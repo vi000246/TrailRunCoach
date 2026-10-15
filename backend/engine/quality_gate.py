@@ -537,6 +537,10 @@ def row_track(h: dict) -> Optional[str]:
     run without a plan row by its stimulus (a Zone 5 run or ≥ 4 short reps → Zone 5, else Zone 3)."""
     if h.get("unplanned"):
         return None
+    if h.get("swap") == "locked":
+        # SP-628: a Zone 5 session added by hand before the track opened (session_suggest.LOCKED) —
+        # on neither ladder: it doesn't move the Zone 5 rung or count as the track under way
+        return None
     rung = h.get("rung_key")
     v = _IL.get(h.get("variant_key"))
     if not rung and v is not None:

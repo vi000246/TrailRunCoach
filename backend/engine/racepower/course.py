@@ -393,10 +393,13 @@ def segment_rows(bounds: list[int], xs: np.ndarray, zs: np.ndarray, flat_pct: fl
     return rows
 
 
-def _climbs(xs, zs) -> list[dict]:
+def _climbs(xs, zs, **kw) -> list[dict]:
+    """The sustained climbs (algorithms/climbs.detect_climbs); `kw` its thresholds (default: a
+    race course's ≥ 80 m, ≥ 3 %; a template's training route passes its own, SP-639)."""
     from backend.engine.algorithms.climbs import detect_climbs
+    xs = np.asarray(xs, float)
     try:
-        cs = detect_climbs(list(xs), list(xs / 1000.0), list(zs))
+        cs = detect_climbs(list(xs), list(xs / 1000.0), list(zs), **kw)
     except Exception:                        # noqa: BLE001
         return []
     return [{"no": i + 1, "start_m": float(xs[c.start_index]), "end_m": float(xs[c.end_index]),
@@ -474,11 +477,13 @@ def day_cuts(splits_km, total_km: float, days: int) -> tuple[list[float], str]:
 
 def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFAULT_EPS_M,
                  min_len_m: Optional[float] = None, flat_pct: float = FLAT_PCT, split: str = "grade",
-                 official_gain_m: Optional[float] = None, osm_huts: bool = True) -> dict:
+                 official_gain_m: Optional[float] = None, osm_huts: bool = True,
+                 climb_kw: Optional[dict] = None) -> dict:
     """Track → course: totals, segments, a thinned profile, climbs, waypoints
     (with their km) and data-quality warnings (§6.5). split: "grade" (DP +
     merge), "km" (every 1000 m) or "none" (one segment). osm_huts: the OSM huts / camps
-    within 150 m of the track join the waypoints as day-end candidates (src "osm", SP-536)."""
+    within 150 m of the track join the waypoints as day-end candidates (src "osm", SP-536).
+    climb_kw: detect_climbs' thresholds for `climbs` (None: the race defaults; SP-639)."""
     td = track_distance(track)
     if len(td["d"]) < 2 or td["d"][-1] < 50:
         raise ValueError("軌跡太短")
@@ -504,7 +509,7 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
         bounds = douglas_peucker(xs, zs, eps_m)
         bounds = merge(bounds, xs, zs, min_len_m, flat_pct)
         bounds = split_long_flats(bounds, xs, zs, flat_pct)
-    climbs = _climbs(xs, zs)
+    climbs = _climbs(xs, zs, **(climb_kw or {}))
     segs = segment_rows(bounds, xs, zs, flat_pct, climbs)
     if raw_gain > 0 and abs(raw_gain - gain) / raw_gain > 0.25 and not official_gain_m:
         warnings.append(H.tag("RC17", f"平滑前後爬升相差 {abs(raw_gain - gain) / raw_gain:.0%}（原始 {raw_gain:.0f} m → {gain:.0f} m），海拔雜訊大"))

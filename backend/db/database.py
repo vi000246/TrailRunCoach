@@ -191,6 +191,7 @@ async def _migrate_schema():
         ("injury_events", "illness", "TEXT"),
         ("coros_plan_push", "provider", "TEXT DEFAULT 'coros'"),   # sync/workout_targets
         ("event_gpx", "source_json", "TEXT"),          # where the GPX came from: a Cairn import (SP-537)
+        ("workout_templates_user", "gpx_course_json", "TEXT"),   # a template route's segments + climbs (SP-639)
     ]
     from backend import data_registry
     async with get_engine().begin() as conn:

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from backend.i18n import _
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -139,6 +140,13 @@ def _materialise(idx: dict) -> dict:
         it = items[r["id"]]
         it["sub_routes"] = [q["id"] for q in idx["routes"] if q.get("parent") == r["id"]]
     aliases = {a: t for a, t in aliases.items() if a not in items and t in items}
+    # SP-626: the segments lying on each route (a segment on several routes is under each)
+    on_route = R.segments_on_routes(idx["segments"], idx["routes"])
+    for rid_, segs in on_route.items():
+        if rid_ in items:
+            items[rid_]["segments"] = [(sid, pos) for sid, pos in segs if sid in items]
+            for sid, _pos in items[rid_]["segments"]:
+                items[sid].setdefault("on_routes", []).append(rid_)
     return {"built_at": idx.get("built_at"), "items": items, "aliases": aliases,
             "weather": _weather_summary(idx.get("weather"))}
 
@@ -191,7 +199,7 @@ def _item(s: dict, efforts: list[dict], key: str) -> dict:
     }
 
 
-def _row(it: dict, names: dict) -> dict:
+def _row(it: dict, names: dict, favs: Optional[dict] = None) -> dict:
     row = {k: v for k, v in it.items() if k not in ("efforts", "lat", "lon", "partials")}
     row["name"] = names.get(it["id"]) or it["auto_name"]
     row["renamed"] = it["id"] in names
@@ -200,6 +208,10 @@ def _row(it: dict, names: dict) -> dict:
     row["spark"] = [[e["start"][:10], e.get(key)] for e in main[-20:]]
     row["start_ll"] = [it["lat"][0], it["lon"][0]]
     row["n_partials"] = len(it.get("partials") or [])
+    row["on_routes"] = list(it.get("on_routes") or [])
+    row["n_segments"] = len(it.get("segments") or [])
+    row.pop("segments", None)
+    row["fav"] = it["id"] in (favs or {})
     return row
 
 
@@ -227,6 +239,31 @@ def _nest(rows: list[dict]) -> list[dict]:
     return out
 
 
+def _by_current_id(d: dict, view: Optional[dict]) -> dict:
+    """A {id: value} file of the user's (names, favorites) keyed by the current
+    item ids: an id merged away by a rebuild (a route merged into another, a
+    folded stretch, a chain link) counts for the item holding it now (`aliases`);
+    the item's own entry wins."""
+    if not view:
+        return dict(d)
+    al = view.get("aliases") or {}
+    out = {k: v for k, v in d.items() if k in view["items"]}
+    for k, v in d.items():
+        if k not in view["items"] and al.get(k) in view["items"]:
+            out.setdefault(al[k], v)
+    return out
+
+
+def _names(view: Optional[dict] = None) -> dict:
+    """{item id: the user's name}, old ids resolved."""
+    return _by_current_id(STORE.names(), view)
+
+
+def _favs(view: Optional[dict] = None) -> dict:
+    """{item id: when starred}, old ids resolved (SP-626)."""
+    return _by_current_id(STORE.favorites(), view)
+
+
 def _status() -> dict:
     return dict(BUILDER.status)
 
@@ -237,15 +274,20 @@ def _status() -> dict:
 
 @router.get("")
 def list_routes(kind: Optional[str] = None, direction: Optional[str] = None,
-                sport: Optional[str] = None, min_efforts: int = 2, limit: Optional[int] = None):
-    """Segments and routes, most-done and most-recent first.
-    kind: segment | route | climb | descent | stretch; direction: up | down | flat;
-    sport: a sport type ("trail running") or group ("run")."""
+                sport: Optional[str] = None, min_efforts: int = 2, limit: Optional[int] = None,
+                fav: bool = False):
+    """Segments and routes. Order (SP-626): starred first, then renamed, then the
+    most done (ties: most recent); sub-routes right under their parent.
+    kind: segment | route | climb | descent | stretch; none = the routes, then the
+    segments on no route (「其他路段」; a segment on a route is listed under the
+    route's detail, starred ones also on top). Each row has `section`: fav /
+    route / other (kind none) or fav / null. direction: up | down | flat;
+    sport: a sport type ("trail running") or group ("run"); fav: starred only."""
     _ensure_fresh()
     view = _index()
     if view is None:
         return {"status": _status(), "built_at": None, "total": 0, "rows": [], "sports": []}
-    names = STORE.names()
+    names, favs = _names(view), _favs(view)
     rows = []
     all_sports = set()
     for it in view["items"].values():
@@ -260,13 +302,28 @@ def list_routes(kind: Optional[str] = None, direction: Optional[str] = None,
             continue
         if it["n_activities"] < min_efforts:
             continue
-        rows.append(_row(it, names))
-    rows.sort(key=lambda r: (r["n_efforts"], r["last_date"] or ""), reverse=True)
-    rows = _nest(rows)
+        if fav and it["id"] not in favs:
+            continue
+        rows.append(_row(it, names, favs))
+    rows.sort(key=lambda r: (not r["fav"], not r["renamed"], -r["n_efforts"], _neg(r["last_date"])))
+    top = [dict(r, depth=0, section="fav") for r in rows if r["fav"]]
+    rest = [r for r in rows if not r["fav"]]
+    if not kind:
+        routes = _nest([r for r in rest if r["kind"] == "route"])
+        other = [dict(r, depth=0) for r in rest if r["kind"] != "route" and not r["on_routes"]]
+        rest = [dict(r, section="route") for r in routes] + [dict(r, section="other") for r in other]
+    else:
+        rest = [dict(r, section=None) for r in _nest(rest)]
+    rows = top + rest
     total = len(rows)
     return {"status": _status(), "built_at": view["built_at"], "total": total,
             "rows": rows[:limit] if limit else rows, "sports": sorted(all_sports),
             "counts": _counts(view), "weather": view.get("weather")}
+
+
+def _neg(iso: Optional[str]) -> tuple:
+    """Newest first inside an ascending sort: the date's characters negated."""
+    return tuple(-ord(c) for c in (iso or ""))
 
 
 def _counts(view) -> dict:
@@ -351,16 +408,18 @@ def _phase_labels(days: list[dt.date]) -> list[Optional[str]]:
 def detail(rid: str):
     it = _get(rid)
     rid = it["id"]
-    names = STORE.names()
+    names = _names(_index())
     f2i = _file_to_idx()
     efforts = [dict(e) for e in it["efforts"]]
     labels = _phase_labels([dt.date.fromisoformat(e["start"][:10]) for e in efforts])
     for e, lab in zip(efforts, labels):
         e["phase"] = lab
         e["workout"] = _idx_of(f2i, e["file"], e.get("start"))
-    out = {k: v for k, v in it.items() if k != "efforts"}
+    favs = _favs(_index())
+    out = {k: v for k, v in it.items() if k not in ("efforts", "segments", "on_routes")}
     out["name"] = names.get(rid) or it["auto_name"]
     out["renamed"] = rid in names
+    out["fav"] = rid in favs
     out["efforts"] = efforts
     out["partials"] = [dict(p, workout=_idx_of(f2i, p["file"], p.get("start"))) for p in it.get("partials") or []]
     items = _index()["items"]
@@ -368,9 +427,34 @@ def detail(rid: str):
                      "n_efforts": items[i]["n_efforts"]}
     out["parent"] = ref(it["parent"]) if it.get("parent") in items else None
     out["sub_routes"] = [ref(i) for i in it.get("sub_routes") or [] if i in items]
+    # SP-626: a route's segments (each with its efforts by this route's runs: 這次 / 名次 per run),
+    # a segment's routes
+    out["on_routes"] = [ref(i) for i in it.get("on_routes") or [] if i in items]
+    out["segments"] = [_seg_row(items[sid], pos, names, favs, {e["file"] for e in it["efforts"]})
+                       for sid, pos in it.get("segments") or [] if sid in items]
     out["status"] = _status()
     out["weather"] = _index().get("weather")
     return out
+
+
+def _seg_row(s: dict, pos: float, names: dict, favs: dict, runs: set) -> dict:
+    """One row of a route's segment table: the segment's best and, per run of the
+    route (by file), that run's fastest effort on it with its rank."""
+    key = s["time_key"]
+    by_file: dict = {}
+    for e in s["efforts"]:
+        if e["file"] in runs and e.get(key) is not None:
+            cur = by_file.get(e["file"])
+            if cur is None or e[key] < cur["time_s"]:
+                by_file[e["file"]] = {"effort": e["id"], "time_s": e[key], "rank": e.get("rank"),
+                                      "dir": e.get("dir") or "same"}
+    best = next((e for e in s["efforts"] if e.get("rank") == 1 and (e.get("dir") or "same") == "same"), None)
+    return {"id": s["id"], "name": names.get(s["id"]) or s["auto_name"], "renamed": s["id"] in names,
+            "kind": s["kind"], "direction": s["direction"], "length_m": s["length_m"], "gain_m": s["gain_m"],
+            "pos": pos, "fav": s["id"] in favs, "time_key": key, "best_s": s["best_s"],
+            "best_effort": best["id"] if best else None, "n_efforts": s["n_efforts"],
+            "n_timed": sum(1 for e in s["efforts"] if e.get(key) is not None and (e.get("dir") or "same") == "same"),
+            "by_file": by_file}
 
 
 class RenameBody(BaseModel):
@@ -381,7 +465,26 @@ class RenameBody(BaseModel):
 def rename(rid: str, body: RenameBody):
     rid = _get(rid)["id"]
     STORE.set_name(rid, body.name.strip())
+    if not body.name.strip():            # clearing: an old id's name must not come back through the aliases
+        for a, t in ((_index() or {}).get("aliases") or {}).items():
+            if t == rid and a in STORE.names():
+                STORE.set_name(a, "")
     return {"id": rid, "name": body.name.strip() or _get(rid)["auto_name"], "renamed": bool(body.name.strip())}
+
+
+class FavBody(BaseModel):
+    on: bool
+
+
+@router.put("/{rid}/favorite")
+def favorite(rid: str, body: FavBody):
+    """Star / unstar a route or segment (SP-626): favorites.json, kept on the server
+    so every device sees it. An old id (merged away) stars the item holding it now."""
+    view = _index()
+    rid = _get(rid)["id"]
+    old = [a for a, t in (view or {}).get("aliases", {}).items() if t == rid]
+    STORE.set_favorite(rid, body.on, aliases=tuple(old))
+    return {"id": rid, "fav": body.on}
 
 
 @router.get("/{rid}/compare")
@@ -400,7 +503,7 @@ def compare(rid: str, a: str, b: str, step: float = 25.0):
         da, db = (by_id[a].get("dir") or "same"), (by_id[b].get("dir") or "same")
         if da != db or da == "mixed":
             # one distance axis needs one direction; a mixed run follows neither
-            raise HTTPException(400, "兩次方向不同，無法沿同一條路線逐點比較")
+            raise HTTPException(400, _("兩次方向不同，無法沿同一條路線逐點比較"))
         tr = BUILDER.track(it["ref_file"])
         ref_lat, ref_lon = list(tr.lat), list(tr.lon)
         if da == "reversed":
@@ -412,7 +515,7 @@ def compare(rid: str, a: str, b: str, step: float = 25.0):
             if t is None:
                 raise HTTPException(404, "track missing")
             if RM.haversine_m(float(t.lat[0]), float(t.lon[0]), ref_lat[0], ref_lon[0]) > R.ROUTE_END_TOL_M:
-                raise HTTPException(400, "這次的起點和參考路線不同，無法逐點比較")
+                raise HTTPException(400, _("這次的起點和參考路線不同，無法逐點比較"))
     lat0, lon0 = ref_lat[0], ref_lon[0]
     ref = RM.project(ref_lat, ref_lon, lat0, lon0)
     L = float(RM.path_length(ref)[-1])
@@ -506,7 +609,7 @@ def workout_segments(idx: int):
     w = ds.workouts[idx]
     file = w.entry.file
     view = _index()
-    names = STORE.names()
+    names = _names(view)
     out = []
     if view is not None:
         # the route index is built from the WKO5 files: this activity's file there,

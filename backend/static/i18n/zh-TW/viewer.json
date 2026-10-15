@@ -437,5 +437,8 @@
   "pz.end": "結束",
   "pz.apply": "套用",
   "plateau_name": "模型閾值功率",
-  "plateau_btn": "模型閾值功率線"
+  "plateau_btn": "模型閾值功率線",
+  "cmp.mode": "比較兩次",
+  "cmp.go": "比較 →",
+  "cmp.n": "已勾 {n}／2"
 }

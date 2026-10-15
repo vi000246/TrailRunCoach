@@ -216,5 +216,12 @@
   "archived": "已封存，原始檔已移除",
   "archived_help": "超過運動紀錄保留期限，FIT 原始檔已在每月清理時移除；距離、時間、訓練負荷（Training load）等數字來自保留的摘要，訓練負荷圖與最佳成績照算，但不能再打開單次活動圖表。",
   "not_original": "不是原始檔",
-  "not_original_help": "華為手錶的活動經 intervals.icu 拿不到手錶的原始檔，這是 intervals.icu 提供的檔案"
+  "not_original_help": "華為手錶的活動經 intervals.icu 拿不到手錶的原始檔，這是 intervals.icu 提供的檔案",
+  "cmp.tip": "比較：先按一筆，再按另一筆",
+  "cmp.picked_tip": "已選這筆當 A；再按一次取消",
+  "cmp.label": "拿「{name}」來比較",
+  "cmp.picked": "比較 A：",
+  "cmp.next": "再按另一筆的比較鈕，或",
+  "cmp.page": "到比較頁挑 B",
+  "cmp.cancel": "取消"
 }

@@ -186,7 +186,7 @@ def test_gpx_upload_replace_remove_and_profile_on_the_chart(monkeypatch):
         el = chk["elev"]
         assert len(el["x"]) == len(chk["order"]) + 1 and el["x"][0] == 0 and el["x"] == sorted(el["x"])
         assert el["d"][0] == 0 and el["d"] == sorted(el["d"]) and el["d"][-1] <= el["x"][-1] + 1e-6
-        assert "t" not in el and el["complete"] is True and el["total_km"] == pytest.approx(el["x"][-1], abs=0.01)
+        assert el["complete"] is True and el["total_km"] == pytest.approx(el["x"][-1], abs=0.01)
         assert max(el["z"]) == pytest.approx(el["z_max"], abs=15) and el["note"]
         # replace with a longer route: not covered by the hour → drawn up to the workout's end
         e.c.post(f"{UAPI}/{t['id']}/gpx", files={"file": ("long.gpx", gpx_bytes(km=30.0), "application/gpx+xml")})
@@ -235,24 +235,7 @@ def test_route_copy_is_normalized():
         assert "route" not in WS.normalize({"items": [st("work", 600)], "route": bad})
 
 
-def test_route_elevation_places_steps_by_distance():
-    prof = {"km": [0.0, 1.0, 2.0], "z": [0.0, 100.0, 100.0], "route_km": 2.0}
-    # 1 km + 100 m climb = 2 km effort; 1 km flat = 1 km effort. At 6 km/h EP: 20′ cover the climb's
-    # 1 km, 10′ more the flat km; a distance step its own 500 m; past the end 1 : 1
-    c = WS.Ctx.of({"cp": 250.0}, "power", speeds={"v_easy": 6.0, "ep_kmh": 6.0, "terrain": "trail"})
-    tg = {"type": "power", "mode": "pct", "lo": 0.77, "hi": 0.79}
-    steps = WS.normalize({"items": [st("warm", 1200, tg), st("work", 600, tg),
-                                    st("work", {"type": "distance", "value": 500}, tg), st("cool", 600, tg)]})
-    el = UT.route_elevation(steps, c, prof)
-    assert el["x"] == [0.0, 1.0, 2.0, 2.5, 3.5]
-    assert el["d"] == [0.0, 1.0, 2.0] and el["complete"] is True and el["km"] == 2.0 and el["total_km"] == 3.5
-    # a lap-button step is the chart's 90 s at that speed: 0.15 km effort on the climb = 0.075 km
-    lap = WS.normalize({"items": [st("work", {"type": "open"}, tg)]})
-    el = UT.route_elevation(lap, c, prof)
-    assert el["x"] == [0.0, 0.075] and el["complete"] is False and el["d"][-1] == 0.075
-    # a profile that doesn't start at 0 (a cut course): the axis starts at the route's start
-    el = UT.route_elevation(steps, c, {"km": [5.0, 6.0, 7.0], "z": [0.0, 100.0, 100.0]})
-    assert el["x"] == [0.0, 1.0, 2.0, 2.5, 3.5] and el["d"][0] == 0.0
+# route_elevation's placement (Minetti, hill repeats, the time axis): test_user_templates_sp639.py
 
 
 def test_free_mode_uphill_template_pushes_to_coros(monkeypatch):

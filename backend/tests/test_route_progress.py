@@ -508,7 +508,7 @@ def test_api_compare_gap_ends_at_the_elapsed_difference(tmp_path, monkeypatch):
     API._CACHE.update(mtime=None, view=None)
     wl, rd = _builder(tmp_path, acts)
     bld.build(wl, rd)
-    lst = API.list_routes()
+    lst = API.list_routes(kind="segment")       # SP-626: by default a segment on a route is under the route
     climb = next(r for r in lst["rows"] if r["kind"] == "climb")
     assert climb["n_efforts"] == 2
     d = API.detail(climb["id"])
@@ -678,7 +678,7 @@ def test_weather_and_max_hr_match_an_independent_recomputation(tmp_path, monkeyp
     assert all(len(c["latitude"].split(",")) >= 2 for c in fake.calls) and all("elevation" in c for c in fake.calls)
     assert idx["weather"]["calls"] == 3 and idx["weather"]["failed"] == 0
     assert idx["weather"]["attribution"] == RW.WX.ATTRIBUTION
-    climb = next(r for r in API.list_routes()["rows"] if r["kind"] == "climb")
+    climb = next(r for r in API.list_routes(kind="climb")["rows"] if r["kind"] == "climb")
     d = API.detail(climb["id"])
     assert d["weather"]["calls"] == 3 and len(d["efforts"]) == 3
     raw = {m["file"]: c for m, c in acts}

@@ -155,7 +155,7 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:370"
   },
-  "5 區每趟至少 2 分鐘（台灣教練）：這段只有 {d}": {
+  "短間歇：每趟只有 {d}，不算 5 區的進階（台灣教練建議 5 區每趟至少 2 分鐘）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1177"
   },
@@ -4755,9 +4755,41 @@
     "draft": true,
     "src": "backend/engine/altitude.py:215"
   },
-  "有 GPX 時橫軸是路線距離（km）：距離段照它的距離放，時間、直到按下計圈、負荷、RPE 段依你每段的預估速度換算成距離（越野用努力距離：km＋爬升÷100），是推估": {
+  "有 GPX 時橫軸可切換距離或時間。距離段照它的距離放；時間、直到按下計圈、負荷、RPE 段用你這段強度的平地速度，依坡度換算（Minetti 跑步耗能，跟賽事計算機的平地等效配速同一套），是推估。反覆爬坡（主課在上坡）的休息段畫成往回走下坡，每趟從坡底重來": {
     "draft": false,
-    "src": "backend/engine/user_templates.py:58"
+    "src": "backend/engine/user_templates.py"
+  },
+  "坡段與爬坡由 GPX 平滑後切出；配速是你在這個強度的平地速度依坡度換算（Minetti，下坡最多快 10%），沒算技術地形，是推估。功率只在平路和可跑的坡（≤ 8%）當目標": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py"
+  },
+  "輕鬆（Z2）": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py"
+  },
+  "這個範本的主課強度": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py"
+  },
+  "可跑的爬坡": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py"
+  },
+  "陡坡": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py"
+  },
+  "下坡": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py"
+  },
+  "平路": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py"
+  },
+  "爬 {m} m · 約 {t}": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py"
   },
   "有刺激，目標 ≥ {m} 分": {
     "draft": true,

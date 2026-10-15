@@ -33,6 +33,12 @@ def test_intro_fits_and_follows_the_colour_scheme(app, loc, size, scheme):
         page.wait_for_function("(el) => el.complete && el.naturalWidth > 0", arg=img.element_handle())
         src = page.evaluate("(el) => el.currentSrc", img.element_handle())
         assert f".{loc}." in src and (src.endswith(".dark.webp") == (scheme == "dark")), src
+    # R2: the sign-in button top right, on a phone too (the manual / about links fold away, it stays)
+    page.evaluate("() => window.scrollTo(0, 0)")
+    btn = page.locator("#nav-login")
+    assert btn.is_visible() and btn.get_attribute("href") == "/login"
+    box = btn.bounding_box()
+    assert box["x"] + box["width"] <= w and box["x"] > w / 2 and box["y"] < 60, box
     sw = page.evaluate("() => document.documentElement.scrollWidth")
     assert sw <= w, f"sideways scroll: {sw} > {w}"
     bg = page.evaluate("() => getComputedStyle(document.body).backgroundColor")

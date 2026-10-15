@@ -753,6 +753,10 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     aet_d = ctx.inputs().get("aet") or {}
     thr = _thr(ctx, aet_d.get("lthr"))
     out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"), thr=thr)
+    if body.type == "trail" and out.get("summary") is not None:
+        # SP-632: 「這場的平地等效配速」 — the segments' GAP by time (after the night slow-down)
+        from backend.engine.racepower import planner as PL
+        out["summary"]["flat_pace_s_per_km"] = PL.flat_pace(out.get("segments") or [])
     # the main chart / table: pace, power and HR target per segment, null where not valid
     out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"), poles=body.poles, thr=thr)
     if body.type != "baiyue":

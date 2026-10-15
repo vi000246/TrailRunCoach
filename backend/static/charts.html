@@ -155,6 +155,16 @@ aside .hint { font-size: 11.5px; color: var(--muted); margin: -2px 0 6px; }
 .act .s { color: var(--muted); font-size: 11px; }
 .act .t b { font-variant-numeric: tabular-nums; }
 .act .t .tl { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* 比較兩次 (SP-625): in compare mode a click picks the activity (up to two) instead of opening it */
+.cmprow { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin: 0 0 6px; font-size: 12px; }
+.cmprow button { font-size: 12px; padding: 2px 8px; }
+.cmprow button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cmprow a { color: var(--accent); font-weight: 600; }
+.cmprow a[hidden] { display: none; }
+.acts.cmp .act { padding-left: 34px; position: relative; }
+.acts.cmp .act::before { content: ""; position: absolute; left: 12px; top: 9px; width: 13px; height: 13px; border: 1.5px solid var(--muted); border-radius: 3px; }
+.acts.cmp .act.picked::before { background: var(--accent); border-color: var(--accent); }
+.acts.cmp .act.picked::after { content: attr(data-ab); position: absolute; left: 12px; top: 8px; width: 16px; text-align: center; font-size: 10px; font-weight: 700; color: #fff; }
 /* the matched planned session's 類型 (課表 kind palette, schedule.html .k-*; dashicons.js icon) */
 .ptag { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; border-radius: 4px; flex: none;
   font-size: 10.5px; line-height: 16px; font-weight: 600; white-space: nowrap;
@@ -481,6 +491,8 @@ table.z5ev td { white-space: normal; }
     <details open data-k="acts" class="actsbox">
       <summary id="acts-h" data-i18n="viewer.acts">活動</summary>
       <p class="hint" data-i18n="viewer.acts_hint">點一筆 → 看它的單次活動圖表</p>
+      <div class="cmprow"><button type="button" id="cmp-mode" aria-pressed="false" data-i18n="viewer.cmp.mode">比較兩次</button>
+        <span class="meta" id="cmp-n"></span><a id="cmp-go" hidden data-i18n="viewer.cmp.go">比較 →</a></div>
       <div class="acts" id="acts"></div>
     </details>
   </aside>
@@ -1079,6 +1091,7 @@ async function loadActs() {
     : `<div class="act ${a.index === S.workout ? "on" : ""}" data-i="${a.index}">
     <div class="t"><span class="tl"><b>${esc(actWhen(a.start))}</b>${planTag(a.plan)}</span><span title="${esc(a.sport_type || a.sport)}">${esc(a.kind ? kindLabel(a.kind) : a.sport_type || a.sport)}</span></div>
     <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"} · ↑${a.climbing != null ? Math.round(a.climbing) + " m" : "—"} · ${esc(t("viewer.load_n", { n: a.tss != null ? (+a.tss).toFixed(0) : "—" }))}<span class="src" title="${esc(tssSrcTitle(a))}">${a.tss_source ? " " + ({power: "⚡", rtss: "🏃", hrtss: "❤", trainingpeaks: "TP"}[a.tss_source] || "") : ""}</span></div></div>`).join("");
+  cmpShow();
   $("acts").querySelectorAll("button[data-exkey]").forEach((b) => b.onclick = async (ev) => {
     ev.stopPropagation(); b.disabled = true;
     try {
@@ -1090,12 +1103,34 @@ async function loadActs() {
     } catch (e) { b.disabled = false; b.textContent = t("viewer.failed", { msg: e.message }); }
   });
   $("acts").querySelectorAll(".act:not(.excl)").forEach((el) => el.onclick = () => {
+    if (CMP.on) { cmpPick(+el.dataset.i); return; }
     S.workout = +el.dataset.i;
     $("acts").querySelectorAll(".act").forEach((x) => x.classList.toggle("on", x === el));
     if (narrowMq.matches) setAside(false, false);
     setMode("workout");
   });
 }
+
+// 比較兩次 (SP-625): tick two activities of the list -> the comparison page (static/actcompare.html)
+const CMP = { on: false, sel: [] };
+function cmpPick(i) {
+  CMP.sel = CMP.sel.includes(i) ? CMP.sel.filter((x) => x !== i) : [...CMP.sel, i].slice(-2);
+  cmpShow();
+}
+function cmpShow() {
+  $("acts").classList.toggle("cmp", CMP.on);
+  $("cmp-mode").setAttribute("aria-pressed", String(CMP.on));
+  $("acts").querySelectorAll(".act:not(.excl)").forEach((el) => {
+    const k = CMP.sel.indexOf(+el.dataset.i);
+    el.classList.toggle("picked", CMP.on && k >= 0);
+    if (k >= 0) el.dataset.ab = "AB"[k]; else delete el.dataset.ab;
+  });
+  $("cmp-n").textContent = CMP.on ? t("viewer.cmp.n", { n: CMP.sel.length }) : "";
+  const go = $("cmp-go");
+  go.hidden = !(CMP.on && CMP.sel.length === 2);
+  if (!go.hidden) go.href = `/api/v1/app/activity-compare/page?a=${CMP.sel[0]}&b=${CMP.sel[1]}`;
+}
+$("cmp-mode").onclick = () => { CMP.on = !CMP.on; if (!CMP.on) CMP.sel = []; cmpShow(); };
 
 async function load() {
   save();

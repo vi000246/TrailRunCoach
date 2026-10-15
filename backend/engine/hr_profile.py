@@ -421,6 +421,7 @@ def plan_hr_zones(lthr: Optional[float], aet: Optional[float], aet_measured: boo
             "fallback": fallback, "basis_text": basis, "source": _(SOURCE[use]),
             "rows": [{"id": i, "name": n, "lo": lo, "hi": hi} for i, n, lo, hi in rows],
             "mhr": float(mhr) if mhr and use in ("hrr", "hrmax") else None,    # Z6's top (workout_steps)
+            "rhr": float(rhr) if rhr and use == "hrr" else None,               # % HRR of a step (SP-642)
             "easy": [round(e_lo), round(e_hi)], "easy_source": e_src, "aet_measured": bool(aet and aet_measured),
             "work": {k: list(band(rows, *v)) for k, v in CLASS_ZONES.items()},
             "targets": {k: list(band(rows, *v)) for k, v in TARGET_ZONES.items()}}

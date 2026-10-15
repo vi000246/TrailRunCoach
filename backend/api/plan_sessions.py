@@ -762,6 +762,59 @@ def _with_variant(data: dict, inp: dict, rung: Optional[str], day: Optional[str]
     # 每堂課前加熱身 (SP-364): the warm-up floor as it is now (None = off); plan_store merges it into the
     # row's variant_adj, keeping the state machine's rest / power tweak
     body["_variant"]["variant_adj"] = vp.get("variant_adj")
+    _lock_z5(body["_variant"], ctx["gate"])
+    return body
+
+
+def _lock_z5(var: dict, gate: Optional[dict]) -> dict:
+    """SP-628: a Zone 5 variant added by hand while the Zone 5 track is still closed
+    (quality_gate.z5_track) is marked 「還沒解鎖：手動加的，不算進階」 — not an equivalent, swap
+    session_suggest.LOCKED — so it never moves the Zone 5 ladder (quality_gate.row_track). The gate
+    and the generator are untouched; it still counts as a 強度課 (budget, 48 h)."""
+    from backend.engine import interval_library as IL
+    from backend.engine import session_suggest as SS
+    v = IL.get(var.get("variant_key"))
+    if v is not None and IL.is_z5(v) and SS.locked_z5(gate):
+        var.update(equiv=False, swap=SS.LOCKED, swap_reason=_t(SS.LOCKED_NOTE))
+    return var
+
+
+def _t(msg: str) -> str:
+    from backend.i18n import _
+    return _(msg)
+
+
+def _suggest_quality(inp: dict, family: str, day: Optional[str], terrain: Optional[str] = None,
+                     tpl: Optional[dict] = None) -> dict:
+    """新增課表's 強度課 (SP-628, engine/session_suggest.py) for `day`: the ladder's session for
+    有氧間歇 / VO2max 間歇, the best speed template for 速度 (needs `tpl`)."""
+    from backend.engine import session_suggest as SS
+    ctx = _variant_ctx(inp, day)
+    if family == "speed":
+        ter = "trail" if terrain in ("trail", "hike") else "road"
+        pick = SS.speed(tpl or {}, cap=ctx["cap"], terrain=ter, phase=_phase_on(inp, day),
+                        sport=(inp.get("cur") or {}).get("primary_sport") or "trail")
+        return {"speed": pick}
+    return SS.ladder(family, ctx["gate"], ctx["th"], cap=ctx["cap"], history=ctx["history"], prefs=ctx["prefs"],
+                     mountain=SS.mountain_of(inp))
+
+
+def _with_suggestion(data: dict, inp: dict) -> Optional[dict]:
+    """A new 強度課 saved as the dialog suggested it (`suggest` = its family, SP-628): the variant
+    fields of that suggestion, recomputed here for the day (the reps re-cut to the day's cap, the
+    「還沒解鎖」 mark) — None when it isn't one (another variant: _with_variant)."""
+    fam = data.get("suggest")
+    if fam not in ("aerobic", "vo2max") or data.get("kind", "quality") != "quality" or not data.get("variant_key"):
+        return None
+    s = _suggest_quality(inp, fam, data.get("day"))["session"]
+    if s["variant_key"] != data["variant_key"]:
+        return None
+    body = {k: v for k, v in data.items() if k not in ("variant_key", "variant_reps", "suggest")}
+    for k in ("title", "minutes", "target", "detail", "tss"):
+        body.setdefault(k, s[k])
+    body["kind"] = "quality"
+    body["_variant"] = {k: s.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "swap_reason",
+                                              "variant_reps", "variant_blocks", "source", "variant_adj")}
     return body
 
 
@@ -774,7 +827,8 @@ def _cp(inp: dict):
 @router.post("/sessions")
 async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
-    data = _with_variant(data, inp, None, data.get("day"))
+    data = _with_suggestion(data, inp) or _with_variant({k: v for k, v in data.items() if k != "suggest"}, inp,
+                                                        None, data.get("day"))
     if data.get("steps"):
         data = await _with_steps(data, inp, {})
         await _with_route(db, data["steps"], None)
@@ -807,6 +861,49 @@ async def _replace_long(db: AsyncSession, day: str) -> None:
     for s in await PS.load(db):
         if s["state"] == "active" and s["kind"] == "long" and s.get("day") == day:
             await PS.delete(db, s["uid"])
+
+
+@router.post("/sessions/suggest")
+async def suggest_session(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """新增課表 (SP-628): what a new session of `kind` (a 強度課: its `family`) on `day` is filled
+    with — the session the automatic plan would give (engine/session_suggest.py). Nothing is stored.
+    {"title", "minutes", "target", "detail", "terrain", "variant": {key, reps, blocks, adj, rung_key}
+    | None, "template_key" (速度: a template applied as the structure) | None, "locked": {text, why}
+    | None (VO2max before the Zone 5 track opened), "reason"}; minutes None = nothing to suggest."""
+    from backend.engine import session_suggest as SS
+    kind, fam, day = body.get("kind") or "easy", body.get("family"), body.get("day")
+    inp = await _inputs()
+    out = {"kind": kind, "family": fam, "title": None, "minutes": None, "target": None, "detail": None,
+           "terrain": None, "variant": None, "template_key": None, "locked": None, "reason": ""}
+    if kind == "quality":
+        fam = fam if fam in PS.FAMILIES else "aerobic"
+        out["family"] = fam
+        tpl = None
+        if fam == "speed":
+            from backend.engine import user_templates as UT
+            from backend.engine import workout_steps as WS
+            tpl = WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)},
+                               warm_floor_s=_warm_floor_s())
+        r = _suggest_quality(inp, fam, day, body.get("terrain"), tpl)
+        if fam == "speed":
+            pick = r.get("speed")
+            if pick:
+                from backend.engine import template_recs as TR
+                row = pick["row"]
+                out.update(title=row.get("title") or row.get("label"), minutes=int(round(TR.row_minutes(row))),
+                           template_key=row["key"], reason=pick["reason"], detail="")
+            return out
+        s = r["session"]
+        out.update(title=s["title"], minutes=s["minutes"], target=s["target"], detail=s["detail"],
+                   terrain=s.get("terrain"), locked=r["locked"], reason=r.get("reason") or "",
+                   variant={"key": s["variant_key"], "reps": s.get("variant_reps"), "blocks": s.get("variant_blocks"),
+                            "adj": s.get("variant_adj"), "rung_key": s.get("rung_key")})
+        return out
+    if kind in ("easy", "long"):
+        e = SS.easy(kind, inp, day)
+        if e:
+            out.update(e)
+    return out
 
 
 SWAP_TO = ("climb",)
@@ -1848,6 +1945,7 @@ async def _steps_env(s: dict, inp: dict, stored: Optional[dict] = None) -> dict:
     # the push target's end conditions (sync/workout_targets; 「負荷」 only where it has one)
     prov = _provider()
     c.end_conditions, c.provider_label = tuple(prov.capabilities.end_conditions), prov.label
+    c.ep_power = WS.ep_power_of(prefs)       # SP-632: 課表偏好「可跑坡目標」 (the COROS preview's Effort Pace legs)
     # SP-437 (Q1 A): warm-up / cool-down / rests / easy steps at this runner's own TSS per hour
     from backend.engine import session_structure as SST
     c.easy_tph = SST.edit_rate(s, stored if stored is not None else s, th,
@@ -1855,6 +1953,11 @@ async def _steps_env(s: dict, inp: dict, stored: Optional[dict] = None) -> dict:
     rung = None
     if s.get("kind") == "quality":
         rung = s.get("rung_key") or getattr(IL.get(s.get("variant_key")), "rung", None)
+        from backend.engine import session_suggest as SS
+        v = IL.get(s.get("variant_key"))
+        if s.get("swap") == SS.LOCKED or (stored is None and v is not None and IL.is_z5(v)
+                                          and SS.locked_z5((inp.get("cur") or {}).get("quality_gate"))):
+            rung = None             # SP-628: a Zone 5 session before the track opened — no 「這堂算進階」
     cap = day_cap(prefs, s.get("day")) if s.get("kind") not in ("test",) else None
     return {"ctx": c, "th": th, "policy": pol, "cap": cap, "cap_mode": getattr(prefs, "cap_mode", "soft"),
             "rung": rung if rung in IL.LIBRARY else None, "provider": prov.describe()}
@@ -1873,6 +1976,14 @@ def _rpe_load_ctx() -> dict:
     return {"levels": RL.levels(m), "min_range": list(RL.MIN_RANGE), "fitted": m.fitted, "n": m.n}
 
 
+def _hr_scale_ctx() -> Optional[dict]:
+    from backend.engine import hr_power_calib as HPC
+    try:
+        return HPC.describe()
+    except Exception:                       # noqa: BLE001 — a hint for the mini charts, never an error
+        return None
+
+
 def _context(env: dict) -> dict:
     from backend.engine import target_policy as TP
     from backend.engine import workout_steps as WS
@@ -1888,6 +1999,9 @@ def _context(env: dict) -> dict:
             "provider": env.get("provider"), "load_kinds": list(WS.LOAD_KINDS), "load_range": list(WS.LOAD_RANGE),
             # 「負荷」 entered by feel (SP-57, engine/rpe_load.py): the five levels and their TSS per hour in effect
             "rpe_load": _rpe_load_ctx(),
+            # SP-642: heart rate on the chart's common scale (the runner's own relation or 推估) — the
+            # template menu's mini charts interpolate its points; the fit stays on the server
+            "hr_scale": _hr_scale_ctx(),
             "rules": {"z5_min_rep_s": WS.Z5_MIN_REP_S, "z3_min_rep_s": WS.Z3_MIN_REP_S,
                       "z5_max_rest_s": WS.Z5_MAX_REST_S, "coros_max_steps": WS.COROS_MAX_STEPS}}
 
@@ -1966,6 +2080,7 @@ def _warm_floor_s() -> int:
 #   POST   /steps/templates/user/{id}/gpx          upload / replace the training route (multipart file)
 #   DELETE /steps/templates/user/{id}/gpx
 #   GET    /steps/templates/user/{id}/gpx/file     the stored file
+#   GET    /steps/templates/user/{id}/gpx/segments the 坡段表: segments + climbs with pace / time (SP-639)
 #   POST   /steps/templates/cats {label} · PATCH / DELETE /steps/templates/cats/{cid}
 #   POST   /sessions/{uid}/save-as-template        {name, cats, steps?}: the session's structure
 #          (the body's — the editor's current one —, else the stored, else derived)
@@ -2053,6 +2168,29 @@ async def user_templates_gpx(tid: int, file: UploadFile = File(...), db: AsyncSe
 async def user_templates_gpx_delete(tid: int, db: AsyncSession = Depends(get_db)):
     from backend.engine import user_templates as UT
     return await _tpl_call(UT.delete_gpx, db, tid)
+
+
+@router.get("/steps/templates/user/{tid}/gpx/segments")
+async def user_templates_gpx_segments(tid: int, db: AsyncSession = Depends(get_db)):
+    """SP-639: the template route's grade segments and climbs (stored at upload; recomputed for one
+    uploaded before), each with the pace / time / GAP / power at the easy run and at the template's
+    main-set intensity (user_templates.course_table; the athlete's speeds as the step chart's)."""
+    from backend.engine import user_templates as UT
+    from backend.engine import workout_steps as WS
+    from backend.i18n import _
+    course = await _tpl_call(UT.course_of, db, tid)
+    t = await _tpl_call(UT.get, db, tid)
+    env = await _steps_env({"kind": "hike", "target_basis": t.get("target_basis"), "minutes": 0}, await _inputs())
+    c = env["ctx"]
+    levels = [("easy", _(UT.LEVEL_EASY), c.easy_frac())]
+    try:
+        v = WS.view(WS.normalize(t.get("steps") or {}), c, env["cap"], env["cap_mode"], env["rung"])
+        main = UT.main_frac(v.get("order") or [])
+    except WS.StepsError:
+        main = None
+    if main:
+        levels.append(("main", _(UT.LEVEL_MAIN), main))
+    return UT.course_table(course, c, levels)
 
 
 @router.get("/steps/templates/user/{tid}/gpx/file")

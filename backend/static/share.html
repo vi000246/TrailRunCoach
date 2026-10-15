@@ -129,8 +129,11 @@ async function init() {
   document.title = `${S.title}（分享）`;
   $("title").textContent = S.title;
   const I = S.inputs || {}, s = S.summary || {}, hike = S.type === "baiyue";
-  $("sub").textContent = [TYPE[S.type], I.date, I.start_time && `出發 ${I.start_time}`, `${f1(s.km)} km ↑${n0(s.gain_m)} m`,
-    `建立於 ${S.created.slice(0, 10)}`, S.expires && `到期 ${S.expires.slice(0, 10)}`, "唯讀"].filter(Boolean).join(" · ");
+  // the built-in examples (SP-637): no calendar date (it would read as a race already run once it passed) —
+  // how long before the race it was computed, if anything
+  const when = S.example ? (ok(I.weeks_before) && I.weeks_before > 0 ? `賽前 ${I.weeks_before} 週` : null) : I.date;
+  $("sub").textContent = [TYPE[S.type], when, I.start_time && `出發 ${I.start_time}`, `${f1(s.km)} km ↑${n0(s.gain_m)} m`,
+    S.created && `建立於 ${S.created.slice(0, 10)}`, S.expires && `到期 ${S.expires.slice(0, 10)}`, "唯讀"].filter(Boolean).join(" · ");
   let h = `<section><h2>預估結果${s.badge ? ` <span class="badge">${esc(s.badge)}</span>` : ""}</h2><div class="tiles">`;
   if (hike) {
     h += tile("移動時間", dur(s.capacity_time_s ?? s.time_s), `${(S.days || []).length || s.days || 1} 天`, true);

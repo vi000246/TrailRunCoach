@@ -9,29 +9,39 @@
  *   we.payload()                    {steps} to save, {steps: null} to clear, or null (untouched)
  *   we.load(doc, {ro})              show a given structure (the 範本 page: a template, not a session)
  *
- * 插入範本: category tabs, then 主課強度 (SP-84: each row's `target_types`, workout_steps.target_types;
- * kept per viewer in localStorage under the 範本 page's key), then the 推薦 block and the rows.
+ * 插入範本: 類型, its 類別 right under it (›), and 主課強度 as a dropdown on the 類型 line (SP-643,
+ * tplFilters, also the 範本 page's; SP-84: each row's `target_types`, workout_steps.target_types;
+ * kept per viewer in localStorage under the 範本 page's key), then the 推薦 block (of the 類別
+ * picked) and the rows.
  *
  * Options: saveTemplate (default true): the 「儲存成範本」 button (POST /sessions/{uid}/save-as-template,
  * else /steps/templates/user; SP-36). A structure made from a user template keeps its id (`tpl`)
  * and, once saved as a session, its own copy of the route profile (`route`, carried through as is):
  * when there is a route GPX, POST /steps/check returns `elev` (engine/user_templates.route_elevation)
  * and the chart switches to the route's distance axis (km; each step from `elev.x`), the elevation
- * drawn as a light background like the chart viewer's (charts.html drawClimbProfile).
+ * drawn as a light background like the chart viewer's (charts.html drawClimbProfile). SP-639: a
+ * 距離 | 時間 switch under the chart (kept per viewer, localStorage) puts it on the time axis instead
+ * (`elev.xt`, the path on `elev.t`); a hill repeat's profile goes up and back (the server walks it);
+ * hovering — or tapping — a block shows its climb, descent, grade and estimated time (`elev.up` …).
  * Without one the chart stays on the time axis.
  *
  * Every number shown (targets, totals, issues, the watch preview) comes from
  * POST /steps/check — the server resolves; this file only edits the structure.
- * Zone colours: the dataviz reference sequential blue (validate_palette.js --ordinal:
- * light #86b6ef→#104281 on #fcfcfb, dark #184f95→#9ec5f4 on #1a1a19, all PASS);
- * height repeats the intensity so colour is never the only cue.
+ * Colours (SP-642, SP-630 table): the hue is the step's target type — heart rate light red, power
+ * yellow, pace blue, RPE purple, no target grey (var(--bar)) — and the shade its intensity, 5 steps
+ * light → dark (level 1–5, workout_steps.level on the common scale). Dark mode: the same colours in
+ * the reverse order (on the dark background the light ones are the strong ones). Height repeats the
+ * intensity and the legend / tooltip name the type, so colour is never the only cue (red / yellow
+ * are hard to tell apart with a red-green colour deficiency).
+ * Height: the common intensity scale, threshold = 100 (power ÷ CP, speed ÷ threshold speed, heart
+ * rate converted on the server: engine/hr_power_calib.py — the runner's own relation or 推估).
  */
 (function () {
   "use strict";
   const STYLE = `
-:root { --wz1: #86b6ef; --wz2: #5598e7; --wz3: #2a78d6; --wz4: #1c5cab; --wz5: #104281; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wz1: #184f95; --wz2: #256abf; --wz3: #3987e5; --wz4: #6da7ec; --wz5: #9ec5f4; } }
-:root[data-theme="dark"] { --wz1: #184f95; --wz2: #256abf; --wz3: #3987e5; --wz4: #6da7ec; --wz5: #9ec5f4; }
+:root { --wzh1: #fad4d4; --wzh2: #f4a6a6; --wzh3: #e97171; --wzh4: #d04343; --wzh5: #a32525; --wzp1: #fbebb0; --wzp2: #f6d66a; --wzp3: #ebb52c; --wzp4: #c98e0e; --wzp5: #93650a; --wzs1: #cfe2fa; --wzs2: #86b6ef; --wzs3: #2a78d6; --wzs4: #1c5cab; --wzs5: #104281; --wzr1: #e6ddf7; --wzr2: #c5b3ee; --wzr3: #9c82dc; --wzr4: #7356c2; --wzr5: #4e3592; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wzh1: #a32525; --wzh2: #d04343; --wzh3: #e97171; --wzh4: #f4a6a6; --wzh5: #fad4d4; --wzp1: #93650a; --wzp2: #c98e0e; --wzp3: #ebb52c; --wzp4: #f6d66a; --wzp5: #fbebb0; --wzs1: #104281; --wzs2: #1c5cab; --wzs3: #2a78d6; --wzs4: #86b6ef; --wzs5: #cfe2fa; --wzr1: #4e3592; --wzr2: #7356c2; --wzr3: #9c82dc; --wzr4: #c5b3ee; --wzr5: #e6ddf7; } }
+:root[data-theme="dark"] { --wzh1: #a32525; --wzh2: #d04343; --wzh3: #e97171; --wzh4: #f4a6a6; --wzh5: #fad4d4; --wzp1: #93650a; --wzp2: #c98e0e; --wzp3: #ebb52c; --wzp4: #f6d66a; --wzp5: #fbebb0; --wzs1: #104281; --wzs2: #1c5cab; --wzs3: #2a78d6; --wzs4: #86b6ef; --wzs5: #cfe2fa; --wzr1: #4e3592; --wzr2: #7356c2; --wzr3: #9c82dc; --wzr4: #c5b3ee; --wzr5: #e6ddf7; }
 /* the route's elevation behind the bars: the chart viewer's neutral --cp-elev (light area + thin line) */
 :root { --we-elev: #77756f; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --we-elev: #9a9890; } }
@@ -65,6 +75,15 @@ dialog.sd.we-wide { width: min(880px, 96vw); }
   padding: 6px 8px; font-size: 12px; line-height: 1.45; box-shadow: 0 4px 14px rgba(0,0,0,.14); white-space: nowrap; transform: translate(-50%, -100%); z-index: 5; }
 .we-legend { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11.5px; color: var(--muted); align-items: center; }
 .we-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.we-legend .we-lt { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
+.we-legend .we-ramp { display: inline-flex; }
+.we-legend .we-ramp i { width: 8px; margin: 0; border-radius: 0; }
+.we-legend .we-ramp i:first-child { border-radius: 2px 0 0 2px; } .we-legend .we-ramp i:last-child { border-radius: 0 2px 2px 0; }
+.we-legend .we-hrs.est { color: var(--warn, var(--muted)); }
+.we-axis { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.we-axis button { font: inherit; font-size: 11.5px; padding: 1px 10px; border: 0; background: none; color: var(--muted); cursor: pointer; }
+.we-axis button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-weight: 600; }
+.we-tip .el { color: var(--muted); }
 .we-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); align-items: baseline; }
 .we-stats b { color: var(--text); font-size: 14.5px; font-variant-numeric: tabular-nums; }
 .we-issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; }
@@ -80,10 +99,24 @@ dialog.sd.we-wide { width: min(880px, 96vw); }
 .we-sumtpl:hover, .we-sumtpl:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .we-pop { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: min(440px, 92vw); max-height: 60vh; overflow: auto; background: var(--panel);
   border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.18); padding: 6px; }
-.we-pop .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 4px 6px; }
-.we-pop .tabs button { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 12px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; }
-.we-pop .tabs button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 600; }
-.we-pop .tabs.sub button { font-size: 12px; padding: 1px 9px; }
+/* the template filters (SP-643, tplFilters; 插入範本 and the 範本 page): 類型 as solid buttons, its
+   類別 right under it (› and an indent, underline tabs: the next level), 主課強度 a dropdown on
+   the 類型 line (a filter across both, not a level) */
+.we-tf { display: grid; gap: 4px; padding: 2px 4px 6px; min-width: 0; }
+.we-tf-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; }
+.we-tf-h { font-size: 11.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.we-tf-seg { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.we-tf-seg button { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px; padding: 3px 11px; font-size: 12.5px; cursor: pointer; }
+.we-tf-seg button:hover { border-color: var(--accent); }
+.we-tf-seg button.on { border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600; }
+.we-tf-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 2px 0 0 6px; padding-left: 8px; border-left: 2px solid var(--line); min-width: 0; }
+.we-tf-tabs { display: flex; flex-wrap: wrap; gap: 0 2px; min-width: 0; }
+.we-tf-tabs button { border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); padding: 3px 7px; font-size: 12.5px; cursor: pointer; }
+.we-tf-tabs button:hover { color: var(--text); }
+.we-tf-tabs button.on { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
+.we-tf-tt { display: inline-flex !important; align-items: center; gap: 5px; min-width: 0; }
+.we-tf-tt select { font-size: 12.5px !important; padding: 2px 4px !important; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); max-width: 100%; min-width: 0; }
+.we-tf button:focus-visible, .we-tf select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .we-pop .g { font-size: 11.5px; color: var(--faint); padding: 6px 8px 2px; }
 .we-pop button.t { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 10px; align-items: center; width: 100%; text-align: left; border: 0; background: none; color: var(--text);
   font-size: 13px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
@@ -159,6 +192,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
 .we-ro .grip { visibility: hidden; }        /* (kept in the row's grid: the columns stay aligned) */
 @media (max-width: 699px) {
   .we-chart svg { height: 96px; }
+  .we-tip { white-space: normal; width: max-content; max-width: min(300px, 86vw); }
   .we-row { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: "g k a" "g d d" "g t t" "g n n"; row-gap: 4px; }
   .we-row > .grip { grid-area: g; align-self: start; padding-top: 6px; }
   .we-row > .kind { grid-area: k; justify-self: start; }
@@ -206,6 +240,28 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     return u ? ` <a class="we-tpl" href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(tr("workout.no_tpace_link"))}</a>` : "";
   };
   const OPEN_W = 90;
+  // SP-642: a step's colour — the hue by its target type, the shade by its level (1–5) on the common scale
+  const WZ = { hr: "h", power: "p", pace: "s", rpe: "r" };
+  const zfill = (type, level) => (WZ[type] && level ? `var(--wz${WZ[type]}${level})` : "var(--bar)");
+  const ZORDER = ["hr", "power", "pace", "rpe"];
+  // the 5 shades of one type as a small ramp (the legend)
+  const ramp = (type) => `<span class="we-ramp" aria-hidden="true">${[1, 2, 3, 4, 5].map((l) => `<i style="background:${zfill(type, l)}"></i>`).join("")}</span>`;
+  // HR ÷ LTHR → the common scale by the server's points (context.hr_scale, engine/hr_power_calib.describe:
+  // the runner's own relation or 推估) — the template menu's mini charts; null without them
+  const hrScale = (ctx, f) => {
+    const p = ((ctx || {}).hr_scale || {}).points;
+    if (!Array.isArray(p) || p.length < 2) return null;
+    let i = 0;
+    while (i < p.length - 2 && f > p[i + 1][0]) i++;
+    const [a0, b0] = p[i], [a1, b1] = p[i + 1];
+    return b0 + (f - a0) / (a1 - a0) * (b1 - b0);
+  };
+  // SP-639: the chart's 距離 | 時間 axis with a route GPX, per viewer (storage may be blocked)
+  const AX_KEY = "workout.xaxis";
+  const axLoad = () => { try { return localStorage.getItem(AX_KEY) === "time" ? "time" : "dist"; } catch (e) { return "dist"; } };
+  const axSave = (v) => { try { localStorage.setItem(AX_KEY, v); } catch (e) { /* not kept */ } };
+  // the route elevation of POST /steps/check (user_templates.route_elevation), when it fits the steps
+  const elevOf = (v) => v && v.elev && Array.isArray(v.elev.x) && v.order && v.elev.x.length === v.order.length + 1 ? v.elev : null;
   const kmTxt = (x) => (Math.round((x || 0) * 10) / 10).toString();
   // 時長類型 (SP-38): the options come from the push target's capabilities (context.provider:
   // sync/workout_targets describe() — end_conditions + end_labels); these only without one
@@ -283,6 +339,18 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const TT_KEY = "templates.target_type";
   const ttLoad = () => { try { return localStorage.getItem(TT_KEY) || "all"; } catch (e) { return "all"; } };
   const ttSave = (v) => { try { localStorage.setItem(TT_KEY, v); } catch (e) { /* not kept */ } };
+  // the filters above a template list (SP-643), shared with the 範本 page: 類型 (data-cat), its 類別
+  // right under it when it has some (data-sub), 主課強度 as a <select data-tt> (only with > 1 type to
+  // pick). cats / subs / tts: [{id, label, tip?}]; the caller listens for click and change.
+  function tplFilters({ cats, cat, subs, sub, tts, tt }) {
+    const b = (k, x, on) => `<button type="button" data-${k}="${esc(x.id)}" class="${on ? "on" : ""}" aria-pressed="${on}"${x.tip ? ` title="${esc(x.tip)}"` : ""}>${esc(x.label)}</button>`;
+    const ttSel = tts && tts.length > 2 ? `<label class="we-tf-tt"><span class="we-tf-h">${esc(tr("workout.tt"))}</span>` +
+      `<select data-tt>${tts.map((x) => `<option value="${esc(x.id)}"${x.id === tt ? " selected" : ""}>${esc(x.label)}</option>`).join("")}</select></label>` : "";
+    const subRow = subs && subs.length ? `<div class="we-tf-sub"><span class="we-tf-h" aria-hidden="true">› ${esc(tr("workout.tpl_sub"))}</span>` +
+      `<div class="we-tf-tabs" role="group" aria-label="${esc(tr("workout.tpl_sub"))}">${subs.map((x) => b("sub", x, x.id === sub)).join("")}</div></div>` : "";
+    return `<div class="we-tf"><div class="we-tf-top"><span class="we-tf-h">${esc(tr("workout.tpl_type"))}</span>${ttSel}</div>` +
+      `<div class="we-tf-seg" role="group" aria-label="${esc(tr("workout.tpl_type"))}">${cats.map((x) => b("cat", x, x.id === cat)).join("")}</div>${subRow}</div>`;
+  }
 
   async function req(method, url, body) {
     const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -495,7 +563,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     }
     zc(r, st) {
       if (!r || st.dur.type === "open" || r.type === "none" || !r.level) return "var(--bar)";
-      return `var(--wz${r.level})`;
+      return zfill(r.type, r.level);
     }
     itemHtml(it, depth) { return it.kind === "repeat" ? this.repHtml(it, depth) : this.rowHtml(it); }
     rowHtml(st) {
@@ -590,26 +658,47 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         <div class="we-rep-in" data-cont="${it.id}">${it.items.map((x) => this.itemHtml(x, depth + 1)).join("")}</div>
       </div>`;
     }
+    // SP-642: one 5-shade ramp per target type the structure uses (at most 4, in a fixed order) and
+    // one 「輕鬆 → 高強度」 caption for all of them; 不設目標 / 直到按下計圈 only when there; the HR
+    // height's basis (the runner's own relation, or 推估) when there is a heart-rate step
     legend() {
-      const z = [[1, "< 75% CP"], [2, "75–88%"], [3, "88–101%"], [4, "101–106%"], [5, "≥ 106%"]];
-      this.$("we-legend").innerHTML = z.map(([c, l]) => `<span><i style="background:var(--wz${c})"></i>${l}</span>`).join("") +
-        `<span><i style="background:var(--bar)"></i>${esc(tr("workout.no_target"))}</span><span><i style="background:repeating-linear-gradient(45deg,var(--bar) 0 3px,var(--panel) 3px 5px)"></i>直到按下計圈</span>${q(TIP.chart)}` +
+      const v = this.view || {}, order = v.order || [];
+      const has = new Set(order.filter((o) => !o.open && o.frac != null && o.level).map((o) => o.type));
+      const types = ZORDER.filter((t) => has.has(t));
+      const none = order.some((o) => !o.open && (o.frac == null || !o.level)), open = order.some((o) => o.open);
+      const hs = v.hr_scale;
+      this.$("we-legend").innerHTML =
+        types.map((t) => `<span class="we-lt" data-type="${t}">${esc(TYPE[t] || t)}${ramp(t)}</span>`).join("") +
+        (types.length ? `<span class="we-lcap">${esc(tr("workout.legend_ramp"))}</span>` : "") +
+        (none ? `<span><i style="background:var(--bar)"></i>${esc(tr("workout.no_target"))}</span>` : "") +
+        (open ? `<span><i style="background:repeating-linear-gradient(45deg,var(--bar) 0 3px,var(--panel) 3px 5px)"></i>${esc(tr("workout.end.open"))}</span>` : "") +
+        q(TIP.chart) +
+        (hs ? `<span class="we-hrs${hs.estimate ? " est" : ""}" data-src="${esc(hs.source)}">${esc(hs.text)}</span>${q(hs.tip)}` : "") +
         this.elevLegend();
     }
     elevLegend() {
       const ev = (this.view || {}).elev;
       if (!ev) return "";
+      const fit = elevOf(this.view), ax = this.axisOf(fit);
+      const sw = fit && Array.isArray(fit.xt) ? `<span class="we-axis" role="group" aria-label="${esc(tr("workout.axis_label"))}">` +
+        ["dist", "time"].map((k) => `<button type="button" data-ax="${k}" aria-pressed="${ax === k}">${esc(tr("workout.axis_" + k))}</button>`).join("") + `</span>` : "";
       const km = (x) => (Math.round((x || 0) * 10) / 10).toString();
       const txt = tr("workout.elev_legend", { name: ev.name || "GPX", km: ev.complete ? km(ev.route_km) : `${km(ev.km)}/${km(ev.route_km)}` });
       const tip = `${ev.note || ""}` + (ev.complete ? "" : "\n" + tr("workout.elev_partial"));
-      return `<span><i style="background:color-mix(in srgb, var(--we-elev) 30%, transparent);border-top:1px solid var(--we-elev)"></i>${esc(txt)}</span>${q(tip)}`;
+      return `<span><i style="background:color-mix(in srgb, var(--we-elev) 30%, transparent);border-top:1px solid var(--we-elev)"></i>${esc(txt)}</span>${q(tip)}${sw}`;
+    }
+    // "time" / "dist": the axis the chart is on with route elevation `ev` (null: none, the time axis)
+    axisOf(ev) {
+      if (!ev) return "time";
+      if (!this.axis) this.axis = axLoad();
+      return this.axis === "time" && Array.isArray(ev.xt) && ev.xt.length === ev.x.length ? "time" : "dist";
     }
     stats() {
       const v = this.view || {}, t = v.totals || {}, c = this.ctx || {};
       const cap = c.cap ? `${Math.round(c.cap)} 分（${c.cap_mode === "hard" ? "硬上限" : "軟上限"}）` : "不限";
       this.$("we-stats").innerHTML = t.sec == null ? "" :
         `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋「直到按下計圈」段" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
-        `<span>≥ 88% CP <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>≥ 106% CP（Palladino 5 區）<b>${mmss(t.z5_s)}</b></span>` : "") +
+        `<span>${esc(tr("workout.hard_time"))} <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>${esc(tr("workout.z5_time"))} <b>${mmss(t.z5_s)}</b></span>` : "") +
         `<span>預估訓練負荷（Training load）<b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
     }
     issues() {
@@ -647,38 +736,40 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const pat = el("pattern", { id: "we-hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
       el("rect", { width: 6, height: 6, fill: "var(--bar)" }, pat);
       el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--panel)", "stroke-width": 2 }, pat);
-      // a route GPX: the distance axis (km, each step from elev.x); else time (a lap-button step OPEN_W s)
-      const ev = v.elev && Array.isArray(v.elev.x) && v.elev.x.length === v.order.length + 1 ? v.elev : null;
-      const span = (o, i) => ev ? ev.x[i + 1] - ev.x[i] : (o.open && !o.sec ? OPEN_W : o.sec);
-      const total = (ev ? ev.x[ev.x.length - 1] : v.order.reduce((a, o, i) => a + span(o, i), 0)) || 1;
+      // a route GPX: the distance axis (km, each step from elev.x) or, switched (SP-639), its time axis
+      // (elev.xt: each step's estimated seconds on the route); else time (a lap-button step OPEN_W s)
+      const ev = elevOf(v), tm = ev && this.axisOf(ev) === "time", bx = ev ? (tm ? ev.xt : ev.x) : null;
+      const span = (o, i) => bx ? bx[i + 1] - bx[i] : (o.open && !o.sec ? OPEN_W : o.sec);
+      const total = (bx ? bx[bx.length - 1] : v.order.reduce((a, o, i) => a + span(o, i), 0)) || 1;
       const sx = (W - 2) / total, maxF = 1.3;
-      const yCP = base - (1 / maxF) * (base - top);
-      this.elev(el, ev, sx, base, top);
+      const yCP = base - (1 / maxF) * (base - top);          // the threshold (100 on the common scale)
+      this.elev(el, ev, sx, base, top, tm);
       el("line", { x1: 0, x2: W, y1: yCP, y2: yCP, stroke: "var(--faint)", "stroke-dasharray": "3 3", "stroke-width": 1 });
-      el("text", { x: W - 2, y: yCP - 3, "text-anchor": "end", "font-size": 10.5, fill: "var(--muted)" }).textContent = "CP";
+      el("text", { x: W - 2, y: yCP - 3, "text-anchor": "end", "font-size": 10.5, fill: "var(--muted)" }).textContent = tr("workout.threshold_line");
       el("line", { x1: 0, x2: W, y1: base, y2: base, stroke: "var(--line)" });
       const res = v.resolved || {}, spans = new Map();
       let x = 1, tAcc = 0;
       const ticks = [];
-      const step = ev ? (total > 40 ? 10 : total > 15 ? 5 : total > 6 ? 2 : total > 2.5 ? 1 : 0.5)
+      const dist = ev && !tm;
+      const step = dist ? (total > 40 ? 10 : total > 15 ? 5 : total > 6 ? 2 : total > 2.5 ? 1 : 0.5)
         : total > 5400 ? 1800 : total > 2400 ? 600 : 300;
       v.order.forEach((o, i) => {
         const w = span(o, i) * sx;
         const f = Math.min(maxF, o.frac == null ? (o.kind === "rest" ? 0.5 : 0.6) : o.frac);
         const h = Math.max(6, (f / maxF) * (base - top));
-        const fill = o.open ? "url(#we-hatch)" : o.frac == null || !o.level ? "var(--bar)" : `var(--wz${o.level})`;
+        const fill = o.open ? "url(#we-hatch)" : o.frac == null || !o.level ? "var(--bar)" : zfill(o.type, o.level);
         const rr = el("rect", { x: x + 1, y: base - h, width: Math.max(1, w - 2), height: h, rx: 2, fill, class: "blk", "data-id": o.id });
         if (this.sel === o.id) { rr.setAttribute("stroke", "var(--text)"); rr.setAttribute("stroke-width", 1.5); }
-        const km = ev ? [ev.x[i], ev.x[i + 1]] : null;
-        rr.addEventListener("mousemove", (e) => this.tip(e, o, res[o.id], km));
+        rr.addEventListener("mousemove", (e) => this.tip(e, o, res[o.id], ev, i));
         rr.addEventListener("mouseleave", () => (this.$("we-tip").hidden = true));
-        rr.addEventListener("click", () => this.select(o.id));
+        // a tap (phones have no hover): select the step and keep its tip up
+        rr.addEventListener("click", (e) => { this.select(o.id); this.tip(e, o, res[o.id], ev, i); });
         for (const rp of o.rep) { const sp = spans.get(rp.id) || { a: x, b: x + w, n: rp.n, d: o.rep.indexOf(rp) }; sp.b = x + w; spans.set(rp.id, sp); }
         if (!ev && (!o.open || o.sec)) { const before = tAcc; tAcc += o.sec; for (let m = Math.ceil(before / step) * step || step; m <= tAcc; m += step) if (m > before) ticks.push(x + (m - before) * sx); }
         x += w;
       });
       if (ev) for (let m = step; m < total; m += step) ticks.push(1 + m * sx);
-      const tick = (i) => ev ? `${+((i + 1) * step).toFixed(1)} km` : `${(i + 1) * step / 60}′`;
+      const tick = (i) => dist ? `${+((i + 1) * step).toFixed(1)} km` : `${(i + 1) * step / 60}′`;
       ticks.forEach((px, i) => { if (px < W - 18) el("text", { x: px, y: H - 3, "text-anchor": "middle", "font-size": 10.5, fill: "var(--faint)" }).textContent = tick(i); });
       for (const { a, b, n, d } of spans.values()) {
         const y = 10 + d * 8;                     // a nested repeat's bracket sits under its parent's
@@ -686,32 +777,54 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         if (b - a > 18) el("text", { x: (a + b) / 2, y: y - 2, "text-anchor": "middle", "font-size": 11, fill: "var(--text)", "font-weight": 600 }).textContent = `×${n}`;
       }
       svg.setAttribute("aria-label", `區段圖：${v.structure || ""}，總長 ${mmss((v.totals || {}).sec || 0)}` +
-        (ev ? tr("workout.elev_aria", { lo: Math.round(ev.z_min), hi: Math.round(ev.z_max), km: kmTxt(ev.total_km) }) : ""));
+        (ev ? tr(tm ? "workout.elev_aria_t" : "workout.elev_aria", { lo: Math.round(ev.z_min), hi: Math.round(ev.z_max), km: kmTxt(ev.total_km) }) : ""));
     }
-    // the route GPX's elevation (POST /steps/check elev: d = km on the chart's distance axis, z = m):
-    // a light area + thin line behind the bars, its own scale (min–max of the route), labelled at the left
-    elev(el, ev, sx, base, top) {
+    // the route GPX's elevation (POST /steps/check elev: d = km covered on the chart's distance axis,
+    // t = its seconds on the time axis, z = m, null off the route's end — a gap): a light area + thin
+    // line behind the bars, its own scale (min–max of the route), labelled at the left
+    elev(el, ev, sx, base, top, tm) {
       if (!ev || !ev.d || ev.d.length < 2) return;
+      const X = tm && Array.isArray(ev.t) && ev.t.length === ev.d.length ? ev.t : ev.d;
       const lo = ev.z_min, hi = Math.max(ev.z_max, lo + 10);
       const ey = (z) => base - 2 - ((z - lo) / (hi - lo)) * (base - top - 8);
       const ex = (t) => 1 + t * sx;
-      const pts = ev.d.map((t, i) => `${ex(t).toFixed(1)},${ey(ev.z[i]).toFixed(1)}`);
-      const a = ex(ev.d[0]).toFixed(1), b = ex(ev.d[ev.d.length - 1]).toFixed(1);
-      el("path", { d: `M${a},${base} L${pts.join(" L")} L${b},${base} Z`, fill: "var(--we-elev)", "fill-opacity": 0.16, stroke: "none", "pointer-events": "none" });
-      el("path", { d: `M${pts.join(" L")}`, fill: "none", stroke: "var(--we-elev)", "stroke-opacity": 0.6, "stroke-width": 1, "pointer-events": "none" });
+      const runs = [[]];
+      ev.z.forEach((z, i) => { if (z == null) runs.push([]); else runs[runs.length - 1].push([ex(X[i]), ey(z)]); });
+      for (const run of runs) {
+        if (run.length < 2) continue;
+        const pts = run.map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`);
+        el("path", { d: `M${run[0][0].toFixed(1)},${base} L${pts.join(" L")} L${run[run.length - 1][0].toFixed(1)},${base} Z`, fill: "var(--we-elev)", "fill-opacity": 0.16, stroke: "none", "pointer-events": "none" });
+        el("path", { d: `M${pts.join(" L")}`, fill: "none", stroke: "var(--we-elev)", "stroke-opacity": 0.6, "stroke-width": 1, "pointer-events": "none" });
+      }
       el("text", { x: 3, y: ey(hi) - 3, "font-size": 10, fill: "var(--muted)" }).textContent = `${Math.round(hi)} m`;
       el("text", { x: 3, y: base - 4, "font-size": 10, fill: "var(--muted)" }).textContent = `${Math.round(lo)} m`;
     }
-    tip(e, o, r, km) {
+    // the step's climb on the route (SP-639): climb / descent, average grade, estimated time, route km;
+    // without a route an RPE step's own 爬升／下降
+    elevTip(o, st, ev, i) {
+      if (ev && Array.isArray(ev.up) && ev.up[i] != null) {
+        const up = Math.round(ev.up[i] || 0), dn = Math.round(ev.down[i] || 0), dk = (ev.x[i + 1] - ev.x[i]) || 0;
+        const g = dk > 0 ? Math.round(((ev.up[i] || 0) - (ev.down[i] || 0)) / (dk * 1000) * 1000) / 10 : 0;
+        const r = (ev.r || [])[i];
+        return `<br><span class="el">${esc(tr("workout.elev_step", { up, down: dn, g }))}` +
+          (Array.isArray(ev.s) && ev.s[i] != null ? ` · ${esc(tr("workout.elev_time", { t: mmss(ev.s[i]) }))}` : "") +
+          (r ? ` · ${esc(tr("workout.elev_route", { a: kmTxt(r[0]), b: kmTxt(r[1]) }))}` : "") + `</span>`;
+      }
+      const t = st.target || {};
+      if (t.type === "rpe" && (t.up || t.down)) return `<br><span class="el">${esc(tr("workout.rpe_climb", { up: Math.round(t.up || 0), down: Math.round(t.down || 0) }))}</span>`;
+      return "";
+    }
+    tip(e, o, r, ev, i) {
       const t = this.$("we-tip"), box = this.$("we-chart").getBoundingClientRect(), f = this.find(o.id);
       const st = f ? f.it : { kind: o.kind, note: "" };
       const n = o.rep.length ? o.rep.map((x) => `第 ${x.i + 1}/${x.n} 趟`).join(" · ") + " · " : "";
       t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : (o.load ? `負荷 ${o.load.tss} · ` : "") + mmss(o.sec) + (o.est ? "（推估）" : "")}` +
-        (km ? ` · ${esc(tr("workout.elev_km", { a: kmTxt(km[0]), b: kmTxt(km[1]) }))}` : "") + `<br>` +
+        (ev ? ` · ${esc(tr("workout.elev_km", { a: kmTxt(ev.x[i]), b: kmTxt(ev.x[i + 1]) }))}` : "") + this.elevTip(o, st, ev, i) + `<br>` +
         (r ? `${r.type === "none" ? esc(tr("workout.no_target")) : `${esc(r.label)} <b class="num">${esc(r.text)}</b>`}${r.sub ? ` <span class="meta">${esc(r.sub)}</span>` : ""}` : "") +
         (st.note ? `<br><span class="meta">${esc(st.note)}</span>` : "");
       t.hidden = false;
-      t.style.left = Math.min(box.width - 100, Math.max(100, e.clientX - box.left)) + "px";
+      const half = Math.min(box.width / 2, Math.max(100, t.offsetWidth / 2 + 2));   // the whole tip inside the chart
+      t.style.left = Math.min(box.width - half, Math.max(half, e.clientX - box.left)) + "px";
       t.style.top = (e.clientY - box.top - 10) + "px";
     }
     select(id) {
@@ -736,7 +849,17 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       L.addEventListener("keydown", (e) => this.onKey(e));
       this.$("we-issues").addEventListener("click", (e) => { const li = e.target.closest("li[data-id]"); if (li) this.select(li.dataset.id); });
       this.$("we-tools").addEventListener("click", (e) => this.onTool(e));
+      this.$("we-legend").addEventListener("click", (e) => {
+        const b = e.target.closest("[data-ax]");
+        if (!b) return;
+        this.axis = b.dataset.ax; axSave(this.axis);
+        this.legend(); this.chart();
+      });
       this.$("we-pop").addEventListener("click", (e) => this.onTpl(e));
+      this.$("we-pop").addEventListener("change", (e) => {          // 主課強度 (SP-643: a dropdown)
+        const t = e.target.closest("select[data-tt]"); if (!t) return;
+        this.tplTT = t.value; ttSave(this.tplTT); this.menuHtml(); this.$("we-pop").querySelector("select[data-tt]")?.focus();
+      });
       // (a tab click re-renders the popup: its target is detached by the time this runs)
       document.addEventListener("click", (e) => { if (e.target.isConnected && !e.target.closest("#we-tpl, #we-sumtpl")) this.$("we-pop").hidden = true; });
       this.$("we-sumtpl").addEventListener("click", (e) => {
@@ -919,7 +1042,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     menuHtml() {
       const T = this.tpls, cat = this.tplCat, cats = T.cats || [];
       const subs = (cats.find((c) => c.id === cat) || {}).subs || [];
-      if (subs.length && !subs.some((s) => s.id === this.tplSub)) this.tplSub = subs[0].id;
+      // the 類別 when none is picked yet: the top 推薦's (the 推薦 follow the 類別 too), else the first
+      if (subs.length && !subs.some((s) => s.id === this.tplSub)) {
+        const top = (((this.recs || {}).cats || {})[cat] || []).map((x) => (T.groups || []).find((g) => g.cat === cat && g.sub && subs.some((s) => s.id === g.sub) && g.rows.some((r) => r.key === x.key))).find(Boolean);
+        this.tplSub = top ? top.sub : subs[0].id;
+      }
       const where = {};                                      // row key -> "gi.i" in this tab
       (T.groups || []).forEach((g, gi) => { if (g.cat === cat) g.rows.forEach((r, i) => { where[r.key] ??= `${gi}.${i}`; }); });
       // 主課強度: the types this category's rows use; a kept choice none of them has shows 全部 (kept still)
@@ -927,11 +1054,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const tt = avail.has(this.tplTT) ? this.tplTT : "all";
       const ttOk = (r) => tt === "all" || (r.target_types || []).includes(tt);
       const rowAt = (at) => { const [g, i] = at.split(".").map(Number); return T.groups[g].rows[i]; };
-      const recs = ((this.recs || {}).cats || {})[cat]?.filter((x) => where[x.key] && ttOk(rowAt(where[x.key]))) || [];
-      const recKeys = new Set(recs.map((x) => x.key));
       // 我的範本 with no sub-tab of its own (a 強度課 one with no interval family): in every sub-tab
       const gs = (T.groups || []).map((g, gi) => ({ g, gi })).filter(({ g }) => g.cat === cat && (!subs.length || g.sub === this.tplSub || (g.mine && !g.sub)));
-      const tab = (k, id, l, on, tip) => `<button type="button" data-${k}="${esc(id)}" class="${on ? "on" : ""}" aria-pressed="${on}"${tip ? ` title="${esc(tip)}"` : ""}>${esc(l)}</button>`;
+      const inView = new Set(gs.flatMap(({ g }) => g.rows.map((r) => r.key)));     // the 推薦 under the 類別 picked
+      const recs = ((this.recs || {}).cats || {})[cat]?.filter((x) => where[x.key] && inView.has(x.key) && ttOk(rowAt(where[x.key]))) || [];
+      const recKeys = new Set(recs.map((x) => x.key));
       // pace × threshold pace (Daniels / Canova / Billat …) with no threshold pace: badge it
       const noTp = !(((this.ctx || {}).thresholds || {}).tpace);
       const hw = cat === "test" ? "" : hrWarn(this.ctx);      // the test templates: no LTHR badge (SP-274)
@@ -944,21 +1071,19 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         (r.role ? ` <span class="fam">${r.role === "quality" ? "算強度課" : "算輕鬆課"}</span>` : "");
       const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${fsub(r)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}${tpBadge(r)}</span>` +
         `${r.purpose ? `<span class="pur">${esc(r.purpose)}</span>` : ""}<span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
-      const rec = recs.length ? `<div class="g rec">推薦 ${q((this.recs || {}).tip || "")}</div>` +
+      const rec = recs.length ? `<div class="g rec">${esc(tr("workout.tpl_recs"))} ${q((this.recs || {}).tip || "")}</div>` +
         recs.map((x, n) => btn(rowAt(where[x.key]), where[x.key], `${n + 1}. ${x.reason}`)).join("") : "";
       const others = gs.map(({ g, gi }) => {
         const rows = g.rows.map((r, i) => [r, i]).filter(([r]) => !recKeys.has(r.key) && ttOk(r));
         return rows.length ? (gs.length > 1 || g.title ? `<div class="g">${esc(g.title || g.group)}</div>` : "") + rows.map(([r, i]) => btn(r, `${gi}.${i}`)).join("") : "";
       }).join("");
-      const subTabs = subs.length ? `<div class="tabs sub" role="group" aria-label="類別">${subs.map((s) => tab("sub", s.id, s.label, s.id === this.tplSub, s.tip)).join("")}</div>` : "";
-      const list = subTabs + (others || `<p class="empty">${!gs.length ? "這一類還沒有範本"
-        : gs.some(({ g }) => g.rows.some(ttOk)) ? "都在上面的推薦裡" : esc(tr("workout.tt_none"))}</p>`);
-      const n = (T.groups || []).filter((g) => g.cat === cat).reduce((a, g) => a + g.rows.filter((r) => !recKeys.has(r.key) && ttOk(r)).length, 0);
+      const list = (others || `<p class="empty">${esc(tr(!gs.length ? "workout.tpl_none"
+        : gs.some(({ g }) => g.rows.some(ttOk)) ? "workout.tpl_all_in_recs" : "workout.tt_none"))}</p>`);
+      const n = gs.reduce((a, { g }) => a + g.rows.filter((r) => !recKeys.has(r.key) && ttOk(r)).length, 0);
       const tts = [{ id: "all", label: tr("workout.tt_all") }, ...(T.target_types || []).filter((x) => avail.has(x.id))];
-      const ttTabs = tts.length > 2 ? `<div class="tabs sub" role="group" aria-label="${esc(tr("workout.tt"))}">${tts.map((x) => tab("tt", x.id, x.label, x.id === tt)).join("")}</div>` : "";
-      this.$("we-pop").innerHTML = `<div class="tabs" role="group" aria-label="類型">${cats.map((c) => tab("cat", c.id, c.label, c.id === cat)).join("")}</div>` + ttTabs +
-        (rec ? rec + `<details class="more" id="we-more"${this.tplMore ? " open" : ""}><summary>其他範本（${n}）</summary>${list}</details>` : list) +
-        `<div class="mode" role="radiogroup" aria-label="插入方式"><label><input type="radio" name="we-tm" value="full"${this.tplFull ? " checked" : ""}>整份換（含暖身、緩和）</label><label><input type="radio" name="we-tm" value="main"${this.tplFull ? "" : " checked"}>只換主課</label></div>`;
+      this.$("we-pop").innerHTML = tplFilters({ cats, cat, subs, sub: this.tplSub, tts, tt }) +
+        (rec ? rec + `<details class="more" id="we-more"${this.tplMore ? " open" : ""}><summary>${esc(tr("workout.tpl_more", { n }))}</summary>${list}</details>` : list) +
+        `<div class="mode" role="radiogroup" aria-label="${esc(tr("workout.tpl_mode"))}"><label><input type="radio" name="we-tm" value="full"${this.tplFull ? " checked" : ""}>${esc(tr("workout.tpl_full"))}</label><label><input type="radio" name="we-tm" value="main"${this.tplFull ? "" : " checked"}>${esc(tr("workout.tpl_main"))}</label></div>`;
       this.$("we-more")?.addEventListener("toggle", (e) => { this.tplMore = e.target.open; });
     }
     // a template's structure as a 96×26 sparkline: width = time, height + colour = intensity
@@ -979,7 +1104,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         if (t.type === "auto" && t.intent === "band") return (t.lo + t.hi) / 2;
         if (t.type === "auto" && t.intent === "easy") return t.plo != null ? (t.plo + t.phi) / 2 : 0.75;
         if (t.type === "power" && t.mode === "pct") return (t.lo + t.hi) / 2;
-        if (t.type === "hr" && t.mode === "pct") { const m = (t.lo + t.hi) / 2; return m < .85 ? .7 : m < .9 ? .8 : m < .95 ? .88 : m < 1 ? .96 : m < 1.03 ? 1.03 : 1.1; }  // Friel → Palladino (推估, height only)
+        if (t.type === "hr" && t.mode === "pct") return hrScale(this.ctx, (t.lo + t.hi) / 2);   // SP-642: the server's HR scale
         if (t.type === "hr" && t.mode === "zone") return 0.75;
         if (t.type === "pace" && t.mode === "pct") return 2 / (t.lo + t.hi);
         if (t.type === "rpe") return (RPE_F[Math.round(t.lo)] + RPE_F[Math.round(t.hi)]) / 2 || null;
@@ -989,9 +1114,12 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const tot = rows.reduce((a, x) => a + sec(x), 0) || 1, W = 96, H = 26;
       let xx = 0;
       const lv = (v) => v == null ? 0 : v < .75 ? 1 : v < .88 ? 2 : v < 1.01 ? 3 : v < 1.06 ? 4 : 5;
+      // the colour's type: the step's own, 「自動」 the session's 目標用 (the editor's policy basis)
+      const basis = (((this.ctx || {}).policy || {}).basis) || "power";
+      const ty = (x) => { const t = (x.target || {}).type; return t === "auto" ? basis : t; };
       const bars = rows.map((x) => {
         const v = f(x), w = sec(x) / tot * W, h = Math.max(3, Math.min(1.3, v == null ? (x.kind === "rest" ? .45 : .55) : v) / 1.3 * H);
-        const fill = v == null ? "var(--bar)" : `var(--wz${lv(v)})`;
+        const fill = v == null ? "var(--bar)" : zfill(ty(x), lv(v));
         const r = `<rect x="${xx.toFixed(1)}" y="${(H - h).toFixed(1)}" width="${Math.max(0.6, w - 0.6).toFixed(1)}" height="${h.toFixed(1)}" fill="${fill}"/>`;
         xx += w;
         return r;
@@ -1005,8 +1133,6 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (c) { this.tplCat = c.dataset.cat; this.tplSub = null; this.menuHtml(); return; }
       const sb = e.target.closest("button[data-sub]");
       if (sb) { this.tplSub = sb.dataset.sub; this.menuHtml(); return; }
-      const tb = e.target.closest("button[data-tt]");
-      if (tb) { this.tplTT = tb.dataset.tt; ttSave(this.tplTT); this.menuHtml(); return; }
       const b = e.target.closest("button[data-t]"); if (!b) return;
       const [g, i] = b.dataset.t.split(".").map(Number), row = this.tpls.groups[g].rows[i];
       this.applyRow(row);
@@ -1116,6 +1242,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
 
   // endOptions: the 時長類型 <option>s of one step for a context (pure; tests/test_coros_tl.py)
   window.WorkoutEditor = { mount: (root, opts) => new Editor(root, opts), request: req,
+    tplFilters,                                       // SP-643: the 範本 page's filters
     endOptions: (ctx, st) => Editor.prototype.endOpts.call({ ctx }, st),
     // SP-57 (tests/test_rpe_load.py): a 「負荷」 step's dur after an edit, and its input html
     loadDur, loadInput: (ctx, st, r) => Editor.prototype.loadIn.call({ ctx }, st, r, ""),

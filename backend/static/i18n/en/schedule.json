@@ -145,6 +145,9 @@
   "pf.basis_tip": "Whether session targets use heart rate or power.\nAuto: road easy and long runs use power with HR capped at the easy-run cap; trail easy runs, long mountain days and recovery runs use HR (≤ the easy-run cap); steep power hiking and hiking climb at HR ≤ 75% of max heart rate or RPE ≤ 13; intervals and 3–8% hill repeats use power with HR as a ceiling alert; long climbs and downhill practice have no target; CP tests use power, AeT tests follow the test protocol. Warm-ups have no target (the HR is still coming up, so the watch doesn't keep alerting); cool-downs stay easy.\nHeart rate: HR zones everywhere (your workout HR zones; easy-run cap = the Z2 top, or a measured AeT when you have one).\nPower: power zones everywhere (the plan power zones in Settings, Palladino % CP by default); tests and downhills keep their own rules.\nOnly affects sessions the planner makes; each step can still be switched to power, HR or pace in the session's structure, and templates keep their source's targets.",
   "pf.hr": "Heart rate",
   "pf.power": "Power",
+  "pf.climb": "Runnable climbs on COROS",
+  "pf.climb_tip": "Race sessions exported from the race calculator: the target the runnable stretches (−3 to +15 %, not technical, not high altitude) get on COROS.\nWithout Stryd (those legs had heart rate or no target): always Effort Pace (the COROS watch's grade-adjusted pace, the same conversion as the calculator's flat-equivalent pace).\nWith Stryd (those legs have power): power by default; pick Effort Pace to send Effort Pace instead.\nGarmin pushes don't change: add a GAP (grade-adjusted pace) data field on the watch as a reference.",
+  "pf.ep": "Effort Pace",
   "pf.t_easy": "Easy-run terrain",
   "pf.t_long": "Long-run terrain",
   "pf.t_quality": "Interval terrain",
@@ -460,5 +463,12 @@
   "rc.done": {"one": "Replanned: 1 change", "other": "Replanned: {n} changes"},
   "rc.ter.road": "road",
   "rc.ter.trail": "trail",
-  "rc.colon": ": "
+  "rc.colon": ": ",
+  "suggest.ladder": "The next step of your interval ladder (same as the automatic plan)",
+  "suggest.speed": "A speed session picked for your phase and this day's time",
+  "suggest.locked": "VO2max isn't unlocked yet: added by hand, doesn't count toward progress",
+  "suggest.locked_why": "VO2max isn't unlocked yet ({why}): added by hand, doesn't count toward progress",
+  "suggest.ask_h": "VO2max isn't unlocked yet",
+  "suggest.ask": "You're adding this by hand: it doesn't count toward progress and won't move the VO2max ladder. Your aerobic base isn't confirmed yet, so rest well after it. Add it?",
+  "suggest.ask_ok": "Add anyway"
 }

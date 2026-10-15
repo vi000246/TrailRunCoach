@@ -54,7 +54,7 @@ Garmin is a **trial** for now: at most 1 scheduled and 3 manual syncs a day; a l
 Charts, the overview, the Race calculator, the CP test and every sync use only the chosen source; another source's activities never fill gaps. Switching asks first, and the charts are recalculated from the new source; tags, RPE, pain, pack weight and the schedule matching are tied to the start time and stay.
 
 ### How the sign-in is kept
-With "remember the password" ticked, the password is stored encrypted on the server: when a COROS sign-in expires (about 24 hours) or is refused, it signs in again once by itself. Without it, sign in again yourself. If Garmin asks for a code, a code field appears (valid 10 minutes). COROS and Garmin are unofficial interfaces: the first connection asks you to accept a notice.
+Without “Remember password”, the password is sent only when you sign in and is not kept; only the encrypted sign-in token is, and when it expires you sign in again yourself. With it ticked, the password is stored encrypted on the server: when a COROS sign-in expires (about 24 hours) or is refused, or Garmin no longer accepts the token, it signs in again once by itself. If Garmin asks for a code, a code field appears (valid 10 minutes). COROS and Garmin are unofficial interfaces: the first connection asks you to accept a notice.
 
 ### When it syncs
 - When you open the site: if the last sync is older than some hours (6 by default).

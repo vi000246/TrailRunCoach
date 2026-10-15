@@ -1108,8 +1108,10 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
         s["steps"] = WS.normalize(s["steps"])
     except WS.StepsError as e:
         raise HTTPException(400, f"分段轉成課表步驟失敗：{e}")
-    pv = WS.watch_preview(s["steps"], WS.Ctx(cp=th["cp"], lthr=th["lthr"], aet=th["aet"]), CW.workout_name(s),
-                          s["detail"])
+    # SP-632: the runnable legs as COROS gets them (Effort Pace; over power with 課表偏好「可跑坡目標」)
+    pv = WS.watch_preview(s["steps"], WS.Ctx(cp=th["cp"], lthr=th["lthr"], aet=th["aet"],
+                                             ep_power=WS.ep_power_of(PS.load_prefs_safe())),
+                          CW.workout_name(s), s["detail"])
     key = CW.RACE_KEY_PREFIX + eid
     today = today_local().isoformat()
     blocked = _blocked()

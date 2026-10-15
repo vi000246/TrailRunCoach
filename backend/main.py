@@ -21,6 +21,7 @@ from backend.api import racepower as racepower_api
 from backend.api import plan_sessions as plan_sessions_api
 from backend.api import plan_auto as plan_auto_api
 from backend.api import routes as routes_api
+from backend.api import activity_compare as activity_compare_api
 from backend.api import injuries as injuries_api
 from backend.api import archive as archive_api
 from backend.api import backup as backup_api
@@ -38,6 +39,7 @@ from backend.api import about as about_api
 from backend.api import admin as admin_api
 from backend.api import change_sync as change_sync_api
 from backend.api import billing as billing_api
+from backend.api import intro as intro_api
 
 
 # pages the demo never serves: the WKO5 comparison, the settings, the injury log and the sign-in page
@@ -217,6 +219,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
         racepower_api.router,
         racepower_api.share_router,      # /share/<id>: the only path meant to skip the tunnel's password
         routes_api.router, routes_api.workout_router,
+        activity_compare_api.router,     # 任選兩次活動比較 (SP-625)
         injuries_api.router,             # 傷病紀錄 (hidden in the demo)
         backup_api.router,               # 備份 (settings page)
         archive_api.router,              # 運動紀錄保留期限、下載全部 FIT (settings page, SP-317)
@@ -253,6 +256,8 @@ def build_app(demo: bool | None = None) -> FastAPI:
         billing_api.router,
         # 管理 (SP-351): site settings and users, admin scopes only; never in the demo
         admin_api.router,
+        # 介紹頁's examples and small calculator (SP-637): public, the built-in fictional runner only
+        intro_api.router,
     ]
     for r in routers:
         # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),

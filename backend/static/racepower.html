@@ -1853,6 +1853,8 @@ function renderResults() {
   }
   h += tile("平均功率", W(s.power), `${pct(s.pct_cp)} CP · ${wkg(s.w_per_kg)}`, true);
   h += tile("平均配速", pace(s.pace_s_per_km), trail ? "實際距離" : "");
+  // SP-632: the race's flat-equivalent pace (the segments' GAP by time) and what it means
+  if (trail && ok(s.flat_pace_s_per_km)) h += `<div class="tile" id="flat-pace"><div class="k">${esc(T("flat.k"))}${help(esc(T("flat.tip")))}</div><div class="v">${pace(s.flat_pace_s_per_km)}</div><div class="s">${esc(T("flat.s"))}</div></div>`;
   h += tile("努力度", `<span style="color:${css(EFF_COLORS[["easy", "steady", "hard", "max", "over"].indexOf(e.key)])}">${esc(e.label)}</span>`, `${pct(e.f)} 可持續功率`);
   h += tile("環境係數 M", s.M.toFixed(3), P.course_source === "gpx" ? "逐段海拔的平均" : "功率 × M");
   h += `</div>`;

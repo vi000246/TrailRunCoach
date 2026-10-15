@@ -386,7 +386,7 @@ def test_templates_manage(app):
     expect(page.locator("#tm-items button[data-id]")).to_have_count(0)
     page.click('#tm-src button[data-src="all"]')
     # a category chip narrows the list, 「全部」 brings it back
-    cats = page.locator("#tm-cats button[data-cat]")
+    cats = page.locator("#tm-filt button[data-cat]")
     if cats.count() > 1:
         cats.nth(1).click()
         cats.first.click()

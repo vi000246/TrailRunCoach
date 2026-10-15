@@ -69,6 +69,10 @@ TARGET_OPEN, TARGET_TIME, TARGET_DIST = 1, 2, 5
 # estimated-time step instead (the name then carries 「負荷 X TSS（約 Y TL）」)
 COROS_TARGET_TYPE_LOAD: Optional[int] = 6
 INT_NONE, INT_HR, INT_PACE, INT_POWER = 0, 2, 3, 6
+# SP-632: COROS 「Effort Pace」 (its grade-adjusted pace). 推估 — the code is third-party
+# (docs/plans/workout-editor.plan.md: intensityType 8 exists; never sent before SP-632, not checked on a watch);
+# value / extend / display unit are assumed to be the pace target's (s/km, faster first, unit 1)
+INT_EFFORT_PACE = 8
 PACE_DISPLAY_UNIT = 1            # min/km on the watch (verified 2026-10-02)
 HR_TYPE_LTHR = 3
 REST_NONE = 3
@@ -106,7 +110,7 @@ class CorosAuthError(CorosError, SyncAuthError):
 class Step:
     kind: int                     # EX_WARMUP / EX_TRAIN / EX_COOLDOWN / EX_REST
     seconds: int                  # 0 = open (ends with the lap button)
-    intensity: Optional[tuple] = None   # ("hr", lo, hi) | ("power", lo, hi)
+    intensity: Optional[tuple] = None   # ("hr" | "power" | "pace" | "effort_pace", lo, hi)
     name: str = ""
     meters: int = 0               # > 0: a distance step (targetType 5, cm) — engine/workout_steps.py
     # a 「負荷」 step (engine/workout_steps.py, SP-38): the planned TSS and its COROS TL
@@ -398,6 +402,8 @@ def _int_text(it: Optional[tuple]) -> str:
         return f"心率 {lo:.0f}–{hi:.0f}" if lo else f"心率 ≤ {hi:.0f}"
     if typ == "pace":
         return f"配速 {_mmss(lo)}–{_mmss(hi)} /km"
+    if typ == "effort_pace":
+        return f"Effort Pace {_mmss(lo)}–{_mmss(hi)} /km"
     return f"功率 {lo:.0f}–{hi:.0f} W"
 
 
@@ -448,9 +454,11 @@ def step_lines(steps: list[StepLike]) -> list[str]:
     return out
 
 
-def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> list[StepLike]:
+def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: bool = False) -> list[StepLike]:
     """Structured steps for one week-plan session, or Unsupported. `sent_tl`: the TL its
-    「負荷」 steps were last pushed with (session_workout / _sent_tl)."""
+    「負荷」 steps were last pushed with (session_workout / _sent_tl). `ep` (SP-632, the COROS
+    push only): a step carrying an Effort Pace band goes as an Effort Pace target
+    (workout_steps.ep_intensity; over power only with s["ep_power"], plan_store.push_dict)."""
     kind = s.get("kind")
     secs = int(s.get("minutes") or 0) * 60
     if kind == "rest" or (kind == "race" and not s.get("steps")):
@@ -469,7 +477,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
         except WS.StepsError as e:
             raise Unsupported(f"課表結構有誤：{e}")
         c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm,
-                   sent_tl=sent_tl, walk=th.walk_of(s))
+                   sent_tl=sent_tl, walk=th.walk_of(s), ep=ep, ep_power=bool(s.get("ep_power")))
         return WS.steps_to_coros(st, c)
     if kind == "notice":
         # 課表待確認 (engine/plan_auto.py): one 1-minute open warm-up step, so it is
@@ -599,10 +607,12 @@ def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds,
                 ex["intensityPercentExtend"] = round(hi / th.lthr * 100000)
         elif typ == "power":
             ex["intensityType"] = INT_POWER
-        elif typ == "pace":
-            # s/km, value = faster (smaller) bound, extend = slower (the verified probe order)
+        elif typ in ("pace", "effort_pace"):
+            # s/km, value = faster (smaller) bound, extend = slower (the verified probe order);
+            # Effort Pace the same fields (推估, SP-632)
             a, b = sorted((int(round(lo)), int(round(hi))))
-            ex["intensityType"], ex["intensityDisplayUnit"] = INT_PACE, PACE_DISPLAY_UNIT
+            ex["intensityType"] = INT_PACE if typ == "pace" else INT_EFFORT_PACE
+            ex["intensityDisplayUnit"] = PACE_DISPLAY_UNIT
             ex["intensityValue"], ex["intensityValueExtend"] = a, b
     return ex
 
@@ -685,7 +695,7 @@ def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = 
         raise Unsupported("日期已過")
     th = Thresholds.of(thresholds)
     sent = _sent_tl(s)
-    steps = session_steps(s, th, sent)
+    steps = session_steps(s, th, sent, ep=True)
     name = workout_name(s)
     payload = build_program(name, steps, th, s.get("detail") or "")
     # the payload is the fingerprint: a TSS → TL refit changes it only for sessions with a
@@ -1053,7 +1063,7 @@ async def push_workout(db: AsyncSession, s: dict, thresholds: Optional[dict], to
         res = await push_sessions(db, [s], thresholds, today, athlete_id=athlete_id, hub=hub)
         return {**res["sessions"][0], "scheduled": True}
     th = Thresholds.of(thresholds)
-    steps = session_steps(s, th)
+    steps = session_steps(s, th, ep=True)
     name = library_name(s)
     payload = build_program(name, steps, th, s.get("detail") or "")
     fp = _fingerprint(None, payload)

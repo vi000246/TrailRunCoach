@@ -27,7 +27,7 @@ async def tp_login_password(body: LoginRequest, db: AsyncSession = Depends(get_d
     Authenticate with TrainingPeaks using WKO5's exact OAuth2 ROPC flow:
       grant_type=password (no client_id) → users/v3/user → persist tokens only.
     The password is stored only with remember=true (「記住密碼」), sealed with
-    the local key; remember=false deletes a stored one. Never returned.
+    the server key; remember=false deletes a stored one. Never returned.
     Returns: { authenticated, tp_athlete_id, athletes, user_type, premium, can_download, password_saved }
     Note: download requires premium or coach account.
     """

@@ -350,6 +350,7 @@ dialog.sd .err:empty { display: none; }
 dialog.sd input.locked { background: var(--soft); color: var(--muted); cursor: pointer; }
 .hint { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .hint button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; }
+#sd-sug.warn { color: var(--watch); }
 .done-box { font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
 /* planned vs actual (engine/plan_match.py) */
 .vs-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -682,6 +683,9 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="meta sd-watch" id="sd-watch" hidden></div>
     <div class="done-box" id="sd-done" hidden></div>
     <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
+    <!-- SP-628: what a new session was filled with (POST /sessions/suggest) — the ladder step, or
+         「還沒解鎖」 for a VO2max session before the Zone 5 track opened -->
+    <div class="hint" id="sd-sug" aria-live="polite" hidden></div>
     <div class="var-box" id="sd-tb">
       <!-- the structured editor (static/workout_editor.js, engine/workout_steps.py): chart, steps, per-step targets
            (each step picks power / HR / pace; 自動 steps follow target_policy by session type), watch preview -->
@@ -836,6 +840,12 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 功率：全部用功率區間（設定的課表功率區間，預設 Palladino % CP）；測試和下坡照它們自己的規則。
 只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button>
           <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-tb-l"><label><input type="radio" name="target_basis" value="auto"><span data-i18n="schedule.pf.auto">自動</span></label><label><input type="radio" name="target_basis" value="hr"><span data-i18n="schedule.pf.hr">心率</span></label><label><input type="radio" name="target_basis" value="power"><span data-i18n="schedule.pf.power">功率</span></label></span></div>
+        <div class="pf-r"><span class="pf-l" id="pf-ct-l" data-i18n="schedule.pf.climb">可跑坡目標（COROS）</span>
+          <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.climb_tip" aria-label="說明" data-tip="賽事計算機匯出的比賽課，可跑的坡（−3～+15 %，不含技術段與高海拔）推到 COROS 時用什麼目標。
+沒有 Stryd（這些段本來是心率或不設目標）：一律送 Effort Pace（COROS 手錶的坡度調整配速，跟計算機的平地等效配速是同一種換算）。
+有 Stryd（這些段是功率）：預設照舊送功率；選 Effort Pace 就改送 Effort Pace。
+Garmin 推送不變：可以在手錶加 GAP（坡度調整配速）資料欄位當參考。">?</button>
+          <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-ct-l"><label><input type="radio" name="climb_target" value="power"><span data-i18n="schedule.pf.power">功率</span></label><label><input type="radio" name="climb_target" value="effort_pace"><span data-i18n="schedule.pf.ep">Effort Pace</span></label></span></div>
         <div class="pf-r"><label class="pf-l" for="pf-te" data-i18n="schedule.pf.t_easy">輕鬆跑地形</label>
           <span class="pf-c"><select id="pf-te" name="terrain_easy"><option value="any" data-i18n="schedule.pf.any">都可</option><option value="road" data-i18n="schedule.pf.road">路跑</option><option value="trail" data-i18n="schedule.pf.trail_hr">越野（只看心率）</option></select></span></div>
         <div class="pf-r"><label class="pf-l" for="pf-tl" data-i18n="schedule.pf.t_long">長跑地形</label>
@@ -2064,7 +2074,8 @@ $("eq-goal").addEventListener("click", () => { const g = D.goal_climb_per_km; if
 function tgtHint() {
   tssHint();
   // trail / hike: heart rate only (pace and power are unreliable off-road)
-  const t = eqOn() && terVal() !== "road" ? aetText() : (D.targets || {})[kindVal()] || "";
+  // a new session filled from the interval ladder (SP-628) carries its own target: no 依門檻建議 over it
+  const t = dlg.sug && dlg.sug.variant && !dlg.uid ? "" : eqOn() && terVal() !== "road" ? aetText() : (D.targets || {})[kindVal()] || "";
   dlg.sugg = t;
   $("sd-tgt").innerHTML = t && F.target.value !== t && !F.target.disabled ? `依門檻建議：${gl(t)} <button type="button" id="sd-tgt-use">套用</button>` : "";
   const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
@@ -2109,7 +2120,8 @@ function weSession() {
     // 目標用: a user template's (SP-36) once one is applied, else the session's stored one
     target_basis: dlg.tplBasis !== undefined ? dlg.tplBasis : (dlg.orig || {}).target_basis,
     protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
-    ...(dlg.variant ? { variant_key: dlg.variant.key } : dlg.orig && dlg.orig.variant_key ? {
+    ...(dlg.variant ? { variant_key: dlg.variant.key, variant_reps: dlg.variant.reps, variant_blocks: dlg.variant.blocks,
+      variant_adj: dlg.variant.adj } : dlg.orig && dlg.orig.variant_key ? {
       variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
       variant_adj: dlg.orig.variant_adj, rung_key: dlg.orig.rung_key } : {}) };
 }
@@ -2394,22 +2406,68 @@ function openDlg(s, day) {
   eqInit(s);
   tgtHint();
   WE.open({ uid: s ? s.uid : null, ro, kind: s ? s.kind : "easy" });
+  sugHint();
   $("sd").showModal();
+  if (!s) suggest();
   (ro ? $("sd-cancel") : F.title).focus();
 }
 F.addEventListener("change", (e) => {
   if (e.target.name === "terrain") return onTerrain();
   if (e.target.name === "kind") { onKind(); dlg.famTouched = !!e.target.dataset.fam; famHint(); }
+  if (e.target.name === "day" && !dlg.uid && dlg.sug) suggest();
   if (e.target.name !== "kind" || dlg.uid) return tgtHint();
   const k = kindVal(), fam = famVal();
-  const defs = D.default_titles || {}, ftitles = D.family_titles || {};
-  if (!F.title.value || [...Object.values(defs), ...Object.values(ftitles)].includes(F.title.value))
+  const defs = D.default_titles || {}, ftitles = D.family_titles || {}, sug = dlg.sug || {};
+  if (!F.title.value || [...Object.values(defs), ...Object.values(ftitles)].includes(F.title.value) ||
+      (sug.title && F.title.value === sug.title && !dlg.titleTouched))
     F.title.value = (fam && ftitles[fam]) || defs[k] || KINDS[k];
+  if (sug.detail && F.detail.value === sug.detail) F.detail.value = "";
   if (!dlg.targetTouched) F.target.value = (D.targets || {})[k] || "";
   if (k === "strength" && +F.minutes.value === 45) F.minutes.value = 35;
   if (eqOn()) autoText();
   tgtHint();
+  suggest();
 });
+// SP-628: a new session is filled with what the automatic plan would give that day (POST /sessions/suggest,
+// engine/session_suggest.py): 強度課 the interval ladder's session — its variant_key, so the structure, the
+// watch and the judging take the plan's path (個人化間歇 under 個人化區間) —, 速度 the best speed template,
+// 輕鬆跑／LSD that week's minutes and target. VO2max before the Zone 5 track opens: V1, marked, asked once on save.
+async function suggest() {
+  if (dlg.uid || dlg.ro || dlg.preset) return;
+  const k = kindVal(), fam = famVal(), my = dlg.sugSeq = (dlg.sugSeq || 0) + 1;
+  if (!["quality", "easy", "long"].includes(k)) {
+    if (dlg.sug) { dlg.variant = null; dlg.sug = null; dlg.locked = null; sugHint(); }
+    return;
+  }
+  let r;
+  try {
+    r = await sj("POST", `${PAPI}/sessions/suggest`, { kind: k, family: fam, day: F.day.value, terrain: eqOn() ? terVal() : null });
+  } catch (_) { return; }
+  if (my !== dlg.sugSeq || dlg.uid || !$("sd").open || kindVal() !== k || famVal() !== fam) return;
+  const prev = dlg.sug || {};
+  dlg.sug = r;
+  if (r.minutes == null) { dlg.variant = null; dlg.locked = null; sugHint(); return; }
+  if (r.title && (!dlg.titleTouched || !F.title.value || F.title.value === prev.title)) { F.title.value = r.title; dlg.titleTouched = false; }
+  if (r.target != null && !dlg.targetTouched) F.target.value = r.target;
+  if (r.detail != null && (!F.detail.value || F.detail.value === prev.detail)) F.detail.value = r.detail;
+  F.minutes.value = r.minutes;
+  dlg.variant = r.variant ? { key: r.variant.key, reps: r.variant.reps, blocks: r.variant.blocks, adj: r.variant.adj, suggest: r.family } : null;
+  dlg.locked = r.locked || null;
+  dlg.lockOk = false;
+  sugHint();
+  if (r.template_key) await WE.applyKey(r.template_key);       // 速度: the template, as a structure of your own
+  else await WE.rederive({});
+  tgtHint();
+}
+function sugHint() {
+  const el = $("sd-sug"), r = dlg.sug;
+  const show = !!(r && r.minutes != null && !dlg.uid && !dlg.ro && (r.locked || r.variant || r.template_key));
+  el.hidden = !show;
+  el.classList.toggle("warn", !!(show && r.locked));
+  if (!show) { el.textContent = ""; return; }
+  el.textContent = r.locked ? (r.locked.why ? tt("suggest.locked_why", { why: r.locked.why }) : tt("suggest.locked"))
+    : r.template_key ? tt("suggest.speed") : tt("suggest.ladder");
+}
 F.target.addEventListener("input", () => { dlg.targetTouched = true; tgtHint(); });
 F.title.addEventListener("input", () => { dlg.titleTouched = true; tgtHint(); if (eqOn()) gradeRender(); });
 F.minutes.addEventListener("input", () => { if (eqOn()) eqRecalc("minutes"); tssHint(); });
@@ -2427,6 +2485,13 @@ F.addEventListener("submit", async (e) => {
   const body = { day: F.day.value, kind: kindVal(), title: F.title.value.trim(), minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
     tss: Math.round(estDialog().tss * 10) / 10 };
   if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
+  // SP-628: the dialog's suggestion — the server rebuilds it for the day (the reps for its cap, the mark)
+  if (dlg.variant && dlg.variant.suggest && body.kind === "quality") body.suggest = dlg.variant.suggest;
+  if (!dlg.uid && dlg.locked && dlg.variant && body.kind === "quality" && !dlg.lockOk) {
+    if (!(await ask(tt("suggest.ask_h"), `<p style="margin:0">${esc(tt("suggest.ask"))}</p>`,
+      tt("suggest.ask_ok")))) return;
+    dlg.lockOk = true;
+  }
   // 強度課's family: saved when you picked one (a new 強度課 always has one); untouched = read from the steps
   if (body.kind === "quality" && (dlg.famTouched || !dlg.uid)) body.family = famVal();
   if (dlg.test && body.kind === "test") body.protocol = dlg.test.protocol;          // 測試 → which protocol
@@ -2694,6 +2759,7 @@ function pfFill(p) {
   PFF.elements.terrain_long.value = p.terrain_long;
   PFF.elements.terrain_quality.value = p.terrain_quality;
   (PFF.querySelector(`input[name="target_basis"][value="${p.target_basis || "auto"}"]`) || {}).checked = true;
+  (PFF.querySelector(`input[name="climb_target"][value="${p.climb_target || "power"}"]`) || {}).checked = true;
   pdaysRender(p);
   smRender(p);
   PFF.elements.warmup_commute_min.value = p.warmup_commute_min ?? 10;
@@ -2720,6 +2786,7 @@ function pfRead() {
     terrain_easy: E.terrain_easy.value, terrain_long: E.terrain_long.value, terrain_quality: E.terrain_quality.value,
     // 目標依據 replaces 間歇目標 (engine/target_policy.py); interval_target stays "power" so it can't override it
     interval_target: "power", target_basis: radioVal("target_basis") || "auto",
+    climb_target: radioVal("climb_target") || "power",
     warmup_commute_min: numOrNull(E.warmup_commute_min.value) ?? 10, cooldown_min: numOrNull(E.cooldown_min.value) ?? 5,
     warmup_on: E.warmup_on.checked, warmup_min: numOrNull(E.warmup_min.value) ?? 10,
     pref_days: pdaysRead(), pref_keep: [...PD_KEEP].filter((k) => PD_CONF.some((c) => c.code === k)),
@@ -3662,6 +3729,7 @@ async function openPreset(add, test, proto, day) {
   };
   S.sel = d; render();
   openDlg(null, d);
+  dlg.preset = true;                     // its own template, not the suggestion (SP-628)
   try {
     if (test) {
       pickKind("test");

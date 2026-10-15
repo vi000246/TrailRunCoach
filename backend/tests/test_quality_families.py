@@ -80,7 +80,7 @@ def test_fixed_sessions_are_named_by_their_family():
         assert s["title"].startswith(PREFIX[(fam, WT.session_family(s, TH)["sub"])])
     assert not any("閾值" in s["title"] for s in (O.ROAD_SPECIFIC_Q, O.TRAIL_SPECIFIC_Z5, O.TAPER_Z3))
     assert O.TAPER_Q["title"] == "有氧間歇（巡航）4×3 分" and "98–102% CP" in O.TAPER_Q["detail"]
-    assert PS.DEFAULT_TITLES["quality"] == "有氧間歇（巡航）3×10 分"
+    assert PS.DEFAULT_TITLES["quality"] == "有氧間歇"           # SP-628: filled from the ladder, no fixed set
 
 
 def test_flat_terrain_turns_the_new_hill_title_flat():

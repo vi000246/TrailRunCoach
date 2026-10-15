@@ -31,7 +31,7 @@ More: [Connecting a data source](start.md#connect), [How long the first sync tak
 - **Password changed**: “logging in again with the remembered password failed too” = the password probably changed; log in again.
 
 ### Remember password
-Ticked, the password is stored encrypted on the server; unticking or logging out deletes it at once. A COROS login expires after about 24 hours; ticked, it logs in again once by itself.
+Unticked, the password is sent only when you log in and is not kept; only the encrypted login token is. Ticked, the password is stored encrypted on the server; unticking, logging out (for Garmin, disconnecting) deletes it at once. A COROS login expires after about 24 hours; ticked, it logs in again once by itself.
 :::
 
 ## An activity is missing, shows twice, or has the wrong type? {#missing-activity}

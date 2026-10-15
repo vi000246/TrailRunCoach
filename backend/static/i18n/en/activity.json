@@ -216,5 +216,12 @@
   "archived": "Archived — original file removed",
   "archived_help": "Older than your activity retention, so its FIT original was removed in the monthly cleanup; distance, time, training load and the rest come from the kept summary and still count in the training load chart and best efforts, but its single-activity charts can no longer be opened.",
   "not_original": "Not the original file",
-  "not_original_help": "Huawei's activities have no original watch file on intervals.icu: this is the file intervals.icu provides"
+  "not_original_help": "Huawei's activities have no original watch file on intervals.icu: this is the file intervals.icu provides",
+  "cmp.tip": "Compare: press one activity, then another",
+  "cmp.picked_tip": "Picked as A; press again to cancel",
+  "cmp.label": "Compare \"{name}\"",
+  "cmp.picked": "Compare A:",
+  "cmp.next": "press another activity's compare button, or",
+  "cmp.page": "pick B on the comparison page",
+  "cmp.cancel": "Cancel"
 }

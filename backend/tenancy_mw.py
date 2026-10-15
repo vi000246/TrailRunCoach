@@ -311,7 +311,7 @@ def _share_tenant(path: str) -> tenancy.Tenant:
     if m is None:
         return tenancy.owner()
     from backend.engine.racepower import share as SH
-    if m.group(1) == SH.EXAMPLE_ID:        # the 介紹頁's built-in example (SP-622): a repo file, no one's tenant
+    if SH.is_example(m.group(1)):          # the 介紹頁's built-in examples (SP-622, SP-637): repo files, no one's tenant
         return tenancy.anonymous()
     from backend.accounts import store, tenants as TN
     u = store.share_owner(m.group(1))

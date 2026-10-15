@@ -232,7 +232,8 @@ def test_issues_z5_rep_cap_and_coros():
         {"kind": "cool", "dur": {"type": "open"}, "target": {"type": "auto", "intent": "easy"}}]})
     iss = WS.issues(d, c, cap=40, cap_mode="hard", rung="z5a")
     texts = [i["text"] for i in iss if i["level"] == "err"]
-    assert any("5 區每趟至少 2 分鐘" in t for t in texts)
+    assert not any("5 區每趟至少 2 分鐘" in t for t in texts)      # SP-645: a reminder, not an error
+    assert any("5 區每趟至少 2 分鐘" in i["text"] for i in iss if i["level"] == "warn")
     assert any("超過這天上限 40 分" in t for t in texts)
     assert any("Buchheit" in i["text"] for i in iss if i["level"] == "warn")
     assert any("直到按下計圈" in i["text"] for i in iss if i["level"] == "info")

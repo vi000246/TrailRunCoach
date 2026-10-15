@@ -122,6 +122,9 @@ PUBLIC_PATHS = PUBLIC_PATHS | {"/test-login", "/api/v1/account/test-login"}
 # 介紹頁 (SP-622, main._home): "/" signed out is the product's introduction (signed in: the overview, as
 # before) — exactly "/", nothing under it
 PUBLIC_PATHS = PUBLIC_PATHS | {"/"}
+# its examples and small calculator (SP-637, api/intro.py): the built-in fictional runner only, limited per
+# client and cached — exactly /api/v1/intro/estimate and /api/v1/intro/example/<trail|baiyue|road>
+PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/estimate"} | {f"/api/v1/intro/example/{k}" for k in ("trail", "baiyue", "road")}
 PUBLIC_PREFIXES = ("/api/v1/static/", "/manual/")
 _OAUTH_CALLBACK = ("/oauth/", "/callback")
 # never a place to come back to after signing in (loops)

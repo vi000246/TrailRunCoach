@@ -92,7 +92,9 @@ def test_the_page_in_both_languages_in_the_decided_order(c):
                                            'id="sources"', 'id="privacy"', 'id="faq"', "<footer>")]
         assert order == sorted(order), loc
     zh = c.get("/?lang=zh-TW", headers=HTML).text
-    assert "<input" not in zh and "type=\"email\"" not in zh        # no e-mail field: the waitlist is the sign-in's
+    # no e-mail field: the waitlist is the sign-in's (SP-637: the only inputs are the small calculator's sliders)
+    assert "type=\"email\"" not in zh and re.findall(r"<input[^>]*>", zh)
+    assert all('type="range"' in i for i in re.findall(r"<input[^>]*>", zh))
 
 
 def test_the_calculator_is_credited_to_palladino():
@@ -143,12 +145,38 @@ def test_every_screenshot_is_there_in_both_languages_and_schemes_and_comes_from_
     assert on_disk == want, sorted(on_disk ^ want)
 
 
+def test_the_screenshots_are_small_parts_taken_sharp_and_shown_near_their_own_size():
+    # R2 (「截圖有點小、縮在一起很難讀」): each picture is one part of a screen taken at phone width (or the
+    # legs table at [w, h, 2]) and twice the pixels, never a whole desktop screen; the page caps each
+    # picture near its own width (a phone-width one at 400 px) instead of stretching it to the column
+    from backend.tests.e2e import shots as S
+    html = (STATIC / "intro.html").read_text("utf-8")
+    for s in json.loads(SHOTS.read_text("utf-8"))["shots"]:
+        vp = s["viewport"]
+        assert vp == "mobile" or (isinstance(vp, list) and vp[0] <= 700 and vp[2] == 2), s["name"]
+        assert s.get("clip"), s["name"]
+        assert S.VIEWPORTS["mobile"]["device_scale_factor"] == 2
+        fig = html[:html.index(f'data-shot="{s["name"]}"')].rsplit("<figure", 1)[1]
+        assert ("phone" in fig) == (vp == "mobile") and ("wide" in fig) == (vp != "mobile"), s["name"]
+    assert ".shot.phone { width: 100%; max-width: 400px;" in html
+
+
+def test_the_sign_in_button_top_right_is_the_prominent_one():
+    # R1: a stranger reads the page first, then signs in from the top-right button (→ /login, never Google directly)
+    html = (STATIC / "intro.html").read_text("utf-8")
+    nav = html[html.index('<header class="top">'):html.index("</header>")]
+    m = re.search(r'<a class="([^"]*)" id="nav-login" href="([^"]*)"', nav)
+    assert m and m.group(2) == "/login", m
+    assert "btn" in m.group(1).split() and "primary" in m.group(1).split()
+    assert "accounts.google.com" not in html and "/api/v1/account/login" not in html
+
+
 def test_the_shot_list_expands_to_each_language_and_scheme():
     from backend.scripts import manual_shots as MS
     from backend.tests.e2e import shots as S
     spec = S.check_spec(MS.spec_for(MS.load(which="intro"), "en", "SP-622"))
     names = [s["name"] for s in spec["shots"]]
-    assert "intro-race.en" in names and "intro-race.en.dark" in names
+    assert "intro-schedule.en" in names and "intro-schedule.en.dark" in names
     assert {s["scheme"] for s in spec["shots"]} == {"light", "dark"}
     assert all("lang=en" in s["path"] for s in spec["shots"])
     with pytest.raises(S.SpecError):

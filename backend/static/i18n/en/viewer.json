@@ -455,5 +455,8 @@
   "pz.end": "End",
   "pz.apply": "Apply",
   "plateau_name": "Modelled threshold power",
-  "plateau_btn": "Threshold power line"
+  "plateau_btn": "Threshold power line",
+  "cmp.mode": "Compare two",
+  "cmp.go": "Compare →",
+  "cmp.n": "{n} of 2 ticked"
 }

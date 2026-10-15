@@ -86,7 +86,11 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.taper_days": "taper_days",
     "plan.prefs.strength_moves": "strength_moves",
     "plan.prefs.strength_no_gear": "strength_no_gear",
+    "plan.prefs.climb_target": "climb_target",
 }
+# 可跑坡目標 (SP-632): what a race leg on runnable ground (−3 … +15 %) gets on COROS when it has a power
+# target — power (default: Stryd is validated there) or Effort Pace (racepower/watch_export, workout_steps.ep_intensity)
+CLIMB_TARGETS = ("power", "effort_pace")
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
 GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
@@ -105,7 +109,7 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # SP-191) — the strength texts only, read by strength_plan / balance_plan whether or not `active`
 NOT_SHAPING = ("cp_test_protocol", "aet_test_days", "aet_test_protocol",
                "warmup_commute_min", "cooldown_min", "warmup_on", "warmup_min", "b2b", "transition_weeks", "taper_days",
-               "strength_moves", "strength_no_gear") + GATE_FIELDS
+               "strength_moves", "strength_no_gear", "climb_target") + GATE_FIELDS
 WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WD_ZH = "一二三四五六日"
 LONG_WD = {d: i for i, d in enumerate(WD)}      # 長跑日: any weekday (was sat / sun only)
@@ -189,6 +193,9 @@ class Prefs:
     # (bar / band), a move that needs it gives way to one that doesn't. Not part of `active`.
     strength_moves: tuple = ()
     strength_no_gear: tuple = ()
+    # 可跑坡目標 (SP-632, CLIMB_TARGETS): only what COROS gets on a race leg on runnable ground that has a
+    # power target (with Stryd). Not part of `active`: it reshapes nothing.
+    climb_target: str = "power"
 
     @property
     def active(self) -> bool:
@@ -258,6 +265,8 @@ def from_settings(values: dict, lenient: bool = True) -> Prefs:
         kw["target_basis"] = "hr"
     if lenient and kw.get("target_basis") not in (None, "auto", "hr", "power"):
         kw["target_basis"] = "auto"
+    if lenient and kw.get("climb_target") not in (None,) + CLIMB_TARGETS:
+        kw["climb_target"] = "power"
     # 長跑地形「登山」 is gone (hiking is not a workout): a stored one reads as 越野跑 (trail)
     if kw.get("terrain_long") == "hike":
         kw["terrain_long"] = "trail"
@@ -342,6 +351,8 @@ def check(p: Prefs) -> None:
     from backend.engine.planning import TAPER_DAYS_RANGE as TD
     if isinstance(p.taper_days, bool) or not isinstance(p.taper_days, int) or not TD[0] <= p.taper_days <= TD[1]:
         raise ValueError(_("減量期天數要在 {lo}–{hi} 天", lo=TD[0], hi=TD[1]))
+    if p.climb_target not in CLIMB_TARGETS:
+        raise ValueError(_("可跑坡目標要是 {choices} 其中之一", choices=CLIMB_TARGETS))
     if isinstance(p.quality_gate_weeks, bool) or not isinstance(p.quality_gate_weeks, int) or \
             not WEEKS_RANGE[0] <= p.quality_gate_weeks <= WEEKS_RANGE[1]:
         raise ValueError(_("週數法的週數要在 {lo}–{hi} 週", lo=WEEKS_RANGE[0], hi=WEEKS_RANGE[1]))

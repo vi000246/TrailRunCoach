@@ -1,37 +1,53 @@
 {
- "_about": "The 介紹頁's screenshots (SP-622; backend/scripts/manual_shots.py --set intro --full: the full demo year, its 50K course): each taken in zh-TW and en, light and dark, on the synthetic demo athlete, saved as backend/static/intro/<name>.<locale>[.dark].webp. Keys as backend/tests/e2e/shots.py's shot list; \"page\" / \"path\" gets ?lang=<locale> added.",
+ "_about": "The 介紹頁's screenshots (SP-622; backend/scripts/manual_shots.py --set intro --full: the full demo year, its 50K course): each taken in zh-TW and en, light and dark, on the synthetic demo athlete, saved as backend/static/intro/<name>.<locale>[.dark].webp. Keys as backend/tests/e2e/shots.py's shot list; \"page\" / \"path\" gets ?lang=<locale> added. R2 (readable on the page): each is one small part of a screen, taken at phone width and at twice the pixels, so the page shows it near the app's own text size instead of a whole desktop screen shrunk to half. SP-637: the hero's calculator result and the legs table are live parts of the page now (the small calculator, the elevation profile), no longer pictures.",
  "shots": [
-  {
-   "name": "intro-race",
-   "path": "/api/v1/racepower/page?event=demo-50k",
-   "schemes": ["light", "dark"],
-   "steps": [{"wait": "#results"}, {"sleep": 3000}],
-   "clip": "#results",
-   "hide": [".an-build", ".an-offline", ".appnav", ".sugbox"]
-  },
-  {
-   "name": "intro-legs",
-   "path": "/api/v1/racepower/page?event=demo-50k",
-   "schemes": ["light", "dark"],
-   "steps": [{"wait": "#segcmp"}, {"sleep": 3000}],
-   "clip": "#segcmp",
-   "hide": [".an-build", ".an-offline", ".appnav", ".sugbox"]
-  },
   {
    "name": "intro-schedule",
    "page": "schedule",
-   "schemes": ["light", "dark"],
-   "steps": [{"click": "#view-seg [data-view=week]"}, {"wait": ".chip.sc"}],
+   "viewport": "mobile",
+   "schemes": [
+    "light",
+    "dark"
+   ],
+   "steps": [
+    {
+     "wait": "#calwrap"
+    },
+    {
+     "sleep": 2500
+    }
+   ],
    "clip": "#calwrap",
-   "hide": [".an-build", ".an-offline", ".appnav", ".sugbox"]
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
   },
   {
    "name": "intro-status",
    "page": "overview",
-   "schemes": ["light", "dark"],
-   "steps": [{"wait": "#pmc"}, {"sleep": 2000}],
+   "viewport": "mobile",
+   "schemes": [
+    "light",
+    "dark"
+   ],
+   "steps": [
+    {
+     "wait": "#pmc"
+    },
+    {
+     "sleep": 2000
+    }
+   ],
    "clip": "#s-status",
-   "hide": [".an-build", ".an-offline", ".appnav", ".sugbox"]
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
   }
  ]
 }

@@ -49,13 +49,31 @@ NOTE_MAX = 200
 BUILTIN = ("easy", "quality", "test", "trail")
 BASES = ("hr", "power")
 PROFILE_OUT = 400                # profile points sent with a chart (the stored one: ≤ course.PROFILE_MAX)
-EP_CLIMB_M = 100.0               # effort distance: km + climb / 100 (equivalence trail EP, as workout_steps._secs)
+# SP-639: 「一段穩定上坡」 on a template's training route (algorithms/climbs.detect_climbs; the race
+# calculator's are ≥ 80 m, ≥ 3 %): average grade ≥ 5 %, ≥ 30 m up, and a drop of up to
+# max(10 m, 5 % of the gain so far) does not end it. The owner's numbers (SP-633 Q5), to be tuned.
+CLIMB_MIN_GRADE = 0.05
+CLIMB_MIN_GAIN_M = 30.0
+CLIMB_DROP_M = 10.0
+CLIMB_DROP_FRAC = 0.05
+# a repeat whose first work leg climbs at least this (average grade on the route): a hill repeat —
+# its recoveries come back down, every rep starts again from the bottom (推估: the usual 登山王 /
+# Koop 上坡 shape; a flatter repeat keeps going forward along the route)
+HILL_REP_GRADE = 0.03
+COURSE_V = 1                     # the stored segments' format
 
 ROOT = None                      # fixed folder (tests); None = the tenant's template_gpx/
 
 MINE = N_("我的範本")
 SRC = N_("我的範本（自己排的）")
-ELEV_NOTE = N_("有 GPX 時橫軸是路線距離（km）：距離段照它的距離放，時間、直到按下計圈、負荷、RPE 段依你每段的預估速度換算成距離（越野用努力距離：km＋爬升÷100），是推估")
+ELEV_NOTE = N_("有 GPX 時橫軸可切換距離或時間。距離段照它的距離放；時間、直到按下計圈、負荷、RPE 段用你這段強度的平地速度，"
+               "依坡度換算（Minetti 跑步耗能，跟賽事計算機的平地等效配速同一套），是推估。反覆爬坡（主課在上坡）的休息段畫成往回走下坡，每趟從坡底重來")
+TABLE_NOTE = N_("坡段與爬坡由 GPX 平滑後切出；配速是你在這個強度的平地速度依坡度換算（Minetti，下坡最多快 10%），"
+                "沒算技術地形，是推估。功率只在平路和可跑的坡（≤ 8%）當目標")
+LEVEL_EASY = N_("輕鬆（Z2）")
+LEVEL_MAIN = N_("這個範本的主課強度")
+SEG_KIND = {"run_climb": N_("可跑的爬坡"), "steep_climb": N_("陡坡"), "descent": N_("下坡"), "flat": N_("平路")}
+CLIMB_LABEL = N_("爬 {m} m · 約 {t}")
 
 
 class TemplateError(ValueError):
@@ -101,8 +119,11 @@ async def _ensure(db: AsyncSession) -> None:
         conn = sess.connection()
         for tbl in (WorkoutTemplateUser.__table__, WorkoutTemplateCat.__table__):
             tbl.create(conn, checkfirst=True)
-        if "uid" not in {r[1] for r in conn.execute(text("PRAGMA table_info(workout_templates_user)"))}:
+        cols = {r[1] for r in conn.execute(text("PRAGMA table_info(workout_templates_user)"))}
+        if "uid" not in cols:
             conn.execute(text("ALTER TABLE workout_templates_user ADD COLUMN uid VARCHAR(32)"))
+        if "gpx_course_json" not in cols:          # SP-639
+            conn.execute(text("ALTER TABLE workout_templates_user ADD COLUMN gpx_course_json TEXT"))
     await db.run_sync(mk)
 
 
@@ -315,19 +336,57 @@ def _unlink(tid: int, root: Optional[Path] = None) -> None:
 # the training-route GPX
 # ---------------------------------------------------------------------------
 
+def climb_rule() -> dict:
+    """The climb thresholds in effect (stored with a template's segments: other numbers → recomputed)."""
+    return {"min_grade": CLIMB_MIN_GRADE, "min_gain_m": CLIMB_MIN_GAIN_M, "drop_m": CLIMB_DROP_M,
+            "drop_frac": CLIMB_DROP_FRAC}
+
+
+def _climb_kw() -> dict:
+    return {"min_grade": CLIMB_MIN_GRADE, "min_gain_m": CLIMB_MIN_GAIN_M,
+            "abs_tolerance_m": CLIMB_DROP_M, "rel_tolerance": CLIMB_DROP_FRAC}
+
+
+def _climb_row(c: dict) -> dict:
+    return {"no": c["no"], "start_km": round(c["start_m"] / 1000.0, 3), "end_km": round(c["end_m"] / 1000.0, 3),
+            "dist_m": round(c["end_m"] - c["start_m"], 1), "gain_m": round(float(c["gain_m"]), 1),
+            "grade": round(float(c["grade"]), 4)}
+
+
+def climbs_of(xs_m, zs) -> list[dict]:
+    """The template rule's climbs (CLIMB_*) of a smoothed profile (xs in m): the race calculator's
+    detector (course._climbs → algorithms/climbs.detect_climbs) with the training-route thresholds."""
+    from backend.engine.racepower import course as CO
+    return [_climb_row(c) for c in CO._climbs(xs_m, zs, **_climb_kw())]
+
+
+def _course_rows(c: dict) -> dict:
+    """What a template keeps of build_course (SP-639): the grade segments (DP + merge, the race
+    calculator's 坡段) and the climbs under the template rule; no coordinates."""
+    segs = [{"i": r["i"], "start_km": round(r["start_km"], 3), "end_km": round(r["end_km"], 3),
+             "dist_m": round(r["dist_m"], 1), "gain_m": round(r["gain_m"], 1), "loss_m": round(r["loss_m"], 1),
+             "grade": round(r["grade"], 4), "max_grade": round(r["max_grade"], 4),
+             "z_start": round(r["z_start"], 1), "z_end": round(r["z_end"], 1), "cls": r["cls"],
+             "climb_no": r.get("climb_no")} for r in c.get("segments") or []]
+    return {"v": COURSE_V, "rule": climb_rule(), "segments": segs,
+            "climbs": [_climb_row(x) for x in c.get("climbs") or []]}
+
+
 def parse_profile(data: bytes, filename: str = "") -> dict:
-    """{"totals", "profile": {"km", "z"}} of a GPX / FIT course: the race calculator's reader
-    and builder (no parser of its own). TemplateError on a file that isn't a course."""
+    """{"totals", "profile": {"km", "z"}, "course": {segments, climbs}} of a GPX / FIT course: the
+    race calculator's reader and builder (no parser of its own), split by grade (its 坡段) and the
+    climbs under the template rule (climb_rule, SP-639). TemplateError on a file that isn't a course."""
     from backend.engine.racepower import course as CO
     from backend.engine.racepower import gpx as GPX
     try:
         tr = GPX.parse(data, filename)
-        c = CO.build_course(tr, split="none")
+        c = CO.build_course(tr, split="grade", osm_huts=False, climb_kw=_climb_kw())
     except (GPX.GpxError, ValueError) as e:
         raise TemplateError([str(e)])
     p = c.get("profile") or {}
     return {"totals": c["totals"], "name": tr.name or "",
-            "profile": {"km": [round(float(x), 4) for x in p.get("km") or []], "z": list(p.get("z") or [])}}
+            "profile": {"km": [round(float(x), 4) for x in p.get("km") or []], "z": list(p.get("z") or [])},
+            "course": _course_rows(c)}
 
 
 async def save_gpx(db: AsyncSession, tid, data: bytes, filename: str = "", root: Optional[Path] = None,
@@ -347,6 +406,7 @@ async def save_gpx(db: AsyncSession, tid, data: bytes, filename: str = "", root:
     t.gpx_sha1 = hashlib.sha1(data).hexdigest()
     t.gpx_km, t.gpx_gain_m, t.gpx_loss_m = float(tot["km"]), float(tot["gain_m"]), float(tot["loss_m"])
     t.gpx_profile_json = json.dumps(got["profile"])
+    t.gpx_course_json = json.dumps(got["course"]) if got.get("course") else None
     t.updated_at = _now()
     await db.commit()
     return to_dict(t)
@@ -357,7 +417,7 @@ async def delete_gpx(db: AsyncSession, tid, root: Optional[Path] = None) -> dict
     if not t.gpx_sha1:
         raise TemplateError([_("這個範本沒有 GPX")], 404)
     _unlink(t.id, root)
-    t.gpx_filename = t.gpx_sha1 = t.gpx_profile_json = None
+    t.gpx_filename = t.gpx_sha1 = t.gpx_profile_json = t.gpx_course_json = None
     t.gpx_km = t.gpx_gain_m = t.gpx_loss_m = None
     t.updated_at = _now()
     await db.commit()
@@ -369,6 +429,108 @@ def read_gpx(tid: int, root: Optional[Path] = None) -> Optional[bytes]:
         return gzip.decompress(gpx_path(tid, root).read_bytes())
     except (OSError, EOFError, gzip.BadGzipFile):
         return None
+
+
+def _fresh(c: dict) -> bool:
+    return bool(c) and c.get("v") == COURSE_V and c.get("rule") == climb_rule() and "segments" in c
+
+
+async def course_of(db: AsyncSession, tid, root: Optional[Path] = None) -> dict:
+    """The template GPX's segments + climbs (SP-639). Stored at upload; a template uploaded before
+    (no segments) or under other climb thresholds gets them recomputed from its stored file and
+    kept (its updated_at untouched: nothing the user changed). TemplateError 404 without a GPX."""
+    import asyncio
+
+    from sqlalchemy import update as sa_update
+    t = await _get(db, tid)
+    if not t.gpx_sha1:
+        raise TemplateError([_("這個範本沒有 GPX")], 404)
+    c = _loads(t.gpx_course_json, {})
+    if not _fresh(c):
+        data = read_gpx(t.id, root)
+        if data is None:
+            raise TemplateError([_("這個範本沒有 GPX")], 404)
+        c = (await asyncio.to_thread(parse_profile, data, t.gpx_filename or ""))["course"]
+        await db.execute(sa_update(WorkoutTemplateUser).where(WorkoutTemplateUser.id == t.id)
+                         .values(gpx_course_json=json.dumps(c), updated_at=t.updated_at))
+        await db.commit()
+    return {**c, "name": t.gpx_filename or "", "route_km": t.gpx_km, "gain_m": t.gpx_gain_m, "loss_m": t.gpx_loss_m}
+
+
+def _flat_kmh(f: Optional[float], c) -> float:
+    """km/h on the flat at ≈ f × CP (workout_steps.speed_kmh), scaled to the athlete's trail EP speed
+    when known (the step chart's speed, route_elevation)."""
+    from backend.engine import workout_steps as WS
+    v, _how = WS.speed_kmh(f, c)
+    if c.ep_kmh and c.v_easy:
+        v = c.ep_kmh * v / c.v_easy
+    return max(0.5, float(v))
+
+
+def _gf(g: float) -> float:
+    """Minetti's running cost at grade g relative to the flat, the 10 % downhill floor: the race
+    calculator's GAP curve (planner: gap_pace = pace × this)."""
+    from backend.engine.algorithms.minetti import grade_factor
+    return grade_factor(g)
+
+
+def _mins(s: float) -> str:
+    m = max(1, int(round(s / 60.0)))
+    return f"{m}′" if m < 60 else f"{m // 60}h{m % 60:02d}′"
+
+
+def main_frac(order: list) -> Optional[float]:
+    """The template's main-set intensity (× CP): its work steps' resolved fraction, averaged by
+    their seconds (a lap-button step counts OPEN_CHART_S); None without one."""
+    from backend.engine import workout_steps as WS
+    num = den = 0.0
+    for o in order:
+        if o.get("kind") != "work" or o.get("frac") is None:
+            continue
+        sec = float(o.get("sec") or 0.0) or float(WS.OPEN_CHART_S)
+        num += float(o["frac"]) * sec
+        den += sec
+    return num / den if den > 0 else None
+
+
+def course_table(course: dict, c, levels: list) -> dict:
+    """The 坡段表 (SP-639): each segment and climb of the template's route with its kind (the race
+    calculator's seg_targets.kind_of: flat / runnable climb ≤ 8 % / steep climb / descent) and, per
+    intensity level (key, label, f = × CP), the pace, time, GAP and power there: the flat speed at f
+    (the step chart's) over the grade's Minetti factor. Power a target on flat / runnable ground
+    only, a reference elsewhere (seg_targets.chart_rows' rule). 推估: no technical terrain."""
+    from backend.engine.racepower import seg_targets as SGT
+    cp = c.cp
+    lv, vs = [], {}
+    for key, label, f in levels:
+        v = _flat_kmh(f, c)
+        vs[key] = (v, f)
+        lv.append({"key": key, "label": label, "frac": round(float(f), 3), "flat_pace_s_per_km": round(3600.0 / v, 1),
+                   "power": round(f * cp) if cp else None})
+
+    def est(dist_m: float, grade: float, kind: str) -> dict:
+        out = {}
+        for key, (v, f) in vs.items():
+            pace = 3600.0 / (v / _gf(grade))
+            p = round(f * cp) if cp else None
+            ok = kind in ("flat", "run_climb")
+            out[key] = {"pace_s_per_km": round(pace, 1), "t_s": round(dist_m / 1000.0 * pace),
+                        "gap_s_per_km": round(3600.0 / v, 1), "power": p if ok else None, "power_ref": None if ok else p}
+        return out
+
+    segs = []
+    for s in course.get("segments") or []:
+        k = SGT.kind_of({"grade": s["grade"]})
+        segs.append({**s, "kind": k, "kind_label": _(SEG_KIND[k]), "est": est(s["dist_m"], s["grade"], k)})
+    last = levels[-1][0] if levels else None
+    climbs = []
+    for cl in course.get("climbs") or []:
+        k = SGT.kind_of({"grade": cl["grade"]})
+        e = est(cl["dist_m"], cl["grade"], k)
+        climbs.append({**cl, "kind": k, "kind_label": _(SEG_KIND[k]), "est": e,
+                       "label": _(CLIMB_LABEL, m=round(cl["gain_m"]), t=_mins(e[last]["t_s"])) if last else ""})
+    return {"segments": segs, "climbs": climbs, "levels": lv, "rule": course.get("rule") or climb_rule(),
+            "note": _(TABLE_NOTE)}
 
 
 async def profile_of(db: AsyncSession, tid) -> Optional[dict]:
@@ -424,76 +586,182 @@ def _interp(x: float, xs: list, ys: list) -> float:
     return ys[lo] if b == a else ys[lo] + (ys[hi] - ys[lo]) * (x - a) / (b - a)
 
 
-def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
-    """The step chart on the route's distance axis (the race calculator's course profile:
-    real km along the route vs elevation), {"x": [km] — where each step of view()["order"]
-    starts, plus the end (len(order) + 1) —, "d": [km], "z": [m] (the profile up to where
-    the workout ends), "z_min", "z_max", "route_km", "km" (covered), "total_km", "complete",
-    "gain_m", "name", "note"} or None.
+class _Walk:
+    """Moving along a route profile (km, z — piecewise linear; km from 0) at a flat speed v (km/h): on
+    each piece the horizontal speed is v / _gf(grade in the travel direction). Past the route's end
+    the ground is flat (1 : 1); going back stops at `floor` (a hill repeat's bottom) and the rest of
+    the step is spent on the flat there."""
+    EPS = 1e-9
 
-    A distance step covers its own km of the route; a time / 直到按下計圈 / 負荷 / RPE step
-    covers its effort distance (EP = km + climb / 100) at the athlete's speed for the step's
-    intensity (workout_steps.speed_kmh, scaled to the trail EP speed when known; a rest
-    without a target walks, WALK_KMH; a lap-button step without an estimate the chart's
-    OPEN_CHART_S), turned back into km through the route's climb. Past the route's end the
-    axis goes on 1 : 1 (flat). All 推估: the real pace on a climb isn't known before the run."""
+    def __init__(self, km: list, z: list):
+        self.km, self.z, self.end = km, z, km[-1]
+
+    def z_at(self, k: float) -> float:
+        return _interp(min(max(k, 0.0), self.end), self.km, self.z)
+
+    def _piece(self, pos: float, sign: int, floor: float) -> tuple[Optional[float], float]:
+        """(the next stop or None = open flat, grade in the travel direction)."""
+        import bisect
+        km, z, e = self.km, self.z, self.EPS
+        if sign > 0:
+            if pos >= self.end - e:
+                return None, 0.0
+            j = bisect.bisect_right(km, pos + e)
+            dk = km[j] - km[j - 1]
+            return km[j], ((z[j] - z[j - 1]) / (dk * 1000.0) if dk > 0 else 0.0)
+        if pos <= floor + e:
+            return None, 0.0
+        if pos > self.end + e:
+            return max(self.end, floor), 0.0
+        j = bisect.bisect_left(km, pos - e) - 1
+        if j < 0:
+            return None, 0.0
+        dk = km[j + 1] - km[j]
+        return max(km[j], floor), (-(z[j + 1] - z[j]) / (dk * 1000.0) if dk > 0 else 0.0)
+
+    def move(self, pos: float, sign: int, v: float, secs: Optional[float] = None, dist: Optional[float] = None,
+             floor: float = 0.0) -> tuple:
+        """(new pos, seconds, km covered, gain m, loss m, [(km, pos, s) from the step's start at each
+        knot passed and the end]) for `secs` seconds or `dist` km."""
+        t = d = gain = loss = 0.0
+        pts = []
+        v = max(0.1, float(v))
+        for _i in range(100000):
+            lt = None if secs is None else secs - t
+            ld = None if dist is None else dist - d
+            if (lt is None and ld is None) or (lt is not None and lt <= 1e-6) or (ld is not None and ld <= 1e-9):
+                break
+            nxt, g = self._piece(pos, sign, floor)
+            vh = v / _gf(g)
+            piece = float("inf") if nxt is None else abs(nxt - pos)
+            take = piece
+            if lt is not None:
+                take = min(take, vh * lt / 3600.0)
+            if ld is not None:
+                take = min(take, ld)
+            if take <= 0 and nxt is not None:
+                pos = nxt                        # a zero-length piece
+                continue
+            z0 = self.z_at(pos)
+            if nxt is not None:
+                pos = nxt if take >= piece else pos + sign * take
+            elif sign > 0:
+                pos += take                      # off the route's end: flat
+            dz = self.z_at(pos) - z0
+            gain += max(0.0, dz)
+            loss += max(0.0, -dz)
+            d += take
+            t += take / vh * 3600.0
+            pts.append((d, pos, t))
+        return pos, t, d, gain, loss, pts
+
+
+PATH_OUT = 600                   # elevation-path points sent with a chart
+
+
+def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
+    """The step chart on the route (the race calculator's course profile: real km along the route vs
+    elevation), SP-36 / SP-639:
+      "x"   km covered where each step of view()["order"] starts, plus the end (len(order) + 1) —
+            the distance axis;
+      "xt"  the same in seconds (the time axis); "s" each step's seconds;
+      "up" / "down"  each step's climb / descent (m); "r" each step's [from, to] km on the route;
+      "d", "z", "t"  the elevation path on the distance covered (km, m — None: off the route's end —
+            and seconds): a hill repeat draws the climb again each time;
+      "z_min", "z_max" (of the drawn path), "route_km", "km" (the farthest point reached), "total_km", "complete",
+      "gain_m", "name", "note"; None without a usable profile.
+
+    A distance step covers its own km; a time / 直到按下計圈 / 負荷 / RPE step its seconds at the athlete's
+    flat speed for its intensity (workout_steps.speed_kmh, scaled to the trail EP speed when known; a
+    rest without a target walks, WALK_KMH; a lap-button step without an estimate the chart's
+    OPEN_CHART_S), each piece of the route at that speed over Minetti's grade factor (_gf: the race
+    calculator's GAP curve). In a repeat whose first work leg climbs (≥ HILL_REP_GRADE on the route)
+    the rests come back down — not below where the repeat started — and every rep starts again from
+    there; other repeats go on forward. All 推估: the real pace on a climb isn't known before the run."""
     from backend.engine import workout_steps as WS
     km, z = list(prof.get("km") or []), list(prof.get("z") or [])
     if len(km) < 2 or len(km) != len(z):
         return None
     k0 = km[0]
-    km = [k - k0 for k in km]
-    ep, climb = [km[0]], 0.0
-    for i in range(1, len(km)):
-        climb += max(0.0, z[i] - z[i - 1])
-        ep.append(km[i] + climb / EP_CLIMB_M)
-
-    def to_km(e: float) -> float:
-        return _interp(e, ep, km) if e <= ep[-1] else km[-1] + (e - ep[-1])
-
-    def to_ep(k: float) -> float:
-        return _interp(k, km, ep) if k <= km[-1] else ep[-1] + (k - km[-1])
-
-    xs, K = [0.0], 0.0
+    km = [float(k) - k0 for k in km]
+    z = [float(v) for v in z]
+    w = _Walk(km, z)
+    pos = D = T = far = 0.0
+    xs, xt, ss, ups, downs, rr = [0.0], [0.0], [], [], [], []
+    path = [(0.0, 0.0, 0.0, True)]               # (km covered, route pos, s, keep)
+    reps: dict = {}
     for row in WS.flat(steps["items"]):
         st = row["st"]
+        inner = row["rep"][-1] if row["rep"] else None
+        rs = None
+        if inner:
+            rid, pi, _n = inner
+            rs = reps.get(rid)
+            if rs is None:
+                rs = reps[rid] = {"base": pos, "hill": None, "pass": pi}
+            elif pi != rs["pass"]:
+                rs["pass"] = pi
+                if rs["hill"]:
+                    pos = rs["base"]             # the next rep: from the bottom again
         r = WS.resolve(st, c)
         s, _e = WS._secs(st, r, c)
-        if st["dur"]["type"] == "open" and not s:
+        typ = st["dur"]["type"]
+        if typ == "open" and not s:
             s = float(WS.OPEN_CHART_S)
-        if st["dur"]["type"] == "distance":
-            K += st["dur"]["value"] / 1000.0
-        elif s > 0:
-            if r.frac is None and st["kind"] == "rest":
-                v = WS.WALK_KMH
-            else:
-                f = r.frac if r.frac is not None else WS.NONE_IF.get(st["kind"], c.easy_frac())
-                v, _how = WS.speed_kmh(f, c)
-                if c.ep_kmh and c.v_easy:
-                    v = c.ep_kmh * v / c.v_easy
-            K = to_km(to_ep(K) + v * s / 3600.0)
-        xs.append(round(K, 3))                # one bound per step, a zero-length one included
-    if K <= 0:
+        if r.frac is None and st["kind"] == "rest":
+            v = WS.WALK_KMH
+        else:
+            v = _flat_kmh(r.frac if r.frac is not None else WS.NONE_IF.get(st["kind"], c.easy_frac()), c)
+        back = bool(rs and rs["hill"] and st["kind"] == "rest")
+        start = pos
+        if path[-1][1] != pos:
+            path.append((D, pos, T, True))
+        if typ == "distance":
+            pos, used_t, used_d, gn, ls, pts = w.move(pos, -1 if back else 1, v, dist=st["dur"]["value"] / 1000.0,
+                                                      floor=rs["base"] if back else 0.0)
+        else:
+            pos, used_t, used_d, gn, ls, pts = w.move(pos, -1 if back else 1, v, secs=max(0.0, s),
+                                                      floor=rs["base"] if back else 0.0)
+        if rs is not None and rs["hill"] is None and st["kind"] in ("work", "other"):
+            a, b = min(start, w.end), min(pos, w.end)
+            rs["hill"] = b > a and (w.z_at(b) - w.z_at(a)) / ((b - a) * 1000.0) >= HILL_REP_GRADE
+        for i, (pd, pp, pt) in enumerate(pts):
+            path.append((D + pd, pp, T + pt, i == len(pts) - 1))
+        D += used_d
+        T += used_t
+        far = max(far, start, pos)
+        xs.append(round(D, 3))                   # one bound per step, a zero-length one included
+        xt.append(round(T, 1))
+        ss.append(round(used_t, 1))
+        ups.append(round(gn, 1))
+        downs.append(round(ls, 1))
+        rr.append([round(start, 3), round(pos, 3)])
+    if D <= 0:
         return None
-    pts_d, pts_z = [], []
-    for i in range(len(km)):
-        if km[i] > K:
-            break
-        pts_d.append(km[i])
-        pts_z.append(z[i])
-    complete = K >= km[-1]
-    if not complete:                          # the workout ends mid-route: the last point at its end
-        pts_d.append(K)
-        pts_z.append(round(_interp(K, km, z), 1))
-    if len(pts_d) < 2:
+    end = w.end
+    pd_, pz, pt_ = [], [], []
+    keep = []
+    for d_, p_, t_, k_ in path:
+        on = p_ <= end + 1e-6
+        if not on and pz and pz[-1] is None:
+            continue                              # one break per stretch off the route
+        pd_.append(d_)
+        pz.append(round(w.z_at(p_), 1) if on else None)
+        pt_.append(t_)
+        keep.append(k_)
+    while pz and pz[-1] is None:
+        pd_.pop(), pz.pop(), pt_.pop(), keep.pop()
+    if len(pd_) < 2:
         return None
-    step = max(1, -(-len(pts_d) // PROFILE_OUT))
-    idx = list(range(0, len(pts_d), step))
-    if idx[-1] != len(pts_d) - 1:
-        idx.append(len(pts_d) - 1)
-    return {"x": xs, "d": [round(pts_d[i], 3) for i in idx], "z": [pts_z[i] for i in idx],
-            "z_min": min(z), "z_max": max(z), "route_km": prof.get("route_km") or km[-1],
-            "km": round(min(K, km[-1]), 2), "total_km": round(K, 2), "complete": complete,
+    step = max(1, -(-len(pd_) // PATH_OUT))
+    idx = [i for i in range(len(pd_)) if i % step == 0 or keep[i] or pz[i] is None or i == len(pd_) - 1]
+    complete = far >= end - 1e-6
+    drawn = [v for v in pz if v is not None]
+    return {"x": xs, "xt": xt, "s": ss, "up": ups, "down": downs, "r": rr,
+            "d": [round(pd_[i], 3) for i in idx], "z": [pz[i] for i in idx], "t": [round(pt_[i]) for i in idx],
+            # the scale of the drawn part (a hill repeat on a long route uses its first km only)
+            "z_min": min(drawn), "z_max": max(drawn), "route_km": prof.get("route_km") or end,
+            "km": round(min(far, end), 2), "total_km": round(D, 2), "complete": complete,
             "gain_m": prof.get("gain_m"), "name": prof.get("filename") or prof.get("name") or "", "note": _(ELEV_NOTE)}
 
 

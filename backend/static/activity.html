@@ -113,6 +113,17 @@ td.c-act .acts { display: inline-flex; gap: 4px; align-items: center; }
 }
 .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 8px 2px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
 .pager .cnt { margin-right: auto; }
+/* 比較兩次 (SP-625): pick A here, B on another row -> the comparison page */
+.cmpbtn { display: inline-grid; place-items: center; width: 28px; height: 26px; padding: 0; color: var(--muted); }
+.cmpbtn svg { width: 17px; height: 17px; }
+.cmpbtn[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+.cmpbar { position: sticky; bottom: 8px; z-index: 5; margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 12px; font-size: 13px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+.cmpbar[hidden] { display: none; }
+.cmpbar b { overflow-wrap: anywhere; }
+@media (max-width: 699px) { .cmpbar { bottom: calc(57px + env(safe-area-inset-bottom) + 8px); }
+  .cmpbtn { width: 24px; } td.c-act .acts { gap: 2px; } }
 
 /* single-activity editor */
 dialog#ed { border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(680px, calc(100vw - 24px));
@@ -235,6 +246,7 @@ dialog#exp .row .sp { flex: 1; }
       </table>
     </div>
     <div class="pager" id="pager"></div>
+    <div class="cmpbar" id="cmpbar" role="status" aria-live="polite" hidden></div>
   </div>
   <section id="ach" role="tabpanel" aria-labelledby="tab-ach" data-ach-only>
     <div class="kpis" id="a-kpis"></div>
@@ -487,6 +499,7 @@ function render() {
       return `<tr data-k="${esc(a.key)}" class="${a.excluded ? "excl" : ""} ${a.key === S.sel ? "on" : ""}">` +
         cs.map((c) => `<td class="${c.cls}">${cell(c, a)}</td>`).join("") +
         `<td class="c-act"><span class="acts">${raceBtn(a)}<button type="button" class="edit" data-edit="${esc(a.key)}" aria-label="${esc(T("edit_label", { name: title(a) }))}">${esc(T("edit"))}</button>` +
+        cmpBtn(a) +
         `<a class="iconlink${href ? "" : " off"}" ${href ? `href="${esc(href)}"` : 'aria-hidden="true" tabindex="-1"'} title="${esc(T("open_chart"))}" aria-label="${esc(T("open_chart"))}">${CHART_ICON}</a></span></td></tr>`;
     }).join("");
   }
@@ -502,11 +515,38 @@ $("pager").addEventListener("click", (e) => {
   $("tbl").scrollIntoView({ block: "start" });
 });
 $("tbody").addEventListener("click", (e) => {
+  const cb = e.target.closest("button[data-cmp]");
+  if (cb) { pickCompare(+cb.dataset.cmp); return; }
   const r = e.target.closest("button[data-race]");
   if (r) { toggleRace(r); return; }
   const b = e.target.closest("button[data-edit]");
   if (b) openEditor(b.dataset.edit);
 });
+
+// 比較兩次 (SP-625): the first press picks A, a press on another row opens the comparison page with
+// both (static/actcompare.html); the bar under the table says what is picked and can cancel
+const CMP_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13"/><path d="m4 14 3 3 3-3"/><path d="M17 20V7"/><path d="m14 10 3-3 3 3"/></svg>`;
+const CMP_PAGE = "/api/v1/app/activity-compare/page";
+function cmpBtn(a) {
+  if (a.index == null || !a.distance) return "";
+  const on = S.cmpA === a.index;
+  return `<button type="button" class="cmpbtn" data-cmp="${a.index}" aria-pressed="${on}" title="${esc(T(on ? "cmp.picked_tip" : "cmp.tip"))}"` +
+    ` aria-label="${esc(T("cmp.label", { name: title(a) }))}">${CMP_ICON}</button>`;
+}
+function pickCompare(idx) {
+  if (S.cmpA == null) { S.cmpA = idx; }
+  else if (S.cmpA === idx) { S.cmpA = null; }
+  else { location.href = `${CMP_PAGE}?a=${S.cmpA}&b=${idx}`; return; }
+  render(); cmpBar();
+}
+function cmpBar() {
+  const bar = $("cmpbar"), a = S.cmpA == null ? null : S.acts.find((x) => x.index === S.cmpA);
+  bar.hidden = !a;
+  if (!a) return;
+  bar.innerHTML = `<span>${esc(T("cmp.picked"))} <b>${esc(a.start.slice(0, 10))} ${esc(title(a))}</b></span><span class="meta">${esc(T("cmp.next"))}</span>` +
+    `<a href="${CMP_PAGE}?a=${a.index}">${esc(T("cmp.page"))}</a><button type="button" id="cmp-cancel">${esc(T("cmp.cancel"))}</button>`;
+  $("cmp-cancel").onclick = () => { S.cmpA = null; render(); cmpBar(); };
+}
 
 // 這是比賽 (SP-71): the user marks a past race by hand — the race-time prediction is checked
 // against the races marked here (racepower backtest: activity type 比賽). Nothing is guessed:

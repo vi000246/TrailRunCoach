@@ -234,6 +234,9 @@ DEFAULTS: dict[str, Any] = {
     # and the equipment they don't have (bar | band)
     "plan.prefs.strength_moves": {},
     "plan.prefs.strength_no_gear": [],
+    # 可跑坡目標 (SP-632, engine/plan_prefs.CLIMB_TARGETS): a race leg on runnable ground with a power
+    # target goes to COROS as power (default) or Effort Pace
+    "plan.prefs.climb_target": "power",
     # accepted B2B weekends (engine/b2b.py ACCEPTED_KEY): [{week, days, minutes, uids, at}]
     "plan.b2b.accepted": [],
     # the floating suggestion box (engine/suggestions.py): {suggestion id: {action, at, week}}
@@ -332,6 +335,7 @@ PREF_ENUMS = {
     "plan.prefs.terrain_quality": ("flat", "hill", "any"),
     "plan.prefs.interval_target": ("power", "hr"),
     "plan.prefs.target_basis": ("auto", "hr", "power"),
+    "plan.prefs.climb_target": ("power", "effort_pace"),
     "plan.prefs.cp_test_protocol": ("quick", "standard", "race"),
     "plan.prefs.quality_gate": ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none"),
     "plan.prefs.aet_test_days": ("weekday", "any"),

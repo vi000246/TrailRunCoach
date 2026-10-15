@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import copy
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as dc_replace
 from typing import Optional
 
 from backend.engine import interval_library as IL
@@ -225,12 +225,25 @@ class Ctx:
     # EASY_F by default) and the × of the RPE → % CP table; None = the value in effect (calibrate)
     easy_f: Optional[float] = None
     rpe_k: Optional[float] = None
+    # SP-632: a step whose target carries `ep` (a race leg on runnable ground, racepower/watch_export)
+    # goes to the watch as an Effort Pace target — `ep` only on the COROS push (the provider that takes
+    # it: coros_workouts.session_steps, watch_preview), `ep_power` also over a power target (課表偏好
+    # 「可跑坡目標」 = Effort Pace, plan_prefs.climb_target; default False = power stays)
+    ep: bool = False
+    ep_power: bool = False
+    # SP-642 (engine/hr_power_calib.py): the HR → common-scale entry (calibrate.entry of hr_power_slope);
+    # None = the one in effect
+    hrp: Optional[dict] = None
 
     def easy_frac(self) -> float:
         if self.easy_f is not None:
             return self.easy_f
         from backend.engine import intensity_calib as ICAL
         return ICAL.easy_if()
+
+    def hr_frac(self, f: float) -> float:
+        """HR ÷ LTHR → the chart's common scale (SP-642: hr_to_p with Ctx.hrp, else the entry in effect)."""
+        return hr_to_p(f, self.hrp)
 
     def rpe_scale(self) -> float:
         if self.rpe_k is not None:
@@ -276,7 +289,14 @@ def session_ctx(s: dict, th: Optional[dict], prefs=None) -> Ctx:
     b = s.get("basis") if s.get("basis") in ("hr", "power", "none") else pol["basis"]
     if b == "power" and th and not (th or {}).get("cp"):
         b = pol["basis"]
-    return Ctx.of(th, b, bool(pol.get("hr_cap")), walk=pol["type"] == "walk")
+    c = Ctx.of(th, b, bool(pol.get("hr_cap")), walk=pol["type"] == "walk")
+    c.ep_power = ep_power_of(prefs)
+    return c
+
+
+def ep_power_of(prefs) -> bool:
+    """SP-632: 課表偏好「可跑坡目標」 is Effort Pace (plan_prefs.climb_target)."""
+    return getattr(prefs, "climb_target", None) == "effort_pace"
 
 
 def easy_hr(c: Ctx) -> Optional[tuple]:
@@ -876,7 +896,30 @@ def _f(x, name: str, errs: list, lo: float = None, hi: float = None) -> Optional
     return v
 
 
+def _norm_ep(t: dict) -> Optional[list]:
+    """SP-632: a target's Effort Pace band [lo, hi] s/km (racepower/watch_export.leg_ep) as stored;
+    anything malformed is dropped (it is the export's own field, never typed by hand)."""
+    ep = t.get("ep")
+    if not isinstance(ep, (list, tuple)) or len(ep) != 2:
+        return None
+    try:
+        a, b = sorted(float(x) for x in ep)
+    except (TypeError, ValueError):
+        return None
+    if a != a or b != b or a < 120 or b > 1200:
+        return None
+    return [int(round(a)), int(round(b))]
+
+
 def _norm_target(t, errs: list) -> dict:
+    out = _norm_target0(t, errs)
+    ep = _norm_ep(t) if isinstance(t, dict) else None
+    if ep and out.get("type") != "auto":
+        out["ep"] = ep
+    return out
+
+
+def _norm_target0(t, errs: list) -> dict:
     if not isinstance(t, dict):
         return dict(OPEN)
     ty = t.get("type", "auto")
@@ -1134,17 +1177,12 @@ def level(f: Optional[float]) -> int:
     return 1 if f < .75 else 2 if f < .88 else 3 if f < 1.01 else 4 if f < 1.06 else 5
 
 
-_HR_P = [(.70, .62), (.85, .75), (.90, .82), (.95, .92), (1.00, 1.00), (1.03, 1.06), (1.06, 1.12)]
-
-
-def hr_to_p(f: float) -> float:
-    """Friel % LTHR → about % CP (推估: only the chart height and the TSS estimate)."""
-    if f <= _HR_P[0][0]:
-        return _HR_P[0][1]
-    for (a0, b0), (a1, b1) in zip(_HR_P, _HR_P[1:]):
-        if f <= a1:
-            return b0 + (f - a0) / (a1 - a0) * (b1 - b0)
-    return _HR_P[-1][1]
+def hr_to_p(f: float, entry: Optional[dict] = None) -> float:
+    """HR ÷ LTHR → the common intensity scale (≈ % CP, threshold = 1.0) of the chart and the TSS
+    estimate (SP-642, engine/hr_power_calib.py): the runner's own fitted relation when there is one,
+    else Friel's run HR ↔ pace zones paired by zone (推估). `entry`: calibrate's entry (None = in effect)."""
+    from backend.engine import hr_power_calib as HPC
+    return HPC.hr_to_p(f, entry)
 
 
 def zone_span(ty: str, zid: str, zto: Optional[str] = None, pzm: Optional[dict] = None) -> tuple:
@@ -1196,7 +1234,7 @@ class Resolved:
     type: str                       # power | hr | pace | none
     lo: Optional[float] = None      # absolute (W, bpm, s/km — lo = faster for pace)
     hi: Optional[float] = None
-    frac: Optional[float] = None    # ≈ % CP (chart height, TSS); None = no target
+    frac: Optional[float] = None    # the common scale, threshold = 1 (≈ % CP; chart height, TSS); None = no target
     text: str = ""
     sub: str = ""
     auto: bool = True               # the step follows 目標用 (not overridden)
@@ -1232,10 +1270,22 @@ def _from_int(it: Optional[tuple], c: Ctx, auto: bool = True, warn: str = "") ->
         zl = (level_name(f, c.pzm) or pzone(f)) if c.cp else ""
         sub = f"{lo / c.cp * 100:.0f}–{hi / c.cp * 100:.0f}% CP · {zl}" if c.cp else ""
         return Resolved("power", lo, hi, f, f"{lo:.0f}–{hi:.0f} W", sub, auto, warn, intensity=it)
-    f = hr_to_p((lo + hi) / 2 / c.lthr) if c.lthr else 0.7
+    f = c.hr_frac((lo + hi) / 2 / c.lthr) if c.lthr else 0.7
     sub = ("≤ " + EASY_CAP if c.aet and abs(hi - c.aet) < 1 else
            f"{lo / c.lthr * 100:.0f}–{hi / c.lthr * 100:.0f}% LTHR" if c.lthr else "")
+    hrr = hrr_text(c, lo, hi)
+    if hrr:                                 # SP-642: a 儲備心率 plan says % HRR (the height stays ÷ LTHR)
+        sub = hrr if not sub or sub.endswith("% LTHR") else f"{sub} · {hrr}"
     return Resolved("hr", lo, hi, f, f"{lo:.0f}–{hi:.0f} bpm", sub, auto, warn, intensity=it)
+
+
+def hrr_text(c: Ctx, lo: float, hi: float) -> str:
+    """「70–75% HRR」 of a bpm band under the 儲備心率 課表心率區間 (its max and rest HR), else ""."""
+    z = c.hrz or {}
+    m, r = z.get("mhr"), z.get("rhr")
+    if z.get("model") != "hrr" or not m or not r or m <= r:
+        return ""
+    return f"{(lo - r) / (m - r) * 100:.0f}–{(hi - r) / (m - r) * 100:.0f}% HRR"
 
 
 def rpe_frac(lo: float, hi: float, scale: float = 1.0) -> float:
@@ -1599,8 +1649,8 @@ def rate_easy(st: dict, r: Resolved) -> bool:
 
 def totals(steps: dict, c: Ctx) -> dict:
     """{"sec", "open", "est" (distance converted), "tss" (估), "hard_s" (≥ 88 % CP),
-    "z5_s"}: Σ s × IF² × 100 / 3600, IF = the target's middle ÷ CP (HR via Friel →
-    Palladino, 推估), no target by step kind (推估). With Ctx.easy_tph (SP-437) the easy steps
+    "z5_s"}: Σ s × IF² × 100 / 3600, IF = the target's middle ÷ CP (HR via hr_to_p: the
+    runner's own relation, else Friel's HR ↔ pace zones, 推估 — SP-642), no target by step kind (推估). With Ctx.easy_tph (SP-437) the easy steps
     (rate_easy) count at that rate instead; "easy_s" = their seconds, "tss_hard" = the TSS of the
     other steps (IF²), so tss = tss_hard + easy_s × the rate."""
     sec = tss = hard = z5 = 0.0
@@ -1644,7 +1694,9 @@ def _is_z5(st: dict, r: Resolved) -> bool:
         return False        # 個人化間歇 (SP-590): its rep length and rest are the model's / the coaches', by design
     if tg.get("type") == "auto" and tg.get("intent") == "band":
         return (tg["lo"] + tg["hi"]) / 2 >= Z5_FRAC
-    return r.type == "power" and r.frac is not None and r.frac >= Z5_FRAC
+    # power, pace and heart rate alike (SP-645): `frac` is each one's ≈ % CP (pace: % threshold
+    # speed; heart rate: hr_to_p, the runner's own or 推估) — before, only power counted, so Billat 30-30 on pace passed
+    return r.type in ("power", "pace", "hr") and r.frac is not None and r.frac >= Z5_FRAC
 
 
 def _is_z3(st: dict, r: Resolved) -> bool:
@@ -1681,7 +1733,9 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
         if r.warn:
             add("warn", r.warn, st["id"])
         if st["kind"] == "work" and st["dur"]["type"] == "time" and _is_z5(st, r) and st["dur"]["value"] < Z5_MIN_REP_S:
-            add("err", _("5 區每趟至少 2 分鐘（台灣教練）：這段只有 {d}", d=mmss(st['dur']['value'])), st["id"])
+            # a reminder, not an error (SP-645): the library itself offers 30/15 (NON_EQUIV, 可手選)
+            add("warn", _("短間歇：每趟只有 {d}，不算 5 區的進階（台灣教練建議 5 區每趟至少 2 分鐘）",
+                          d=mmss(st['dur']['value'])), st["id"])
         if st["kind"] == "work" and st["dur"]["type"] == "time" and _is_z3(st, r) and \
                 st["dur"]["value"] < Z3_MIN_REP_S and _has_rest_after(rows, st):
             add("warn", _("3 區每趟至少 3 分鐘（Haugen 2022 的下緣）：這段只有 {d}", d=mmss(st['dur']['value'])), st["id"])
@@ -2003,9 +2057,24 @@ def _name(st: dict, r: Resolved, em: _Emit, grouped: bool) -> str:
     return ""
 
 
+def ep_intensity(st: dict, r: Resolved, c: Ctx) -> Optional[tuple]:
+    """SP-632: ("effort_pace", lo, hi) s/km when this step goes to the watch as an Effort Pace target:
+    its target carries `ep` (watch_export.leg_ep), the push takes it (c.ep: COROS) and the target is
+    not power — or is, with 課表偏好「可跑坡目標」 = Effort Pace (c.ep_power). None = as resolved."""
+    ep = (st.get("target") or {}).get("ep")
+    if not c.ep or not ep:
+        return None
+    if r.type == "power" and not c.ep_power:
+        return None
+    return ("effort_pace", int(ep[0]), int(ep[1]))
+
+
 def _one(st: dict, em: _Emit, grouped: bool):
     CW = _cw()
     r = resolve(st, em.c)
+    epi = ep_intensity(st, r, em.c)
+    if epi:
+        r.intensity = epi
     d = st["dur"]
     secs = d["value"] if d["type"] == "time" else 0
     meters = d["value"] if d["type"] == "distance" else 0
@@ -2078,6 +2147,9 @@ def structure_text(steps: dict) -> str:
     return " · ".join(one(x) for x in steps["items"])[:300]
 
 
+# SP-632: the Effort Pace target's field codes are third-party (docs/plans/workout-editor.plan.md) — not yet on a watch
+EP_LOST = N_("Effort Pace 段：COROS 的坡度調整配速目標（intensityType 8，秒／公里同一般配速）依第三方整理，"
+             "還沒在手錶上確認（推估）")
 EX_LABEL = {1: N_("暖身"), 2: N_("訓練"), 3: N_("緩和"), 4: N_("休息")}
 
 
@@ -2097,6 +2169,8 @@ def _ex_line(ex: dict) -> dict:
         tgt = _("心率 {lo}–{hi} bpm", lo=ex['intensityValue'], hi=ex['intensityValueExtend'])
     elif it == 3:
         tgt = _("配速 {lo}–{hi} /km", lo=mmss(ex['intensityValue']), hi=mmss(ex['intensityValueExtend']))
+    elif it == _cw().INT_EFFORT_PACE:
+        tgt = _("Effort Pace {lo}–{hi} /km", lo=mmss(ex['intensityValue']), hi=mmss(ex['intensityValueExtend']))
     else:
         tgt = _("不設目標")
     return {"kind": _(EX_LABEL.get(ex["exerciseType"], N_("訓練"))), "dur": dur, "target": tgt, "name": ex.get("name") or ""}
@@ -2107,6 +2181,7 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
     "n", "limits": [{key, text, hit}], "lost": [text]} — limits always listed
     (absolute watts, one target per step, no ramps), `hit` when this session meets one."""
     CW = _cw()
+    c = dc_replace(c, ep=True)              # what COROS gets: its Effort Pace legs too (SP-632)
     program = CW.build_program(name, steps_to_coros(steps, c), CW.Thresholds(cp=c.cp, lthr=c.lthr, aet=c.aet, hrz=c.hrz, pzm=c.pzm), overview)
     groups = {}
     lines = []
@@ -2141,6 +2216,8 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
         lost.append(_("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段"))
     if dist:
         lost.append(_("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）"))
+    if any(ex.get("intensityType") == CW.INT_EFFORT_PACE for ex in program["exercises"]):
+        lost.append(_(EP_LOST))
     if any(st["dur"]["type"] == "load" for st, _ in res):
         lost.append(_("「{x}」段：這裡填的是訓練負荷（Training load），推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；"
                       "每次同步後用你的活動重新校正）", x=_(LOAD_LABEL)))
@@ -2181,7 +2258,9 @@ def view(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "soft
                                     "n": int(lv.get("n") or 0), "err_pct": round(rpe_m.err_frac() * 100)}
         order.append(o)
     eq = equivalence(steps, rung, c) if rung else None
-    return {"resolved": by_id, "order": order, "totals": totals(steps, c),
+    from backend.engine import hr_power_calib as HPC
+    hr_scale = HPC.describe(c.hrp) if any(o["type"] == "hr" for o in order) else None
+    return {"resolved": by_id, "order": order, "totals": totals(steps, c), "hr_scale": hr_scale,
             "issues": issues(steps, c, cap, cap_mode, rung), "watch": watch_preview(steps, c),
             "summary": steps_text(steps, c), "structure": structure_text(steps), "rpe_role": rpe_role(steps["items"]),
             "equiv": {k: eq[k] for k in ("ok", "why", "text")} if eq else None}

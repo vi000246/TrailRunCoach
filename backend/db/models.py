@@ -181,13 +181,13 @@ class SyncState(Base):
     coros_email: Mapped[Optional[str]] = mapped_column(String(200))
     coros_base_url: Mapped[Optional[str]] = mapped_column(String(100))
     coros_user_id: Mapped[Optional[str]] = mapped_column(String(50))
-    # 「記住密碼」 (opt-in): the password sealed with the local key (settings/secrets.py),
+    # 「記住密碼」 (opt-in): the password sealed with the server key (settings/secrets.py),
     # for the automatic re-login; deleted on untick / logout; never returned by an API
     coros_password_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     tp_username: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     tp_password_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Garmin Connect (SP-91 trial, sync/garmin_client.py): the library's token JSON (DI token +
-    # refresh token) sealed with the local key, never returned; garmin_token_expires is set only
+    # refresh token) sealed with the server key, never returned; garmin_token_expires is set only
     # when Garmin refused the token (登入已過期), None while it is good. 「記住密碼」 as COROS
     garmin_token_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     garmin_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -513,6 +513,9 @@ class WorkoutTemplateUser(Base):
     gpx_gain_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     gpx_loss_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     gpx_profile_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # {"km": [...], "z": [...]}
+    # SP-639: the course's grade segments and climbs (user_templates.parse_profile; recomputed on read
+    # when missing or made under other climb thresholds)
+    gpx_course_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

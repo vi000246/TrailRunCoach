@@ -332,7 +332,7 @@ async def refresh_hr_profile(db: AsyncSession, athlete_id: int, token: str, base
 # 記住密碼 + automatic re-login (user-approved 2026-10-01)
 #
 # Only when the user ticked 「記住密碼」: the password is stored sealed
-# (secrets.seal, Fernet with the local key) in sync_state.coros_password_sealed;
+# (secrets.seal, Fernet with the server key) in sync_state.coros_password_sealed;
 # never in plaintext, never logged, never returned by an API (the status says
 # only password_saved). Unticking or logging out deletes it.
 # When the token has expired (24 h) or COROS answers "Access token is invalid"

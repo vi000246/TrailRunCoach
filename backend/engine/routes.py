@@ -13,6 +13,7 @@ Two tiers, both on disk under ~/.wko5coach/routes/:
   index.json           the segments and routes, each with its efforts and
                        their metrics. Rebuilt incrementally from the tracks.
   names.json           the athlete's renames, keyed by segment / route id.
+  favorites.json       the athlete's starred segments / routes (SP-626), keyed the same way.
 
 Because every kept point IS a raw sample and the cumulative sums are taken
 over raw samples, an effort's metrics between two kept points are an exact
@@ -552,6 +553,7 @@ class RouteStore:
     tracks_dir = property(lambda self: self.root / "tracks")
     index_path = property(lambda self: self.root / "index.json")
     names_path = property(lambda self: self.root / "names.json")
+    favorites_path = property(lambda self: self.root / "favorites.json")
     manifest_path = property(lambda self: self.root / "manifest.json")
     weather_dir = property(lambda self: self.root / "weather")
 
@@ -596,6 +598,21 @@ class RouteStore:
         else:
             n.pop(sid, None)
         _write(self.names_path, n, indent=1)
+
+    def favorites(self) -> dict:
+        """{segment / route id: when it was starred} (SP-626; the user's, like names.json)."""
+        d = _read(self.favorites_path)
+        return d if isinstance(d, dict) else {}
+
+    def set_favorite(self, sid: str, on: bool, aliases: tuple = ()) -> None:
+        """Star / unstar; unstarring also drops the item's old ids (`aliases`) still in the file."""
+        f = self.favorites()
+        if on:
+            f.setdefault(sid, dt.datetime.now().isoformat(timespec="seconds"))
+        else:
+            for k in (sid, *aliases):
+                f.pop(k, None)
+        _write(self.favorites_path, f, indent=1)
 
 
 def _read(p: Path):
@@ -1775,6 +1792,45 @@ def enrich(idx: dict, tracks: dict[str, Track]) -> None:
         elev = [None if np.isnan(v) else float(v) for v in ref.e]
         r["auto_name"] = auto_name("route", [float(x) for x in ref.lat], [float(x) for x in ref.lon],
                                    r["length_m"], r["gain_m"], elev)
+
+
+SEG_ON_ROUTE = 0.8        # 推估 a segment this much (length share) inside a route's canonical path lies on it
+
+
+def segments_on_routes(segments: list[dict], routes: list[dict]) -> dict[str, list[tuple[str, float]]]:
+    """{route id: [(segment id, position along the route 0..1)], in order along the route}
+    (SP-626: the route page lists the segments of a route). A segment is on a route
+    when ≥ SEG_ON_ROUTE of its path lies within the 30 m buffer of the route's
+    canonical path and at least one of the route's runs did it (so a climb run
+    the other way round on a loop shows as the descent the runs actually do).
+    A segment on several routes is listed under each."""
+    out: dict[str, list[tuple[str, float]]] = {}
+    for r in routes:
+        if len(r.get("lat") or []) < 2:
+            continue
+        runs = set(r.get("members") or []) | {p["file"] for p in r.get("partials") or [] if p.get("file")}
+        runs |= {e["file"] for e in r.get("efforts") or [] if e.get("file")}
+        o = (r["lat"][0], r["lon"][0])
+        rxy = RM.project(r["lat"], r["lon"], *o)
+        lo, hi = rxy.min(axis=0) - RM.TOL_M, rxy.max(axis=0) + RM.TOL_M
+        cum = RM.path_length(rxy)
+        L = float(cum[-1]) or 1.0
+        hits = []
+        for s in segments:
+            if s.get("family") != r.get("family") or len(s.get("lat") or []) < 2:
+                continue
+            if not runs & {e["file"] for e in s.get("efforts") or []}:
+                continue
+            sxy = RM.project(s["lat"], s["lon"], *o)
+            if (sxy.max(axis=0) < lo).any() or (sxy.min(axis=0) > hi).any():
+                continue
+            if RM.cover_share(sxy, rxy) < SEG_ON_ROUTE:
+                continue
+            k = int(np.argmin(np.hypot(*(rxy - sxy[0]).T)))
+            hits.append((s["id"], round(float(cum[k]) / L, 3)))
+        if hits:
+            out[r["id"]] = sorted(hits, key=lambda h: (h[1], h[0]))
+    return out
 
 
 def carry_over(old: dict, new: dict, store: RouteStore) -> None:

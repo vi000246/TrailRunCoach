@@ -13,6 +13,7 @@
   color-scheme: light;
   --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --line: #e3e3df;
   --accent: #2a78d6; --soft: #e8efff; --warm: #b45309;
+  --c-run: #2a78d6; --c-walk: #c2410c; --c-mix: #7c3aed; --c-line: #33475b; --c-fill: rgba(42,120,214,.10);
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
 }
 @media (prefers-color-scheme: dark) {
@@ -20,12 +21,14 @@
     color-scheme: dark;
     --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --line: #2e2e2b;
     --accent: #3987e5; --soft: #1c2a40; --warm: #fbbf24; --shadow: none;
+    --c-run: #5a9cf0; --c-walk: #fb923c; --c-mix: #a78bfa; --c-line: #d6d5cf; --c-fill: rgba(90,156,240,.14);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --line: #2e2e2b;
   --accent: #3987e5; --soft: #1c2a40; --warm: #fbbf24; --shadow: none;
+  --c-run: #5a9cf0; --c-walk: #fb923c; --c-mix: #a78bfa; --c-line: #d6d5cf; --c-fill: rgba(90,156,240,.14);
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -56,8 +59,13 @@ a { color: var(--accent); }
 .btn:focus-visible, .lang:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* hero */
 .hero { padding: 44px 0 28px; display: grid; gap: 28px; }
-.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.tags li { padding: 2px 10px; border-radius: 999px; background: var(--soft); color: var(--accent); font-size: 13px; font-weight: 600; }
+/* SP-637: 越野／百岳／路跑 — the tags are the switch (the hero's words, the calculator, the profile) */
+.kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.kinds button { font: inherit; font-size: 13.5px; font-weight: 600; min-height: 34px; padding: 4px 12px; border-radius: 999px;
+  cursor: pointer; border: 1px solid var(--soft); background: var(--soft); color: var(--accent); }
+.kinds button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.kinds button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kinds.small button { min-height: 32px; font-size: 13px; }
 .hero h1 { margin: 12px 0 10px; font-size: clamp(26px, 4.4vw, 40px); line-height: 1.25; letter-spacing: .01em; }
 .hero .lead { margin: 0 0 20px; color: var(--muted); font-size: 17px; max-width: 40em; }
 .cta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -68,6 +76,14 @@ figure.shot { margin: 0; }
 .shot .frame { border-radius: 12px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); overflow: hidden; }
 .shot img { display: block; width: 100%; height: auto; }
 .shot figcaption { margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+/* R2 (readable): each picture is one small part of a screen taken at phone width and twice the pixels
+   (backend/scripts/intro_shots.json), shown near the app's own text size — a phone-width picture is
+   never stretched past ~1.1×; the long week list is cut with a fade. (SP-637: the hero's result and the
+   legs table are live now — the small calculator and the elevation profile below.) */
+.shot.phone { width: 100%; max-width: 400px; justify-self: center; }
+.shot.tall .frame { max-height: 620px; position: relative; }
+.shot.tall .frame::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 72px;
+  background: linear-gradient(to bottom, transparent, var(--panel)); pointer-events: none; }
 /* sections */
 section { padding: 36px 0; }
 section + section { border-top: 1px solid var(--line); }
@@ -80,9 +96,9 @@ h2 { margin: 0 0 8px; font-size: clamp(22px, 3vw, 28px); line-height: 1.3; }
 .card h3 { margin: 6px 0 6px; font-size: 17px; }
 .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
 .card svg { width: 28px; height: 28px; color: var(--accent); }
-.feature { display: grid; gap: 22px; }
+.feature { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 900px) {
-  .feature { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; }
+  .feature { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: center; }
   .feature.flip .text { order: 2; }
 }
 .feature ul { margin: 0 0 14px; padding-left: 1.2em; }
@@ -112,6 +128,52 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: cente
 footer a { color: var(--muted); }
 footer a:hover { color: var(--accent); }
 footer .lang { margin-left: auto; }
+/* SP-637: the small calculator (hero) */
+.calc { width: 100%; max-width: 440px; justify-self: center; padding: 20px; border-radius: 16px; background: var(--panel);
+  border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; gap: 12px; }
+.calc-h { margin: 0; font-size: 17px; }
+.field label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 600; font-size: 14.5px; }
+.field output { font-variant-numeric: tabular-nums; color: var(--accent); font-size: 16px; }
+.field input[type=range] { width: 100%; margin: 6px 0 0; accent-color: var(--accent); min-height: 32px; }
+.calc-res { padding: 12px 14px; border-radius: 12px; background: var(--soft); }
+.calc-res .k { color: var(--muted); font-size: 13px; font-weight: 600; }
+.calc-res .big { font-size: clamp(34px, 7vw, 44px); font-weight: 750; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.calc-res .s { color: var(--muted); font-size: 14px; min-height: 1.4em; }
+.calc-res.busy .big { opacity: .55; }
+.calc-note { margin: 0; color: var(--muted); font-size: 12.5px; }
+/* SP-637: the example's elevation profile (race section) */
+.prof { padding: 16px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
+  display: grid; gap: 10px; min-width: 0; }
+.prof-title { margin: 0; font-weight: 700; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.stats div { padding: 6px 8px; border-radius: 10px; background: var(--soft); min-width: 0; }
+.stats dt { color: var(--muted); font-size: 12px; }
+.stats dd { margin: 0; font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 420px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.chart { position: relative; height: 200px; touch-action: pan-y; }
+.chart svg { display: block; width: 100%; height: 100%; cursor: crosshair; overflow: visible; }
+.chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.chart .line { fill: none; stroke: var(--c-line); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.chart .area { fill: var(--c-fill); }
+.chart .band { opacity: .9; }
+.chart .run { fill: var(--c-run); } .chart .walk { fill: var(--c-walk); } .chart .mix { fill: var(--c-mix); }
+.chart .sel { fill: var(--accent); opacity: .16; }
+.chart .day { stroke: var(--muted); stroke-dasharray: 4 4; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: -4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.legend .c-run { background: var(--c-run); } .legend .c-walk { background: var(--c-walk); } .legend .c-mix { background: var(--c-mix); }
+.leg { min-height: 92px; padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 14px; }
+.leg p { margin: 0; }
+.leg .h { font-weight: 700; }
+.leg .row { display: flex; flex-wrap: wrap; gap: 2px 14px; font-variant-numeric: tabular-nums; }
+/* SP-637: fade in on scroll — only with JS and without 「減少動態效果」 (the page reads the same either way) */
+html.anim .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+html.anim .reveal.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  html.anim .reveal { opacity: 1; transform: none; transition: none; }
+  html { scroll-behavior: auto; }
+}
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -122,43 +184,57 @@ footer .lang { margin-left: auto; }
     <a class="link wide" href="/manual" data-i18n="intro.nav.manual">操作手冊</a>
     <a class="link wide" href="/about" data-i18n="intro.nav.about">關於</a>
     <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:intro.lang.title" data-i18n="intro.lang.other">English</button>
-    <a class="btn small" href="/login" data-i18n="intro.nav.login">登入</a>
+    <a class="btn small primary signin" id="nav-login" href="/login" data-i18n="intro.nav.login">登入</a>
   </nav>
 </header>
 <main>
   <div class="wrap">
     <section class="hero" aria-labelledby="hero-h">
       <div>
-        <ul class="tags" aria-label="適合誰" data-i18n-attr="aria-label:intro.tags.label">
-          <li data-i18n="intro.tags.trail">越野跑</li><li data-i18n="intro.tags.baiyue">百岳／多日縱走</li><li data-i18n="intro.tags.road">路跑</li>
-        </ul>
-        <h1 id="hero-h" data-i18n="intro.hero.h1">報了一場越野賽？告訴你練不練得完、每一段怎麼跑。</h1>
-        <p class="lead" data-i18n="intro.hero.lead">給越野跑、百岳、路跑的備賽工具：用你的跑步資料預估比賽、排好課表、讀懂每一趟訓練。</p>
+        <div class="kinds" role="group" aria-label="適合誰" data-i18n-attr="aria-label:intro.tags.label">
+          <button type="button" data-kind="trail" aria-pressed="true" data-i18n="intro.tags.trail">越野跑</button><button type="button" data-kind="baiyue" aria-pressed="false" data-i18n="intro.tags.baiyue">百岳／多日縱走</button><button type="button" data-kind="road" aria-pressed="false" data-i18n="intro.tags.road">路跑</button>
+        </div>
+        <h1 id="hero-h" data-kind-text="h1" data-i18n="intro.hero.h1">報了一場越野賽？告訴你練不練得完、每一段怎麼跑。</h1>
+        <p class="lead" data-kind-text="lead" data-i18n="intro.hero.lead">給越野跑、百岳、路跑的備賽工具：用你的跑步資料預估比賽、排好課表、讀懂每一趟訓練。</p>
         <div class="cta">
           <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
           <a class="btn" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
         </div>
         <p class="price" data-i18n="intro.cta.price">目前免費、名額有限，額滿收候補。</p>
       </div>
-      <figure class="shot">
-        <div class="frame"><img data-shot="intro-race" alt="賽事計算機的預估結果：完賽時間、平均功率、配速與努力度" data-i18n-attr="alt:intro.shot.race_alt"></div>
-        <figcaption data-i18n="intro.shot.fictional">畫面是示範資料：虛構跑者、虛構賽事。</figcaption>
-      </figure>
+      <!-- SP-637: the small calculator — the server computes (/api/v1/intro/estimate), the page only formats -->
+      <form class="calc" id="calc" aria-labelledby="calc-h" onsubmit="return false">
+        <h2 id="calc-h" class="calc-h" data-i18n="intro.calc.h">試算一場比賽</h2>
+        <div class="field">
+          <label for="calc-km"><span data-i18n="intro.calc.km">距離</span><output id="calc-km-v" for="calc-km">50 km</output></label>
+          <input type="range" id="calc-km" min="5" max="100" step="1" value="50">
+        </div>
+        <div class="field">
+          <label for="calc-gain"><span data-i18n="intro.calc.gain">爬升</span><output id="calc-gain-v" for="calc-gain">2,750 m</output></label>
+          <input type="range" id="calc-gain" min="0" max="6000" step="50" value="2750">
+        </div>
+        <div class="calc-res" aria-live="polite">
+          <div class="k" id="calc-k" data-i18n="intro.calc.finish">預估完賽</div>
+          <div class="big" id="calc-time">–</div>
+          <div class="s" id="calc-pace"></div>
+        </div>
+        <p class="calc-note" data-i18n="intro.calc.note">一位虛構跑者的試算。登入後，用你自己的跑步資料算。</p>
+      </form>
     </section>
 
     <section aria-label="三個重點" data-i18n-attr="aria-label:intro.points.label">
       <div class="points">
-        <div class="card">
+        <div class="card reveal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 6-10 4 6 3-4 5 8z"/><path d="M15.5 6.5h.01"/></svg>
           <h3 data-i18n="intro.points.terrain.h">坡度、背包、天氣都算進去</h3>
           <p data-i18n="intro.points.terrain.p">爬升、下坡、背包重量、比賽當天的氣溫和海拔，都換算成你跑得出來的配速。</p>
         </div>
-        <div class="card">
+        <div class="card reveal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>
           <h3 data-i18n="intro.points.plan.h">課表跟著你的賽事和狀況走</h3>
           <p data-i18n="intro.points.plan.p">依目標賽事分周期、按你的偏好排一週；狀況變了會重排，大變動先問你。</p>
         </div>
-        <div class="card">
+        <div class="card reveal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8.5 7.5h7M8.5 11h5"/></svg>
           <h3 data-i18n="intro.points.sources.h">每條規則都有出處</h3>
           <p data-i18n="intro.points.sources.p">計算方法都列出公開文獻；沒有出處的數字標「推估」，再用你的資料校正。</p>
@@ -182,9 +258,31 @@ footer .lang { margin-left: auto; }
         <p class="origin" data-i18n="intro.race.origin">完賽預估、環境修正與 CP 的公式移植自 Steve Palladino 的 SuperPower Calculator（跑步功率社群公開流通的試算表），不是我們發明的；越野與百岳的坡度、背包換算另外依照公開文獻。</p>
         <a class="more" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
       </div>
-      <figure class="shot">
-        <div class="frame"><img data-shot="intro-legs" alt="賽事計算機的分段表：每一段的坡度、配速、功率、心率與補給" data-i18n-attr="alt:intro.race.shot_alt" loading="lazy"></div>
-      </figure>
+      <!-- SP-637: the example's elevation profile — hover (desktop) or tap (phone) a leg -->
+      <div class="prof reveal" id="profile">
+        <div class="kinds small" role="group" aria-label="範例" data-i18n-attr="aria-label:intro.prof.kinds">
+          <button type="button" data-kind="trail" aria-pressed="true" data-i18n="intro.tags.trail">越野跑</button><button type="button" data-kind="baiyue" aria-pressed="false" data-i18n="intro.tags.baiyue">百岳／多日縱走</button><button type="button" data-kind="road" aria-pressed="false" data-i18n="intro.tags.road">路跑</button>
+        </div>
+        <p class="prof-title" data-kind-text="profile" data-i18n="intro.kind.trail.profile">示範山徑越野 50K</p>
+        <dl class="stats">
+          <div><dt data-i18n="intro.prof.km">距離</dt><dd><span data-stat="km">–</span> km</dd></div>
+          <div><dt data-i18n="intro.prof.gain">爬升</dt><dd><span data-stat="gain">–</span> m</dd></div>
+          <div><dt data-i18n="intro.prof.time">預估完賽</dt><dd><span data-stat="time">–</span></dd></div>
+          <div><dt data-i18n="intro.prof.legs">分段</dt><dd><span data-stat="legs">–</span></dd></div>
+        </dl>
+        <div class="chart">
+          <svg id="prof-svg" viewBox="0 0 1000 220" preserveAspectRatio="none" role="img" tabindex="0"
+               aria-label="高度剖面：左右鍵切換分段" data-i18n-attr="aria-label:intro.prof.aria"></svg>
+        </div>
+        <div class="axis"><span>0 km</span><span id="prof-end"></span></div>
+        <ul class="legend">
+          <li><i class="c-run"></i><span data-i18n="intro.prof.run">跑</span></li>
+          <li><i class="c-mix"></i><span data-i18n="intro.prof.mix">走跑皆可</span></li>
+          <li><i class="c-walk"></i><span data-i18n="intro.prof.walk">走</span></li>
+        </ul>
+        <div class="leg" id="prof-leg" aria-live="polite"><p class="muted" data-i18n="intro.prof.hint">滑過或點一下剖面，看每一段的配速、心率和補給。</p></div>
+        <p class="calc-note" data-i18n="intro.shot.fictional">畫面是示範資料：虛構跑者、虛構賽事。</p>
+      </div>
     </section>
 
     <section id="plan" class="feature flip" aria-labelledby="plan-h">
@@ -199,8 +297,8 @@ footer .lang { margin-left: auto; }
         </ul>
         <a class="more" href="/manual/schedule" data-i18n="intro.plan.more">手冊：課表怎麼用 →</a>
       </div>
-      <figure class="shot">
-        <div class="frame"><img data-shot="intro-schedule" alt="課表的週視圖：每一天的課、類型與完成狀況" data-i18n-attr="alt:intro.plan.shot_alt" loading="lazy"></div>
+      <figure class="shot phone tall reveal">
+        <div class="frame"><img data-shot="intro-schedule" alt="課表的一週：每一天的課、類型與完成狀況" data-i18n-attr="alt:intro.plan.shot_alt" loading="lazy"></div>
       </figure>
     </section>
 
@@ -216,7 +314,7 @@ footer .lang { margin-left: auto; }
         </ul>
         <a class="more" href="/manual/glossary" data-i18n="intro.read.more">手冊：名詞表 →</a>
       </div>
-      <figure class="shot">
+      <figure class="shot phone reveal">
         <div class="frame"><img data-shot="intro-status" alt="訓練總覽：長期訓練負荷、負荷平衡、本週的量與訓練負荷圖" data-i18n-attr="alt:intro.read.shot_alt" loading="lazy"></div>
       </figure>
     </section>
@@ -224,9 +322,9 @@ footer .lang { margin-left: auto; }
     <section id="start" aria-labelledby="start-h">
       <h2 id="start-h" data-i18n="intro.start.h">怎麼開始</h2>
       <ol class="steps">
-        <li class="card"><h3 data-i18n="intro.start.1.h">用 Google 帳號登入</h3><p data-i18n="intro.start.1.p">第一次登入會先請你看過條款。</p></li>
-        <li class="card"><h3 data-i18n="intro.start.2.h">匯入跑步資料</h3><p data-i18n="intro.start.2.p">匯入任何手錶的 FIT 檔，或連 intervals.icu；COROS、Garmin 帳號登入屬於進階功能（非官方介面，風險自負）。</p></li>
-        <li class="card"><h3 data-i18n="intro.start.3.h">加一場目標賽事</h3><p data-i18n="intro.start.3.p">課表就照賽事排好，計算機也能直接算那一場。</p></li>
+        <li class="card reveal"><h3 data-i18n="intro.start.1.h">用 Google 帳號登入</h3><p data-i18n="intro.start.1.p">第一次登入會先請你看過條款。</p></li>
+        <li class="card reveal"><h3 data-i18n="intro.start.2.h">匯入跑步資料</h3><p data-i18n="intro.start.2.p">匯入任何手錶的 FIT 檔，或連 intervals.icu；COROS、Garmin 帳號登入屬於進階功能（非官方介面，風險自負）。</p></li>
+        <li class="card reveal"><h3 data-i18n="intro.start.3.h">加一場目標賽事</h3><p data-i18n="intro.start.3.p">課表就照賽事排好，計算機也能直接算那一場。</p></li>
       </ol>
       <a class="more" href="/manual/start" data-i18n="intro.start.more">手冊：入門 →</a>
     </section>
@@ -255,7 +353,7 @@ footer .lang { margin-left: auto; }
       <h2 id="faq-h" data-i18n="intro.faq.h">常見問題</h2>
       <details><summary data-i18n="intro.faq.watch.q">要什麼手錶？沒有 COROS 或 Garmin 可以用嗎？</summary>
         <div><p data-i18n="intro.faq.watch.a">可以。任何手錶匯出的 FIT 檔都能匯入，也能連 intervals.icu。</p><a class="more" href="/manual/start#connect" data-i18n="intro.faq.more">看手冊 →</a></div></details>
-      <details><summary data-i18n="intro.faq.power.q">沒有 Stryd 功率計可以用嗎？</summary>
+      <details><summary data-i18n="intro.faq.power.q">沒有功率計可以用嗎？</summary>
         <div><p data-i18n="intro.faq.power.a">可以。沒有功率時改用心率：課表的目標用心率區間，只有功率才有的圖表會隱藏。</p><a class="more" href="/manual/faq#no-power" data-i18n="intro.faq.more">看手冊 →</a></div></details>
       <details><summary data-i18n="intro.faq.numbers.q">數字為什麼跟手錶不一樣？</summary>
         <div><p data-i18n="intro.faq.numbers.a">兩邊的算法和用的閾值不同，這是正常的；設定裡有 app 和手錶數值的對照。</p><a class="more" href="/manual/faq#watch-numbers" data-i18n="intro.faq.more">看手冊 →</a></div></details>
@@ -318,6 +416,196 @@ footer .lang { margin-left: auto; }
     img.src = base + (forced === "dark" ? ".dark" : "") + ".webp";
     pic.appendChild(img);
   }
+
+  // ---- SP-637: the page made interactive. The server computes (api/intro.py); this only asks and formats.
+  const reduce = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const API = "/api/v1/intro/";
+  const $ = (id) => document.getElementById(id);
+  const NF = loc === "en" ? "en-US" : "zh-TW";
+  const num = (v, d = 0) => (v == null || !isFinite(v) ? "–"
+    : Number(v).toLocaleString(NF, { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const hm = (s) => { if (s == null || !isFinite(s)) return "–"; const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+  const mmss = (s) => { if (s == null || !isFinite(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+
+  // fade in on scroll (style: html.anim .reveal); nothing moves with 「減少動態效果」
+  if (!reduce && "IntersectionObserver" in window) {
+    document.documentElement.classList.add("anim");
+    const io = new IntersectionObserver((es) => {
+      for (const e of es) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+    }, { rootMargin: "0px 0px -6% 0px" });
+    for (const el of document.querySelectorAll(".reveal")) io.observe(el);
+  }
+
+  // the numbers above the profile count up the first time they are seen (at once with reduced motion)
+  let statsSeen = reduce || !("IntersectionObserver" in window);
+  let statsWant = null;
+  function countTo(el, to, fmt) {
+    if (statsSeen && !reduce && window.requestAnimationFrame) {
+      const t0 = performance.now(), dur = 800;
+      const step = (t) => {
+        const p = Math.min(1, (t - t0) / dur), e = 1 - (1 - p) * (1 - p) * (1 - p);
+        el.textContent = fmt(to * e);
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    } else el.textContent = fmt(to);
+  }
+  function setStats(d) {
+    statsWant = d;
+    const s = d.summary;
+    const F = { km: [s.km, (v) => num(v, 1)], gain: [s.gain_m, (v) => num(v)], time: [s.time_s, hm], legs: [s.legs, (v) => num(v)] };
+    for (const el of document.querySelectorAll("[data-stat]")) {
+      const [v, fmt] = F[el.dataset.stat];
+      if (statsSeen) countTo(el, v, fmt); else el.textContent = fmt(0);
+    }
+  }
+  if (!statsSeen) {
+    const so = new IntersectionObserver((es) => {
+      if (!es.some((e) => e.isIntersecting)) return;
+      so.disconnect(); statsSeen = true;
+      if (statsWant) setStats(statsWant);
+    }, { threshold: 0.4 });
+    so.observe(document.querySelector(".stats"));
+  }
+
+  // the small calculator: the server's answer for the fictional runner, asked after the slider rests
+  const kmIn = $("calc-km"), gainIn = $("calc-gain"), res = document.querySelector(".calc-res");
+  let kind = "trail", timer = 0, seq = 0;
+  const memo = new Map();
+  function labels() {
+    $("calc-km-v").textContent = num(Number(kmIn.value)) + " km";
+    $("calc-gain-v").textContent = num(Number(gainIn.value)) + " m";
+  }
+  function show(r) {
+    res.classList.remove("busy");
+    $("calc-time").textContent = hm(r.time_s);
+    $("calc-pace").textContent = r.kind === "baiyue" ? L.t("intro.calc.moving_note")
+      : L.t("intro.calc.pace", { pace: mmss(r.pace_s_per_km) });
+  }
+  function ask() {
+    clearTimeout(timer);
+    res.classList.add("busy");
+    timer = setTimeout(async () => {
+      const q = { kind, km: kmIn.value, gain: gainIn.value }, key = JSON.stringify(q), my = ++seq;
+      let r = memo.get(key), err = null;
+      if (!r) {
+        try {
+          const x = await fetch(API + "estimate?" + new URLSearchParams(q));
+          if (x.ok) { r = await x.json(); memo.set(key, r); } else err = x.status;
+        } catch { err = 0; }
+      }
+      if (my !== seq) return;
+      if (r) { show(r); return; }
+      res.classList.remove("busy");
+      $("calc-time").textContent = "–";
+      $("calc-pace").textContent = L.t(err === 429 ? "intro.calc.busy" : "intro.calc.error");
+    }, 200);
+  }
+  for (const el of [kmIn, gainIn]) el.addEventListener("input", () => { labels(); ask(); });
+  function setCalc(d) {
+    const c = d.calc;
+    kmIn.min = c.km[0]; kmIn.max = c.km[1]; kmIn.step = c.km_step; kmIn.value = c.default.km;
+    gainIn.min = c.gain[0]; gainIn.max = c.gain[1]; gainIn.step = c.gain_step; gainIn.value = c.default.gain;
+    labels();
+    $("calc-k").textContent = L.t(d.kind === "baiyue" ? "intro.calc.moving" : "intro.calc.finish");
+    if (c.result) { memo.set(JSON.stringify({ kind: d.kind, km: kmIn.value, gain: gainIn.value }), c.result); show(c.result); }
+    else ask();
+  }
+
+  // the example's elevation profile: hand-drawn SVG; hover (mouse) or tap a leg, ← → on the keyboard
+  const svg = $("prof-svg"), NS = "http://www.w3.org/2000/svg", W = 1000, H = 220, BAND = 14, TOP = 8;
+  let P = null, sel = -1;
+  const el = (name, attrs) => { const n = document.createElementNS(NS, name); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+  function drawProfile(d) {
+    svg.textContent = "";
+    P = null; sel = -1;
+    const pts = d.profile || [];
+    if (pts.length < 2) return;
+    const k0 = pts[0][0], k1 = pts[pts.length - 1][0];
+    let lo = Infinity, hi = -Infinity;
+    for (const p of pts) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
+    if (hi - lo < 120) { const mid = (hi + lo) / 2; lo = mid - 60; hi = mid + 60; }   // a flat road stays flat
+    const base = H - BAND - 6;
+    const X = (km) => ((km - k0) / (k1 - k0 || 1)) * W;
+    const Y = (z) => TOP + ((hi - z) / (hi - lo)) * (base - TOP);
+    let line = "";
+    pts.forEach((p, i) => { line += `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`; });
+    svg.appendChild(el("path", { class: "area", d: `${line}L${W},${base}L0,${base}Z` }));
+    svg.appendChild(el("path", { class: "line", d: line }));
+    for (const g of d.legs) {
+      svg.appendChild(el("rect", { class: "band " + (g.mode || "run"), x: X(g.a).toFixed(1), y: H - BAND,
+        width: Math.max(1, X(g.b) - X(g.a) - 1).toFixed(1), height: BAND, rx: 2 }));
+    }
+    let day = null;
+    for (const g of d.legs) {
+      if (g.day && day != null && g.day !== day) svg.appendChild(el("line", { class: "day", x1: X(g.a), x2: X(g.a), y1: 0, y2: H }));
+      day = g.day;
+    }
+    const hl = el("rect", { class: "sel", x: 0, y: 0, width: 0, height: H });
+    svg.appendChild(hl);
+    P = { d, X, k0, k1, hl };
+    $("prof-end").textContent = num(k1, 1) + " km";
+    showLeg(-1);
+  }
+  function showLeg(i) {
+    const box = $("prof-leg");
+    if (!P || i < 0) { box.innerHTML = ""; const p = document.createElement("p"); p.className = "muted"; p.textContent = L.t("intro.prof.hint"); box.appendChild(p); return; }
+    const g = P.d.legs[i];
+    P.hl.setAttribute("x", P.X(g.a).toFixed(1));
+    P.hl.setAttribute("width", Math.max(2, P.X(g.b) - P.X(g.a)).toFixed(1));
+    const head = L.t("intro.prof.leg_h", { n: g.n, a: num(g.a, 1), b: num(g.b, 1) }) + (g.day ? " · " + L.t("intro.prof.day", { day: g.day }) : "");
+    const rows = [
+      [L.t("intro.prof.climb", { gain: num(g.gain_m), loss: num(g.loss_m), grade: num(g.grade == null ? null : g.grade * 100, 0) }),
+       L.t("intro.prof.mode_" + (g.mode || "run"))],
+      [L.t("intro.prof.pace", { pace: mmss(g.pace_s_per_km) }), g.hr_cap ? L.t("intro.prof.hr", { hr: num(g.hr_cap) }) : "",
+       L.t("intro.prof.at", { time: hm(g.cum_s) })],
+      [L.t("intro.prof.fuel", { cho: num(g.cho_g), water: num(g.water_ml), na: num(g.na_mg) })],
+    ];
+    box.innerHTML = "";
+    const h = document.createElement("p"); h.className = "h"; h.textContent = head; box.appendChild(h);
+    for (const r of rows) {
+      const p = document.createElement("p"); p.className = "row";
+      for (const t of r.filter(Boolean)) { const s = document.createElement("span"); s.textContent = t; p.appendChild(s); }
+      box.appendChild(p);
+    }
+  }
+  function select(i) { sel = i; showLeg(i); }
+  function pick(e) {
+    if (!P) return;
+    const r = svg.getBoundingClientRect();
+    const km = P.k0 + ((e.clientX - r.left) / r.width) * (P.k1 - P.k0);
+    const i = P.d.legs.findIndex((g) => km >= g.a && km <= g.b);
+    if (i >= 0 && i !== sel) select(i);
+  }
+  svg.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") pick(e); });
+  svg.addEventListener("pointerdown", pick);
+  svg.addEventListener("keydown", (e) => {
+    if (!P || (e.key !== "ArrowRight" && e.key !== "ArrowLeft")) return;
+    e.preventDefault();
+    const n = P.d.legs.length;
+    select(sel < 0 ? 0 : Math.max(0, Math.min(n - 1, sel + (e.key === "ArrowRight" ? 1 : -1))));
+  });
+
+  // 越野／百岳／路跑: the hero's words, the calculator's range and first answer, the profile
+  const EX = {};
+  const example = (k) => EX[k] || (EX[k] = fetch(API + "example/" + k).then((r) => (r.ok ? r.json() : Promise.reject(r.status))));
+  // 「先看一場比賽的試算」 opens the chosen kind's example (the public demo, when the server says so, stays)
+  const SHARE = { trail: "example-trail-50k", baiyue: "example-baiyue-3day", road: "example-road-half" };
+  const demoTry = !!(tr && tr.kind === "demo" && /^https:\/\//.test(tr.url));
+  async function setKind(k) {
+    kind = k;
+    if (!demoTry) for (const a of document.querySelectorAll("[data-try]")) a.href = "/share/" + SHARE[k];
+    for (const b of document.querySelectorAll("button[data-kind]")) b.setAttribute("aria-pressed", String(b.dataset.kind === k));
+    for (const t of document.querySelectorAll("[data-kind-text]")) t.textContent = L.t(`intro.kind.${k}.${t.dataset.kindText}`);
+    const tl = document.querySelector('[data-i18n="intro.prof.time"]');
+    if (tl) tl.textContent = L.t(k === "baiyue" ? "intro.prof.time_baiyue" : "intro.prof.time");
+    let d;
+    try { d = await example(k); } catch { delete EX[k]; $("calc-pace").textContent = L.t("intro.calc.error"); return; }
+    if (k !== kind) return;
+    setCalc(d); drawProfile(d); setStats(d);
+  }
+  for (const b of document.querySelectorAll("button[data-kind]")) b.addEventListener("click", () => setKind(b.dataset.kind));
+  setKind("trail");
 })();
 </script>
 </body>

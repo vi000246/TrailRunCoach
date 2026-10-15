@@ -272,6 +272,9 @@ FILES: tuple = (
          backup=ALWAYS, deidentify=("activity files / starts", "achievement footprint cells (GPS), summits")),
     File("routes/names.json", USER, SHARED, "the user's names for detected routes (engine/routes.py)",
          backup=ALWAYS, deidentify=("names (free text)",)),
+    File("routes/favorites.json", USER, SHARED, "the user's starred routes / segments (engine/routes.py, "
+         "SP-626); keyed by id, an id merged away still found through the index's aliases",
+         backup=ALWAYS),
     File("routes/**", DERIVED, SHARED, "route index, per-activity tracks, route weather (engine/routes.py, "
          "route_weather.py)", deidentify=("tracks: GPS points", "activity_weather: positions + times"),
          invalidated_by="INDEX_VERSION, the activity files' stamps; weather refetched"),

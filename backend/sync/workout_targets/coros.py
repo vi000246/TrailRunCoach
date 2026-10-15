@@ -17,11 +17,12 @@ class CorosProvider(WorkoutProvider):
     label = "COROS"
     enabled = True
     capabilities = Capabilities(
-        targets=("power", "hr", "pace"), repeat_groups=True, nested_repeats=False, open_steps=True,
+        targets=("power", "hr", "pace", "effort_pace"), repeat_groups=True, nested_repeats=False, open_steps=True,
         distance_steps=True, distance_unit="cm", max_steps=None,
         notes=(N_("功率只收絕對瓦數"), N_("配速：秒／公里（2026-10-02 手錶驗證）"),
                N_("「最後一趟不休息」的重複要攤平"), N_("距離段單位依第三方整理（未驗證）"),
-               N_("訓練負荷（Training load）：app 填負荷，送 COROS 的 TL（推估換算）")),
+               N_("訓練負荷（Training load）：app 填負荷，送 COROS 的 TL（推估換算）"),
+               N_("賽事可跑的坡：Effort Pace 目標（intensityType 8，推估，手錶上還沒確認）")),
         end_conditions=("time", "distance", "open", "load"), load_unit="TL")
 
     def build_payload(self, session: dict, thresholds: Optional[dict]) -> dict:

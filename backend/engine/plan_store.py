@@ -31,7 +31,10 @@ NOT_LOAD = ("notice",)
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m",
             "target_basis", "steps", "family")
 TERRAINS = ("road", "trail", "hike")
-DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "LSD", "quality": "有氧間歇（巡航）3×10 分", "test": "CP 測試 20 分全力",
+# 強度課 (SP-628): no fixed set — the 課表 dialog fills a new one from the interval ladder (POST
+# /sessions/suggest, engine/session_suggest.py); the old 「有氧間歇（巡航）3×10 分」 (95–101 % CP, rests of
+# 10′) was a threshold session, and a title alone gave it that structure
+DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "LSD", "quality": "有氧間歇", "test": "CP 測試 20 分全力",
                   "hike": "越野跑", "strength": "肌力（下肢單腳＋核心）"}
 # 長時間 -> LSD (2026-10-03): the planner's old auto titles, mapped at read time so stored
 # rows show the new label; any other title (a user's own wording) is left as written
@@ -477,7 +480,9 @@ def _edit_row(db: AsyncSession, rows: dict, uid: str, patch: dict, today: str, a
         ch["steps"] = None                  # a new library variant: its own steps, not the old structure
     if patch.get("_variant") is None and ch and d.get("variant_key") and \
             (any(k in ch for k in ("title", "minutes", "detail")) or ch.get("steps")) and "variant_key" not in ch:
-        ch["swap"] = "user"                 # hand-edited text: the variant stays, marked as the user's
+        # hand-edited text: the variant stays, marked as the user's — a Zone 5 one added before the
+        # track opened keeps its mark (SP-628, session_suggest.LOCKED: never counted)
+        ch["swap"] = "locked" if d.get("swap") == "locked" else "user"
     if not ch:
         return d
     if "day" in ch and ch["day"] != d["day"]:
@@ -963,7 +968,16 @@ def push_dict(s: dict, prefs=PREFS_UNREAD, th: Optional[dict] = None) -> dict:
                                      "target_basis", "steps")
                if s.get(k) is not None},
             # 目標用: the session's own choice, else 課表偏好 目標依據, else 自動 (engine/target_policy.py)
-            "basis": _basis_for(s, prefs, bool((th or {}).get("cp_stale")))}
+            "basis": _basis_for(s, prefs, bool((th or {}).get("cp_stale"))),
+            # SP-632: 課表偏好「可跑坡目標」 = Effort Pace — COROS sends it over power too (workout_steps.ep_intensity)
+            **({"ep_power": True} if s.get("steps") and _ep_power(prefs) else {})}
+
+
+def _ep_power(prefs=PREFS_UNREAD) -> bool:
+    from backend.engine.workout_steps import ep_power_of
+    if prefs is PREFS_UNREAD:
+        prefs = load_prefs_safe()
+    return ep_power_of(prefs)
 
 
 def load_prefs_safe():

@@ -206,6 +206,8 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
             "temp_c": s.get("temp_c"), "fuel": fuel_summary(plan, s), "badge": tg.get("badge") or s.get("badge"),
             "pole_hint": pole_hint(s, k, kind) if poles else None,
             "night": s.get("night"),             # SP-254: run in the dark (None without a start time / sun)
+            # SP-632: what the watch export's Effort Pace legs read (watch_export.ep_ok / _target)
+            "gap_pace_s_per_km": s.get("gap_pace_s_per_km"), "z_mean": s.get("z_mean"), "tech_f": s.get("tech_f"),
         })
     return out
 

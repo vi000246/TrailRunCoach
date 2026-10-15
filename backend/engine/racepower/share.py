@@ -144,20 +144,38 @@ def expired(snap: dict, now: Optional[dt.datetime] = None) -> bool:
 # the repo (backend/scripts/intro_example.py writes it) — never in a tenant, never anyone's row in accounts.db.
 # Its id has a shape new_id() never makes (17 characters; token_urlsafe(16) gives 22).
 EXAMPLE_ID = "example-trail-50k"
-EXAMPLE_FILE = Path(__file__).resolve().parents[2] / "demo" / "example_share.json"
+_DEMO = Path(__file__).resolve().parents[2] / "demo"
+EXAMPLE_FILE = _DEMO / "example_share.json"
+# SP-637: one example per kind the 介紹頁 switches between (越野／百岳／路跑), the same way: a repo file each,
+# ids of 17 and 19 characters (never new_id()'s 22)
+EXAMPLES = {
+    EXAMPLE_ID: EXAMPLE_FILE,
+    "example-baiyue-3day": _DEMO / "example_share_baiyue.json",
+    "example-road-half": _DEMO / "example_share_road.json",
+}
+EXAMPLE_KINDS = {EXAMPLE_ID: "trail", "example-baiyue-3day": "baiyue", "example-road-half": "road"}
 
 
-def example() -> Optional[dict]:
-    """The built-in example snapshot; None when the file is missing (a share page's 404)."""
+def is_example(sid: str) -> bool:
+    return sid in EXAMPLES
+
+
+def example_id(kind: str) -> str:
+    """The built-in example of a kind (trail | baiyue | road); KeyError for any other."""
+    return {v: k for k, v in EXAMPLE_KINDS.items()}[kind]
+
+
+def example(sid: str = EXAMPLE_ID) -> Optional[dict]:
+    """A built-in example snapshot; None when the file is missing (a share page's 404)."""
     try:
-        return json.loads(EXAMPLE_FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return json.loads(EXAMPLES[sid].read_text(encoding="utf-8"))
+    except (KeyError, OSError, ValueError):
         return None
 
 
 def load(sid: str, root: Optional[Path] = None) -> Optional[dict]:
-    if sid == EXAMPLE_ID:
-        return example()
+    if sid in EXAMPLES:
+        return example(sid)
     p = _path(sid, root)
     if not p.exists():
         return None

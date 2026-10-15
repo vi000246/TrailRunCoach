@@ -60,6 +60,31 @@ def _pace(v: float) -> Optional[float]:
     return 1000.0 / v if v and v > 0 else None
 
 
+def flat_pace(segs: list[dict]) -> Optional[float]:
+    """SP-632: the race's 「平地等效配速」 (s/km): every segment's GAP (gap_pace_s_per_km, the
+    Minetti running curve with the 10 % downhill floor) averaged by the segment's time. None
+    when no segment has one (road, 百岳)."""
+    num = den = 0.0
+    for s in segs or []:
+        g, t = s.get("gap_pace_s_per_km"), float(s.get("t") or 0.0)
+        if g and t > 0:
+            num += float(g) * t
+            den += t
+    return num / den if den > 0 else None
+
+
+def _tech_eff(grade_re, s: dict, trail: bool, gpx: bool) -> Optional[float]:
+    """SP-632: the trail technicality the segment's time carries (GaitRE.tech_at on g ≤ +2 %,
+    × SP-544's dirt-share re_mult when set); None where none applies (climbs, road, no model)."""
+    if not (trail and gpx) or s["grade"] > 0.02 or not hasattr(grade_re, "tech_at"):
+        return None
+    try:
+        f = float(grade_re.tech_at(s["grade"])[0] or 1.0)
+    except Exception:                       # noqa: BLE001 — a duck-typed model without bins
+        return None
+    return f * float(s.get("re_mult") or 1.0)
+
+
 def _clock(start: Optional[str], secs: float) -> Optional[str]:
     if not start:
         return None
@@ -766,6 +791,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             "walk": walk, "gait": gait, "gait_curve": curve,
             "M": s["M"], "power": r["P"], "pct_cp": r["P"] / cp, "zone": z["id"] if z else "1A 以下",
             "speed_ms": v, "pace_s_per_km": _pace(v), "gap_pace_s_per_km": _pace(v * gf) if trail else None,
+            "tech_f": _tech_eff(grade_re, s, trail, gpx),            # SP-632: the watch export's 技術段
             "vert_m_per_h": v * s["grade"] * 3600.0 if abs(s["grade"]) >= 0.15 else None,
             "t": r["t"], "cum_s": cum, "eta": _clock(opts.get("start_time"), cum + _stops_before(stops, s["end_km"])),
             "capped": r["capped"], "locked": r.get("locked", False), "notes": notes,

@@ -59,16 +59,33 @@ def test_derive_check_save_and_preview(monkeypatch):
 def test_patch_refuses_errors_unless_forced(monkeypatch):
     with Env(monkeypatch) as e:
         q = _quality(e)
+        # a red error: lower bound above the upper one (a short Zone 5 rep is only a reminder, SP-645)
         bad = {"items": [{"kind": "repeat", "times": 8, "items": [
             {"kind": "work", "dur": {"type": "time", "value": 60},
-             "target": {"type": "power", "mode": "pct", "lo": 1.1, "hi": 1.2}},
+             "target": {"type": "power", "mode": "pct", "lo": 1.2, "hi": 1.1}},
             {"kind": "rest", "dur": {"type": "time", "value": 60}, "target": {"type": "none"}}]}]}
         r = e.c.patch(f"{API}/sessions/{q['uid']}", json={"steps": bad})
-        assert r.status_code == 422 and any("2 分鐘" in x for x in r.json()["detail"]["errors"])
+        assert r.status_code == 422 and "下限比上限高" in r.json()["detail"]["errors"]
         r = e.c.patch(f"{API}/sessions/{q['uid']}", json={"steps": bad, "steps_force": True})
         assert r.status_code == 200 and r.json()["minutes"] == 16
         r = e.c.post(f"{API}/steps/check", json={"steps": {"items": [{"kind": "x"}]}})
         assert r.status_code == 400 and r.json()["detail"]["errors"]
+
+
+def test_short_z5_reps_save_with_a_reminder(monkeypatch):
+    """SP-645: 30/15 from 插入範本 — /steps/check shows a yellow reminder, PATCH saves it unforced."""
+    from backend.engine import workout_steps as WS
+    with Env(monkeypatch) as e:
+        q = _quality(e)
+        rows = {r["key"]: r for g in e.c.get(f"{API}/steps/templates").json()["groups"] for r in g["rows"]}
+        for key in ("lib:ronnestad_3015", "x3015"):
+            steps = {"items": rows[key]["full"]}
+            chk = e.c.post(f"{API}/steps/check", json={"uid": q["uid"], "steps": steps}).json()
+            short = [i for i in chk["issues"] if "短間歇" in i["text"]]
+            assert short and {i["level"] for i in short} == {"warn"}, chk["issues"]
+            r = e.c.patch(f"{API}/sessions/{q['uid']}", json={"steps": steps})
+            assert r.status_code == 200, (key, r.json())
+        assert WS.Z5_MIN_REP_S == 120
 
 
 def test_templates_and_new_session_with_steps(monkeypatch):

@@ -35,6 +35,7 @@ achievements page) is unchanged.
 | `manifest.json` | `[size, mtime, ALGO_VERSION]` per workout file, and whether it has GPS |
 | `index.json` | tier B: segments, routes, pending references, efforts with metrics and weather, the build's weather call counts |
 | `names.json` | renames, keyed by segment / route id (see Names) |
+| `favorites.json` | starred segments / routes, keyed by id (SP-626) |
 | `weather/<lat>_<lon>_<date>.json` | one Open-Meteo archive day per 0.25° cell, every effort point in it (see Weather) |
 | `activity_weather.json` | per-activity heat exposure for the heat-acclimation index (see Weather) |
 
@@ -394,15 +395,37 @@ Routes: both runs must have the same direction (a reversed pair walks the
 reference backwards) and start within 200 m of the reference's start; else
 400 with the reason (a loop started elsewhere has no common distance axis).
 
+## Two activities (SP-625, `GET /api/v1/app/activity-compare?a=&b=`)
+
+Any two activities, picked on the 活動列表 (a compare button per row: the first press is A, a press on
+another row opens the page), the 圖表分析 activity list (「比較兩次」: tick two) or the 路線 page's
+header link; the page (`static/actcompare.html`, `/api/v1/app/activity-compare/page?a=&b=`) has its own
+two pickers and a 「只看比賽」 filter (the user's own 比賽 mark, as on the 活動列表).
+
+- **Same course**: both are runs of one route and the route comparison accepts the pair (same
+  direction, started within the route's start tolerance) → `aligned` = that route; else the longest
+  segment both did, when it is ≥ 80 % (`ALIGN_SHARE`, 推估) of the shorter activity's distance. The page
+  then draws this page's point-by-point comparison (`GET /api/v1/routes/{id}/compare`, map, gap chart)
+  instead of the overlay. A route both ran that cannot be lined up gives `aligned_note` (the reason).
+  Every other segment both did is listed (`shared`) with A / B times and a 逐點比較 button.
+- **Any course** (`backend/engine/activity_compare.py`, plain arrays): summary (time, distance,
+  average pace = elapsed ÷ distance, time-weighted HR / power, climbing, training load) with B − A;
+  kilometre splits (elapsed time at each whole km, the last part km ≥ 50 m); overlay every 0.5 % of the
+  distance (pace centred over 1.5 %, nothing drawn slower than 60 min/km; HR / power time-weighted per
+  step), x axis = share completed (default), distance or elapsed time; pace by gradient group — every
+  100 m by its gradient, uphill > 3 %, downhill < −3 %, the rest flat (推估).
+- Not done (SP-475): HR / power zone time, the gap chart for different courses.
+
 ## API
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/v1/routes` | `kind` (segment/route/climb/descent/stretch), `direction` (up/down/flat), `sport`, `limit`; rows sorted by effort count then recency, sub-routes right under their parent (`depth`); each row has `thumb` (below), `n_reversed`, `n_partials`, `parent`; `status`, `counts` (sub-routes as `sub_route`), `sports` |
+| GET | `/api/v1/routes` | `kind` (segment/route/climb/descent/stretch; none = routes + segments on no route, rows carry `section`), `direction` (up/down/flat), `sport`, `fav`, `limit`; rows sorted starred → renamed → effort count then recency (SP-626), each with `fav`, `on_routes`, `n_segments`; sub-routes right under their parent (`depth`); each row has `thumb` (below), `n_reversed`, `n_partials`, `parent`; `status`, `counts` (sub-routes as `sub_route`), `sports` |
 | GET | `/api/v1/routes/status` | build progress `{state, phase, done, total, …}` |
 | POST | `/api/v1/routes/rebuild` | `{"full": false}`; returns at once, builds in a thread |
 | GET | `/api/v1/routes/{id}` | detail with efforts (+ `workout` index — by the effort's file, else the current source's activity with the nearest start (`activity_key.ByStartDict`, ±3 min), `phase`, `dir`), `parent`, `sub_routes`, `partials`; an id merged away (route alias, folded stretch, chain link) answers with the item holding it now |
 | PATCH | `/api/v1/routes/{id}` | `{"name": ""}` clears the rename |
+| PUT | `/api/v1/routes/{id}/favorite` | `{"on": true}` stars, false unstars (SP-626) |
 | GET | `/api/v1/routes/{id}/compare?a=&b=` | effort ids from the detail |
 | GET | `/api/v1/routes/page` | the page (`render_page("routes")`, localized) |
 | GET | `/api/v1/app/workouts/{idx}/segments` | segments / routes this activity matched, rank, Δ best; the activity's file in the route index is found by start when the current source names it otherwise |
@@ -440,7 +463,25 @@ new file: none; full recompute from cached tracks: ~40 s.
   link to the viewer), reversed-run count, merged pieces; reversed / mixed
   runs carry a 反向 / 混合 tag in the table, rank among their own direction,
   and the default A / B pair is of the main direction.
-- Phone (< 900 px): list and detail are separate views with a back button.
+- **Routes first, favourites, names (SP-626)**: the default list (全部) is the routes (sub-routes
+  under their parent), then 「其他路段」 = the segments on no route; a segment on a route is listed in
+  the route's detail table 「這條路線上的路段」 (`segments_on_routes`, `backend/engine/routes.py`: ≥ 0.8
+  (`SEG_ON_ROUTE`, 推估) of its path inside the route's 30 m buffer and done by at least one of the
+  route's runs; a segment on several routes is under each, in order along the route). The table shows,
+  per segment, 這次 = comparison B's time on it, its rank there, the best and the gap; a row opens the
+  segment with B = that run. A segment's detail lists the routes it is on. 路段 / 路線 filters list every
+  segment / route (a segment row says on how many routes it is).
+  Order: starred → renamed → most done (ties: most recent). ★ on every row and on the detail title
+  (yellow when on) toggles `PUT /{id}/favorite {"on"}` → `favorites.json` (a USER file in
+  `data_registry`, backed up), so every device sees it; starred items are pinned on top in a 「★ 最愛」
+  section (a starred on-route segment too), and the 「★ 最愛」 filter (`?fav=1`) lists only them. Names
+  and stars are read through the index's `aliases`: an id merged away by a rebuild still counts for
+  the item holding it; unstarring / clearing a name drops the old ids' entries too. Rename is the
+  pencil beside the title, edited inline (Enter saves, Esc cancels, empty = automatic name) — no
+  `prompt()`. The page is translated (namespace `routes`); an automatic name's kind word is translated
+  on the page, peak names and the user's names are not.
+- Phone (< 900 px): list and detail are separate views with a back button; < 600 px a row is two lines
+  (name, then length · count · best, cut with …), no sparkline.
 - Single-activity card in the viewer: segments matched with 「第 N 快 / M 次」
   and Δ best, linking to `/api/v1/routes/page#<id>`.
 
@@ -575,3 +616,5 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 | 2026-10-08 | code-sync（SP-78, SP-41） | N/A | Documented auto names (nearest 百岳 within 1 km, renames take precedence), the weather call cap (2,000 per build, 3 at a time), the canonical path thinned to 400 points, rain matched by file or start ±3 min, map layer strings via i18n `common.map.*`; `precipitation` added to the hourly list; Open Questions from SP-299 / SP-47 |
 | 2026-10-08 | SP-299 follow-up | owner decision 2026-10-07 (ticket SP-299) | The rain hint only on 越野跑 / 登山健行 (`activity_tags.rain_kind`); the one-time rain backfill of the last 12 months (`engine/rain_backfill.py`, `api/rain_backfill.py`, setting `weather.rain_backfill`): `Fetcher` gains `refetch` / `workers` / `pace_s`, `activity_point` shared with `fill_activities`. Tests `test_rain_backfill.py` (HTTP faked) |
 | 2026-10-08 | SP-299 review | code review of fix/activity-sp81-299-300-258 | Rain backfill: runs in the routes Builder's slot (`Builder.start_task`), so no build writes the same cache meanwhile (M1); `STOP` set on quit ends it before the next call, no thread pool for one call at a time (M2); only `hourly.precipitation` merged into the cached day (`merge_rain`, L1); tmp names unique per process / thread (`write_atomic`). Tests `test_rain_backfill.py` (merge, stop, slot, tmp names) |
+| 2026-10-15 | feature | SP-625 | Any two activities compared: same route / segment lined up point by point, else summary, km splits, overlay on share completed / distance / time, pace by gradient group; entries on the 活動列表, 圖表分析 and 路線 page |
+| 2026-10-15 | feature | SP-626 | Routes page: segments listed under the routes they lie on (each route), 「其他路段」 for the rest; favourites on the server (`favorites.json`, aliases kept), pinned and filterable; order starred → renamed → count; inline rename; page translated; phone rows two lines |

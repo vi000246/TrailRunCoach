@@ -13,7 +13,7 @@ def _spec(**shot):
     return {"ticket": "SP-396", "shots": [{"name": "課表頁", "page": "schedule", **shot}]}
 
 
-@pytest.mark.parametrize("vp", ["mobile", "desktop", [1024, 768]])
+@pytest.mark.parametrize("vp", ["mobile", "desktop", [1024, 768], [600, 900, 2]])
 def test_every_documented_viewport_passes(vp):
     # [w, h] once raised TypeError (a list is not hashable) instead of passing
     assert S.check_spec(_spec(viewport=vp))

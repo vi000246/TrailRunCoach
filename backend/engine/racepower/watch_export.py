@@ -25,6 +25,15 @@ or pace (no power meter for 百岳); descents 控制、安全. When a leg merges
 segments of different kinds, the kind with the most time decides; merged power is
 time-weighted. Pure functions on the /plan payload.
 
+Effort Pace (SP-632): a trail leg that is mostly runnable ground — grade EP_GRADE (−3 … +15 %,
+both ends in), not walked (gait), not technical (the segment's technicality tech_f ≥ EP_TECH_MIN)
+and below EP_ALT_MAX_M — also carries `ep` [lo, hi] (s/km) on its target: the time-weighted GAP
+of those segments ± EP_BAND. COROS sends it as an Effort Pace target (intensityType 8,
+coros_workouts) instead of the HR cap / no target, and instead of power only when the 課表偏好
+「可跑坡目標」 is Effort Pace (plan_prefs.climb_target); every other provider ignores it.
+The 229-run comparison (SP-368): COROS Effort Pace ÷ the app's GAP, median 0.98–1.02 on +3 … +15 %.
+Road and 百岳 legs never carry it.
+
 The steps go to the 課表 (api/racepower.py /export/plan → plan_store.upsert_external) and
 reach the watch with the plan's own push.
 """
@@ -43,8 +52,32 @@ MIN_DIST_STEP_M = 50             # workout_steps' distance minimum
 HR_LO_FRAC = 0.85                # 推估: a cap's watch band = 85–100 % of the cap
 PACE_BAND = 0.02                 # 推估: ± 2 % around the planned pace (road, no CP)
 POWER_BAND = 0.03                # the COROS power band (planner.coros_steps, seg_targets.POWER_BAND)
+EP_NOTE = N_("可跑的坡（−3～+15 %，不含技術段與高海拔）推到 COROS 時目標是 Effort Pace（手錶的坡度調整配速，"
+             "跟這裡的平地等效配速是同一種換算）；有 Stryd 時照課表偏好，預設仍是功率。Garmin 推送不變："
+             "可以在手錶加 GAP（坡度調整配速）資料欄位當參考")
 STOP_LABEL = {"water": N_("水站"), "aid": N_("補給站"), "big": N_("大補給站"), "medical": N_("醫護站"), "self": N_("補給點")}
 MODES = ("lap", "distance")
+# SP-632 Effort Pace legs (the module docstring)
+EP_GRADE = (-0.03, 0.15)         # the runnable grades, both ends included (SP-368 Q3, the owner 2026-10-15)
+EP_TECH_MIN = 0.85               # 推估: a technicality factor below this (≥ 15 % slower than the grade model) = 技術段
+EP_ALT_MAX_M = 2800.0            # planner.altitude_note: above 2800 m the altitude factor is extrapolated
+EP_SHARE_MIN = 0.5               # 推估: a merged leg gets Effort Pace when more than half its time is eligible
+EP_BAND = 0.03                   # 推估: ± 3 % around the leg's GAP (as the power band)
+
+
+def ep_ok(r: dict) -> bool:
+    """A chart row (seg_targets.chart_rows) where Effort Pace is the target: −3 … +15 %, not walked,
+    not technical, not high altitude, with a GAP."""
+    g = r.get("grade")
+    if g is None or not r.get("gap_pace_s_per_km"):
+        return False
+    if not (EP_GRADE[0] - 1e-9 <= float(g) <= EP_GRADE[1] + 1e-9):
+        return False
+    if r.get("gait") == "walk" or (r.get("gait") is None and r.get("walk")):
+        return False                     # walked (chart_rows' walk: a steep climb without a gait)
+    if r.get("tech_f") is not None and float(r["tech_f"]) < EP_TECH_MIN:
+        return False
+    return not (r.get("z_mean") is not None and float(r["z_mean"]) > EP_ALT_MAX_M)
 
 
 def default_mode(plan_type: str) -> str:
@@ -65,14 +98,16 @@ def _piece(r: dict) -> dict:
             "kt": {r.get("basis") or "pace": t},                 # time per basis (the dominant one wins)
             "kd": {r.get("kind") or "": t},                      # time per segment kind (seg_targets.kind_of)
             "pt": (p * t) if p else 0.0, "ptime": t if p else 0.0,
-            "hr": r.get("hr_cap"), "end": None}
+            "hr": r.get("hr_cap"), "end": None,
+            # SP-632: the Effort Pace part — its time and GAP × time
+            "ept": t if ep_ok(r) else 0.0, "epg": float(r["gap_pace_s_per_km"]) * t if ep_ok(r) else 0.0}
 
 
 def _split(pc: dict, km: float) -> tuple[dict, dict]:
     f = (km - pc["start_km"]) / max(1e-9, pc["end_km"] - pc["start_km"])
     a, b = dict(pc), dict(pc)
     a["end_km"], b["start_km"] = km, km
-    for k in ("dist_m", "t", "gain_m", "loss_m", "pt", "ptime"):
+    for k in ("dist_m", "t", "gain_m", "loss_m", "pt", "ptime", "ept", "epg"):
         a[k], b[k] = pc[k] * f, pc[k] * (1 - f)
     for key in ("kt", "kd"):
         a[key] = {k: v * f for k, v in pc[key].items()}
@@ -92,7 +127,7 @@ def _merge(a: dict, b: dict) -> dict:
             "t": a["t"] + b["t"], "gain_m": a["gain_m"] + b["gain_m"], "loss_m": a["loss_m"] + b["loss_m"],
             "group": a["group"] if a["t"] >= b["t"] else b["group"], "day": a["day"], "kt": kt, "kd": kd,
             "pt": a["pt"] + b["pt"], "ptime": a["ptime"] + b["ptime"], "hr": max(hr) if hr else None,
-            "end": b["end"]}
+            "end": b["end"], "ept": a["ept"] + b["ept"], "epg": a["epg"] + b["epg"]}
 
 
 def _cut_at(pieces: list[dict], km: float, end: dict) -> None:
@@ -145,8 +180,29 @@ def _hm(sec: float) -> str:
     return f"{m // 60}:{m % 60:02d}" if m >= 60 else _("{m} 分", m=m)
 
 
+def leg_ep(pc: dict, plan_type: str) -> Optional[list]:
+    """[lo, hi] s/km of a leg's Effort Pace target (the eligible segments' GAP by time ± EP_BAND),
+    None when the leg is not mostly eligible or the plan is not a trail plan."""
+    if plan_type != "trail" or pc.get("ept", 0.0) <= 0 or pc["ept"] <= EP_SHARE_MIN * max(pc["t"], 1e-9):
+        return None
+    g = pc["epg"] / pc["ept"]
+    if not 120 <= g <= 1200:
+        return None
+    return [round(g * (1 - EP_BAND)), round(g * (1 + EP_BAND))]
+
+
 def _target(pc: dict, plan_type: str) -> tuple[dict, str]:
-    """(workout_steps target, basis) of one leg."""
+    """(workout_steps target, basis) of one leg; a trail leg on runnable ground also carries
+    `ep` (leg_ep, SP-632) for the providers that take an Effort Pace target."""
+    tg, basis = _target0(pc, plan_type)
+    ep = leg_ep(pc, plan_type)
+    if ep:
+        tg = {**tg, "ep": ep}
+    return tg, basis
+
+
+def _target0(pc: dict, plan_type: str) -> tuple[dict, str]:
+    """(workout_steps target, basis) of one leg, before Effort Pace."""
     basis = max(pc["kt"].items(), key=lambda kv: kv[1])[0] if pc["kt"] else "pace"
     kind = max(pc["kd"].items(), key=lambda kv: kv[1])[0] if pc.get("kd") else ""
     if plan_type == "baiyue":
@@ -244,6 +300,8 @@ def steps_for(plan: dict, rows: list[dict], *, mode: Optional[str] = None, stops
                          "gain_m": pc["gain_m"], "loss_m": pc["loss_m"], "basis": basis, "target": tg})
     if mode == "lap":
         notes.append(_("每段「直到按下計圈」：到步驟名稱寫的地點時按一下計圈（lap）"))
+    if any((lg["target"] or {}).get("ep") for lg in out_legs):
+        notes.append(_(EP_NOTE))
     return {"mode": mode, "doc": {"v": WS.V, "origin": "user", "items": items}, "legs": out_legs,
             "merged": merged, "limit": limit, "notes": notes}
 

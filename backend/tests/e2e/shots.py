@@ -20,6 +20,7 @@ The shot list:
         "ready": "#loginForm",                       # what to wait for after loading (default: the app's
                                                      #   nav, .appnav — pages without it, like /login, need this)
         "viewport": "mobile",                        # mobile (390×844) | desktop (1400×900, default) | [w, h]
+                                                     #   | [w, h, scale] (scale 2: sharp at half the pixels' size)
         "scheme": "dark",                            # the browser's colour scheme: light (default) | dark
         "caption": "第二張卡片：左側色條＝類型色",      # what the reviewer should look at
         "init": "localStorage.setItem('k', 'v')",    # runs before the page's own scripts
@@ -110,8 +111,8 @@ def check_spec(spec: dict, where: str = "spec") -> dict:
             raise SpecError(f"{at}: page {s['page']!r} is not one of {sorted(_server.PAGES)}")
         vp = s.get("viewport", "desktop")
         if not ((isinstance(vp, str) and vp in VIEWPORTS)        # a list is not hashable: no `in` on it
-                or (isinstance(vp, list) and len(vp) == 2 and all(isinstance(x, int) and x > 0 for x in vp))):
-            raise SpecError(f"{at}: viewport must be mobile / desktop / [w, h]")
+                or (isinstance(vp, list) and len(vp) in (2, 3) and all(isinstance(x, int) and x > 0 for x in vp))):
+            raise SpecError(f"{at}: viewport must be mobile / desktop / [w, h] / [w, h, scale]")
         if s.get("scheme", "light") not in ("light", "dark"):
             raise SpecError(f"{at}: scheme must be light / dark")
         if not (isinstance(s.get("hide", []), list) and all(isinstance(x, str) and x for x in s.get("hide", []))):
@@ -231,7 +232,8 @@ def take(browser, base_url: str, spec: dict, out: Path, fmt: str = "webp") -> li
     rows = []
     for n, s in enumerate(spec["shots"], 1):
         vp = s.get("viewport", "desktop")
-        opts = VIEWPORTS[vp] if isinstance(vp, str) else {"viewport": {"width": vp[0], "height": vp[1]}}
+        opts = VIEWPORTS[vp] if isinstance(vp, str) else {"viewport": {"width": vp[0], "height": vp[1]},
+                                                          "device_scale_factor": vp[2] if len(vp) > 2 else 1}
         path = _server.PAGES[s["page"]] if s.get("page") else s["path"]
         row = {"n": n, "name": s["name"], "file": file_name(ticket, n, s["name"], fmt), "path": path,
                "viewport": vp, "caption": s.get("caption", ""), "errors": []}

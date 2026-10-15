@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="actcompare.title">兩次活動比較</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/api/v1/static/basemaps.js"></script>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
+  --accent: #2563eb; --soft: #e8efff; --a: #2563eb; --b: #d9480f; --ok: #15803d; --bad: #b91c1c; --warn: #b45309;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+    --accent: #60a5fa; --soft: #1c2a40; --a: #60a5fa; --b: #fb923c; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+  --accent: #60a5fa; --soft: #1c2a40; --a: #60a5fa; --b: #fb923c; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+main { max-width: 1200px; margin: 0 auto; padding: 12px 16px 28px; display: grid; gap: 12px; }
+h1 { font-size: 17px; margin: 0; }
+h2 { font-size: 14px; margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+h2 .meta { font-weight: 400; }
+.meta, .note { color: var(--muted); font-size: 12px; }
+.note { margin-top: 6px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+button, select, input { font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pick { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; }
+.pick select { width: 100%; min-width: 0; }
+.pick .bar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.pick label.ck { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: 0; }
+.dot.a { background: var(--a); } .dot.b { background: var(--b); }
+.lbl { font-weight: 600; white-space: nowrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 3px 9px; font-size: 13px; background: transparent; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--soft); color: var(--accent); font-weight: 600; }
+.who { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.who > div { min-width: 0; }
+.who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aligned { border-left: 3px solid var(--accent); }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+th:first-child, td:first-child { text-align: left; }
+td.better { color: var(--ok); font-weight: 600; }
+td.worse { color: var(--bad); }
+.chart { height: 280px; width: 100%; }
+.chart.short { height: 180px; }
+.empty { color: var(--muted); padding: 24px 6px; text-align: center; }
+a { color: var(--accent); }
+.shared button { padding: 1px 8px; font-size: 12px; }
+#map { height: 280px; border-radius: 8px; }
+@media (max-width: 699px) {
+  main { padding: 10px 10px 24px; }
+  .who { grid-template-columns: 1fr; }
+  .chart { height: 230px; }
+  #map { height: 220px; }
+  th, td { padding: 5px 5px; }
+}
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="activity"></script>
+<main>
+  <h1 data-i18n="actcompare.title">兩次活動比較</h1>
+  <section class="panel">
+    <div class="pick">
+      <span class="lbl"><i class="dot a"></i> A</span>
+      <select id="sa" data-i18n-attr="aria-label:actcompare.pick_a" aria-label=""></select>
+      <span class="lbl"><i class="dot b"></i> B</span>
+      <select id="sb" data-i18n-attr="aria-label:actcompare.pick_b" aria-label=""></select>
+      <div class="bar">
+        <label class="ck"><input type="checkbox" id="race"><span data-i18n="actcompare.race_only">只看比賽</span></label>
+        <button class="primary" id="go" data-i18n="actcompare.go">比較</button>
+        <span class="meta" id="msg"></span>
+      </div>
+    </div>
+    <div class="note" data-i18n="actcompare.how">同一條路線或路段跑兩次：沿路線逐點對齊，看在哪裡快、在哪裡慢。不同賽道：比總成績、每公里分段、配速／心率／功率的走勢（橫軸預設是完成百分比），以及上坡、平路、下坡各自的配速。</div>
+  </section>
+  <div id="out"></div>
+</main>
+<script>
+const API = "/api/v1/app/activity-compare";
+const T = (k, p) => I18N.t("actcompare." + k, p);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const S = { acts: [], race: false, a: null, b: null, res: null, charts: [], xmode: "pct", omode: "pace", amode: "pace", aligned: null, cmp: null, map: null };
+
+function hms(s) {
+  if (s == null) return "—";
+  s = Math.round(Math.abs(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
+}
+function pace(v) { if (v == null || !isFinite(v)) return "—"; const a = Math.abs(v), m = Math.floor(a), s = Math.round((a - m) * 60); return `${m}:${String(s === 60 ? 59 : s).padStart(2, "0")}`; }
+function num(v, d = 0) { return v == null ? "—" : (+v).toFixed(d); }
+const SPORTS = ["running", "trail running", "indoor running", "treadmill running", "hiking", "mountaineering", "walking", "cycling"];
+const sportName = (a) => { const k = a.sport_type || a.sport || ""; return SPORTS.includes(k) ? T("sport." + k) : k; };
+const label = (a) => `${a.start.slice(0, 10)} ${a.name || sportName(a)} · ${num(a.distance, 1)} km${a.race ? " · " + T("race") : ""}`;
+async function j(url) {
+  const r = await fetch(url);
+  let body = null;
+  try { body = await r.json(); } catch {}
+  if (!r.ok) throw new Error((body && (typeof body.detail === "string" ? body.detail : body.detail?.message)) || `HTTP ${r.status}`);
+  return body;
+}
+function axis() {
+  return { axisLine: { lineStyle: { color: css("--line") } }, axisLabel: { color: css("--muted") },
+    splitLine: { lineStyle: { color: css("--line") } }, nameTextStyle: { color: css("--muted") } };
+}
+function chart(el) { const c = echarts.init(el); S.charts.push(c); return c; }
+function disposeCharts() { S.charts.splice(0).forEach((c) => c.dispose()); if (S.map) { S.map.remove(); S.map = null; } }
+
+// ---- picker
+async function loadActs() {
+  try { S.acts = await j(`${API}/activities${S.race ? "?race=1" : ""}`); }
+  catch (e) { $("msg").textContent = T("load_failed", { msg: e.message }); return; }
+  const opts = (sel) => `<option value="">${esc(T("choose"))}</option>` +
+    S.acts.map((a) => `<option value="${a.index}" ${a.index === sel ? "selected" : ""}>${esc(label(a))}</option>`).join("");
+  // a picked activity stays in the list even when the filter would hide it
+  for (const [id, sel] of [["sa", S.a], ["sb", S.b]]) {
+    $(id).innerHTML = opts(sel);
+    if (sel != null && !S.acts.some((a) => a.index === sel)) $(id).insertAdjacentHTML("beforeend", `<option value="${sel}" selected>#${sel}</option>`);
+  }
+  $("msg").textContent = S.race && !S.acts.length ? T("no_races") : "";
+}
+function readUrl() {
+  const q = new URLSearchParams(location.search);
+  const n = (k) => (q.get(k) != null && q.get(k) !== "" && !isNaN(+q.get(k)) ? +q.get(k) : null);
+  S.a = n("a"); S.b = n("b"); S.race = q.get("race") === "1";
+  $("race").checked = S.race;
+}
+function writeUrl() {
+  const q = new URLSearchParams();
+  if (S.a != null) q.set("a", S.a);
+  if (S.b != null) q.set("b", S.b);
+  if (S.race) q.set("race", "1");
+  history.replaceState(null, "", `${location.pathname}?${q}`);
+}
+
+// ---- result
+async function run() {
+  S.a = $("sa").value === "" ? null : +$("sa").value;
+  S.b = $("sb").value === "" ? null : +$("sb").value;
+  writeUrl();
+  disposeCharts();
+  if (S.a == null || S.b == null) { $("out").innerHTML = `<div class="panel empty">${esc(T("pick_two"))}</div>`; return; }
+  if (S.a === S.b) { $("out").innerHTML = `<div class="panel empty">${esc(T("pick_diff"))}</div>`; return; }
+  $("out").innerHTML = `<div class="panel empty">${esc(T("loading"))}</div>`;
+  let r;
+  try { r = await j(`${API}?a=${S.a}&b=${S.b}`); }
+  catch (e) { $("out").innerHTML = `<div class="panel empty">${esc(T("load_failed", { msg: e.message }))}</div>`; return; }
+  S.res = r;
+  S.aligned = r.aligned;
+  render();
+}
+
+function render() {
+  disposeCharts();
+  const r = S.res, A = r.a, B = r.b;
+  const who = (x, side) => `<div><span class="lbl"><i class="dot ${side}"></i> ${side.toUpperCase()}</span>
+    <b>${esc(x.name || sportName(x))}</b><span class="meta">${esc(x.start.slice(0, 16).replace("T", " "))} · ${esc(sportName(x))}${x.race ? " · " + esc(T("race")) : ""}</span></div>`;
+  const hasPw = (r.summary.a.avg_power ?? r.summary.b.avg_power) != null;
+  const shared = r.shared || [];
+  $("out").innerHTML = `
+  <section class="panel who">${who(A, "a")}${who(B, "b")}</section>
+  ${S.aligned ? alignedHtml(hasPw) : r.aligned_note ? `<section class="panel note">${esc(T("aligned_none", { why: r.aligned_note }))}</section>` : ""}
+  <section class="panel"><h2>${esc(T("sum.h"))} <span class="meta">${esc(T("sum.sub"))}</span></h2>
+    <div class="tablewrap"><table id="sum"></table></div></section>
+  <section class="panel"><h2>${esc(T("splits.h"))} <span class="meta">${esc(T("splits.sub"))}</span></h2>
+    <div class="chart" id="splits"></div></section>
+  ${S.aligned ? "" : `<section class="panel"><h2>${esc(T("ov.h"))}
+    <span class="seg" id="omode"><button data-v="pace" class="on">${esc(T("m.pace"))}</button><button data-v="hr">${esc(T("m.hr"))}</button>${hasPw ? `<button data-v="power">${esc(T("m.power"))}</button>` : ""}</span>
+    <span class="seg" id="xmode"><button data-v="pct" class="on">${esc(T("x.pct"))}</button><button data-v="dist">${esc(T("x.dist"))}</button><button data-v="time">${esc(T("x.time"))}</button></span></h2>
+    <div class="chart" id="ov"></div><div class="note">${esc(T("ov.note"))}</div></section>`}
+  <section class="panel"><h2>${esc(T("gr.h"))} <span class="meta">${esc(T("gr.sub", { bin: r.grades.bin_m, up: r.grades.up, down: -r.grades.down }))}</span></h2>
+    <div class="chart short" id="grades"></div><div class="tablewrap"><table id="grtab"></table></div></section>
+  ${shared.length ? `<section class="panel shared"><h2>${esc(T("shared.h"))} <span class="meta">${esc(T("shared.sub"))}</span></h2>
+    <div class="tablewrap"><table>${sharedRows(shared)}</table></div></section>` : ""}`;
+  drawSummary();
+  drawSplits();
+  if (!S.aligned) {
+    drawOverlay();
+    for (const [id, key] of [["omode", "omode"], ["xmode", "xmode"]])
+      $(id).querySelectorAll("button").forEach((b) => b.onclick = () => {
+        $(id).querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); S[key] = b.dataset.v; drawOverlay(); });
+  }
+  drawGrades();
+  document.querySelectorAll("button[data-seg]").forEach((b) => b.onclick = () => {
+    S.aligned = shared.find((s) => s.id === b.dataset.seg) || null; render(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  if ($("unalign")) $("unalign").onclick = (e) => { e.preventDefault(); S.aligned = null; render(); };
+  if (S.aligned) loadAligned();
+}
+
+function alignedHtml(hasPw) {
+  const al = S.aligned, route = al.kind === "route";
+  return `<section class="panel aligned"><h2>${esc(T(route ? "al.h_route" : "al.h_seg", { name: al.name }))}
+      <span class="seg" id="amode"><button data-v="pace" class="on">${esc(T("m.pace"))}</button><button data-v="hr">${esc(T("m.hr"))}</button>${hasPw ? `<button data-v="power">${esc(T("m.power"))}</button>` : ""}<button data-v="elev">${esc(T("m.elev"))}</button></span></h2>
+    <div class="meta">${esc(T("al.sub"))} <a href="/api/v1/routes/page#${esc(al.id)}">${esc(T("al.open"))}</a> · <a href="#" id="unalign">${esc(T("al.off"))}</a></div>
+    <div class="meta" id="albar"></div>
+    <div id="map" style="margin-top:6px"></div>
+    <div class="chart" id="al"></div><div class="chart short" id="gap"></div></section>`;
+}
+
+function sharedRows(list) {
+  return `<thead><tr><th>${esc(T("shared.name"))}</th><th>${esc(T("shared.len"))}</th><th><i class="dot a"></i> A</th><th><i class="dot b"></i> B</th><th>B − A</th><th></th></tr></thead><tbody>` +
+    list.map((s) => {
+      const d = s.a_s != null && s.b_s != null ? s.b_s - s.a_s : null;
+      return `<tr><td>${esc(s.name)}</td><td>${num(s.length_m / 1000, 2)} km</td><td>${hms(s.a_s)}</td><td>${hms(s.b_s)}</td>
+        <td class="${d == null ? "" : d < 0 ? "better" : d > 0 ? "worse" : ""}">${d == null ? "—" : (d > 0 ? "+" : d < 0 ? "−" : "") + hms(d)}</td>
+        <td><button data-seg="${esc(s.id)}">${esc(T("shared.go"))}</button></td></tr>`;
+    }).join("") + "</tbody>";
+}
+
+// summary: A, B, B − A; time and pace: lower is better (green), the rest is shown, not judged
+function drawSummary() {
+  const s = S.res.summary;
+  const rows = [
+    ["time", "duration_s", hms, true], ["dist", "distance_km", (v) => num(v, 2) + " km"], ["pace", "pace_min_km", pace, true],
+    ["hr", "avg_hr", (v) => num(v) + " bpm"], ["power", "avg_power", (v) => num(v) + " W"],
+    ["climb", "climbing_m", (v) => num(v) + " m"], ["load", "load", (v) => num(v)],
+  ].filter(([, k]) => s.a[k] != null || s.b[k] != null);
+  const sign = (d, f) => (d == null ? "—" : d === 0 ? f(0) : (d > 0 ? "+" : "−") + f(Math.abs(d)).replace(/^-/, ""));
+  $("sum").innerHTML = `<thead><tr><th></th><th><i class="dot a"></i> A</th><th><i class="dot b"></i> B</th><th>B − A</th></tr></thead><tbody>` +
+    rows.map(([k, key, f, lowBetter]) => {
+      const a = s.a[key], b = s.b[key], d = s.diff[key];
+      const cls = lowBetter && d ? (d < 0 ? "better" : "worse") : "";
+      return `<tr><td>${esc(T("sum." + k))}</td><td>${a == null ? "—" : f(a)}</td><td>${b == null ? "—" : f(b)}</td><td class="${cls}">${sign(d, f)}</td></tr>`;
+    }).join("") + "</tbody>";
+}
+
+function drawSplits() {
+  const sa = S.res.splits.a, sb = S.res.splits.b, n = Math.max(sa.length, sb.length);
+  const el = $("splits");
+  if (!n) { el.outerHTML = `<div class="empty">${esc(T("no_dist"))}</div>`; return; }
+  const cats = Array.from({ length: n }, (_, i) => String(i + 1));
+  const ser = (rows, side) => ({ type: "bar", name: side.toUpperCase(), barGap: "10%", itemStyle: { color: css("--" + side), borderRadius: [2, 2, 0, 0] },
+    data: cats.map((_, i) => rows[i] ? { value: rows[i].pace_min_km, r: rows[i] } : null) });
+  const ax = axis();
+  const c = chart(el);
+  c.setOption({
+    animation: false, legend: { top: 0, textStyle: { color: css("--muted") } },
+    grid: { left: 46, right: 12, top: 28, bottom: 42 },
+    tooltip: { trigger: "axis", formatter: (ps) => `${esc(T("splits.km", { k: ps[0].axisValue }))}<br>` + ps.filter((p) => p.data).map((p) =>
+      `${p.marker}${p.seriesName} ${pace(p.data.value)} /km · ${hms(p.data.r.time_s)}${p.data.r.len_km < 0.999 ? ` (${num(p.data.r.len_km, 2)} km)` : ""}${p.data.r.avg_hr != null ? ` · ${num(p.data.r.avg_hr)} bpm` : ""}`).join("<br>") },
+    xAxis: { type: "category", data: cats, name: "km", nameLocation: "middle", nameGap: 26, ...ax, splitLine: { show: false } },
+    yAxis: { type: "value", min: 0, name: "min/km", ...ax, axisLabel: { color: css("--muted"), formatter: pace } },
+    dataZoom: n > 30 ? [{ type: "inside" }] : undefined,
+    series: [ser(sa, "a"), ser(sb, "b")],
+  });
+}
+
+function drawOverlay() {
+  const o = S.res.overlay, m = S.omode, x = S.xmode;
+  const key = { pace: "pace_min_km", hr: "hr", power: "power" }[m];
+  const xs = (side) => (x === "pct" ? o[side].pct : x === "dist" ? o[side].dist_km : o[side].t_s.map((v) => (v == null ? null : v / 60)));
+  const ser = (side) => ({ type: "line", name: side.toUpperCase(), showSymbol: false, connectNulls: false,
+    lineStyle: { width: 1.6, color: css("--" + side) }, itemStyle: { color: css("--" + side) },
+    data: (o[side][key] || []).map((v, i) => [xs(side)[i], v]) });
+  const el = $("ov");
+  echarts.getInstanceByDom(el)?.dispose();
+  S.charts = S.charts.filter((c) => !c.isDisposed());
+  const ax = axis();
+  const fmtY = m === "pace" ? pace : (v) => Math.round(v);
+  const fmtX = x === "pct" ? (v) => `${Math.round(v)}%` : x === "dist" ? (v) => (+v).toFixed(1) : (v) => hms(v * 60);
+  const c = chart(el);
+  c.setOption({
+    animation: false, legend: { top: 0, textStyle: { color: css("--muted") } },
+    grid: { left: 52, right: 16, top: 28, bottom: 30 },
+    tooltip: { trigger: "axis", formatter: (ps) => `${fmtX(ps[0].value[0])}<br>` + ps.map((p) => `${p.marker}${p.seriesName} ${p.value[1] == null ? "—" : fmtY(p.value[1])}`).join("<br>") },
+    xAxis: { type: "value", min: 0, max: x === "pct" ? 100 : "dataMax", name: { pct: "%", dist: "km", time: T("x.time_unit") }[x], ...ax,
+      axisLabel: { color: css("--muted"), formatter: fmtX } },
+    yAxis: { type: "value", scale: true, inverse: m === "pace", nameLocation: m === "pace" ? "start" : "end", name: { pace: "min/km", hr: "bpm", power: "W" }[m], ...ax,
+      axisLabel: { color: css("--muted"), formatter: fmtY } },
+    series: [ser("a"), ser("b")],
+  });
+}
+
+function drawGrades() {
+  const g = S.res.grades, keys = ["up", "flat", "down"];
+  const el = $("grades");
+  if (!g.a && !g.b) { el.outerHTML = `<div class="empty">${esc(T("no_elev"))}</div>`; $("grtab").remove(); return; }
+  const ax = axis();
+  const ser = (side) => ({ type: "bar", name: side.toUpperCase(), itemStyle: { color: css("--" + side), borderRadius: [0, 2, 2, 0] },
+    data: keys.map((k) => g[side]?.[k]?.pace_min_km ?? null) });
+  const c = chart(el);
+  c.setOption({
+    animation: false, legend: { top: 0, textStyle: { color: css("--muted") } },
+    grid: { left: 60, right: 20, top: 26, bottom: 24 },
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: (v) => (v == null ? "—" : pace(v) + " /km") },
+    yAxis: { type: "category", inverse: true, data: keys.map((k) => T("gr." + k)), ...ax, splitLine: { show: false } },
+    xAxis: { type: "value", min: 0, ...ax, axisLabel: { color: css("--muted"), formatter: (v) => pace(v) + (v ? "" : " /km") } },
+    series: [ser("a"), ser("b")],
+  });
+  const cell = (x) => (x && x.km ? `${pace(x.pace_min_km)}<span class="meta"> · ${num(x.km, 1)} km${x.avg_hr != null ? ` · ${num(x.avg_hr)} bpm` : ""}</span>` : "—");
+  $("grtab").innerHTML = `<thead><tr><th></th><th><i class="dot a"></i> A</th><th><i class="dot b"></i> B</th><th>B − A</th></tr></thead><tbody>` +
+    keys.map((k) => {
+      const a = g.a?.[k], b = g.b?.[k];
+      const d = a?.pace_min_km != null && b?.pace_min_km != null ? b.pace_min_km - a.pace_min_km : null;
+      return `<tr><td>${esc(T("gr." + k))}</td><td>${cell(a)}</td><td>${cell(b)}</td>
+        <td class="${d == null || !d ? "" : d < 0 ? "better" : "worse"}">${d == null ? "—" : (d > 0 ? "+" : d < 0 ? "−" : "") + pace(Math.abs(d))}</td></tr>`;
+    }).join("") + "</tbody>";
+}
+
+// ---- same course: the route page's point-by-point comparison (GET /api/v1/routes/{id}/compare)
+async function loadAligned() {
+  const al = S.aligned;
+  let c;
+  try { c = await j(`/api/v1/routes/${encodeURIComponent(al.id)}/compare?a=${al.a}&b=${al.b}`); }
+  catch (e) { $("albar").textContent = T("load_failed", { msg: e.message }); return; }
+  if (S.aligned !== al) return;
+  S.cmp = c;
+  const fin = c.gap_s.filter((g) => g != null), end = fin.length ? fin[fin.length - 1] : null;
+  $("albar").textContent = end == null ? "" : T(end > 0 ? "al.end_slower" : "al.end_faster", { t: hms(end) });
+  $("amode").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    $("amode").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); S.amode = b.dataset.v; drawAligned(); });
+  await drawMap(c);
+  drawAligned();
+}
+
+async function drawMap(c) {
+  if (!window.L || !window.MapLayers) { $("map").remove(); return; }
+  const map = S.map = L.map("map", { zoomControl: true });
+  MapLayers.attach(map, await MapLayers.defaults(), "routes.map");
+  const ll = c.lat.map((a, i) => [a, c.lon[i]]);
+  MapLayers.track(L.layerGroup().addTo(map), ll, { color: css("--accent") || "#2563eb" });
+  S.hoverA = L.circleMarker(ll[0], { radius: 7, color: "#fff", weight: 2, fillColor: css("--a"), fillOpacity: 1 });
+  S.hoverB = L.circleMarker(ll[0], { radius: 5, color: "#fff", weight: 2, fillColor: css("--b"), fillOpacity: 1 });
+  map.fitBounds(L.latLngBounds(ll), { padding: [18, 18] });
+}
+
+function drawAligned() {
+  const c = S.cmp;
+  if (!c) return;
+  for (const id of ["al", "gap"]) echarts.getInstanceByDom($(id))?.dispose();
+  S.charts = S.charts.filter((x) => !x.isDisposed());
+  const m = S.amode, key = { pace: "pace_min_km", hr: "hr", power: "power", elev: "elev" }[m];
+  const x = c.x_m.map((v) => v / 1000);
+  const ser = (side) => ({ type: "line", name: side.toUpperCase(), showSymbol: false, connectNulls: false,
+    data: x.map((xv, i) => [xv, c[side][key][i]]), lineStyle: { width: 1.6, color: css("--" + side) }, itemStyle: { color: css("--" + side) } });
+  const ax = axis();
+  const fmt = m === "pace" ? pace : (v) => Math.round(v);
+  const ch = chart($("al"));
+  ch.setOption({
+    animation: false, legend: { top: 0, textStyle: { color: css("--muted") } },
+    grid: { left: 52, right: 16, top: 28, bottom: 26 },
+    tooltip: { trigger: "axis", valueFormatter: (v) => (v == null ? "—" : fmt(v)) },
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    xAxis: { type: "value", min: 0, max: x[x.length - 1], name: "km", ...ax, axisLabel: { color: css("--muted"), formatter: (v) => v.toFixed(1) } },
+    yAxis: { type: "value", scale: true, inverse: m === "pace", nameLocation: m === "pace" ? "start" : "end", name: { pace: "min/km", hr: "bpm", power: "W", elev: "m" }[m], ...ax, axisLabel: { color: css("--muted"), formatter: fmt } },
+    series: [ser("a"), ser("b")],
+  });
+  const g = chart($("gap"));
+  g.setOption({
+    animation: false, grid: { left: 52, right: 16, top: 22, bottom: 26 },
+    title: { text: T("al.gap"), textStyle: { fontSize: 12, fontWeight: 400, color: css("--muted") }, left: 50, top: 0 },
+    tooltip: { trigger: "axis", valueFormatter: (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Math.round(v)} s`) },
+    xAxis: { type: "value", min: 0, max: x[x.length - 1], ...ax, axisLabel: { color: css("--muted"), formatter: (v) => v.toFixed(1) } },
+    yAxis: { type: "value", ...ax },
+    series: [{ type: "line", showSymbol: false, data: x.map((xv, i) => [xv, c.gap_s[i]]), lineStyle: { color: css("--b"), width: 1.6 },
+      areaStyle: { color: css("--b"), opacity: .12 }, markLine: { symbol: "none", silent: true, lineStyle: { color: css("--muted") }, data: [{ yAxis: 0 }] } }],
+  });
+  echarts.connect([ch, g]);
+  const hover = (p) => {
+    const xv = p?.axesInfo?.[0]?.value;
+    if (xv == null || !S.map) return;
+    let k = 0, best = Infinity;
+    for (let i = 0; i < x.length; i++) { const dd = Math.abs(x[i] - xv); if (dd < best) { best = dd; k = i; } }
+    S.hoverA.setLatLng([c.lat[k], c.lon[k]]).addTo(S.map);
+    const ta = c.a.t_s[k];
+    let kb = k;
+    if (ta != null) { let bb = Infinity; c.b.t_s.forEach((t, i) => { if (t != null && Math.abs(t - ta) < bb) { bb = Math.abs(t - ta); kb = i; } }); }
+    S.hoverB.setLatLng([c.lat[kb], c.lon[kb]]).addTo(S.map);
+  };
+  ch.on("updateAxisPointer", hover);
+  g.on("updateAxisPointer", hover);
+}
+
+// ---- init
+$("go").onclick = run;
+$("race").onchange = async () => { S.race = $("race").checked; S.a = $("sa").value === "" ? null : +$("sa").value; S.b = $("sb").value === "" ? null : +$("sb").value; writeUrl(); await loadActs(); };
+window.addEventListener("resize", () => S.charts.forEach((c) => c.resize()));
+readUrl();
+loadActs().then(() => { if (S.a != null && S.b != null) run(); else $("out").innerHTML = `<div class="panel empty">${esc(T("pick_two"))}</div>`; });
+</script>
+</body>
+</html>
