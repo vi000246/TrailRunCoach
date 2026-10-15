@@ -20,6 +20,7 @@ The shot list:
         "ready": "#loginForm",                       # what to wait for after loading (default: the app's
                                                      #   nav, .appnav — pages without it, like /login, need this)
         "viewport": "mobile",                        # mobile (390×844) | desktop (1400×900, default) | [w, h]
+        "scheme": "dark",                            # the browser's colour scheme: light (default) | dark
         "caption": "第二張卡片：左側色條＝類型色",      # what the reviewer should look at
         "init": "localStorage.setItem('k', 'v')",    # runs before the page's own scripts
         "mock": [                                    # set up before the page loads
@@ -65,7 +66,7 @@ VIEWPORTS = {
                "is_mobile": True, "has_touch": True},
 }
 SHOT_KEYS = {"name", "page", "path", "ready", "viewport", "caption", "init", "mock", "steps", "clip", "full_page",
-             "hide"}
+             "hide", "scheme"}
 MOCK_KEYS = {"url", "json", "status", "set"}
 STEP_KEYS = {"click", "wait", "fill", "hover", "press", "scroll", "eval", "sleep", "goto"}
 TICKET_RE = re.compile(r"^[A-Z]{2,4}-\d+$")
@@ -111,6 +112,8 @@ def check_spec(spec: dict, where: str = "spec") -> dict:
         if not ((isinstance(vp, str) and vp in VIEWPORTS)        # a list is not hashable: no `in` on it
                 or (isinstance(vp, list) and len(vp) == 2 and all(isinstance(x, int) and x > 0 for x in vp))):
             raise SpecError(f"{at}: viewport must be mobile / desktop / [w, h]")
+        if s.get("scheme", "light") not in ("light", "dark"):
+            raise SpecError(f"{at}: scheme must be light / dark")
         if not (isinstance(s.get("hide", []), list) and all(isinstance(x, str) and x for x in s.get("hide", []))):
             raise SpecError(f"{at}: hide must be a list of selectors")
         for m in s.get("mock", []):
@@ -232,7 +235,8 @@ def take(browser, base_url: str, spec: dict, out: Path, fmt: str = "webp") -> li
         path = _server.PAGES[s["page"]] if s.get("page") else s["path"]
         row = {"n": n, "name": s["name"], "file": file_name(ticket, n, s["name"], fmt), "path": path,
                "viewport": vp, "caption": s.get("caption", ""), "errors": []}
-        ctx = browser.new_context(base_url=base_url, locale="zh-TW", timezone_id="Asia/Taipei", **opts)
+        ctx = browser.new_context(base_url=base_url, locale="zh-TW", timezone_id="Asia/Taipei",
+                                  color_scheme=s.get("scheme", "light"), **opts)
         ctx.set_default_timeout(30_000)
         try:
             blank_tiles(ctx, base_url)

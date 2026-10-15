@@ -106,6 +106,8 @@ tr.off td { color: var(--muted); }
 ul.failed { list-style: none; margin: 4px 0; padding: 0; font-size: 13px; }
 ul.failed li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 3px 0; }
 .sub { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.link-row ul { margin: 4px 0 6px; padding-left: 20px; }
+.link-row.link-asked { outline: 2px solid var(--accent, #2a7); outline-offset: 4px; border-radius: 4px; }
 .sub b { font-size: 13px; }
 progress { width: 220px; height: 10px; }
 .log { max-height: 150px; overflow: auto; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -369,14 +371,28 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
         <li data-i18n="settings.thr.how_cp">CP 測試的方式在「課表」頁的課表偏好選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。CP 自動計算（PD 模型擬合近 90 天功率曲線的上緣）：測試只是近 90 天功率曲線上的一次全力，沒有套用按鈕。這裡沒填的話，課表用 Stryd 功率 PD 模型算出的模型閾值功率（Modelled threshold power；用近 90 天每次跑步的 mean-max 曲線上緣擬合，含 CP 測試；30–60 分鐘的功率；新的擬合跟目前的 CP 差 3 W 以上才換）。這裡手動填的 CP 優先。</li>
       </ul>
     </details>
+    <!-- SP-363 R2: 課表功率區間 — which set the 課表's power targets (texts, the push) and the power charts' default use -->
+    <div class="row">
+      <label><span data-i18n="settings.thr.pz_model">課表功率區間</span> <select id="pz-model"></select></label>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.pz_model_help" title="課表（自動排課、課表步驟、推到手錶）的功率目標用哪一套區間，圖表的功率區間預設也跟著它。每種課照原本的強度對到這套最接近的一級：輕鬆跑、長跑、山路長天用這套的輕鬆級，恢復跑用含 75% CP 那一級的上緣當上限，間歇和爬坡用跟原本功率帶重疊最多的那一級。換了之後，接下來的課會重新排、已推到手錶的課照課表的規則重新推送；你在結構裡自己設的功率目標（% CP、區間、瓦數）不變，設成「自動」的段跟著新區間。個人化區間要有近 90 天的 Stryd 跑步算出功率–時間模型，沒有時先用 Palladino。">?</button>
+      <span class="meta" id="pz-model-note" role="status"></span>
+    </div>
+    <p class="meta" id="pz-model-warn" role="status" style="color:var(--warn)" hidden></p>
     <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.pz_h">功率區間（Palladino／Stryd，依目前 CP）</summary>
-      <p class="meta" data-i18n="settings.thr.pz_palladino">Palladino 10 區：課表的功率目標用這張</p>
+      <div id="thr-pz-plan-box" hidden>
+        <p class="meta"><span id="thr-pz-plan-h"></span> <span class="badge" data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
+        <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
+          <th>% CP</th><th>W</th></tr></thead>
+        <tbody id="thr-pz-plan"></tbody></table></div>
+        <p class="meta" id="thr-pz-plan-src"></p>
+      </div>
+      <p class="meta"><span data-i18n="settings.thr.pz_palladino">Palladino 10 區</span> <span class="badge" id="pz-use-palladino" hidden data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
       <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
         <th>% CP</th><th>W</th></tr></thead>
       <tbody id="thr-pz"></tbody></table></div>
       <p class="meta" id="thr-pzsrc"></p>
       <!-- SP-363: Stryd's five zones at the same CP, for comparison (the 課表 keeps Palladino's) -->
-      <p class="meta" data-i18n="settings.thr.pz_stryd">Stryd 5 區：對照用</p>
+      <p class="meta"><span data-i18n="settings.thr.pz_stryd">Stryd 5 區</span> <span class="badge" id="pz-use-stryd" hidden data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
       <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
         <th>% CP</th><th>W</th></tr></thead>
       <tbody id="thr-pz-stryd"></tbody></table></div>
@@ -778,6 +794,15 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
       <div class="row"><span id="acct-analysis-state"></span>
         <button type="button" id="acct-analysis-btn"></button>
         <span class="meta" id="acct-analysis-msg" role="status"></span></div>
+    </div>
+    <!-- SP-329: 已連結的服務 (api/link.py) — another project of ours on the same Google account;
+         linked only here, by the person, and unlinked here (a consents row each) -->
+    <div id="acct-links" hidden>
+      <h3 id="links" data-i18n="settings.acct.links_title">已連結的服務</h3>
+      <p class="meta" data-i18n="settings.acct.links_intro">用同一個 Google 帳號登入的其他服務。連結後，對方可以讀下面列出的內容，不會讀你的活動、心率或其他健康資料。隨時可以在這裡解除連結，解除後對方就讀不到了。</p>
+      <p class="meta" id="acct-links-ask" role="status" hidden></p>
+      <div id="acct-links-list"></div>
+      <p class="meta" id="acct-links-msg" role="status"></p>
     </div>
     <h3 data-i18n="settings.acct.delete_title">刪除帳號</h3>
     <p class="meta" id="acct-del-intro" data-i18n="settings.acct.delete_intro">立即刪除你的帳號和所有資料（活動、課表、設定、上傳的檔案），無法復原。已連接的 COROS／Garmin／TrainingPeaks 會先中斷連接、刪掉登入憑證。建議先下載資料。</p>
@@ -1247,6 +1272,36 @@ async function putHr(body, msg) {
   } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
 }
 $("hr-model").onchange = (e) => putHr({ model: e.target.value }, t("settings.hr.model_saved"));
+
+// ---- 課表功率區間 (SP-363 R2; api/plan.py GET / PUT /power-zones, engine/power_zone_plan.py) -------------
+const PZM = "/api/v1/plan/power-zones";
+function renderPz(r) {
+  $("pz-model").innerHTML = r.choices.map((c) => `<option value="${esc(c.id)}"${c.id === r.setting ? " selected" : ""}>${esc(c.title)}</option>`).join("");
+  $("pz-model-note").textContent = r.fallback || "";
+  $("pz-model-warn").textContent = r.warning ? "⚠ " + r.warning : "";   // SP-363: model threshold power far from the CP
+  $("pz-model-warn").hidden = !r.warning;
+  $("pz-use-palladino").hidden = r.system !== "palladino";
+  $("pz-use-stryd").hidden = r.system !== "stryd";
+  const own = r.system === "classic" || r.system === "personal";
+  $("thr-pz-plan-box").hidden = !own;
+  if (!own) return;
+  $("thr-pz-plan-h").textContent = r.title;
+  $("thr-pz-plan").innerHTML = r.levels.map((z) => `<tr><td>${esc(z.id)}</td><td>${esc(z.name)}</td>
+    <td>${Math.round((z.lo || 0) * 100)}${z.hi ? "–" + Math.round(z.hi * 100) : "+"}%</td>
+    <td>${z.watts ? z.watts[0] + (z.watts[1] ? "–" + z.watts[1] : "+") : "–"}</td></tr>`).join("");
+  const b = r.basis;
+  $("thr-pz-plan-src").textContent = [r.source ? t("settings.thr.pz_src_plain", { src: r.source }) : "",
+    b ? t("settings.thr.pz_personal_basis", { w: Math.round(b.mftp || 0), date: b.date || "" }) : ""].filter(Boolean).join(" ");
+}
+async function loadPz() {
+  try { renderPz(await j(PZM)); } catch (e) { $("pz-model-note").textContent = t("settings.failed", { msg: e.message.slice(0, 80) }); }
+}
+$("pz-model").onchange = async (e) => {
+  try {
+    renderPz(await j(PZM, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ system: e.target.value }) }));
+    toast(t("settings.thr.pz_model_saved"));
+  } catch (err) { toast(t("settings.failed", { msg: err.message.slice(0, 80) })); }
+};
 $("hr-max-save").onclick = () => { const x = Number($("hr-max").value); if (x) putHr({ max_hr: x }, t("settings.hr.max_saved")); };
 $("hr-rest-save").onclick = () => { const x = Number($("hr-rest").value); if (x) putHr({ rest_hr: x }, t("settings.hr.rest_saved")); };
 $("hr-max-auto").onclick = () => putHr({ clear_max: true }, t("settings.hr.max_cleared"));
@@ -1984,8 +2039,8 @@ async function loadCorosSite() {
     const el = f("coros", "sitemsg");
     const txt = {
       disabled: st.tripped
-        ? "COROS 同步全站暫停中：短時間內有多個帳號被 COROS 擋下登入，為了不讓整台伺服器被封鎖，已自動暫停，站主確認後才會恢復。已匯入的活動都還在。"
-        : "COROS 同步全站暫停中（站主關閉）。已匯入的活動都還在。",
+        ? "COROS 同步全站暫停中：短時間內有多個帳號被 COROS 擋下登入，為了不讓整台伺服器被封鎖，已自動暫停，管理員確認後才會恢復。已匯入的活動都還在。"
+        : "COROS 同步全站暫停中（管理員關閉）。已匯入的活動都還在。",
       cooldown: `COROS 最近常拒絕連線，全站先暫停 ${Math.ceil(st.cooldown_s / 60)} 分鐘再試。已匯入的活動都還在。`,
       paused: "你的 COROS 帳號上次被 COROS 暫時擋下（請求太頻繁或登入被拒），為了保護帳號，下一次每日自動同步才會再試；在那之前請不要反覆按同步。",
     }[st.state];
@@ -2521,6 +2576,7 @@ async function loadAccount() {
     me = await r.json();
   } catch { return; }
   showAccount(me);
+  loadLinks();
   // back from 「用 Google 確認身分」: ?reauth=ok | mismatch | failed | rate_limited
   const q = new URLSearchParams(location.search), back = q.get("reauth");
   if (back) {
@@ -2560,6 +2616,65 @@ $("acct-ok").onclick = async () => {
     $("acct-dlg-msg").textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) });
   } finally { b.removeAttribute("aria-busy"); b.disabled = false; }
 };
+// ---- 已連結的服務 (SP-329, api/link.py) ------------------------------------------------------
+// ?link=cairn: sent here by that project the first time it needs this account — its row asks
+function linkRow(c) {
+  const row = document.createElement("div");
+  row.className = "sub link-row"; row.dataset.client = c.id;
+  const head = document.createElement("div"); head.className = "row";
+  const name = document.createElement("b"); name.textContent = c.name;
+  const st = document.createElement("span"); st.className = "meta";
+  st.textContent = c.linked ? t("settings.acct.link_on", { at: (c.at || "").slice(0, 10) }) : t("settings.acct.link_off");
+  head.append(name, st);
+  const allows = document.createElement("p"); allows.className = "meta";
+  allows.textContent = t(c.linked ? "settings.acct.link_can" : "settings.acct.link_allows", { name: c.name });
+  const ul = document.createElement("ul"); ul.className = "meta";
+  for (const s of c.scopes || []) { const li = document.createElement("li"); li.textContent = s.text; ul.appendChild(li); }
+  row.append(head, allows, ul);
+  if (c.linked && c.remote && c.remote.plan) {
+    const rp = document.createElement("p"); rp.className = "meta";
+    rp.textContent = t("settings.acct.link_remote", { name: c.name, plan: c.remote.plan });
+    row.appendChild(rp);
+  }
+  const act = document.createElement("div"); act.className = "row";
+  const b = document.createElement("button"); b.type = "button";
+  if (c.linked) { b.textContent = t("settings.acct.unlink_btn"); }
+  else if (c.available) { b.textContent = t("settings.acct.link_btn"); b.className = "primary"; }
+  else { b.textContent = t("settings.acct.link_btn"); b.disabled = true;
+         const na = document.createElement("span"); na.className = "meta"; na.textContent = t("settings.acct.link_unavailable");
+         act.append(b, na); row.appendChild(act); return row; }
+  b.onclick = () => setLink(c, !c.linked, b);
+  act.appendChild(b); row.appendChild(act);
+  return row;
+}
+async function setLink(c, want, b) {
+  b.disabled = true;
+  try {
+    await j(`${ACCT}/links/${encodeURIComponent(c.id)}`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                         body: JSON.stringify({ linked: want }) });
+    await loadLinks();
+    $("acct-links-ask").hidden = true;
+    $("acct-links-msg").textContent = t(want ? "settings.acct.linked" : "settings.acct.unlinked", { name: c.name });
+  } catch (e) {
+    $("acct-links-msg").textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) });
+    b.disabled = false;
+  }
+}
+async function loadLinks() {
+  let r;
+  try { r = await j(`${ACCT}/links`); } catch { return; }
+  const list = $("acct-links-list");
+  list.replaceChildren(...(r.clients || []).map(linkRow));
+  $("acct-links").hidden = !(r.clients || []).length;
+  const ask = new URLSearchParams(location.search).get("link");
+  const c = ask && (r.clients || []).find((x) => x.id === ask);
+  if (c && !c.linked && c.available) {
+    $("acct-links-ask").textContent = t("settings.acct.link_ask", { name: c.name });
+    $("acct-links-ask").hidden = false;
+    const row = list.querySelector(`[data-client="${CSS.escape(c.id)}"]`);
+    if (row) { row.classList.add("link-asked"); row.scrollIntoView({ block: "center" }); }
+  }
+}
 $("acct-analysis-btn").onclick = async () => {
   const want = !(acctMe && acctMe.analysis);
   try {
@@ -2674,7 +2789,7 @@ window.addEventListener("hashchange", tabFromHash);
 tabFromHash();
 foldQ();
 
-loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadExclusions(); loadBackup(); loadArchive(); loadCalib(); loadCal();
+loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadPz(); loadExclusions(); loadBackup(); loadArchive(); loadCalib(); loadCal();
 loadAccount();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 // 匯入 FIT (SP-323): the imported files sit in the 資料來源's folder, so its stats change too

@@ -69,8 +69,12 @@ def target_texts(th: dict) -> dict[str, str]:
     from backend.engine.zones import target_hr
     cp, lthr, aet = th.get("cp"), th.get("lthr"), th.get("aet")
     hrz = th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None
+    # 課表功率區間 (SP-363): the power bands in the chosen set, as this week's (zones.training_targets)
+    from backend.engine.power_zone_plan import target_band
+    pzm = th.get("power_model") if isinstance(th.get("power_model"), dict) else None
     rows = []
     for tid, name, plo, phi, hlo, hhi, primary, example, src in WORKOUT_TARGETS:
+        plo, phi = target_band(tid, plo, phi, pzm)
         rows.append({"id": tid, "primary": primary,
                      "power": [None if plo is None or not cp else plo * cp, None if phi is None or not cp else phi * cp],
                      "hr": target_hr(tid, hlo, hhi, lthr, aet, hrz)})

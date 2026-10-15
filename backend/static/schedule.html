@@ -833,7 +833,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
           <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.basis_tip" aria-label="說明" data-tip="課表的目標用心率還是功率。
 自動：路跑的輕鬆跑、長跑用功率，心率以輕鬆跑上限為上限；越野輕鬆跑、山路長天、恢復跑用心率（≤ 輕鬆跑上限）；陡坡健走、登山健行的上坡用心率 ≤ 75% 最大心率或 RPE ≤ 13；間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡、下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。暖身不設目標（心率還沒上來，手錶不會一直提醒），緩和照輕鬆跑。
 心率：全部用心率區間（設定的課表心率區間；輕鬆跑上限＝Z2 上緣，有實測 AeT 時用實測值）。
-功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。
+功率：全部用功率區間（設定的課表功率區間，預設 Palladino % CP）；測試和下坡照它們自己的規則。
 只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button>
           <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-tb-l"><label><input type="radio" name="target_basis" value="auto"><span data-i18n="schedule.pf.auto">自動</span></label><label><input type="radio" name="target_basis" value="hr"><span data-i18n="schedule.pf.hr">心率</span></label><label><input type="radio" name="target_basis" value="power"><span data-i18n="schedule.pf.power">功率</span></label></span></div>
         <div class="pf-r"><label class="pf-l" for="pf-te" data-i18n="schedule.pf.t_easy">輕鬆跑地形</label>
@@ -966,7 +966,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 
 <dialog class="sd" id="cf" aria-labelledby="cf-h">
   <form method="dialog">
-    <div class="dh"><h3 id="cf-h"></h3><button class="x" value="cancel" aria-label="關閉">✕</button></div>
+    <div class="dh"><h3 id="cf-h"></h3><button class="x" value="cancel" data-i18n-attr="aria-label:schedule.cf.close" aria-label="關閉">✕</button></div>
     <div class="cf-body" id="cf-body"></div>
     <div class="btns"><span class="spacer"></span><button class="btn" value="cancel" id="cf-no">取消</button><button class="btn primary" value="ok" id="cf-ok">確定</button></div>
   </form>
@@ -1686,7 +1686,7 @@ async function reconcile(opts = {}) {
     finally { box.disabled = false; }
   });
   const ok = await shown;
-  if (!ok) { if (opts.cancelMsg) msg(n ? opts.cancelMsg : "偏好已儲存；課表不需要變動", n ? "" : "ok"); return; }
+  if (!ok) { if (opts.cancelMsg) msg(n ? opts.cancelMsg : tt("pf.rc_nochange"), n ? "" : "ok"); return; }
   const dec = decisions(), reset = !!(box && box.checked);
   S.busy = true; renderToolbar(); msg(`<span class="spin"></span> ${esc(tt("rc.applying"))}`);
   try {

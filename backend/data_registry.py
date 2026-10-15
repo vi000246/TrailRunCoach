@@ -137,7 +137,9 @@ TABLES: tuple = (
           "rows it restores and a device whose cursor is newer is sent everything again (reset)",
           deidentify=("ts", "received_at", "row_id", "item", "value_json", "device_id")),
     Table("workout_files", IMPORTED, "one row per synced / imported activity file; rpe / feel / coros_feel "
-          "are the athlete's own rating but entered on the watch / in COROS and imported, not edited here",
+          "are the athlete's own rating but entered on the watch / in COROS and imported, not edited here; "
+          "source_chain = where the data came from, upstream included (SP-585): the research pool's source "
+          "rules (research/sources.py) decide by it what may feed the A / B layer",
           user_fields=("trail_classification", "classification_overridden"),
           deidentify=("file_path", "workout_date", "start_time_utc", "coros_activity_id", "tp_workout_id",
                       "garmin_activity_id", "intervals_activity_id", "device_name", "imported_at")),
@@ -352,8 +354,14 @@ FILES: tuple = (
     File("accounts.db", SECRET, ROOT, "accounts (backend/accounts/store.py): users (role, Google sub, "
          "e-mail, tenant folder, plan), identities, sessions (sha256 of the cookie only; when the user last "
          "confirmed who they are at Google, SP-386), shares, waitlist, consents (terms version and time, SP-58; "
-         "the analysis consent withdrawn / given again, SP-386), and the sign-ins in progress (oauth_states: "
-         "nonce and PKCE verifier, 10 min; signup_tickets: the Google account at the terms, 30 min). A user's "
+         "the analysis consent withdrawn / given again, SP-386; linking with 疊石 Cairn and unlinking, SP-329), "
+         "api_tokens (sha256 only: the weight API's, SP-472; 疊石 Cairn's service tokens, SP-329), "
+         "the sign-ins in progress (oauth_states: "
+         "nonce and PKCE verifier, 10 min; signup_tickets: the Google account at the terms, 30 min), the research "
+         "pool's link user -> random donor id + day 0 and its HMAC key (research_links, research_keys, SP-586: "
+         "never next to the pool; withdrawal deletes the link), the subscription (billing_subscriptions: Polar's "
+         "customer / subscription ids, status, period end; billing_events: each webhook id applied once, no "
+         "payload, 400 days; SP-328). A user's "
          "own rows (profile, consents) go into their 下載我的資料 as account.json; deleting the account "
          "deletes every row of theirs (store.delete_user, SP-386)",
          scope=INSTANCE, deidentify=("email", "display_name", "google_sub")),
@@ -362,7 +370,12 @@ FILES: tuple = (
          "switch, breaker, limits and paused accounts (SP-385); the Garmin trial's switch, breaker, paused "
          "accounts and per-account daily counts (SP-91, sync/garmin_limits.py); intervals.icu's app-wide "
          "request counts and the webhook map sha256(intervals.icu athlete id) -> tenant id (SP-346, "
-         "sync/intervals_limits.py); tenants by id only",
+         "sync/intervals_limits.py); the admin page's site settings and the plans' own defaults (SP-351, "
+         "backend/site_config.py); tenants by id only",
+         scope=INSTANCE),
+    File("site_audit.jsonl", USER, ROOT, "the admin page's change log (SP-351, backend/site_config.py): when, "
+         "who (user id), what (a setting, a data source, a user id, a waitlist row id), the old and new value; "
+         "append-only, users by id only",
          scope=INSTANCE),
     File("users/**", USER, ROOT, "multi-user mode: each users/<id>/ is a signed-in user's tenant folder "
          "(classified on its own, like the owner's)", scope=INSTANCE),
@@ -370,6 +383,20 @@ FILES: tuple = (
          "(sync/events.py: COROS / Garmin logins, syncs, blocks; tenants by id only — the Garmin trial's "
          "record, backend/scripts/garmin_trial_report.py); disposable, not tenant data (a demo base holds one: "
          "its build runs there)", scope=INSTANCE),
+    # the de-identified research pool (SP-586, backend/research/pool.py): other people's data, so never
+    # in the owner's backup and never in anyone's 下載我的資料 (no row names a person); not
+    # recomputable as is (the donor ids are random) but disposable: deleting it loses nothing a
+    # tenant needs, the next export starts it again. Off unless TRC_RESEARCH_POOL=1
+    File("research/pool.db", DERIVED, ROOT, "the research pool's B layer (SP-586, research/pool.py): activity "
+         "summaries and daily load under random donor ids, 1-km splits with no id (export year only), grid "
+         "cells of >= 5 people, the A layer's group statistics of >= k people (a_params, SP-587, "
+         "research/a_layer.py), meta (attributions, the source rules in force). No GPS track, FIT, account, "
+         "date, file name or free text; the link donor id -> user is accounts.db's research_links",
+         scope=INSTANCE, deidentify=("de-identified already: summaries / daily by donor id (withdrawal and "
+                                     "retention delete them, research/pool.py)",),
+         invalidated_by="never recomputed: written by the operator's export; withdrawal / retention delete "
+                        "rows hourly (sync/scheduler.py); safe to delete (nothing reads it but the analysis)"),
+    File("research/pool.db-*", DERIVED, ROOT, "research/pool.db's WAL / shared memory / journal", scope=INSTANCE),
     File("research/**", DERIVED, ROOT, "probe-script output (backend/scripts/probe_coros_tl.py)",
          scope=INSTANCE),
     File("fits/**", IMPORTED, ROOT, "the COROS folder before fit/coros (backend/scripts/"

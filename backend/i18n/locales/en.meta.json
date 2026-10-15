@@ -9982,5 +9982,57 @@
   "{head}（不含賽後恢復期／轉換期 {n} 天）": {
     "draft": true,
     "src": "backend/engine/reentry.py"
+  },
+  "讀你的帳號與方案狀態（免費或訂閱、到期日）": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
+  },
+  "讀你存過的賽事計算與配速曲線": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
+  },
+  "同步 GPX 路線與行程": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
+  },
+  "讀你路線的天氣": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
+  },
+  "要連結還是解除連結？": {
+    "draft": true,
+    "src": "backend/api/link.py"
+  },
+  "這個帳號沒有用 Google 登入，不能連結": {
+    "draft": true,
+    "src": "backend/api/link.py"
+  },
+  "這個服務還沒開放連結": {
+    "draft": true,
+    "src": "backend/api/link.py"
+  },
+  "疊石 Cairn": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
+  },
+  "測試帳號不能訂閱或付款": {
+    "draft": true,
+    "src": "backend/api/billing.py:56"
+  },
+  "嘗試太多次，請 15 分鐘後再試": {
+    "draft": true,
+    "src": "backend/api/account.py:275"
+  },
+  "這個瀏覽器已經登入其他帳號；請用無痕視窗或另一個瀏覽器開啟測試帳號的連結": {
+    "draft": true,
+    "src": "backend/api/account.py:278"
+  },
+  "這個連結無效、已用過或已過期，請管理員重新產生": {
+    "draft": true,
+    "src": "backend/api/account.py:283"
+  },
+  "這個測試帳號的假資料還在產生中，請稍後再試": {
+    "draft": true,
+    "src": "backend/api/account.py:285"
   }
 }

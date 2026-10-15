@@ -358,7 +358,7 @@ Actual 的同步做法很適合 TrailRunCoach 的**小筆、使用者自己改�
 | 問題 | 判斷 | 標記 |
 |---|---|---|
 | 瀏覽器能不能讀 FIT | 能。Garmin 官方有 JavaScript FIT SDK（npm `@garmin/fitsdk`），可以在瀏覽器跑。Python 的 `fitdecode` 也可以在 Pyodide 裡跑 | 摘要（npm 頁面、Garmin 論壇公告） |
-| 解析多快 | NAS 上 Python 中位數檔案 0.65 秒、最大 12 秒。在手機瀏覽器全量重解析 800 個檔，估計要好幾分鐘到十幾分鐘，而且要在背景 worker 做，不能卡畫面 | 推估（以 NAS 實測外推，沒在手機上測） |
+| 解析多快 | NAS 上 Python 中位數檔案 0.65 秒、最大 12 秒。原本推估手機瀏覽器全量重解析 800 個檔要好幾分鐘到十幾分鐘。**2026-10-15 實測（§7.1，桌面＋模擬手機）**：Garmin JS SDK 模擬手機 26–39 秒、Pyodide＋`fitdecode` 17–22 分鐘；都要放在 worker | 已驗證（桌面 Chrome 與 CPU 節流模擬）；真手機待使用者測 |
 | 存得下嗎 | 存得下。Chrome 每個網站最多可用磁碟的 60%；Safari 17 起瀏覽器 app 也是 60%。gzip 後 FIT 約 44 MB 加 npz 約 43 MB，不到 100 MB | 已驗證（MDN 儲存配額頁、WebKit 部落格 2023 儲存政策） |
 | 會不會被系統清掉 | **會。** Safari 開啟追蹤防護時，網站 7 天沒被點就會清掉它用程式寫入的資料。加到主畫面的 web app 比較容易拿到「持久儲存」。空間不夠時，瀏覽器會整個網站一起清 | 已驗證（MDN、WebKit） |
 | 跑得動整套模型嗎 | 小型計算可以：示範版已經用 Pyodide 跑賽事功率計算。**整套 dataset 和 `workout_review` 很吃力**：引擎約 8 萬行 Python，有些用到檔案 I/O、SQLAlchemy；Pyodide 要先下載約十幾 MB 的執行環境 | 推估（`todo-multi-user-sharing.plan.md` §1(c) 估 Pyodide 可沿用約 60%） |
@@ -367,6 +367,141 @@ Actual 的同步做法很適合 TrailRunCoach 的**小筆、使用者自己改�
 **結論：**
 - 瀏覽器和手機當「只讀摘要，加上小筆離線編輯」的客戶端是可行的。
 - 要它們當「完整運算節點」不划算，而且瀏覽器資料可能被清掉，所以**完整資料一定要有伺服器（或桌面 app）那份**。
+
+### 7.1 實測 2026-10-15（SP-313）
+
+**先講結論（桌面加模擬，不是真手機）：**
+- **用 Garmin 官方 JS SDK 解析很快。** 800 個檔全部重新解析：桌面 6 秒，模擬中階手機（CPU 慢 4 倍）26 秒，模擬較慢的手機（慢 6 倍）39 秒。每天新增的一兩個檔在模擬手機上不到 0.1 秒。原本估「好幾分鐘到十幾分鐘」，對 JS SDK 來說高估了一個數量級以上。
+- **用 Pyodide＋`fitdecode` 慢很多**，大約是 JS SDK 的 40 倍：800 個檔在桌面 4.2 分鐘，模擬手機 17–22 分鐘。原本的推估對 Python 這條路大致成立，模擬手機甚至落在偏高的一端。
+- 兩種解析器的結果，和伺服器 `fitdecode` 的逐秒資料**完全一致**：筆數一樣，8 個欄位的最大誤差是 0。
+- 解析一定要放在 Web Worker。同樣的 Pyodide 工作放在主執行緒，畫面最久卡了 2.6 秒（桌面）到 13 秒（模擬手機）；放在 worker 裡只卡 17 毫秒。
+- **初步判斷：手機可以當「解析」節點，前提是用 JS SDK。** 但這只解決「把 FIT 讀成逐秒資料」。後面的模型（`dataset`、`workout_review`，約 8 萬行 Python）在手機上要跑多久，這次沒測。§7 原本的結論（完整運算還是要伺服器那份，而且瀏覽器資料可能被清掉）不變。
+- **真手機還沒測**，要請使用者用自己的 iPhone Safari、Android Chrome 打開測試頁跑一次（步驟在本節最後）。
+
+**怎麼測**
+- **測試頁**：`docs/research/fit-parse-bench/`。`index.html` 是頁面，`bench-worker.js` 是 module Web Worker。可以重跑。
+- **解析器**：
+  - Garmin `@garmin/fitsdk` 21.218.0，從 jsDelivr 的 `+esm` 載入，`Decoder.read()` 用預設選項。
+  - Pyodide 314.0.7（和示範版同一版），從 jsDelivr 載入。`fitdecode` 0.11.0 不在 Pyodide 的套件清單裡，所以把 venv 裡的純 Python 原始碼打包成 zip，由頁面解開放進 Pyodide。**證實 `fitdecode` 在 Pyodide 裡可以直接跑**，`fit-on-device.md` §5 原本這點是推估。
+- **檔案**：都不是擁有者的資料。示範資料產生器（`backend.demo.generate`，seed 20261002，anchor 2026-10-03）產生一年 260 個檔，共 43.9 MB。由 `make_fixtures.py` 從中挑出三個代表檔：
+
+  | 代表 | 用的檔 | 大小 | 逐秒筆數 | 擁有者那個檔（§3.5） |
+  |---|---|---|---|---|
+  | 中位數 | `demo_0066.fit` | 93 KB | 2,964 | 93 KB、3,695 筆、NAS 0.65 秒 |
+  | 第 90 百分位 | `demo_0039.fit` | 302 KB | 9,660 | 296 KB、5,472 筆、NAS 1.76 秒 |
+  | 最大 | `synthetic_max.fit`（合成） | 2.17 MB | 71,075 | 2.17 MB、21,873 筆、NAS 12.3 秒 |
+
+  示範資料最大的檔只有 930 KB，所以最大的那個是合成的：把示範資料裡最長的一次健行來回接起來，直到檔案大小和擁有者最大的檔一樣。示範檔每筆逐秒紀錄約 32 bytes，擁有者最大的檔約 100 bytes 一筆，所以合成檔的筆數多了 3 倍多。我照**檔案大小**對齊，因為解析時間大致跟大小成正比：同樣用 Mac 上的 CPython `fitdecode`，中位數檔 0.09 秒、合成最大檔 1.93 秒；NAS 上對應的是 0.65、12.3 秒，倍率 7.2 和 6.4，和 NAS 平常比 Mac 慢 8～9.5 倍的量測差不多。
+- **全量模式**：把 260 個示範檔重複用到 800 個，共 128 MB（擁有者是 812 個、122.7 MB）。流程：
+  1. 先全部寫進 OPFS（瀏覽器給網站的私有檔案空間）。
+  2. 再一個一個讀出來解析，取出逐秒欄位後就丟掉。
+  3. 跑完刪掉。
+- **環境**：
+  - 機器是 Mac（Apple M5 Pro，18 核心）。瀏覽器是 Playwright 1.63 開的 Google Chrome 155 headless。
+  - 「模擬手機」是 Pixel 7 的螢幕尺寸和 user agent，加上 DevTools 的 CPU 節流 4 倍或 6 倍。慢 4 倍通常拿來代表中階 Android（Lighthouse 也用 4 倍），慢 6 倍代表較舊或較便宜的手機。新款 iPhone 的單核心效能接近 Mac，應該落在桌面和 4 倍之間（推估，沒有實測）。
+  - **DevTools 的 CPU 節流只會讓頁面主執行緒變慢，對 worker 沒有作用**（實測：送到 worker 會回 `Operation is only supported for pages, not workers`）。所以兩組模擬手機改在主執行緒跑解析。`chromium-desktop-main` 是沒節流、在主執行緒跑的對照組，數字和 worker 版一樣，代表換執行緒不會影響解析時間。
+  - Playwright 裝的 Firefox 版本對不上，WebKit 沒裝，所以這次**只有 Chromium**，沒有 Safari 引擎的數字。
+  - 測試時同一台 Mac 還有其他工作在跑（load average 在 3 到 29 之間），數字大約有 ±20% 的雜訊。6 倍那組的最大檔，第一次和中位數差了 40%，就是這個雜訊。
+- **記憶體**：
+  - 在 worker 裡拿不到 `performance.memory`。所以由 Playwright 每 0.25 秒用 `ps` 抽樣瀏覽器 renderer 行程的 RSS，每一段都用新開的瀏覽器量。
+  - 表裡的「增加」＝峰值減去開頁後、開跑前的值。這是桌面 Chrome 的數字，iOS Safari 的記憶體行為不一樣。
+  - Pyodide 另外記錄 wasm 記憶體大小。
+
+**載入時間**（第二次＝同一頁再開一個 worker，CDN 檔案從 HTTP 快取拿）
+
+| 設定 | JS SDK 第一次／第二次 | Pyodide 第一次／第二次 |
+|---|---|---|
+| 桌面（worker） | 95 ms／5 ms | 1.4 秒／0.8 秒 |
+| 模擬手機 4 倍 | 90 ms／0 ms | 3.9 秒／2.9 秒 |
+| 模擬手機 6 倍 | 92 ms／0 ms | 8.4 秒／7.0 秒 |
+
+- **下載量**：
+  - JS SDK 壓縮後 64 KB，解壓後 431 KB。
+  - Pyodide 壓縮後 6.0 MB，解壓後 13.5 MB（5 個檔：`pyodide.asm.wasm`、`python_stdlib.zip`、`pyodide-lock.json` 等）。沒有載 numpy，所以比 `fit-on-device.md` §5 寫的 15 MB 少。`fitdecode.zip` 另外 100 KB。
+  - 這台 Mac 的網路很快。手機用行動網路第一次開，Pyodide 還要再加下載時間（6 MB 在 10 Mbps 下約 5 秒，推估）。
+- **Pyodide 啟動時間大部分在 `loadPyodide`**（編譯 wasm、初始化）。解開並 import `fitdecode` 只要約 55 ms。
+
+**三個代表檔**（解析時間包含取出 8 個逐秒欄位；跑 3 次，取中位數）
+
+| 設定 | 解析器 | 中位數檔 93 KB | 第 90 百分位 302 KB | 最大 2.17 MB |
+|---|---|---|---|---|
+| NAS（§3.5，CPython，擁有者的檔） | `fitdecode` | 0.65 秒 | 1.76 秒 | 12.3 秒 |
+| Mac CPython（示範檔） | `fitdecode` | 0.09 秒 | 0.28 秒 | 1.93 秒 |
+| 桌面 Chrome（worker） | JS SDK | 7 ms | 16 ms | 0.11 秒 |
+| 桌面 Chrome（worker） | Pyodide | 0.16 秒 | 0.50 秒 | 3.6 秒 |
+| 模擬手機 4 倍 | JS SDK | 27 ms | 66 ms | 0.45 秒 |
+| 模擬手機 4 倍 | Pyodide | 1.0 秒 | 2.1 秒 | 15.4 秒 |
+| 模擬手機 6 倍 | JS SDK | 63 ms | 0.15 秒 | 0.99 秒 |
+| 模擬手機 6 倍 | Pyodide | 2.3 秒 | 4.9 秒 | 26.8 秒 |
+
+- Pyodide 比同一台 Mac 上的 CPython 慢約 1.7–1.9 倍。JS SDK 比 CPython 快 13–18 倍。
+- 第一次解析通常比後面慢一點（JIT 暖機），差距在 50% 以內。
+
+**全量 800 個檔（128 MB）**
+
+| 設定 | 解析器 | 解析總時間 | 最慢一檔 | OPFS 寫／讀（MB/s） | 記憶體增加 | 畫面最久卡 |
+|---|---|---|---|---|---|---|
+| 桌面（worker） | JS SDK | **6.3 秒** | 0.04 秒 | 297／293 | 273 MB | 17 ms |
+| 桌面（worker） | Pyodide | **4.2 分** | 2.2 秒 | 286／93 | 372 MB（wasm 43 MB） | 17 ms |
+| 桌面（主執行緒，對照） | JS SDK | 6.3 秒 | 0.04 秒 | 255／324 | 274 MB | 34 ms |
+| 桌面（主執行緒，對照） | Pyodide | 4.5 分 | 2.6 秒 | 268／88 | 349 MB（wasm 43 MB） | **2.6 秒** |
+| 模擬手機 4 倍（主執行緒） | JS SDK | **26 秒** | 0.20 秒 | 92／68 | 323 MB | 0.18 秒＊ |
+| 模擬手機 4 倍（主執行緒） | Pyodide | **17.4 分** | 10.8 秒 | 44／35 | 336 MB（wasm 43 MB） | 10.7 秒＊ |
+| 模擬手機 6 倍（主執行緒） | JS SDK | **39 秒** | 0.29 秒 | 65／48 | 293 MB | 0.27 秒＊ |
+| 模擬手機 6 倍（主執行緒） | Pyodide | **22.4 分** | 12.9 秒 | 59／30 | 354 MB（wasm 43 MB） | 12.9 秒＊ |
+
+＊模擬手機是在主執行緒跑的，所以畫面會卡。真的實作會放在 worker，不會卡成這樣。
+
+- **最慢一檔**是示範資料裡最大的 930 KB 健行。全量模式沒有放合成的 2.17 MB 檔。
+- **OPFS 不是瓶頸。** 128 MB 在桌面寫入約半秒、讀取 0.4–1.4 秒，模擬手機寫入或讀取 1–4 秒，和解析時間比起來很小。Pyodide 那幾組的讀取速度比較低。應該是讀和解析交錯進行，計時裡混進了別的工作，不是 OPFS 本身變慢（推估，沒有拆開量）。
+- **記憶體沒有一路往上漲。** Pyodide 的 wasm 記憶體從頭到尾都是 43 MB，renderer 增加 270–370 MB，和跑了幾個檔、節流幾倍都沒什麼關係。iPhone 分頁的記憶體上限官方沒公布，這個量會不會被砍，**只能在真手機上看**。
+
+**和原本推估比**
+
+| 原本的說法 | 實測後 |
+|---|---|
+| §7：「手機瀏覽器全量重解析 800 個檔，好幾分鐘到十幾分鐘」（推估） | JS SDK：模擬手機 26–39 秒。Pyodide：17–22 分鐘。推估只對 Python 這條路成立 |
+| `fit-on-device.md` §5：「用 Python 估 10–20 分鐘；JS SDK 應該比較快，但沒測」 | Python（Pyodide）在模擬手機 17–22 分鐘，落在推估範圍的上緣。JS SDK 大約快 40 倍 |
+| `fit-on-device.md` §5：「`fitdecode` 能裝進 Pyodide 是推估」 | 已證實：把原始碼 zip 解開就能用，不用 micropip、不用連 PyPI |
+| `fit-on-device.md` §9.2：「JS 解析一筆約 1 秒內」（推估） | 模擬手機上中位數檔 27–63 ms，最大檔 1 秒內 |
+
+**手機能不能當解析節點（初步）**
+- **解析這一步：用 JS SDK 可以。**
+  - 日常增量（1–2 個檔）幾十毫秒就好。
+  - 換手機、資料被清掉後的全量重解析，在中階 Android 上約半分鐘。
+  - 前提是：放在 worker 跑；而且第一次全量要讓使用者知道「正在處理」，iPhone Safari 切到背景或鎖螢幕時，分頁會被暫停。
+- **用 Pyodide 解析只適合偶爾一兩個檔。** 全量要十幾、二十分鐘，而且手機要一直亮著，不適合當重建路徑。如果將來裝置要跑 Python 模型，比較好的組合是「JS SDK 解析 → 逐秒陣列交給 Pyodide 計算」；這個組合這次沒測。
+- **授權**：JS SDK 用的是 Garmin 自己的 FIT 授權（`fit-on-device.md` §5），上線前要讀條款。
+- **給 SP-319 的輸入**：「FIT 存在裝置、需要時在裝置重新解析」在解析時間上不是障礙。剩下的問題是模型計算時間、儲存被清掉（§7 表格），以及真手機的記憶體上限。
+
+**真手機要請使用者自己測（iPhone Safari、Android Chrome 各一次）**
+1. Mac 和手機連同一個 Wi-Fi。
+2. 在 Mac 的 repo 目錄執行：
+
+   ```bash
+   .venv/bin/python docs/research/fit-parse-bench/serve.py --https
+   ```
+
+   - 第一次會先自動產生測試檔，約 10 秒。
+   - 跑起來後終端機會印出「Open on the phone: `https://192.168.x.x:8765/`」。
+   - macOS 如果問「是否允許 Python 接受連入連線」，按允許。
+3. 用手機開那個網址。測試憑證是自己簽的，所以會出現警告：
+   - iPhone Safari：「此連線不是私人連線」→「顯示詳細資訊」→「瀏覽此網站」→ 再確認一次。
+   - Android Chrome：「進階」→「繼續前往 192.168.x.x（不安全）」。
+   - 不想處理憑證的話，可以不加 `--https`，改開 `http://`。解析一樣能測，但 OPFS 那欄會顯示「不可用」。手機開區網 http 不算安全連線，瀏覽器不給用 OPFS。
+4. 頁面最上方會顯示這台手機的資訊。確認「安全連線 是」「OPFS 可用」。
+5. 按「全部跑」，跑的時候**螢幕保持亮著、不要切 app、不要鎖螢幕**。
+   - JS SDK 一兩分鐘內跑完。
+   - Pyodide 全量在手機上可能要 15–30 分鐘。只想先看快的結果，可以先取消勾選 Pyodide 跑一次，之後再只勾 Pyodide 跑。
+6. 跑完按「複製結果」，把整段文字貼回單上或對話裡。
+   - 如果中途分頁自己重新整理或當掉（iPhone 記憶體不夠時會這樣），請一起回報當時畫面上的進度文字，那正是要找的答案。
+   - 跑完會自動刪掉 OPFS 裡的測試檔。
+7. 收到的結果用 `summarize.py <貼上的檔案>.json` 整理成和上面一樣的表格，補進這一節。
+
+**重跑桌面數字**：
+- `.venv/bin/python docs/research/fit-parse-bench/run_playwright.py`：需要 Playwright 的 Chromium。結果放 `results/`，並自動呼叫 `compare.py` 比對。
+- 只想比對時：`compare.py results/<設定>-dump.json`。
+- `fixtures/`、`results/` 都不進 git。
 
 ## 8. COROS 同步要在哪跑
 
@@ -546,7 +681,7 @@ access-control-allow-methods: GET,POST,OPTIONS
 | 3 | 使用者改的資料表改用穩定 id，並加 `updated_at` | M | — | `activity_tags`、`injury_events`、`plan_sessions`（已有 `uid`）、`workout_templates_user`、`race_calc`、`plan_change_log` 加 UUID。任何同步方案都要先有這個 |
 | 4 | 資料分類登錄表 | S | — | 用程式碼列出每個租戶的檔案和資料表屬於「使用者改的／匯入的／衍生的／機密」哪一類。備份、同步、刪除帳號都讀這份清單，取代各處各寫一份 |
 | 5 | 試做：小筆資料的變更紀錄同步（只做 `user_settings` 和 `activity_tags`） | M | 3 | `changes` 表、伺服器序號、`/api/v1/sync/changes`。用兩個瀏覽器分頁或兩個 process 模擬離線再合併，寫合併測試。**只有選了 B 才開** |
-| 6 | 試做：手機瀏覽器解析 FIT 的實測 | S | — | 在 iPhone Safari、Android Chrome 上，用 `@garmin/fitsdk` 和 Pyodide＋`fitdecode` 各解析中位數、第 90 百分位、最大的檔案，記時間和記憶體。結果決定 §7 的推估要不要改 |
+| 6 | 試做：手機瀏覽器解析 FIT 的實測 | S | — | 在 iPhone Safari、Android Chrome 上，用 `@garmin/fitsdk` 和 Pyodide＋`fitdecode` 各解析中位數、第 90 百分位、最大的檔案，記時間和記憶體。結果決定 §7 的推估要不要改。**桌面＋模擬已做（SP-313，2026-10-15）**：見 §7.1；真手機待使用者用測試頁跑 |
 | 7 | PWA 唯讀離線快取 | S–M | — | 加 service worker，快取最近一次的課表和摘要。沒訊號時（山上）還能看今天的課。不涉及同步 |
 | 8 | 補測 COROS／TP 的 CORS | S | — | 沿用 `todo-multi-user-sharing` §1(c) 一直沒做的 preflight 實測。**已做（SP-315，2026-10-15）**：COROS、intervals.icu 放行，TP、Garmin 擋；見 §8.1 |
 | 9 | `plan.json` 等整份 JSON 設定拆成資料列 | M | 3 | 一個賽事、一筆修正各一列。**只有選了 B 或 C 才需要** |
@@ -635,3 +770,4 @@ access-control-allow-methods: GET,POST,OPTIONS
 
 **量測**
 - 2026-10-07 在 NAS 容器內用唯讀 Python 腳本統計 `/data`：檔案數、大小分位數、sha256 重複、資料表列數、`fitdecode` 解析時間、gzip 壓縮比。沒有寫入，也沒有讀機密檔。
+- 2026-10-15（SP-313）在 Mac 上用 `docs/research/fit-parse-bench/`（Playwright＋Chrome 155）量瀏覽器解析，檔案全部是示範資料產生器產生的，沒有用擁有者的資料。Garmin `@garmin/fitsdk` 21.218.0、Pyodide 314.0.7 都從 cdn.jsdelivr.net 載入。

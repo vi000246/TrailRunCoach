@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="intro.title">TrailRunCoach · 越野跑與百岳的備賽工具</title>
+<meta name="description" data-i18n-attr="content:intro.description" content="報了一場越野賽？用你的跑步資料預估完賽時間、每一段的配速和補給，排好備賽課表。給越野跑、百岳、路跑。">
+<style>
+/* 介紹頁 (SP-622, api/intro.py): "/" signed out. The app's colours (login.html, demo.html), light and
+   dark; no shell (its bar is the signed-in app's). One column on a phone, text and picture side by
+   side from 900 px. */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --warm: #b45309;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --warm: #fbbf24; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --warm: #fbbf24; --shadow: none;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text); overflow-wrap: anywhere;
+  font: 15.5px/1.65 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+a { color: var(--accent); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+/* top bar */
+.top { position: sticky; top: 0; z-index: 10; background: var(--panel); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; gap: 6px; min-height: 54px; }
+.brand { display: flex; align-items: center; gap: 8px; margin-right: auto; color: var(--text); text-decoration: none;
+  font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+.brand i { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); display: grid; place-items: center; flex: none; }
+.brand svg { width: 18px; height: 18px; color: #fff; }
+.top .link { color: var(--muted); text-decoration: none; padding: 6px 8px; border-radius: 7px; font-size: 14px; white-space: nowrap; }
+.top .link:hover { color: var(--accent); }
+.lang { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 7px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--line); background: none; color: var(--muted); }
+.lang:hover { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 560px) { .top .link.wide { display: none; } .brand span { display: none; } }
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 9px 18px;
+  border-radius: 10px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; text-align: center;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.small { min-height: 36px; padding: 5px 14px; font-size: 14px; }
+.btn:focus-visible, .lang:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* hero */
+.hero { padding: 44px 0 28px; display: grid; gap: 28px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.tags li { padding: 2px 10px; border-radius: 999px; background: var(--soft); color: var(--accent); font-size: 13px; font-weight: 600; }
+.hero h1 { margin: 12px 0 10px; font-size: clamp(26px, 4.4vw, 40px); line-height: 1.25; letter-spacing: .01em; }
+.hero .lead { margin: 0 0 20px; color: var(--muted); font-size: 17px; max-width: 40em; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.price { margin: 10px 0 0; color: var(--muted); font-size: 13.5px; }
+@media (min-width: 900px) { .hero { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); align-items: center; padding-top: 64px; } }
+/* screenshots */
+figure.shot { margin: 0; }
+.shot .frame { border-radius: 12px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); overflow: hidden; }
+.shot img { display: block; width: 100%; height: auto; }
+.shot figcaption { margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+/* sections */
+section { padding: 36px 0; }
+section + section { border-top: 1px solid var(--line); }
+h2 { margin: 0 0 8px; font-size: clamp(22px, 3vw, 28px); line-height: 1.3; }
+.kicker { margin: 0 0 4px; color: var(--warm); font-weight: 700; font-size: 13px; letter-spacing: .04em; }
+.sec-lead { margin: 0 0 14px; color: var(--muted); max-width: 44em; }
+.points { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 820px) { .points { grid-template-columns: 1fr; } }
+.card { padding: 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.card h3 { margin: 6px 0 6px; font-size: 17px; }
+.card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.card svg { width: 28px; height: 28px; color: var(--accent); }
+.feature { display: grid; gap: 22px; }
+@media (min-width: 900px) {
+  .feature { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; }
+  .feature.flip .text { order: 2; }
+}
+.feature ul { margin: 0 0 14px; padding-left: 1.2em; }
+.feature li { margin: 4px 0; }
+.origin { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 14px; }
+.more { font-weight: 600; text-decoration: none; }
+.more:hover { text-decoration: underline; }
+.shots { display: grid; gap: 14px; }
+.steps { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 14px 0; padding: 0; list-style: none; counter-reset: s; }
+@media (max-width: 820px) { .steps { grid-template-columns: 1fr; } }
+.steps li { counter-increment: s; }
+.steps li::before { content: counter(s); display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; }
+.two { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 820px) { .two { grid-template-columns: 1fr; } }
+.two ul { margin: 0 0 10px; padding-left: 1.2em; }
+.two p { margin: 0 0 10px; }
+.muted { color: var(--muted); }
+details { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin: 0 0 8px; }
+summary { cursor: pointer; padding: 10px 14px; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+details > div { padding: 0 14px 12px; }
+details p { margin: 0 0 6px; color: var(--muted); }
+.end { text-align: center; }
+.end .cta { justify-content: center; margin-top: 14px; }
+footer { border-top: 1px solid var(--line); background: var(--panel); padding: 22px 0 28px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; }
+footer a { color: var(--muted); }
+footer a:hover { color: var(--accent); }
+footer .lang { margin-left: auto; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="top">
+  <nav class="wrap" aria-label="主要連結" data-i18n-attr="aria-label:intro.nav.label">
+    <a class="brand" href="/"><i><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg></i><span>TrailRunCoach</span></a>
+    <a class="link wide" href="/manual" data-i18n="intro.nav.manual">操作手冊</a>
+    <a class="link wide" href="/about" data-i18n="intro.nav.about">關於</a>
+    <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:intro.lang.title" data-i18n="intro.lang.other">English</button>
+    <a class="btn small" href="/login" data-i18n="intro.nav.login">登入</a>
+  </nav>
+</header>
+<main>
+  <div class="wrap">
+    <section class="hero" aria-labelledby="hero-h">
+      <div>
+        <ul class="tags" aria-label="適合誰" data-i18n-attr="aria-label:intro.tags.label">
+          <li data-i18n="intro.tags.trail">越野跑</li><li data-i18n="intro.tags.baiyue">百岳／多日縱走</li><li data-i18n="intro.tags.road">路跑</li>
+        </ul>
+        <h1 id="hero-h" data-i18n="intro.hero.h1">報了一場越野賽？告訴你練不練得完、每一段怎麼跑。</h1>
+        <p class="lead" data-i18n="intro.hero.lead">給越野跑、百岳、路跑的備賽工具：用你的跑步資料預估比賽、排好課表、讀懂每一趟訓練。</p>
+        <div class="cta">
+          <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
+          <a class="btn" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
+        </div>
+        <p class="price" data-i18n="intro.cta.price">目前免費、名額有限，額滿收候補。</p>
+      </div>
+      <figure class="shot">
+        <div class="frame"><img data-shot="intro-race" alt="賽事計算機的預估結果：完賽時間、平均功率、配速與努力度" data-i18n-attr="alt:intro.shot.race_alt"></div>
+        <figcaption data-i18n="intro.shot.fictional">畫面是示範資料：虛構跑者、虛構賽事。</figcaption>
+      </figure>
+    </section>
+
+    <section aria-label="三個重點" data-i18n-attr="aria-label:intro.points.label">
+      <div class="points">
+        <div class="card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 6-10 4 6 3-4 5 8z"/><path d="M15.5 6.5h.01"/></svg>
+          <h3 data-i18n="intro.points.terrain.h">坡度、背包、天氣都算進去</h3>
+          <p data-i18n="intro.points.terrain.p">爬升、下坡、背包重量、比賽當天的氣溫和海拔，都換算成你跑得出來的配速。</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>
+          <h3 data-i18n="intro.points.plan.h">課表跟著你的賽事和狀況走</h3>
+          <p data-i18n="intro.points.plan.p">依目標賽事分周期、按你的偏好排一週；狀況變了會重排，大變動先問你。</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8.5 7.5h7M8.5 11h5"/></svg>
+          <h3 data-i18n="intro.points.sources.h">每條規則都有出處</h3>
+          <p data-i18n="intro.points.sources.p">計算方法都列出公開文獻；沒有出處的數字標「推估」，再用你的資料校正。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="race" class="feature" aria-labelledby="race-h">
+      <div class="text">
+        <p class="kicker" data-i18n="intro.race.kicker">主角</p>
+        <h2 id="race-h" data-i18n="intro.race.h">賽事計算機</h2>
+        <p class="sec-lead" data-i18n="intro.race.lead">丟一條賽道 GPX，算出完賽時間、每一段的配速、功率、心率上限和補給量。</p>
+        <ul>
+          <li data-i18n="intro.race.li.legs">逐段配速：哪段該跑、哪段改用走的、陡下坡先求安全</li>
+          <li data-i18n="intro.race.li.weather">比賽日天氣：每一段用「跑到那裡時」的氣溫和濕度算熱負荷，也算海拔</li>
+          <li data-i18n="intro.race.li.fuel">補給：每小時碳水、水分、鈉，什麼時候吃</li>
+          <li data-i18n="intro.race.li.baiyue">百岳多日：按山屋與營地分日預覽，背包重量一起算</li>
+          <li data-i18n="intro.race.li.group">跟團對照：拿開團的時刻表比一比，逐段看跟不跟得上</li>
+          <li data-i18n="intro.race.li.share">算好的配速表可以存成課表，或用一個連結分享給同團的人</li>
+        </ul>
+        <p class="origin" data-i18n="intro.race.origin">完賽預估、環境修正與 CP 的公式移植自 Steve Palladino 的 SuperPower Calculator（跑步功率社群公開流通的試算表），不是我們發明的；越野與百岳的坡度、背包換算另外依照公開文獻。</p>
+        <a class="more" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
+      </div>
+      <figure class="shot">
+        <div class="frame"><img data-shot="intro-legs" alt="賽事計算機的分段表：每一段的坡度、配速、功率、心率與補給" data-i18n-attr="alt:intro.race.shot_alt" loading="lazy"></div>
+      </figure>
+    </section>
+
+    <section id="plan" class="feature flip" aria-labelledby="plan-h">
+      <div class="text">
+        <h2 id="plan-h" data-i18n="intro.plan.h">課表與賽事周期</h2>
+        <p class="sec-lead" data-i18n="intro.plan.lead">設好 A／B／C 賽事，自動分成基礎、強化、專項、減量期，照你的偏好排出每一週。</p>
+        <ul>
+          <li data-i18n="intro.plan.li.prefs">哪天長跑、哪天休息照你排；拖曳就能換日</li>
+          <li data-i18n="intro.plan.li.replan">跑完的課自動對上；狀況變了會重排，大變動先等你同意</li>
+          <li data-i18n="intro.plan.li.ready">賽事評估：來不來得及練、現在練得夠不夠</li>
+          <li data-i18n="intro.plan.li.calendar">訂閱到 Google 日曆或 iPhone 行事曆</li>
+        </ul>
+        <a class="more" href="/manual/schedule" data-i18n="intro.plan.more">手冊：課表怎麼用 →</a>
+      </div>
+      <figure class="shot">
+        <div class="frame"><img data-shot="intro-schedule" alt="課表的週視圖：每一天的課、類型與完成狀況" data-i18n-attr="alt:intro.plan.shot_alt" loading="lazy"></div>
+      </figure>
+    </section>
+
+    <section id="read" class="feature" aria-labelledby="read-h">
+      <div class="text">
+        <h2 id="read-h" data-i18n="intro.read.h">讀懂每一趟</h2>
+        <p class="sec-lead" data-i18n="intro.read.lead">一頁看完最近練得怎樣，每一趟訓練用白話說明。</p>
+        <ul>
+          <li data-i18n="intro.read.li.status">訓練負荷與疲勞的趨勢、本週的量、離下一場 A 賽還有幾天</li>
+          <li data-i18n="intro.read.li.intervals">間歇每一趟的達成度、心率飄移，自動認出 AeT／CP 測試</li>
+          <li data-i18n="intro.read.li.climb">爬升速度、登山杖有沒有用、百岳成就、同一段爬坡的進步</li>
+          <li data-i18n="intro.read.li.zones">心率與功率區間跟著你的測試和資料校正</li>
+        </ul>
+        <a class="more" href="/manual/glossary" data-i18n="intro.read.more">手冊：名詞表 →</a>
+      </div>
+      <figure class="shot">
+        <div class="frame"><img data-shot="intro-status" alt="訓練總覽：長期訓練負荷、負荷平衡、本週的量與訓練負荷圖" data-i18n-attr="alt:intro.read.shot_alt" loading="lazy"></div>
+      </figure>
+    </section>
+
+    <section id="start" aria-labelledby="start-h">
+      <h2 id="start-h" data-i18n="intro.start.h">怎麼開始</h2>
+      <ol class="steps">
+        <li class="card"><h3 data-i18n="intro.start.1.h">用 Google 帳號登入</h3><p data-i18n="intro.start.1.p">第一次登入會先請你看過條款。</p></li>
+        <li class="card"><h3 data-i18n="intro.start.2.h">匯入跑步資料</h3><p data-i18n="intro.start.2.p">匯入任何手錶的 FIT 檔，或連 intervals.icu；COROS、Garmin 帳號登入屬於進階功能（非官方介面，風險自負）。</p></li>
+        <li class="card"><h3 data-i18n="intro.start.3.h">加一場目標賽事</h3><p data-i18n="intro.start.3.p">課表就照賽事排好，計算機也能直接算那一場。</p></li>
+      </ol>
+      <a class="more" href="/manual/start" data-i18n="intro.start.more">手冊：入門 →</a>
+    </section>
+
+    <section class="two" aria-label="出處與資料">
+      <div id="sources">
+        <h2 data-i18n="intro.sources.h">有出處，不是黑盒子</h2>
+        <p class="muted" data-i18n="intro.sources.lead">每個計算方法都列出公開文獻，方法與名稱屬於原作者。用到的有：</p>
+        <p data-i18n="intro.sources.list">Banister 的訓練反應模型、Tobler 的健行速度、背負重量的代謝公式、Riegel 的距離換算、Palladino 的跑步功率、Joe Friel 的心率區間、Uphill Athlete 的有氧閾值測試、Jack Daniels 的停訓回復，以及熱適應的國際共識。</p>
+        <p class="muted" data-i18n="intro.sources.estimate">沒有直接出處的數字一律標「推估」，之後用你自己的資料校正。</p>
+        <a class="more" href="/about#methods" data-i18n="intro.sources.more">看全部出處 →</a>
+      </div>
+      <div id="privacy">
+        <h2 data-i18n="intro.privacy.h">你的資料</h2>
+        <ul>
+          <li data-i18n="intro.privacy.li.use">資料只用來算你的訓練</li>
+          <li data-i18n="intro.privacy.li.export">隨時可以下載全部資料、刪除帳號</li>
+          <li data-i18n="intro.privacy.li.analysis">去識別化的跨使用者分析可以關掉</li>
+          <li data-i18n="intro.privacy.li.offline">可以加到手機主畫面，山上沒訊號也看得到課表</li>
+        </ul>
+        <a class="more" href="/legal/privacy" data-i18n="intro.privacy.more">隱私權政策 →</a>
+      </div>
+    </section>
+
+    <section id="faq" aria-labelledby="faq-h">
+      <h2 id="faq-h" data-i18n="intro.faq.h">常見問題</h2>
+      <details><summary data-i18n="intro.faq.watch.q">要什麼手錶？沒有 COROS 或 Garmin 可以用嗎？</summary>
+        <div><p data-i18n="intro.faq.watch.a">可以。任何手錶匯出的 FIT 檔都能匯入，也能連 intervals.icu。</p><a class="more" href="/manual/start#connect" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+      <details><summary data-i18n="intro.faq.power.q">沒有 Stryd 功率計可以用嗎？</summary>
+        <div><p data-i18n="intro.faq.power.a">可以。沒有功率時改用心率：課表的目標用心率區間，只有功率才有的圖表會隱藏。</p><a class="more" href="/manual/faq#no-power" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+      <details><summary data-i18n="intro.faq.numbers.q">數字為什麼跟手錶不一樣？</summary>
+        <div><p data-i18n="intro.faq.numbers.a">兩邊的算法和用的閾值不同，這是正常的；設定裡有 app 和手錶數值的對照。</p><a class="more" href="/manual/faq#watch-numbers" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+      <details><summary data-i18n="intro.faq.estimate.q">「推估」是什麼意思？</summary>
+        <div><p data-i18n="intro.faq.estimate.a">沒有公開文獻直接出處的數字或規則，依你的資料或常見做法估出來，之後用你的資料校正。</p><a class="more" href="/manual/faq#estimate" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+      <details><summary data-i18n="intro.faq.data.q">可以帶走我的資料嗎？</summary>
+        <div><p data-i18n="intro.faq.data.a">可以。設定裡能下載全部資料（含原始 FIT 檔），也能刪除帳號。</p><a class="more" href="/manual/faq#import-export" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+    </section>
+
+    <section class="end" aria-labelledby="end-h">
+      <h2 id="end-h" data-i18n="intro.end.h">下一場比賽，先算一次再出發。</h2>
+      <div class="cta">
+        <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
+        <a class="btn" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
+      </div>
+      <p class="price" data-i18n="intro.cta.price">目前免費、名額有限，額滿收候補。</p>
+    </section>
+  </div>
+</main>
+<footer>
+  <div class="wrap">
+    <a href="/manual" data-i18n="intro.footer.manual">操作手冊</a>
+    <a href="/about" data-i18n="intro.footer.about">關於（版本、出處、商標聲明）</a>
+    <a href="/legal/terms" data-i18n="intro.footer.terms">服務條款</a>
+    <a href="/legal/privacy" data-i18n="intro.footer.privacy">隱私權政策</a>
+    <a href="/legal/health" data-i18n="intro.footer.health">健康風險聲明</a>
+    <a href="/legal/third_party" data-i18n="intro.footer.third_party">第三方串接免責</a>
+    <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:intro.lang.title" data-i18n="intro.lang.other">English</button>
+  </div>
+</footer>
+<!--fill:try-->
+<script>
+(() => {
+  const L = window.I18N || { locale: "zh-TW", t: (k) => k, setLocale: () => {} };
+  const loc = L.locale === "en" ? "en" : "zh-TW";
+  // 語言切換: the other language (the `lang` cookie, i18n.js)
+  for (const b of document.querySelectorAll("[data-lang-switch]")) {
+    b.lang = loc === "en" ? "zh-Hant" : "en";
+    b.addEventListener("click", () => L.setLocale(loc === "en" ? "zh-TW" : "en"));
+  }
+  // 「先試試看」 (login.try_link): the built-in example by default; the public demo when the server says so
+  const tr = window.TRC_TRY;
+  if (tr && tr.kind === "demo" && /^https:\/\//.test(tr.url)) {
+    for (const a of document.querySelectorAll("[data-try]")) {
+      a.href = tr.url;
+      a.textContent = L.t("intro.cta.demo");
+    }
+  }
+  // the screenshots (backend/scripts/intro_shots.json): this language's, the dark ones in dark mode
+  const DIR = "/api/v1/static/intro/";
+  for (const img of document.querySelectorAll("img[data-shot]")) {
+    const base = DIR + img.dataset.shot + "." + loc;
+    const pic = document.createElement("picture");
+    const dark = document.createElement("source");
+    dark.media = "(prefers-color-scheme: dark)";
+    dark.srcset = base + ".dark.webp";
+    const forced = document.documentElement.dataset.theme;
+    img.replaceWith(pic);
+    if (!forced) pic.appendChild(dark);
+    img.src = base + (forced === "dark" ? ".dark" : "") + ".webp";
+    pic.appendChild(img);
+  }
+})();
+</script>
+</body>
+</html>

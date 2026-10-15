@@ -1,6 +1,6 @@
 # TrailRunCoach
 
-**給越野跑、百岳、路跑的訓練教練。** 讀你的手錶資料，告訴你現在的訓練狀況、幫你排課表並推送到 COROS 手錶、
+**給越野跑、百岳、路跑的訓練教練。** 讀你的手錶資料，告訴你現在的訓練狀況、幫你排課表（可以送到 COROS 手錶）、
 判讀每一趟間歇和心率飄移，還能用賽道 GPX 預估比賽配速、功率和補給。自己架、資料留在自己的電腦。
 
 > **公開版不含計算核心。** 完整程式在 private repo 開發；這個公開 repo（`vi000246/TrailRunCoach`）是它的自動鏡像，
@@ -20,7 +20,7 @@
 | | |
 |---|---|
 | **總覽 dashboard** | 長期訓練負荷（Chronic load）／短期負荷（Acute load）／負荷平衡（Load balance）的訓練負荷圖、負荷比、近期最佳、狀況卡，一頁看完。 |
-| **自動排課＋推送 COROS** | 依週期、課表偏好、休息日自動排一週，拖曳調整，一鍵推送到手錶。 |
+| **自動排課** | 依週期、課表偏好、休息日自動排一週，拖曳調整；可以把課表送到 COROS 手錶。 |
 | **間歇／飄移判讀** | 每趟間歇的功率對目標、心率飄移（白話說明），AeT／CP 測試自動辨識。 |
 | **賽事計算機** | 賽道 GPX＋天氣＋你的體能 → 分段配速、目標功率、完賽時間、補給；可匯出 COROS 課表。 |
 | **週期規劃** | A／B／C 賽事，基礎／強化／專項／減量期，課表跟著週期走。 |
@@ -37,7 +37,7 @@
 
 ## 資料來源
 
-- **COROS**：帳號登入後同步活動（FIT），也能把課表推送到手錶。
+- **COROS**：帳號登入後匯入活動（FIT），也能把課表送到手錶（非官方介面，進階、風險自負）。
 - **TrainingPeaks**：網站登入或你自己的 OAuth client（`TP_CLIENT_ID`／`TP_CLIENT_SECRET`）。
 - **FIT 檔**：任何手錶匯出的 FIT。
 
@@ -121,7 +121,7 @@ python -m backend.tests.e2e._server --serve                    # 或先起一個
 
 TrailRunCoach is a self-hosted training coach for trail runners, mountain hikers (Taiwan's 百岳)
 and road runners. It reads your watch data (COROS, TrainingPeaks or plain FIT files) and gives you
-an overview dashboard (training load chart: chronic / acute load and load balance, load ratio, status), an automatic weekly schedule you can push to a
+an overview dashboard (training load chart: chronic / acute load and load balance, load ratio, status), an automatic weekly schedule you can send to a
 COROS watch, interval and heart-rate-drift analysis per activity, a race calculator (GPX + weather +
 fitness → pacing, power, finish time, fuelling), season periodisation, schedule statistics and an
 injury log. Your data stays on your machine.

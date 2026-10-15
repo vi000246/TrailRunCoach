@@ -140,7 +140,24 @@ def expired(snap: dict, now: Optional[dt.datetime] = None) -> bool:
     return bool(e) and dt.datetime.fromisoformat(e) <= (now or _now())
 
 
+# the 介紹頁's 「先試算一場比賽」 (SP-622): a built-in share of the demo's fictional runner and 50K, a file in
+# the repo (backend/scripts/intro_example.py writes it) — never in a tenant, never anyone's row in accounts.db.
+# Its id has a shape new_id() never makes (17 characters; token_urlsafe(16) gives 22).
+EXAMPLE_ID = "example-trail-50k"
+EXAMPLE_FILE = Path(__file__).resolve().parents[2] / "demo" / "example_share.json"
+
+
+def example() -> Optional[dict]:
+    """The built-in example snapshot; None when the file is missing (a share page's 404)."""
+    try:
+        return json.loads(EXAMPLE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def load(sid: str, root: Optional[Path] = None) -> Optional[dict]:
+    if sid == EXAMPLE_ID:
+        return example()
     p = _path(sid, root)
     if not p.exists():
         return None

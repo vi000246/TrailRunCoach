@@ -350,9 +350,19 @@ def run(cutoff: dt.date, *, ds=None, folder: Optional[str] = None, today: Option
 # the schedule
 # ---------------------------------------------------------------------------
 
+def default_years() -> int:
+    """The current tenant's retention when it chose none: its plan's default, else the site's
+    (site_config archive.retention_years, the admin page, SP-351), else DEFAULT_YEARS."""
+    from backend import site_config as SC
+    v = SC.for_current(RETENTION_KEY)
+    return v if isinstance(v, int) and not isinstance(v, bool) and v in CHOICES else DEFAULT_YEARS
+
+
 def _years() -> int:
+    """The person's own choice -> their plan's default -> the site's (site_config.effective)."""
+    from backend import site_config as SC
     from backend.engine.wko5expr import datasource
-    v = datasource.read_setting(RETENTION_KEY, DEFAULT_YEARS)
+    v = SC.for_current(RETENTION_KEY, personal=datasource.read_setting(RETENTION_KEY, None))
     return v if isinstance(v, int) and not isinstance(v, bool) and v in CHOICES else DEFAULT_YEARS
 
 

@@ -12,6 +12,7 @@ low < 80% CP, moderate 80–95%, high ≥ 95%.
 """
 from __future__ import annotations
 
+from backend.engine import power_zone_plan as _PZP
 from backend.i18n import N_, _
 
 PALLADINO_POWER_ZONES = [
@@ -173,7 +174,14 @@ def stryd_rows() -> list[tuple]:
 # SP-363: the analysis page's power-zone card can switch to Stryd's five zones (like the HR card);
 # the time in zone counts every second (stryd_rows), the settings table shows Stryd's own edges
 SYSTEMS["stryd"] = {"title": N_("Stryd 功率區間（跑步）"), "unit": "W", "basis": "cp", "zones": stryd_rows()}
-POWER_SYSTEMS = ("palladino", "stryd")
+# SP-363: the classic 7 levels (% threshold power = CP) and the 個人化區間 (the PD model in effect on the
+# card's end day: engine/power_zone_plan.personal_levels — its zones are filled in by zone_table)
+SYSTEMS["classic"] = {"title": N_("經典 7 級功率區間（跑步）"), "unit": "W", "basis": "cp",
+                      "zones": [(z, n, lo, hi) for z, n, lo, hi in _PZP.CLASSIC_LEVELS]}
+SYSTEMS["personal"] = {"title": N_("個人化功率區間（跑步）"), "unit": "W", "basis": "cp", "zones": None}
+POWER_SYSTEMS = ("palladino", "stryd", "classic", "personal")
+# 課表功率區間 → the analysis card's default table (SP-363)
+PLAN_SYSTEM_CARD = {"palladino": "palladino", "stryd": "stryd", "classic": "classic", "personal": "personal"}
 
 
 # No %HRmax zones (user decision 2026-10-01): a fixed % of HRmax puts LT
@@ -346,9 +354,24 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
     # recent CP test, runs before it had no CP and the table read 0 s
     # (FIT source), or a different CP than the boundaries printed in the row
     op = None if T is None else f"{float(T):.4f}"
+    zones_, no_model = spec["zones"], None
+    if system == "personal":
+        # SP-363: the PD model in effect on the end day, as fractions of the CP the rows show
+        from backend.engine import power_zone_plan as PZP
+        from backend.files.wko5_athlete import day_to_date as _d2d
+        pl = PZP.personal_levels(ds, _d2d(end_day), T)
+        if "levels" in pl:
+            zones_ = [(z, n, lo, hi) for z, n, lo, hi in pl["levels"]]
+            zones_[0] = (zones_[0][0], zones_[0][1], 0.0, zones_[0][3])
+        else:
+            no_model = _(pl["reason"])
+            zones_ = [(str(i + 1), n, None, None) for i, n in enumerate(PZP.PERSONAL_NAMES)]
     ev = Evaluator(ds, end_day - days + 1, end_day, sports={"run"})
     rows, total = [], 0.0
-    for zid, name, lo, hi in spec["zones"]:
+    for zid, name, lo, hi in zones_:
+        if no_model:
+            rows.append({"id": zid, "name": _(name), "lo": None, "hi": None, "seconds": 0.0, "from": None, "to": None})
+            continue
         r = ev.evaluate(f"athleterange({end_day - days + 1}, {end_day}, {_in_zone_expr(system, lo, hi, op)})")
         secs = sum(float(v) for v in r.values() if v == v) if isinstance(r, WS) else 0.0
         total += secs
@@ -361,8 +384,9 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
             "threshold": T, "threshold_is_default": is_default, "days": days, "runs": len(runs), "total_seconds": total, "rows": rows,
             "threshold_source": info.get("source"), "threshold_date": info.get("date"),
             "wprime": info.get("wprime"), "wprime_source": info.get("wprime_source"),
-            "no_data_reason": None if total else _no_data_reason(spec["basis"], T, len(runs), days),
-            "source": {"palladino": SOURCE, "stryd": STRYD_SOURCE}.get(system)
+            "no_data_reason": no_model or (None if total else _no_data_reason(spec["basis"], T, len(runs), days)),
+            "source": {"palladino": SOURCE, "stryd": STRYD_SOURCE, "classic": _classic_source(),
+                       "personal": _personal_source()}.get(system)
             or _coros_source(spec) or "Friel / Classic level tables",
             "choices": hr_choices() if spec["unit"] == "bpm" else power_choices() if system in POWER_SYSTEMS else None}
 
@@ -373,6 +397,16 @@ HR_SYSTEMS = ("frielhr", "classichr", "coroslthr", "coroshrr", "coroshrmax")
 def hr_choices() -> list[dict]:
     """The HR zone tables a 「心率區間」 card can switch between (the viewer remembers the choice)."""
     return [{"id": k, "title": SYSTEMS[k]["title"]} for k in HR_SYSTEMS]
+
+
+def _classic_source() -> str:
+    from backend.engine.power_zone_plan import CLASSIC_SOURCE
+    return CLASSIC_SOURCE
+
+
+def _personal_source() -> str:
+    from backend.engine.power_zone_plan import PERSONAL_SOURCE
+    return _(PERSONAL_SOURCE)
 
 
 def power_choices() -> list[dict]:
@@ -580,9 +614,13 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
             hrz = HP.plan_hr_zones_for(ds, day0, lthr, aet, aet_measured)
         except Exception:                   # noqa: BLE001 — a dataset without a plan (tests)
             hrz = None
+    # 課表功率區間 (SP-363, engine/power_zone_plan.py): the power bands in the chosen set (Palladino: as they are)
+    from backend.engine import power_zone_plan as PZP
+    pzm = PZP.plan_model(ds, day0, cp) if not getattr(getattr(ds, "config", None), "parity", False) else None
     rows = []
     for tid, name, plo, phi, hlo, hhi, primary, example, src in WORKOUT_TARGETS:
         h = target_hr(tid, hlo, hhi, lthr, aet, hrz)
+        plo, phi = PZP.target_band(tid, plo, phi, pzm)
         rows.append({"id": tid, "name": name, "primary": primary, "example": example, "source": src,
                      "power": [None if plo is None or not cp else plo * cp, None if phi is None or not cp else phi * cp],
                      "power_pct": [plo, phi], "hr": h})
@@ -600,7 +638,9 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
             # (HP.easy_cap — the same cap the activity review and adapt read, SP-565)
             "easy_cap": (lambda c: c and {"value": c["value"], "source": c["source"]})(HP.easy_cap(hrz)),
             "hr_model": hrz,
-            "hr_zones": hrz["label"] if hrz else "Friel % LTHR", "power_zones": "Palladino % CP", "rows": rows}
+            "hr_zones": hrz["label"] if hrz else "Friel % LTHR", "power_zones": PZP.label(pzm),
+            # the 課表功率區間 in effect (SP-363): the push / step builders read it from the plan thresholds
+            "power_model": pzm, "rows": rows}
 
 
 def target_hr(tid: str, hlo, hhi, lthr: Optional[float], aet: Optional[float], hrz: Optional[dict]) -> list:

@@ -77,6 +77,8 @@ summary { cursor: pointer; padding: 10px 12px; font-weight: 600; min-height: 44p
 footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-between; align-items: center; margin-top: 14px; }
 .legal-links { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
 .legal-links a { color: var(--muted); }
+.what a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.what a:hover { text-decoration: underline; }
 .legal-links a:hover { color: var(--accent); }
 .lang { font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 7px; cursor: pointer;
   border: 1px solid var(--line); background: none; color: var(--muted); }
@@ -97,6 +99,7 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-b
       <span data-i18n="login.google">用 Google 帳號登入</span>
     </a>
     <p class="note" data-i18n="login.note">我們只讀取你的 Google 帳號識別碼、名稱與 email，不會讀取其他 Google 資料。</p>
+    <p class="note what"><a href="/" id="lg-what" data-i18n="login.what">這是什麼？看介紹 →</a></p>
   </section>
 
   <section class="card" id="lg-signup" hidden>
@@ -110,6 +113,15 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-b
       <a class="btn" href="/login" id="lg-cancel" data-i18n="login.cancel">取消</a>
     </div>
     <p class="err-line" id="lg-su-err" role="alert" hidden></p>
+  </section>
+
+  <section class="card" id="lg-test" hidden>
+    <h1 data-i18n="login.test.h">測試帳號登入</h1>
+    <p data-i18n="login.test.lead">這是管理員給的一次性登入連結：按下去就會以這個測試帳號登入這個瀏覽器，連結隨即失效。</p>
+    <div class="msg" id="lg-test-msg" role="status" hidden></div>
+    <div class="actions">
+      <button type="button" class="btn primary" id="lg-test-go" data-i18n="login.test.go">以測試帳號登入</button>
+    </div>
   </section>
 
   <footer>
@@ -200,10 +212,45 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-b
     msg.textContent = T("signed_out");
     msg.className = "msg info";
     msg.hidden = false;
+  } else if (q.has("waitlist")) {         // 「用自己的資料算」 while full (SP-124): signing in joins the list
+    msg.textContent = T("waitlist");
+    msg.className = "msg info";
+    msg.hidden = false;
   } else if (q.has("deleted")) {          // 刪除帳號 done (SP-386)
     msg.textContent = T("deleted");
     msg.className = "msg info";
     msg.hidden = false;
+  }
+  const csrfToken = async () => {
+    const r = await fetch("/api/v1/session", { cache: "no-store", credentials: "same-origin" });
+    return ((await r.json()) || {}).csrf || "";
+  };
+
+  // ---- a test account's one-time link (SP-611): the token is in the fragment, never sent to a server ----
+  if (location.pathname === "/test-login") {
+    $("lg-signin").hidden = true;
+    $("lg-test").hidden = false;
+    const token = location.hash.slice(1);
+    history.replaceState(null, "", "/test-login");          // not kept in the address bar or the history
+    const tmsg = $("lg-test-msg"), go = $("lg-test-go");
+    const say = (text, kind) => { tmsg.textContent = text; tmsg.className = "msg " + (kind || "err"); tmsg.hidden = false; };
+    if (!token) { say(T("test.no_token")); go.hidden = true; return; }
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      try {
+        const r = await fetch("/api/v1/account/test-login", {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-TRC-CSRF": await csrfToken() },
+          body: JSON.stringify({ token }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.next) { location.replace(j.next); return; }
+        const code = j.detail && j.detail.code;
+        say(T("test.error." + (["SIGNED_IN_AS_OTHER", "MOCK_RUNNING", "LINK_INVALID", "RATE_LIMITED"].includes(code) ? code : "failed")));
+        go.disabled = code !== "MOCK_RUNNING";               // still unused: may be tried again later
+      } catch (_) { say(T("test.error.failed")); go.disabled = false; }
+    });
+    return;
   }
   if (location.pathname !== "/signup") return;
 

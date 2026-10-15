@@ -67,7 +67,7 @@
 |---|---|---|
 | `TRC_SECRET_KEY` | 封存所有同步憑證的 server key；多使用者模式必填 | SP-384 |
 | `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | Google 登入 | SP-58 |
-| `PAYMENT_MERCHANT_ID`、`PAYMENT_HASH_KEY`、`PAYMENT_HASH_IV` | 金流（名字待 SP-328 選定金流商後確認） | SP-328 |
+| `TRC_POLAR_TOKEN`、`TRC_POLAR_WEBHOOK_SECRET` | 訂閱付款：Polar 的 Organization Access Token 與 webhook secret（同一組金流商戶與 inReachLiveTrack 共用；非密鑰的設定 `TRC_POLAR_ENV`、`TRC_POLAR_PRODUCT_MONTH`、`TRC_POLAR_PRODUCT_YEAR` 見 `docs/deploy/billing.md`） | SP-328 |
 | `TP_CLIENT_ID`、`TP_CLIENT_SECRET` | TP 的桌面軟體 client（只限擁有者） | — |
 | `CWA_API_KEY` | 中央氣象署授權碼（只有擁有者能看、能設；站台用它下載的預報全站共用） | SP-552 |
 | `TRC_UPSTREAM_TOKEN`、`TRC_PROXY_PASSWORD` | 本機副本從正式站同步用的 token 與代理密碼（只設在本機，不設在正式站；SP-373 起 `TRC_DEBUG_PIN` 不再讀） | SP-373 |

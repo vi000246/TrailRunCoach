@@ -880,7 +880,9 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         # HR zones / targets read the COROS account and the 課表心率區間 setting (engine/hr_profile.py);
         # the review's 「輕鬆」 reads the easy cap of those zones (SP-565)
         from backend.engine import hr_profile as HP
-        params = {**params, "_hr": HP.stamp()}
+        from backend.engine import power_zone_plan as PZP
+        # SP-363: the 課表功率區間 is the power charts' default zone set
+        params = {**params, "_hr": HP.stamp(), "_pz": PZP.stamp()}
     if ch.get("race_refs") == "course_constant":
         # the events' stored GPX (engine/event_gpx.py) changes the reference lines, not plan.json
         from backend.engine import event_gpx as EG
@@ -1167,6 +1169,11 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
                 system = want
             elif want in POWER_SYSTEMS and system in POWER_SYSTEMS:
                 system = want
+            elif system in POWER_SYSTEMS:
+                # SP-363: without a choice on the card, the 課表功率區間's table
+                from backend.engine import power_zone_plan as PZP
+                from backend.engine.zones import PLAN_SYSTEM_CARD
+                system = PLAN_SYSTEM_CARD.get(PZP.setting(), system)
             if system != ch["system"]:
                 # the card's title names the model: a switched table shows its own title, not the
                 # view's (fixed / translated) one; the view keeps it for the default model

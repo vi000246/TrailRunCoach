@@ -6,6 +6,7 @@
   "note": "我們只讀取你的 Google 帳號識別碼、名稱與 email，不會讀取其他 Google 資料。",
   "signed_out": "已登出。",
   "deleted": "你的帳號和所有資料已經刪除。",
+  "waitlist": "目前額滿：用 Google 帳號登入，我們會把你的 email 記進候補名單，有名額時通知你。",
   "error.expired": "登入逾時或連結已失效，請重新登入。",
   "error.failed": "登入沒有完成，請重新登入。",
   "error.cancelled": "你取消了 Google 登入。",
@@ -29,5 +30,15 @@
   "links.terms": "服務條款",
   "links.privacy": "隱私權政策",
   "links.health": "健康風險聲明",
-  "links.third_party": "第三方串接免責"
+  "links.third_party": "第三方串接免責",
+  "test.h": "測試帳號登入",
+  "test.lead": "這是管理員給的一次性登入連結：按下去就會以這個測試帳號登入這個瀏覽器，連結隨即失效。",
+  "test.go": "以測試帳號登入",
+  "test.no_token": "連結不完整，請把管理員給的整段連結貼到網址列。",
+  "test.error.SIGNED_IN_AS_OTHER": "這個瀏覽器已經登入其他帳號。請用無痕視窗或另一個瀏覽器開啟這個連結（連結還沒用掉）。",
+  "test.error.MOCK_RUNNING": "這個測試帳號的假資料還在產生中，請過幾分鐘再按一次（連結還沒用掉）。",
+  "test.error.LINK_INVALID": "這個連結無效、已用過或已過期，請管理員重新產生。",
+  "test.error.RATE_LIMITED": "嘗試太多次，請 15 分鐘後再試。",
+  "test.error.failed": "沒有成功，請再試一次。",
+  "what": "這是什麼？看介紹 →"
 }

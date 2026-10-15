@@ -388,7 +388,7 @@ def test_signed_out_only_the_public_paths_open(c):
     assert r.status_code in (302, 303) and location(r) == "/login?next=%2Fapi%2Fv1%2Foverview%2Fpage"
     r = c.get("/api/v1/plan/page?event=x", headers=HTML)
     assert location(r) == "/login?next=%2Fapi%2Fv1%2Fplan%2Fpage%3Fevent%3Dx"
-    assert location(c.get("/", headers=HTML)) == "/login?next=%2F"
+    assert c.get("/", headers=HTML).status_code == 200                 # the 介紹頁 (SP-622)
     r = c.get("/login")
     assert r.status_code == 200 and "text/html" in r.headers["content-type"] and 'id="lg-google"' in r.text
     assert c.get("/signup").status_code == 200

@@ -26,7 +26,7 @@ More: [Connecting a data source](start.md#connect), [How long the first sync tak
 
 :::deep
 ### Other messages
-- **COROS blocked the account for a while** (too many requests, or the login was refused): to protect the account, the next daily auto sync tries again; until then, don't press sync over and over. When COROS refuses often, the whole site pauses for about 30 minutes; the activities already imported stay.
+- **COROS blocked the account for a while** (too many requests, or the login was refused): to protect the account, the next daily scheduled sync tries again; until then, don't press sync over and over. When COROS refuses often, the whole site pauses for about 30 minutes; the activities already imported stay.
 - **Garmin (trial)**: 1 automatic and 3 manual “Sync now” a day; a long history comes over several days (“today's download limit is reached, the rest continues tomorrow”). When Garmin locks the login it usually comes back in 2–3 days, and sync pauses meanwhile. The code goes to your email or phone and is valid for 10 minutes.
 - **Password changed**: “logging in again with the remembered password failed too” = the password probably changed; log in again.
 
@@ -46,7 +46,7 @@ More: [How long the first sync takes](start.md#first-sync).
 
 :::deep
 ### When a download fails
-Later syncs retry only the failed ones, each at most 5 times or for 7 days, then they stop; press “Retry” to try again. With auto sync on, the last 60 days are also checked every week and missing ones downloaded. The full check only lists activities that are here but not on the platform; it never deletes them.
+Later syncs retry only the failed ones, each at most 5 times or for 7 days, then they stop; press “Retry” to try again. With scheduled sync on (when the site opens or daily), the last 60 days are also checked every week and missing ones downloaded. The full check only lists activities that are here but not on the platform; it never deletes them.
 
 ### The same activity twice
 Importing the same file again never adds it twice, and a run that came both by sync and by import counts once. When the app did not notice, open the activity's editor and under “The same activity from other sources” choose “Same activity (merge)”; if it guessed wrong, “Not the same (split)”.
@@ -59,17 +59,17 @@ Fields the app set are marked “Auto” (hover for the reason), the ones you ch
 
 With “Sync new activities in the background” on, the server looks for new activities regularly — **about every 30 minutes for accounts used lately** — syncs them and gets the overview and the schedule matches ready. In a hurry, press “Sync now”.
 
-1. Settings → Data & sync: “Sync new activities in the background”, “Sync when you open the site” and “Daily auto sync”.
+1. Settings → Data & sync: “Sync new activities in the background”, “Sync when you open the site” and the daily sync at a set time.
 2. Opening the site syncs when the last sync is older than the hours you set (6 by default).
 
 More: [Connecting a data source](start.md#connect).
 
 :::deep
 ### How often
-Accounts used in the last 3 days about every 30 minutes; less-used ones every 2–6 hours; after a month without use only the daily auto sync. Nothing between 1 and 5 a.m. When COROS blocks for a while, the next look is postponed. Accounts are spread out and synced one at a time.
+Accounts used in the last 3 days about every 30 minutes; less-used ones every 2–6 hours; after a month without use only the daily one at a set time. Nothing between 1 and 5 a.m. When COROS blocks for a while, the next look is postponed. Accounts are spread out and synced one at a time.
 
 ### Exceptions
-- Garmin allows one automatic sync a day, so it is not checked in the background.
+- Garmin allows one scheduled sync a day, so it is not checked in the background.
 - Free plan: one sync a night (between 1 and 5 a.m.), no background checks, and opening the site does not sync.
 :::
 
@@ -154,7 +154,7 @@ The plan preferences' “Approval notice”: “Watch” pushes a 1-minute “Pl
 
 The schedule reaches the watch only when **pushed**: log in to COROS in Settings → Data & sync, then press “Push to watch” on the schedule; the sessions show in the watch's calendar after the watch app syncs. A red watch icon on a card = the push failed.
 
-More: [Pushing to the watch](schedule.md#push).
+More: [Sending the schedule to the watch](schedule.md#push).
 
 :::deep
 ### Common causes

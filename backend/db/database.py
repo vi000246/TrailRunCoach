@@ -155,6 +155,7 @@ async def _migrate_schema():
         ("workout_files", "intervals_activity_id", "TEXT"),
         ("workout_files", "upstream_source", "TEXT"),
         ("workout_files", "device_name", "TEXT"),
+        ("workout_files", "source_chain", "TEXT"),     # SP-585 (research/sources.py); filled below
         ("athlete_settings", "threshold_pace_s_per_km", "REAL"),
         ("athlete_settings", "run_ftp_w", "REAL"),
         ("athlete_settings", "initial_ctl_run", "REAL"),
@@ -214,6 +215,9 @@ async def _migrate_schema():
         if "intervals_activity_id" in cols:             # SP-346: the same lookup per listed activity
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_workout_files_intervals_activity_id "
                                     "ON workout_files (intervals_activity_id)"))
+        if "source_chain" in cols:                      # SP-585: the rows from before, once (NULL only)
+            from backend.research.sources import backfill_sql
+            await conn.execute(text(backfill_sql(cols)))       # a partial schema: its columns only
         # SP-310: a stable uid (UUID) and updated_at on the tables the user edits, ids for the rows
         # from before, the unique index (db/stable_ids.py)
         from backend.db import stable_ids

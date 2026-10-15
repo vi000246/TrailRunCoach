@@ -24,7 +24,7 @@
   "season.go": "Plan a season →",
   "enter": "Enter the demo (Training overview)",
   "activities": "See single-activity analysis",
-  "off": "Watch sync, pushing workouts and share links are turned off in the demo.",
+  "off": "The demo can't connect a watch account, send the schedule to a watch or make share links.",
   "ex.race": "See a trail race (GPX) calculation example",
   "ex.intervals": "See an intervals analysis example",
   "ex.trail": "See a trail workout example"

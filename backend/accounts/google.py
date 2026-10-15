@@ -1,8 +1,9 @@
 """
 Google sign-in (OpenID Connect, authorization code flow with PKCE; SP-58).
 
-    configure(id, secret, public_url)          the client, frozen at start-up (login.decide())
-    configured()                               configure() ran
+    configure(id, secret, public_url)          the environment's client, frozen at start-up (login.decide())
+    client_id() / client_secret()              the admin page's (google_client, SP-351 R2), else the above
+    configured()                               a whole client and the public URL
     redirect_uri()                             <public URL>/oauth/google/callback (the registered one)
     authorize_url(state, nonce, verifier, uri) where the browser is sent (scope openid email profile)
     await identity(code, verifier, uri, nonce) -> Identity, after exchanging the code and verifying
@@ -63,7 +64,9 @@ class Identity:
     name: Optional[str]
 
 
-# the client, set once at start-up by login.decide(): a request never reads the environment
+# the environment's client, set once at start-up by login.decide(): a request never reads the
+# environment. The admin page's (site.json, google_client) comes first, part by part, and is read
+# at each use: a change there needs no restart (SP-351 R2).
 _CONF: dict = {"id": None, "secret": None, "public": None}
 
 
@@ -71,16 +74,28 @@ def configure(cid: Optional[str], secret: Optional[str], public_url: Optional[st
     _CONF.update(id=cid, secret=secret, public=(public_url or "").rstrip("/") or None)
 
 
+def env_client() -> tuple:
+    """(id, secret) from the environment as frozen at start-up."""
+    return _CONF["id"], _CONF["secret"]
+
+
 def client_id() -> Optional[str]:
-    return _CONF["id"]
+    from backend.accounts import google_client
+    return google_client.site_id() or _CONF["id"]
 
 
 def client_secret() -> Optional[str]:
-    return _CONF["secret"]
+    from backend.accounts import google_client
+    return google_client.site_secret() or _CONF["secret"]
 
 
 def configured() -> bool:
-    return bool(_CONF["id"] and _CONF["secret"] and _CONF["public"])
+    return bool(_CONF["public"] and client_id() and client_secret())
+
+
+def public_url() -> Optional[str]:
+    """The site's fixed public origin (WKO5COACH_PUBLIC_URL), or None before sign-in is set up."""
+    return _CONF["public"]
 
 
 def redirect_uri() -> str:

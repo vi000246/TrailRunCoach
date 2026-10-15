@@ -60,7 +60,7 @@
   "demo.reset": "重設示範",
   "demo.reset_title": "清掉你的修改，回到原始示範資料",
   "demo.reset_confirm": "清掉你在示範裡的所有修改？",
-  "demo.cta": "想用自己的資料？",
+  "demo.cta": "用自己的資料算",
   "demo.locked": "示範模式不提供這個功能",
   "demo.disabled": "示範模式不提供這個功能",
   "account.logout": "登出",
@@ -88,5 +88,15 @@
   "scope.paused_short": "全站暫停中",
   "scope.quota_used": "{what}已用完",
   "scope.sep": "；",
-  "scope.what": "{what}：{why}"
+  "scope.what": "{what}：{why}",
+  "scope.see_plans": "看方案與訂閱",
+  "account.plans": "方案與訂閱",
+  "account.plans_free": "目前：免費方案",
+  "account.plans_sub": "目前：訂閱方案",
+  "account.plans_title": "看兩個方案的差別、訂閱或管理訂閱",
+  "page.admin.name": "管理",
+  "page.admin.short": "管理",
+  "page.admin.purpose": "全站設定・使用者・候補名單",
+  "notice.close": "關閉公告",
+  "test_account": "測試帳號：{name}（不是真的會員；資料是假的）"
 }

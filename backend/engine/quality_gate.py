@@ -595,6 +595,15 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             continue
         row = planned.get(w.idx) or {}
         spec = planned_variant_spec(row)
+        judge = None
+        if spec is not None and not user_steps(row) and getattr(spec, "opt", -1) < 0 and m.get("cp"):
+            # SP-618: the reps, the 達標 line and the time in zone in the 課表功率區間 in effect
+            # (Palladino: as planned; a 個人化間歇 is already the model's band; a structure you set: yours)
+            from backend.engine import power_zone_plan as PZP
+            j = PZP.judge_spec(spec, PZP.model_on(ds, WR._wdate(w), m["cp"]))
+            if j is not spec:
+                judge = {"from": [lo_band(spec)[0], lo_band(spec)[1]], "to": [lo_band(j)[0], lo_band(j)[1]]}
+                spec = j
         c = WR.classify(ds, w, m)
         s = WR._samples(ds, w) if m.get("cp") else None
         found = IR.find_reps(ds, w, s, m.get("cp"), spec) if m.get("cp") and (
@@ -642,6 +651,7 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
                     "faded": fade is not None and fade < -FADE,
                     "bouts": bouts[:20], "cp": m.get("cp"), "rep_source": found["source"], "tiz_ratio": tiz_ratio,
                     "stimulus": c.get("stimulus"),
+                    **({"judge": judge} if judge else {}),
                     # the stored plan is in use and this run matched none of its quality sessions:
                     # a hard run, not a ladder session (real data 2026-10-01: steady runs at
                     # ~95 % CP were judged 「目標太高」 against 3×8′ and moved the ladder)
@@ -649,6 +659,25 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
         out[-1]["track"] = row_track(out[-1])
     WR._flush(ds)
     return out
+
+
+def lo_band(spec) -> tuple:
+    """(lo, hi) × CP of a spec: an interval_library Variant or a ladder tuple."""
+    if hasattr(spec, "lo"):
+        return spec.lo, spec.hi
+    return spec[5], spec[6]
+
+
+def judged_spec(spec: tuple, judge: Optional[dict]) -> tuple:
+    """dose_step's spec with the band dose_history judged it in (SP-618, the 課表功率區間: `judge`
+    {"from", "to"}) when it is the same planned band; else the spec as it is."""
+    if not judge or not isinstance(spec, tuple) or len(spec) < 7 or spec[5] is None or spec[6] is None:
+        return spec
+    a, b = judge.get("from") or (None, None)
+    if a is None or abs(float(spec[5]) - float(a)) > 1e-6 or abs(float(spec[6]) - float(b)) > 1e-6:
+        return spec
+    lo, hi = judge["to"]
+    return spec[:5] + (lo, hi) + spec[7:]
 
 
 def planned_variant_spec(row: dict):
@@ -1000,7 +1029,7 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
             h["outcome"] = "neutral"
             continue
         if h.get("bouts") and h.get("cp"):
-            o = interval_outcome(h["bouts"], spec, h["cp"], aet)
+            o = interval_outcome(h["bouts"], judged_spec(spec, h.get("judge")), h["cp"], aet)
         else:
             o = {"outcome": "unknown", "why": "沒有功率或 CP，無法判定達標：同一階再做一次"}
         oc = o.get("outcome") or "unknown"

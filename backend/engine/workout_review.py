@@ -2018,9 +2018,16 @@ def _measure(ds, w) -> Optional[dict]:
     # the session classifier's per-run part (engine/session_stimulus.py): cadence is stored per
     # leg (rpm) like form_drift's ×2 below
     from backend.engine import session_stimulus as SS
+    # SP-618: the classifier's power edges in the 課表功率區間 in effect when the run is first measured
+    # (the measurements are cached per run: a switch changes the runs measured after it, not the ones before)
+    edges = None
+    if cat in QUALITY_CATEGORIES and cp:
+        from backend.engine import power_zone_plan as PZP
+        pm = PZP.model_on(ds, _wdate(w), cp)
+        edges = PZP.class_edges(pm) if pm is not None else None
     out["stim"] = SS.measure(t, s["hr"], s["power"], s["speed"],
                              None if s["cadence"] is None else np.asarray(s["cadence"], dtype=float) * 2.0,
-                             rg, cp, lthr, cat) if cat in QUALITY_CATEGORIES else None
+                             rg, cp, lthr, cat, edges) if cat in QUALITY_CATEGORIES else None
     hp = [c["hr_per_100m"] for c in climbs if c.get("hr_per_100m")]
     out["hr_per_100m"] = statistics.median(hp) if hp else None
     stryd = s["ilr"] is not None or s["lss"] is not None

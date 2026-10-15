@@ -51,8 +51,12 @@ NIGHT_SPAN_MIN = 240
 
 
 def night_slot(tenant_id: str) -> tuple[str, int]:
-    """(HH:MM, offset) of a free-tier tenant's nightly sync: spread over NIGHT_SPAN_MIN by its id."""
-    return NIGHT_START, int(hashlib.sha256(("night:" + tenant_id).encode("utf-8")).hexdigest(), 16) % NIGHT_SPAN_MIN
+    """(HH:MM, offset) of a free-tier tenant's nightly sync: spread over the window by its id. The
+    window is the admin's (site_config sync.night_start / sync.night_span_min, SP-351), else
+    NIGHT_START / NIGHT_SPAN_MIN."""
+    from backend import site_config as SC
+    start, span = SC.get("sync.night_start") or NIGHT_START, int(SC.get("sync.night_span_min") or NIGHT_SPAN_MIN)
+    return start, int(hashlib.sha256(("night:" + tenant_id).encode("utf-8")).hexdigest(), 16) % max(1, span)
 
 
 def offset_minutes(tenant_id: str) -> int:
@@ -237,6 +241,14 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
                 raise
             except Exception as e:
                 log.warning("backup tick failed: %s", type(e).__name__)
+            # the research pool (SP-586): withdrawals and retention, hourly, only when the pool exists
+            try:
+                from backend.research import pool as research_pool
+                await asyncio.to_thread(research_pool.tick)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.warning("research pool tick failed: %s", type(e).__name__)
             # multi-user mode: the whole server's daily backup — accounts.db and every user's
             # tenant (accounts/server_backup.py, SP-387 第 7 條)
             try:

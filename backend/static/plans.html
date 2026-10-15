@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="plans.title">方案與訂閱</title>
+<style>
+/* 方案與訂閱 (SP-328, api/billing.py): the two plans, the checkout (Polar), the subscription's state
+   and its portal. Signed in only; GET /api/v1/billing says what to show. */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --ok: #1f7a3d; --warn: #9a5b00; --warn-bg: #fff4e0; --err: #b3261e;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --ok: #5cc37f; --warn: #f0b75a; --warn-bg: #33270f; --err: #f28b82;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --ok: #5cc37f; --warn: #f0b75a; --warn-bg: #33270f; --err: #f28b82;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+a { color: var(--accent); }
+.pl-main { max-width: 860px; margin: 0 auto; padding: 22px 16px 64px; }
+.pl-main h1 { margin: 6px 0 6px; font-size: 26px; line-height: 1.3; }
+.pl-lead { margin: 0 0 16px; color: var(--muted); }
+.pl-sec { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+  padding: 18px 22px 20px; margin: 0 0 16px; }
+.pl-sec h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.4; }
+.pl-flash { border-radius: 10px; padding: 10px 14px; margin: 0 0 16px; background: var(--soft); }
+.pl-flash.warn { background: var(--warn-bg); color: var(--warn); }
+.pl-now { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+.pl-note { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.pl-note.warn { color: var(--warn); }
+table.pl-cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pl-cmp th, .pl-cmp td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pl-cmp th { color: var(--muted); font-weight: 600; font-size: 13px; }
+.pl-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 12px; }
+.pl-card { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+  cursor: pointer; background: var(--bg); }
+.pl-card:has(input:checked) { border-color: var(--accent); background: var(--soft); }
+.pl-card input { margin-top: 5px; }
+.pl-card b { display: block; font-size: 16px; }
+.pl-price { font-size: 20px; font-weight: 700; }
+.pl-save { color: var(--ok); font-size: 13px; }
+.pl-agree { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 12px; }
+.pl-agree input { margin-top: 5px; }
+.pl-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button { font: inherit; padding: 8px 16px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.pl-msg { color: var(--muted); font-size: 14px; }
+.pl-msg.err { color: var(--err); }
+.pl-sandbox { display: inline-block; margin: 0 0 10px; padding: 3px 10px; border-radius: 999px; background: var(--warn-bg);
+  color: var(--warn); font-size: 13px; }
+@media (max-width: 599px) {
+  .pl-main { padding: 14px 12px 40px; }
+  .pl-main h1 { font-size: 22px; }
+  .pl-sec { padding: 14px 14px 16px; border-radius: 12px; }
+  .pl-cards { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="plans"></script>
+<main class="pl-main">
+  <h1 data-i18n="plans.h1">方案與訂閱</h1>
+  <p class="pl-lead" data-i18n="plans.lead">免費方案可以一直用；訂閱後解鎖更長的圖表、無限次計算機、回測和即時同步。安全提示永遠免費。</p>
+  <p class="pl-flash" id="pl-flash" role="status" hidden></p>
+
+  <section class="pl-sec" id="pl-now-sec">
+    <h2 data-i18n="plans.now.h">你目前的方案</h2>
+    <p class="pl-now" id="pl-now"></p>
+    <p class="pl-note" id="pl-now-note" hidden></p>
+  </section>
+
+  <section class="pl-sec">
+    <h2 data-i18n="plans.compare.h">兩個方案的差別</h2>
+    <table class="pl-cmp">
+      <thead><tr><th data-i18n="plans.compare.feature">功能</th><th data-i18n="plans.compare.free">免費</th><th data-i18n="plans.compare.paid">訂閱</th></tr></thead>
+      <tbody>
+        <tr><td data-i18n="plans.row.view">看課表、改課表、手動記錄、活動列表、近 90 天圖表</td><td data-i18n="plans.row.view.free">✅（圖表每天 5 個）</td><td>✅</td></tr>
+        <tr><td data-i18n="plans.row.safety">安全提示、關門判斷、傷病紅燈、熱與寒冷提醒</td><td data-i18n="plans.row.safety.free">✅ 永遠免費</td><td>✅</td></tr>
+        <tr><td data-i18n="plans.row.data">手動匯入 FIT、下載我的資料</td><td>✅</td><td>✅</td></tr>
+        <tr><td data-i18n="plans.row.sync">自動同步</td><td data-i18n="plans.row.sync.free">每天夜間一次</td><td data-i18n="plans.row.sync.paid">有新活動就處理</td></tr>
+        <tr><td data-i18n="plans.row.auto">自動調課表</td><td data-i18n="plans.row.auto.free">夜間同步後</td><td data-i18n="plans.row.auto.paid">即時</td></tr>
+        <tr><td data-i18n="plans.row.calc">賽事計算機</td><td data-i18n="plans.row.calc.free">每月 10 次</td><td data-i18n="plans.row.calc.paid">不限次數</td></tr>
+        <tr><td data-i18n="plans.row.charts">365 天與全部歷史的圖表</td><td>—</td><td>✅</td></tr>
+        <tr><td data-i18n="plans.row.backtest">回測</td><td>—</td><td data-i18n="plans.row.backtest.paid">每月 2 次</td></tr>
+        <tr><td data-i18n="plans.row.keep">完整資料保留</td><td data-i18n="plans.row.keep.free">1 年（另存 3 年摘要）</td><td data-i18n="plans.row.keep.paid">3 年</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="pl-sec" id="pl-buy" hidden>
+    <h2 data-i18n="plans.buy.h">訂閱</h2>
+    <p class="pl-sandbox" id="pl-sandbox" data-i18n="plans.buy.sandbox" hidden>測試模式：用的是金流商的測試環境，不會真的扣款。</p>
+    <div class="pl-cards" role="radiogroup">
+      <label class="pl-card"><input type="radio" name="pl-interval" value="month" checked>
+        <span><b data-i18n="plans.buy.month">月繳</b><span class="pl-price" data-i18n="plans.buy.month_price">NT$99／月</span></span></label>
+      <label class="pl-card"><input type="radio" name="pl-interval" value="year">
+        <span><b data-i18n="plans.buy.year">年繳</b><span class="pl-price" data-i18n="plans.buy.year_price">NT$890／年</span>
+          <span class="pl-save" data-i18n="plans.buy.year_save">比月繳一年少付 NT$298</span></span></label>
+    </div>
+    <label class="pl-agree"><input type="checkbox" id="pl-agree"> <span><span data-i18n="plans.buy.agree">我已閱讀並同意服務條款（含訂閱、取消與退款）</span>
+      · <a href="/legal/terms" target="_blank" rel="noopener" data-i18n="plans.buy.terms">服務條款</a></span></label>
+    <div class="pl-row"><button type="button" class="primary" id="pl-go" disabled data-i18n="plans.buy.go">前往付款</button>
+      <span class="pl-msg" id="pl-buy-msg" role="status"></span></div>
+    <p class="pl-note" data-i18n="plans.buy.provider">付款在 Polar 的付款頁完成（Polar 是代收款項的賣方，會寄收據給你）。我們不會拿到你的卡號。每期自動續訂，隨時可以在「管理訂閱」取消，取消後用到這一期結束。</p>
+  </section>
+
+  <section class="pl-sec" id="pl-closed" hidden>
+    <p class="pl-note" data-i18n="plans.closed">訂閱還沒開放。開放後就可以在這裡付款；在那之前所有人都是免費方案。</p>
+  </section>
+
+  <section class="pl-sec" id="pl-manage" hidden>
+    <h2 data-i18n="plans.manage.h">管理訂閱</h2>
+    <p class="pl-note" data-i18n="plans.manage.intro">換信用卡、取消訂閱、看收據，都在 Polar 的訂閱管理頁。</p>
+    <div class="pl-row" style="margin-top:10px"><button type="button" class="primary" id="pl-portal" data-i18n="plans.manage.portal">管理訂閱</button>
+      <button type="button" id="pl-refresh" data-i18n="plans.manage.refresh">重新整理訂閱狀態</button>
+      <span class="pl-msg" id="pl-manage-msg" role="status"></span></div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const T = (k, p) => window.t("plans." + k, p);
+  const day = (iso) => { try { return new Date(iso).toLocaleDateString(document.documentElement.lang || "zh-TW"); } catch (_) { return iso; } };
+  const errOf = async (r) => { try { const j = await r.json(); return (j.detail && (j.detail.message || j.detail)) || r.status; } catch (_) { return r.status; } };
+  const flash = (msg, warn) => { const el = $("pl-flash"); el.textContent = msg; el.hidden = !msg; el.classList.toggle("warn", !!warn); };
+  let state = null;
+
+  const render = (s) => {
+    state = s;
+    const sub = s.subscription;
+    const paid = s.role === "subscriber";
+    $("pl-now").textContent = s.role === "owner" ? T("now.site") : paid ? T("now.sub") : T("now.free");
+    let note = "", warn = false;
+    if (sub && sub.managed && sub.status === "past_due" && sub.grace_until) { note = T("now.past_due", { date: day(sub.grace_until) }); warn = true; }
+    else if (sub && sub.managed && (sub.cancel_at_period_end || sub.status === "canceled")) note = T("now.ends", { date: day(sub.ends_at || sub.current_period_end) });
+    else if (sub && sub.managed && sub.current_period_end) note = T("now.renews", { date: day(sub.current_period_end), interval: T("now." + (sub.interval || "month")) });
+    else if (paid && s.plan_expires_at) note = T("now.expires", { date: day(s.plan_expires_at) });
+    $("pl-now-note").textContent = note; $("pl-now-note").hidden = !note; $("pl-now-note").classList.toggle("warn", warn);
+    const managed = !!(sub && sub.managed);
+    $("pl-buy").hidden = !(s.open && s.role === "user" && !managed);
+    $("pl-closed").hidden = !!s.open || s.role === "owner";
+    $("pl-manage").hidden = !(s.open && sub);
+    $("pl-sandbox").hidden = s.env !== "sandbox";
+  };
+  const load = async () => {
+    const r = await fetch("/api/v1/billing", { cache: "no-store" });
+    if (!r.ok) { flash(T("err", { msg: await errOf(r) }), true); return null; }
+    const s = await r.json(); render(s); return s;
+  };
+  const post = (path) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+
+  $("pl-agree").addEventListener("change", () => { $("pl-go").disabled = !$("pl-agree").checked; $("pl-go").title = $("pl-agree").checked ? "" : T("buy.need_agree"); });
+  $("pl-go").title = T("buy.need_agree");
+  $("pl-go").addEventListener("click", async () => {
+    if (!$("pl-agree").checked) { $("pl-buy-msg").textContent = T("buy.need_agree"); return; }
+    const interval = (document.querySelector('input[name="pl-interval"]:checked') || {}).value || "month";
+    $("pl-go").disabled = true; $("pl-buy-msg").classList.remove("err"); $("pl-buy-msg").textContent = T("buy.going");
+    const r = await fetch("/api/v1/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interval, agree: true }) });
+    if (r.ok) { const j = await r.json(); location.href = j.url; return; }
+    $("pl-buy-msg").classList.add("err"); $("pl-buy-msg").textContent = T("err", { msg: await errOf(r) }); $("pl-go").disabled = false;
+  });
+  $("pl-portal").addEventListener("click", async () => {
+    $("pl-manage-msg").textContent = "";
+    const r = await post("/api/v1/billing/portal");
+    if (r.ok) { location.href = (await r.json()).url; return; }
+    $("pl-manage-msg").classList.add("err"); $("pl-manage-msg").textContent = T("err", { msg: await errOf(r) });
+  });
+  $("pl-refresh").addEventListener("click", async () => {
+    $("pl-manage-msg").classList.remove("err"); $("pl-manage-msg").textContent = "";
+    const r = await post("/api/v1/billing/sync");
+    if (r.ok) { render(await r.json()); $("pl-manage-msg").textContent = T("manage.refreshed"); return; }
+    $("pl-manage-msg").classList.add("err"); $("pl-manage-msg").textContent = T("err", { msg: await errOf(r) });
+  });
+
+  // back from Polar: ?billing=ok (ask Polar until the plan shows, 6 × 5 s) | cancel | portal
+  const q = new URLSearchParams(location.search);
+  const back = q.get("billing");
+  if (back) history.replaceState(null, "", location.pathname);
+  (async () => {
+    await load();
+    if (back === "cancel") flash(T("flash.cancel"), true);
+    else if (back === "portal") flash(T("flash.portal"));
+    else if (back === "ok") {
+      flash(T("flash.ok_wait"));
+      for (let i = 0; i < 6; i++) {
+        const r = await post("/api/v1/billing/sync");
+        if (r.ok) { const s = await r.json(); render(s); if (s.role === "subscriber") { flash(T("flash.ok")); return; } }
+        await new Promise((res) => setTimeout(res, 5000));
+      }
+      flash(T("flash.ok_late"), true);
+    }
+  })();
+})();
+</script>
+</body>
+</html>

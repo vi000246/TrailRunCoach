@@ -557,7 +557,8 @@ async def sync_workouts(db: AsyncSession, athlete_id: int = 1, since: Optional[s
     elif last:
         since_day = last.date() - timedelta(days=CURSOR_OVERLAP_DAYS)
     else:
-        since_day = FIRST_SYNC_DAY
+        from backend import site_config as SC
+        since_day = SC.first_sync_day(FIRST_SYNC_DAY)          # the admin's history limit (SP-351)
     sync_started = datetime.now(timezone.utc)
     yield {"status": "started", "since": since_day.isoformat(), "until": sync_started.date().isoformat()}
 

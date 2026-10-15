@@ -18,6 +18,11 @@ anyone yet — SP-56 / SP-329 are the second wave):
   user         everyone else signed in (the free tier)
   demo         the demo instance (its own caps in tenancy.DEMO_CAPS still apply)
 
+An admin (SP-351 R2): the owner, and anyone the admin page made one (accounts.db users.admin).
+Being an admin adds ADMIN_SCOPES (the admin page) to their role's scopes and nothing else — not
+the owner's own scopes (計算模式 `admin`, the WKO5 client, TrainingPeaks' website login), not a
+plan: their plan and quotas stay their own.
+
 Expiry / cancellation = downgrade: the role falls back to `user`, the scopes with it; no data is
 deleted (full-resolution data past the free tier's retention follows SP-317's monthly archive,
 with a reminder before the first one).
@@ -27,9 +32,14 @@ Data sources are scopes too, and each can be switched off for the whole server
 scheduler then skips it and the settings page says 暫停中. TrainingPeaks' website login and the
 WKO5 client are the owner's only (owner 2026-10-12: TP's terms §11(e), §23).
 
-Cross-project (inReachLiveTrack, SP-329): it calls this API with a service token
-(accounts.db api_tokens) that carries `link:*` scopes; `check_service_token` refuses one
-without the scope asked for.
+A test account (SP-611, accounts/testaccounts.py) has its role's scopes but no data source and no
+automatic sync (TEST_DENIED): it never connects a real platform. Its plan can still be set on the
+admin page, to try either tier.
+
+Cross-project (疊石 Cairn / inReachLiveTrack, SP-329, accounts/links.py): it calls /api/v1/link/*
+with a service token (accounts.db api_tokens) that carries `link:*` scopes, issued only to a user
+who linked the two accounts in 設定; `check_service_token` refuses one without the scope asked
+for. No role grants a link scope: only a token does.
 """
 from __future__ import annotations
 
@@ -75,25 +85,32 @@ SCOPES: dict[str, str] = {
     "wko5": "對照資料夾",
     "tp:wko5_client": "TrainingPeaks 的桌面軟體 client",
     "admin": "全站設定與使用者管理（SP-351）",
+    "admin:config": "管理頁：全站設定、資料來源開關",
+    "admin:users": "管理頁：使用者、候補名單",
     # second wave: defined, granted to nobody yet
     "coach:read_students": "教練看學員資料（SP-56）",
     "group:calc_participants": "開團者幫報名者算能力值（SP-329）",
-    # cross-project (inReachLiveTrack → TrailRunCoach, SP-329)
-    "link:gpx_sync": "inReachLiveTrack 同步 GPX",
-    "link:calc": "inReachLiveTrack 呼叫計算機",
-    "link:participant_ability": "inReachLiveTrack 讀報名者能力值",
+    # cross-project (疊石 Cairn / inReachLiveTrack → TrailRunCoach, SP-329; accounts/links.py)
+    "link:account": "疊石 Cairn 讀帳號與方案狀態",
+    "link:gpx_sync": "疊石 Cairn 同步 GPX",
+    "link:calc": "疊石 Cairn 讀存過的計算與配速曲線",
+    "link:weather": "疊石 Cairn 讀路線天氣（SP-556）",
+    "link:participant_ability": "疊石 Cairn 讀報名者能力值（要報名者本人另外同意）",
 }
 SOURCE_SCOPES = ("sync:coros_credential", "sync:garmin_trial", "sync:intervals", "sync:coros_mcp", "sync:tp_web")
 SYNC_SOURCE_SCOPE = {"coros": "sync:coros_credential", "garmin": "sync:garmin_trial", "intervals": "sync:intervals",
                      "tp": "sync:tp_web"}      # runner's sources
-LINK_SCOPES = ("link:gpx_sync", "link:calc", "link:participant_ability")
+# never a test account's (SP-611): no real platform, nothing synced
+TEST_DENIED = frozenset(SOURCE_SCOPES) | {"sync:auto_nightly", "sync:auto_realtime"}
+LINK_SCOPES = ("link:account", "link:gpx_sync", "link:calc", "link:weather", "link:participant_ability")
 
 _FREE = frozenset({"plan:view", "plan:edit", "safety", "import:fit", "export:data", "ai:chat", "charts:90d",
                    "calc:use", "plan:auto", "sync:auto_nightly",
                    "sync:coros_credential", "sync:garmin_trial", "sync:intervals", "sync:coros_mcp"})
 _PAID = _FREE | {"charts:365d", "charts:full", "history:full", "calc:unlimited", "calc:backtest",
                  "plan:auto_realtime", "sync:auto_realtime", "offline:full"}
-_OWNER_ONLY = frozenset({"wko5", "tp:wko5_client", "sync:tp_web", "admin"})
+_OWNER_ONLY = frozenset({"wko5", "tp:wko5_client", "sync:tp_web", "admin", "admin:config", "admin:users"})
+ADMIN_SCOPES = ("admin:config", "admin:users")
 
 ROLE_SCOPES: dict[str, frozenset] = {
     USER: _FREE,
@@ -152,6 +169,8 @@ class Member:
     plan: str
     user_id: Optional[int]
     expires_at: Optional[str] = None
+    admin: bool = False                # SP-351 R2: the admin page's scopes on top of the role's
+    test: bool = False                 # a test account (SP-611)
 
 
 def _now() -> dt.datetime:
@@ -181,7 +200,7 @@ def member(tenant=None, now: Optional[dt.datetime] = None) -> Member:
     from backend import tenancy
     t = tenant or tenancy.current()
     if t.kind == tenancy.OWNER:
-        return Member(OWNER, PAID, 1)
+        return Member(OWNER, PAID, 1, admin=True)
     if t.is_demo:
         return Member(DEMO, FREE, None)
     uid = user_id_of(t)
@@ -195,7 +214,8 @@ def member(tenant=None, now: Optional[dt.datetime] = None) -> Member:
     if u is None:
         return Member(USER, FREE, uid)
     role = role_of_user(u, now)
-    return Member(role, PAID if role in (SUBSCRIBER, OWNER) else FREE, uid, u.plan_expires_at)
+    return Member(role, PAID if role in (SUBSCRIBER, OWNER) else FREE, uid, u.plan_expires_at,
+                  admin=bool(getattr(u, "is_admin", False)), test=bool(getattr(u, "is_test", False)))
 
 
 def user_id_of(t) -> Optional[int]:
@@ -222,24 +242,36 @@ def sources_off() -> set:
 
 def scopes(tenant=None, now: Optional[dt.datetime] = None) -> frozenset:
     m = member(tenant, now)
-    return ROLE_SCOPES.get(m.role, frozenset()) - sources_off()
+    out = ROLE_SCOPES.get(m.role, frozenset()) - sources_off()
+    if m.test:
+        out = out - TEST_DENIED                  # SP-611: no data source, no automatic sync
+    return out | frozenset(ADMIN_SCOPES) if m.admin else out      # SP-351 R2
+
+
+def role_allows(scope: str) -> bool:
+    """The current person's role holds `scope`, whether or not the server switched it off (a
+    connection made while paused; SP-385) — never a test account's data source (SP-611)."""
+    m = member()
+    if m.test and scope in TEST_DENIED:
+        return False
+    return scope in ROLE_SCOPES.get(m.role, frozenset())
 
 
 def has(scope: str, tenant=None) -> bool:
     return scope in scopes(tenant)
 
 
-def set_source(scope: str, on: bool) -> list:
-    """Switch a data source off / on for the whole server (the owner; SP-351's page later)."""
+def set_source(scope: str, on: bool, by: str = "owner") -> list:
+    """Switch a data source off / on for the whole server (an admin: SP-351's page, api/admin.py)."""
     from backend import site_settings as SS
     if scope not in SOURCE_SCOPES:
         raise ValueError(f"not a data source scope: {scope}")
     if scope == "sync:coros_credential":
         from backend.sync import coros_limits as CL
-        CL.set_enabled(on, by="owner")
+        CL.set_enabled(on, by=by)
     if scope == "sync:garmin_trial":
         from backend.sync import garmin_limits as GL
-        GL.set_enabled(on, by="owner")
+        GL.set_enabled(on, by=by)
     off = set(SS.get("sources.off") or [])
     (off.discard if on else off.add)(scope)
     SS.update({"sources.off": sorted(off) or None})
@@ -289,10 +321,20 @@ def _period_key(period: str, now: dt.datetime) -> str:
 
 
 def quota_for(key: str, m: Optional[Member] = None) -> Optional[Quota]:
+    """The plan's quota, its limit as the admin set it (site_config quota.<plan>.<key>, SP-351)."""
     m = m or member()
     if m.role in (OWNER, DEMO):
         return None
-    return QUOTAS.get(m.plan, {}).get(key)
+    q = QUOTAS.get(m.plan, {}).get(key)
+    if q is None:
+        return None
+    from backend import site_config as SC
+    ck = f"quota.{m.plan}.{key}"
+    if ck in SC.ITEMS:
+        limit = SC.get(ck)
+        if limit != q.limit:
+            q = Quota(q.key, int(limit), q.period, q.label)
+    return q
 
 
 def usage(key: str, now: Optional[dt.datetime] = None, m: Optional[Member] = None) -> dict:
@@ -361,5 +403,7 @@ def session_view(tenant=None) -> dict:
            "upgrade_scopes": sorted(ROLE_SCOPES[SUBSCRIBER] - ROLE_SCOPES[USER])}
     if m.expires_at:
         out["plan_expires_at"] = m.expires_at
+    if m.test:
+        out["test"] = True            # SP-611: the shell says so on every page
     out["quotas"] = {k: usage(k, m=m) for k in QUOTAS.get(m.plan, {})} if m.role in (USER, SUBSCRIBER) else {}
     return out

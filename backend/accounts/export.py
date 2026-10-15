@@ -82,8 +82,8 @@ def read_tables(db: Path) -> dict[str, list[dict]]:
 
 
 def account_record(user) -> dict:
-    """The user's own accounts.db rows: the profile and the consent history (no session, no
-    Google account id)."""
+    """The user's own accounts.db rows: the profile, the consent history and the subscription as
+    last applied (SP-328; no session, no Google account id, no Polar id)."""
     from backend.accounts import store
     consents = []
     for c in store.consents(user.id):
@@ -91,11 +91,23 @@ def account_record(user) -> dict:
             docs = json.loads(c.get("documents") or "{}")
         except ValueError:
             docs = {}
-        consents.append({"action": c.get("action") or "terms", "terms_version": c["terms_version"],
-                         "documents": docs, "analysis": int(c["analysis"]), "at": c["accepted_at"]})
+        row = {"action": c.get("action") or "terms", "terms_version": c["terms_version"],
+               "documents": docs, "analysis": int(c["analysis"]), "at": c["accepted_at"]}
+        if c.get("client"):                     # a link to another project (SP-329)
+            row["client"] = c["client"]
+        consents.append(row)
     return {"email": user.email, "display_name": user.display_name, "role": user.role,
             "created_at": user.created_at, "last_login_at": user.last_login_at, "plan": user.plan,
-            "plan_expires_at": user.plan_expires_at, "consents": consents}
+            "plan_expires_at": user.plan_expires_at, "consents": consents, "subscription": _subscription(user.id)}
+
+
+def _subscription(uid: int):
+    from backend.accounts import store
+    row = store.billing_row(uid)
+    if not row:
+        return None
+    return {k: row.get(k) for k in ("interval", "status", "current_period_end", "cancel_at_period_end", "ends_at",
+                                    "past_due_since", "updated_at")}
 
 
 def _readme() -> bytes:

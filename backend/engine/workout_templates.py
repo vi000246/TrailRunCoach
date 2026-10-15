@@ -518,6 +518,10 @@ def _level(t: Optional[dict], th: Optional[dict] = None) -> Optional[str]:
     t = t or {}
     ty, mode = t.get("type"), t.get("mode", "pct")
     th = th or {}
+    if ty == "auto" and t.get("intent") == "band" and t.get("opt") is not None:
+        # 個人化間歇 (SP-590): its level, not its % CP (the model's band can sit far from Palladino's)
+        o = int(t["opt"])
+        return "thr" if o == 0 else "above" if o == 1 else "vo2" if o == 2 else "speed"
     if ty == "auto":
         it = t.get("intent")
         if it == "easy":
@@ -594,6 +598,8 @@ def classify(work_s: float, rest_s: Optional[float], level: Optional[str]) -> Op
         return None
     if level == "speed":
         return "speed", None
+    if level == "vo2":                  # a 個人化間歇 level 2 (SP-590): VO2max whatever its rep length
+        return "vo2max", "short" if work_s < SPEED_MAX_S else None
     if level == "thr":
         return "aerobic", "tempo" if work_s >= TEMPO_MIN_S else "cruise"
     if work_s <= SPEED_MAX_S and long_rest:

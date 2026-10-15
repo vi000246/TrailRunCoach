@@ -457,10 +457,10 @@ Karvonen et al. 1957（儲備心率法）；Tanaka et al. 2001（*Journal of the
 | 最大心率（% 最大心率） | 50／60／70／80／90 % |
 
 ### 圖表的區間
-圖表上的心率區間在各張圖自己選，預設 Friel 7 區（% LTHR）；功率區間預設 Palladino 的 % CP 分區，也可以選 Stryd 5 區（Easy 65–80、Moderate 80–90、Threshold 90–100、Interval 100–115、Repetition 115–130 % CP）。不影響課表：課表的功率目標用 Palladino 的分區。
+圖表上的心率區間在各張圖自己選，預設 Friel 7 區（% LTHR）；功率區間預設跟著設定的「課表功率區間」（Palladino 的 % CP 分區、Stryd 5 區（Easy 65–80、Moderate 80–90、Threshold 90–100、Interval 100–115、Repetition 115–130 % CP）、經典 7 級（% 閾值功率）或依你的功率–時間模型算的個人化區間），也可以在圖上換別套。課表的功率目標用課表功率區間：每種課對到那一套最接近的一級。
 
 ### 來源
-Friel（% LTHR）；COROS 心率區間說明；Karvonen 1957（% HRR）；Stryd 說明中心「Power Zones」（Stryd 5 區）。同樣的 % 最大心率，每個人的乳酸閾值可以落在 60–90 %（Iannetta et al. 2020），所以最大心率區間最不準。
+Friel（% LTHR）；COROS 心率區間說明；Karvonen 1957（% HRR）；Stryd 說明中心「Power Zones」（Stryd 5 區）；Allen & Coggan《Training and Racing with a Power Meter》（經典 7 級）。同樣的 % 最大心率，每個人的乳酸閾值可以落在 60–90 %（Iannetta et al. 2020），所以最大心率區間最不準。
 :::
 
 ## 區間時間（Time in zones） {#time-in-zones}

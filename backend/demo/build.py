@@ -103,6 +103,29 @@ def build(root: Path, seed: int = DEFAULT_SEED, anchor: dt.date | None = None, w
     return final
 
 
+def stage_into(dest: Path, *, seed: int, anchor: dt.date, weeks: int, level: str = "intermediate",
+               small: bool = False, warm: bool = False, env: dict | None = None, timeout_s: float | None = None) -> None:
+    """Build one made-up athlete straight into `dest` (an empty folder; a test account's data,
+    SP-611): the same child process as build(), `level` one of athlete.LEVELS; then the DB's file
+    paths pointed at `dest`. `env`: the child's whole environment (default child_env(dest)).
+    RuntimeError when the child fails (dest is left for the caller to remove)."""
+    from backend.demo import athlete as A
+    if level not in A.LEVELS:
+        raise ValueError(f"unknown level {level!r}")
+    dest = Path(dest).resolve()
+    _refuse_owner(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    cmd = [sys.executable, "-m", "backend.demo.build", "--stage", str(dest), "--seed", str(seed),
+           "--anchor", anchor.isoformat(), "--weeks", str(weeks), "--level", level] + \
+          (["--small"] if small else []) + ([] if warm else ["--no-warm"])
+    r = subprocess.run(cmd, env=env if env is not None else child_env(dest),
+                       cwd=str(Path(__file__).resolve().parents[2]), timeout=timeout_s,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if r.returncode != 0:
+        tail = (r.stderr or b"").decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
+        raise RuntimeError(f"made-up data build failed (exit {r.returncode}): {tail[0][:300]}")
+
+
 def relocate_paths(base: Path) -> int:
     """The DB's workout_files.file_path rows are absolute; the build imports in the
     staging folder and then renames it (and a demo root may be copied elsewhere), so
@@ -156,9 +179,13 @@ SETTINGS = {
 }
 
 
-def _stage(base: Path, seed: int, anchor: dt.date, weeks: int, small: bool, warm: bool) -> None:
+def _stage(base: Path, seed: int, anchor: dt.date, weeks: int, small: bool, warm: bool,
+           level: str = "intermediate") -> None:
     import asyncio
+    from backend.demo import athlete as A
     from backend.demo.generate import generate
+    if level != A.DEFAULT_LEVEL:
+        A.apply_level(level)
     t0 = time.time()
     manifest = generate(base, seed=seed, anchor=anchor, weeks=weeks, small=small)
     print(f"  generated {manifest['n_activities']} activities in {time.time() - t0:.0f} s", flush=True)
@@ -542,11 +569,12 @@ def main(argv=None) -> int:
     ap.add_argument("--anchor", help="the last day of the data (default: today)")
     ap.add_argument("--weeks", type=int, default=52)
     ap.add_argument("--small", action="store_true", help="a few weeks of short activities (tests)")
+    ap.add_argument("--level", default="intermediate", help=argparse.SUPPRESS)      # SP-611: athlete.LEVELS
     ap.add_argument("--no-warm", action="store_true")
     a = ap.parse_args(argv)
     anchor = dt.date.fromisoformat(a.anchor) if a.anchor else dt.date.today()
     if a.stage:
-        _stage(Path(a.stage), a.seed, anchor, a.weeks, a.small, not a.no_warm)
+        _stage(Path(a.stage), a.seed, anchor, a.weeks, a.small, not a.no_warm, level=a.level)
         return 0
     if a.stage_linked:
         from backend.demo import linked

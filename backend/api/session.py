@@ -15,6 +15,8 @@ signed out it says only {"mode": "signed_out", "caps": [], "user": null, "member
 "login": {"required": true, "signed_in": false}}; signed in, mode "owner" | "user" and
 "user": {"id", "name", "email", "role"}.
 
+GET /join — 「用自己的資料算」 (SP-124): on to sign-up, the waitlist or the public demo (public).
+
 POST /api/v1/demo/reset — the demo's 「重設示範」: delete the visitor's sandbox;
 the next write starts a fresh one from the demo base.
 """
@@ -62,6 +64,8 @@ def session_info(had_cookie: bool = False) -> dict:
     if login is not None:
         body["mode"] = "owner" if u.is_owner else "user"
         body["user"] = {"id": u.id, "name": u.display_name, "email": u.email, "role": u.role}
+        if u.is_test:
+            body["user"]["test"] = True        # SP-611: a test account (the shell's strip says so)
         body["login"] = login
     # SP-330: role, plan, scopes (what the pages may show), paused data sources, the quotas left
     try:
@@ -69,6 +73,15 @@ def session_info(had_cookie: bool = False) -> dict:
         body["membership"] = MS.session_view(t)
     except Exception:                      # noqa: BLE001 — the page still loads; the API still checks
         body["membership"] = None
+    # 站內公告 (SP-351): the admin's notice in the page's language (the other one when only it is set)
+    try:
+        from backend import i18n, site_config as SC
+        zh, en = SC.get("notice.zh"), SC.get("notice.en")
+        text = (en or zh) if i18n.current_locale() == "en" else (zh or en)
+        if text:
+            body["notice"] = text
+    except Exception:                      # noqa: BLE001 — no notice rather than no page
+        pass
     if tenancy.demo_mode():
         from backend.demo import sandbox as SB
         demo: dict = {"sandbox": t.kind == tenancy.DEMO_SANDBOX, "base": None, "expires_at": None,
@@ -80,9 +93,39 @@ def session_info(had_cookie: bool = False) -> dict:
         if t.kind == tenancy.DEMO_SANDBOX:
             meta = SB.read_meta(t.root) or {}
             demo["expires_at"] = _iso(SB.expires_at(meta))
-        demo["cta_url"] = os.environ.get("WKO5COACH_DEMO_CTA_URL") or None
+        # 「用自己的資料算」 (SP-124): the main site's /join (https only), which sends the visitor on to
+        # sign-up, the waitlist or nothing — the same entry as the share page's
+        demo["cta_url"] = _https_url(os.environ.get("WKO5COACH_DEMO_CTA_URL"))
         body["demo"] = demo
     return body
+
+
+def _https_url(raw: Optional[str]) -> Optional[str]:
+    """An https address with no user info and nothing that could break out of an attribute; else None."""
+    from urllib.parse import urlsplit
+    raw = (raw or "").strip()
+    if not raw or any(ord(ch) < 0x21 or ord(ch) == 0x7F or ch in "\"'<>`\\" for ch in raw):
+        return None
+    try:
+        u = urlsplit(raw)
+    except ValueError:
+        return None
+    return raw if u.scheme == "https" and u.hostname and not (u.username or u.password) else None
+
+
+@router.get("/join", include_in_schema=False)
+def join():
+    """「用自己的資料算」 (SP-124): a public path (login.PUBLIC_PATHS), the same for every visitor —
+    303 to sign-up (/login, then the race calculator), the waitlist (/login?waitlist=1) or, before
+    sign-up opens, the public demo (TRC_DEMO_URL); 404 when there is nowhere to go (and in the demo).
+    Reads nobody's data and computes nothing."""
+    from fastapi.responses import RedirectResponse
+
+    from backend.accounts import login as LG
+    j = LG.join_link()
+    if j is None:
+        raise HTTPException(404, "not found")
+    return RedirectResponse(j["url"], status_code=303, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/v1/session")

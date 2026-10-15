@@ -51,7 +51,8 @@ HIST_KEY = "period_zone_hist_v1"
 # + the watch's COROS models (engine/hr_profile.py, user request 2026-10-03): % LTHR,
 # % HRR (id rqhrr: the RQ table) and % HRmax; HRR / HRmax need max / resting HR
 HR_IDS = ("frielhr", "classichr", "seiler3", "coroslthr", "rqhrr", "coroshrmax")
-POWER_IDS = ("palladino", "palladino3", "stryd")   # Palladino by default, no iLevels (2026-10-02); Stryd SP-363
+# Palladino by default, no iLevels (2026-10-02); Stryd, the classic 7 levels and the 個人化區間 SP-363
+POWER_IDS = ("palladino", "palladino3", "stryd", "classic", "personal")
 MODEL_IDS = {"hr": HR_IDS, "power": POWER_IDS}
 DEFAULT_MODEL = {"hr": "frielhr", "power": "palladino"}
 SUMMARY_MODEL = {"hr": "seiler3", "power": "palladino3"}      # the 3 zones the targets are written in
@@ -204,7 +205,7 @@ def models(kind: str) -> list[dict]:
 
 def model(kind: str, mid: Optional[str]) -> dict:
     ms = {m["id"]: m for m in models(kind)}
-    return ms.get(mid) or ms[DEFAULT_MODEL[kind]]
+    return ms.get(mid) or ms.get(A.default_model(kind)) or ms[DEFAULT_MODEL[kind]]   # SP-363: the 課表功率區間
 
 
 def _pct_text(m: dict) -> list[Optional[str]]:
@@ -219,7 +220,7 @@ def _pct_text(m: dict) -> list[Optional[str]]:
     if "zones" not in m or m["basis"] not in ("lthr", "cp"):
         if m["id"] == "seiler3":
             return ["< AeT", "AeT–LTHR", "≥ LTHR"]
-        return [None] * (len(m["zones"]()) if "zones" in m else 0)
+        return [None] * (len(m["zones"]()) if "zones" in m else 9 if m["basis"] == "personal" else 0)
     b = "LTHR" if m["basis"] == "lthr" else "CP"
     out = []
     zs = m["zones"]()
@@ -405,6 +406,9 @@ def _zone_rows(items: list[dict], m: dict, kind: str) -> tuple[list[dict], float
     elif m["basis"] == "coros":
         from backend.engine import hr_profile as HP
         zs = [(i, n, None, None) for i, n in zip(HP.ZONE_IDS, HP.ZONE_NAMES)]
+    elif m["basis"] == "personal":          # SP-363: the 個人化區間's 9 levels (no model in the period)
+        from backend.engine import power_zone_plan as PZP
+        zs = [(str(i + 1), n, None, None) for i, n in enumerate(PZP.PERSONAL_NAMES)]
     else:                                   # seiler3: the names _bounds gives its rows
         zs = [("1", "低強度（< AeT）", None, None), ("2", "中強度（AeT–LTHR）", None, None),
               ("3", "高強度（≥ LTHR）", None, None)]
@@ -422,7 +426,7 @@ def _zone_rows(items: list[dict], m: dict, kind: str) -> tuple[list[dict], float
         if one and used:
             lo_, hi_ = (0 if i == 0 else lo), hi
             rng = (f"< {hi_:.0f}" if not lo_ else f"≥ {lo_:.0f}" if hi_ is None else f"{lo_:.0f}–{hi_:.0f}") + f" {unit}"
-        rows.append({"id": str(zid), "name": nm, "pct": pct[i] if i < len(pct) else None, "range": rng,
+        rows.append({"id": str(zid), "name": _(nm), "pct": pct[i] if i < len(pct) else None, "range": rng,
                      "seconds": secs[i], "share": secs[i] / tot if tot else None})
     return rows, tot
 
@@ -454,7 +458,7 @@ def compute(ds, b: float, e: float, params: dict, view: str = "total") -> dict:
             "model": {"id": m["id"], "title": _(m["title"]), "source": m["source"], "estimate": bool(m.get("estimate"))},
             "models": {k: [{"id": x["id"], "title": _(x["title"]), "estimate": bool(x.get("estimate"))} for x in models(k)]
                        for k in ("hr", "power")},
-            "default_model": DEFAULT_MODEL,
+            "default_model": {k: A.default_model(k) for k in DEFAULT_MODEL},
             "sports": list(sports), "sport_choices": [{"id": s, "label": lb} for s, lb in SPORTS],
             "summary_model": {"id": sm["id"], "title": sm["title"]}}
     if view == "weekly":

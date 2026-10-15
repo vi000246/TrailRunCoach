@@ -20,13 +20,15 @@ from typing import Optional
 NAMES = (
     "WKO5COACH_SECRET_KEY",
     "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
-    "PAYMENT_MERCHANT_ID", "PAYMENT_HASH_KEY", "PAYMENT_HASH_IV",
+    # Polar (SP-328, backend/billing): the organization access token and the webhook secret
+    "TRC_POLAR_TOKEN", "TRC_POLAR_WEBHOOK_SECRET",
     "TP_CLIENT_ID", "TP_CLIENT_SECRET",
     "CWA_API_KEY",
     # intervals.icu's OAuth app and its webhook secret (SP-346, sync/intervals_client.py)
     "TRC_INTERVALS_CLIENT_ID", "TRC_INTERVALS_CLIENT_SECRET", "TRC_INTERVALS_WEBHOOK_SECRET",
     "TRC_DEBUG_PIN",                  # no longer read (SP-373); an old .env may still set it
     "TRC_UPSTREAM_TOKEN", "TRC_PROXY_PASSWORD",   # a local copy pulling from production (SP-373)
+    "TRC_CAIRN_LINK_SECRET",          # 疊石 Cairn, server to server both ways (SP-329, accounts/links.py)
 )
 MIN_REDACT_LEN = 6        # shorter values would blank ordinary words
 

@@ -11,8 +11,10 @@ WKO5COACH_ACCOUNTS=1 and the whole set of sign-in settings; with none of them it
 above), per request:
   1. a path with dot segments, an empty segment, a backslash or an encoded slash / backslash /
      dot: 400 (no prefix check is trusted with it)
-  2. /share/* (public shares and the 課表 feed): the owner's, as before; a real CORS preflight
-     (Origin + Access-Control-Request-Method) passes with no tenant
+  2. /share/* (public shares and the 課表 feed): /share/<id>[/data] the tenant of the user
+     accounts.db's shares row names (SP-124; a disabled account's: none), anything else under
+     /share/ the owner's; a real CORS preflight (Origin + Access-Control-Request-Method) passes
+     with no tenant
   3. the session cookie (__Host-trc_session over https) -> its user (accounts.db, sha256 of the
      token only; the expiry slides, the cookie is renewed with it); a dead cookie is cleared
   4. no user and not a public path (login.PUBLIC_PATHS: /login, /signup, /oauth/*/callback,
@@ -23,12 +25,20 @@ above), per request:
   5. a write (not GET / HEAD) must carry the CSRF header (the demo's double submit), public or not
      — except POST /api/v1/intervals/webhook (SP-346): intervals.icu's webhook, checked by the
      payload's secret in api/intervals.py, with no tenant (the endpoint opens the athlete's)
+     — and POST /api/v1/billing/webhook (SP-328): Polar's webhook, checked by its Standard Webhooks
+     signature in billing/service.py, with no tenant (it writes accounts.db only)
      — except POST /api/v1/weight/measurements with a weight token (SP-472, weight_auth.py): the
      token's user from accounts.db, its tenant, no session and no CSRF (no cookie is read: nothing
      for another site to forge); that one path only
      — and a GET / HEAD under /api/v1/debug/ with a debug token (SP-406, debug_auth.py): the
      token's user from accounts.db, the owner only (scope debug:*), the owner's tenant, no session;
      the debug API checks the token against the tenant's own row again. Nothing else opens with it
+     — and everything under /api/v1/link/ (SP-329, accounts/links.py: 疊石 Cairn, server to server),
+     which never reads the session cookie: POST /api/v1/link/<project>/token with no tenant (the
+     endpoint checks the project's shared secret); a GET / HEAD of a route in links.ROUTES with
+     `Authorization: Bearer <service token>` whose scopes hold the route's, of a user still linked
+     with that project, bound to that user's tenant (the token's, never one the caller names);
+     anything else there 401 TOKEN_INVALID (429 once the IP failed too often)
   6. a user who hasn't accepted the current terms: pages go to /signup, the rest gets
      403 {"code": "TERMS_REQUIRED"} (the owner accepts none)
   7. tenant: the user's (the owner's own for user 1; a new user's folder and DB on first use),
@@ -67,6 +77,9 @@ MAX_BODY = 6 * 1024 * 1024
 WEIGHT_INGEST = "/api/v1/weight/measurements"   # SP-472: the one path a weight token opens (sign-in mode)
 DEBUG_PREFIX = "/api/v1/debug/"                 # SP-406: the paths a debug token opens (sign-in mode, GET / HEAD)
 INTERVALS_WEBHOOK = "/api/v1/intervals/webhook"  # SP-346: intervals.icu's webhook (its own secret, no session)
+BILLING_WEBHOOK = "/api/v1/billing/webhook"      # SP-328: Polar's webhook (its own signature, no session)
+LINK_PREFIX = "/api/v1/link/"                   # SP-329: another project's calls (accounts/links.py)
+_LINK_TOKEN = re.compile(r"/api/v1/link/[a-z]+/token$")
 CSRF_COOKIE = "trc_csrf"
 CSRF_HEADER = b"x-trc-csrf"
 
@@ -288,6 +301,27 @@ def _volume_error(method: str, path: str, body: bytes, t: Optional[tenancy.Tenan
     return None
 
 
+_SHARE_PATH = re.compile(r"/share/([A-Za-z0-9_-]{16,64})(?:/data)?")
+
+
+def _share_tenant(path: str) -> tenancy.Tenant:
+    """The tenant a public /share/… request reads (sign-in mode, SP-124): /share/<id> and
+    /share/<id>/data by accounts.db's shares row; everything else under /share/ the owner's."""
+    m = _SHARE_PATH.fullmatch(path)
+    if m is None:
+        return tenancy.owner()
+    from backend.engine.racepower import share as SH
+    if m.group(1) == SH.EXAMPLE_ID:        # the 介紹頁's built-in example (SP-622): a repo file, no one's tenant
+        return tenancy.anonymous()
+    from backend.accounts import store, tenants as TN
+    u = store.share_owner(m.group(1))
+    if u is None or u.is_owner:
+        return tenancy.owner()
+    if u.disabled:
+        return tenancy.anonymous()
+    return TN.tenant_of(u)
+
+
 class TenancyMiddleware:
     def __init__(self, app):
         self.app = app
@@ -327,9 +361,19 @@ class TenancyMiddleware:
             await _json_response(send, 400, _demo_error("BAD_PATH", "bad path"))
             return
         if path == "/share" or path.startswith("/share/"):
-            # public shares and the 課表 feed: the owner's, as before SP-58 (accounts.db's shares
-            # table is not filled by the share pages yet, so it can't name another tenant)
-            with tenancy.use(tenancy.owner()):
+            # public shares and the 課表 feed (SP-124): a share whose row in accounts.db names a user
+            # opens that user's tenant (only its racepower_shares/<id>.json is read there); no row —
+            # the owner's shares from before, and the 課表 feed — the owner's; a disabled account's
+            # share no tenant at all (its snapshot reads as gone)
+            try:
+                share_tenant = await run_in_threadpool(_share_tenant, path)
+            except Exception as e:                 # noqa: BLE001 — accounts.db unreadable: no one's share opens
+                import logging
+                logging.getLogger(__name__).warning("share lookup failed: %s", type(e).__name__)
+                await _json_response(send, 503, _demo_error("UNAVAILABLE", _("暫時無法確認登入狀態，請稍後再試")),
+                                     [(b"retry-after", b"10")])
+                return
+            with tenancy.use(share_tenant):
                 await self.app(scope, receive, send)
             return
         if method == "OPTIONS" and _is_preflight(scope):        # a CORS preflight carries no cookie
@@ -342,9 +386,10 @@ class TenancyMiddleware:
             if wtok is not None:                   # SP-472: the weight API's own token, no session
                 await self._weight_token(scope, receive, send, wtok)
                 return
-        if method == "POST" and path == INTERVALS_WEBHOOK:
+        if method == "POST" and path in (INTERVALS_WEBHOOK, BILLING_WEBHOOK):
             # SP-346: intervals.icu posts with the payload's secret, never a cookie or the CSRF header;
-            # no tenant here — the endpoint checks the secret and opens the tenant the athlete maps to
+            # no tenant here — the endpoint checks the secret and opens the tenant the athlete maps to.
+            # SP-328: Polar likewise, with its signature (the endpoint writes accounts.db only)
             with tenancy.use(tenancy.anonymous()):
                 await self.app(scope, receive, send)
             return
@@ -354,6 +399,10 @@ class TenancyMiddleware:
             if dtok is not None:                   # SP-406: the debug API's own token, no session
                 await self._debug_token(scope, receive, send, dtok)
                 return
+        if path.startswith(LINK_PREFIX):
+            # SP-329: another project of ours (疊石 Cairn), server to server; never a session or a cookie
+            await self._link(scope, receive, send, method, path)
+            return
         session_cookie = LG.cookie_name(LG.SESSION_COOKIE)
         token = cookie(scope, session_cookie)
         try:
@@ -453,6 +502,73 @@ class TenancyMiddleware:
         scope.setdefault("state", {})["tenant"] = tenant
         try:
             await self.app(scope, receive, send)
+        finally:
+            LG.reset_user(utok)
+            tenancy.reset(ttok)
+
+    async def _link(self, scope, receive, send, method: str, path: str):
+        """Sign-in mode, /api/v1/link/* (SP-329, accounts/links.py): the module docstring's step 5."""
+        from backend.accounts import links as LK, login as LG, store, tenants as TN
+        if method == "POST" and _LINK_TOKEN.match(path):
+            with tenancy.use(tenancy.anonymous()):             # the endpoint checks the shared secret
+                await self.app(scope, receive, send)
+            return
+        ip = RL.client_ip(scope)
+
+        async def refuse(status: int, code: str, **extra_body):
+            st = LK.failed(ip) if status == 401 else status
+            if st == 429:
+                await _json_response(send, 429, {"detail": {"code": "BLOCKED"}},
+                                     [(b"retry-after", str(LK.FAIL_BLOCK_S).encode())])
+            else:
+                await _json_response(send, st, {"detail": {"code": code, **extra_body}},
+                                     [(b"www-authenticate", b"Bearer")] if st == 401 else None)
+
+        need = LK.ROUTES.get(path)
+        tok = LK.service_bearer(_headers(scope))
+        if need is None or method not in ("GET", "HEAD") or tok is None:
+            await refuse(401, "TOKEN_INVALID")
+            return
+        try:
+            got = await run_in_threadpool(store.service_token_full, tok)
+        except Exception as e:                     # noqa: BLE001 — accounts.db unreadable
+            import logging
+            logging.getLogger(__name__).warning("link token lookup failed: %s", type(e).__name__)
+            await _json_response(send, 503, {"detail": {"code": "UNAVAILABLE"}}, [(b"retry-after", b"10")])
+            return
+        if got is None:
+            await refuse(401, "TOKEN_INVALID")
+            return
+        user, granted, client_id = got
+        c = LK.client(client_id or "")
+        if c is None:                               # a weight / debug token: not for these routes
+            await refuse(401, "TOKEN_INVALID")
+            return
+        if need not in granted:
+            await refuse(403, "SCOPE_REQUIRED", scope=need)
+            return
+        if not await run_in_threadpool(LK.is_linked, user, c):
+            await refuse(403, "LINK_REVOKED")
+            return
+        if not await run_in_threadpool(LG.consent_current, user):
+            await refuse(403, "TERMS_REQUIRED")
+            return
+        tenant = TN.tenant_of(user)
+        await TN.ensure_ready(tenant)
+        ttok = tenancy.set_current(tenant)
+        utok = LG.set_user(user)
+        st = scope.setdefault("state", {})
+        st["tenant"], st["link_client"], st["link_scopes"] = tenant, c.id, granted
+
+        async def send_wrapper(message):
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                if not any(k.lower() == b"cache-control" for k, _v in headers):
+                    headers.append((b"cache-control", b"private, no-store"))
+                message = {**message, "headers": headers}
+            await send(message)
+        try:
+            await self.app(scope, receive, send_wrapper)
         finally:
             LG.reset_user(utok)
             tenancy.reset(ttok)

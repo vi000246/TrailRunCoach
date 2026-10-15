@@ -66,6 +66,8 @@
 | 其他任何組合 | **拒絕啟動**（`LoginConfigError`，訊息寫明缺什麼）。例如：設了 Google client 但 `TRC_ACCOUNTS` 沒開；開了但少 secret、少 `TRC_PUBLIC_URL`；`*_FILE` 讀不到；`TRC_PUBLIC_URL` 不是 https（localhost 除外）或帶路徑；https 但 `TRC_TRUSTED_PROXIES` 沒設或還是預設值；擁有者的 Google 帳號認不出來（user 1 還沒綁，也沒設 `TRC_OWNER_*`）；`TRC_ACCOUNTS` 不是 on／off 的值 |
 
 「登入設定」指：`GOOGLE_CLIENT_ID[_FILE]`、`GOOGLE_CLIENT_SECRET[_FILE]`、`TRC_OWNER_GOOGLE_SUB`、`TRC_OWNER_EMAIL`、`TRC_PUBLIC_URL`。
+Google client 的 ID 與密鑰在管理頁設了（§5.7，存在 `site.json`）也算數：env 沒有 Google client、但管理頁有整組時照樣以 **signin** 啟動；
+兩邊都沒有（或只有半組）時跟以前一樣拒絕啟動。管理頁的值只補 Google client 這兩項，**不會**單獨把登入打開——開不開登入仍看 env 有沒有其他登入設定。
 **部署前先檢查 NAS 的 `.env`**：如果已經預先放了其中任何一個，但 `TRC_ACCOUNTS` 還沒開，這個版本會拒絕啟動。
 
 ### 5.2 環境變數
@@ -73,12 +75,14 @@
 | 名字 | 用途 |
 |---|---|
 | `TRC_ACCOUNTS=1` | 多使用者開關（SP-384）；也要 `TRC_SECRET_KEY` |
-| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | Google OAuth client（Web application）。只從 env 或 `*_FILE`（Docker secret）讀，見 `deploy/commercial.md` §2、§5 |
+| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | Google OAuth client（Web application）。從 env 或 `*_FILE`（Docker secret）讀，見 `deploy/commercial.md` §2、§5。管理頁也可以設（§5.7），管理頁的值優先 |
 | `TRC_PUBLIC_URL` | **必填**。固定的對外網址，只有 origin，例如 `https://coach.yichlin.com`；redirect URI 是 `<它>/oauth/google/callback`。一定要 https；本機開發可用 `http://localhost:8000` |
 | `TRC_TRUSTED_PROXIES` | https 時**必填**。只填 cloudflared 容器的位址（`/32`），例如 `172.18.0.5/32`。app 只在直接連線端是它時才採用 `CF-Connecting-IP`，登入限流才算得到真正的使用者 IP；填整段 Docker 網段的話，同網段的任何容器都能假造 IP |
 | `TRC_OWNER_GOOGLE_SUB` | 擁有者 Google 帳號的 `sub`（Google 帳號的固定 ID）。**建議用這個**；設了就只認這個 sub，email 不算 |
 | `TRC_OWNER_EMAIL` | 沒有 sub 時用：Google 說已驗證、而且等於這個 email 的帳號是擁有者。只設這個時啟動會記一行 warning 建議改用 sub |
-| `TRC_MAX_USERS` | 註冊上限，預設 100（擁有者與停用的帳號也算）。到上限後新的 Google 帳號只記進候補名單（`waitlist`），不建帳號與租戶 |
+| `TRC_MAX_USERS` | 註冊上限，預設 100（擁有者與停用的帳號也算）。到上限後新的 Google 帳號只記進候補名單（`waitlist`），不建帳號與租戶。管理頁（`/admin`，SP-351）設了值就以管理頁為準，清掉才回到這個變數；管理頁的候補名單可以手動放行一位（立刻建帳號與租戶，對方用同一個 Google 信箱登入、同意條款） |
+| `TRC_DEMO_URL` | 選填（SP-124）。線上示範的網址（只收 https）。分享頁的「用自己的資料算」在**還沒開放註冊**時（擁有者模式，或登入模式但擁有者還沒登入過）導到這裡；沒設就不顯示按鈕。開放註冊後按鈕導到 `/login`（登入完回賽事計算機），額滿時導到 `/login?waitlist=1`（用 Google 登入就記進候補名單） |
+| `TRC_DEMO_CTA_URL` | 示範 instance 用（`deploy/hf`）。示範橫幅「用自己的資料算」的網址，只收 https；填正式站的 `/join`（例如 `https://<正式站>/join`），它會依開放／額滿導到註冊或候補 |
 | `TRC_COOKIE_SECURE=0` | 只限 `http://localhost` 開發；`TRC_PUBLIC_URL` 是 https 時不管它設什麼，登入 cookie 一律 `Secure` |
 | `TRC_BG_SYNC` | 背景同步（SP-499，`backend/sync/background.py`）：`on`（預設：擁有者與付費帳號，依最近使用決定多久看一次）、`owner`（只有擁有者）、`off`（全關，只剩每日同步與開網站同步）。不用設就是 `on` |
 
@@ -91,7 +95,9 @@ Docker network。repo 的 `docker-compose.yml` 目前是 `"8000:8000"`（所有�
 `/login`、`/signup`、`/oauth/*/callback`、`/api/v1/account/login|signup|logout`、`/api/v1/session`、`/api/v1/static/*`、`/healthz`、
 四份法律文件 `/legal`、`/legal/terms|privacy|health|third_party`（SP-60，完整路徑比對），
 `/sw.js`、`/manifest.webmanifest`（SP-314 離線快取與加到主畫面；兩個檔都沒有任何人的資料，瀏覽器抓 manifest 時不帶 cookie），
-以及 `/share/*`（照舊讀擁有者的分享與課表訂閱，不看 session；`accounts.db` 的 `shares` 表還沒有分享頁在寫，所以還沒辦法對到別的使用者）。
+`/join`（SP-124，「用自己的資料算」：303 到註冊、候補或線上示範，完整路徑比對），
+以及 `/share/*`（不看 session）：`/share/<id>` 與 `/share/<id>/data` 依 `accounts.db` 的 `shares` 表找到建立分享的使用者、只讀他租戶裡那份凍結的快照
+（SP-124；沒有列的是擁有者的舊分享，停用帳號的分享回 404）；課表訂閱照舊是擁有者的。沒登入的人不會觸發任何計算：計算機與建立分享都要登入。
 其他路徑都要登入；寫入（非 GET／HEAD）一律檢查 CSRF（`X-TRC-CSRF` 等於 CSRF cookie，跟示範模式同一套）。路徑裡有 `/./`、`/../`、`//`、
 反斜線或編碼過的 `/`、`\`、`.`（`%2f`、`%5c`、`%2e`）一律回 400。沒登入的請求沒有租戶（讀資料會失敗），不會變成擁有者。
 
@@ -131,6 +137,39 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' -H 'Accept: text/html' 
 ```
 
 `/healthz` 不是 `signin`、或 `/api/v1/plan` 不是 401，就**不要拿掉 Access**，先查 `.env`。
+
+### 5.7 管理頁：Google client、管理員、刪除使用者（SP-351 R2）
+
+**Google OAuth client**（`/admin` 的「Google 登入」分頁，`admin:config`）
+
+- 取值順序：管理頁 → 環境變數（`GOOGLE_CLIENT_ID[_FILE]`、`GOOGLE_CLIENT_SECRET[_FILE]`），ID 與密鑰各自判斷；管理頁清掉就回到環境變數。
+- 存在 `<server-root>/site.json` 的 `google.client_id`、`google.client_secret`。密鑰用 server key（`TRC_SECRET_KEY`）以 Fernet 加密
+  （`enc:v1:…`，跟 COROS／TP 的 token 同一把）；**換 server key 前**先在管理頁清掉或之後重填，否則解不開——解不開時改用環境變數的密鑰、
+  頁面顯示「解不開，請重填」，log 記一行 warning。有這個密文時，server key 遺失不會被自動重新產生。
+- 改完下一次登入就生效，**不用重啟**（`site.json` 依 mtime 重讀；`backend/accounts/google.py` 的 `client_id()`／`client_secret()` 每次用時取值）。
+  環境變數仍是啟動時讀一次就凍結。
+- 畫面與 API（`GET /api/v1/admin/google`）只回密鑰「已設定／未設定」與來源，**從不回原值**；Client ID 不是秘密（登入網址上就有），照常顯示。
+- 操作紀錄：ID 記舊值與新值；密鑰只記「Google client 密鑰已更新」或「已清除」，不記值。
+- 登入模式下，清掉之後如果環境變數沒有可退回的值（會變成沒人能登入），API 回 400 `GOOGLE_INCOMPLETE`，不會寫入。
+- 雞生蛋：管理頁要登入才進得去。第一次設定可以 (a) 照 §5.4 先用環境變數的 client 開登入，再到管理頁改；或 (b) 先在擁有者模式
+  （`TRC_ACCOUNTS=1`、還沒有其他登入設定）打開 `/admin` 填好 client，再加上 `TRC_OWNER_*`、`TRC_PUBLIC_URL`、`TRC_TRUSTED_PROXIES` 重啟，
+  這時 env 不需要 `GOOGLE_CLIENT_*`。
+- Google Cloud Console 的 OAuth client「已授權的重新導向 URI」是 `<TRC_PUBLIC_URL>/oauth/google/callback`（分頁上也會顯示）。換 client 時記得新的 client 也要登記這個 URI。
+
+**管理員**（「使用者」分頁，`admin:users`）
+
+- 擁有者（user 1）永遠是管理員，不能被降級或刪除。其他人可以設為管理員（`accounts.db` 的 `users.admin`），取得 `admin:config`、`admin:users`；
+  不會因此拿到擁有者自己的權限（計算模式切換、WKO5 client、TrainingPeaks 網站登入）或付費方案。
+- 不能拿掉最後一位管理員（在同一個寫入交易裡算，`LAST_ADMIN`）。有擁有者在時這條實際上不會觸發，留著防擁有者那列不存在的情況。
+- 操作紀錄：`user.admin`，舊值與新值。
+
+**刪除使用者**
+
+- `POST /api/v1/admin/users/<id>/delete {confirm: true}`，跟使用者自己在設定頁刪除帳號走同一套（SP-386／SP-326）：先停掉訂閱續扣
+  （`billing.cancel_for_deletion`，Polar 連不上就不刪），再 `accounts/deletion.delete_account`（停同步、登出所有裝置、中斷平台授權、刪憑證、
+  等背景工作、刪租戶資料夾、從研究資料撤回、刪 `accounts.db` 所有列）。不需要對方重新用 Google 確認身分（那是本人刪除時的保護）。
+- 不能刪擁有者、不能刪自己（自己的帳號請到設定頁）、不能刪最後一位管理員；畫面上要輸入對方的 email（沒有 email 時是 `#<id>`）才會送出。
+- 操作紀錄 `user.delete`：只記 id、刪除前的方案／是否管理員／是否停用、中斷了哪些平台，不記 email 或名字。
 
 ## 6. 還沒做的（別的單）
 

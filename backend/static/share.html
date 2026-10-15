@@ -63,14 +63,47 @@ tr.k-aid td { background: var(--soft); }
 .badge { display: inline-block; font-size: 11.5px; border: 1px solid var(--watch); color: var(--watch); border-radius: 10px; padding: 0 8px; }
 .err { color: var(--bad); padding: 30px 0; text-align: center; }
 footer { text-align: center; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.join-btn { display: inline-block; padding: 7px 14px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600;
+  text-decoration: none; white-space: nowrap; }
+.join-btn:hover { filter: brightness(1.08); }
+.join-btn[hidden] { display: none; }
+.join { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; border-color: var(--accent); background: var(--soft); }
+.join h2 { margin: 0 0 2px; }
+.join p { margin: 0; color: var(--muted); font-size: 13px; }
 @media (max-width: 700px) { .tiles { grid-template-columns: 1fr 1fr; } .tile .v { font-size: 18px; } main { padding: 10px 10px 30px; } }
 </style>
 </head>
 <body>
-<header><h1 id="title">賽事計畫</h1><div class="meta" id="sub">唯讀分享</div></header>
+<header><div><h1 id="title">賽事計畫</h1><div class="meta" id="sub">唯讀分享</div></div><a class="join-btn" id="join-top" hidden></a></header>
 <main id="main"><section><div class="meta">讀取中…</div></section></main>
+<!--fill:join-->
 <script>
 const $ = (id) => document.getElementById(id);
+// 「用自己的資料算」 (SP-124): {kind: signup | waitlist | demo, url} from the server, the same for every visitor
+const JT = (k) => (window.I18N ? window.I18N.t("share." + k) : k);
+const JOIN = (() => {
+  const j = window.TRC_JOIN;
+  if (!j || !["signup", "waitlist", "demo"].includes(j.kind) || typeof j.url !== "string") return null;
+  return /^\/(?!\/)/.test(j.url) || /^https:\/\//.test(j.url) ? j : null;
+})();
+function joinLink(el) {
+  el.href = JOIN.url;
+  el.textContent = JT("join.button");
+  el.dataset.kind = JOIN.kind;
+  if (/^https:/.test(JOIN.url)) el.rel = "noopener";
+  el.hidden = false;
+  return el;
+}
+function joinCard() {
+  if (!JOIN) return "";
+  return `<section class="join" id="join"><div><h2>${esc(JT("join.title"))}</h2><p>${esc(JT("join." + JOIN.kind))}</p></div><a class="join-btn" id="join-bottom"></a></section>`;
+}
+function showJoin() {
+  if (!JOIN) return;
+  joinLink($("join-top"));
+  if ($("join-bottom")) joinLink($("join-bottom"));
+}
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const ok = (v) => v != null && isFinite(v);
@@ -92,7 +125,7 @@ async function init() {
     const r = await fetch(location.pathname.replace(/\/+$/, "") + "/data", { cache: "no-store" });
     if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `${r.status}`); }
     S = await r.json();
-  } catch (e) { $("main").innerHTML = `<section><div class="err">${esc(e.message)}</div></section>`; return; }
+  } catch (e) { $("main").innerHTML = `<section><div class="err">${esc(e.message)}</div></section>` + joinCard(); showJoin(); return; }
   document.title = `${S.title}（分享）`;
   $("title").textContent = S.title;
   const I = S.inputs || {}, s = S.summary || {}, hike = S.type === "baiyue";
@@ -115,7 +148,8 @@ async function init() {
   if (S.profile || (S.segments || []).length) h += `<section><h2>剖面與分段</h2><div class="profile" id="profile"></div><div id="targets"></div></section>`;
   h += fuelHtml(S);
   if (!S.seg_targets) h += splitsHtml(S);
-  $("main").innerHTML = h + `<footer class="meta">這是分享者在建立當下的計算結果，不會重新計算。</footer>`;
+  $("main").innerHTML = h + joinCard() + `<footer class="meta">這是分享者在建立當下的計算結果，不會重新計算。</footer>`;
+  showJoin();
   if ($("profile")) drawProfile(S);
   if (S.seg_targets && $("targets")) $("targets").innerHTML = targetsHtml(S);
 }

@@ -68,6 +68,12 @@ def ciphertext_exists() -> bool:
     """Is anything already sealed (a committed .enc, or a sealed DB column)?"""
     if any(p.exists() for p in SEALED_FILES):
         return True
+    try:                                  # the admin page's Google client secret (site.json, SP-351 R2)
+        from backend import site_settings
+        if str(site_settings.get("google.client_secret") or "").startswith(PREFIX):
+            return True
+    except Exception:                     # noqa: BLE001 — no server root yet
+        pass
     db = _db_path()
     if db is None or not Path(db).exists():
         return False

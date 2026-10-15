@@ -15,6 +15,7 @@ yet (HTML / JS / Python). A new string with one of the old names fails here — 
 for one of the cases above, add it to ALLOWED with the reason."""
 import json
 import re
+from pathlib import Path
 
 import pytest
 
@@ -149,3 +150,59 @@ def test_the_guard_catches_sp391_words_replaced_by_sp497():
               "百岳／多日縱走：背重、高海拔、連續多天的體能與配速估算", "疲勞保護", "狀況卡", "過度疲勞", "Load ratio (acute ÷ chronic)",
               "Load", "狀況", "負荷 80"):
         assert not _bad(s), s
+
+
+# ---------------------------------------------------------------------------- the public pages (SP-622, SP-624)
+# What a stranger reads before signing in — the 介紹頁, the sign-in page, the demo's landing, the 操作手冊 (zh-TW, en) —
+# says nothing it can't keep (SP-321 Q8, SP-390: no 「自動同步」 or 「推手錶」 as a promise while the watch
+# platforms are unofficial; the repo's words are 「背景同步」「每天固定時間同步」「送到手錶」) and never
+# names WKO5 or another party's trademark (the metric names above): not even with ®, there is no
+# comparison on these pages. Scanned as written: each page's HTML, its own catalogs in both languages
+# and the manual's chapters.
+_ROOT = Path(__file__).resolve().parents[2]
+_STATIC = _ROOT / "backend" / "static"
+PUBLIC_PAGES = ("intro", "login", "demo", "manual")
+PUBLIC_WORDS = re.compile(r"自動同步|推手錶|推到手錶|推送課表|(?<![A-Za-z])WKO"
+                          r"|(?i:auto[- ]?sync|automatic(?:ally)? sync|push(?:ing|es)? workouts)")
+
+
+def _public_bad(s: str) -> bool:
+    return bool(PUBLIC_WORDS.search(s)) or bool(OLD.search(s)) or bool(SUPERSEDED.search(s))
+
+
+def public_texts():
+    """(where, text) of every public page's source: HTML lines, catalog entries, manual lines."""
+    for page in PUBLIC_PAGES:
+        html = _STATIC / f"{page}.html"
+        for n, line in enumerate(html.read_text("utf-8").splitlines(), 1):
+            yield f"static/{page}.html:{n}", line
+        for loc in ("zh-TW", "en"):
+            cat = json.loads((_STATIC / "i18n" / loc / f"{page}.json").read_text("utf-8"))
+            for k, v in cat.items():
+                for s in (v.values() if isinstance(v, dict) else [v]):
+                    yield f"i18n/{loc}/{page}.{k}", s
+    for md in sorted((_ROOT / "backend" / "manual").glob("*/*.md")):
+        for n, line in enumerate(md.read_text("utf-8").splitlines(), 1):
+            yield f"manual/{md.parent.name}/{md.name}:{n}", line
+
+
+def test_public_pages_promise_nothing_and_name_no_trademark():
+    bad = [f"{w}: {s.strip()[:100]!r}" for w, s in public_texts() if _public_bad(s)]
+    assert bad == []
+
+
+def test_public_pages_scan_covers_both_languages_and_the_manual():
+    where = {w.split(":")[0].rsplit(".", 1)[0] for w, _s in public_texts()}
+    for page in PUBLIC_PAGES:
+        assert f"static/{page}" in where
+    assert any(w.startswith("manual/zh-TW/") for w in where) and any(w.startswith("manual/en/") for w in where)
+    assert any(w.startswith("i18n/en/") for w in where)
+
+
+def test_the_public_guard_catches_the_words():
+    for s in ("每日自動同步", "推到手錶", "一鍵推手錶", "同步手錶、推送課表", "WKO5 圖表", "TSS 64", "IF 0.8", "NP 230 W",
+              "Daily auto sync", "auto-sync", "Pushing workouts", "Load & fitness", "CTL"):
+        assert _public_bad(s), s
+    for s in ("背景同步", "每天固定時間同步", "課表送到手錶", "按「推送到手錶」", "訓練負荷（Training load）", "Send to watch",
+              "負荷平衡"):
+        assert not _public_bad(s), s

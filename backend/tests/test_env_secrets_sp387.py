@@ -38,7 +38,7 @@ def test_the_server_key_from_a_docker_secret_file(tmp_path, monkeypatch):
 
 def test_set_secrets_never_reach_a_log_line(tmp_path, monkeypatch, caplog):
     from backend import applog
-    odd = {"GOOGLE_CLIENT_SECRET": "short-ish_Secret!", "PAYMENT_HASH_KEY": "abcDEF1234",
+    odd = {"GOOGLE_CLIENT_SECRET": "short-ish_Secret!", "TRC_POLAR_WEBHOOK_SECRET": "abcDEF1234",
            "TRC_DEBUG_PIN": "246810", "CWA_API_KEY": "CWA-0123-4567-89AB"}
     for k, v in odd.items():
         monkeypatch.setenv(k, v)

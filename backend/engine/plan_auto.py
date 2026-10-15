@@ -256,6 +256,26 @@ def classify(stored: list[dict], new: list[dict], items: list[dict], today: str,
     return out
 
 
+POWER_ZONE_RULE = "power_zone"
+# what a switch may rewrite: the target (+ minutes / TSS) and, for a 個人化間歇 (SP-590) re-cut to the
+# model's reps, the title and the detail too
+POWER_ZONE_KEYS = STRUCTURE_KEYS | {"title", "detail"}
+
+
+def mark_power_zone(items: list[dict], old: str, new: str) -> int:
+    """SP-363: the changed items of a run after a 課表功率區間 switch whose change is the target text
+    (and the minutes / TSS the structure gives): rule POWER_ZONE_RULE, the reason names the switch."""
+    from backend.engine import power_zone_plan as PZP
+    why = _("課表功率區間：{a} → {b}，功率目標照新的區間", a=_(PZP.TITLE.get(old, old)), b=_(PZP.TITLE.get(new, new)))
+    n = 0
+    for i in items:
+        b = i.get("before") or {}
+        if i["action"] == "changed" and "target" in b and set(b) <= POWER_ZONE_KEYS and not i.get("rule"):
+            i["rule"], i["reason"] = POWER_ZONE_RULE, why
+            n += 1
+    return n
+
+
 def mark_structure(items: list[dict]) -> int:
     """SP-437: the items of the first run on the structure rule that only rewrote minutes / TSS / target
     (no adapt rule): rule STRUCTURE_RULE + its reason. The number marked."""
@@ -385,6 +405,12 @@ def hr_of(inp: dict) -> Optional[dict]:
         return None
     return {"model": hrz["model"], "setting": hrz.get("setting") or hrz.get("requested") or hrz["model"],
             "reason": ((hrz.get("auto") or {}).get("reason") or "")}
+
+
+def pz_of(inp: dict) -> Optional[str]:
+    """The 課表功率區間 in effect of the inputs (week_plan thresholds' power_model.system, SP-363)."""
+    pm = (inp.get("thresholds") or {}).get("power_model")
+    return pm.get("system") if isinstance(pm, dict) else None
 
 
 def hr_name(model: Optional[str]) -> str:
@@ -953,11 +979,16 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
     hr = hr_of(inp)
     hr_new, hr_old = (hr or {}).get("model"), state.get("hr_model")
     hr_changed = bool(hr_new and hr_old and hr_new != hr_old and (hr or {}).get("setting") == "auto")
-    if not force and state.get("stamp") == stp and not cp_changed and not hr_changed:
-        if (cp_new and cp_old is None) or (hr_new and hr_old != hr_new):
+    # SP-363: the 課表功率區間 switched (設定) — re-plan like a new CP: the regenerated sessions take the
+    # new set, the pushed ones go out of date by fingerprint and are re-pushed (push_window)
+    pz_new, pz_old = pz_of(inp), state.get("power_zone")
+    pz_changed = bool(pz_new and pz_old and pz_new != pz_old)
+    if not force and state.get("stamp") == stp and not cp_changed and not hr_changed and not pz_changed:
+        if (cp_new and cp_old is None) or (hr_new and hr_old != hr_new) or (pz_new and pz_old is None):
             # the baselines, no event (a model the user picked: put_hr_profile's run re-plans it)
             await _set_state(db, {**state, **({"cp": cp_new} if cp_new else {}),
-                                  **({"hr_model": hr_new} if hr_new else {})})
+                                  **({"hr_model": hr_new} if hr_new else {}),
+                                  **({"power_zone": pz_new} if pz_new else {})})
         out = {"status": "noop", "reason": "沒有新的活動"}
         if state.get("remote"):
             # 課表待確認 copies an interrupted push left on the watch (review M2): off now
@@ -981,6 +1012,8 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
     adj: list = []
     new, changes = PS.reconcile_with_adapt(stored, inp, adjustments=adj)
     items = diff(stored, new, changes, adj)
+    if pz_changed:
+        mark_power_zone(items, pz_old, pz_new)    # SP-363: the targets changed because the set did
     if state.get("structure_v") != STRUCTURE_V:
         mark_structure(items)               # SP-437: the first run on the structure rule
     days = int(cfg["push_days"] or 7)
@@ -1045,6 +1078,8 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
         state["cp"] = cp_new
     if hr_new:
         state["hr_model"] = hr_new
+    if pz_new:
+        state["power_zone"] = pz_new
     state["stamp"] = stp
     if not held:
         # the phase baseline moves only once a plan is applied: a held phase

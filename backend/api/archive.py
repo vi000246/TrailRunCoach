@@ -49,7 +49,7 @@ async def _status(repo: SettingsRepository) -> dict:
         nxt = FA.next_run().isoformat(timespec="minutes")
     except Exception:                              # noqa: BLE001 — the page shows no date then
         pass
-    return {"retention_years": years, "choices": list(FA.CHOICES), "default": FA.DEFAULT_YEARS,
+    return {"retention_years": years, "choices": list(FA.CHOICES), "default": FA.default_years(),
             "min_years": FA.MIN_YEARS, "last": _with_local_date(FA.last_run()), "next_run": nxt}
 
 

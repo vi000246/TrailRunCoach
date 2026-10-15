@@ -6,7 +6,8 @@
     "compliance",
     "schedule",
     "templates",
-    "about"
+    "about",
+    "admin"
   ],
   "files": {
     "backend/api/achievements.py": 16,

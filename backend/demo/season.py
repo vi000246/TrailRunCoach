@@ -22,6 +22,7 @@ import numpy as np
 from backend.demo import athlete as A
 
 SHOWCASE_DAYS = 21
+VOLUME = 1.0                  # the weekly hours' factor (athlete.apply_level, SP-611's levels)
 
 
 @dataclass
@@ -346,6 +347,7 @@ def schedule(seed: int, anchor: dt.date, weeks: int = 52) -> Season:
         if ph == "base" and phase is not None and phase.start not in base_seen:
             base_seen.append(phase.start)
         hours, recovery_week = week_hours(ph, wk_in, wk_left, max(0, len(base_seen) - 1))
+        hours *= VOLUME
         tmpl = dict(_templates(ph, evk, week_no))
         if ph == "base" and len(base_seen) >= 3 and wk_in % 4 == 2:
             tmpl[5] = "trail_long"           # the base before the 50K: long climbs on trails

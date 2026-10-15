@@ -12,7 +12,7 @@ Order:
      cached weather days) inside Taiwan's bounding box
      (scripts/build_baiyue.py: 21.5–26.5 N, 118–122.5 E)
   3. the detected time zone's browser zone (Asia/Taipei → tw)
-  4. intl
+  4. the site's default (site_config defaults.region, the admin page; intl unless set)
 """
 from __future__ import annotations
 
@@ -64,7 +64,8 @@ def detect(root: Optional[Path] = None, auto_tz: Optional[dict] = None) -> tuple
     br = (auto_tz or {}).get("browser")
     if br:
         return ("tw" if br in TW_ZONES else "intl"), "瀏覽器時區"
-    return "intl", "預設"
+    from backend import site_config as SC
+    return SC.get("defaults.region"), "預設"           # the site's default region (the admin page, SP-351)
 
 
 def region(user_id: int = 1, root: Optional[Path] = None) -> tuple[str, str]:

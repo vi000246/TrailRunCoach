@@ -60,7 +60,7 @@
   "demo.reset": "Reset demo",
   "demo.reset_title": "Drop your changes and go back to the original demo data",
   "demo.reset_confirm": "Drop all your changes in the demo?",
-  "demo.cta": "Use your own data?",
+  "demo.cta": "Use your own data",
   "demo.locked": "Not available in the demo",
   "demo.disabled": "Not available in the demo",
   "account.logout": "Sign out",
@@ -88,5 +88,15 @@
   "scope.paused_short": "paused for the whole site",
   "scope.quota_used": "{what} used up",
   "scope.sep": "; ",
-  "scope.what": "{what}: {why}"
+  "scope.what": "{what}: {why}",
+  "scope.see_plans": "See plans",
+  "account.plans": "Plans and subscription",
+  "account.plans_free": "Now: free plan",
+  "account.plans_sub": "Now: subscription",
+  "account.plans_title": "Compare the plans, subscribe or manage your subscription",
+  "page.admin.name": "Admin",
+  "page.admin.short": "Admin",
+  "page.admin.purpose": "Site settings, users, waitlist",
+  "notice.close": "Close the notice",
+  "test_account": "Test account: {name} (not a real member; the data is made up)"
 }

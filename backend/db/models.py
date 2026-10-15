@@ -69,6 +69,10 @@ class WorkoutFile(Base):
     intervals_activity_id: Mapped[Optional[str]] = mapped_column(String(40), index=True, nullable=True)
     upstream_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     device_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    # where the data came from, upstream included (SP-585, research/sources.py): "manual",
+    # "coros-unofficial", "intervals:GARMIN_CONNECT" … — set from source + upstream_source on insert
+    # / when they change (the mapper events below), filled in once for older rows (database._migrate_schema)
+    source_chain: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     elevation_gain_m: Mapped[Optional[float]] = mapped_column(nullable=True)
     trail_classification: Mapped[Optional[str]] = mapped_column(String(20), default="unknown")
     classification_overridden: Mapped[Optional[bool]] = mapped_column(Boolean, default=False)
@@ -89,6 +93,40 @@ class WorkoutFile(Base):
     coros_training_load: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     athlete: Mapped["Athlete"] = relationship(back_populates="workouts")
+
+
+def _chain_on_insert(mapper, connection, target) -> None:
+    """SP-585: a new row's source chain, unless the importer set one itself."""
+    if target.source_chain is None:
+        from backend.research.sources import chain_of
+        target.source_chain = chain_of(target.source, target.upstream_source)
+
+
+def _chain_on_update(mapper, connection, target) -> None:
+    """SP-585: source / upstream_source changed (intervals.icu sets the upstream after the import)
+    -> the chain follows, when it was the derived one (or none); an importer's own chain stays."""
+    from sqlalchemy import inspect as sa_inspect
+    from backend.research.sources import chain_of
+    st = sa_inspect(target)
+    hs, hu = st.attrs.source.history, st.attrs.upstream_source.history
+    if not (hs.has_changes() or hu.has_changes()):
+        if target.source_chain is None:
+            target.source_chain = chain_of(target.source, target.upstream_source)
+        return
+    # a changed attribute without its old value (not loaded since the insert's flush) was NULL then
+    old_src = hs.deleted[0] if hs.deleted else (None if hs.added else target.source)
+    old_up = hu.deleted[0] if hu.deleted else (None if hu.added else target.upstream_source)
+    if target.source_chain in (None, chain_of(old_src, old_up)):
+        target.source_chain = chain_of(target.source, target.upstream_source)
+
+
+def _listen_chain() -> None:
+    from sqlalchemy import event
+    event.listen(WorkoutFile, "before_insert", _chain_on_insert)
+    event.listen(WorkoutFile, "before_update", _chain_on_update)
+
+
+_listen_chain()
 
 
 class ActivityLink(Base):

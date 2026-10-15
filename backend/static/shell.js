@@ -29,6 +29,8 @@
     // 操作手冊 (SP-558, api/manual.py): public, the one page a signed-out visitor's bar has
     { id: "manual", href: "/manual", icon: I('<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8.5 7.5h7M8.5 11h5"/>') },
     { id: "settings", href: "/api/v1/app/settings", icon: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.2 7.5l2 1.2M17.8 15.3l2 1.2M4.2 16.5l2-1.2M17.8 8.7l2-1.2"/><circle cx="12" cy="12" r="6.6"/>') },
+    // 管理 (SP-351, api/admin.py): site settings and users — only an admin with sign-in on sees the link
+    { id: "admin", href: "/admin", icon: I('<path d="M12 3 4.5 6v5.5c0 4.4 3.1 8.2 7.5 9.5 4.4-1.3 7.5-5.1 7.5-9.5V6z"/><path d="m9 12 2.2 2.2L15.5 10"/>') },
     // 關於 (SP-495, api/about.py): version, sources, licences, trademarks; public like the manual, last in 更多
     { id: "about", href: "/about", icon: I('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><path d="M12 7.5h.01"/>') },
   ];
@@ -41,6 +43,12 @@
   // signed out (sign-in mode) on a public page — the manual, 關於: their links only, plus 登入; no data is asked for
   const PUBLIC = SESSION.mode === "signed_out";
   const PUBLIC_PAGES = new Set(["manual", "about"]);
+  // 管理 (SP-351): in sign-in mode, for whoever holds an admin scope; the owner's single-user app keeps
+  // its menu as it was (the page still answers at /admin there), the demo never has it
+  const ADMIN = !!SESSION.login && !DEMO && ((SESSION.membership && SESSION.membership.scopes) || [])
+    .some((s) => s === "admin:config" || s === "admin:users");
+  const adminCur = location.pathname.replace(/\/+$/, "") === "/admin";
+  if (!ADMIN && !adminCur) PAGES.splice(PAGES.findIndex((p) => p.id === "admin"), 1);
   if (PUBLIC) PAGES.splice(0, PAGES.length, ...PAGES.filter((p) => PUBLIC_PAGES.has(p.id)));
   if (DEMO) {
     for (const id of ["settings", "injuries"]) {
@@ -52,7 +60,7 @@
   // 成就 is the 成就 tab of 活動列表 (2026-10-02); /api/v1/achievements/page redirects there
   // 操作手冊 sits right above 設定 (SP-505: 「選單放在設定頁的上面」)
   // 關於 (SP-495) last, under 設定
-  const MORE = new Set(["activity", "routes", "injuries", "manual", "settings", "about"]);
+  const MORE = new Set(["activity", "routes", "injuries", "manual", "settings", "admin", "about"]);
   for (const p of PAGES) p.more = !PUBLIC && MORE.has(p.id);
   // SP-480: 設定's purpose names 計算模式 only for whoever may switch it (SP-464: in sign-in mode an
   // admin; the owner's app and the demo have no `login`)
@@ -160,7 +168,7 @@
   const LOGIN_ICON = I('<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M14 17l5-5-5-5"/><path d="M19 12H8"/>');
   const login = () => `<a class="an-item an-login" href="/login?${new URLSearchParams({ next: location.pathname + location.hash })}" title="${T("account.login_title")}">
       ${LOGIN_ICON}<span class="an-name"><span class="an-long">${T("account.login")}</span><span class="an-short">${T("account.login")}</span></span></a>`;
-  nav.innerHTML = `<a class="an-brand" href="${PUBLIC ? "/manual" : PAGES[0].href}" title="${T("brand.title")}"><i>${CAL_ICON}</i><span>${T("brand")}</span></a>` +
+  nav.innerHTML = `<a class="an-brand" href="${PUBLIC ? "/" : PAGES[0].href}" title="${T("brand.title")}"><i>${CAL_ICON}</i><span>${T("brand")}</span></a>` +
     PAGES.filter((p) => !p.more).map(item).join("") +
     (PUBLIC ? login() : `<details class="an-more"><summary class="an-item"${cur && cur.more ? ' aria-current="page"' : ""} title="${T("nav.more_title")}">
       ${MORE_ICON}<span class="an-name"><span class="an-long">${cur && cur.more ? `${T("nav.more")} · ${cur.name}` : T("nav.more")}</span><span class="an-short">${T("nav.more")}</span></span></summary>
@@ -171,6 +179,18 @@
   const more = nav.querySelector(".an-more") || { open: false, contains: () => false };
   document.addEventListener("click", (e) => { if (more.open && !more.contains(e.target)) more.open = false; });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") more.open = false; });
+  // sign-in mode (SP-328): 方案與訂閱 in 更多, above 登出 (not for the site owner: every feature already)
+  const role = SESSION.membership && SESSION.membership.role;
+  if (SESSION.login && SESSION.user && (role === "user" || role === "subscriber")) {
+    const pl = document.createElement("a");
+    pl.className = "an-item an-plans"; pl.href = "/plans"; pl.setAttribute("role", "menuitem");
+    if (location.pathname === "/plans") pl.setAttribute("aria-current", "page");
+    pl.innerHTML = `${I('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M7 15h4"/>')}<span class="an-name"></span><span class="an-purpose"></span>`;
+    pl.querySelector(".an-name").textContent = T("account.plans");
+    pl.querySelector(".an-purpose").textContent = T(role === "subscriber" ? "account.plans_sub" : "account.plans_free");
+    pl.title = T("account.plans_title");
+    nav.querySelector(".an-menu").appendChild(pl);
+  }
   // sign-in mode (SP-58): 登出 at the end of 更多, with whose account this is
   if (SESSION.login && SESSION.user) {
     const out = document.createElement("button");
@@ -207,6 +227,44 @@
   })();
   const mount = () => document.body.prepend(nav);
   if (document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
+  // 站內公告 (SP-351): the admin's notice under the bar, until closed (remembered per notice text)
+  if (SESSION.notice && !PUBLIC) {
+    const NK = "appshell.notice.closed";
+    let closed = null;
+    try { closed = localStorage.getItem(NK); } catch (_) {}
+    if (closed !== SESSION.notice) {
+      const ns = document.createElement("style");
+      ns.textContent = `.an-notice { display: flex; gap: 10px; align-items: flex-start; padding: 7px 14px;
+        font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; color: var(--text, #111);
+        background: color-mix(in srgb, var(--accent, #2563eb) 10%, var(--panel, #fff));
+        border-bottom: 1px solid color-mix(in srgb, var(--accent, #2563eb) 30%, var(--line, #e1e5ea)); }
+        .an-notice span { flex: 1; white-space: pre-line; overflow-wrap: anywhere; }
+        .an-notice button { font: inherit; border: 0; background: none; color: var(--muted, #667); cursor: pointer; padding: 0 4px; }`;
+      document.head.appendChild(ns);
+      const bar = document.createElement("div");
+      bar.className = "an-notice"; bar.setAttribute("role", "note");
+      const txt = document.createElement("span");
+      txt.textContent = SESSION.notice;
+      const x = document.createElement("button");
+      x.type = "button"; x.textContent = "×"; x.title = T("notice.close"); x.setAttribute("aria-label", T("notice.close"));
+      x.addEventListener("click", () => { bar.remove(); try { localStorage.setItem(NK, SESSION.notice); } catch (_) {} });
+      bar.append(txt, x);
+      const put = () => nav.after(bar);
+      if (document.body) put(); else document.addEventListener("DOMContentLoaded", put);
+    }
+  }
+  // 測試帳號 (SP-611): a strip on every page, so a test account's browser is never taken for a real one
+  if (SESSION.user && SESSION.user.test && !PUBLIC) {
+    const ts = document.createElement("style");
+    ts.textContent = `.an-test { padding: 4px 14px; font: 600 12.5px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+      color: #fff; background: #b45309; text-align: center; overflow-wrap: anywhere; }`;
+    document.head.appendChild(ts);
+    const tb = document.createElement("div");
+    tb.className = "an-test"; tb.setAttribute("role", "note");
+    tb.textContent = T("test_account", { name: SESSION.user.name || `#${SESSION.user.id}` });
+    const putT = () => nav.after(tb);
+    if (document.body) putT(); else document.addEventListener("DOMContentLoaded", putT);
+  }
   if (cur && !document.title.includes("·")) document.title = `${cur.name.split("／")[0]} · ${T("brand")}`;
   window.AppShell = { pages: PAGES, current: cur, session: SESSION, can };
 
@@ -218,14 +276,21 @@
   const csrf = () => csrfP || (csrfP = nativeFetch("/api/v1/session", { cache: "no-store", credentials: "same-origin" })
     .then((r) => r.json()).then((j) => { if (j && j.demo) Object.assign(SESSION, { demo: j.demo, caps: j.caps }); return j.csrf || ""; })
     .catch(() => ""));
-  const toast = (msg) => {
+  // link (SP-328): {href, text} after the message — the upgrade hint's 「看方案與訂閱」; stays longer
+  const toast = (msg, link) => {
     let el = document.getElementById("an-toast");
     if (!el) {
       el = document.createElement("div"); el.id = "an-toast"; el.className = "an-toast"; el.setAttribute("role", "status");
       document.body.appendChild(el);
     }
     el.textContent = msg; el.hidden = false;
-    clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 3500);
+    if (link) {
+      const a = document.createElement("a");
+      a.href = link.href; a.textContent = link.text;
+      a.style.cssText = "color:#9cc3ff;margin-left:10px;font-weight:600;white-space:nowrap";
+      el.appendChild(a);
+    }
+    clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, link ? 8000 : 3500);
   };
   window.fetch = async (input, init) => {
     const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
@@ -260,6 +325,8 @@
   const hasScope = (s) => !SCOPES || SCOPES.has(s);
   window.AppScopes = { has: hasScope, membership: MS };
   const UPGRADE = T("scope.upgrade");
+  // SP-328: in sign-in mode the upgrade hint leads to 方案與訂閱 (/plans: the plans and the checkout)
+  const PLANS = SESSION.login && MS && MS.role === "user" ? { href: "/plans", text: T("scope.see_plans") } : null;
   // SP-569 ⑤: the subscribe hint (scope.upgrade) only for what a subscription adds (membership.upgrade_scopes);
   // a scope no plan gives (TrainingPeaks' website login …) says it is the site's own, not to subscribe
   const UPGRADABLE = new Set((MS && MS.upgrade_scopes) || []);
@@ -289,7 +356,8 @@
       el.title = lockReason(need);
       if ("disabled" in el) el.disabled = true;
       el.setAttribute("aria-disabled", "true");
-      el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation(); toast(el.title); }, true);
+      el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation();
+        toast(el.title, el.title === UPGRADE ? PLANS : null); }, true);
     }
   };
   if (SCOPES) {
@@ -309,7 +377,8 @@
           toast(d.code === "QUOTA_EXCEEDED"
             ? T("scope.quota_used", { what }) + (d.upgrade ? T("scope.sep") + UPGRADE : "")
             : T("scope.what", { what, why: d.paused ? T("scope.paused_short") : d.upgrade ? UPGRADE
-              : T(MS.role === "user" ? "scope.site_only" : "scope.none") }));
+              : T(MS.role === "user" ? "scope.site_only" : "scope.none") }),
+          d.upgrade && !d.paused ? PLANS : null);
         }).catch(() => {});
       }
       return r;
@@ -548,6 +617,8 @@
     .an-demo button, .an-demo .an-d-cta { font: inherit; font-size: 12.5px; padding: 3px 10px; border-radius: 6px; cursor: pointer;
       border: 1px solid var(--line, #d4d8de); background: var(--panel, #fff); color: var(--text, #111); text-decoration: none; }
     .an-demo button:hover, .an-demo .an-d-cta:hover { border-color: var(--accent, #2563eb); color: var(--accent, #2563eb); }
+    .an-demo .an-d-cta { background: var(--accent, #2563eb); border-color: var(--accent, #2563eb); color: #fff; font-weight: 600; }
+    .an-demo .an-d-cta:hover { color: #fff; filter: brightness(1.08); }
     .an-demo .an-d-left { color: var(--muted, #667); font-size: 12px; }
     @media (max-width: 699px) { .an-demo { top: 0; font-size: 12.5px; padding: 6px 10px; } .an-demo .an-d-sp { display: none; } }
     [data-cap][data-cap-locked] { opacity: .5; cursor: not-allowed !important; }

@@ -601,7 +601,13 @@ async def _list(token: str, lo: date, hi: date, backfill: bool = False) -> list:
 
 def new_backfill(today: date) -> dict:
     return {"next_newest": (today - timedelta(days=RECENT_DAYS + 1)).isoformat(),
-            "oldest": FIRST_SYNC_DAY.isoformat(), "done": False, "windows": 0}
+            "oldest": _first_day(today).isoformat(), "done": False, "windows": 0}
+
+
+def _first_day(today: date) -> date:
+    """FIRST_SYNC_DAY, or later when the admin limited a new connection's history (SP-351)."""
+    from backend import site_config as SC
+    return SC.first_sync_day(FIRST_SYNC_DAY, today)
 
 
 # ---------------------------------------------------------------------------- the webhook queue

@@ -126,9 +126,14 @@ def runs_of(mask: np.ndarray, bridge: int = 0) -> list[tuple[int, int]]:
 
 
 def measure(t, hr=None, power=None, speed=None, cadence_spm=None, grade=None,
-            cp: Optional[float] = None, lthr: Optional[float] = None, category: str = "road") -> Optional[dict]:
+            cp: Optional[float] = None, lthr: Optional[float] = None, category: str = "road",
+            edges: Optional[dict] = None) -> Optional[dict]:
     """The per-run part (no HRpeak): VO2 bouts and T_p, the HR path's seconds per bpm,
-    Zone 3 time, the run's own 60-s HR peak. `grade` is a fraction per sample (rgrade)."""
+    Zone 3 time, the run's own 60-s HR peak. `grade` is a fraction per sample (rgrade).
+    `edges` {"z3", "p_lo", "p_hi"} × CP: the power edges in the 課表功率區間 in effect
+    (power_zone_plan.class_edges, SP-618); None = Palladino's (Z3_P, P_LO, P_HI)."""
+    e = edges or {}
+    z3_edge, lo_edge, hi_edge = float(e.get("z3") or Z3_P), float(e.get("p_lo") or P_LO), float(e.get("p_hi") or P_HI)
     t = np.asarray(t, dtype=float)
     if len(t) < 2 or not np.isfinite(t).any():
         return None
@@ -157,8 +162,8 @@ def measure(t, hr=None, power=None, speed=None, cadence_spm=None, grade=None,
         # found on 30-s power (Stryd's second-to-second dips would split a rep: real data, a
         # 6.4′ rep came out as 2.6′ + 2′ on 10-s power), then the edges the 30-s window trims
         # are given back while the 1-s power is still ≥ 1.03 CP
-        on1 = np.nan_to_num(p1) >= P_LO * cp
-        for a, b in runs_of(pvalid & (p30 >= P_LO * cp), BRIDGE_S):
+        on1 = np.nan_to_num(p1) >= lo_edge * cp
+        for a, b in runs_of(pvalid & (p30 >= lo_edge * cp), BRIDGE_S):
             while a > 0 and on1[a - 1] and pvalid[a - 1]:
                 a -= 1
             while b < n and on1[b] and pvalid[b]:
@@ -166,9 +171,9 @@ def measure(t, hr=None, power=None, speed=None, cadence_spm=None, grade=None,
             d = b - a
             pm = float(np.nanmean(p1[a:b])) / cp
             best = pm if best is None else max(best, pm)
-            if pm >= P_HI and d >= P_HI_MIN_S - BRIDGE_S:      # 5 s slack: a late lap press
+            if pm >= hi_edge and d >= P_HI_MIN_S - BRIDGE_S:   # 5 s slack: a late lap press
                 lag = LAG_HI_S + (LAG_FIRST_S if first else 0)
-            elif pm >= P_LO and d >= P_LO_MIN_S - BRIDGE_S:
+            elif pm >= lo_edge and d >= P_LO_MIN_S - BRIDGE_S:
                 lag = LAG_LO_S
             else:
                 continue
@@ -202,7 +207,7 @@ def measure(t, hr=None, power=None, speed=None, cadence_spm=None, grade=None,
     # ---- Zone 3
     z3_p = 0.0
     if pvalid.any():
-        z3_p = float(sum(b - a for a, b in runs_of(pvalid & (p30 >= Z3_P * cp), BRIDGE_S) if b - a >= Z3_MIN_S))
+        z3_p = float(sum(b - a for a, b in runs_of(pvalid & (p30 >= z3_edge * cp), BRIDGE_S) if b - a >= Z3_MIN_S))
     z3_h = 0.0
     if h30 is not None and lthr:
         ok = np.isfinite(h30) & ~lock & ~pvalid & ~down
@@ -212,7 +217,8 @@ def measure(t, hr=None, power=None, speed=None, cadence_spm=None, grade=None,
     return {"t_vo2_power_s": float(t_p), "vo2_bouts": bouts[:20], "top_pct_cp": top,
             "best_bout_pct_cp": best, "hr_path": {"lo": HR_BPM_LO, "secs": hr_secs}, "hr_peak60": hr_peak60,
             "z3_s": z3_p + z3_h, "z3_power_s": z3_p, "z3_hr_s": z3_h,
-            "power_valid_share": float(pvalid.mean()) if n else 0.0, "lock_s": float(lock.sum())}
+            "power_valid_share": float(pvalid.mean()) if n else 0.0, "lock_s": float(lock.sum()),
+            **({"edges": {"z3": z3_edge, "p_lo": lo_edge, "p_hi": hi_edge}} if edges else {})}
 
 
 def hr_path_s(stim: Optional[dict], thr_bpm: Optional[float]) -> float:

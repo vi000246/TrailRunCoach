@@ -199,7 +199,7 @@ async def coros_login(body: CorosLoginRequest, db: AsyncSession = Depends(get_db
     stores the password sealed for the automatic re-login; false deletes it."""
     from backend.sync import coros_limits as CL, events as EV
     from backend import membership as MS, tenancy
-    if "sync:coros_credential" not in MS.ROLE_SCOPES.get(MS.member().role, frozenset()):
+    if not MS.role_allows("sync:coros_credential"):
         raise MS.scope_error("sync:coros_credential")
     await _coros_consent(db, body.athlete_id, body.consent_version)
     try:
@@ -349,7 +349,7 @@ async def garmin_login(body: GarminLoginRequest, db: AsyncSession = Depends(get_
     re-login; false deletes a stored one. Never returns the token / password."""
     from backend import membership as MS
     from backend.sync import garmin_client as GC, garmin_limits as GL
-    if "sync:garmin_trial" not in MS.ROLE_SCOPES.get(MS.member().role, frozenset()):
+    if not MS.role_allows("sync:garmin_trial"):
         raise MS.scope_error("sync:garmin_trial")
     await _garmin_consent(db, body.athlete_id, body.consent_version)
     try:

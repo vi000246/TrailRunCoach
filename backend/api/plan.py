@@ -975,6 +975,58 @@ async def put_hr_profile(body: HrProfileIn, db: AsyncSession = Depends(get_db)):
     return await run_in_threadpool(lambda: hr_profile_view(_estimate_dataset(), today_local()))
 
 
+# ---- 課表功率區間 (SP-363; engine/power_zone_plan.py) -------------------------------------------
+
+def power_zones_view(ds, today) -> dict:
+    """The 課表功率區間: the setting, the set in effect (personal falls back to Palladino without a
+    model, and says why), the choices, and the set's levels at the CP in effect (watts)."""
+    from backend.engine import power_zone_plan as PZP
+    from backend.engine.zones import cp_in_effect
+    from backend.engine.wko5expr.dataset import date_to_day
+    end = int(date_to_day(today))
+    cp = None
+    try:
+        cp = cp_in_effect(ds, end).get("value")
+    except Exception:                       # noqa: BLE001 — no dataset / no runs
+        cp = None
+    pm = PZP.plan_model(ds, today, cp)
+    return {"setting": pm["setting"], "system": pm["system"], "fallback": _(pm["fallback"]) if pm["fallback"] else "",
+            "choices": PZP.choices(), "title": _(PZP.TITLE[pm["system"]]), "cp": cp, "basis": pm.get("basis"),
+            "source": _(PZP.PERSONAL_SOURCE) if pm["system"] == "personal" else
+            {"stryd": None, "classic": PZP.CLASSIC_SOURCE}.get(pm["system"]),
+            "levels": PZP.rows_json(pm, cp),
+            # SP-363 Q3-1 (c): the model threshold power far from the 課表's CP
+            "warning": PZP.gap_warning(pm, cp)}
+
+
+class PowerZonesIn(BaseModel):
+    system: str
+
+
+@router.get("/power-zones")
+def get_power_zones():
+    return power_zones_view(_estimate_dataset(), today_local())
+
+
+@router.put("/power-zones")
+async def put_power_zones(body: PowerZonesIn, db: AsyncSession = Depends(get_db)):
+    """Switch the 課表功率區間: the upcoming sessions are re-planned / re-pushed the way a 課表心率區間
+    switch is (plan_auto.after_thresholds; what is already pushed or edited follows plan_store's rules)."""
+    from fastapi.concurrency import run_in_threadpool
+    from backend.engine import power_zone_plan as PZP
+    from backend.settings.repository import SettingsRepository
+    if body.system not in PZP.SYSTEMS:
+        raise HTTPException(400, f"system must be one of {PZP.SYSTEMS}")
+    repo = SettingsRepository(db, current_athlete_id())
+    old = await repo.get(PZP.SETTING_KEY)
+    await repo.set(PZP.SETTING_KEY, body.system)
+    await db.commit()
+    if (old or PZP.DEFAULT) != body.system:
+        from backend.engine import plan_auto as PA
+        PA.after_thresholds()
+    return await run_in_threadpool(lambda: power_zones_view(_estimate_dataset(), today_local()))
+
+
 # ---- 起始 CTL／ATL (SP-68; engine/load_guard.py pmc_start) ---------------------------------
 
 def pmc_start_view(ds) -> dict:

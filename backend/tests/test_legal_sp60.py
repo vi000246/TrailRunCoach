@@ -12,6 +12,7 @@ The texts themselves are not tested for wording; these checks keep the registry 
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -74,21 +75,73 @@ def test_public_documents_carry_their_version_effective_date_and_address():
 
 
 @pytest.mark.parametrize("doc,needles", [
-    ("terms", ["NT$99", "NT$890", "自動續訂", "取消", "退款", "停權", "刪除帳號", "責任限制", "中華民國",
-               "資料遺失", "免費方案", "訂閱方案", "【營運者名稱】", "【聯絡 email】"]),
+    # SP-60 R2: no plans, prices, payment or refunds (test_no_commercial_clause_until_there_is_a_plan)
+    ("terms", ["目前免費", "收費之前", "停權", "刪除帳號", "責任限制", "中華民國",
+               "資料遺失", "【營運者名稱】", "【聯絡 email】"]),
     ("privacy", ["【營運者名稱】", "【聯絡 email】", "蒐集目的", "心率", "GPS", "裝置",
-                 "1 年", "3 年", "COROS", "Garmin", "intervals.icu", "AI", "金流", "跨使用者", "去識別化",
+                 "1 年", "3 年", "COROS", "Garmin", "intervals.icu", "AI", "跨使用者", "去識別化",
                  "下載", "刪除", "撤回", "管理員", "Cookie", "__Host-trc_session", "__Host-trc_csrf",
                  "【待定：SP-326 調查結論與律師審閱】", "特種個資", "GDPR"]),
     ("health", ["醫療建議", "醫師", "風險", "停止", "演算法", "估計"]),
     ("third_party", ["COROS", "Garmin", "garminconnect", "非官方", "鎖", "停權", "自行承擔", "intervals.icu",
-                     "金鑰", "金流"]),
+                     "金鑰"]),
 ])
 def test_each_document_covers_the_items_sp60_lists(doc, needles):
     from backend.accounts import terms
     text = terms.body(next(d for d in terms.DOCUMENTS if d.id == doc))
     missing = [n for n in needles if n not in text]
     assert not missing, (doc, missing)
+
+
+# SP-60 R2 (owner, 2026-10-14): the commercial plan is not ready, so the documents carry no
+# commercial clause; the clauses taken out wait in docs/legal/commercial-terms-draft.md
+COMMERCIAL = ("NT$", "新台幣", "訂閱", "自動續訂", "續訂", "付款", "扣款", "退款", "金流", "發票", "價格",
+              "免費方案", "訂閱方案", "計費")
+COMMERCIAL_DRAFT = Path(__file__).resolve().parents[2] / "docs" / "legal" / "commercial-terms-draft.md"
+
+
+def test_no_commercial_clause_until_there_is_a_plan():
+    from backend.accounts import terms
+    for d in terms.DOCUMENTS:
+        t = terms.body(d)
+        found = [w for w in COMMERCIAL if w in t]
+        assert not found, (d.id, found)
+    # what stays: it is free now, and a charge comes only after a notice and a new consent
+    t = terms.body(terms.by_id("terms"))
+    assert "## 4. 費用" in t and "目前免費" in t and "請你閱讀並同意" in t
+    assert "目前免費" in terms.body(terms.by_id("privacy"))
+
+
+def test_the_commercial_clauses_are_kept_as_a_draft_for_later():
+    """Not served (docs/ is not in the image) and not part of the consent; kept for the day there
+    is a commercial plan."""
+    from backend.accounts import terms
+    text = COMMERCIAL_DRAFT.read_text("utf-8")
+    for n in ("NT$99", "NT$890", "自動續訂", "取消與退款", "消費者保護法第 19 條", "金流商", "電子發票",
+              "付款資料", "付款紀錄", "12 個月內實際支付"):
+        assert n in text, n
+    assert "commercial-terms-draft" not in "".join(terms.body(d) for d in terms.DOCUMENTS)
+    assert not (terms.LEGAL_DIR / "commercial-terms-draft.md").exists()
+
+
+def test_third_party_has_a_trademark_section_in_our_own_words():
+    """SP-496 (SP-391's follow-up): TrainingPeaks' registered names belong to TrainingPeaks, LLC;
+    the service names its own metrics (SP-391 / SP-497 words) and mentions the others only where
+    it compares, with the notice."""
+    from backend.accounts import terms
+    t = terms.body(terms.by_id("third_party"))
+    assert "## 2. 商標" in t
+    sec = t.split("## 2. 商標", 1)[1].split("\n## ", 1)[0]
+    for n in ("TrainingPeaks, LLC", "TSS®", "Training Stress Score®", "NP®", "Normalized Power®", "IF®",
+              "Intensity Factor®", "註冊商標", "訓練負荷（Training load）", "強度比（Intensity）",
+              "加權功率（Weighted power）", "長期訓練負荷（Chronic load）", "短期負荷（Acute load）",
+              "負荷平衡（Load balance）", "對照", "商標聲明", "授權或背書"):
+        assert n in sec, n
+    # the trademarks appear with their ® only, never as our own label; nothing of the old app name
+    import re
+    assert not re.search(r"(?<![A-Za-z])(TSS|NP|IF)(?![A-Za-z®])", sec)
+    for d in terms.DOCUMENTS:
+        assert "WKO" not in terms.body(d), d.id
 
 
 def test_the_documents_never_name_rq_or_its_people():
@@ -146,7 +199,8 @@ def test_next_to_the_legal_pages_everything_stays_closed(c):
     for p in ("/legal/%2e%2e/api/v1/plan", "/legal/privacy%2f..%2f..%2fapi", "/legal//privacy"):
         assert c.get(p).status_code == 400, p
     assert c.get("/api/v1/plan").status_code == 401
-    assert location(c.get("/", headers=HTML)) == "/login?next=%2F"
+    assert location(c.get("/overview", headers=HTML)) == "/login?next=%2Foverview"
+    assert c.get("/", headers=HTML).status_code == 200      # "/" is the introduction since SP-622
     # a write to a legal page is no way in either
     assert c.post("/legal/privacy", headers={"X-TRC-CSRF": csrf(c)}).status_code == 405
 

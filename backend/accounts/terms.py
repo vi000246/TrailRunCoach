@@ -41,7 +41,7 @@ from backend.i18n import N_, _
 LEGAL_DIR = Path(__file__).resolve().parents[1] / "legal"
 
 # the version of the whole set; a change asks every user for their consent again
-VERSION = "2026-10-13-draft"
+VERSION = "2026-10-15-draft"
 PINNED = {
     # SP-58's placeholders (kept: a consent recorded under that version names those texts)
     "2026-10-12-draft": {
@@ -55,6 +55,15 @@ PINNED = {
         "privacy": "72a02af45ab42ce44337a7a71f3325e4643faee5e1c014c74026e0def0887e3f",
         "health": "95cd126a9b7975508df89dbb2ff342c1b0e7ebe75826f4b4df282fef5b5a44c7",
         "third_party": "d4fdf17b4d6869f3018aac04317658797ae651b6f20b42a1f36f17f689a84b61",
+    },
+    # SP-60 R2: the commercial clauses (plans, prices, payment, auto-renewal, refunds) taken out
+    # until there is a commercial plan; kept for later in docs/legal/commercial-terms-draft.md.
+    # SP-496: third_party gains the trademark section (same version: neither was released alone)
+    "2026-10-15-draft": {
+        "terms": "1ec9ae82b3da23f4fbcff389afdea10f9271cb57de8054e5c07bf29128623537",
+        "privacy": "cc64a7b5411d9d74ad53e4e7ca3ea16ee1da05b3866a114923dece68882058f1",
+        "health": "95cd126a9b7975508df89dbb2ff342c1b0e7ebe75826f4b4df282fef5b5a44c7",
+        "third_party": "8e7e6c1f587c56140a92f4e2caec1646f465e3e92e3d246680b989a20e98f9cc",
     },
 }
 DRAFT = True          # SP-60's drafts, not reviewed by a lawyer yet: the sign-up page and /legal mark them

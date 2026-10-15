@@ -469,10 +469,10 @@ Settings › Physiology › Heart rate › Workout HR zones is “Auto” by def
 | Max HR (% max HR) | 50 / 60 / 70 / 80 / 90 % |
 
 ### The charts' zones
-Each chart picks its own heart-rate zones, Friel's 7 zones (% LTHR) by default; power zones are Palladino's % CP table by default, or Stryd's 5 zones (Easy 65–80, Moderate 80–90, Threshold 90–100, Interval 100–115, Repetition 115–130 % CP). They do not change the schedule: its power targets use Palladino's zones.
+Each chart picks its own heart-rate zones, Friel's 7 zones (% LTHR) by default; power zones default to the plan power zones chosen in Settings (Palladino's % CP table, Stryd's 5 zones (Easy 65–80, Moderate 80–90, Threshold 90–100, Interval 100–115, Repetition 115–130 % CP), the classic 7 levels (% threshold power) or the personalized zones from your power–duration model), and a chart can switch to another set. The schedule's power targets use the plan power zones: each kind of session takes the nearest level of that set.
 
 ### Sources
-Friel (% LTHR); COROS's heart-rate zone guide; Karvonen 1957 (% HRR); Stryd Help Center, "Power Zones" (Stryd's 5 zones). At the same % of max HR, people's lactate threshold ranges from 60 to 90 % (Iannetta et al. 2020), which is why max-HR zones are the least accurate.
+Friel (% LTHR); COROS's heart-rate zone guide; Karvonen 1957 (% HRR); Stryd Help Center, "Power Zones" (Stryd's 5 zones); Allen & Coggan, Training and Racing with a Power Meter (the classic 7 levels). At the same % of max HR, people's lactate threshold ranges from 60 to 90 % (Iannetta et al. 2020), which is why max-HR zones are the least accurate.
 :::
 
 ## Time in zones {#time-in-zones}

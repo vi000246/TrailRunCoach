@@ -1044,6 +1044,65 @@ def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bo
 CP_FIT_MIN_RUNS = 5              # = fitdataset.CP_FIT_MIN_RUNS (a Dataset without stryd_cp_fit)
 
 
+def pd_model_params(ds, today: dt.date, runs_90, ref_cp: Optional[float] = None,
+                    any_power: bool = False) -> Optional[dict]:
+    """pd_model with the whole model: {"mftp", "tte", "frc", "pmax", "params" [FRC, tau1, FTP, tau2,
+    TTE, D]} — the 個人化區間 (algorithms/wko5_levels, SP-363) need tau1 and the model itself. The
+    same points and fit as pd_model, line for line (test_personal_zones_sp363 pins that they agree):
+    pd_model itself stays as it is, its code is in the PD memo's key (fitdataset.pd_code) and an edit
+    would refit every day of every tenant."""
+    from backend.engine.algorithms import wko5_pdmodel as PDM
+    from backend.engine.racepower import cptest as T
+    accept = any_power or getattr(ds, "accept_watch_power", True)
+    # WKO5's own duration grid (the PD fit is sensitive to point spacing; on
+    # this grid the port reproduces WKO5's mFTP): the longest cached curve's xs
+    curves_ = []
+    for w in runs_90:
+        c = _curve(ds, w, any_power=any_power)
+        if c and c[0]:
+            xs = np.array(c[0], float)
+            ys = np.array([np.nan if v is None else v for v in c[1]], float)
+            ok_ = np.isfinite(ys)
+            if ok_.sum() >= 2 and not implausible(w, xs[ok_], ys[ok_], ref_cp):
+                curves_.append((xs[ok_], ys[ok_]))
+    if not curves_:
+        return None
+    grid = max((c[0] for c in curves_), key=len)
+    best = np.full(len(grid), np.nan)
+    for xs, ys in curves_:
+        m = grid <= xs[-1]
+        vals = np.interp(grid[m], xs, ys)
+        cur = best[m]
+        best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
+    extra = []
+    try:
+        extra = T.curves(WX.home(), today - dt.timedelta(days=CP_WINDOW_DAYS - 1), today, accept_watch=accept)
+    except Exception:                       # noqa: BLE001
+        extra = []
+    for c in extra:
+        xs, ys = np.array(c["xs"]), np.array(c["ys"])
+        if len(xs) < 2:
+            continue
+        if ref_cp and ((xs[-1] >= 300 and np.interp(300.0, xs, ys) > 2.0 * ref_cp)):
+            continue
+        m = grid <= xs[-1]
+        vals = np.interp(grid[m], xs, ys)
+        cur = best[m]
+        best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
+    ok = np.isfinite(best)
+    pts = [(float(x), float(y)) for x, y in zip(grid[ok], best[ok])]
+    try:
+        f = PDM.fit(pts)
+    except Exception:                       # noqa: BLE001
+        f = None
+    if not f or not f.get("valid"):
+        return None
+    # "tte" = where the model falls to mFTP (tte_solve) — the value WKO5 shows
+    # and stores (1895 vs the snapshot's 1897 s on WKO5's data alone)
+    return {"mftp": float(f["FTP"]), "tte": float(f["tte"]), "frc": float(f["FRC"]), "pmax": float(f["Pmax"]),
+            "params": [float(x) for x in f["params"]], "n_points": len(pts)}
+
+
 def stryd_pd(ds, day: dt.date) -> Optional[dict]:
     """WKO5's mFTP as of `day`, the way the 課表 gets its CP before a plan CP test: the PD model
     fitted to the 90-day mean-max envelope up to `day` (docs/research/wko5-mftp-logic.md) —

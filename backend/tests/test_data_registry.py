@@ -51,6 +51,7 @@ SAMPLES = {
     "channel_peaks.json.tmp": R.DERIVED, "plan.json.tmp": R.DERIVED,
     "weather.json": R.SECRET, "secret.key": R.SECRET, "tp_client.json": R.SECRET,
     "logs/app.log": R.DERIVED, "logs/app.log.1": R.DERIVED, "research/coros-tl/20261001-120000/x.json": R.DERIVED,
+    "research/pool.db": R.DERIVED, "research/pool.db-wal": R.DERIVED,
     "fits/123_2025-01-01_run.fit": R.IMPORTED, "base/current": R.DERIVED,
     "sandboxes/0123456789abcdef0123456789abcdef/plan.json": R.DERIVED,
     "meta.json": R.DERIVED, "demo_manifest.json": R.DERIVED, "demo_courses/trail_50k.gpx": R.IMPORTED,

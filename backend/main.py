@@ -29,16 +29,19 @@ from backend.api import region as region_api
 from backend.api import calendar_feed as calendar_api
 from backend.api import debug as debug_api
 from backend.api import account as account_api
+from backend.api import link as link_api
 from backend.api import pwa as pwa_api
 from backend.api import weight as weight_api
 from backend.api import manual as manual_api
 from backend.api import intervals as intervals_api
 from backend.api import about as about_api
+from backend.api import admin as admin_api
 from backend.api import change_sync as change_sync_api
+from backend.api import billing as billing_api
 
 
 # pages the demo never serves: the WKO5 comparison, the settings, the injury log and the sign-in page
-DEMO_HIDDEN_PAGES = {"compare", "settings", "injuries", "login"}
+DEMO_HIDDEN_PAGES = {"compare", "settings", "injuries", "login", "admin"}
 
 # the charts / activities / settings API (wko5views, routes, injuries) and its old prefix (308)
 API_PREFIX = "/api/v1/app"
@@ -205,7 +208,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
                                   archive_api.router,
                                   calendar_api.router, calendar_api.feed_router,
                                   debug_api.router, debug_api.admin_router, weight_api.router,
-                                  intervals_api.router, change_sync_api.router)}
+                                  intervals_api.router, change_sync_api.router, billing_api.router)}
     routers = [
         workouts.router,
         sync.router, auth.router,        # owner only (sync, connect)
@@ -233,6 +236,9 @@ def build_app(demo: bool | None = None) -> FastAPI:
         intervals_api.router,
         # Google sign-in, the terms, sign-out (SP-58): 404 unless sign-in is on (accounts/login.py)
         account_api.router,
+        # linked services (SP-329, 疊石 Cairn): the user's links and the service-to-service routes;
+        # 404 unless sign-in is on; never in the demo
+        link_api.router,
         # /sw.js and /manifest.webmanifest: the offline copy and 加到主畫面 (SP-314); not in the demo
         pwa_api.router,
         # 操作手冊 (SP-558): public, signed in or not, also in the demo (accounts/login.PUBLIC_PREFIXES)
@@ -242,12 +248,17 @@ def build_app(demo: bool | None = None) -> FastAPI:
         # the change-log sync trial (SP-312, db/changelog.py): 404 unless TRC_CHANGE_SYNC=1; no page
         # calls it; never in the demo
         change_sync_api.router,
+        # 方案與訂閱 (SP-328): the plans page, Polar's checkout / portal and its webhook (its own
+        # signature, no session); 404 unless sign-in is on; never in the demo
+        billing_api.router,
+        # 管理 (SP-351): site settings and users, admin scopes only; never in the demo
+        admin_api.router,
     ]
     for r in routers:
         # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),
         # nor the public share pages or the 課表訂閱 feed (it creates no shares), nor sign-in
         if demo and (id(r) in owner_only or r is racepower_api.share_router or r is account_api.router
-                     or r is pwa_api.router):
+                     or r is link_api.router or r is pwa_api.router or r is admin_api.router):
             continue
         app.include_router(r)
     # the tenant of each request (and the demo's rules): outermost, so every route sees it
@@ -316,6 +327,12 @@ def build_app(demo: bool | None = None) -> FastAPI:
     else:
         @app.get("/", include_in_schema=False)
         def _home():
+            # 介紹頁 (SP-622): signed out in sign-in mode, "/" is the product's introduction (a public path,
+            # login.PUBLIC_PATHS); signed in — and the owner's app without sign-in — the overview, as before
+            from backend.accounts import login as _login
+            if _login.required() and _login.current_user() is None:
+                from backend.api import intro as intro_api
+                return intro_api.page()
             return RedirectResponse("/api/v1/overview/page")
 
         # monitoring: public in sign-in mode too (SP-58, deploy/commercial.md §4); says which

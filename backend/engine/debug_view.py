@@ -506,7 +506,7 @@ BLOCKS = (
     ("data_source", N_("資料來源設定"), ("sync.", "charts.", "power.", "activities.")),
     ("races", N_("比賽成績"), ("athlete.race_results",)),
     ("calendar", N_("不排課日期、休息日、高海拔過夜"), ("plan.blackouts", "altitude.nights")),
-    ("plan_prefs", N_("課表偏好"), ("plan.prefs.", "plan.hr_zone_model", "plan.b2b.", "plan.suggestions.",
+    ("plan_prefs", N_("課表偏好"), ("plan.prefs.", "plan.hr_zone_model", "plan.power_zone_system", "plan.b2b.", "plan.suggestions.",
                                "plan.match.", "plan.push.")),
     ("auto", N_("自動調整設定"), ("plan.auto.",)),
     ("advanced", N_("進階設定與每人校正值（含 Zone 3 解鎖數字）"), ("athlete.calib", "coros.", "rpe.", "racepower.",

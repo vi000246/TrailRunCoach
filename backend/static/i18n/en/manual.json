@@ -10,7 +10,7 @@
   "prev": "Previous",
   "next": "Next",
   "toc": "Contents",
-  "search_ph": "Search the manual… (e.g. push to watch, thresholds)",
+  "search_ph": "Search the manual… (e.g. send to watch, thresholds)",
   "search_label": "Search the user manual",
   "search_none": "Nothing for “{q}”: try other words, or fewer",
   "search_loading": "Loading the search…",

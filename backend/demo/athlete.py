@@ -46,3 +46,26 @@ def profile() -> dict:
 
 def birth_year(anchor_year: int) -> int:
     return anchor_year - AGE
+
+
+# the levels a test account's made-up data can have (SP-611): the demo athlete is "intermediate";
+# the others move the power, the weight and the weekly hours (season.VOLUME). Invented numbers too.
+LEVELS = {
+    "beginner": {"CP_W": 185.0, "CP_HISTORY": (172.0, 182.0, 188.0), "WEIGHT_KG": 68.0, "VOLUME": 0.6},
+    "intermediate": {},
+    "advanced": {"CP_W": 300.0, "CP_HISTORY": (285.0, 298.0, 305.0), "WEIGHT_KG": 58.0, "VOLUME": 1.25},
+}
+DEFAULT_LEVEL = "intermediate"
+
+
+def apply_level(level: str) -> None:
+    """Set this process's athlete to `level` (the build's child process only: it changes the
+    module's numbers for everything generated after it)."""
+    if level not in LEVELS:
+        raise ValueError(f"unknown level {level!r}")
+    from backend.demo import season
+    vals = dict(LEVELS[level])
+    season.VOLUME = float(vals.pop("VOLUME", 1.0))
+    g = globals()
+    for k, v in vals.items():
+        g[k] = v

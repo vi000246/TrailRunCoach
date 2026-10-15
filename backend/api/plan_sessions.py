@@ -206,10 +206,12 @@ def _inputs_key(blackouts: Optional[list] = None) -> tuple:
     from backend.engine import advanced_params as AP
     # the 跑步經驗問卷 (SP-288 / SP-291): the cold week / ramp and the data level's line follow the answers
     from backend.engine import experience as EX
+    # 課表功率區間 (SP-363): the power targets' zone set
+    from backend.engine import power_zone_plan as PZP
     # the self-ratings come with a sync (data); everything after them is the user's own settings
     key = (*_tenancy.ds_key(ds), today, _recorded_stamp(recorded), _plan_stamp(), prefs.stamp(), BL.stamp(bos),
            auto_on, B2B.accepted_stamp(acc), PSP.stored(), HRP.stamp(), TECH.user_stamp(), rpe_on,
-           AP.z3_rule_stamp(), EX.stamp())
+           AP.z3_rule_stamp(), EX.stamp(), PZP.stamp())
     return key, functools.partial(_build_inputs, key, ds, today, prefs, bos, acc, auto_on, rpe_on, recorded)
 
 

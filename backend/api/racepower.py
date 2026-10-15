@@ -984,6 +984,7 @@ def create_share(body: ShareIn):
         sid = SH.save(snap)
     except SH.ShareError as e:
         raise HTTPException(400, str(e))
+    _register_share(sid)
     return {"id": sid, "url": f"/share/{sid}", "title": snap["title"], "created": snap["created"],
             "expires": snap["expires"]}
 
@@ -1002,7 +1003,40 @@ def delete_share(sid: str):
             raise HTTPException(404, "找不到這個分享")
     except SH.ShareError as e:
         raise HTTPException(400, str(e))
+    _unregister_share(sid)
     return {"deleted": sid}
+
+
+def _signed_in_user():
+    """The signed-in user (sign-in mode), else None (owner mode: the owner's shares need no row)."""
+    from backend.accounts import login as LG
+    return LG.current_user() if LG.required() else None
+
+
+def _register_share(sid: str) -> None:
+    """SP-124: accounts.db's shares row (id -> the user whose tenant holds it), so the public
+    /share/<id> opens the right tenant (tenancy_mw). Without the row the link would not open:
+    the snapshot is taken back and the error goes up."""
+    u = _signed_in_user()
+    if u is None:
+        return
+    from backend.accounts import store
+    from backend.engine.racepower import share as SH
+    try:
+        store.add_share(sid, u.id)
+    except Exception:
+        SH.delete(sid)
+        raise
+
+
+def _unregister_share(sid: str) -> None:
+    u = _signed_in_user()
+    if u is None:
+        return
+    from backend.accounts import store
+    owner = store.share_owner(sid)
+    if owner is not None and owner.id == u.id:
+        store.remove_share(sid)
 
 
 share_router = APIRouter(prefix="/share", tags=["share"], include_in_schema=False)
@@ -1011,7 +1045,13 @@ SHARE_HEADERS = {"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow
 
 @share_router.get("/{sid}")
 def share_page(sid: str):
-    return render_page("share", headers=SHARE_HEADERS)
+    # 「用自己的資料算」 (SP-124): the same link for every visitor (login.join_link); the snapshot is
+    # read by the page from /data — nothing is computed here
+    import json
+
+    from backend.accounts import login as LG
+    join = json.dumps(LG.join_link()).replace("<", "\\u003c")
+    return render_page("share", headers=SHARE_HEADERS, fill={"join": f"<script>window.TRC_JOIN = {join};</script>"})
 
 
 @share_router.get("/{sid}/data")
@@ -1019,9 +1059,10 @@ def share_data(sid: str):
     from fastapi.responses import JSONResponse
 
     from backend.engine.racepower import share as SH
+    from backend import tenancy
     try:
         snap = SH.load(sid)
-    except SH.ShareError:
+    except (SH.ShareError, tenancy.NoTenant):   # NoTenant: a disabled account's share (tenancy_mw)
         snap = None
     if snap is None:
         raise HTTPException(404, "這個分享不存在或已刪除")

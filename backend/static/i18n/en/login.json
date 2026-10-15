@@ -6,6 +6,7 @@
   "note": "We only read your Google account ID, name and email, nothing else from Google.",
   "signed_out": "You are signed out.",
   "deleted": "Your account and all its data have been deleted.",
+  "waitlist": "We are full right now: sign in with Google and we will put your email on the waiting list, then let you know when there is a place.",
   "error.expired": "The sign-in timed out or the link is no longer valid. Please sign in again.",
   "error.failed": "The sign-in did not complete. Please sign in again.",
   "error.cancelled": "You cancelled the Google sign-in.",
@@ -29,5 +30,15 @@
   "links.terms": "Terms of Service",
   "links.privacy": "Privacy Policy",
   "links.health": "Health Risk Notice",
-  "links.third_party": "Third-Party Services Disclaimer"
+  "links.third_party": "Third-Party Services Disclaimer",
+  "test.h": "Sign in to a test account",
+  "test.lead": "This is a one-time sign-in link from an admin: press the button to sign this browser in as the test account. The link then stops working.",
+  "test.go": "Sign in as the test account",
+  "test.no_token": "The link is incomplete. Paste the whole link the admin gave you into the address bar.",
+  "test.error.SIGNED_IN_AS_OTHER": "This browser is signed in to another account. Open the link in a private window or another browser (the link has not been used).",
+  "test.error.MOCK_RUNNING": "This test account's made-up data is still being built. Try again in a few minutes (the link has not been used).",
+  "test.error.LINK_INVALID": "This link is not valid, was already used or has expired. Ask the admin for a new one.",
+  "test.error.RATE_LIMITED": "Too many attempts. Please try again in 15 minutes.",
+  "test.error.failed": "That did not work. Please try again.",
+  "what": "What is this? See the introduction →"
 }

@@ -23,18 +23,22 @@ In order:
         none writes into the folder after it is gone
      d. the tenant folder is deleted (users/<id>/: the DB, FIT, caches, uploads, share links) —
         only a folder that is exactly <server-root>/users/<id>, never a link
-  3. every accounts.db row of the person (store.delete_user: user, identities, sessions, shares,
-     usage, service tokens, consents, sign-ins in progress, sign-up tickets, the waitlist e-mail)
+  3. the research pool's rows under their donor id and the link to it (research/pool.withdraw,
+     SP-586); then every accounts.db row of the person (store.delete_user: user, identities,
+     sessions, shares, usage, service tokens, consents, the research link, sign-ins in progress,
+     sign-up tickets, the waitlist e-mail)
   4. what the server keeps by tenant id only is let go: a COROS / Garmin pause (site.json), the
      tenant's ready mark, consent cache and login-check answers (sync/session_check.py, per
      tenant since SP-431) in this process
 A step that fails leaves the user disabled with reason "deleting" — signed out, never half usable
 — and the CLI finishes it.
 
-Not done here (SP-386 notes): the subscription (SP-328, not built yet); the server backups
+Before any of this the web route stops a live subscription's renewals at Polar (SP-328,
+billing/service.cancel_for_deletion; the CLI doesn't: cancel it in Polar's dashboard first).
+Not done here (SP-386 notes): the server backups
 (accounts/server_backup.py keeps the last KEEP daily runs: the user is gone from them after about
-a week); log lines that name the tenant id (logs/, rotated); a share link's page is the owner's
-only today (tenancy_mw: /share/* reads the owner's tenant).
+a week); log lines that name the tenant id (logs/, rotated). A user's share links (SP-124) go with
+the folder and the shares rows: /share/<id> answers 404 from then on.
 """
 from __future__ import annotations
 
@@ -201,6 +205,10 @@ async def delete_account(user, *, job_wait_s: Optional[float] = None) -> dict:
             await asyncio.to_thread(shutil.rmtree, folder)
         if folder.exists():
             raise DeletionError(f"{tenant.id}'s folder is still there")
+    # the research pool's rows that still map to them, then the link (SP-586); before the accounts
+    # rows, so a failure here leaves the user disabled with the link still there to retry
+    from backend.research import pool as research_pool
+    await asyncio.to_thread(research_pool.withdraw, user.id)
     rows = await asyncio.to_thread(store.delete_user, user.id)
     TN._READY.discard(str(tenant.root))
     LG._CONSENT.pop(user.id, None)

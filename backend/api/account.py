@@ -18,6 +18,14 @@ mounts this router.
                                  texts shown (and the account, for a new person), then a session.
                                  CSRF-checked like every write
   POST /api/v1/account/logout    the session row deleted, the cookie cleared
+  GET  /test-login               a test account's one-time sign-in link (SP-611): the page reads the
+                                 token from the URL's fragment (never sent to a server) and posts it
+  POST /api/v1/account/test-login  {token}: the link taken once -> a session as that test account.
+                                 Refused, the link untouched, in a browser signed in as anyone who is
+                                 not a test account (409 SIGNED_IN_AS_OTHER: the admin's own session is
+                                 never replaced) or while its made-up data is being built (409
+                                 MOCK_RUNNING); 404 LINK_INVALID for an unknown, used or expired link;
+                                 20 per client in 15 minutes. CSRF-checked like every write
 
 The account's own data (SP-386; accounts/export.py, accounts/deletion.py), signed in only:
   GET  /api/v1/account/me          who, whether the account can be deleted here (never the owner),
@@ -33,8 +41,11 @@ The account's own data (SP-386; accounts/export.py, accounts/deletion.py), signe
                                    with ?reauth=ok | mismatch | failed. Not for the owner
   POST /api/v1/account/delete      {confirm: true}: 刪除帳號 now — 403 OWNER_PROTECTED for the owner,
                                    403 REAUTH_REQUIRED without a confirmation in the last
-                                   REAUTH_TTL_S, 409 SYNC_BUSY while a sync runs; then the session
-                                   cookie cleared and {next: /login?deleted=1}
+                                   REAUTH_TTL_S, 409 SYNC_BUSY while a sync runs; a live
+                                   subscription is set to stop renewing at Polar first (SP-328; 502
+                                   BILLING_UPSTREAM / 409 SUBSCRIPTION_ACTIVE when it can't be, and
+                                   nothing is deleted); then the session cookie cleared and
+                                   {next: /login?deleted=1}
   POST /api/v1/account/analysis    {analysis: false | true}: withdraw (or give again) the cross-user
                                    analysis consent bundled with the terms — one more consents row
   GET  /legal                    the legal documents (SP-60): a list; public, signed in or not
@@ -243,6 +254,45 @@ def signup(body: SignupIn, request: Request):
     return resp
 
 
+@router.get("/test-login")
+def test_login_page():
+    _on()
+    return render_page("login", headers={"Cache-Control": "no-store"})
+
+
+TEST_LINK_LIMIT = RL.Window(limit=20, per=15 * 60)
+
+
+class TestLoginIn(BaseModel):
+    token: str = ""
+
+
+@router.post("/api/v1/account/test-login")
+def test_login(body: TestLoginIn, request: Request):
+    from backend.accounts import testaccounts as TA
+    _on()
+    if not TEST_LINK_LIMIT.take(_client_key(request)):
+        raise UserError(N_("嘗試太多次，請 15 分鐘後再試"), code="RATE_LIMITED", status=429)
+    me = LG.current_user()
+    if me is not None and not me.is_test:
+        raise UserError(N_("這個瀏覽器已經登入其他帳號；請用無痕視窗或另一個瀏覽器開啟測試帳號的連結"),
+                        code="SIGNED_IN_AS_OTHER", status=409)
+    token = (body.token or "").strip()[:200]
+    u = store.peek_test_login(token)
+    if u is None:
+        raise UserError(N_("這個連結無效、已用過或已過期，請管理員重新產生"), code="LINK_INVALID", status=404)
+    if TA.busy(u.id):
+        raise UserError(N_("這個測試帳號的假資料還在產生中，請稍後再試"), code="MOCK_RUNNING", status=409)
+    u = store.take_test_login(token)
+    if u is None or u.disabled:
+        raise UserError(N_("這個連結無效、已用過或已過期，請管理員重新產生"), code="LINK_INVALID", status=404)
+    resp = JSONResponse({"ok": True, "next": "/"})
+    resp.headers["Cache-Control"] = "no-store"
+    _start_session(request, resp, u)
+    log.info("a test account (u%s) signed in with a one-time link", u.id)
+    return resp
+
+
 @router.post("/api/v1/account/logout")
 def logout(request: Request):
     _on()
@@ -351,6 +401,9 @@ async def account_delete(body: DeleteIn, request: Request):
         raise UserError(N_("請先用 Google 再確認一次身分"), code="REAUTH_REQUIRED", status=403)
     if not body.confirm:
         raise UserError(N_("請先確認要刪除帳號"), code="CONFIRM_REQUIRED", status=400)
+    # SP-328: a live subscription stops renewing first (Polar told; when it can't be, nothing is deleted)
+    from backend.billing import service as billing
+    await billing.cancel_for_deletion(u)
     try:
         out = await DEL.delete_account(u)
     except runner.SyncBusy:

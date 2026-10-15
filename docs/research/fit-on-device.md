@@ -142,7 +142,7 @@
 |---|---|---|
 | Garmin 官方 JS FIT SDK | npm `@garmin/fitsdk`，最新版 21.218.0（2026-10-06 更新），解壓後約 1.45 MB。README：「requires Node.js v14.0 or higher, or a browser with a compatible JavaScript runtime engine」。授權是 Garmin 自己的 FIT 授權（`SEE LICENSE IN LICENSE.txt`），上線前要讀條款 | 已驗證（npm、GitHub README） |
 | Pyodide（瀏覽器裡跑 Python） | 示範版已在用 314.0.7（`backend/demo/static_racepower.py`）。實際下載量：`pyodide.asm.wasm` 9.6 MB、`python_stdlib.zip` 2.5 MB、numpy 套件 3.0 MB，**合計約 15 MB**（未壓縮）。SQLAlchemy 有現成套件；`fitdecode` 不在 Pyodide 套件清單裡，要另外從 PyPI 裝（它是純 Python，應該可以） | 已驗證（CDN 實際下載量測、`pyodide-lock.json`）；`fitdecode` 能裝是推估 |
-| 解析速度 | NAS 上 Python 解析：中位數檔 0.65 秒、最大 12.3 秒。800 個檔第一次全量解析，用 Python 估計要 10–20 分鐘；JS SDK 應該比較快，但沒測 | NAS 數字已驗證（SP-307）；手機數字推估，**SP-313 會實測** |
+| 解析速度 | NAS 上 Python 解析：中位數檔 0.65 秒、最大 12.3 秒。800 個檔第一次全量解析，用 Python 估計要 10–20 分鐘；JS SDK 應該比較快，但沒測。**SP-313 實測（2026-10-15，桌面 Chrome＋CPU 節流模擬手機）**：800 個檔 JS SDK 桌面 6 秒、模擬手機 26–39 秒；Pyodide＋`fitdecode` 桌面 4.2 分、模擬手機 17–22 分。`fitdecode` 把原始碼 zip 解開就能在 Pyodide 跑。見 `local-first-sync.md` §7.1 | NAS 數字已驗證（SP-307）；桌面與模擬數字已驗證（SP-313）；真手機待測 |
 | 平常每天 | 只解析新的那 1–2 個檔，幾秒內完成。前提是快取 key 用 FIT 雜湊（SP-308）、彙總能增量更新（SP-320） | 推估 |
 | 整套模型搬到瀏覽器 | 引擎約 8.1 萬行 Python。用 Pyodide 可以沿用，但要拿掉檔案 I/O 與資料庫的部分；改寫成 JS／TS 等於維護兩份模型，會越差越遠 | 推估（SP-307 §7） |
 | 手機記憶體 | iPhone 分頁的記憶體上限官方沒公布 | 未找到來源 |
@@ -268,7 +268,7 @@
 | **P1 應該放** | 3 年的每筆活動摘要（約 1.2 MB）；每天的 CTL／TSB 序列（3 年約 50 KB，推估）；最佳成績曲線與成就（約 1.4 MB）；近 90 天「畫圖用」逐秒資料（1.0 MB）；近 90 天 GPS 軌跡（約 0.8–1.5 MB，按比例推估） | 約 5 MB | 長期圖表、PMC、最近活動的逐秒圖「秒開」，不用等伺服器 | **約 8 MB** |
 | **P2 有空間再放** | 近 90 天 FIT gzip（4.7 MB）；近 1 年「畫圖用」逐秒資料（3.8 MB）；近 1 年 GPS 軌跡（約 3.4 MB，推估） | 約 12 MB | 往前捲一年內的活動也快；有 FIT 才能在裝置上重算 | **約 20 MB** |
 | **P3 不放裝置，放伺服器或雲端** | 90 天以前的 FIT（3 年 gzip 47 MB）；全解析度 npz（39 MB）；圖表圖片快取；伺服器的中間彙總快取；舊版快取（應該直接刪） | 90 MB 以上 | 很少看；放裝置會擠掉 P0–P2，而且 iPhone 被清時白下載 | — |
-| **需要時再拿或重算** | 打開一筆舊活動：下載那一筆的 FIT gzip（中位數約 40 KB）或伺服器算好的圖表資料 | 每筆幾十 KB | 下載不到 1 秒；JS 解析一筆約 1 秒內（推估，SP-313 實測） | — |
+| **需要時再拿或重算** | 打開一筆舊活動：下載那一筆的 FIT gzip（中位數約 40 KB）或伺服器算好的圖表資料 | 每筆幾十 KB | 下載不到 1 秒；JS 解析一筆：模擬手機上中位數檔 27–63 ms，最大檔 1 秒內（SP-313 實測，非真手機） | — |
 
 **不同預算放得下什麼（推估）：**
 
@@ -413,7 +413,7 @@
 | 2 | 設定頁顯示「這台裝置的離線資料」 | S | 1 | 用量、是否持久、最後更新時間；iPhone Safari 分頁顯示「加到主畫面才不會 7 天被清」提示 |
 | 3 | 手動匯入 FIT（選檔、選資料夾上傳） | M | SP-308 | 補上 `upload.fit` 的後端；所有瀏覽器用 `<input type=file multiple>`／`webkitdirectory`；匯入走雜湊去重與 `dedup.py` |
 | 4 | 桌面 Chrome／Edge：記住 FIT 資料夾，打開時自動匯入新檔 | S | 3 | 用 `showDirectoryPicker`，把資料夾控制代碼存 IndexedDB；不支援的瀏覽器隱藏這個選項 |
-| 5 | SP-313 補充：量 800 個檔全量解析與 OPFS 讀寫 | S（併入 SP-313） | SP-313 | 除了三個代表檔，也量批次 800 個的總時間、記憶體峰值、iPhone 會不會把分頁砍掉；這是 B、D 能不能在手機重算的依據 |
+| 5 | SP-313 補充：量 800 個檔全量解析與 OPFS 讀寫 | S（併入 SP-313） | SP-313 | 除了三個代表檔，也量批次 800 個的總時間、記憶體峰值、iPhone 會不會把分頁砍掉；這是 B、D 能不能在手機重算的依據。**桌面＋模擬已做（2026-10-15）**：OPFS 不是瓶頸，記憶體不會一路漲；iPhone 會不會砍分頁要真手機測（`local-first-sync.md` §7.1） |
 | 6 | 資料分類加上「敏感度」欄位 | S（併入 SP-311） | SP-311 | 標出 GPS、逐秒資料、自由文字屬於「加密時要封存」，摘要屬於「伺服器自動化需要」。之後選 D 時直接照表做 |
 | 7 | 清掉舊版本的衍生快取 | S | — | `cache/fit` 的 `series_workout_review_v18`、`v19` 共 44 MB（擁有者一人），程式只用 `v23`。快取版本升級時自動刪舊版；可併入 SP-320 |
 | 8 | FIT 物件異地備份到 Cloudflare R2 | S–M | SP-308 | `FitStore` 加 `S3Store`（R2），先當備份、之後可當主檔；伺服器金鑰加密；每月清理（SP-317）時一起刪。100 人免費，1,000 人每月不到 1 美元。要使用者同意開 R2 |

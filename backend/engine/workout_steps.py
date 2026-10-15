@@ -93,6 +93,35 @@ HR_ZONES = [("aet", None, None)] + [(z, lo if lo else 0.70, hi if hi is not None
 PACE_ZONES = [(z, lo if lo is not None else 0.85, hi if hi is not None else 1.45)
               for z, _n, lo, hi in FRIEL_PACE]         # × threshold pace; bigger = slower
 ZONES = {"power": POWER_ZONES, "hr": HR_ZONES, "pace": PACE_ZONES}
+# The power 區間 choice follows 設定 → 課表功率區間 (SP-618, engine/power_zone_plan): with Stryd / the
+# classic 7 levels / 個人化區間 in effect the editor offers that set's zones — ids with the set's
+# letter (S1–S5, C1–C7, P1–P9), × CP — and the Palladino ids above stay valid for steps saved before
+# (marked legacy, shown only on a step that has one), as the HR choice does with the Friel ids.
+PZ_PREFIX = {"stryd": "S", "classic": "C", "personal": "P"}
+PZ_OPEN_TOP = 1.8                # × CP: an open top level's upper bound (as POWER_ZONES)
+PZ_FLOOR = 0.40                  # × CP: a level starting at 0 W starts here on a target (推估, as Z1A's 50 %)
+PZ_IDS = {f"{p}{i}" for p, n in (("S", 5), ("C", 7), ("P", 9)) for i in range(1, n + 1)}
+
+
+def power_set_zones(system: Optional[str], pzm: Optional[dict] = None) -> Optional[list]:
+    """[(id, name msgid, lo, hi)] × CP of a 課表功率區間 other than Palladino (open ends closed), or None.
+    Stryd / classic from their fixed tables; 個人化區間 only from `pzm` (the model in effect)."""
+    from backend.engine import power_zone_plan as PZP
+    if system not in PZ_PREFIX:
+        return None
+    if system == "personal":
+        if not isinstance(pzm, dict) or pzm.get("system") != "personal" or not pzm.get("levels"):
+            return None
+        rows = pzm["levels"]
+    else:
+        rows = PZP.static_levels(system)
+    pre = PZ_PREFIX[system]
+    return [(f"{pre}{z}", n, float(lo) if lo else PZ_FLOOR, PZ_OPEN_TOP if hi is None else float(hi))
+            for z, n, lo, hi in rows]
+
+
+def _set_of(zid: str) -> Optional[str]:
+    return next((k for k, p in PZ_PREFIX.items() if zid[:1] == p and zid in PZ_IDS), None) if zid else None
 # The HR 區間 choice follows 設定 → 課表心率區間 (SP-30): ids Z1–Z6 of that model, in bpm
 # from Ctx.hrz (hr_profile.plan_hr_zones). The Friel ids above stay valid for steps saved
 # before (resolved as % LTHR, as then) and are the only choice without a 課表心率區間.
@@ -172,6 +201,9 @@ class Ctx:
     # 課表心率區間 (engine/hr_profile.plan_hr_zones; the plan thresholds' "hr_model"): the
     # automatic easy / interval HR targets and the editor's HR 區間 choice (hr_model_zones)
     hrz: Optional[dict] = None
+    # 課表功率區間 (SP-363, engine/power_zone_plan.plan_model; the plan thresholds' "power_model"): the
+    # auto power steps' bands in the chosen set (None / Palladino: the bands as stored)
+    pzm: Optional[dict] = None
     # a walking session (target_policy.is_walk, SP-115): its uphill cap (hr_profile.walk_cap, the
     # plan thresholds' "walk_cap") replaces the easy-run cap of its 「輕鬆」 steps
     walk: Optional[dict] = None
@@ -232,6 +264,7 @@ class Ctx:
                    v_easy=f("v_easy", sp), v_easy_src=str(sp.get("v_easy_src") or ""), ep_kmh=f("ep_kmh", sp),
                    terrain=ter, climb_per_km=max(0.0, f("climb_per_km", sp) or 0.0) if ter == "trail" else 0.0,
                    hrz=th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None,
+                   pzm=th.get("power_model") if isinstance(th.get("power_model"), dict) else None,
                    walk=th.get("walk_cap") if walk and isinstance(th.get("walk_cap"), dict) else None)
 
 
@@ -401,6 +434,8 @@ def from_variant(v: IL.Variant, level: str = "std", target_text: str = "", ids=N
 
 def _band(v: IL.Variant, target_text: str = "") -> dict:
     tg = {"type": "auto", "intent": "band", "lo": v.lo, "hi": v.hi, "cls": v.cls}
+    if v.opt >= 0:
+        tg["opt"] = v.opt           # 個人化間歇 (SP-590): the model's own band, not mapped again (resolve)
     hr = _text_hr(target_text)
     if hr:
         tg["hr"] = hr
@@ -873,6 +908,8 @@ def _norm_target(t, errs: list) -> dict:
         if it == "band":
             out["lo"], out["hi"] = _f(t.get("lo"), _("強度下限"), errs, 0.3, 2.5), _f(t.get("hi"), _("強度上限"), errs, 0.3, 2.5)
             out["cls"] = str(t.get("cls") or "")
+            if t.get("opt") is not None and str(t.get("opt")).isdigit() and 0 <= int(t["opt"]) <= 5:
+                out["opt"] = int(t["opt"])      # 個人化間歇 (SP-590): the band is the model's, kept as is
             if t.get("hr"):
                 h = t["hr"]
                 if isinstance(h, (list, tuple)) and len(h) == 2:
@@ -888,7 +925,8 @@ def _norm_target(t, errs: list) -> dict:
         return dict(OPEN)
     out = {"type": ty, "mode": mode}
     if mode == "zone":
-        known = {r[0] for r in ZONES[ty]} | (set(HR_MODEL_ZONES) if ty == "hr" else set())
+        known = {r[0] for r in ZONES[ty]} | (set(HR_MODEL_ZONES) if ty == "hr" else set()) | \
+            (PZ_IDS if ty == "power" else set())
         z = str(t.get("zone") or "")
         if z not in known:
             errs.append(_("沒有這個區間：{x}", x=repr(z)))
@@ -1109,10 +1147,20 @@ def hr_to_p(f: float) -> float:
     return _HR_P[-1][1]
 
 
-def zone_span(ty: str, zid: str, zto: Optional[str] = None) -> tuple:
+def zone_span(ty: str, zid: str, zto: Optional[str] = None, pzm: Optional[dict] = None) -> tuple:
     """(lo, hi) fractions of one zone, or of the run of zones `zid`–`zto` (SP-383): the first zone's
     lower to the last one's upper bound (pace, × threshold pace and listed easy → hard: the run's
-    fastest to its slowest edge). (None, None) for an id the table lacks and the easy-run cap."""
+    fastest to its slowest edge). (None, None) for an id the table lacks and the easy-run cap.
+    Power ids of a 課表功率區間 (S… / C… / P…, SP-618): that set's table (P… needs `pzm`, the
+    個人化區間 in effect)."""
+    sys_ = _set_of(str(zid or "")) if ty == "power" else None
+    if sys_ is not None:
+        rows = power_set_zones(sys_, pzm) or []
+        ids = [r[0] for r in rows]
+        if zid not in ids or (zto and zto not in ids):
+            return (None, None)
+        i, j = sorted((ids.index(zid), ids.index(zto or zid)))
+        return (min(r[2] for r in rows[i:j + 1]), max(r[3] for r in rows[i:j + 1]))
     ids = [r[0] for r in ZONES[ty]]
     if zid not in ids or (zto and zto not in ids):
         return (None, None)
@@ -1128,6 +1176,10 @@ def zone_set(ty: str, zid: str) -> list:
     (SP-383): Palladino power, Friel pace, Friel HR (not the easy-run cap) or the 課表心率區間's Z1–Z6."""
     if ty == "hr" and zid in HR_MODEL_ZONES:
         return list(HR_MODEL_ZONES)
+    sys_ = _set_of(str(zid or "")) if ty == "power" else None
+    if sys_ is not None:
+        p = PZ_PREFIX[sys_]
+        return sorted((x for x in PZ_IDS if x[:1] == p), key=lambda x: int(x[1:]))
     return [r[0] for r in ZONES[ty] if r[1] is not None]
 
 
@@ -1136,7 +1188,7 @@ def zone_range_text(tg: dict) -> str:
     z, zt = str(tg.get("zone") or ""), str(tg.get("zone_to") or "")
     if not zt or zt == z:
         return ""
-    return "–".join(x if x in HR_MODEL_ZONES else f"Z{x}" for x in (z, zt))
+    return "–".join(x if x in HR_MODEL_ZONES or x in PZ_IDS else f"Z{x}" for x in (z, zt))
 
 
 @dataclass
@@ -1176,7 +1228,9 @@ def _from_int(it: Optional[tuple], c: Ctx, auto: bool = True, warn: str = "") ->
     typ, lo, hi = it
     if typ == "power":
         f = (lo + hi) / 2 / c.cp if c.cp else None
-        sub = f"{lo / c.cp * 100:.0f}–{hi / c.cp * 100:.0f}% CP · {pzone(f)}" if c.cp else ""
+        from backend.engine.power_zone_plan import level_name
+        zl = (level_name(f, c.pzm) or pzone(f)) if c.cp else ""
+        sub = f"{lo / c.cp * 100:.0f}–{hi / c.cp * 100:.0f}% CP · {zl}" if c.cp else ""
         return Resolved("power", lo, hi, f, f"{lo:.0f}–{hi:.0f} W", sub, auto, warn, intensity=it)
     f = hr_to_p((lo + hi) / 2 / c.lthr) if c.lthr else 0.7
     sub = ("≤ " + EASY_CAP if c.aet and abs(hi - c.aet) < 1 else
@@ -1233,7 +1287,8 @@ def _rpe(tg: dict, c: Ctx) -> Resolved:
 def _auto_easy(tg: dict, c: Ctx) -> Resolved:
     """An auto easy target (intent easy): power (plo / phi) when the basis is power, else the easy HR band."""
     if tg.get("plo") is not None and c.basis == "power":
-        p = _power(c, tg["plo"], tg["phi"])
+        from backend.engine.power_zone_plan import easy_band
+        p = _power(c, *easy_band((tg["plo"], tg["phi"]), c.pzm))
         if p:
             return _from_int(p, c)
         return _from_int(easy_hr(c), c, warn="沒有 CP：改用心率")
@@ -1274,6 +1329,11 @@ def resolve(st: dict, c: Ctx) -> Resolved:
         # band
         if c.basis == "none":
             return Resolved("none", text="不設目標")
+        # 課表功率區間 (SP-363): the band in the chosen set (Palladino: as stored); a 個人化間歇 rep
+        # (SP-590, "opt") is already the model's band
+        from backend.engine.power_zone_plan import band as pz_band
+        blo, bhi = (tg["lo"], tg["hi"]) if tg.get("opt") is not None else pz_band(tg["lo"], tg["hi"], c.pzm)
+        tg = {**tg, "lo": blo, "hi": bhi}
         if c.basis == "hr":
             h = _work_hr(c, tg)
             if h:
@@ -1291,7 +1351,9 @@ def resolve(st: dict, c: Ctx) -> Resolved:
     lo, hi = tg.get("lo"), tg.get("hi")
     if ty == "power":
         if mode == "zone":
-            lo, hi = zone_span("power", tg.get("zone"), tg.get("zone_to"))
+            lo, hi = zone_span("power", tg.get("zone"), tg.get("zone_to"), c.pzm)
+            if lo is None:
+                return Resolved("none", text="不設目標", auto=False, err=_("選了課表功率區間的區間，但目前沒有這一套"))
         if mode != "abs":
             if not c.cp:
                 return Resolved("none", text="不設目標", auto=False, err="選了功率卻沒有 CP")
@@ -1578,6 +1640,8 @@ def totals(steps: dict, c: Ctx) -> dict:
 
 def _is_z5(st: dict, r: Resolved) -> bool:
     tg = st.get("target") or {}
+    if tg.get("opt") is not None:
+        return False        # 個人化間歇 (SP-590): its rep length and rest are the model's / the coaches', by design
     if tg.get("type") == "auto" and tg.get("intent") == "band":
         return (tg["lo"] + tg["hi"]) / 2 >= Z5_FRAC
     return r.type == "power" and r.frac is not None and r.frac >= Z5_FRAC
@@ -1585,6 +1649,8 @@ def _is_z5(st: dict, r: Resolved) -> bool:
 
 def _is_z3(st: dict, r: Resolved) -> bool:
     tg = st.get("target") or {}
+    if tg.get("opt") is not None:
+        return False        # 個人化間歇 (SP-590), as _is_z5
     if tg.get("type") == "auto" and tg.get("intent") == "band":
         m = (tg["lo"] + tg["hi"]) / 2
     elif r.type == "power" and r.frac is not None:
@@ -1792,7 +1858,7 @@ def _work_band(st: dict, c: Optional[Ctx]) -> Optional[tuple]:
         if tg.get("mode") == "pct":
             return tg["lo"], tg["hi"], False
         if tg.get("mode") == "zone":
-            lo, hi = zone_span("power", tg.get("zone"), tg.get("zone_to"))
+            lo, hi = zone_span("power", tg.get("zone"), tg.get("zone_to"), c.pzm if c else None)
             return (lo, hi, False) if lo is not None else None
         if c and c.cp:
             return tg["lo"] / c.cp, tg["hi"] / c.cp, False
@@ -1874,8 +1940,15 @@ def equivalence(steps: dict, rung: Optional[str], c: Optional[Ctx] = None) -> Op
     """{"ok", "why", "text", "variant"} of the structure against the rung's canonical."""
     if not rung or rung not in IL.LIBRARY:
         return None
-    v = variant_from_steps(steps, rung, c)
     canon = IL.canonical(rung)
+    if any(((r["st"].get("target") or {}).get("opt") is not None) for r in flat(steps.get("items") or [])
+           if r["st"]["kind"] == "work"):
+        # 個人化間歇 (SP-590): the reps are the model's, by design not the canonical's — the session keeps
+        # its place on the ladder (session_for); no % CP class / time-in-zone comparison
+        return {"ok": True, "why": [], "variant": None,
+                "text": _("個人化間歇：每趟時間與功率照你的功率–時間模型，不跟 {rung} 標準課表 {s} 比等效；這堂照原本的階段算",
+                          rung=IL.RUNG_NAME.get(rung, rung), s=IL.structure(canon))}
+    v = variant_from_steps(steps, rung, c)
     if v is None:
         return {"ok": False, "why": ["找不到有強度的主課段"], "variant": None,
                 "text": f"{IL.RUNG_NAME.get(rung, rung)}：找不到有功率／心率目標的主課段，這堂不算進階"}
@@ -2034,7 +2107,7 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
     "n", "limits": [{key, text, hit}], "lost": [text]} — limits always listed
     (absolute watts, one target per step, no ramps), `hit` when this session meets one."""
     CW = _cw()
-    program = CW.build_program(name, steps_to_coros(steps, c), CW.Thresholds(cp=c.cp, lthr=c.lthr, aet=c.aet, hrz=c.hrz), overview)
+    program = CW.build_program(name, steps_to_coros(steps, c), CW.Thresholds(cp=c.cp, lthr=c.lthr, aet=c.aet, hrz=c.hrz, pzm=c.pzm), overview)
     groups = {}
     lines = []
     for ex in program["exercises"]:
@@ -2248,8 +2321,20 @@ def zones_table(c: Ctx) -> dict:
         from backend.engine.hr_profile import WALK_CAP
         cap_label = "≤ " + _(WALK_CAP)
 
+    pz = power_set_zones((c.pzm or {}).get("system"), c.pzm) if c.pzm else None
+
     def rows(ty):
         out = []
+        if ty == "power" and pz:
+            # 課表功率區間 (SP-618): the set's zones first, the Palladino ids kept for steps saved before
+            for z, name, lo, hi in pz:
+                head = f"Stryd Z{z[1:]}" if z[0] == "S" else f"L{z[1:]}"
+                out.append({"id": z, "label": f"{head} {_(name)}", "lo": lo, "hi": hi,
+                            "text": f"{lo * c.cp:.0f}–{hi * c.cp:.0f} W" if c.cp else ""})
+            for z, lo, hi in ZONES["power"]:
+                out.append({"id": z, "label": f"Palladino Z{z}", "lo": lo, "hi": hi, "legacy": True,
+                            "text": f"{lo * c.cp:.0f}–{hi * c.cp:.0f} W" if c.cp else ""})
+            return out
         if ty == "hr" and hz:
             e = easy_hr(c)
             out.append({"id": "aet", "label": cap_label, "text": f"{e[1]}–{e[2]} bpm" if e else ""})

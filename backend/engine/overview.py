@@ -1012,7 +1012,8 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         # the progression state machine's verdict (quality_gate.dose_step)
         pre = (dose.get("note") or "上次間歇沒有達標：") + pre
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
-    tth = {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet"), "hr_model": th.get("hr_model")}
+    tth = {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet"), "hr_model": th.get("hr_model"),
+           "power_model": th.get("power_model")}
     if spec is QG.SUB:
         # a ramp week (CTL ramp at load_guard's watch line): T1's content, never a ladder step (neutral)
         f = IL.fit("z3a", cap, (), prefs, mountain)
@@ -1234,7 +1235,8 @@ def _second_z3(gate: dict, built: dict, it: dict, th: dict, hours: Optional[floa
          "equiv": True, "progress": False, "reason": why, "action": "ok", "rung": rung, "base": canon}
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
     s = IL.session_for(f, {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet"),
-                           "hr_model": th.get("hr_model")}, QG.prefix(gate),
+                           "hr_model": th.get("hr_model"), "power_model": th.get("power_model")},
+                       QG.prefix(gate),
                        lthr_default, prefs, swap="cap")
     s["source"] = QG.source(gate, (f"{s['source']}；{QG.SRC_Z3['volume']}",))
     if notes is not None:
@@ -1279,7 +1281,7 @@ def _shorten(s: dict, left: float, total: float, hours: float, th: dict, gate: d
     out = IL.session_for({"variant": r, "level": s.get("variant_blocks") or "std", "reps": n, "equiv": False,
                           "progress": False, "reason": why, "rung": s.get("rung_key")},
                          {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet"),
-                          "hr_model": th.get("hr_model")}, "",
+                          "hr_model": th.get("hr_model"), "power_model": th.get("power_model")}, "",
                          bool((gate.get("lthr") or {}).get("default")), prefs, swap="cap")
     out["source"] = f"{s.get('source') or ''}；{QG.SRC_Z3['share']}"
     if notes is not None:
@@ -2488,7 +2490,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     cp_old = _BCK.cp_stale(today, last_cp_test_day(status.plan, today, (tx.get("cp_test") or {}).get("date")),
                            last_race_day(status.plan, today))
     st_th = {"cp": tt.get("cp"), "lthr": tt.get("lthr"), "aet": aet, "hr_model": hrz, "walk_cap": walk, "tpace": tpace,
-             "cp_stale": cp_old}
+             "cp_stale": cp_old, "power_model": tt.get("power_model")}
     SST.apply_objs(sessions, st_th, tph, prefs)
 
     # ---- projection to Sunday -------------------------------------------
@@ -2616,6 +2618,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                        "aet_measured": aet_meas, "easy_cap_label": cap_txt, "easy_cap_tip": _(EASY_CAP_TIP),
                        # 課表心率區間 (engine/hr_profile.plan_hr_zones): the push / step builders read it
                        "hr_model": hrz,
+                       # 課表功率區間 (SP-363, engine/power_zone_plan.py): the power targets' zone set
+                       "power_model": tt.get("power_model"),
                        # SP-493: the CP has no recent all-out effort (base_check.cp_stale) — target_policy
                        # runs the auto road intervals by HR
                        "cp_stale": cp_old,

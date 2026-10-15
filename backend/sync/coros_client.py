@@ -28,6 +28,13 @@ from backend.settings.secrets import SecretError, seal, unseal
 log = logging.getLogger(__name__)
 
 FIRST_SYNC_DAY = "20200101"
+
+
+def first_sync_day() -> str:
+    """FIRST_SYNC_DAY, or later when the admin limited a new connection's history (site_config
+    sync.history_days, SP-351)."""
+    from backend import site_config as SC
+    return SC.first_sync_day(datetime.strptime(FIRST_SYNC_DAY, "%Y%m%d").date()).strftime("%Y%m%d")
 # re-list days before the last sync: activities uploaded late would otherwise fall behind the
 # cursor — the watch synced the next day, or a multi-day 百岳 trip without a phone uploads a
 # week or more later (SP-362: 3 → 14 days; the already-imported ones cost one DB lookup each)
@@ -886,7 +893,7 @@ async def sync_workouts(
     elif last:
         since_day = (last.date() - timedelta(days=CURSOR_OVERLAP_DAYS)).strftime("%Y%m%d")
     else:
-        since_day = FIRST_SYNC_DAY
+        since_day = first_sync_day()
     end_day = datetime.now().strftime("%Y%m%d")
     sync_started = datetime.now(timezone.utc)
 

@@ -174,7 +174,7 @@ def test_power_zone_models_are_palladino_only():
     res = A.zone_times(ds, ds.workouts[0], "power")
     # power zones are Palladino's by default (2026-10-02): no Coggan set, no iLevels; Stryd's 5 zones
     # are a choice again (SP-363, test_stryd_zones_sp363.py)
-    assert [m["id"] for m in res["models"]] == ["palladino", "palladino3", "stryd"]
+    assert [m["id"] for m in res["models"]] == ["palladino", "palladino3", "stryd", "classic", "personal"]
     assert res["default"] == "palladino"          # Palladino % CP (zones-and-thresholds.md §3.2)
     assert not hasattr(A, "ilevels_for") and not hasattr(A, "ILEVEL_NAMES")
     p3 = _model(res, "palladino3")  # 80 % / 95 % CP = 200 / 237.5

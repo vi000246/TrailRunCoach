@@ -390,7 +390,7 @@ def test_nav_order_and_activity_list_name():
     import re
     ids = re.findall(r'\{ id: "(\w+)"', shell)
     assert ids == ["home", "schedule", "charts", "plan", "activity", "routes", "racepower",
-                   "injuries", "manual", "settings", "about"]               # 成就 is a tab of 活動列表; 操作手冊 (SP-558), 關於 (SP-495)
+                   "injuries", "manual", "settings", "admin", "about"]      # 成就 is a tab of 活動列表; 操作手冊 (SP-558), 管理 (SP-351), 關於 (SP-495) last
     assert _catalog("zh-TW", "shell")["page.activity.name"] == "活動列表"
     assert not any(k.startswith("page.achievements.") for k in _catalog("zh-TW", "shell"))
 

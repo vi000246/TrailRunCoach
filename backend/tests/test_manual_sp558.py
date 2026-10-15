@@ -134,9 +134,9 @@ def test_signed_out_the_manual_opens(c):  # noqa: F811
 
 def test_the_manual_in_the_owners_app_and_in_english(owner):
     r = owner.get("/manual/schedule?lang=en", headers=HTML)
-    assert r.status_code == 200 and "Pushing to the watch" in r.text and 'lang="en"' in r.text
+    assert r.status_code == 200 and "Sending the schedule to the watch" in r.text and 'lang="en"' in r.text
     r = owner.get("/manual/schedule?lang=zh-TW", headers=HTML)
-    assert "推到手錶" in r.text and r.headers["cache-control"] == "private, no-cache"
+    assert "課表送到手錶" in r.text and r.headers["cache-control"] == "private, no-cache"
     assert owner.get("/manual/index.json?lang=en").json()["locale"] == "en"
 
 

@@ -79,6 +79,10 @@ def test_standard_shows_at_most_12_hints_on_the_demo_trail_race(app):
 
 def _fuel_and_goal(body):
     fw = body.setdefault("fuel", {}).setdefault("warnings", [])
+    # SP-606: the demo trail race has no aid stations, so the server already sends its own RC21 — drop the
+    # server's copy of what this patch adds, or the page shows the patch's and the server's (2 × RC21)
+    added = {"RC20", "RC21", "RC22"}
+    fw[:] = [w for w in fw if not (isinstance(w, dict) and w.get("id") in added)]
     fw[:0] = [H.make("RC22", "熱量交叉檢查：功率法和 Fletcher 差超過 15 %"),
               H.make("RC21", "沒有輸入補給站：越野賽請在「補給站」加上 km，才能算每段要帶多少水"),
               H.make("RC20", "預估脫水約 3.1 % 體重：> 2 % 表現會掉")]
@@ -117,6 +121,19 @@ def test_no_stops_dehydration_and_too_fast_are_on_top_in_every_level(app, level)
     expect(page.locator("#fh-how .hint-detail")).to_be_hidden()
     # the hints the reader sees still counts the 補給 card's
     assert page.evaluate("() => RaceHints.list().filter((s) => s.startsWith('RC21')).length") == 1
+
+
+@pytest.mark.parametrize("level", H.LEVELS)
+def test_no_stops_from_the_server_is_shown_once_on_the_fuel_card(app, level):
+    """SP-606: the real /plan answer, unpatched — the demo trail race has no aid stations, so the server's
+    沒填補給站 (RC21) is shown once, in the box under the 補給 card's title, and nowhere on the result."""
+    page, _ = app
+    eid = _event(page)
+    _level(page, level)
+    _calc(page, eid)
+    assert page.evaluate("() => RaceHints.list().filter((s) => s.startsWith('RC21')).length") == 1
+    expect(page.locator('#fh-box [data-hint-id="RC21"]')).to_have_count(1)
+    assert "沒有輸入補給站" not in page.locator("#results").inner_text()
 
 
 def test_light_rain_is_a_line_on_the_weather_card_not_on_top(app):

@@ -135,6 +135,9 @@ class Thresholds:
     # 課表心率區間 (engine/hr_profile.plan_hr_zones, via the plan's thresholds "hr_model"):
     # easy = its Z2 band (a measured AeT caps it), interval classes = its zones
     hrz: Optional[dict] = None
+    # 課表功率區間 (SP-363, engine/power_zone_plan.plan_model via the plan's thresholds "power_model"):
+    # the auto power bands in the chosen set; None / Palladino = the bands as they are
+    pzm: Optional[dict] = None
     aet_measured: bool = False         # the easy cap is a measured AeT (week_plan thresholds)
     walk: Optional[dict] = None        # the walking sessions' uphill cap (hr_profile.walk_cap, SP-115)
 
@@ -145,6 +148,7 @@ class Thresholds:
         hrz = t.get("hr_model") if isinstance(t.get("hr_model"), dict) else None
         from backend.engine.hr_profile import easy_cap_measured
         return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"), hrz=hrz,
+                   pzm=t.get("power_model") if isinstance(t.get("power_model"), dict) else None,
                    aet_measured=easy_cap_measured(t),
                    walk=t.get("walk_cap") if isinstance(t.get("walk_cap"), dict) else None)
 
@@ -221,7 +225,8 @@ def easy_target(s: dict, th: Thresholds, frac: tuple = EASY_BAND) -> Optional[tu
     from backend.engine.hr_profile import walk_band
     b = _basis(s)
     if b == "power":
-        return power(th, *frac) or walk_band(th.walk_of(s), easy_hr(th))
+        from backend.engine.power_zone_plan import easy_band
+        return power(th, *easy_band(frac, th.pzm)) or walk_band(th.walk_of(s), easy_hr(th))
     if b == "none":
         return None
     return walk_band(th.walk_of(s), easy_hr(th))
@@ -254,7 +259,9 @@ def _variant_steps(s: dict, th: Thresholds) -> Optional[list[StepLike]]:
     v = IL.resolve(s.get("variant_key"), s.get("variant_reps"), s.get("variant_adj"))
     if v is None:
         return None
-    work_int = power(th, *watch_band(v.lo, v.hi))          # SP-378: the band the rep is judged by
+    # SP-378: the band the rep is judged by; SP-363: in the 課表功率區間 (Palladino: the variant's own);
+    # SP-590: a 個人化間歇 rep its own model band
+    work_int = power(th, *watch_band(*IL.plan_band(v, th.pzm)))
     if _basis(s) == "hr":
         work_int = _work_hr(s, th, v.cls) or work_int
     elif _basis(s) == "none":
@@ -297,7 +304,8 @@ def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
     pm = re.search(r"(\d+)\s*[–-]\s*(\d+)\s*%\s*CP", detail + " " + target)
     if pm:
         plo, phi = int(pm.group(1)) / 100.0, int(pm.group(2)) / 100.0
-    work_int = power(th, *watch_band(plo, phi))            # SP-378: the band the rep is judged by
+    from backend.engine.power_zone_plan import band as pz_band
+    work_int = power(th, *watch_band(*pz_band(plo, phi, th.pzm)))   # SP-378 / SP-363 (see _variant_steps)
     # 課表偏好 間歇目標 = 心率 (engine/plan_prefs.py): the target carries only a heart-rate range
     hm = re.search(r"心率\s*(\d+)\s*[–-]\s*(\d+)\s*bpm", target)
     if (hm and "功率" not in target) or s.get("basis") == "hr":
@@ -460,7 +468,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
             st = WS.normalize(s["steps"])
         except WS.StepsError as e:
             raise Unsupported(f"課表結構有誤：{e}")
-        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz,
+        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm,
                    sent_tl=sent_tl, walk=th.walk_of(s))
         return WS.steps_to_coros(st, c)
     if kind == "notice":
@@ -472,7 +480,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
         d = WS.derive(s) if not s.get("variant_key") and WS.me_climb(s) else None
         if d is not None:
             # 「ME 負重爬坡」 (SP-443): warm-up, the climb, the descent — the editor's structure, pushed as it is
-            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz,
+            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm,
                        sent_tl=sent_tl, walk=th.walk_of(s))
             return WS.steps_to_coros(WS.normalize(d), c)
         return _quality_steps(s, th)
@@ -489,7 +497,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
         # pushed as it is
         d = WS.derive(s)
         if d is not None:
-            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz,
+            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm,
                        sent_tl=sent_tl, walk=th.walk_of(s))
             return WS.steps_to_coros(WS.normalize(d), c)
     mp = WS.mp_minutes(s) if kind == "long" else None
@@ -738,7 +746,7 @@ def _load_records(s: dict, th: Thresholds, sent: Optional[dict] = None) -> list:
         st = WS.normalize(s["steps"])
     except WS.StepsError:
         return []
-    c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, sent_tl=sent,
+    c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm, sent_tl=sent,
                walk=th.walk_of(s))
     return WS.load_records(st, c)
 

@@ -83,6 +83,7 @@ class Variant:
     listed_equiv: bool = True    # False = the 非同等 options (30/15)
     grade: str = ""              # hill: "4–6%" / "6–10%"
     warm_floor: int = 0          # 每堂課前加熱身 (SP-364): the warm-up's minimum, minutes (variant_adj "warm")
+    opt: int = -1                # 個人化間歇 (SP-590): the level (0–5) it was re-cut to (variant_adj "opt"); -1 = not
 
     # ---- derived ----------------------------------------------------------
     @property
@@ -573,6 +574,13 @@ def adjust(v: Variant, adj: Optional[dict]) -> Variant:
     """quality_gate's state-machine tweak on a variant: rest + N min, or the band × factor."""
     if not adj:
         return v
+    o = adj.get("opt")
+    if isinstance(o, dict) and o.get("work_s") and o.get("reps"):
+        # 個人化間歇 (SP-590, power_zone_plan.optimized): the model's reps / rest / band, first — the
+        # state machine's tweaks below apply on top of it
+        v = replace(v, reps=int(o["reps"]), work_s=int(o["work_s"]), rest_s=int(o.get("rest_s") or 0),
+                    lo=float(o["lo"]), hi=float(o["hi"]), pattern=None, sets=1, set_rest_s=0,
+                    opt=int(o.get("level", 0)))
     if adj.get("rest_add") and not v.continuous:
         v = replace(v, rest_s=v.rest_s + 60 * int(adj["rest_add"]))
     if adj.get("power"):
@@ -615,6 +623,7 @@ def fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountain
     r = _fit(rung, cap, history, prefs, mountain, alt_caps, adj, cap_label, hill)
     if adj and r.get("rung") == rung:
         r["adj"] = adj
+    r.setdefault("cap", cap)            # the day's cap the 個人化間歇 (SP-590, session_for) fits into
     return r
 
 
@@ -728,8 +737,13 @@ def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False,
     v, lv = f["variant"], f["level"]
     cp, lthr, aet = th.get("cp"), th.get("lthr"), th.get("aet")
     use_hr = bool(lthr) and not lthr_default
-    band = f"{v.lo * 100:.0f}–{v.hi * 100:.0f}% CP"
-    parts = [f"功率 {v.lo * cp:.0f}–{v.hi * cp:.0f} W（{band}）"] if cp else [f"RPE 8（{band}）"]
+    pm = th.get("power_model") if isinstance(th.get("power_model"), dict) else None
+    # 個人化間歇 (SP-590): under 個人化區間 an interval at / above threshold takes the model's reps
+    v, opt, opt_note = _personal(f, v, lv, pm, cp, prefs)
+    # 課表功率區間 (SP-363): the rep's band in the chosen set (Palladino: the variant's own)
+    blo, bhi = plan_band(v, pm)
+    band = f"{blo * 100:.0f}–{bhi * 100:.0f}% CP"
+    parts = [f"功率 {blo * cp:.0f}–{bhi * cp:.0f} W（{band}）"] if cp else [f"RPE 8（{band}）"]
     # SP-493: under the 儲備心率 / 最大心率 課表心率區間 the HR is the class's zone of that model (what the
     # push gives a library step, hr_profile.work_band) — not × LTHR; the LTHR model keeps HR_LTHR
     from backend.engine.hr_profile import class_hr
@@ -748,9 +762,11 @@ def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False,
     hill = f"上坡（{v.grade} 坡）" if v.terrain == "hill" else ""
     body = f"{hill}{structure(v)}，{band}；{rest_text(v)}"
     total = int(round(total_min(v, lv, prefs)))
-    detail = (f"{f['reason']}。{prefix}{body}；暖身 {b['warm_min']} 分（{warm_txt}）、緩和 {b['cool_min']} 分"
+    detail = (f"{f['reason']}。{prefix}{opt_note}{body}；暖身 {b['warm_min']} 分（{warm_txt}）、緩和 {b['cool_min']} 分"
               + ("；暖身完 1–2 分內開始第一趟" if is_z5(v) else ""))
     adj = dict(f.get("adj") or {})
+    if opt:
+        adj["opt"] = opt                    # SP-590: the push / the structure / the judging read it back
     if warm_floor(v, prefs):
         # 每堂課前加熱身 (SP-364): the floor travels with the session, so the push / the editor
         # (no prefs there) build the same warm-up
@@ -760,10 +776,64 @@ def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False,
             "tss": total / 60.0 * RATE.get(v.cls, 70.0),
             "terrain": "trail" if v.terrain == "hill" else None,
             "variant_key": v.key, "rung_key": f.get("rung") or v.rung, "equiv": bool(f["equiv"]),
-            "swap": swap, "swap_reason": f["reason"], "variant_reps": f.get("reps"),
+            "swap": swap, "swap_reason": f["reason"], "variant_reps": None if opt else f.get("reps"),
             "variant_blocks": lv, "variant_adj": adj or None,
             "progress": bool(f.get("progress", f["equiv"])),
             **({"prefer_days": f["prefer_days"]} if f.get("prefer_days") else {})}
+
+
+def plan_band(v: Variant, pm: Optional[dict]) -> tuple:
+    """(lo, hi) × CP the 課表 writes a variant's reps in: a 個人化間歇 (SP-590) its own model band, any
+    other the 課表功率區間's level for its band (SP-363; Palladino: the variant's own)."""
+    if v.opt >= 0:
+        return v.lo, v.hi
+    from backend.engine.power_zone_plan import band as pz_band
+    return pz_band(v.lo, v.hi, pm)
+
+
+def _opt_of(v: Variant) -> dict:
+    """The variant_adj["opt"] of an already re-cut variant (fewer reps of a stored 個人化間歇)."""
+    return {"level": v.opt, "work_s": int(v.work_s), "reps": int(v.reps), "rest_s": int(v.rest_s),
+            "lo": v.lo, "hi": v.hi}
+
+
+def _personal(f: dict, v: Variant, lv: str, pm: Optional[dict], cp: Optional[float], prefs=None):
+    """(variant, opt dict or None, detail text) of a session under 個人化區間 (SP-590): an interval at /
+    above threshold re-cut to its level of the model's optimized intervals (power_zone_plan.optimized),
+    rebuilt from the library row so the stored tweaks (variant_adj) apply on top of it the way
+    resolve() does; its reps cut to the day's cap (f["cap"]) down to the level's minimum. The 30/15
+    (not an equivalent, picked by hand) is left as it is. Anything else: (v, None, "")."""
+    if v.opt >= 0:                                      # a stored one, fewer reps (overview._shorten)
+        return v, _opt_of(v), _opt_text(v, pm, cp, None)
+    if not v.listed_equiv or pm is None or pm.get("system") != "personal":
+        return v, None, ""
+    from backend.engine import power_zone_plan as PZP
+    base = get(v.key) or v
+    o = PZP.optimized(base.lo, base.hi, _median(base.works), tiz_s(base), pm, cp)
+    if not o:
+        return v, None, ""
+    adj = {k: x for k, x in (f.get("adj") or {}).items() if k != "opt"}
+    out = adjust(base, {**adj, "opt": o})
+    cap, cut = f.get("cap"), None
+    if cap is not None:
+        while out.reps > int(o.get("min_reps") or 1) and total_min(out, lv, prefs) > float(cap) + 1e-6:
+            o = {**o, "reps": out.reps - 1, "rest_s": o["rest_s"] if out.reps - 1 > 1 else 0}
+            out = adjust(base, {**adj, "opt": o})
+            cut = cap
+    o = {k: o[k] for k in ("level", "work_s", "reps", "rest_s", "lo", "hi", "w")}
+    return out, o, _opt_text(out, pm, cp, cut)
+
+
+def _opt_text(v: Variant, pm: Optional[dict], cp: Optional[float], cut: Optional[float]) -> str:
+    from backend.engine import power_zone_plan as PZP
+    w = f"{(v.lo + v.hi) / 2 * cp:.0f}" if cp else "–"
+    sec = int(round(v.work_s))
+    d = _("{s} 秒", s=sec) if sec < 60 else f"{sec // 60}:{sec % 60:02d}" if sec % 60 else _("{m} 分", m=sec // 60)
+    txt = _("個人化間歇（{name}）：每趟 {d}、約 {w} W，依你的功率–時間模型；趟數與休息：{rule}",
+            name=_(PZP.OPT_NAMES[v.opt]), d=d, w=w, rule=PZP.opt_rule(v.opt))
+    if cut is not None:
+        txt += _("；今天上限 {cap:.0f} 分，減成 {n} 趟", cap=cut, n=v.n)
+    return txt + "。"
 
 
 def resolve(key: Optional[str], reps: Optional[int] = None, adj: Optional[dict] = None) -> Optional[Variant]:

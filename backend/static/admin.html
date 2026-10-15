@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="admin.title">管理</title>
+<style>
+/* 管理 (SP-351): site settings, users, waitlist, change log. The data comes from /api/v1/admin/*
+   (api/admin.py), which refuses anyone without an admin scope; this page only frames it. */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --bad: #c0392b; --good: #1e8a4c; --warn: #b45309;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --bad: #ef6b5b; --good: #4cc27f; --warn: #f0a24b;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --bad: #ef6b5b; --good: #4cc27f; --warn: #f0a24b;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14.5px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 20px 16px 96px; }
+h1 { margin: 4px 0 4px; font-size: 24px; }
+.lead { margin: 0 0 14px; color: var(--muted); }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; }
+.tabs button { font: inherit; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sec { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+  padding: 16px 20px 18px; margin: 0 0 14px; }
+.sec h2 { margin: 0 0 6px; font-size: 17px; }
+.sec .sub { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+.row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 4px 18px; padding: 10px 0;
+  border-top: 1px solid var(--line); align-items: start; }
+.row:first-of-type { border-top: 0; }
+.row .lbl b { display: block; font-weight: 600; }
+.row .lbl small { display: block; color: var(--muted); font-size: 12.5px; }
+.row .ctl { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.ctl input, .ctl select, .ctl textarea, td select { font: inherit; padding: 4px 8px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); }
+.ctl input[type=number] { width: 7.5em; }
+.ctl textarea { width: 100%; min-height: 3.6em; resize: vertical; }
+.ctl .plans { display: flex; flex-wrap: wrap; gap: 6px 12px; width: 100%; font-size: 12.5px; color: var(--muted); }
+.ctl .plans label { display: inline-flex; gap: 5px; align-items: center; }
+.ctl .plans input, .ctl .plans select { width: 8.5em; font-size: 12.5px; }
+.badge { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.badge.site { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.badge.env { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.range { font-size: 12px; color: var(--faint); }
+.linkbtn { font: inherit; font-size: 12.5px; border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; }
+.btn { font: inherit; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.small { padding: 2px 10px; font-size: 12.5px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.savebar { position: sticky; bottom: 0; display: flex; gap: 12px; align-items: center; padding: 10px 0; background: var(--bg); }
+@media (max-width: 699px) { .savebar { bottom: calc(56px + env(safe-area-inset-bottom)); } }
+.msg { font-size: 13px; } .msg.err { color: var(--bad); } .msg.ok { color: var(--good); }
+.note { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+.switch { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+.switch input { width: 18px; height: 18px; }
+.paused { color: var(--warn); font-weight: 600; }
+.tablewrap { overflow-x: auto; margin: 0 -4px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; border-top: 0; }
+td.wrap { white-space: normal; min-width: 160px; }
+td .who b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+td.wrap:first-child { min-width: 210px; }
+td .st { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+td .who small { color: var(--muted); }
+.prob { display: block; color: var(--warn); font-size: 12.5px; }
+.dis { color: var(--bad); font-weight: 600; }
+/* SP-351 R2: admins, deleting a user, the Google client */
+.btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.btn.danger:hover { background: var(--bad); border-color: var(--bad); color: #fff; }
+td .rolebox { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+td .rolebox small { color: var(--muted); font-size: 11.5px; white-space: normal; max-width: 14em; }
+.gform input[name=gid], .gform input[name=gsecret] { width: min(100%, 30em); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.gstate { font-weight: 600; } .gstate.set { color: var(--good); } .gstate.unset { color: var(--warn); }
+.note code { font-size: 12.5px; overflow-wrap: anywhere; background: var(--soft); padding: 1px 6px; border-radius: 6px; }
+.empty { color: var(--muted); padding: 18px 4px; text-align: center; }
+.denied { text-align: center; padding: 48px 16px; }
+.denied p { font-size: 16px; margin: 0 0 14px; }
+.badge.test { color: #fff; background: var(--warn); border-color: var(--warn); }
+.tform { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: end; }
+.tform label { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); }
+.tform input, .tform select { font: inherit; font-size: 14px; padding: 4px 8px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); }
+.tform input[name=name] { width: 14em; } .tform input[name=count] { width: 5em; }
+.tform .chk { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 14px; }
+.tform fieldset { border: 0; padding: 0; margin: 0; display: flex; gap: 8px 14px; flex-wrap: wrap; }
+.tform fieldset[disabled] { opacity: .5; }
+.linkbox { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 6px; white-space: normal; }
+.linkbox input { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; flex: 1 1 260px; min-width: 0; padding: 4px 8px;
+  border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.linkbox small { flex-basis: 100%; color: var(--muted); }
+.mock-run { color: var(--accent); } .mock-fail { color: var(--bad); }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.chg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 699px) {
+  /* tables become one card per row: each cell with its column's name */
+  .tablewrap { overflow: visible; margin: 0; }
+  table, tbody, tr, td { display: block; width: 100%; }
+  thead { display: none; }
+  tr { border-top: 1px solid var(--line); padding: 8px 0; }
+  tr:first-child { border-top: 0; }
+  td { border: 0; padding: 2px 0; white-space: normal; display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 8px; }
+  td::before { content: attr(data-l); color: var(--muted); font-size: 12px; }
+  td:first-child, td[data-l=""] { display: block; }
+  td:first-child::before, td[data-l=""]::before { content: none; }
+  td.wrap:first-child { min-width: 0; }
+  td .st { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  main { padding: 14px 12px 120px; }
+  .row { grid-template-columns: 1fr; }
+  .sec { padding: 14px 14px 16px; }
+}
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="admin"></script>
+<main>
+  <h1 data-i18n="admin.title">管理</h1>
+  <p class="lead" id="lead" data-i18n="admin.lead">全站設定與使用者。這裡改的是整個網站，不是你自己的設定；每次修改都會留下操作紀錄。</p>
+  <section class="sec denied" id="denied" hidden>
+    <p data-i18n="admin.denied">只有管理員能開這一頁。</p>
+    <a class="btn" href="/api/v1/overview/page" data-i18n="admin.denied_back">回總覽</a>
+  </section>
+  <div id="app" hidden>
+    <div class="tabs" role="tablist" data-i18n-attr="aria-label:admin.tabs.label" aria-label="管理分頁">
+      <button type="button" role="tab" data-tab="config" data-i18n="admin.tab.config">全站設定</button>
+      <button type="button" role="tab" data-tab="google" data-i18n="admin.tab.google">Google 登入</button>
+      <button type="button" role="tab" data-tab="users" data-i18n="admin.tab.users">使用者</button>
+      <button type="button" role="tab" data-tab="waitlist" data-i18n="admin.tab.waitlist">候補名單</button>
+      <button type="button" role="tab" data-tab="tests" data-i18n="admin.tab.tests">測試帳號</button>
+      <button type="button" role="tab" data-tab="audit" data-i18n="admin.tab.audit">操作紀錄</button>
+    </div>
+    <div id="panel" role="tabpanel"></div>
+  </div>
+</main>
+<script>
+(() => {
+  "use strict";
+  const t = (k, p) => window.I18N.t("admin." + k, p);
+  const S = window.TRC_SESSION || {};
+  const scopes = new Set((S.membership && S.membership.scopes) || []);
+  const CAN_CONFIG = scopes.has("admin:config"), CAN_USERS = scopes.has("admin:users");
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  if (!CAN_CONFIG && !CAN_USERS) { $("#denied").hidden = false; $("#lead").hidden = true; return; }
+  $("#app").hidden = false;
+  const panel = $("#panel");
+  const tabs = [...document.querySelectorAll("[data-tab]")];
+  for (const b of tabs) {
+    const need = b.dataset.tab === "config" || b.dataset.tab === "google" ? CAN_CONFIG : b.dataset.tab === "audit" ? true : CAN_USERS;
+    if (!need) b.remove();
+  }
+
+  const api = async (path, opt) => {
+    const r = await fetch("/api/v1/admin" + path, { cache: "no-store", ...(opt || {}),
+      headers: { "Content-Type": "application/json", ...((opt && opt.headers) || {}) } });
+    let j = null;
+    try { j = await r.json(); } catch (_) {}
+    if (!r.ok) {
+      const d = j && j.detail;
+      const code = d && (d.code || d);
+      const msg = (code && typeof code === "string" && window.I18N.t("admin.err." + code, "")) || (d && d.key ? `${d.key}: ${t("err." + d.code)}` : `HTTP ${r.status}`);
+      throw new Error(msg);
+    }
+    return j;
+  };
+  const when = (iso) => {
+    if (!iso) return t("never");
+    const d = new Date(String(iso).includes("T") || String(iso).includes("Z") ? iso : String(iso).replace(" ", "T") + "Z");
+    return isNaN(d) ? esc(iso) : d.toLocaleString(window.I18N.locale === "en" ? "en-GB" : "zh-TW",
+      { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  };
+  const day = (iso) => (iso ? String(iso).slice(0, 10) : t("never"));
+  const bytes = (n) => {
+    if (n == null) return t("never");
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0, x = +n;
+    while (x >= 1024 && i < u.length - 1) { x /= 1024; i++; }
+    return `${x.toFixed(i ? 1 : 0)} ${u[i]}`;
+  };
+  const loading = () => { panel.innerHTML = `<p class="empty">${t("loading")}</p>`; };
+  const failed = (e) => { panel.innerHTML = `<p class="empty msg err">${esc(t("load_failed", { error: e.message }))}</p>`; };
+
+  // ---------------------------------------------------------------- site settings
+  const GROUPS = ["sync", "members", "quota", "coros", "retention", "shared"];
+  let cfg = null;
+  const srcBadge = (it) => {
+    const txt = it.source === "env" ? t("src.env", { env: it.env }) : t("src." + it.source);
+    return `<span class="badge ${it.source}" title="${esc(t("src_title"))}">${esc(txt)}</span>`;
+  };
+  const choiceLabel = (it, v) => (it.key === "archive.retention_years" ? t("unit.years", { n: v }) : t("choice." + v));
+  const input = (it, v, name, plan) => {
+    const blank = plan ? `<option value="">${esc(t("plan.same"))}</option>` : "";
+    if (it.kind === "choice") {
+      return `<select name="${name}">${blank}${it.choices.map((c) => `<option value="${esc(c)}"${String(c) === String(v) ? " selected" : ""}>${esc(choiceLabel(it, c))}</option>`).join("")}</select>`;
+    }
+    if (it.kind === "text") return `<textarea name="${name}" maxlength="${it.max_len}">${esc(v || "")}</textarea>`;
+    if (it.kind === "time") return `<input type="time" name="${name}" value="${esc(v || "")}">`;
+    const step = it.kind === "float" ? "any" : "1";
+    return `<input type="number" name="${name}" step="${step}" min="${it.min ?? ""}" max="${it.max ?? ""}" value="${v == null ? "" : esc(v)}"${plan ? ` placeholder="${esc(t("plan.same"))}"` : ""}>`;
+  };
+  const row = (it) => {
+    const help = window.I18N.t(`admin.item.${it.key}.help`, "");
+    const range = it.min != null && it.kind !== "choice" ? `<span class="range">${esc(t("range", { min: it.min, max: it.max }))}</span>` : "";
+    const plans = it.plan ? `<div class="plans" title="${esc(t("plan_title"))}">${Object.keys(cfg.plans).map((p) =>
+      `<label>${esc(t("plan." + p))} ${input(it, cfg.plans[p][it.key], `plan:${p}:${it.key}`, true)}</label>`).join("")}</div>` : "";
+    return `<div class="row" data-key="${esc(it.key)}"><div class="lbl"><b>${esc(t("item." + it.key))}</b>${help ? `<small>${esc(help)}</small>` : ""}</div>
+      <div class="ctl">${input(it, it.value, `site:${it.key}`)} ${range} ${srcBadge(it)}
+        ${it.source === "site" ? `<button type="button" class="linkbtn" data-reset="${esc(it.key)}" title="${esc(t("reset_title"))}">${t("reset")}</button>` : ""}${plans}</div></div>`;
+  };
+  const sourcesSec = () => `<section class="sec"><h2>${t("group.sources")}</h2><p class="sub">${t("group.sources_lead")}</p>
+    ${cfg.sources.map((s) => `<div class="row"><div class="lbl"><b>${esc(t("source." + s.scope))}</b>${s.tripped ? `<small class="paused">${esc(t("source.tripped"))}</small>` : ""}</div>
+      <div class="ctl"><label class="switch"><input type="checkbox" data-source="${esc(s.scope)}"${s.on ? " checked" : ""}>
+      <span class="${s.on ? "" : "paused"}">${s.on ? t("source.on") : t("source.off")}</span></label></div></div>`).join("")}</section>`;
+  const renderConfig = () => {
+    const by = (g) => cfg.items.filter((i) => i.group === g);
+    panel.innerHTML = `<p class="note">${esc(t("order_note"))}</p>` + sourcesSec() + GROUPS.map((g) =>
+      `<section class="sec"><h2>${t("group." + g)}</h2>${by(g).map(row).join("")}</section>`).join("") +
+      `<div class="savebar"><button type="button" class="btn primary" id="save">${t("save")}</button><span class="msg" id="smsg"></span></div>`;
+    for (const cb of panel.querySelectorAll("[data-source]")) cb.addEventListener("change", async () => {
+      const name = t("source." + cb.dataset.source);
+      if (!cb.checked && !confirm(t("source.confirm_off", { name }))) { cb.checked = true; return; }
+      try {
+        cfg = await api("/sources", { method: "PUT", body: JSON.stringify({ scope: cb.dataset.source, on: cb.checked }) });
+        renderConfig();
+      } catch (e) { alert(e.message); cb.checked = !cb.checked; }
+    });
+    for (const b of panel.querySelectorAll("[data-reset]")) b.addEventListener("click", () => save({ values: { [b.dataset.reset]: null }, plans: {} }));
+    $("#save").addEventListener("click", () => save(collect()));
+  };
+  const collect = () => {
+    const values = {}, plans = {};
+    const num = (it, raw) => (raw === "" ? null : it.kind === "int" || it.kind === "float" || (it.kind === "choice" && typeof it.choices[0] === "number") ? Number(raw) : raw);
+    for (const it of cfg.items) {
+      const el = panel.querySelector(`[name="site:${CSS.escape(it.key)}"]`);
+      if (el) {
+        const v = num(it, el.value.trim ? el.value.trim() : el.value);
+        if (it.kind === "text" ? (v || "") !== (it.value || "") : v != null && String(v) !== String(it.value)) values[it.key] = v == null ? "" : v;
+      }
+      if (!it.plan) continue;
+      for (const p of Object.keys(cfg.plans)) {
+        const pe = panel.querySelector(`[name="plan:${p}:${CSS.escape(it.key)}"]`);
+        if (!pe) continue;
+        const v = num(it, pe.value.trim());
+        const had = cfg.plans[p][it.key];
+        if (String(v ?? "") !== String(had ?? "")) (plans[p] = plans[p] || {})[it.key] = v;
+      }
+    }
+    return { values, plans };
+  };
+  const save = async (body) => {
+    const m = $("#smsg");
+    if (!Object.keys(body.values).length && !Object.keys(body.plans).length) { m.className = "msg"; m.textContent = t("nothing_changed"); return; }
+    m.className = "msg"; m.textContent = t("saving");
+    try {
+      cfg = await api("/config", { method: "PUT", body: JSON.stringify(body) });
+      renderConfig();
+      const m2 = $("#smsg"); m2.className = "msg ok"; m2.textContent = t("saved");
+    } catch (e) { m.className = "msg err"; m.textContent = t("save_failed", { error: e.message }); }
+  };
+  const showConfig = async () => { loading(); try { cfg = await api("/config"); renderConfig(); } catch (e) { failed(e); } };
+
+  // ---------------------------------------------------------------- users
+  const probText = (p) => (p.code === "FAILED_ACTIVITIES" ? t("prob.FAILED_ACTIVITIES", { n: p.n }) : t("prob." + p.code));
+  const userRow = (u) => {
+    const who = esc(u.email || (u.owner ? t("role.admin") : u.name) || `#${u.id}`);
+    const plan = u.owner ? t("never") : `<select data-plan="${u.id}">${["free", "subscriber"].map((p) =>
+      `<option value="${p}"${u.plan === p ? " selected" : ""}>${esc(t("plan_name." + p))}</option>`).join("")}</select>${u.plan_expires_at ? ` <small>${esc(t("plan_until", { date: day(u.plan_expires_at) }))}</small>` : ""}`;
+    const probs = (u.problems || []).map((p) => `<span class="prob">${esc(probText(p))}</span>`).join("") || t("never");
+    const testBtn = u.owner ? "" : `<button type="button" class="btn small" data-test="${u.id}" data-on="${u.test ? "0" : "1"}">${t(u.test ? "tests.unmark" : "tests.mark")}</button>`;
+    const act = u.owner ? "" : u.disabled_at
+      ? `<button type="button" class="btn small" data-enable="${u.id}">${t("act.enable")}</button>`
+      : `<button type="button" class="btn small" data-disable="${u.id}" data-who="${who}">${t("act.disable")}</button>`;
+    return `<tr><td class="wrap"><div class="who"><b>${who}${u.test ? ` <span class="badge test">${t("tests.badge")}</span>` : ""}</b><small>#${u.id}${u.name && u.email ? " · " + esc(u.name) : ""}</small></div></td>
+      <td>${esc(t("role." + (u.role === "owner" ? "admin" : u.role)))}</td><td>${plan}</td><td>${day(u.created_at)}</td><td>${when(u.last_seen_at || u.last_login_at)}</td>
+      <td>${when(u.last_sync_at)}</td><td class="wrap">${probs}</td><td>${bytes(u.bytes)}</td>
+      <td><div class="st">${u.disabled_at ? `<span class="dis">${t("status.disabled")}</span>` : t("status.active")}${act}${testBtn}</div></td></tr>`;
+  };
+  const showUsers = async () => {
+    loading();
+    let d;
+    try { d = await api("/users"); } catch (e) { failed(e); return; }
+    if (!d.accounts) { panel.innerHTML = `<section class="sec"><p class="sub">${esc(t("accounts_off"))}</p></section>`; return; }
+    panel.innerHTML = `<section class="sec"><p class="sub">${esc(t("users.count", { n: d.count, max: d.max_users }))}</p>
+      ${d.users.length ? `<div class="tablewrap"><table><thead><tr>${["user", "role", "plan", "created", "seen", "sync", "problems", "size", "status"]
+        .map((c) => `<th>${t("col." + c)}</th>`).join("")}</tr></thead><tbody>${d.users.map(userRow).join("")}</tbody></table></div>`
+        : `<p class="empty">${t("users.none")}</p>`}<p class="msg" id="umsg"></p></section>`;
+    decorateUsers(d);
+    const put = async (id, body) => {
+      try { await api(`/users/${id}`, { method: "PUT", body: JSON.stringify(body) }); showUsers(); }
+      catch (e) { const m = $("#umsg"); m.className = "msg err"; m.textContent = e.message; }
+    };
+    for (const b of panel.querySelectorAll("[data-disable]")) b.addEventListener("click", () => {
+      if (confirm(t("act.confirm_disable", { who: b.dataset.who }))) put(b.dataset.disable, { disabled: true });
+    });
+    for (const b of panel.querySelectorAll("[data-enable]")) b.addEventListener("click", () => put(b.dataset.enable, { disabled: false }));
+    for (const s of panel.querySelectorAll("[data-plan]")) s.addEventListener("change", () => put(s.dataset.plan, { plan: s.value }));
+    for (const b of panel.querySelectorAll("[data-test]")) b.addEventListener("click", () => put(b.dataset.test, { test: b.dataset.on === "1" }));
+  };
+
+  // ---------------------------------------------------------------- test accounts (SP-611)
+  let testPoll = null;
+  const mockText = (m) => {
+    if (!m) return `<span>${t("tests.mock.none")}</span>`;
+    const what = t("tests.mock.what", { weeks: m.weeks, level: t("tests.level." + m.level) });
+    if (m.state === "done") return `<span>${esc(t("tests.mock.done", { n: m.activities ?? 0 }))}</span><small>${esc(what)}</small>`;
+    if (m.state === "failed") return `<span class="mock-fail">${esc(t("tests.mock.failed"))}</span><small>${esc(what)}</small>`;
+    return `<span class="mock-run">${esc(t("tests.mock." + m.state))}</span><small>${esc(what)}</small>`;
+  };
+  const testRow = (r, signin) => {
+    const busy = r.mock && (r.mock.state === "queued" || r.mock.state === "running");
+    const made = r.origin === "admin";
+    const link = made && signin ? `<button type="button" class="btn small primary" data-link="${r.id}"${busy || r.disabled_at ? " disabled" : ""}>${t("tests.link")}</button>` : "";
+    return `<tr data-row="${r.id}"><td class="wrap"><div class="who"><b>${esc(r.name || r.email || "#" + r.id)}</b>
+        <small>#${r.id} · ${esc(t("tests.origin." + (made ? "admin" : "marked")))}</small></div><div class="linkbox" data-linkbox="${r.id}" hidden></div></td>
+      <td>${esc(t("plan_name." + r.plan))}</td><td><div class="st">${mockText(r.mock)}</div></td><td>${day(r.created_at)}</td><td>${when(r.last_seen_at)}</td>
+      <td><div class="acts">${link}<button type="button" class="btn small" data-del="${r.id}" data-who="${esc(r.name || "#" + r.id)}"${busy ? " disabled" : ""}>${t("tests.delete")}</button></div></td></tr>`;
+  };
+  const showTests = async () => {
+    if (testPoll) { clearTimeout(testPoll); testPoll = null; }
+    let d;
+    try { d = await api("/test-accounts"); } catch (e) { failed(e); return; }
+    if (!d.accounts) { panel.innerHTML = `<section class="sec"><p class="sub">${esc(t("accounts_off"))}</p></section>`; return; }
+    const opt = (xs, cur, lbl) => xs.map((x) => `<option value="${esc(x)}"${x === cur ? " selected" : ""}>${esc(lbl(x))}</option>`).join("");
+    panel.innerHTML = `<section class="sec"><h2>${t("tests.new.h")}</h2><p class="sub">${esc(t("tests.new.lead"))}</p>
+      <form class="tform" id="tnew" autocomplete="off">
+        <label>${t("tests.new.name")}<input name="name" maxlength="40" required placeholder="${esc(t("tests.new.name_ph"))}"></label>
+        <label>${t("tests.new.count")}<input name="count" type="number" min="1" max="${d.max_count}" value="1"></label>
+        <label class="chk"><input type="checkbox" name="mock" checked>${t("tests.new.mock")}</label>
+        <fieldset id="tmock">
+          <label>${t("tests.new.weeks")}<select name="weeks">${opt(d.weeks, d.default_weeks, (w) => t("tests.weeks", { n: w }))}</select></label>
+          <label>${t("tests.new.level")}<select name="level">${opt(d.levels, d.default_level, (l) => t("tests.level." + l))}</select></label>
+        </fieldset>
+        <button type="submit" class="btn primary">${t("tests.new.go")}</button>
+      </form><p class="note" style="margin:10px 0 0">${esc(t("tests.new.note"))}</p><p class="msg" id="tmsg"></p></section>
+      <section class="sec"><h2>${t("tests.list.h")}</h2><p class="sub">${esc(t(d.signin ? "tests.list.lead" : "tests.list.lead_owner", { min: Math.round(d.link_ttl_s / 60) }))}</p>
+      ${d.rows.length ? `<div class="tablewrap"><table><thead><tr>${["account", "plan", "mock", "created", "seen", ""]
+        .map((c) => `<th>${c ? t("tests.col." + c) : ""}</th>`).join("")}</tr></thead><tbody>${d.rows.map((r) => testRow(r, d.signin)).join("")}</tbody></table></div>`
+        : `<p class="empty">${t("tests.list.none")}</p>`}<p class="msg" id="tlmsg"></p></section>`;
+    const f = $("#tnew");
+    f.mock.addEventListener("change", () => { $("#tmock").disabled = !f.mock.checked; });
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const m = $("#tmsg");
+      const body = { name: f.name.value.trim(), count: Number(f.count.value) || 1,
+        mock: f.mock.checked ? { weeks: Number(f.weeks.value), level: f.level.value } : null };
+      m.className = "msg"; m.textContent = t("saving");
+      try {
+        const r = await api("/test-accounts", { method: "POST", body: JSON.stringify(body) });
+        await showTests();
+        const m2 = $("#tmsg"); m2.className = "msg ok"; m2.textContent = t("tests.new.done", { n: r.created.length });
+      } catch (e) { m.className = "msg err"; m.textContent = e.message; }
+    });
+    const lmsg = (text, ok) => { const m = $("#tlmsg"); m.className = "msg " + (ok ? "ok" : "err"); m.textContent = text; };
+    for (const b of panel.querySelectorAll("[data-link]")) b.addEventListener("click", async () => {
+      try {
+        const r = await api(`/test-accounts/${b.dataset.link}/link`, { method: "POST", body: "{}" });
+        const box = panel.querySelector(`[data-linkbox="${b.dataset.link}"]`);
+        box.innerHTML = `<input readonly aria-label="${esc(t("tests.link_label"))}"><button type="button" class="btn small">${t("tests.copy")}</button>
+          <small>${esc(t("tests.link_note", { time: when(r.expires_at) }))}</small>`;
+        const inp = box.querySelector("input");
+        inp.value = r.url;
+        box.hidden = false;
+        inp.select();
+        box.querySelector("button").addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(r.url); lmsg(t("tests.copied"), true); }
+          catch (_) { inp.select(); document.execCommand("copy"); lmsg(t("tests.copied"), true); }
+        });
+      } catch (e) { lmsg(e.message); }
+    });
+    for (const b of panel.querySelectorAll("[data-del]")) b.addEventListener("click", async () => {
+      if (!confirm(t("tests.confirm_delete", { who: b.dataset.who }))) return;
+      b.disabled = true;
+      try { await api(`/test-accounts/${b.dataset.del}`, { method: "DELETE" }); await showTests(); lmsg(t("tests.deleted"), true); }
+      catch (e) { lmsg(e.message); b.disabled = false; }
+    });
+    // made-up data being built: look again in a few seconds (only while this tab is open)
+    if (d.rows.some((r) => r.mock && (r.mock.state === "queued" || r.mock.state === "running"))) {
+      testPoll = setTimeout(() => { if (location.hash === "#tests" && !panel.querySelector(".linkbox:not([hidden])")) showTests(); }, 5000);
+    }
+  };
+
+  // ---------------------------------------------------------------- waitlist
+  const showWaitlist = async () => {
+    loading();
+    let d;
+    try { d = await api("/waitlist"); } catch (e) { failed(e); return; }
+    if (!d.accounts) { panel.innerHTML = `<section class="sec"><p class="sub">${esc(t("accounts_off"))}</p></section>`; return; }
+    const waiting = d.waitlist.filter((w) => !w.invited_at).length;
+    panel.innerHTML = `<section class="sec"><p class="sub">${esc(t("wait.count", { n: d.count, max: d.max_users, w: waiting }))}</p>
+      ${d.waitlist.length ? `<div class="tablewrap"><table><thead><tr><th>${t("wait.email")}</th><th>${t("wait.since")}</th><th>${t("wait.state")}</th><th></th></tr></thead><tbody>
+      ${d.waitlist.map((w) => `<tr><td class="wrap">${esc(w.email)}</td><td>${when(w.created_at)}</td>
+        <td>${w.invited_at ? esc(t("wait.admitted", { date: day(w.invited_at) })) : t("wait.waiting")}</td>
+        <td>${w.invited_at ? "" : `<button type="button" class="btn small primary" data-admit="${w.id}" data-email="${esc(w.email)}" title="${esc(t("wait.admit_title"))}">${t("wait.admit")}</button>`}</td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="empty">${t("wait.none")}</p>`}<p class="msg" id="wmsg"></p></section>`;
+    for (const b of panel.querySelectorAll("[data-admit]")) b.addEventListener("click", async () => {
+      if (!confirm(t("wait.confirm_admit", { email: b.dataset.email }))) return;
+      try { await api(`/waitlist/${b.dataset.admit}/admit`, { method: "POST", body: "{}" }); await showWaitlist();
+        const m = $("#wmsg"); m.className = "msg ok"; m.textContent = t("wait.admitted_ok"); }
+      catch (e) { const m = $("#wmsg"); m.className = "msg err"; m.textContent = e.message; }
+    });
+  };
+
+  // ---------------------------------------------------------------- the log
+  const val = (v) => (v == null || v === "" ? t("audit.empty") : typeof v === "object" ? JSON.stringify(v) : String(v));
+  // a setting's name; a plan's own value (plan.<plan>.<key>) says which plan
+  const cfgName = (k) => {
+    const m = /^plan\.(free|subscriber)\.(.+)$/.exec(k);
+    return m ? `${t("item." + m[2])} (${t("plan." + m[1])})` : t("item." + k);
+  };
+  const showAudit = async () => {
+    loading();
+    let d;
+    try { d = await api("/audit"); } catch (e) { failed(e); return; }
+    panel.innerHTML = `<section class="sec">${d.rows.length ? `<div class="tablewrap"><table><thead><tr><th>${t("audit.at")}</th><th>${t("audit.by")}</th><th>${t("audit.action")}</th><th>${t("audit.change")}</th></tr></thead><tbody>
+      ${d.rows.map((r) => `<tr><td>${when(r.at)}</td><td>${esc(t("audit.by_user", { id: r.by ?? "?" }))}</td>
+        <td class="wrap">${esc(t("audit." + r.action, { key: r.action === "config" ? cfgName(r.target) : r.action === "source" ? t("source." + r.target) : r.target }))}</td>
+        <td class="chg">${r.action.startsWith("google.secret") ? "" : `${esc(val(r.old))} → ${esc(val(r.new))}`}</td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="empty">${t("audit.none")}</p>`}</section>`;
+  };
+
+  // ---------------------------------------------------------------- R2: admins, deleting a user (SP-351 R2)
+  // added onto the users table after it is drawn: the role cell gets the admin switch, the status
+  // cell the delete button. The site owner is always an admin and is never deleted; nobody deletes
+  // themselves here (their own account is deleted from 設定).
+  const ME = (S.user && S.user.id) || 1;
+  const decorateUsers = (d) => {
+    const trs = panel.querySelectorAll("tbody tr");
+    const msg = (text, ok) => { const m = $("#umsg"); if (m) { m.className = "msg " + (ok ? "ok" : ok === false ? "err" : ""); m.textContent = text; } };
+    d.users.forEach((u, i) => {
+      const tr = trs[i];
+      if (!tr || !tr.children[1]) return;
+      const who = u.email || u.name || `#${u.id}`;
+      const role = tr.children[1];
+      const extra = u.owner ? `<small title="${esc(t("role.site_owner_note"))}">${esc(t("role.site_owner"))}</small>`
+        : (u.admin ? `<span class="badge site">${esc(t("role.admin"))}</span>` : "") +
+          `<button type="button" class="linkbtn" data-admin="${u.id}" data-on="${u.admin ? "0" : "1"}" data-who="${esc(who)}">${t(u.admin ? "act.unadmin" : "act.make_admin")}</button>`;
+      role.innerHTML = `<div class="rolebox"><span>${role.innerHTML}</span>${extra}</div>`;
+      const st = tr.querySelector(".st");
+      if (st && !u.owner && !u.me && u.id !== ME) {
+        st.insertAdjacentHTML("beforeend", `<button type="button" class="btn small danger" data-delete="${u.id}" data-who="${esc(who)}">${t("act.delete")}</button>`);
+      }
+    });
+    for (const b of panel.querySelectorAll("[data-admin]")) b.addEventListener("click", async () => {
+      const on = b.dataset.on === "1";
+      if (!confirm(t(on ? "act.confirm_admin" : "act.confirm_unadmin", { who: b.dataset.who }))) return;
+      try { await api(`/users/${b.dataset.admin}/admin`, { method: "PUT", body: JSON.stringify({ admin: on }) }); await showUsers(); }
+      catch (e) { msg(e.message, false); }
+    });
+    for (const b of panel.querySelectorAll("[data-delete]")) b.addEventListener("click", async () => {
+      const word = b.dataset.who;
+      const typed = prompt(t("act.confirm_delete", { who: word, word }));
+      if (typed == null) return;
+      if (typed.trim().toLowerCase() !== word.toLowerCase()) { msg(t("act.delete_mismatch"), false); return; }
+      b.disabled = true;
+      msg(t("act.deleting"));
+      try {
+        await api(`/users/${b.dataset.delete}/delete`, { method: "POST", body: JSON.stringify({ confirm: true }) });
+        await showUsers();
+        msg(t("act.deleted", { who: word }), true);
+      } catch (e) { b.disabled = false; msg(e.message, false); }
+    });
+  };
+
+  // ---------------------------------------------------------------- R2: the Google client (SP-351 R2)
+  // the secret is write-only: the API answers set / not set and where from, never the value
+  const showGoogle = async () => {
+    loading();
+    let g;
+    try { g = await api("/google"); } catch (e) { failed(e); return; }
+    const src = (s) => `<span class="badge ${s || ""}">${esc(t("google.src." + (s || "none")))}</span>`;
+    const clear = (k) => `<button type="button" class="linkbtn" data-gclear="${k}" title="${esc(t("google.clear"))}">${t("reset")}</button>`;
+    const id = g.client_id, sec = g.client_secret;
+    panel.innerHTML = `<section class="sec gform"><h2>${t("google.h")}</h2><p class="sub">${esc(t("google.lead"))}</p>
+      ${g.redirect_uri ? `<p class="note">${esc(t("google.redirect"))} <code>${esc(g.redirect_uri)}</code></p>` : ""}
+      <div class="row"><div class="lbl"><b>${t("google.id")}</b><small>${esc(t("google.id_help"))}</small></div>
+        <div class="ctl"><input name="gid" autocomplete="off" spellcheck="false" maxlength="300" value="${esc(id.site ? id.value : "")}"
+          placeholder="${esc(!id.site && id.value ? id.value : t("google.id_ph"))}"> ${src(id.source)} ${id.site ? clear("client_id") : ""}</div></div>
+      <div class="row"><div class="lbl"><b>${t("google.secret")}</b><small>${esc(t("google.secret_help"))}</small></div>
+        <div class="ctl"><input type="password" name="gsecret" autocomplete="new-password" spellcheck="false" maxlength="300"
+          placeholder="${esc(t(sec.set ? "google.secret_set_ph" : "google.secret_ph"))}">
+          <span class="gstate ${sec.set ? "set" : "unset"}">${t(sec.set ? "google.state.set" : "google.state.unset")}</span> ${src(sec.source)} ${sec.site ? clear("client_secret") : ""}
+          ${sec.unreadable ? `<small class="msg err">${esc(t("google.unreadable"))}</small>` : ""}</div></div>
+      <p class="note">${esc(t(g.signin ? "google.note_signin" : "google.note_owner"))}</p>
+      <div class="savebar"><button type="button" class="btn primary" id="gsave">${t("save")}</button><span class="msg" id="gmsg"></span></div></section>`;
+    const put = async (body) => {
+      const m = $("#gmsg");
+      if (!Object.keys(body).length) { m.className = "msg"; m.textContent = t("nothing_changed"); return; }
+      m.className = "msg"; m.textContent = t("saving");
+      try {
+        await api("/google", { method: "PUT", body: JSON.stringify(body) });
+        await showGoogle();
+        const m2 = $("#gmsg"); m2.className = "msg ok"; m2.textContent = t("google.saved");
+      } catch (e) { m.className = "msg err"; m.textContent = t("save_failed", { error: e.message }); }
+    };
+    $("#gsave").addEventListener("click", () => {
+      const body = {};
+      const v = panel.querySelector("[name=gid]").value.trim();
+      if (v !== (id.site ? id.value : "")) body.client_id = v || null;
+      const s = panel.querySelector("[name=gsecret]").value.trim();
+      if (s) body.client_secret = s;
+      put(body);
+    });
+    for (const b of panel.querySelectorAll("[data-gclear]")) b.addEventListener("click", () => put({ [b.dataset.gclear]: null }));
+  };
+
+  // each cell knows its column's name (the phone layout shows it before the value)
+  new MutationObserver(() => {
+    for (const tb of panel.querySelectorAll("table")) {
+      const names = [...tb.querySelectorAll("thead th")].map((th) => th.textContent.trim());
+      for (const tr of tb.querySelectorAll("tbody tr")) [...tr.children].forEach((td, i) => { td.dataset.l = names[i] || ""; });
+    }
+  }).observe(panel, { childList: true, subtree: true });
+  const SHOW = { config: showConfig, users: showUsers, waitlist: showWaitlist, tests: () => { loading(); showTests(); }, audit: showAudit };
+  const open = (name) => {
+    const ok = tabs.filter((b) => b.isConnected).map((b) => b.dataset.tab);
+    if (!ok.includes(name)) name = ok[0];
+    for (const b of tabs) b.setAttribute("aria-selected", String(b.dataset.tab === name));
+    if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
+    SHOW[name]();
+  };
+  SHOW.google = showGoogle;                                      // SP-351 R2
+  for (const b of tabs) b.addEventListener("click", () => open(b.dataset.tab));
+  open(location.hash.slice(1) || "config");
+})();
+</script>
+</body>
+</html>

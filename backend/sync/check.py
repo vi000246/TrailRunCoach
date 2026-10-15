@@ -97,7 +97,7 @@ class _Coros:
 
     def first_day(self) -> date:
         from backend.sync import coros_client as C
-        return datetime.strptime(C.FIRST_SYNC_DAY, "%Y%m%d").date()
+        return datetime.strptime(C.first_sync_day(), "%Y%m%d").date()
 
     async def open(self) -> None:
         from backend.sync import coros_client as C

@@ -46,20 +46,22 @@ The schedule and the analysis are calculated from your watch's activities, so co
 4. Press sync now (立即同步). The first sync also fetches your older activities and takes a while (next part).
 
 :::warn
-Garmin is a **trial** for now: at most 1 automatic and 3 manual syncs a day; a long history takes a few days to arrive.
+Garmin is a **trial** for now: at most 1 scheduled and 3 manual syncs a day; a long history takes a few days to arrive.
 :::
 
 :::deep
 ### One source at a time
-Charts, the overview, the Race calculator, the CP test and the automatic sync use only the chosen source; another source's activities never fill gaps. Switching asks first, and the charts are recalculated from the new source; tags, RPE, pain, pack weight and the schedule matching are tied to the start time and stay.
+Charts, the overview, the Race calculator, the CP test and every sync use only the chosen source; another source's activities never fill gaps. Switching asks first, and the charts are recalculated from the new source; tags, RPE, pain, pack weight and the schedule matching are tied to the start time and stay.
 
 ### How the sign-in is kept
 With "remember the password" ticked, the password is stored encrypted on the server: when a COROS sign-in expires (about 24 hours) or is refused, it signs in again once by itself. Without it, sign in again yourself. If Garmin asks for a code, a code field appears (valid 10 minutes). COROS and Garmin are unofficial interfaces: the first connection asks you to accept a notice.
 
-### Automatic sync
-- Sync when the site opens (開啟網站時自動同步): when the last sync is older than some hours (6 by default).
-- Daily sync (每日自動同步): every day at a set time (off by default).
+### When it syncs
+- When you open the site: if the last sync is older than some hours (6 by default).
+- Once a day: at a time you set (off by default).
 - The free plan: opening the site does not sync; the daily sync runs at night, between 01:00 and 05:00.
+
+The switches are in "Settings" → "Data & sync".
 
 ### No COROS / Garmin account
 Use "Import FIT files" on the same tab: choose files or a whole folder. Desktop Chrome and Edge can also keep an automatic import folder, imported whenever you open the site.

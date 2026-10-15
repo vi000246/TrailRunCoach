@@ -2,7 +2,7 @@
 id: schedule
 order: 2
 title: Schedule
-summary: Reading a session card, colours and symbols, changing and replanning, pushing to the watch, the calendar subscription.
+summary: Reading a session card, colours and symbols, changing and replanning, sending the schedule to the watch, the calendar subscription.
 icon: schedule
 ---
 The schedule is planned for you from your races, the season's phases and your recent training; change it whenever you like — the sessions you change are remembered as yours.
@@ -150,9 +150,9 @@ It starts from your own value (Settings › Physiology › the starting Chronic 
 A bar's colour is the Load balance ÷ yesterday's Chronic load: < −30 % High Risk, −30 … −10 % Optimal, −10 … +5 % Grey Zone, +5 … +25 % Fresh, > +25 % Transition (bands common in the industry). Note that the recovery-week rule looks at the Load balance **number** (−30), not at this share.
 :::
 
-## Pushing to the watch {#push}
+## Sending the schedule to the watch {#push}
 
-The schedule can be pushed to a **COROS** watch's calendar: "Push to watch" pushes this week; ▾ next to it chooses "this day", "this week" or "the whole phase". A preview says first how many sessions go and which do not.
+The schedule can be sent to a **COROS** watch's calendar: "Push to watch" pushes this week; ▾ next to it chooses "this day", "this week" or "the whole phase". A preview says first how many sessions go and which do not.
 
 ![The push button and its ▾ menu on top of the schedule](../img/schedule-push.en.webp "The schedule is replanned from your progress before a push; strength sessions are not pushed.")
 

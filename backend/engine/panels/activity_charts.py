@@ -44,6 +44,7 @@ import numpy as np
 
 from backend.engine import hints as H
 from backend.engine import hr_profile as HP
+from backend.engine import power_zone_plan as PZP
 from backend.engine import zones as Z
 from backend.i18n import N_, _
 
@@ -378,8 +379,26 @@ POWER_MODELS = [
      "source": "Palladino 的三區摘要（低 < 80% CP、中 80–95%、高 ≥ 95%），即功率版的 Seiler 三區"},
     {"id": "stryd", "title": N_("Stryd 5 區（% CP）"), "basis": "cp", "zones": Z.stryd_rows,
      "source": Z.STRYD_SOURCE},
+    # SP-363: the classic 7 levels (% threshold power = CP here) and the 個人化區間 (the runner's own PD
+    # model on the activity's day, engine/power_zone_plan.personal_levels; the algorithm is in the core)
+    {"id": "classic", "title": N_("經典 7 級（% 閾值功率）"), "basis": "cp",
+     "zones": lambda: [(z, n, lo, hi) for z, n, lo, hi in PZP.CLASSIC_LEVELS], "source": PZP.CLASSIC_SOURCE},
+    {"id": "personal", "title": N_("個人化區間（依你的功率–時間模型）"), "basis": "personal",
+     "source": PZP.PERSONAL_SOURCE},
 ]
 MODELS = {"hr": HR_MODELS, "power": POWER_MODELS}
+# 課表功率區間 (engine/power_zone_plan.py) → the power chart's default model (SP-363)
+POWER_DEFAULT_OF = {"palladino": "palladino", "stryd": "stryd", "classic": "classic", "personal": "personal"}
+
+
+def default_model(kind: str) -> str:
+    """The chart's default model: HR Friel; power the 課表功率區間 (SP-363), Palladino by default."""
+    if kind != "power":
+        return DEFAULT_MODEL[kind]
+    try:
+        return POWER_DEFAULT_OF.get(PZP.setting(), DEFAULT_MODEL["power"])
+    except Exception:                       # noqa: BLE001 — no settings store (tests, scripts)
+        return DEFAULT_MODEL["power"]
 # defaults: Friel % LTHR and Palladino % CP (docs/research/zones-and-thresholds.md §3.1–3.2)
 DEFAULT_MODEL = {"hr": "frielhr", "power": "palladino"}
 
@@ -407,6 +426,16 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
                 "basis_text": f"AeT {aet:.0f}、LTHR {lthr:.0f} bpm", "estimate": est}
     if b == "coros":
         return _coros_bounds(ds, w, model["coros"], lthr, ctx)
+    if b == "personal":
+        # in watts (× 1): the PD model in effect on the activity's day (FitFolderDataset.stryd_pd_params)
+        from backend.engine.wko5expr.dataset import day_to_date as _d2d
+        p = PZP.personal_levels(ds, _d2d(math.floor(w.day)), 1.0)
+        if "levels" not in p:
+            return {"reason": _(p["reason"])}
+        bs = p["basis"] or {}
+        text = _("模型閾值功率 {w:.0f} W（Stryd 功率 PD 模型 {d}）", w=bs.get("mftp") or 0, d=bs.get("date") or "")
+        rows = [(z, nm, lo or 0.0, hi) for z, nm, lo, hi in p["levels"]]
+        return {"rows": rows, "basis_text": text, "estimate": True}
     T = {"lthr": lthr, "cp": cp}[b]
     if not T:
         return {"reason": _("沒有 {name}，區間算不出來", name="LTHR" if b == "lthr" else "CP")}
@@ -477,7 +506,7 @@ def zone_times(ds, w, kind: str) -> dict:
                               "share": s / total if total else None}
                              for (zid, nm, lo, hi), s in zip(b["rows"], secs)]})
     has = vals is not None and bool(np.isfinite(vals).any() and (np.nan_to_num(vals) > 0).any())
-    return {"zone_kind": kind, "models": out, "default": DEFAULT_MODEL[kind],
+    return {"zone_kind": kind, "models": out, "default": default_model(kind),
             "empty": None if has else (_("這筆活動沒有心率") if kind == "hr" else _("這筆活動沒有可用的功率（手錶推估功率不採用）"))}
 
 

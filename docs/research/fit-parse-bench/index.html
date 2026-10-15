@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FIT 解析實測</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg: #fff; --fg: #1d1d1f; --muted: #666; --line: #ddd; --ok: #0a7d32; --bad: #b3261e; --btn: #0b57d0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151515; --fg: #eee; --muted: #aaa; --line: #333; --ok: #5bd17f; --bad: #ff8a80; --btn: #8ab4f8; }
+  }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, system-ui, sans-serif; margin: 0; padding: 16px; max-width: 900px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; padding: 8px 12px; }
+  button { font: inherit; padding: 10px 14px; margin: 4px 6px 4px 0; border-radius: 8px; border: 1px solid var(--btn); background: transparent; color: var(--btn); }
+  button.primary { background: var(--btn); color: var(--bg); }
+  button:disabled { opacity: .5; }
+  input[type=number] { width: 6em; font: inherit; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0; }
+  th, td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+  .scroll { overflow-x: auto; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  textarea { width: 100%; height: 160px; font: 12px ui-monospace, monospace; background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; box-sizing: border-box; }
+  #status { font-weight: 600; min-height: 1.5em; }
+  #tick { font: 12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<h1>FIT 解析實測（SP-313）</h1>
+<p class="muted">Garmin FIT JavaScript SDK 與 Pyodide＋fitdecode，在 Web Worker 裡解析示範資料（不是任何人的真實紀錄）。下面的數字會停在這台裝置上，跑完按「複製結果」貼回來。</p>
+
+<div id="env" class="muted"></div>
+
+<fieldset>
+  <legend>解析器</legend>
+  <label><input type="checkbox" id="p-js" checked> Garmin JS SDK</label>
+  <label><input type="checkbox" id="p-py" checked> Pyodide＋fitdecode</label>
+</fieldset>
+
+<fieldset>
+  <legend>要跑什麼</legend>
+  <button class="primary" id="b-all">全部跑</button>
+  <button id="b-reps">① 三個代表檔</button>
+  <button id="b-full">② 全量</button>
+  <label>檔案數 <input type="number" id="n" value="800" min="1" max="5000"></label>
+  <div class="muted">「全部跑」＝①＋②。② 會先把檔案寫進瀏覽器的私有儲存（OPFS），再一個一個讀出來解析，跑完自動刪掉（約 130 MB）。iPhone 上 Pyodide 跑 800 個檔可能要十幾分鐘，期間請讓螢幕保持亮著、不要切到別的 app。</div>
+</fieldset>
+
+<div id="status"></div>
+<div id="tick" class="muted">畫面更新：—</div>
+
+<h2 style="font-size:16px">① 載入時間</h2>
+<div class="scroll"><table id="t-init"><thead><tr><th>解析器</th><th>第幾次</th><th>總共 ms</th><th>細項</th><th>下載 MB</th><th>wasm 記憶體 MB</th></tr></thead><tbody></tbody></table></div>
+
+<h2 style="font-size:16px">① 三個代表檔</h2>
+<div class="scroll"><table id="t-reps"><thead><tr><th>解析器</th><th>檔案</th><th>大小 KB</th><th>筆數</th><th>第一次 ms</th><th>中位數 ms</th><th>NAS 上 s</th><th>記憶體 MB</th><th>和伺服器比對</th></tr></thead><tbody></tbody></table></div>
+
+<h2 style="font-size:16px">② 全量</h2>
+<div class="scroll"><table id="t-full"><thead><tr><th>解析器</th><th>檔案數</th><th>總共 MB</th><th>解析 s</th><th>最慢一檔 s</th><th>OPFS 寫 MB/s</th><th>OPFS 讀 MB/s</th><th>記憶體峰值 MB</th><th>畫面最久卡 ms</th></tr></thead><tbody></tbody></table></div>
+
+<p>
+  <button class="primary" id="b-copy">複製結果</button>
+  <span id="copied" class="muted"></span>
+</p>
+<textarea id="out" readonly></textarea>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const MB = 1024 * 1024;
+const FIELDS = ["ts", "hr", "power", "speed", "dist", "alt", "lat", "lon"];
+const TOL = { ts: 0, hr: 0, power: 0, speed: 1e-6, dist: 1e-6, alt: 1e-6, lat: 1e-9, lon: 1e-9 };
+const R = { page: "fit-parse-bench/1", started: new Date().toISOString(), env: {}, inits: [], reps: [], full: [], errors: [] };
+const dumps = {};
+window.__bench = { R, dumps, done: false };
+
+// ---- main-thread responsiveness: the longest gap between two animation frames ----------------
+let lastFrame = performance.now(), maxGap = 0;
+function frame(t) {
+  maxGap = Math.max(maxGap, t - lastFrame);
+  lastFrame = t;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setInterval(() => { $("tick").textContent = `畫面更新：最久一次卡 ${maxGap.toFixed(0)} ms（超過 100 ms 才會覺得卡）`; }, 500);
+
+// ---- worker RPC ------------------------------------------------------------------------------
+// thread "main" runs the same handlers on the page's main thread: only for the desktop emulation
+// (DevTools CPU throttling does not reach workers). On a phone always use the default "worker".
+let THREAD = new URLSearchParams(location.search).get("thread") === "main" ? "main" : "worker";
+function newWorker(forceWorker = false) {
+  if (THREAD === "main" && !forceWorker) return newInline();
+  const w = new Worker(new URL("./bench-worker.js", import.meta.url), { type: "module" });
+  let seq = 0;
+  const pending = new Map();
+  w.onmessage = (e) => {
+    const m = e.data;
+    if (m.progress) return onProgress(m.progress);
+    const p = pending.get(m.id);
+    pending.delete(m.id);
+    m.ok ? p.resolve(m.r) : p.reject(new Error(m.error));
+  };
+  w.onerror = (e) => { for (const p of pending.values()) p.reject(new Error(e.message || "worker error")); pending.clear(); };
+  return {
+    call(cmd, args = {}) {
+      return new Promise((resolve, reject) => { const id = ++seq; pending.set(id, { resolve, reject }); w.postMessage({ id, cmd, ...args }); });
+    },
+    terminate() { w.terminate(); },
+  };
+}
+function newInline() {
+  const mod = import("./bench-worker.js").then((m) => { m.setProgress(onProgress); return m; });
+  return {
+    async call(cmd, args = {}) {
+      const { result } = await (await mod).handlers[cmd](args);
+      return result;
+    },
+    terminate() {},
+  };
+}
+let progressLabel = "";
+function onProgress(p) {
+  status(`${progressLabel}：${p.phase} ${p.i + 1}/${p.n}` + (p.parse_ms ? `（解析累計 ${(p.parse_ms / 1000).toFixed(1)} s）` : ""));
+}
+function status(s) { $("status").textContent = s; }
+
+const NAME = { js: "Garmin JS SDK", py: "Pyodide＋fitdecode" };
+const f1 = (x, d = 1) => (x === null || x === undefined || Number.isNaN(x) ? "—" : Number(x).toFixed(d));
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+function row(tbody, cells, cls = []) {
+  const tr = document.createElement("tr");
+  cells.forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (cls[i]) td.className = cls[i]; tr.appendChild(td); });
+  $(tbody).querySelector("tbody").appendChild(tr);
+}
+function publish() { $("out").value = JSON.stringify(R, null, 1); }
+
+// ---- environment -----------------------------------------------------------------------------
+async function envInfo() {
+  const e = {
+    ua: navigator.userAgent, cores: navigator.hardwareConcurrency || null, device_memory_gb: navigator.deviceMemory || null,
+    secure_context: window.isSecureContext, viewport: `${innerWidth}x${innerHeight}@${devicePixelRatio}`,
+    main_performance_memory: !!performance.memory,
+  };
+  try { const est = await navigator.storage.estimate(); e.storage_quota_mb = Math.round(est.quota / MB); e.storage_usage_mb = +(est.usage / MB).toFixed(1); } catch { e.storage_quota_mb = null; }
+  try { e.storage_persisted = await navigator.storage.persisted(); } catch { e.storage_persisted = null; }
+  const w = newWorker(true);
+  try { Object.assign(e, await w.call("env")); } catch (err) { e.worker_error = String(err); }
+  w.terminate();
+  R.env = e;
+  $("env").textContent = `${e.ua}｜${e.cores ?? "?"} 核心｜${e.device_memory_gb ?? "?"} GB｜安全連線 ${e.secure_context ? "是" : "否（OPFS 不能用）"}｜OPFS ${e.opfs ? "可用" : "不可用"}｜配額 ${e.storage_quota_mb ?? "?"} MB`;
+  publish();
+}
+
+let manifest = null;
+async function loadManifest() {
+  if (!manifest) {
+    const r = await fetch("fixtures/manifest.json", { cache: "no-store" });
+    if (!r.ok) throw new Error("找不到 fixtures/manifest.json：先在電腦上跑 make_fixtures.py");
+    manifest = await r.json();
+  }
+  return manifest;
+}
+
+// ---- compare with the server's fitdecode (reference/<key>.json) -------------------------------
+function compareCols(ref, got) {
+  const out = { ok: true, fields: {} };
+  const n = ref.ts.length;
+  for (const k of FIELDS) {
+    const a = ref[k], b = got[k];
+    let mism = 0, maxd = 0;
+    const m = Math.min(a.length, b.length);
+    for (let i = 0; i < m; i++) {
+      const x = a[i], y = b[i];
+      const xm = x === null, ym = y === null || Number.isNaN(y);
+      if (xm || ym) { if (xm !== ym) mism++; continue; }
+      const d = Math.abs(x - y);
+      if (d > maxd) maxd = d;
+      if (d > TOL[k]) mism++;
+    }
+    if (a.length !== b.length || b.length !== n || mism) out.ok = false;
+    out.fields[k] = { n_ref: a.length, n_got: b.length, mismatches: mism, max_abs_diff: maxd };
+  }
+  return out;
+}
+const toJsonArr = (fa) => Array.from(fa, (v) => (Number.isNaN(v) ? null : v));
+
+// ---- ① three representative files ------------------------------------------------------------
+async function runReps(parsers, { repeat = 3, dump = false } = {}) {
+  const m = await loadManifest();
+  for (const p of parsers) {
+    progressLabel = NAME[p];
+    let w = null;
+    for (const nth of [1, 2]) {                     // 2nd load: the CDN files come from the HTTP cache
+      if (w) w.terminate();
+      w = newWorker();
+      status(`${NAME[p]}：第 ${nth} 次載入…`);
+      const t0 = performance.now();
+      const r = await w.call("init", { parser: p, fitdecodeZipUrl: new URL("fixtures/" + m.fitdecode_zip, location.href).href });
+      r.wall_ms = performance.now() - t0;
+      R.inits.push({ parser: p, nth, ...r });
+      const ph = r.phases ? Object.entries(r.phases).map(([k, v]) => `${k.replace(/_ms$/, "")} ${v.toFixed(0)}`).join("、") : "";
+      row("t-init", [NAME[p], nth === 1 ? "第一次" : "第二次（快取）", f1(r.ms, 0), ph, f1(r.net.transfer_bytes / MB, 2), f1(r.wasm_heap / MB, 0)]);
+      publish();
+    }
+    for (const rep of m.reps) {
+      status(`${NAME[p]}：解析 ${rep.label}（${(rep.size / 1024).toFixed(0)} KB）…`);
+      const r = await w.call("benchFile", { parser: p, url: new URL("fixtures/" + rep.file, location.href).href, repeat, keep: true });
+      const ref = await (await fetch(`fixtures/reference/${rep.key}.json`)).json();
+      const cmp = compareCols(ref, r.cols);
+      if (dump) dumps[`${p}-${rep.key}`] = { file: rep.file, parser: p, fields: Object.fromEntries(FIELDS.map((k) => [k, toJsonArr(r.cols[k])])) };
+      const times = r.runs.map((x) => x.parse_ms + x.extract_ms);
+      const mem = p === "py" ? r.runs.at(-1).wasm_heap : r.runs.at(-1).js_heap;
+      const entry = {
+        parser: p, key: rep.key, label: rep.label, size: r.size, records: r.runs[0].records, frames: r.runs[0].frames,
+        first_ms: times[0], median_ms: median(times), runs: r.runs, owner_nas_s: rep.owner.nas_s,
+        mem_bytes: mem, compare: cmp,
+      };
+      R.reps.push(entry);
+      const bad = Object.entries(cmp.fields).filter(([, f]) => f.mismatches || f.n_got !== f.n_ref).map(([k]) => k);
+      row("t-reps", [NAME[p], rep.label, f1(r.size / 1024, 0), String(entry.records), f1(times[0], 0), f1(entry.median_ms, 0),
+        f1(rep.owner.nas_s, 2), mem === null ? "—" : f1(mem / MB, 0), cmp.ok ? "一致" : "不一致：" + bad.join("、")],
+        [, , , , , , , , cmp.ok ? "ok" : "bad"]);
+      publish();
+    }
+    w.terminate();
+  }
+}
+
+// ---- ② N files through OPFS -----------------------------------------------------------------
+async function runFull(parsers, n) {
+  const m = await loadManifest();
+  for (const p of parsers) {
+    progressLabel = `${NAME[p]} 全量 ${n} 檔`;
+    const w = newWorker();
+    status(`${progressLabel}：載入解析器…`);
+    await w.call("init", { parser: p, fitdecodeZipUrl: new URL("fixtures/" + m.fitdecode_zip, location.href).href });
+    maxGap = 0;
+    const t0 = performance.now();
+    const r = await w.call("fullRun", { parser: p, n, files: m.demo, base: new URL("fixtures/", location.href).href });
+    r.wall_ms = performance.now() - t0;
+    r.max_frame_gap_ms = maxGap;
+    w.terminate();
+    R.full.push(r);
+    const mbs = (ms) => (ms ? r.total_bytes / MB / (ms / 1000) : null);
+    const peak = p === "py" ? r.peak_wasm_heap : r.peak_js_heap;
+    row("t-full", [NAME[p], String(n), f1(r.total_bytes / MB, 0), f1(r.parse_ms / 1000, 1), f1(r.slowest_file_ms / 1000, 2),
+      r.opfs ? f1(mbs(r.opfs_write_ms), 0) : (r.opfs_error ? "失敗" : "不可用"), r.opfs ? f1(mbs(r.opfs_read_ms), 0) : "—",
+      peak === null ? "—" : f1(peak / MB, 0), f1(r.max_frame_gap_ms, 0)]);
+    publish();
+  }
+}
+
+// ---- entry points ----------------------------------------------------------------------------
+function chosen() { return ["js", "py"].filter((p) => $("p-" + p).checked); }
+async function guarded(fn) {
+  document.querySelectorAll("button:not(#b-copy)").forEach((b) => (b.disabled = true));
+  try { await fn(); status("完成。按「複製結果」把下面的文字貼回來。"); }
+  catch (err) { R.errors.push(String(err && err.stack || err)); status("出錯：" + err.message); }
+  finally { R.finished = new Date().toISOString(); publish(); document.querySelectorAll("button").forEach((b) => (b.disabled = false)); }
+}
+window.benchRun = async ({ reps = ["js", "py"], full = [], n = 800, repeat = 3, dump = false, thread } = {}) => {
+  if (thread) THREAD = thread;
+  R.thread = THREAD;
+  await guarded(async () => {
+    if (reps.length) await runReps(reps, { repeat, dump });
+    if (full.length) await runFull(full, n);
+  });
+  window.__bench.done = true;
+  return R;
+};
+R.thread = THREAD;
+$("b-all").onclick = () => guarded(async () => { await runReps(chosen()); await runFull(chosen(), +$("n").value); });
+$("b-reps").onclick = () => guarded(() => runReps(chosen()));
+$("b-full").onclick = () => guarded(() => runFull(chosen(), +$("n").value));
+$("b-copy").onclick = async () => {
+  publish();
+  try { await navigator.clipboard.writeText($("out").value); $("copied").textContent = "已複製"; }
+  catch { $("out").select(); document.execCommand("copy"); $("copied").textContent = "已選取，請手動複製"; }
+};
+
+await envInfo();
+window.__bench.ready = true;
+</script>
+</body>
+</html>

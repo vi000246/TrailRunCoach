@@ -103,7 +103,7 @@ def test_analysis_power_card_switches_to_stryd(tmp_path):
     assert res["title"] == "Stryd 功率區間（跑步）" == res["zones"]["title"]
     assert [r["id"] for r in res["zones"]["rows"]] == ["1", "2", "3", "4", "5"]
     assert "Stryd" in res["zones"]["source"]
-    assert [c["id"] for c in res["zones"]["choices"]] == ["palladino", "stryd"]
+    assert [c["id"] for c in res["zones"]["choices"]] == ["palladino", "stryd", "classic", "personal"]   # SP-363 R2
     for params in ({}, {"zsys": "frielhr"}, {"zsys": "nope"}):
         r = _render(power, ds, end - 30, end, None, None, params=params)
         assert r["title"] == power["title"] and r["zones"]["system"] == "palladino"

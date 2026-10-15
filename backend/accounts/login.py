@@ -9,7 +9,9 @@ unreadable secret file, an edited env) can turn one request into the owner's app
              multi-user data without sign-in yet): every request is the owner, exactly as before
              SP-58 (no 401, no CSRF on writes, the sign-in pages answer 404)
     signin   WKO5COACH_ACCOUNTS=1 and the whole set: GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET
-             (env or *_FILE), WKO5COACH_PUBLIC_URL (https; http only for localhost), with https
+             (env or *_FILE; or the admin page's, SP-351 R2: a part set there counts — a server
+             whose environment has no Google client but whose page has one still starts),
+             WKO5COACH_PUBLIC_URL (https; http only for localhost), with https
              an explicit WKO5COACH_TRUSTED_PROXIES (the client IP the limits count), and the
              owner's Google account (user 1 linked already, or WKO5COACH_OWNER_GOOGLE_SUB /
              _OWNER_EMAIL)
@@ -30,9 +32,12 @@ Who becomes whom (resolve(), after Google's id_token checked out and its e-mail 
   3. unknown: a new person
        user 1 not linked yet -> refused ("setup": 網站還在設定中) — a typo in the owner's
        e-mail never turns the owner into a new, empty account
-       the server is full (users >= WKO5COACH_MAX_USERS, default 100; the owner and disabled
+       the server is full (users >= the admin page's cap, else WKO5COACH_MAX_USERS, default 100; the owner and disabled
        users count) -> the e-mail goes on the waitlist, no account, no tenant -> refused ("full")
        else -> the terms (signup ticket); the account and its tenant are made only on consent
+       let in from the waitlist by an admin (SP-351, store.admit_waitlisted: the account is made
+       then, without a Google account) and this verified e-mail is that account's -> linked
+       (store.link_admitted_google), then the terms like anyone new
   An e-mail Google has not verified is refused before any of this ("unverified"): the e-mail is
   never trusted for the owner match, the waitlist or contact.
 
@@ -70,7 +75,7 @@ ENV_OWNER_EMAIL = "WKO5COACH_OWNER_EMAIL"
 ENV_MAX_USERS = "WKO5COACH_MAX_USERS"
 ENV_PUBLIC_URL = google.ENV_PUBLIC_URL
 ENV_PROXIES = "WKO5COACH_TRUSTED_PROXIES"
-DEFAULT_MAX_USERS = 100            # SP-58: until SP-351's site settings
+DEFAULT_MAX_USERS = 100            # SP-58; the admin page's members.max_users wins (site_config, SP-351)
 # the settings that only mean something with sign-in: any of them set asks for the whole set.
 # Not WKO5COACH_PUBLIC_URL: the site's own address is a site setting (the 課表 feed's links, SP-54)
 # set on the owner's app too; sign-in still needs it (_public_url) once the settings above are there.
@@ -92,7 +97,8 @@ START_LIMIT = RL.Window(limit=10, per=15 * 60)        # sign-in starts per clien
 CALLBACK_LIMIT = RL.Window(limit=10, per=15 * 60)     # callbacks past the state check, per client
 
 # reachable without a session (deploy/commercial.md §4; auth-and-demo plan §7). /share/* is
-# public too but read as before (the owner's shares), outside the gate entirely.
+# public too, outside the gate entirely: a share's own tenant by accounts.db's shares row (SP-124,
+# tenancy_mw._share_tenant), only its frozen snapshot read — nothing computed.
 # The legal documents (SP-60) too, each by its exact path: /legal and /legal/<id> of terms.DOCUMENTS
 # (the privacy policy's address goes on Google's OAuth consent screen, SP-387) — nothing next to them.
 PUBLIC_PATHS = frozenset({
@@ -108,6 +114,14 @@ PUBLIC_PATHS = frozenset({
 PUBLIC_PATHS = PUBLIC_PATHS | {"/manual"}
 # 關於 (SP-495, api/about.py): version, sources, licences, trademarks — exactly /about
 PUBLIC_PATHS = PUBLIC_PATHS | {"/about"}
+# 「用自己的資料算」 (SP-124, api/session.join): a redirect to sign-up / the waitlist / the demo — exactly /join
+PUBLIC_PATHS = PUBLIC_PATHS | {"/join"}
+# a test account's one-time sign-in link (SP-611, accounts/testaccounts.py): the page (its token in the
+# URL's fragment, never sent) and the POST it makes — exactly these two paths
+PUBLIC_PATHS = PUBLIC_PATHS | {"/test-login", "/api/v1/account/test-login"}
+# 介紹頁 (SP-622, main._home): "/" signed out is the product's introduction (signed in: the overview, as
+# before) — exactly "/", nothing under it
+PUBLIC_PATHS = PUBLIC_PATHS | {"/"}
 PUBLIC_PREFIXES = ("/api/v1/static/", "/manual/")
 _OAUTH_CALLBACK = ("/oauth/", "/callback")
 # never a place to come back to after signing in (loops)
@@ -167,6 +181,20 @@ def _secret(name: str) -> str:
     raise LoginConfigError(f"{name} (or {name}_FILE) is not set")
 
 
+def _client_part(name: str, site: Optional[str]) -> Optional[str]:
+    """The environment's GOOGLE_CLIENT_ID / _SECRET (the fallback, frozen in google.configure).
+    When the admin page holds that part (google_client, SP-351 R2) the environment may lack it
+    (None); without the page's, the rule is _secret's: missing or unreadable -> LoginConfigError."""
+    if not site:
+        return _secret(name)
+    try:
+        return _secret(name)
+    except LoginConfigError as e:
+        if _env(name + "_FILE"):
+            log.warning("%s: the admin page's value is used (%s)", name, e)
+        return None
+
+
 def _public_url() -> str:
     raw = _env(ENV_PUBLIC_URL)
     if not raw:
@@ -198,7 +226,10 @@ def _decide() -> tuple:
         return OWNER_MODE, True, (None, None)
     if not present:
         return OWNER_MODE, True, (None, None)        # multi-user data only (SP-384): no sign-in yet
-    cid, secret, public = _secret("GOOGLE_CLIENT_ID"), _secret("GOOGLE_CLIENT_SECRET"), _public_url()
+    from backend.accounts import google_client as GC
+    cid = _client_part("GOOGLE_CLIENT_ID", GC.site_id())
+    secret = _client_part("GOOGLE_CLIENT_SECRET", GC.site_secret())
+    public = _public_url()
     https = public.startswith("https://")
     if https:
         nets = {str(n) for n in RL.trusted_networks()}
@@ -292,9 +323,12 @@ def safe_next(raw: Optional[str]) -> str:
 
 
 def max_users() -> int:
+    """The sign-up cap: the admin page's value, else WKO5COACH_MAX_USERS (TRC_MAX_USERS), else 100
+    (site_config.get: the page wins over the environment)."""
+    from backend import site_config as SC
     try:
-        n = int(_env(ENV_MAX_USERS) or DEFAULT_MAX_USERS)
-    except ValueError:
+        n = int(SC.get("members.max_users"))
+    except (TypeError, ValueError):
         n = DEFAULT_MAX_USERS
     return max(1, n)
 
@@ -303,14 +337,71 @@ def full() -> bool:
     return store.count_users() >= max_users()
 
 
+# ---------------------------------------------------------------------------- 「用自己的資料算」 (SP-124)
+
+# the public demo's address (a site setting, https only): where the button goes before sign-up opens
+ENV_DEMO_URL = "TRC_DEMO_URL"
+JOIN_NEXT = "/api/v1/racepower/page"      # after signing up: the race calculator, with one's own data
+
+
+def demo_url() -> Optional[str]:
+    """TRC_DEMO_URL when it is an https address (no user info); None otherwise."""
+    raw = _env(ENV_DEMO_URL)
+    if not raw or any(ord(ch) < 0x21 or ord(ch) == 0x7F for ch in raw):
+        return None
+    try:
+        u = urlsplit(raw)
+    except ValueError:
+        return None
+    if u.scheme != "https" or not u.hostname or u.username or u.password:
+        return None
+    return raw
+
+
+def join_link() -> Optional[dict]:
+    """Where 「用自己的資料算」 (the share page's button) goes, {kind, url}; None: no button.
+      signup    sign-in on, the owner linked, room left -> /login (Google sign-in is the sign-up),
+                then the race calculator
+      waitlist  sign-in on and full -> /login?waitlist=1 (signing in puts the e-mail on the list)
+      demo      sign-up not open yet (owner mode, or sign-in on before the owner's first sign-in)
+                -> the public demo (TRC_DEMO_URL); none set: no button
+    Never anything of the viewer's or the share's: the same answer for every visitor."""
+    from urllib.parse import urlencode
+
+    from backend import tenancy
+    if tenancy.demo_mode():
+        return None
+    if required():
+        try:
+            linked, is_full = _owner_linked(), full()
+        except Exception:                  # noqa: BLE001 — accounts.db unreadable: no button, the page still opens
+            return None
+        if linked:
+            if is_full:
+                return {"kind": "waitlist", "url": "/login?waitlist=1"}
+            return {"kind": "signup", "url": "/login?" + urlencode({"next": JOIN_NEXT})}
+    url = demo_url()
+    return {"kind": "demo", "url": url} if url else None
+
+
+def try_link() -> dict:
+    """The 介紹頁's 「先試試看」 (SP-622): the public demo when TRC_DEMO_URL is set ({kind: demo}), else the
+    built-in race calculator example ({kind: example}, /share/<EXAMPLE_ID>: a fictional runner's 50K).
+    The same for every visitor."""
+    from backend.engine.racepower import share as SH
+    url = demo_url()
+    return {"kind": "demo", "url": url} if url else {"kind": "example", "url": "/share/" + SH.EXAMPLE_ID}
+
+
 # ---------------------------------------------------------------------------- the terms a user accepted
 
 _CONSENT: dict = {}                # user id -> (accepted version, monotonic time read)
 
 
 def consent_current(u: store.User) -> bool:
-    """The user has accepted terms.VERSION (the owner accepts none). Cached CONSENT_TTL_S."""
-    if u.is_owner:
+    """The user has accepted terms.VERSION (the owner accepts none, nor does a test account: SP-611).
+    Cached CONSENT_TTL_S."""
+    if u.is_owner or u.is_test:
         return True
     now = time.monotonic()
     hit = _CONSENT.get(u.id)
@@ -390,6 +481,13 @@ def resolve(ident: google.Identity, next_url: str) -> Outcome:
     if not _owner_linked():
         log.info("sign-up refused: the owner has not signed in yet")
         return Outcome("refused", reason="setup")
+    # let in from the waitlist by an admin (SP-351): the account is there, waiting for this e-mail
+    let_in = store.link_admitted_google(ident.subject, ident.email)
+    if let_in is not None:
+        log.info("a person let in from the waitlist signed in for the first time")
+        if let_in.disabled:
+            return Outcome("refused", reason="disabled")
+        return _terms("reconsent", ident, next_url, user_id=let_in.id)
     if full():
         return _waitlist(ident.email)
     return _terms("signup", ident, next_url)

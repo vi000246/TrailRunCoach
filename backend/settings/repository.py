@@ -178,6 +178,9 @@ DEFAULTS: dict[str, Any] = {
     # {model, setting, since, from?, reason, auto?}; a switch 自動 made by itself (auto: true) is told
     # once in the suggestion box and re-pushes what is on the watch. None = not seen yet
     "plan.hr_zone_auto": None,
+    # 課表功率區間 (engine/power_zone_plan.py, SP-363): palladino (default) | stryd | classic | personal —
+    # the zone set the 課表's power targets (texts, the push) and the charts' default power zones use
+    "plan.power_zone_system": "palladino",
     # workout route map (viewer 單次活動): default basemap id and overlay ids;
     # the map can switch them temporarily (remembered per browser)
     "charts.map.basemap": None,               # None = by 地區 (engine/region.py): tw 魯地圖, intl OSM
@@ -508,6 +511,8 @@ def validate(key: str, value: Any) -> None:
             raise ValueError("athlete.pmc_start must be {date: YYYY-MM-DD, ctl, atl} (0-300) or null")
     if key == "plan.hr_zone_model" and value not in ("auto", "lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be auto, lthr, hrr or hrmax")
+    if key == "plan.power_zone_system" and value not in ("palladino", "stryd", "classic", "personal"):
+        raise ValueError("plan.power_zone_system must be palladino, stryd, classic or personal")
     if key == "plan.hr_zone_auto" and value is not None and not isinstance(value, dict):
         raise ValueError("plan.hr_zone_auto must be an object or null")
     if key == "plan.hr_zone_model_history":
