@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!--fill:title--></title>
+<style>
+/* About (SP-495): version, methods and sources, data and software licences, trademarks. Public; the
+   contents come from api/about.py (static/i18n/<locale>/about.json), this page only frames them. */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: calc(var(--shell-top, 0px) + 16px); }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.7 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+a { color: var(--accent); }
+code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: color-mix(in srgb, var(--line) 60%, transparent);
+  padding: 1px 6px; border-radius: 5px; }
+.ab-main { max-width: 860px; margin: 0 auto; padding: 22px 16px 64px; }
+.ab-hero h1 { margin: 6px 0 6px; font-size: 26px; line-height: 1.3; }
+.ab-hero p { margin: 0 0 14px; color: var(--muted); }
+.ab-toc { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 0 0 18px; }
+.ab-toc a { font-size: 13px; text-decoration: none; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); }
+.ab-toc a:hover { border-color: var(--accent); color: var(--accent); }
+.ab-sec { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+  padding: 18px 22px 20px; margin: 0 0 16px; }
+.ab-sec h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.4; }
+.ab-lead { margin: 0 0 14px; color: var(--muted); }
+.ab-note { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.ab-ver { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.ab-ver dt { color: var(--muted); }
+.ab-ver dd { margin: 0; }
+.ab-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; counter-reset: ab; }
+ol.ab-list > .ab-item { counter-increment: ab; }
+.ab-item { border-top: 1px solid var(--line); padding-top: 12px; }
+.ab-item:first-child { border-top: 0; padding-top: 0; }
+.ab-item h3 { margin: 0 0 4px; font-size: 15.5px; line-height: 1.45; }
+ol.ab-list > .ab-item h3::before { content: counter(ab) ". "; color: var(--faint); font-weight: 600; }
+.ab-item p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.ab-cites { margin: 0; padding-left: 1.2em; font-size: 13px; color: var(--muted); line-height: 1.6; }
+.ab-cites li { margin: 2px 0; overflow-wrap: anywhere; }
+.ab-links { font-size: 13px; color: var(--muted); }
+.ab-sw { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ab-sw th, .ab-sw td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.ab-sw th { color: var(--muted); font-weight: 600; font-size: 13px; }
+#trademarks p { margin: 0 0 10px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 699px) {
+  .ab-main { padding: 14px 12px 40px; }
+  .ab-hero h1 { font-size: 22px; }
+  .ab-sec { padding: 14px 14px 16px; border-radius: 12px; }
+}
+@media print { .ab-toc { display: none; } .ab-sec { box-shadow: none; } }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="about"></script>
+<main class="ab-main" id="ab-main"><!--fill:main--></main>
+</body>
+</html>

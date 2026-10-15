@@ -64,9 +64,11 @@ def _fill(vals: Sequence[Optional[float]]) -> np.ndarray:
 def track_distance(track) -> dict:
     """Cumulative horizontal distance along a Track, dropping duplicate
     points (< 0.5 m) and GPS jumps (implied speed > 60 km/h, only when the
-    track has times). With `track.dist` (device distance of the athlete's
-    own activity) that distance is used instead, keeping points where it
-    advances ≥ 0.5 m. Returns {"d", "z", "t", "keep"} (numpy, kept points)."""
+    track has times). A timed track adds nothing while it is stopped (≥ 10 min
+    within 50 m and 20 m of elevation, SP-566: GPS drift at camp), so `d` may stay flat there. With
+    `track.dist` (device distance of the athlete's own activity) that distance
+    is used instead, keeping points where it advances ≥ 0.5 m. Returns
+    {"d", "z", "t", "keep"} (numpy, kept points)."""
     lat = np.asarray(track.lat, float)
     lon = np.asarray(track.lon, float)
     z = _fill(track.ele)
@@ -81,7 +83,7 @@ def track_distance(track) -> dict:
         k = np.array(keep)
         return {"d": dv[k] - dv[0], "z": z[k], "t": None if tt is None else tt[k], "keep": k}
     keep = [0]
-    d = [0.0]
+    steps = [0.0]
     for i in range(1, len(lat)):
         j = keep[-1]
         step = float(haversine(lat[j], lon[j], lat[i], lon[i]))
@@ -92,9 +94,73 @@ def track_distance(track) -> dict:
             if dt_ > 0 and step / dt_ > JUMP_MS:
                 continue
         keep.append(i)
-        d.append(d[-1] + step)
+        steps.append(step)
     k = np.array(keep)
-    return {"d": np.array(d), "z": z[k], "t": None if tt is None else tt[k], "keep": k}
+    steps = np.array(steps)
+    if tt is not None and len(k) > 2:
+        tk = tt[k]
+        if np.all(np.isfinite(tk)) and np.all(np.diff(tk) >= 0):
+            _still(lat[k], lon[k], z[k], tk, steps)     # SP-566: no drift while stopped
+    return {"d": np.cumsum(steps), "z": z[k], "t": None if tt is None else tt[k], "keep": k}
+
+
+# SP-566: a timed recording that stops somewhere (a night at camp, a rest) keeps logging GPS drift —
+# the points wander a few metres at a time and the haversine sum grows. Only on the haversine path
+# (a GPX / FIT file without the device's own distance) and only with times: a drawn route has none,
+# and the athlete's own activities use the watch's distance (unchanged).
+STILL_M = 50.0     # 推估: a stop = every point stays within this of where the stop began …
+STILL_Z = 20.0     # 推估: … and within this of its elevation …
+STILL_S = 600.0    # 推估: … for at least this long (10 min) …
+STILL_MS = 0.3     # … and its points add up to no more than this (m/s; the hike rest speed,
+                   # athlete.HIKE_REST_MS) — more is someone pacing a small place, not drift.
+# Why (推估, checked on the owner's recorded trips, SP-566): 50 m in 10 min is 0.3 km/h, far below
+# any walking pace; stationary GPS scatter at camp was p95 23–43 m, max 50 m. A steep switchback
+# climb can stay within 50 m for 10 min but climbs 30–50 m: the 20 m band (120 m/h) keeps it
+# counted, while a night's barometric drift is slow (8–33 m over 10–15 h). The drift adds
+# 0.1–0.25 m/s at 1 s recording (0.01–0.03 m/s at night, when the watch records seldom).
+_CHUNK = 256
+
+
+def _still_end(lat, lon, z, i: int) -> int:
+    """The last index j ≥ i with every point i..j within STILL_M (and STILL_Z) of point i."""
+    n = len(lat)
+    j = i + 1
+    while j < n:
+        e = min(n, j + _CHUNK)
+        away = (haversine(lat[i], lon[i], lat[j:e], lon[j:e]) > STILL_M) | (np.abs(z[j:e] - z[i]) > STILL_Z)
+        out = np.flatnonzero(away)
+        if len(out):
+            return j + int(out[0]) - 1
+        j = e
+    return n - 1
+
+
+def _still(lat, lon, z, t, steps) -> list[tuple[int, int]]:
+    """Zero the steps inside every stop, in place: a stop = the track stays within STILL_M and
+    STILL_Z of point i for ≥ STILL_S, its points adding up to ≤ STILL_MS. Only the straight line
+    from where it stopped to where it left counts (≤ STILL_M), so a stop adds its real
+    displacement and none of its drift. Returns the stops [(i, j)]. A track that never stops is
+    untouched (the same sum, point for point)."""
+    n = len(t)
+    # a stop starting at i needs the first point ≥ STILL_S later to be near i too: one vectorised
+    # test rules out every moving point, the exact check runs on the few left
+    k = np.searchsorted(t, t + STILL_S, side="left")
+    idx = np.flatnonzero(k < n)
+    near = haversine(lat[idx], lon[idx], lat[k[idx]], lon[k[idx]]) <= STILL_M
+    near &= ~(np.abs(z[k[idx]] - z[idx]) > STILL_Z)          # no elevation (NaN): position only
+    stops: list[tuple[int, int]] = []
+    nxt = 0
+    for i in idx[near]:
+        i = int(i)
+        if i < nxt:
+            continue
+        j = _still_end(lat, lon, z, i)
+        if t[j] - t[i] >= STILL_S and steps[i + 1:j + 1].sum() <= STILL_MS * (t[j] - t[i]):
+            steps[i + 1:j + 1] = 0.0
+            steps[j] = float(haversine(lat[i], lon[i], lat[j], lon[j]))
+            stops.append((i, j))
+            nxt = j
+    return stops
 
 
 def resample(dist: np.ndarray, ele: np.ndarray, step_m: float = STEP_M) -> tuple[np.ndarray, np.ndarray]:
@@ -357,12 +423,62 @@ def _scale_to_gain(zs: np.ndarray, target: float) -> tuple[np.ndarray, float]:
     return zbar + c * base, c
 
 
+WPT_NEAR_M = 500.0             # a waypoint farther than this from the whole track is not on the route
+WPT_PASS_M = 150.0             # … a pass = the track within dmin + this (≥ this, ≤ WPT_NEAR_M) of it
+WPT_SEP_M = 300.0              # two passes closer than this along the track are one
+
+
+def is_camp_name(name: str) -> bool:
+    """The waypoint's name looks like a camp / hut (CAMP_WORDS): a day-end candidate (SP-533)."""
+    low = (name or "").lower()
+    return any(k in low for k in CAMP_WORDS)
+
+
+def wpt_passes(lat: np.ndarray, lon: np.ndarray, d: np.ndarray, wlat: float, wlon: float) -> list[int]:
+    """Indices of every pass of the track by a waypoint (SP-533): the closest point of each run of
+    track points near it. An out-and-back route passes a hut twice and gets two; [] when the
+    waypoint is more than WPT_NEAR_M from the track. Passes < WPT_SEP_M apart along the track
+    (GPS wobble at the edge of the circle) are one — the closer point is kept."""
+    if not len(lat):
+        return []
+    dd = haversine(lat, lon, wlat, wlon)
+    dmin = float(dd.min())
+    if dmin > WPT_NEAR_M:
+        return []
+    near = np.flatnonzero(dd <= min(WPT_NEAR_M, max(WPT_PASS_M, dmin + WPT_PASS_M)))
+    runs = np.split(near, np.flatnonzero(np.diff(near) > 1) + 1)
+    out: list[int] = []
+    for r in runs:
+        j = int(r[np.argmin(dd[r])])
+        if out and d[j] - d[out[-1]] < WPT_SEP_M:
+            if dd[j] < dd[out[-1]]:
+                out[-1] = j
+            continue
+        out.append(j)
+    return out
+
+
+def day_cuts(splits_km, total_km: float, days: int) -> tuple[list[float], str]:
+    """The day ends (km) of an n-day trip and where they come from (SP-533): the given split
+    points when they make exactly n days ("stored"), else equal km per day ("equal", 推估);
+    "single" for one day. The day count is never changed by the points — the event's and the
+    calculator's rule (event_gpx.splits_for)."""
+    n = max(1, int(days or 1))
+    if n == 1:
+        return [], "single"
+    s = sorted({round(float(x), 3) for x in splits_km or [] if 0 < float(x) < total_km})
+    if len(s) == n - 1:
+        return s, "stored"
+    return [total_km * i / n for i in range(1, n)], "equal"
+
+
 def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFAULT_EPS_M,
                  min_len_m: Optional[float] = None, flat_pct: float = FLAT_PCT, split: str = "grade",
-                 official_gain_m: Optional[float] = None) -> dict:
+                 official_gain_m: Optional[float] = None, osm_huts: bool = True) -> dict:
     """Track → course: totals, segments, a thinned profile, climbs, waypoints
     (with their km) and data-quality warnings (§6.5). split: "grade" (DP +
-    merge), "km" (every 1000 m) or "none" (one segment)."""
+    merge), "km" (every 1000 m) or "none" (one segment). osm_huts: the OSM huts / camps
+    within 150 m of the track join the waypoints as day-end candidates (src "osm", SP-536)."""
     td = track_distance(track)
     if len(td["d"]) < 2 or td["d"][-1] < 50:
         raise ValueError("軌跡太短")
@@ -403,14 +519,27 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
     lon = np.asarray(track.lon, float)[td["keep"]]
     wpts = []
     for w in getattr(track, "wpts", []) or []:
-        dd = haversine(lat, lon, w["lat"], w["lon"])
-        j = int(np.argmin(dd))
-        if dd[j] > 500:
-            continue
+        js = wpt_passes(lat, lon, td["d"], w["lat"], w["lon"])
         name = w.get("name") or ""
-        wpts.append({"name": name, "km": float(td["d"][j]) / 1000.0,
-                     "camp": any(k in name.lower() for k in CAMP_WORDS),
-                     "lat": round(float(w["lat"]), 5), "lon": round(float(w["lon"]), 5)})
+        for n, j in enumerate(js, 1):
+            # SP-533: one row per time the track goes by (an out-and-back passes the same hut twice).
+            # camp = the name looks like a camp / hut: a day-end CANDIDATE only, never a cut by itself
+            wpts.append({"name": name, "km": float(td["d"][j]) / 1000.0,
+                         "camp": is_camp_name(name), "pass": n, "passes": len(js),
+                         "lat": round(float(w["lat"]), 5), "lon": round(float(w["lon"]), 5)})
+    wpts.sort(key=lambda w: w["km"])
+    osm_attr = None
+    if osm_huts and len(lat):
+        # SP-536: Taiwan's huts / camps from OpenStreetMap (ODbL) near the track — candidates only
+        from backend.engine.racepower import huts as HU
+        try:
+            osm = HU.along(lat, lon, td["d"])
+        except Exception:                    # noqa: BLE001 — a convenience: the course stands without it
+            osm = []
+        if osm:
+            wpts = HU.merge(wpts, osm)
+            if any(w.get("src") == "osm" for w in wpts):
+                osm_attr = HU.attribution()
     # the route map (racepower.html): the profile's points on the track, by distance along it.
     # A share snapshot (share.py) keeps only km / z: no coordinates leave with a share link.
     profile = {"km": [float(xs[i]) / 1000.0 for i in idx], "z": [round(float(zs[i]), 1) for i in idx]}
@@ -427,6 +556,7 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
         "profile": profile,
         "climbs": climbs,
         "wpts": wpts,
+        "osm": osm_attr,                     # SP-536: {text, url, license} when an OSM hut is among wpts
         "warnings": warnings,
         # where the course starts: the race-day weather's location when nothing else gives one
         "start": {"lat": float(lat[0]), "lon": float(lon[0]), "z": float(zs[0])} if len(lat) else None,

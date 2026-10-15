@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
-VIEWER = (STATIC / "wko5_viewer.html").read_text("utf-8")
+VIEWER = (STATIC / "charts.html").read_text("utf-8")
 SETTINGS = (STATIC / "settings.html").read_text("utf-8")
 
 
@@ -15,7 +15,7 @@ def test_the_viewer_has_no_formula_pill():
     # the markup, its link to the settings tab and the script that filled it
     assert 'id="modepill"' not in VIEWER
     assert '$("modepill")' not in VIEWER
-    assert "/api/v1/wko5/settings#mode" not in VIEWER
+    assert "/api/v1/app/settings#mode" not in VIEWER
     assert "算式：" not in VIEWER
     # what existed only for it: the calculator icon and the .pill styles
     assert 'id="i-calc"' not in VIEWER and "#i-calc" not in VIEWER
@@ -39,7 +39,7 @@ def test_the_settings_page_still_offers_both_modes():
     sec = main[main.index('<section id="mode">'):]
     sec = sec[:sec.index("</section>")]
     assert re.findall(r'<button class="mode" data-parity="(\w+)">', sec) == ["false", "true"]
-    assert "我的算式" in sec and "WKO5 對照模式" in sec
+    assert "我的算式" in sec and "對照模式" in sec and "WKO5" not in sec
     # the buttons save the choice and show which one is on
     assert 'document.querySelectorAll(".mode").forEach((b) => b.onclick' in SETTINGS
     assert 'method: "PUT"' in SETTINGS[SETTINGS.index("async function loadMode()"):][:1200]

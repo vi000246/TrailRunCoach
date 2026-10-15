@@ -201,7 +201,7 @@ def test_threshold_intervals_use_cp_power():
     kinds = [(e["exerciseType"], e["isGroup"]) for e in ex]
     assert kinds == [(1, False), (0, True), (2, False), (4, False), (3, False)]
     warm, grp, work, rest, cool = ex
-    assert warm["targetValue"] == 15 * 60 and warm["intensityType"] == CW.INT_HR
+    assert warm["targetValue"] == 15 * 60 and warm["intensityType"] == CW.INT_NONE    # SP-479: no HR floor
     assert grp["sets"] == 3 and grp["targetValue"] == 13 * 60
     assert work["groupId"] == str(grp["id"]) and rest["groupId"] == str(grp["id"])
     assert work["targetValue"] == 600 and work["intensityType"] == CW.INT_POWER
@@ -252,7 +252,8 @@ def test_cp_test_structure_quick():
     work = ex[1]
     assert work["name"] == "20 分全力" and work["intensityType"] == CW.INT_NONE   # open target
     assert work["targetType"] == CW.TARGET_TIME
-    assert ex[0]["intensityType"] == CW.INT_HR and ex[2]["intensityType"] == CW.INT_HR
+    # SP-479: the warm-up has no target (no HR floor while the HR comes up); the cool-down keeps the easy band
+    assert ex[0]["intensityType"] == CW.INT_NONE and ex[2]["intensityType"] == CW.INT_HR
     assert CW.session_workout(_cp_sess("quick"), TH).payload["estimatedTime"] == 37 * 60
 
 

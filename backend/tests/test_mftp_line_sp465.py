@@ -151,7 +151,7 @@ def _get(client):
     v = WV._view("我的訓練")
     di, ci = next((di, ci) for di, d in enumerate(v["dashboards"]) for ci, c in enumerate(d["charts"])
                   if c.get("id") == "run-power-recent-bests")
-    r = client.get(f"/api/v1/wko5/views/我的訓練/dashboards/{di}/charts/{ci}?begin=2026-07-15&end=2026-10-13")
+    r = client.get(f"/api/v1/app/views/我的訓練/dashboards/{di}/charts/{ci}?begin=2026-07-15&end=2026-10-13")
     assert r.status_code == 200, r.text[:300]
     return r.json()
 

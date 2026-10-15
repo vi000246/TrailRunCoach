@@ -1,10 +1,10 @@
 # Debug API（給 AI agent 用）
 
-SP-371。一組**唯讀**的 HTTPS API，讓 AI agent 不用進主機就能拿到「正式環境現在的真相」：某一筆活動、某段期間的課表、某一天的配對與完成度、當天生效的門檻、同步狀態，以及運動員設定的匯出。
+SP-371、SP-373、SP-406。一組**唯讀**的 HTTPS API，讓 AI agent 不用進主機就能拿到「正式環境現在的真相」：某一筆活動、某段期間的課表、某一天的配對與完成度、當天生效的門檻、同步狀態，以及運動員設定和課表的匯出。本機的副本也用它把正式站的設定和課表拉回來（見「本機從正式站同步」）。
 
-- 程式：`backend/api/debug.py`（端點）、`backend/debug_auth.py`（認證、稽核、流量限制）、`backend/engine/debug_view.py`（組資料、去掉秘密和 GPS）
-- 設定頁：設定 › 進階設定 › **Debug API**（`backend/static/debug_api.js`）
-- 測試：`backend/tests/test_debug_auth.py`、`test_debug_api.py`、`test_debug_integration.py`
+- 程式：`backend/api/debug.py`（端點）、`backend/debug_auth.py`（認證、稽核、流量限制）、`backend/engine/debug_view.py`（組資料、去掉秘密和 GPS）、`backend/engine/upstream.py`（本機從正式站同步）
+- 設定頁：設定 › 進階設定 › **Debug API**、**從正式站同步**（`backend/static/debug_api.js`）
+- 測試：`backend/tests/test_debug_auth.py`、`test_debug_api.py`、`test_debug_integration.py`、`test_debug_sync_sp373.py`
 
 ---
 
@@ -13,7 +13,7 @@ SP-371。一組**唯讀**的 HTTPS API，讓 AI agent 不用進主機就能拿�
 正式網址前面有一層**密碼代理**（Cloudflare Tunnel → 密碼代理 → app；只有 `/share/` 不用密碼）。所以一個請求要帶**兩樣東西**：
 
 - `Authorization`：代理自己的帳密（Basic），跟用瀏覽器開網站時輸入的一樣；
-- `X-TRC-Debug-Token`：debug token（使用者在設定頁產生、交給你的 `trcd_…`）。
+- `X-TRC-Debug-Token`：個人 API token（擁有者在設定頁產生、交給你的 `trcd_…`）。
 
 ```bash
 BASE=https://<正式網址>                     # 經 Cloudflare Tunnel 的 HTTPS 位址
@@ -38,6 +38,9 @@ curl -s "${H[@]}" "$BASE/api/v1/debug/sync?lines=200"
 
 # 匯出運動員設定（token 要有 export:config）
 curl -s "${H[@]}" "$BASE/api/v1/debug/export/config"
+
+# 匯出已存的課表（token 要有 export:plan）
+curl -s "${H[@]}" "$BASE/api/v1/debug/export/plan"
 ```
 
 沒有代理的部署（例如本機 `http://localhost:8000`）就不用 `-u`；token 也可以用 `Authorization: Bearer trcd_…` 帶。
@@ -62,26 +65,26 @@ python -m backend.scripts.debug_fetch export -o config.json
 | 項目 | 規則 |
 |---|---|
 | 預設 | **關閉**。沒在設定 › 進階打開時，`/api/v1/debug/*` 一律回 `404 {"detail": "Not Found"}`（跟不存在的網址一樣，不洩漏端點存在）。這些路由也不出現在 OpenAPI（`/docs`） |
-| PIN | 伺服器環境變數 `TRC_DEBUG_PIN`（至少 6 碼）。**沒設 PIN 就不能打開**，打開了也一律 404。PIN 只在伺服器的 `.env`，不在 repo、不在資料庫 |
-| 怎麼拿 token | 使用者在設定頁按「產生 token」→ 輸入 PIN → 選名稱、範圍、有效期 → token **只顯示這一次** |
-| PIN 錯誤 | 固定時間比較（兩邊先 SHA-256 再 `hmac.compare_digest`）；**連續錯 5 次鎖 15 分鐘**（整台伺服器，鎖住時正確的 PIN 也拒絕；鎖在記憶體裡，重啟會清掉）。每次輸錯和上鎖都寫進 app log（不含 PIN），設定頁顯示次數 |
+| 誰能管 | **只有擁有者**（`tenancy.is_owner()`）能打開／關閉、產生、撤銷 token、從正式站同步；登入模式下其他使用者打這些設定端點一律 `403 {"code": "OWNER_ONLY"}`，設定頁也不顯示這一塊 |
+| 怎麼拿 token | 個人 API token（SP-373，像 GitHub 的 personal access token）：擁有者在設定頁按「產生 token」→ 選名稱、範圍、有效期 → token **只顯示這一次**。**不用 PIN**（舊的 `TRC_DEBUG_PIN` 已不讀，留著也沒作用） |
 | 怎麼帶 | `X-TRC-Debug-Token: trcd_…`（建議；`Authorization` 留給密碼代理）或 `Authorization: Bearer trcd_…`。**網頁登入的 cookie 一律不讀**：被 XSS／CSRF 帶走的 session 叫不動這些端點，token 外流也碰不到一般功能 |
 | 儲存 | 資料庫（`debug_tokens`）只存 token 的 SHA-256 和前 4 碼（`trcd_AbCd…`，用來分辨）。token 是 256 位元亂數，資料庫外流也還原不出來 |
-| 範圍（scope） | `read:activity`、`read:plan`、`read:sync`、`read:gps`、`export:config`。預設勾前三個；`read:gps`（`?gps=1` 要它）和 `export:config` 要自己勾 |
-| 有效期 | 1／7／30／90 天，預設 30；到期自動失效 |
-| 撤銷 | 設定頁可以撤銷單一 token 或「全部撤銷」；撤銷後立刻 401 |
+| 範圍（scope） | `read:activity`、`read:plan`、`read:sync`、`read:gps`、`export:config`、`export:plan`。預設勾前三個；`read:gps`（`?gps=1` 要它）、`export:config`、`export:plan` 要自己勾 |
+| 有效期 | 7／30／90／365 天或**不過期**，預設 90；到期自動失效。不過期的 token 只能靠撤銷停用（存成 9999-12-31，畫面顯示「不過期」） |
+| 撤銷 | 設定頁可以撤銷單一 token 或「全部撤銷」；撤銷後立刻 401（登入模式下在登入攔截就擋掉） |
+| 登入模式（SP-406） | `TRC_ACCOUNTS=1`＋完整 Google 登入時，登入攔截只認 session cookie；但 **GET／HEAD `/api/v1/debug/*` 帶 debug token** 會放行：token 產生時把雜湊登記到 accounts.db（`api_tokens`，client `debug`、scope `debug:*`，撤銷時刪掉），攔截層查到是**擁有者**的 token 才進擁有者的 tenant，之後照常由 debug API 檢查到期、撤銷、範圍、開關。debug token 打其他任何路徑（包括設定頁的端點、寫入）都跟沒登入一樣回 401。別人帳號名下的 `debug:*` 列一律 401。SP-406 之前產生的 token 沒登記，登入模式下要重新產生 |
 | 綁定使用者 | token 綁定產生它的 tenant（`tenancy.current().id`），只看得到自己的資料；別的 tenant 的 token 在這裡是「不認識的 token」 |
 | 流量限制 | **先檢查 token**：有效的 token 不會被 IP 封鎖擋下（在 Docker／cloudflared 後面，大家看起來可能是同一個 IP）。有效的 token：每個 token 每分鐘 60 次、每個使用者（tenant）每分鐘 120 次，超過回 `429`（`Retry-After: 60`）；同時最多 2 個在算，忙的時候回 `503 BUSY`（`Retry-After: 10`）。認證失敗：同一個來源 IP 10 分鐘內失敗超過 10 次 → 之後 10 分鐘這個 IP 的**失敗請求**直接回 `429 BLOCKED`。沿用 `backend/security/ratelimit.py`（同 `tenancy_mw`） |
 | 稽核 | 有效 token 的每次呼叫（200、400、403、500）記一筆：時間、token 名稱、端點、參數（`applog.mask_url` 遮過）、來源 IP、狀態、回應大小、耗時；保留最新 1000 筆，設定頁看最近 100 筆。**認證失敗不逐筆記**：每小時 × 來源 IP × 原因一列、累加次數（`debug_auth_failures`，最多 500 列）。429／503 **什麼都不寫**，只在記憶體裡數（設定頁看得到）。token **第一次從某個 IP 使用**時，那筆和 token 列會標「⚠ 新 IP」 |
 | demo 模式 | 一律關閉：demo instance 根本不掛這些路由 |
 | HTTPS | 正式網址經 Cloudflare Tunnel，本來就是 HTTPS |
-| 設定頁的寫入 | 打開／產生 token／撤銷只接受同站請求（`Sec-Fetch-Site`，沒有就看 `Origin` 跟 Host 一致）；沒有 `Content-Type` 的 body 不當 JSON 解析（FastAPI strict content type） |
+| 設定頁的寫入 | 打開／產生 token／撤銷／從正式站同步只接受同站請求（`Sec-Fetch-Site`，沒有就看 `Origin` 跟 Host 一致）；沒有 `Content-Type` 的 body 不當 JSON 解析（FastAPI strict content type） |
 
 ### 錯誤碼
 
 | 狀態 | `detail` | 意思 |
 |---|---|---|
-| 404 | `"Not Found"` | 沒打開、沒設 PIN、demo 模式，或網址不存在 |
+| 404 | `"Not Found"` | 沒打開、demo 模式，或網址不存在 |
 | 401 | `{"code": "TOKEN_MISSING"}` | 沒帶 `X-TRC-Debug-Token`／`Authorization: Bearer trcd_…`（cookie 不算） |
 | 401 | `{"code": "TOKEN_INVALID"}` | 不認識的 token（打錯、別的 tenant 的） |
 | 401 | `{"code": "TOKEN_REVOKED"}` / `{"code": "TOKEN_EXPIRED"}` | 已撤銷／已過期 |
@@ -187,7 +190,7 @@ python -m backend.scripts.debug_fetch export -o config.json
 | `settings` | `sync.*`：資料來源、各來源開關、`last_result`／`last_ok`（每次同步的結果：時間、觸發方式、下載數、錯誤）、排程、開站自動同步 |
 | `state` | `sync_state` 的時間和 cursor：`coros_last_sync_at`、`tp_last_sync_at`、`tp_cursor`、`*_login_expires`（**不含任何 token**） |
 | `failures` | 最後一次同步有錯的來源：`error_count`（幾筆活動失敗，`last_result.errors` 是次數）、`error`（整次同步的失敗原因） |
-| `log` | app log（`applog`，`~/.wko5coach/logs/app.log` 和上一個輪替檔）的最後 N 行（最多 2000），每一行再過一次 `applog.redact`（去掉 token、e-mail、網址參數、家目錄）；`warnings_errors` 是其中 WARNING／ERROR 的行（慢請求、5xx、例外） |
+| `log` | app log（`applog`，`~/.trailruncoach/logs/app.log` 和上一個輪替檔）的最後 N 行（最多 2000），每一行再過一次 `applog.redact`（去掉 token、e-mail、網址參數、家目錄）；`warnings_errors` 是其中 WARNING／ERROR 的行（慢請求、5xx、例外） |
 
 ### `GET /api/v1/debug/export/config` — 範圍 `export:config`
 
@@ -213,6 +216,40 @@ python -m backend.scripts.debug_fetch export -o config.json
 
 ---
 
+### `GET /api/v1/debug/export/plan` — 範圍 `export:plan`
+
+已存的課表（SP-373）：`schema_version`、`exported_at`、`count`、`sessions[]`。`sessions` 是 `plan_sessions` 的**每一列**（跟 `plan_store.to_dict` 同欄位，`title` 是存的原文）：自動產生的、使用者自己加的（`origin: custom`）、改過的（`edited`）、刪除／取代的標記（`state: deleted / superseded`，本機照抄才不會把刪掉的課又長回來）。**不含** COROS 推送紀錄（`coros_plan_push`：那是推送那台的）。跟其他回應一樣過 `debug_view.scrub`。
+
+---
+
+## 本機從正式站同步（SP-373）
+
+本機跑的時候想用正式站填好的設定和課表，不用再填一次：**單向**，正式站為準，本機只讀正式站（只送 GET），不會改正式站任何東西。
+
+1. 正式站：設定 › 進階 › Debug API → 打開 → 產生 token，勾 `export:config` 和 `export:plan`，有效期可以選「不過期」（之後要停用就撤銷）。
+2. 本機（**只在你自己的電腦**，不要設在正式站）的環境變數或 `.env`：
+
+   ```bash
+   TRC_UPSTREAM_URL=https://<正式網址>        # https；只有 localhost 可以用 http
+   TRC_UPSTREAM_TOKEN=<剛產生的 trcd_ token>  # 或 TRC_UPSTREAM_TOKEN_FILE（Docker secret）
+   TRC_PROXY_USER=<代理帳號>                   # 正式站前面有密碼代理時才要
+   TRC_PROXY_PASSWORD=<代理密碼>
+   ```
+3. 本機設定 › 進階 › **從正式站同步**（有設環境變數才出現）→ 勾「設定」「課表」→「看會改什麼」（預覽，什麼都不寫）→「套用到這台」。
+
+| 部分 | 抓 | 套用時寫進本機 |
+|---|---|---|
+| 設定 | `export/config` | `export/config` 的設定鍵（這一版不認得的略過並列出；`debug.*`、`upstream.*`、`plan.auto.push` 是本機自己的，不抓）、`plan.json`（基本資料、體重、門檻、賽事、手動週期）、傷病紀錄（整批換掉，**保留 id**：活動標記的 `injury_id` 指向它）、活動的手動標記（整批換掉）、地形覆寫（用檔名對到本機的活動；本機沒有的活動只計數） |
+| 課表 | `export/plan` | `plan_sessions` 整批換成正式站的列（`plan_store.save`），刪除標記一起 |
+
+- 先把要的部分**都抓完、檢查過格式**才開始寫；任何一個抓失敗（401／403／404／連不到）或格式版本不同，什麼都不寫，畫面顯示原因。
+- 套用後本機的 `plan.auto.push` 設成關：兩台推同一個 COROS 帳號會打架，推課表交給正式站。
+- 結果記在本機的 `upstream.last_pull`（時間、抓了哪些、正式站匯出的時間；備份不帶走）。
+- **不抓**：活動檔（本機自己同步）、賽事 GPX、範本、賽事計算機、COROS 推送紀錄，以及 `export/config` 本來就不含的東西（密碼、token、備份位置…）。
+- 安全：token 和代理密碼只從環境變數讀（`applog.redact` 會把它們從 log 裡遮掉），不進資料庫、不顯示在畫面（畫面只顯示正式站的主機名）；只走 HTTPS（本機除外）、不跟隨轉址（轉址可能把 token 帶去別處）。
+
+---
+
 ## 範例：「這一天為什麼被標成沒照課表？」
 
 1. `GET /api/v1/debug/day?date=2026-10-05`
@@ -231,10 +268,10 @@ python -m backend.scripts.debug_fetch export -o config.json
 
 採用的做法（A）：**密碼代理不動**。agent 在 `Authorization` 帶代理自己的帳密，在 `X-TRC-Debug-Token` 帶 debug token（見「一分鐘上手」）。
 
-1. 在 NAS 的 `.env`（不進 repo）加 `TRC_DEBUG_PIN=<自己選的，至少 6 碼>`，並讓容器讀得到（compose 的 `environment: - TRC_DEBUG_PIN=${TRC_DEBUG_PIN}` 或 `env_file`），重啟容器。
+1. 不用設任何環境變數（SP-373 起沒有 PIN；舊的 `TRC_DEBUG_PIN` 可以從 `.env` 拿掉）。
 2. 建 image 時帶上版本：`docker build --build-arg GIT_SHA=$(git rev-parse --short HEAD) .`（回應的 `meta.app_version`）。
-3. 稽核和 IP 封鎖看的是來源 IP：app 的埠只綁 `127.0.0.1`（或只信任代理容器的 IP，`WKO5COACH_TRUSTED_PROXIES`），由代理／cloudflared 帶上 `CF-Connecting-IP`，稽核的 IP 才是真的來源；不然大家都會是 Docker 閘道的 IP（有效的 token 不受影響，只是稽核看不出來是誰）。
-4. 設定 › 進階設定 › Debug API → 打開 → 產生 token（輸入 PIN）→ 複製交給 agent，連同代理帳密（agent 從環境變數讀，不要寫進檔案）。
+3. 稽核和 IP 封鎖看的是來源 IP：app 的埠只綁 `127.0.0.1`（或只信任代理容器的 IP，`TRC_TRUSTED_PROXIES`），由代理／cloudflared 帶上 `CF-Connecting-IP`，稽核的 IP 才是真的來源；不然大家都會是 Docker 閘道的 IP（有效的 token 不受影響，只是稽核看不出來是誰）。
+4. 設定 › 進階設定 › Debug API → 打開 → 產生 token → 複製交給 agent，連同代理帳密（agent 從環境變數讀，不要寫進檔案）。
 5. 用完就撤銷；token 外流就按「全部撤銷」。
 
 > **沒採用，需要時才考慮：在代理上開窄的例外。** 如果哪天 agent 拿不到代理帳密，可以讓代理對 `^/api/v1/debug/`（用**正規化之後**的路徑比對，擋掉 `..`、`%2e`、重複斜線這類繞法）而且**只限 GET／HEAD** 不要密碼，debug API 自己的 token 認證照舊。**絕對不要**包含 `/api/v1/settings/debug-api`（產生 token 的地方），也不要把規則放寬成 `/api/v1/` 或前綴比對以外的寫法——放寬一點就等於把整個 app 開在網路上。

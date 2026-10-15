@@ -17,7 +17,7 @@ from backend.engine.wko5expr.render import (
 from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
 
 TODAY = dt.date(2026, 9, 30)          # a Wednesday
-VIEWER = Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html"
+VIEWER = Path(__file__).resolve().parents[1] / "static" / "charts.html"
 
 
 def _run(day, secs=600, power=None, hr=140.0, cadence=85.0, **metrics):

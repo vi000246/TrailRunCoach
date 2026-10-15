@@ -255,7 +255,7 @@ def logout(request: Request):
 # ---------------------------------------------------------------------------- the account's own data (SP-386)
 
 REAUTH_TTL_S = 10 * 60             # a Google confirmation counts this long for a deletion
-SETTINGS_URL = "/api/v1/wko5/settings"
+SETTINGS_URL = "/api/v1/app/settings"
 DELETED_NEXT = "/login?deleted=1"
 
 

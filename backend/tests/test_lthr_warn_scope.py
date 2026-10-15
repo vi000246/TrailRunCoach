@@ -1,6 +1,9 @@
 """The LTHR warning's scope and wording (SP-277; lthr-low-confidence-testing.md §1.1, §6.1 第
 4–5 點): only on steps whose HR target comes from LTHR, never on a test session, why + how it
-goes away, a manual LTHR's 「手動輸入，沒有驗證」. Synthetic data only."""
+goes away, a manual LTHR's 「手動輸入，沒有驗證」. SP-493 (owner 2026-10-14): the editor shows no
+badge any more (threshold_confidence.EDITOR_BADGE) — the reminder is the suggestion box's one row;
+the texts (assess's "warn", the settings page's note) and the scope rule stay, tested with the
+badge switched back on. Synthetic data only."""
 import asyncio
 
 import pytest
@@ -24,7 +27,19 @@ def _assess(kind, runs=RUNS, **k):
 
 # ---- the text: why + how it goes away -------------------------------------------------------
 
-def test_estimate_alone_gets_the_actionable_text():
+@pytest.fixture
+def badge(monkeypatch):
+    monkeypatch.setattr(TC, "EDITOR_BADGE", True)
+
+
+def test_sp493_no_editor_badge_by_default():
+    assert TC.EDITOR_BADGE is False
+    assert TC.warn_of(_assess("estimate")) is None
+    assert TC.session_warn(WARN, {"kind": "quality", "title": "閾值 3×8 分"}, BAND, HR_RES) is None
+    assert _assess("estimate")["warn"]["lthr"]["low"]            # the data is still there (settings page)
+
+
+def test_estimate_alone_gets_the_actionable_text(badge):
     w = TC.warn_of(_assess("estimate"))
     assert w["lthr"]["low"]
     assert w["lthr"]["text"] == "LTHR 是估算的；輕鬆跑可以改用講話測試的配速，做一次 30 分鐘測試後這個提醒會消失"
@@ -32,7 +47,7 @@ def test_estimate_alone_gets_the_actionable_text():
         assert TC.warn_of(_assess("estimate"))["lthr"]["text"].startswith("Your LTHR is an estimate;")
 
 
-def test_watch_alone_names_the_watch():
+def test_watch_alone_names_the_watch(badge):
     t = TC.warn_of(_assess("watch"))["lthr"]["text"]
     assert t.startswith("LTHR 來自手錶帳號，沒有測過；") and t.endswith("做一次 30 分鐘測試後這個提醒會消失")
 
@@ -49,7 +64,7 @@ def test_other_reasons_keep_the_why_and_say_how():
     assert t.startswith("LTHR 可信度低：心率目標可能不準（") and t.endswith("做一次 30 分鐘 LTHR 測試並套用後，這個提醒會消失")
 
 
-def test_manual_lthr_stays_medium_with_the_small_note():
+def test_manual_lthr_stays_medium_with_the_small_note(badge):
     r = _assess("manual")
     assert r["lthr"]["confidence"] == "medium"
     w = TC.warn_of(r)
@@ -58,7 +73,7 @@ def test_manual_lthr_stays_medium_with_the_small_note():
         assert TC.warn_of(_assess("manual"))["lthr"]["note"] == "Entered by hand, not verified"
 
 
-def test_a_tested_lthr_has_no_note():
+def test_a_tested_lthr_has_no_note(badge):
     r = TC.assess(lt(168.0, kind="test", date="2026-09-20"), {"value": 190.0, "source_kind": "test"},
                   {"value": 50.0, "source_kind": "manual"}, TODAY, RUNS, {}, None)
     assert TC.warn_of(r) is None
@@ -73,25 +88,25 @@ TYPED = [{"id": "a", "kind": "work", "target": {"type": "hr", "mode": "abs", "lo
 HR_RES = {"a": {"type": "hr"}}
 
 
-def test_easy_with_a_measured_aet_has_no_warning():
+def test_easy_with_a_measured_aet_has_no_warning(badge):
     assert TC.session_warn(WARN, {"kind": "easy"}, EASY, HR_RES, aet_measured=True) is None
     assert TC.session_warn(WARN, {"kind": "easy"}, EASY, HR_RES, aet_measured=False) == WARN   # 0.89 × LTHR cap
 
 
-def test_intervals_keep_the_warning():
+def test_intervals_keep_the_warning(badge):
     assert TC.session_warn(WARN, {"kind": "quality", "title": "閾值 3×8 分"}, BAND, HR_RES, aet_measured=True) == WARN
     # on power, not HR: nothing from LTHR
     assert TC.session_warn(WARN, {"kind": "quality"}, BAND, {"a": {"type": "power"}}, aet_measured=False) is None
 
 
-def test_typed_bpm_is_not_from_lthr():
+def test_typed_bpm_is_not_from_lthr(badge):
     assert TC.session_warn(WARN, {"kind": "quality"}, TYPED, HR_RES) is None
 
 
 @pytest.mark.parametrize("s", [
     AT.session({"cp": 250.0, "lthr": 165.0}, 140.0, 190.0, None, p) for p in ("xu90", "ua60", "ua40", "evoke60", "friel")
 ] + [{"kind": "test", "title": "Friel 30′ 閾值心率測試"}, {"kind": "test", "title": "最大心率測試：3 趟上坡、最後一趟全力"}])
-def test_test_sessions_never(s):
+def test_test_sessions_never(s, badge):
     assert TC.session_warn(WARN, s, BAND + EASY, HR_RES) is None
 
 
@@ -111,13 +126,21 @@ def _check(monkeypatch, s, aet_measured, warn):
     return asyncio.run(PSAPI.steps_check({**s, "steps": steps}, db=None))
 
 
-def test_editor_easy_run(monkeypatch):
+def test_editor_easy_run(monkeypatch, badge):
     s = {"kind": "easy", "title": "輕鬆跑", "minutes": 45, "target": "", "detail": "", "day": "2026-10-06"}
     assert _check(monkeypatch, s, True, WARN)["thr_warn"] is None
     assert _check(monkeypatch, s, False, WARN)["thr_warn"] == WARN
 
 
-def test_editor_intervals_and_tests(monkeypatch):
+def test_sp493_editor_endpoint_has_no_badge(monkeypatch):
+    q = {"kind": "quality", "title": "閾值 3×8 分", "minutes": 55, "target": "", "detail": "暖身 15 分，休 2 分",
+         "day": "2026-10-07"}
+    s = {"kind": "easy", "title": "輕鬆跑", "minutes": 45, "target": "", "detail": "", "day": "2026-10-06"}
+    assert _check(monkeypatch, q, True, WARN)["thr_warn"] is None
+    assert _check(monkeypatch, s, False, WARN)["thr_warn"] is None
+
+
+def test_editor_intervals_and_tests(monkeypatch, badge):
     q = {"kind": "quality", "title": "閾值 3×8 分", "minutes": 55, "target": "", "detail": "暖身 15 分，休 2 分",
          "day": "2026-10-07"}
     assert _check(monkeypatch, q, True, WARN)["thr_warn"] == WARN
@@ -126,7 +149,7 @@ def test_editor_intervals_and_tests(monkeypatch):
         assert _check(monkeypatch, t, False, WARN)["thr_warn"] is None
 
 
-def test_editor_manual_note_passes_through(monkeypatch):
+def test_editor_manual_note_passes_through(monkeypatch, badge):
     w = {"lthr": {"low": False, "text": "", "note": "手動輸入，沒有驗證"}}
     s = {"kind": "quality", "title": "閾值 3×8 分", "minutes": 55, "target": "", "detail": "", "day": "2026-10-07"}
     assert _check(monkeypatch, s, True, w)["thr_warn"]["lthr"]["note"] == "手動輸入，沒有驗證"

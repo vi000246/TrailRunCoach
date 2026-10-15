@@ -55,7 +55,9 @@ def test_recovery_and_rebuild_by_size(kw, rec, rb):
 
 def test_b_race_recovery_by_size():
     assert P.recovery_plan(ev(distance_km=10, climbing_m=0, est_hours=1.0), b=True)["days"] == 3
-    assert P.recovery_plan(ev(distance_km=21, climbing_m=0, est_hours=2.5), b=True)["days"] == 5
+    # SP-525: 中 = one easy day per 3 km (Daniels), ≤ 7: a half 7, 15 km 5
+    assert P.recovery_plan(ev(distance_km=21, climbing_m=0, est_hours=2.5), b=True)["days"] == 7
+    assert P.recovery_plan(ev(distance_km=15, climbing_m=0, est_hours=2.5), b=True)["days"] == 5
     assert (P.recovery_plan(ev(**MARA), b=True)["days"], P.recovery_plan(ev(**MARA), b=True)["rebuild"]) == (7, 0)
     assert P.recovery_plan(ev(**ULTRA), b=True)["days"] == 14
 

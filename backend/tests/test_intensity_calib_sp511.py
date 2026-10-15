@@ -8,7 +8,6 @@ import datetime as dt
 import math
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
 
 from backend.engine import calibrate as CAL
@@ -282,16 +281,6 @@ def test_load_step_on_rpe_is_timed_at_the_table(monkeypatch):
     secs, est = WS._secs(st, r, c)
     assert est and secs == pytest.approx(40 * 3600 / (f * f * 100))
     assert math.isclose(WS.totals({"items": [st]}, c)["tss"], 40.0, abs_tol=0.1)   # a typed load stays typed
-
-
-def test_static_demo_exports_the_values_in_effect(monkeypatch):
-    from backend.demo import static_steps as SS
-    _manual(monkeypatch, easy_run_if=0.72, rpe_if_scale=1.1)
-    ws = SS.constants()["ws"]
-    assert ws["easy_f"] == 0.72
-    assert ws["rpe"]["frac"]["4"] == pytest.approx(WS.RPE_FRAC[4] * 1.1)
-    assert ws["rpe"]["frac_default"]["4"] == WS.RPE_FRAC[4]
-    assert np.isclose(ws["rpe"]["frac"]["10"] / ws["rpe"]["frac_default"]["10"], 1.1)
 
 
 def test_easy_rows_on_a_dataset():

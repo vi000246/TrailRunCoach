@@ -95,11 +95,11 @@ def day_plan_course(e) -> Optional[dict]:
 
 
 def course_of(e, gpx: Callable = stored_course) -> dict:
-    """SP-114: a GPX with its own day ends (the calculator's split points, camp waypoints) wins;
-    then the trip's own per-day numbers (Event.day_plan); then the GPX cut into equal days; the
-    event's km / climb split equally only when there is neither."""
+    """SP-114: a GPX with its own day ends (the calculator's split points; SP-533: camp waypoints
+    are only candidates) wins; then the trip's own per-day numbers (Event.day_plan); then the GPX
+    cut into equal days (推估); the event's km / climb split equally only when there is neither."""
     c = gpx(e)
-    if c and (split_days(e) < 2 or c.get("split_source") in ("stored", "camp")):
+    if c and (split_days(e) < 2 or c.get("split_source") == "stored"):
         return {**c, "descent_assumed": False}
     dp = day_plan_course(e)
     if dp is not None:
@@ -238,7 +238,7 @@ def tip(ln: dict) -> str:
             f"{ln['hours']:.1f} h（{ln['time_source']}）\n路線：{src}")
     if not ln.get("multi"):
         return head + f"\nコース定數 {ln['cc']:.0f}"
-    split = {"stored": "你在賽事計算器點的分日點", "camp": "GPX 的營地／山屋航點", "equal": "每天距離平均（沒有分日點）",
+    split = {"stored": "你在賽事計算器點的分日點", "equal": "每天距離平均（沒有分日點，推估）",
              "day_plan": "你填的每天距離和爬升"}
     rows = "\n".join(f"第 {d['day']} 天：{d['km']:.1f} km ↑{d['climb_m']} ↓{d['descent_m']} {d['hours']:.1f} h → 定數 {d['cc']:.0f}"
                      + ("（最難）" if d["day"] == ln["hardest_day"] else "") for d in ln["per_day"])

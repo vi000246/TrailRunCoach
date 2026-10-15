@@ -3,20 +3,20 @@
 docs/plans/injury-tracking.plan.md §3.6). Everything answers 404 in the demo
 mode (WKO5COACH_MODE=demo). Local only: nothing here is synced or shared.
 
-  GET    /api/v1/wko5/injuries                    every event (+ auto days off, linked activities)
-  GET    /api/v1/wko5/injuries/meta               areas (fixed + the user's), severities, settings
-  POST   /api/v1/wko5/injuries                    a manual event
-  PATCH  /api/v1/wko5/injuries/{id}               change fields
-  POST   /api/v1/wko5/injuries/{id}/resolve       「好了」 {date?}
-  POST   /api/v1/wko5/injuries/{id}/walkrun       「可以開始走跑」 {date?} (SP-272)
-  DELETE /api/v1/wko5/injuries/{id}               delete (activities keep their pain mark)
-  POST   /api/v1/wko5/injuries/areas              {label}: add a body area
-  DELETE /api/v1/wko5/injuries/areas/{label}      remove one from the picker
-  PUT    /api/v1/wko5/injuries/settings           {pattern_alerts?, reentry_step_up?}
-  GET    /api/v1/wko5/injuries/analysis           the case-crossover (tier decides the fields)
-  GET    /api/v1/wko5/injuries/timeline           weekly load, CTL, injury bands, pain ticks
-  GET    /api/v1/wko5/injuries/{id}/days          the 21 days before the onset
-  GET    /api/v1/wko5/injuries/page               the page
+  GET    /api/v1/app/injuries                    every event (+ auto days off, linked activities)
+  GET    /api/v1/app/injuries/meta               areas (fixed + the user's), severities, settings
+  POST   /api/v1/app/injuries                    a manual event
+  PATCH  /api/v1/app/injuries/{id}               change fields
+  POST   /api/v1/app/injuries/{id}/resolve       「好了」 {date?}
+  POST   /api/v1/app/injuries/{id}/walkrun       「可以開始走跑」 {date?} (SP-272)
+  DELETE /api/v1/app/injuries/{id}               delete (activities keep their pain mark)
+  POST   /api/v1/app/injuries/areas              {label}: add a body area
+  DELETE /api/v1/app/injuries/areas/{label}      remove one from the picker
+  PUT    /api/v1/app/injuries/settings           {pattern_alerts?, reentry_step_up?}
+  GET    /api/v1/app/injuries/analysis           the case-crossover (tier decides the fields)
+  GET    /api/v1/app/injuries/timeline           weekly load, CTL, injury bands, pain ticks
+  GET    /api/v1/app/injuries/{id}/days          the 21 days before the onset
+  GET    /api/v1/app/injuries/page               the page
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _not_demo():
         raise HTTPException(404, "Not Found")
 
 
-router = APIRouter(prefix="/api/v1/wko5/injuries", tags=["injuries"], dependencies=[Depends(_not_demo)])
+router = APIRouter(prefix="/api/v1/app/injuries", tags=["injuries"], dependencies=[Depends(_not_demo)])
 
 EDITABLE = ("area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key", "onset_file", "status",
             "resolved_date", "days_missed", "pause_quality", "note", "category", "illness", "condition",

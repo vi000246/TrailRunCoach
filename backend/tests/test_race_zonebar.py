@@ -116,15 +116,36 @@ def _plan(hr_bar):
     return {"zones": zones_json(300.0), "summary": {"power": 255.0}, "used": {"cp": {"value": 300.0}}, "hr_bar": hr_bar}
 
 
+def _fold(h: str):
+    """(the line before 「區間細節」, the folded part inside it, its <details> tag)"""
+    m = re.search(r"(<details class=\"zmore\"[^>]*>)<summary>([^<]*)</summary>(.*)</details>", h, re.S)
+    assert m, h
+    return h[:m.start()], m.group(3), m.group(1), m.group(2)
+
+
 @pytest.mark.skipif(NODE is None, reason="node not installed")
-def test_page_power_basis_shows_palladino_with_ticks_and_names():
+def test_page_power_basis_is_one_small_line_and_the_zones_are_folded():
     out = _run(_plan(ZB.hr_bar(TRAIL, 160.0)), {"basis": "power"})
     assert out["spec"] == {"kind": "power"}
-    h = out["html"]
-    assert "絕對強度・功率區間" in h and "<help>" in h and 'class="escale"' in h
-    assert ">130<" in h and ">50<" in h                                       # the % CP scale
-    assert "Endurance / long run" in h and 'class="cur"' in h                  # names on the page, not on hover
-    assert "平均 85% CP（255 W），落在 Palladino 2 區" in h and "zbar-sys" not in h
+    line, more, tag, summ = _fold(out["html"])
+    # SP-548: one line, no colour strip; the strip, the scale and the names under a closed 「區間細節」
+    assert "絕對強度（參考）：平均 85% CP（255 W），落在 Palladino 2 區 · Endurance / long run" in line
+    assert "<help>" in line and "zbar" not in line.replace('id="zbar-box"', "") and "escale" not in line
+    assert summ == "區間細節" and "open" not in tag
+    assert 'class="zbar gray"' in more and 'class="escale"' in more and ">130<" in more and ">50<" in more
+    assert "Endurance / long run" in more and 'class="cur"' in more and "zbar-sys" not in out["html"]
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_page_folded_strip_is_grey_but_the_race_zone():
+    out = _run(_plan(ZB.hr_bar(TRAIL, 160.0)), {"basis": "power"})
+    _, more, _, _ = _fold(out["html"])
+    strip = re.search(r'<div class="zbar gray">(.*?)<div class="needle"', more, re.S).group(1)
+    segs = re.findall(r'<div class="z( cur)?" style="([^"]*)">', strip)
+    assert len(segs) >= 5
+    coloured = [cur for cur, st in segs if "background" in st]
+    assert coloured == [" cur"]                              # only the race's zone has a colour
+    assert more.count("<i ") == 1 and more.count("<i>") == len(re.findall(r"<b>", more)) - 1   # legend chips too
 
 
 @pytest.mark.skipif(NODE is None, reason="node not installed")
@@ -132,8 +153,11 @@ def test_page_hr_basis_shows_the_hr_zones_and_remembers_the_pick():
     hb = ZB.hr_bar(TRAIL, 160.0, {"model": "lthr", "mhr": 200.0, "rhr": 50.0})
     out = _run(_plan(hb), {"basis": "hr"})
     assert out["spec"]["kind"] == "hr" and out["spec"]["sys"] == "coroslthr" and out["spec"]["hr"] == approx(140.8)
-    assert "絕對強度・心率區間" in out["html"] and "平均 141 bpm，落在 COROS 乳酸閾 Z2 區" in out["html"]
-    assert 'id="zbar-sys"' in out["html"] and 'value="frielhr"' in out["html"]
+    line, more, _, _ = _fold(out["html"])
+    assert "絕對強度（參考）：平均 141 bpm，落在 COROS 乳酸閾 Z2 區" in line
+    # SP-548: the heart-rate zone model is picked inside 「區間細節」
+    assert "zbar-sys" not in line and 'id="zbar-sys"' in more and 'value="frielhr"' in more
+    assert 'class="zbar gray"' in more and "LTHR" in more
     friel = _run(_plan(hb), {"basis": "hr"}, pick="frielhr")
     assert friel["spec"]["sys"] == "frielhr" and "落在 Friel 2 區" in friel["html"]
     # a remembered system that has no zones now (no max HR) falls back to the default
@@ -145,6 +169,19 @@ def test_page_hr_basis_shows_the_hr_zones_and_remembers_the_pick():
 def test_page_hr_basis_without_hr_falls_back_to_power_with_the_reason():
     out = _run(_plan(ZB.hr_bar({"type": "road", "summary": {}}, 160.0)), {"basis": "hr"})
     assert out["spec"]["kind"] == "power" and out["spec"]["why"] == ZB.NO_HR_ROAD
-    assert "絕對強度・功率區間" in out["html"] and ZB.NO_HR_ROAD in out["html"]
+    line, more, _, _ = _fold(out["html"])
+    assert "Palladino" in line and ZB.NO_HR_ROAD in line
+    # SP-548: the reason is grey and small like the line, not a yellow note
+    assert f'<div class="zline" data-rh="RCz">{ZB.NO_HR_ROAD}</div>' in line and "wn" not in line
     old = _run(_plan(None), {"basis": "hr"})                                  # a plan without hr_bar
     assert old["spec"]["kind"] == "power" and "沒有平均心率" in old["html"]
+
+
+def test_zone_bar_strings_in_both_languages():
+    for lang in ("zh-TW", "en"):
+        cat = json.loads((STATIC / "i18n" / lang / "racepower.json").read_text(encoding="utf-8"))
+        assert cat["zbar.more"] and cat["zbar.system"] and "zbar.title_power" not in cat
+        for k in ("zbar.line_power", "zbar.line_hr", "zbar.tip"):
+            assert cat[k]
+    en = json.loads((STATIC / "i18n" / "en" / "racepower.json").read_text(encoding="utf-8"))
+    assert en["zbar.more"] == "Zone details" and "(reference)" in en["zbar.line_power"]

@@ -58,7 +58,7 @@ import datetime as dt
 import math
 from typing import Optional
 
-from backend.i18n import _
+from backend.i18n import M_, _
 
 MIN_BREAK = 6                         # Daniels cat. 2 starts at 6 days
 CAT2_MAX, CAT3_MAX = 28, 56           # days
@@ -172,22 +172,23 @@ def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False
 
 def text_of(days: int, cat: str, ret: dt.date, end: dt.date, injury: Optional[dict] = None,
             stepped: bool = False, transition_days: int = 0, illness: Optional[dict] = None) -> str:
-    how = {"6-13": _("前半 50%、後半 75%"), "14-28": _("前半 50%、後半 75%，強度目標打折"),
-           "29-56": _("三段 33／50／75%，5 區要重新確認有氧基礎"), "long": _("15 週重新打底（33→50→70→85→100%）")}[cat]
+    # (M_: the text is in the plan inputs' week why, shown in the page's language — SP-542)
+    how = {"6-13": M_("前半 50%、後半 75%"), "14-28": M_("前半 50%、後半 75%，強度目標打折"),
+           "29-56": M_("三段 33／50／75%，5 區要重新確認有氧基礎"), "long": M_("15 週重新打底（33→50→70→85→100%）")}[cat]
     if injury and illness:
-        head = _("傷停＋生病停跑 {days} 天（{label}，傷病紀錄 #{id}；{ill}，#{ill_id}）", days=days,
-                 label=injury["label"], id=injury["id"], ill=illness["label"], ill_id=illness["id"])
+        head = M_("傷停＋生病停跑 {days} 天（{label}，傷病紀錄 #{id}；{ill}，#{ill_id}）", days=days,
+                  label=injury["label"], id=injury["id"], ill=illness["label"], ill_id=illness["id"])
     elif illness:
-        head = _("生病停跑 {days} 天（{ill}，傷病紀錄 #{id}）", days=days, ill=illness["label"], id=illness["id"])
+        head = M_("生病停跑 {days} 天（{ill}，傷病紀錄 #{id}）", days=days, ill=illness["label"], id=illness["id"])
     elif injury:
-        head = _("傷停 {days} 天（{label}，傷病紀錄 #{id}）", days=days, label=injury["label"], id=injury["id"])
+        head = M_("傷停 {days} 天（{label}，傷病紀錄 #{id}）", days=days, label=injury["label"], id=injury["id"])
     else:
-        head = _("停跑 {days} 天", days=days)
-    up = _("；傷後往上一級排（推估）") if stepped else ""
+        head = M_("停跑 {days} 天", days=days)
+    up = M_("；傷後往上一級排（推估）") if stepped else ""
     if transition_days:
-        head += _("（不含賽後恢復期／轉換期 {n} 天）", n=transition_days)
-    return _("{head}：{start} 起恢復期到 {end}（{how}；Daniels 表 9.2，恢復期＝停訓天數{up}）",
-             head=head, start=ret.isoformat(), end=(end - dt.timedelta(days=1)).isoformat(), how=how, up=up)
+        head = M_("{head}（不含賽後恢復期／轉換期 {n} 天）", head=head, n=transition_days)
+    return M_("{head}：{start} 起恢復期到 {end}（{how}；Daniels 表 9.2，恢復期＝停訓天數{up}）",
+              head=head, start=ret.isoformat(), end=(end - dt.timedelta(days=1)).isoformat(), how=how, up=up)
 
 
 def frac_on(p: Optional[dict], day: dt.date) -> Optional[float]:

@@ -137,7 +137,7 @@ def test_no_pd_model_text_in_english():
     with use_locale("en"):
         t = RD._pd_reason(ds, 0, 1)
     _no_cjk([t], "擬合不出 PD 模型")
-    assert t.startswith("The power–duration (PD) model can't be fitted") and "values. The WKO5 comparison mode" in t
+    assert t.startswith("The power–duration (PD) model can't be fitted") and "values. Comparison mode" in t
     with use_locale("zh-TW"):
         assert RD._pd_reason(ds, 0, 1).startswith("這段期間擬合不出功率–時間（PD）模型")
 
@@ -154,14 +154,14 @@ def test_tis_tile_is_wide(monkeypatch):
     with use_locale("en"):
         c = _cards(ds, 1)["tis"]
     assert c["wide"] is True and c["label"] == "Aerobic / Anaerobic training effect"
-    assert c["sub"] == "1–10, not the watch's 0–5"
+    assert "sub" not in c and "1–10, not the watch's 0–5" in c["tip"]      # SP-567: the scale in the ? only
     with use_locale("zh-TW"):
         assert _cards(ds, 1)["tis"]["wide"] is True
     # 「算不出」 (no PD model) is as wide
     monkeypatch.setattr(R, "tis_scores", lambda ds, w: (None, None))
     with use_locale("en"):
         assert _cards(ds, 1)["tis"]["wide"] is True
-    src = (X.STATIC / "wko5_viewer.html").read_text("utf-8")
+    src = (X.STATIC / "charts.html").read_text("utf-8")
     assert ".rv-c.w2 { grid-column: span 2; }" in src and ".rv-c.zn, .rv-c.w2 { grid-column: 1 / -1; }" in src
     assert '${c.wide ? " w2" : ""}' in src and '<span class="kt">${esc(c.label)}</span>' in src
 

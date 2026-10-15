@@ -121,6 +121,8 @@ def stops_from_wpts(wpts: Sequence[dict], km_total: Optional[float] = None) -> l
     {km, type, name}; a name match only (no distance rules)."""
     out = []
     for w in wpts or []:
+        if w.get("src") == "osm":           # SP-536: OSM huts are day-end candidates, not race stations
+            continue
         name = str(w.get("name") or "").strip()
         low = name.lower()
         typ = next((t for key, t in STOP_NAME_HINTS if key in low), None)
@@ -764,10 +766,13 @@ def _hike_fuel(plan: dict, segs: list, weight: float, cls: str, body: dict, body
     # schedule: per day from that day's start, every 45–60 min
     events = []
     ev_s = sum(cho["every_min"]) / 2.0 * 60.0
+    from backend.engine.racepower import planner as PL
+    day0 = start_time
     for n in sorted(by_day):
         ds = [x for x in segs if int(x.get("day") or 1) == n]
         if not ds:
             continue
+        start_time = PL.start_of(plan, n, day0)          # SP-580: that day's own start time
         t0 = ds[0]["cum_s"] - ds[0]["t"]
         ratio = float(s.get("moving_ratio") or 1.0)
         for tau, _ in fuel_points(ds, ev_s, t0=t0):

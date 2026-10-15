@@ -1,21 +1,22 @@
 """
-Debug API authentication (SP-371, docs/debug-api.md): who may call /api/v1/debug/*.
+Debug API authentication (SP-371, SP-373, docs/debug-api.md): who may call /api/v1/debug/*.
 
-  * off by default: `debug.api.enabled` (設定 › 進階) and a server PIN (TRC_DEBUG_PIN) are both
-    needed; otherwise every /api/v1/debug/* path answers 404 (the endpoints don't show), and the
-    demo instance never mounts them.
+  * off by default: `debug.api.enabled` (設定 › 進階); off, every /api/v1/debug/* path answers 404
+    (the endpoints don't show), and the demo instance never mounts them.
+  * personal API tokens (SP-373, like a GitHub personal access token): made on the settings page by
+    the owner (tenancy.is_owner; nobody else may turn the API on, make or revoke one) — no server
+    PIN any more —, shown once, only the SHA-256 stored (debug_tokens; 256 random bits, so a fast
+    hash is enough — nothing to brute-force). Scopes (SCOPES), an expiry (DAYS: 7 / 30 / 90 / 365
+    days, or 0 = never; stored as NEVER), revoke one / all; bound to the tenant that made it
+    (tenancy.current().id): another tenant's token is unknown here.
   * a dedicated token only, in its own header `X-TRC-Debug-Token: trcd_…` (so `Authorization` stays
     free for the owner's password proxy) or as `Authorization: Bearer trcd_…`. The web session
     (cookies) is never read, so a page hit by XSS / CSRF cannot call these, and a leaked token
     reaches nothing else.
-  * tokens are made on the settings page after the PIN; the token is shown once and only its
-    SHA-256 is stored (debug_tokens; 256 random bits, so a fast hash is enough — nothing to
-    brute-force). Scopes (SCOPES), an expiry (1 / 7 / 30 / 90 days), revoke one / all; bound to
-    the tenant that made it (tenancy.current().id): another tenant's token is unknown here.
-  * the PIN comes from the environment only — never the repo, never the DB. Compared in constant
-    time (both sides hashed first); PIN_MAX_FAILS wrong in a row lock it for PIN_LOCK_S, for the
-    whole server (one PIN per server). A PIN shorter than PIN_MIN_LEN counts as not set. Wrong
-    PINs and locks go to the app log; the settings page shows the count.
+  * sign-in mode (SP-58, SP-406): the login gate (tenancy_mw) lets a GET / HEAD under
+    /api/v1/debug/ through on a debug token, without a session, after finding the token's user in
+    accounts.db (api_tokens, client CLIENT, scope SCOPE_ALL; registered when the token is made,
+    removed when it is revoked) — the owner only; this gate then checks the tenant's own row.
   * limits (backend/security/ratelimit.py, as tenancy_mw): the token is checked FIRST — a valid
     token is never refused by the IP block (behind Docker / cloudflared every caller may share one
     IP). A valid token: TOKEN_BUCKET per token and TENANT_BUCKET per tenant → 429, CALL_GATE
@@ -31,12 +32,9 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
-import hmac
 import json
 import logging
-import os
 import secrets as _secrets
-import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -53,18 +51,17 @@ from backend.security import ratelimit as RL
 
 log = logging.getLogger("backend.debug_auth")
 
-PIN_ENV = "TRC_DEBUG_PIN"
-PIN_MIN_LEN = 6
-PIN_MAX_FAILS = 5
-PIN_LOCK_S = 15 * 60
 ENABLED_KEY = "debug.api.enabled"
 
 TOKEN_PREFIX = "trcd_"
 TOKEN_HEADER = "x-trc-debug-token"
-SCOPES = ("read:activity", "read:plan", "read:sync", "read:gps", "export:config")
-DEFAULT_SCOPES = ("read:activity", "read:plan", "read:sync")      # read:gps / export:config only when ticked
-DAYS = (1, 7, 30, 90)
-DEFAULT_DAYS = 30
+SCOPES = ("read:activity", "read:plan", "read:sync", "read:gps", "export:config", "export:plan")
+DEFAULT_SCOPES = ("read:activity", "read:plan", "read:sync")      # read:gps / export:* only when ticked
+DAYS = (7, 30, 90, 365, 0)                        # 0 = never expires (revoke it instead)
+DEFAULT_DAYS = 90
+NEVER = dt.datetime(9999, 12, 31)                 # expires_at of a token that never expires (NOT NULL column)
+CLIENT = "debug"                                  # accounts.db api_tokens.client (sign-in mode, SP-406)
+SCOPE_ALL = "debug:*"
 MAX_ACTIVE = 20
 NAME_MAX = 40
 IPS_KEEP = 20
@@ -81,79 +78,9 @@ FAIL_ROWS_KEEP = 500
 _NOT_FOUND = {"detail": "Not Found"}               # FastAPI's own 404 body: the endpoints don't show
 
 
-# ---------------------------------------------------------------------------
-# PIN
-# ---------------------------------------------------------------------------
-
-def _pin() -> Optional[str]:
-    from backend.settings.env_secrets import secret_env
-    v = secret_env(PIN_ENV) or ""                 # or TRC_DEBUG_PIN_FILE (a Docker secret, SP-387)
-    return v if len(v) >= PIN_MIN_LEN else None
-
-
-def pin_configured() -> bool:
-    return _pin() is not None
-
-
-_PIN_STATE = {"fails": 0, "locked_until": 0.0, "total_fails": 0, "locks": 0}
-_PIN_LOCK = threading.Lock()
-
-
-class PinError(Exception):
-    def __init__(self, code: str, retry_s: int = 0):
-        super().__init__(code)
-        self.code, self.retry_s = code, retry_s
-
-
-def pin_locked_for() -> int:
-    """Seconds the PIN stays locked (0 = not locked)."""
-    with _PIN_LOCK:
-        left = _PIN_STATE["locked_until"] - RL.clock()
-    return max(0, int(left + 0.999)) if left > 0 else 0
-
-
-def pin_stats() -> dict:
-    """Wrong PINs since the server started, the current streak, the locks (the settings page)."""
-    with _PIN_LOCK:
-        return {"wrong_total": _PIN_STATE["total_fails"], "wrong_in_a_row": _PIN_STATE["fails"],
-                "locks": _PIN_STATE["locks"]}
-
-
-def check_pin(pin: Optional[str], ip: str = "") -> None:
-    """Raises PinError(no_pin | locked | wrong); returns when the PIN is right. Wrong PINs and
-    locks are logged (never the PIN)."""
-    want = _pin()
-    if want is None:
-        raise PinError("no_pin")
-    with _PIN_LOCK:
-        now = RL.clock()
-        if _PIN_STATE["locked_until"] > now:
-            log.warning("debug API: PIN attempt while locked (ip %s)", ip or "?")
-            raise PinError("locked", int(_PIN_STATE["locked_until"] - now + 0.999))
-        if _PIN_STATE["locked_until"]:                 # a lock that ran out: a fresh count
-            _PIN_STATE.update(fails=0, locked_until=0.0)
-        got = hashlib.sha256(str(pin or "").encode("utf-8")).digest()
-        ok = hmac.compare_digest(got, hashlib.sha256(want.encode("utf-8")).digest())
-        if ok:
-            _PIN_STATE["fails"] = 0
-            return
-        _PIN_STATE["fails"] += 1
-        _PIN_STATE["total_fails"] += 1
-        if _PIN_STATE["fails"] >= PIN_MAX_FAILS:
-            _PIN_STATE["locked_until"] = now + PIN_LOCK_S
-            _PIN_STATE["locks"] += 1
-            log.warning("debug API: PIN locked for %d min after %d wrong PINs (ip %s)", PIN_LOCK_S // 60,
-                        PIN_MAX_FAILS, ip or "?")
-            raise PinError("locked", PIN_LOCK_S)
-        log.warning("debug API: wrong PIN (%d in a row, ip %s)", _PIN_STATE["fails"], ip or "?")
-        raise PinError("wrong")
-
-
 def reset_limits() -> None:
-    """Tests: forget the PIN failures, the rate-limit buckets and the counters."""
+    """Tests: forget the rate-limit buckets and the counters."""
     global CALL_GATE
-    with _PIN_LOCK:
-        _PIN_STATE.update(fails=0, locked_until=0.0, total_fails=0, locks=0)
     TOKEN_BUCKET.reset()
     TENANT_BUCKET.reset()
     FAIL_BUCKET.reset()
@@ -186,17 +113,23 @@ def clean_scopes(scopes) -> list[str]:
     return [s for s in SCOPES if s in scopes]
 
 
+def never_expires(r: DebugToken) -> bool:
+    return r.expires_at is not None and r.expires_at >= NEVER
+
+
 def token_view(r: DebugToken, now: Optional[dt.datetime] = None) -> dict:
     now = now or _now()
     return {"id": r.id, "name": r.name, "prefix": r.prefix, "scopes": json.loads(r.scopes_json or "[]"),
-            "created_at": _iso(r.created_at), "expires_at": _iso(r.expires_at),
+            "created_at": _iso(r.created_at), "expires_at": None if never_expires(r) else _iso(r.expires_at),
+            "never_expires": never_expires(r),
             "expired": r.expires_at is not None and r.expires_at <= now, "revoked_at": _iso(r.revoked_at),
             "active": r.revoked_at is None and (r.expires_at is None or r.expires_at > now),
             "last_used_at": _iso(r.last_used_at), "last_ip": r.last_ip, "new_ip_at": _iso(r.new_ip_at)}
 
 
 async def create_token(db: AsyncSession, name: str, scopes, days) -> tuple[str, dict]:
-    """(the token — shown once —, its row view). The PIN is checked by the caller."""
+    """(the token — shown once —, its row view). `days` 0 = never expires. Who may make one (the
+    owner) is checked by the caller."""
     name = str(name or "").strip()[:NAME_MAX] or "agent"
     sc = clean_scopes(scopes)
     try:
@@ -214,10 +147,11 @@ async def create_token(db: AsyncSession, name: str, scopes, days) -> tuple[str, 
     raw = _secrets.token_urlsafe(32)
     token = TOKEN_PREFIX + raw
     r = DebugToken(tenant_id=t, name=name, prefix=TOKEN_PREFIX + raw[:4], token_hash=hash_token(token),
-                   scopes_json=json.dumps(sc), created_at=now, expires_at=now + dt.timedelta(days=days),
-                   ips_json="[]")
+                   scopes_json=json.dumps(sc), created_at=now,
+                   expires_at=NEVER if days == 0 else now + dt.timedelta(days=days), ips_json="[]")
     db.add(r)
     await db.commit()
+    _register(r.token_hash)
     return token, token_view(r, now)
 
 
@@ -230,12 +164,47 @@ async def list_tokens(db: AsyncSession) -> list[dict]:
 
 async def revoke(db: AsyncSession, token_id: Optional[int] = None) -> int:
     """Revoke one token (`token_id`) or every active one; how many were revoked."""
-    q = update(DebugToken).where(DebugToken.tenant_id == tenancy.current().id, DebugToken.revoked_at.is_(None))
+    q = select(DebugToken).where(DebugToken.tenant_id == tenancy.current().id, DebugToken.revoked_at.is_(None))
     if token_id is not None:
         q = q.where(DebugToken.id == token_id)
-    res = await db.execute(q.values(revoked_at=_now()))
-    await db.commit()
-    return int(res.rowcount or 0)
+    rows = (await db.execute(q)).scalars().all()
+    if rows:
+        await db.execute(update(DebugToken).where(DebugToken.id.in_([r.id for r in rows])).values(revoked_at=_now()))
+        await db.commit()
+    _unregister([r.token_hash for r in rows])
+    return len(rows)
+
+
+# ---------------------------------------------------------------------------- accounts.db (sign-in mode)
+
+def _user_id() -> Optional[int]:
+    """The accounts.db user of the current tenant when multi-user mode is on, else None (the
+    weight API's rule, weight_auth._user_id)."""
+    from backend import accounts
+    if not accounts.enabled():
+        return None
+    from backend.accounts import login as LG
+    u = LG.current_user()
+    if u is not None:
+        return int(u.id)
+    return 1 if tenancy.current().id == "owner" else None
+
+
+def _register(token_hash: str) -> None:
+    """Sign-in mode (SP-406): the token's hash in accounts.db, so the login gate knows whose it is."""
+    uid = _user_id()
+    if uid is None:
+        return
+    from backend.accounts import store
+    store.register_token_hash(uid, CLIENT, [SCOPE_ALL], token_hash)
+
+
+def _unregister(hashes: list) -> None:
+    uid = _user_id()
+    if uid is None or not hashes:
+        return
+    from backend.accounts import store
+    store.revoke_token_hashes(uid, hashes)
 
 
 async def enabled(db: AsyncSession) -> bool:
@@ -349,16 +318,35 @@ def _blocked(ip: str) -> bool:
     return False
 
 
-def _token(request: Request) -> Optional[str]:
+def failed_at_gate(ip: str) -> int:
+    """Sign-in mode's login gate (tenancy_mw): a debug token accounts.db does not know, from `ip`.
+    Counted like a failure here (FAIL_BUCKET, then the IP's failures are refused); the status to
+    answer: 401, or 429 while the IP is blocked. Nothing is written (no tenant to write to)."""
+    if _blocked(ip):
+        return 429
+    if not FAIL_BUCKET.take(ip):
+        _BLOCKED[ip] = RL.clock() + FAIL_BLOCK_S
+        log.warning("debug API: an IP blocked for %d min after repeated failed tokens", FAIL_BLOCK_S // 60)
+        return 429
+    return 401
+
+
+def token_from_headers(headers) -> Optional[str]:
     """X-TRC-Debug-Token first (Authorization may carry the proxy's own credentials), else
-    Authorization: Bearer. Never a cookie."""
-    val = (request.headers.get(TOKEN_HEADER) or "").strip()
+    Authorization: Bearer. Never a cookie. Only a well-formed trcd_ token."""
+    val = (headers.get(TOKEN_HEADER) or "").strip()
     if not val:
-        kind, _, rest = (request.headers.get("authorization") or "").partition(" ")
+        kind, _, rest = (headers.get("authorization") or "").partition(" ")
         if kind.lower() != "bearer":
             return None
         val = rest.strip()
     return val if val.startswith(TOKEN_PREFIX) and 20 <= len(val) <= 200 else None
+
+
+def _token(request: Request) -> Optional[str]:
+    """X-TRC-Debug-Token first (Authorization may carry the proxy's own credentials), else
+    Authorization: Bearer. Never a cookie."""
+    return token_from_headers(request.headers)
 
 
 def _err(status: int, code: str, headers: Optional[dict] = None) -> HTTPException:
@@ -390,7 +378,7 @@ async def gate(request: Request, db: AsyncSession = Depends(get_db)):
     if tenancy.demo_mode():
         raise HTTPException(404, _NOT_FOUND["detail"])
     t = tenancy.current()
-    if t.is_demo or not pin_configured() or not await enabled(db):
+    if t.is_demo or not await enabled(db):
         raise HTTPException(404, _NOT_FOUND["detail"])
     ctx = Ctx(path=request.url.path, query=request.url.query, ip=RL.client_ip(request.scope),
               method=request.method,

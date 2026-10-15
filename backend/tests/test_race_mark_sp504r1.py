@@ -13,8 +13,8 @@ from backend.tests.test_race_day_sp504 import ACT_RACE, EV, EV_A, _cal
 I18N = Path(__file__).resolve().parents[1] / "static" / "i18n"
 TRIP = {"id": "t1", "name": "大小霸 3 日", "priority": "C", "kind": "baiyue", "start": "2026-09-29",
         "end": "2026-10-01"}
-TRIP_KEYS = ("race.trip_mark", "race.trip_tip_b", "race.trip_tip_c", "race.trip_act", "race.trip_act_tip",
-             "race.trip_act_note")
+TRIP_KEYS = ("race.trip_mark", "race.trip_tip_a", "race.trip_tip_b", "race.trip_tip_c", "race.trip_act",
+             "race.trip_act_tip", "race.trip_act_note")         # (R2: + trip_tip_a, the A trip's mark)
 
 
 def _cat(loc: str) -> dict:
@@ -65,7 +65,8 @@ def test_schedule_picks_the_trip_strings_by_kind():
     """Every place schedule.html writes a race mark / race activity goes through raceT (kind baiyue → trip)."""
     src = (Path(__file__).resolve().parents[1] / "static" / "schedule.html").read_text(encoding="utf-8")
     assert re.search(r'raceT = \(r, k, p\) => tt\(r && r\.kind === "baiyue" \? RACE_TRIP\[k\] : k, p\)', src)
-    for k in ("race.mark", "race.mark_tip_b", "race.mark_tip_c", "race.act", "race.act_tip", "race.act_note"):
+    for k in ("race.mark", "race.mark_tip_a", "race.mark_tip_b", "race.mark_tip_c", "race.act", "race.act_tip",
+              "race.act_note"):
         assert f'tt("{k}"' not in src, k                          # never the race string straight
     trip = dict(re.findall(r'"(race\.[a-z_]+)": "(race\.trip_[a-z_]+)"', src))
     assert sorted(trip.values()) == sorted(TRIP_KEYS)

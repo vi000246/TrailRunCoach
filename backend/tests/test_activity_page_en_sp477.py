@@ -28,10 +28,10 @@ def _no_cjk(texts, where: str) -> None:
     assert not bad, f"{where}: still Chinese: {bad}"
 
 
-# ---- the viewer page (static/wko5_viewer.html + its helpers) -----------------
+# ---- the viewer page (static/charts.html + its helpers) -----------------
 
 def test_viewer_catalog_is_english_and_keeps_plurals():
-    cat = P.page_catalog(P.namespaces_for("wko5_viewer"), "en")
+    cat = P.page_catalog(P.namespaces_for("charts"), "en")
     zh = X.frontend_catalogs()["zh-TW"]["viewer"]
     missing = [k for k in zh if f"viewer.{k}" not in cat]
     assert not missing
@@ -55,7 +55,7 @@ SHOT_LITERALS = ("疼痛？", "我的圖表", "張圖", "放大這張圖", "⤢ 
 
 
 def test_single_activity_page_has_no_unwrapped_shot_literals():
-    files = {"backend/static/wko5_viewer.html": X.scan_html(X.ROOT / "backend/static/wko5_viewer.html")}
+    files = {"backend/static/charts.html": X.scan_html(X.ROOT / "backend/static/charts.html")}
     for js in ("segments_card.js", "basemaps.js", "suggestions.js"):
         files[f"backend/static/{js}"] = X.scan_js(X.ROOT / "backend/static" / js)
     for path, fs in files.items():

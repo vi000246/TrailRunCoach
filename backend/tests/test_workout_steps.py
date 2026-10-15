@@ -202,7 +202,7 @@ def test_push_preview_note_and_the_link_to_threshold_pace():
     assert API.pace_note({"steps": _one({"type": "pace", "mode": "abs", "lo": 270, "hi": 285})}, FULL) is None
     assert API.pace_note({}, FULL) is None
     link = API.tpace_link()
-    assert link.startswith("/api/v1/static/wko5_viewer.html?view=") and "chart=" in link
+    assert link.startswith("/api/v1/static/charts.html?view=") and "chart=" in link
     # no CP: a power override is an error; an auto band falls back to HR with the reason
     nc = WS.Ctx.of({"lthr": 168, "aet": 150}, "power")
     r = WS.resolve(_one({"type": "power", "mode": "pct", "lo": 1.0, "hi": 1.05})["items"][0], nc)

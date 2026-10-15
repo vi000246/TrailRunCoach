@@ -60,18 +60,22 @@ def test_high_hr_with_normal_power_and_tss_is_not_flagged():
     assert notes == {} and adj == [] and out == wk()
 
 
-def test_without_power_hr_over_94_percent_lthr_is_the_fallback():
-    # no power (the user 2026-10-06): avg HR > 94 % LTHR (above Friel run Zone 3), no time share
-    assert A.overhard(36, {"avg_hr": 159, "lthr": 170, "aet": 150, "tss": 30}) is None     # 93.5 %
-    why = A.overhard(36, {"avg_hr": 161, "lthr": 170, "aet": 150, "tss": 30})
-    assert why == "平均心率 161 > LTHR 的 94%（160 bpm；沒有功率才看心率）"
-    assert A.overhard(36, {"avg_hr": 170, "aet": 150, "tss": 44}).startswith("負荷 44")        # no LTHR: TSS still
+def test_without_power_hr_over_the_easy_cap_is_the_fallback():
+    # no power: avg HR > the easy-run cap + 3 (SP-565: the 課表's cap, the review's 「輕鬆」; was 94 % LTHR)
+    cap = {"value": 153.0, "source": "COROS 乳酸閾 Z2（136–153 bpm）"}
+    assert A.overhard(36, {"avg_hr": 156, "easy_cap": cap, "lthr": 170, "tss": 30}) is None     # = cap + 3
+    why = A.overhard(36, {"avg_hr": 157, "easy_cap": cap, "lthr": 170, "tss": 30})
+    assert why == "平均心率 157 > 輕鬆跑上限 153+3（沒有功率才看心率）"
+    assert A.overhard(36, {"avg_hr": 157, "easy_cap": 153, "tss": 30}).startswith("平均心率 157")     # a bare bpm too
+    # LTHR alone is not read any more (the old 94 % line): no cap, no HR line
+    assert A.overhard(36, {"avg_hr": 165, "lthr": 170, "tss": 30}) is None
+    assert A.overhard(36, {"avg_hr": 170, "aet": 150, "tss": 44}).startswith("負荷 44")        # no cap: TSS still
     # power in the row: HR is not read at all, however high
-    assert A.overhard(36, {"avg_hr": 175, "lthr": 170, "avg_power": 220, "cp": 300, "tss": 30}) is None
+    assert A.overhard(36, {"avg_hr": 175, "easy_cap": cap, "avg_power": 220, "cp": 300, "tss": 30}) is None
     # a power value without CP is no power: the HR fallback applies
-    assert A.overhard(36, {"avg_hr": 165, "lthr": 170, "avg_power": 220, "tss": 30}).startswith("平均心率 165")
+    assert A.overhard(36, {"avg_hr": 165, "easy_cap": cap, "avg_power": 220, "tss": 30}).startswith("平均心率 165")
     # label only, like the power one
-    out, adj, notes = A.adapt(wk(), [], c(reviews={7: {"avg_hr": 165, "lthr": 170, "tss": 30}}))
+    out, adj, notes = A.adapt(wk(), [], c(reviews={7: {"avg_hr": 165, "easy_cap": cap, "tss": 30}}))
     assert out == wk() and changes(adj) == [] and notes[7].startswith("輕鬆跑偏強（平均心率 165")
 
 

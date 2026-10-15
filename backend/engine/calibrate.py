@@ -102,8 +102,8 @@ def _load_items() -> None:
     from backend.engine import terrain_calib  # noqa: F401  (climb_divisor_run)
     from backend.engine import advanced_params  # noqa: F401  (進階 C 類: heat_partial_hadley, pack_daily_drop_kg)
     from backend.engine import drift_calib  # noqa: F401  (drift windows)
-    from backend.engine import interval_calib  # noqa: F401  (SP-69: interval_in_band_tol, interval_last_fade, interval_tiz_goal)
-    from backend.engine import threshold_calib  # noqa: F401  (SP-69: lthr_test_age_days, easy_hr_margin_bpm)
+    from backend.engine import interval_calib  # noqa: F401  (SP-69: interval_in_band_tol; SP-526 retired the fade / TIZ goal)
+    from backend.engine import threshold_calib  # noqa: F401  (SP-69: easy_hr_margin_bpm; SP-526 retired lthr_test_age_days)
     from backend.engine import intensity_calib  # noqa: F401  (SP-511: easy_run_if, rpe_if_scale)
 
 

@@ -43,7 +43,7 @@ ENV_STAGE = "WKO5COACH_DEMO_BUILD_STAGE"       # set in the child process
 def _refuse_owner(root: Path) -> None:
     from backend.demo.instance import DemoStartupError, _inside
     real = Path(os.environ.get("WKO5COACH_TEST_REAL_HOME") or Path.home())
-    for owner in (real / ".wko5coach", real / "WKO5"):
+    for owner in (real / ".trailruncoach", real / ".wko5coach", real / "WKO5"):
         if _inside(root, owner):
             raise DemoStartupError(f"refusing to build demo data inside the owner's {owner}")
 
@@ -152,6 +152,7 @@ SETTINGS = {
     "sync.primary": "coros",
     "athlete.timezone": "Asia/Taipei",
     "sync.auto_on_open.enabled": False,
+    "sync.background.enabled": False,
 }
 
 
@@ -216,7 +217,7 @@ def _stage(base: Path, seed: int, anchor: dt.date, weeks: int, small: bool, warm
             ok(c.post(f"/api/v1/plan/events/{eid}/gpx",
                       files={"file": (p.name, p.read_bytes(), "application/gpx+xml")}), f"gpx {course}")
         # the activity titles (活動列表), as a watch would name them
-        acts = c.get("/api/v1/wko5/workouts").json()
+        acts = c.get("/api/v1/app/workouts").json()
         rows = acts if isinstance(acts, list) else acts.get("workouts") or []
         by_file = {Path(str(r.get("file", ""))).name: r["index"] for r in rows if "index" in r}
         for a in manifest["activities"]:
@@ -230,7 +231,7 @@ def _stage(base: Path, seed: int, anchor: dt.date, weeks: int, small: bool, warm
                 body["tags"] = [FLAG_TAG]
             if a["kind"].startswith("race"):
                 body["activity_type"] = "race"
-            ok(c.patch(f"/api/v1/wko5/workouts/{i}/activity", json=body), "name")
+            ok(c.patch(f"/api/v1/app/workouts/{i}/activity", json=body), "name")
         # an interval run and a trail run done as the 課表 planned them, matched to their
         # sessions as after a COROS sync (backend/demo/linked.py)
         from backend.demo import linked
@@ -250,13 +251,13 @@ def warm_base(c, anchor: dt.date, show: list[str], max_acts: int = 8, charts_for
             print(f"  ! {what}: {r.status_code} {r.text[:200]}", flush=True)
         return r
     t1 = time.time()
-    for url in ("/api/v1/wko5/dataset/status", "/api/v1/overview/status", "/api/v1/overview/summary",
+    for url in ("/api/v1/app/dataset/status", "/api/v1/overview/status", "/api/v1/overview/summary",
                 "/api/v1/overview/pmc", "/api/v1/overview/plan/sessions?scope=week",
                 f"/api/v1/overview/plan/calendar?start={anchor - dt.timedelta(days=35)}&end={anchor + dt.timedelta(days=28)}",
                 f"/api/v1/overview/plan/compliance?start={anchor - dt.timedelta(days=84)}&end={anchor}",
-                "/api/v1/wko5/workouts", "/api/v1/plan", "/api/v1/racepower/inputs",
+                "/api/v1/app/workouts", "/api/v1/plan", "/api/v1/racepower/inputs",
                 "/api/v1/racepower/goal-basis", "/api/v1/racepower/heat-status",
-                "/api/v1/routes", "/api/v1/wko5/views"):
+                "/api/v1/routes", "/api/v1/app/views"):
         t2 = time.time()
         ok(c.get(url), url)
         print(f"    {url.split('?')[0]}: {time.time() - t2:.1f} s", flush=True)
@@ -265,23 +266,23 @@ def warm_base(c, anchor: dt.date, show: list[str], max_acts: int = 8, charts_for
         day = (anchor + dt.timedelta(weeks=w)).isoformat()
         ok(c.get(f"/api/v1/overview/plan/sessions?scope=week&day={day}"), f"week +{w}")
     # every chart of the views, for the showcase activities (render cache)
-    acts = c.get("/api/v1/wko5/workouts").json()
+    acts = c.get("/api/v1/app/workouts").json()
     rows = acts if isinstance(acts, list) else acts.get("workouts") or []
     names = {s.split("/")[-1] for s in show}
     idxs = [r["index"] for r in rows if str(r.get("file", "")).replace("\\", "/").split("/")[-1] in names][:max_acts]
-    views = c.get("/api/v1/wko5/views").json()
+    views = c.get("/api/v1/app/views").json()
     n = 0
     for v in views if isinstance(views, list) else []:
         if v.get("error"):
             continue
         for d in v.get("dashboards", []):
             for ch in d.get("charts", []):
-                url = f"/api/v1/wko5/views/{v['name']}/dashboards/{d['index']}/charts/{ch['index']}"
+                url = f"/api/v1/app/views/{v['name']}/dashboards/{d['index']}/charts/{ch['index']}"
                 for i in (idxs[:charts_for] or [None]):
                     c.get(url, params={"workout": i} if i is not None else None)
                     n += 1
     for i in idxs:
-        c.get(f"/api/v1/wko5/workouts/{i}/review")
+        c.get(f"/api/v1/app/workouts/{i}/review")
     print(f"  warmed {n} charts in {time.time() - t1:.0f} s", flush=True)
 
 

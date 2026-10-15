@@ -173,7 +173,60 @@ AeT 也一樣：`steady_drift` 沒有功率就回 None（`threshold_estimate.py:
 | 4 | 「接受手錶功率」的說明跟 COROS／TP 來源的 CP 行為對齊 | 依 §6 問題 3。建議版：說明文字寫清楚「課表和圖表的 CP 只用 Stryd 擬合；打開後影響賽事功率模型和功率 TSS」；設定頁和 `repository.py` 註解一致 | P3 |
 | 5 | （不建議現在做）只有推估 LTHR 時，用 TrainingPeaks 規則往上調 | 依 §6 問題 2。如果要做：(a) 只在 LTHR 來源是先驗或手錶時；(b) 只用涼天、心率乾淨的跑步；(c) 只往上調，不往下；(d) 標「推估（下限）」、信心仍低；(e) 有測試或自己資料的估算時不用 | P3 |
 
+### 5.1 單 2 已做（SP-294，2026-10-14，使用者照建議）
+
+`hr_profile.max_hr` 的順序改成：你的設定 → 手錶帳號 → 跑步推出的值 → 年齡公式；但跑步推出的值**比年齡公式低超過 10 bpm、而且 365 天內沒有硬跑**時，直接用年齡公式（來源文字寫兩個值：「推估（年齡公式 180…；近 365 天跑步最高 147，但沒有比賽、測試或閾值以上的跑步，只能算下限…）」）。
+
+「硬跑」（`thresholds.hard_efforts`，全部推估，只當「有沒有用力跑過」的標記）：
+- 比賽：當天行事曆有比賽，或標題有比賽字樣（`threshold_confidence._race`）；
+- 測試：標題是 LTHR／最大心率測試（`threshold_confidence.test_kind`）；
+- 功率（路跑、可用的功率）：最佳 30 分鐘 ≥ 95 % CP（LTHR 估算自己的「夠硬」門檻）或最佳 5 分鐘 ≥ CP（CP 以上，心率會往最大爬）；
+- 心率：同樣兩個門檻，對照計畫裡的 LTHR（測試／自己填／套用的估算）；沒有的話對照 **0.90 × 年齡公式**（年齡那條路會給的 LTHR）。不拿跑步自己的最大心率或資料集的 0.90 × 最大心率先驗當門檻——那是拿被判斷的值判斷自己（§3.2 說的循環論證）。
+
+結果（`backend/tests/test_lthr_without_power_sp294.py` §2、§7）：只跑輕鬆跑、有出生年（40 歲）→ 最大心率 180（年齡）、LTHR 先驗 **162**（原本 ≤ 135）；有硬跑的人不變（187／168）；沒填出生年維持跑步推出的值；差距 ≤ 10 bpm（例如 75 歲公式 156 對 147）維持跑步的值；一次硬跑（比賽標題、行事曆比賽、測試標題、5 分鐘 ≥ CP、5 分鐘 ≥ 0.90 × 年齡公式、30 分鐘 ≥ 95 % 計畫 LTHR）就維持跑步的值；超過 365 天的比賽不算。
+
+可信度（`threshold_confidence`）：年齡公式、跑步推出的值都是低可信度來源，照舊建議最大心率測試；年齡公式的值不再跑「撐 120 秒的最高心率差 8 bpm 以上＝尖峰」那條檢查（輕鬆跑遠低於年齡公式正是改用它的原因，不是尖峰的證據），也就不會出現「套用候選值」。手錶帳號的值另見 `lthr-low-confidence-testing.md` §9.9（SP-493 R1：近 90 天有跑到接近就算可信）。
+
+代價（照 §6 問題 1）：真正最大心率天生偏低、又只用心率跑間歇（沒功率、沒標題、心率到不了 0.90 × 年齡公式）的人，會被當成「沒有硬跑」，最大心率偏高；低可信度＋測試建議兜底。
+
 `cold-start.md` §5 的 T8 可以結案：(a) 已跑；(b) 評估結果是不加自動估算，改開上面的單 1–3。
+
+### 5.2 單 1 已做（SP-572，2026-10-14）
+
+`thresholds.estimate` 判斷「這次跑步夠不夠硬」（最佳 30 分鐘 ≥ 95 % CP）時，只拿跟 CP 同一種功率的跑步（`thresholds._judged_against_cp`）。規則跟 `cp_as_of` 選擬合資料的規則（`athlete._pd_mftp`）一樣：CP 那天往前 90 天裡有可用的功率（Stryd；或打開「接受手錶功率」時的手錶功率），CP 就是用它擬合的，只有這些跑步算；一筆都沒有時 CP 是手錶功率擬合的（或在手錶上做的 CP 測試），所有有功率的跑步都算。
+
+- 混合的歷史（§2.1 那組合成資料）：**170**（原本 146），5 次跑步，跟只留 Stryd 那 40 天一樣；預設路徑（`Dataset.cp`，閾值建議 API）也是 170。
+- 只有手錶功率：170（不變）；只有 Stryd：170（不變）；Stryd 只在 CP 窗口之前、窗口裡只有手錶功率：手錶的跑步照樣算，170。
+- 只改 LTHR 的那一半；AeT 的漂移點每筆跑步本來就跟它自己那天的 CP 比，沒動。
+- 打開「接受手錶功率」時，手錶功率算可用的功率，`cp_as_of` 也拿兩種一起擬合，所以兩種照舊一起算（這個情況沒改）。
+- 快取：每筆跑步的數值（`thresholds_v1`／`thresholds_asof_v1`）跟這條規則無關，不用重算；估算結果的快取（`fitdataset.estimate_code`）的 codehash 走得到 `_judged_against_cp`、`athlete.power_ok`／`power_source`、`CP_WINDOW_DAYS`，部署後自動失效重算。
+
+測試：`backend/tests/test_lthr_without_power_sp294.py` §5。
+
+### 5.3 單 3 已做（SP-573，2026-10-15）
+
+- 沒有 CP 時 `thresholds.estimate` 的 `lthr` 不再是 `null`：`{"value": null, "no_cp": true, "reason": "沒有 CP（沒有 Stryd 功率，也沒有 CP 測試），所以不能從一般跑步估 LTHR；可以做一次 30 分鐘 LTHR 測試", "links": [threshold_confidence.schedule_link("tt30")]}`（`thresholds.no_cp_lthr`），連結跟測試建議的「安排課表：LTHR 測試（30 分鐘獨跑）」是同一個。設定 › 閾值的「從活動估計」卡片在沒有值時顯示原因和連結。中英都有。
+- 預設路徑（`Dataset.cp`：閾值建議 API、總覽、圖表的訓練目標）在 `Dataset.cp` 沒有值（沒有 CP 測試、沒有 Stryd 擬合）、但窗口裡有帶功率的跑步時，改走 as-of 路徑（`cp_of=cp_as_of`），也就是載入時寫進 `runthr` 的那條路。只有手錶功率的人兩邊同一個值（合成資料 170）。有 Stryd CP 的人照舊；只有心率的人不呼叫 `cp_as_of`（沒有東西可擬合），直接回原因。
+- 估算結果的快取（`fitdataset.estimate_code`）的 codehash 涵蓋 `thresholds.estimate`，部署後格點估算會重算一次。
+
+測試：`backend/tests/test_lthr_without_power_sp294.py` §1、§4、§8。
+
+### 5.4 單 4 已做（SP-574，2026-10-15）
+
+讀程式確認打開「接受手錶功率」時兩種 CP 用的功率：
+
+| | 用哪種功率 | 依據 |
+|---|---|---|
+| 課表和圖表的 CP（`Dataset.cp`，也是功率 TSS 的 FTP） | 只有 Stryd 擬合，或使用者輸入的 CP 測試；**不管這個設定** | `fitdataset.stryd_cp_fit` 篩 `power_source == STRYD`、`cp`、`tss_ftp` |
+| LTHR 估算的 CP（`cp_as_of`） | 打開時 Stryd 和手錶功率**一起擬合**；關著時窗口有 Stryd 就只用 Stryd，沒有才用手錶功率 | `athlete._pd_mftp`（`power_ok` 打開時對手錶功率也是 True） |
+| 賽事功率模型（功率曲線、PD 模型） | 打開時兩種都用 | `athlete.pd_model`（`accept_watch_power`） |
+| 功率 TSS | 打開時手錶功率的跑步也算功率 TSS，但除以上面那個 CP；沒有 CP 就照舊 rTSS／hrTSS | `Dataset._metrics`、`tss_ftp` |
+
+設定頁說明（`settings.power.watch_help`，中英）和 `settings/repository.py` 註解照這張表寫，並加上「想用功率練可以手動輸入一筆用手錶功率做的 CP 測試」。
+
+兩條 CP 不一致（打開設定時 LTHR 估算的 CP 混了手錶功率，課表的 CP 沒有）沒有改：這次只對齊說明。合成資料上打開設定時 `cp_as_of` 比關著高（手錶功率讀數偏高，mean-max 外框被拉上去）。要不要改成兩邊一致，是使用者決定的事（SP-572 問答 Q1 第 1 題）。
+
+測試：`backend/tests/test_lthr_without_power_sp294.py` §9。
 
 ## 6. 要使用者決定的問題
 

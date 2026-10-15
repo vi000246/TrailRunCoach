@@ -1,7 +1,7 @@
 /*
  * 專項 chip (SP-381): which sport the charts are about — 主要訓練項目 (engine/primary_sport.py,
  * the setting athlete.primary_sport: auto | trail | road), the same switch as 設定 › 主要訓練項目.
- * 圖表分析 hides the charts of the other sport (wko5views: the viewer's catalog), so changing it
+ * 圖表分析 hides the charts of the other sport (the viewer's catalog), so changing it
  * saves the setting (PUT /api/v1/sync/settings) and reloads the page. It replaced the 資料來源
  * chip there (the data source stays in 設定 › 資料同步).
  *
@@ -44,7 +44,7 @@
     if (!host) return;
     let ps = null;
     try {
-      const r = await fetch("/api/v1/wko5/primary-sport");
+      const r = await fetch("/api/v1/app/primary-sport");
       if (r.ok) ps = await r.json();
     } catch (_) { /* no data yet: no chip */ }
     if (!ps) return;

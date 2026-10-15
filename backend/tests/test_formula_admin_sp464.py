@@ -7,7 +7,7 @@
 - The admin (the owner, the only role with `admin`) switches their own engine.json only: their
   screens and calculations change, nobody else's — their Datasets / caches are their own (the
   Dataset key holds the config and the tenant's folder) and a switch drops only their Datasets.
-- The owner's single-user app (no sign-in) and the demo: unchanged.
+- The owner's single-user app (no sign-in): unchanged. The demo: no comparison mode (SP-498).
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from backend.tests.test_login_sp58 import (  # noqa: F401 — fixtures used by n
 )
 
 SETTINGS = (Path(__file__).resolve().parents[1] / "static" / "settings.html").read_text("utf-8")
-CONFIG = "/api/v1/wko5/config"
+CONFIG = "/api/v1/app/config"
 
 
 # ---------------------------------------------------------------------------- fixtures
@@ -231,9 +231,10 @@ def test_owner_mode_with_owner_login_setting_off_still_switches(server, monkeypa
         assert WV.get_config()["config"]["parity"] is True
 
 
-def test_the_demo_is_unchanged(monkeypatch):
+def test_the_demo_has_no_comparison_mode(monkeypatch):
+    """SP-498 (owner 2026-10-14): the comparison mode is the owner's tool, the demo never has it."""
     monkeypatch.setenv("WKO5COACH_MODE", "demo")
-    assert parity_allowed() is True
+    assert parity_allowed() is False
 
 
 # ---------------------------------------------------------------------------- the settings page

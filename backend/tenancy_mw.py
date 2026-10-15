@@ -21,9 +21,14 @@ above), per request:
      a page (a browser navigation) is sent to /login?next=<path>, anything else gets
      401 {"code": "LOGIN_REQUIRED"}
   5. a write (not GET / HEAD) must carry the CSRF header (the demo's double submit), public or not
+     — except POST /api/v1/intervals/webhook (SP-346): intervals.icu's webhook, checked by the
+     payload's secret in api/intervals.py, with no tenant (the endpoint opens the athlete's)
      — except POST /api/v1/weight/measurements with a weight token (SP-472, weight_auth.py): the
      token's user from accounts.db, its tenant, no session and no CSRF (no cookie is read: nothing
      for another site to forge); that one path only
+     — and a GET / HEAD under /api/v1/debug/ with a debug token (SP-406, debug_auth.py): the
+     token's user from accounts.db, the owner only (scope debug:*), the owner's tenant, no session;
+     the debug API checks the token against the tenant's own row again. Nothing else opens with it
   6. a user who hasn't accepted the current terms: pages go to /signup, the rest gets
      403 {"code": "TERMS_REQUIRED"} (the owner accepts none)
   7. tenant: the user's (the owner's own for user 1; a new user's folder and DB on first use),
@@ -60,6 +65,8 @@ from starlette.requests import cookie_parser
 
 MAX_BODY = 6 * 1024 * 1024
 WEIGHT_INGEST = "/api/v1/weight/measurements"   # SP-472: the one path a weight token opens (sign-in mode)
+DEBUG_PREFIX = "/api/v1/debug/"                 # SP-406: the paths a debug token opens (sign-in mode, GET / HEAD)
+INTERVALS_WEBHOOK = "/api/v1/intervals/webhook"  # SP-346: intervals.icu's webhook (its own secret, no session)
 CSRF_COOKIE = "trc_csrf"
 CSRF_HEADER = b"x-trc-csrf"
 
@@ -73,7 +80,6 @@ WRITE_ALLOW: list[tuple[frozenset, re.Pattern]] = [(frozenset(m.split()), re.com
     ("POST", _P + r"/(test-suggestions/schedule|suggestions/dismiss|suggestions/accept|steps-preview|steps/derive"
              r"|steps/check|reconcile|prefs/conflicts|blackouts/preview|equivalence/design|rest-days)"),
     ("DELETE", _P + r"/rest-days/[^/]+"),
-    ("PUT DELETE", _P + r"/high-nights/[^/]+"),          # 睡在高處的紀錄 (SP-259)
     # 範本 (SP-36): the visitor's own templates, categories and route GPX, in the sandbox
     ("POST", _P + r"/steps/templates/(user|user/copy|cats)"),
     ("PATCH DELETE", _P + r"/steps/templates/(user|cats)/[^/]+"),
@@ -336,6 +342,18 @@ class TenancyMiddleware:
             if wtok is not None:                   # SP-472: the weight API's own token, no session
                 await self._weight_token(scope, receive, send, wtok)
                 return
+        if method == "POST" and path == INTERVALS_WEBHOOK:
+            # SP-346: intervals.icu posts with the payload's secret, never a cookie or the CSRF header;
+            # no tenant here — the endpoint checks the secret and opens the tenant the athlete maps to
+            with tenancy.use(tenancy.anonymous()):
+                await self.app(scope, receive, send)
+            return
+        if method in ("GET", "HEAD") and path.startswith(DEBUG_PREFIX):
+            from backend import debug_auth as DA
+            dtok = DA.token_from_headers(_headers(scope))
+            if dtok is not None:                   # SP-406: the debug API's own token, no session
+                await self._debug_token(scope, receive, send, dtok)
+                return
         session_cookie = LG.cookie_name(LG.SESSION_COOKIE)
         token = cookie(scope, session_cookie)
         try:
@@ -435,6 +453,48 @@ class TenancyMiddleware:
         scope.setdefault("state", {})["tenant"] = tenant
         try:
             await self.app(scope, receive, send)
+        finally:
+            LG.reset_user(utok)
+            tenancy.reset(ttok)
+
+    async def _debug_token(self, scope, receive, send, token: str):
+        """Sign-in mode, GET / HEAD under /api/v1/debug/ with a debug token (SP-406, debug_auth.py):
+        the token's user from accounts.db (scope debug:*) — the owner only —, the owner's tenant;
+        no session (no cookie is read). The debug API then checks the token against the tenant's
+        own row (expiry, revocation, scopes, enabled). 401 unknown / not the owner's, 429 once the
+        IP failed too often."""
+        from backend import debug_auth as DA
+        from backend.accounts import login as LG, store, tenants as TN
+        ip = RL.client_ip(scope)
+        try:
+            got = await run_in_threadpool(store.service_token, token)
+        except Exception as e:                     # noqa: BLE001 — accounts.db unreadable
+            import logging
+            logging.getLogger(__name__).warning("debug token lookup failed: %s", type(e).__name__)
+            await _json_response(send, 503, {"detail": {"code": "UNAVAILABLE"}}, [(b"retry-after", b"10")])
+            return
+        if got is None or DA.SCOPE_ALL not in got[1] or not (got[0].is_owner or int(got[0].id) == 1):
+            st = DA.failed_at_gate(ip)
+            await _json_response(send, st, {"detail": {"code": "BLOCKED" if st == 429 else "TOKEN_INVALID"}},
+                                 [(b"retry-after", str(DA.FAIL_BLOCK_S).encode())] if st == 429
+                                 else [(b"www-authenticate", b"Bearer")])
+            return
+        user = got[0]
+        tenant = TN.tenant_of(user)
+        await TN.ensure_ready(tenant)
+        ttok = tenancy.set_current(tenant)
+        utok = LG.set_user(user)
+        scope.setdefault("state", {})["tenant"] = tenant
+
+        async def send_wrapper(message):
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                if not any(k.lower() == b"cache-control" for k, _v in headers):
+                    headers.append((b"cache-control", b"private, no-store"))
+                message = {**message, "headers": headers}
+            await send(message)
+        try:
+            await self.app(scope, receive, send_wrapper)
         finally:
             LG.reset_user(utok)
             tenancy.reset(ttok)

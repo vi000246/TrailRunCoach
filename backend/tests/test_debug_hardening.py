@@ -3,11 +3,10 @@ Debug API hardening after the SP-371 security review: the token in its own heade
 password proxy's Authorization (H1); a valid token is never refused by the IP block (M1); failed
 authentications aggregated, 429s never stored (M2); scrub / export allow-list (M3, the sentinel
 test is test_debug_api.test_no_answer_carries_a_credential_or_a_position); per-tenant limit and the
-concurrency gate (M4); same-origin settings writes, PIN logging, no OpenAPI listing, read:plan /
+concurrency gate (M4); same-origin settings writes, no OpenAPI listing, read:plan /
 read:gps scopes, bounded / strict input with 400 not 500, masked audit query, the sync error count
 (L1–L9). Synthetic data, in-memory DB (debug_fixtures.debug_env).
 """
-import logging
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -18,7 +17,7 @@ from backend.db.models import DebugAudit, DebugAuthFailure
 from backend.engine import debug_view as DV
 from backend.security import ratelimit as RL
 from backend.settings.repository import SettingsRepository
-from backend.tests.debug_fixtures import ADMIN, ALL_SCOPES, DBG, TEST_PIN, bearer, debug_env, enable, make_token
+from backend.tests.debug_fixtures import ADMIN, ALL_SCOPES, DBG, bearer, debug_env, enable, make_token
 from backend.tests.test_plan_store import run
 
 REPO = Path(__file__).resolve().parents[2]
@@ -113,7 +112,8 @@ def test_settings_writes_refuse_a_cross_site_request(monkeypatch, tmp_path):
     with debug_env(monkeypatch, tmp_path) as e:
         cross = {"Sec-Fetch-Site": "cross-site"}
         assert e.c.put(ADMIN, json={"enabled": True}, headers=cross).status_code == 403
-        assert e.c.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN}, headers=cross).status_code == 403
+        assert e.c.post(f"{ADMIN}/tokens", json={}, headers=cross).status_code == 403
+        assert e.c.post(f"{ADMIN}/upstream/pull", json={}, headers=cross).status_code == 403
         assert e.c.post(f"{ADMIN}/tokens/revoke-all", headers=cross).status_code == 403
         assert e.c.delete(f"{ADMIN}/tokens/1", headers=cross).status_code == 403
         assert e.c.post(f"{ADMIN}/tokens/revoke-all", headers={"Origin": "https://evil.example"}).status_code == 403
@@ -122,7 +122,7 @@ def test_settings_writes_refuse_a_cross_site_request(monkeypatch, tmp_path):
         assert e.c.post(f"{ADMIN}/tokens/revoke-all", headers={"Origin": "http://testserver"}).status_code == 200
         assert e.c.get(ADMIN, headers=cross).status_code == 200            # a read is not a write
         # no JSON body without a Content-Type (FastAPI strict_content_type): not parsed as JSON
-        r = e.c.post(f"{ADMIN}/tokens", content=b'{"pin": "' + TEST_PIN.encode() + b'"}')
+        r = e.c.post(f"{ADMIN}/tokens", content=b'{"name": "x"}')
         assert r.status_code in (400, 415, 422) and "token" not in r.text
 
 
@@ -131,17 +131,6 @@ def test_requirements_pin_a_fastapi_with_strict_content_type():
     req = (REPO / "requirements.txt").read_text("utf-8")
     m = re.search(r"^fastapi>=(\d+)\.(\d+)", req, re.M)
     assert m and (int(m.group(1)), int(m.group(2))) >= (0, 142)
-
-
-def test_wrong_pins_are_logged_and_counted(monkeypatch, tmp_path, caplog):
-    with debug_env(monkeypatch, tmp_path) as e:
-        with caplog.at_level(logging.WARNING, logger="backend.debug_auth"):
-            for _ in range(DA.PIN_MAX_FAILS):
-                e.c.post(f"{ADMIN}/tokens", json={"pin": "wrong-wrong"})
-        text = caplog.text
-        assert "wrong PIN" in text and "PIN locked" in text and "wrong-wrong" not in text and TEST_PIN not in text
-        pin = e.c.get(ADMIN).json()["pin"]
-        assert pin == {"wrong_total": DA.PIN_MAX_FAILS, "wrong_in_a_row": DA.PIN_MAX_FAILS, "locks": 1}
 
 
 def test_the_debug_routes_are_not_in_the_openapi_schema():

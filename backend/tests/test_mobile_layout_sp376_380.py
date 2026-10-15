@@ -33,7 +33,7 @@ def test_one_finger_scrolls_the_page_over_charts_and_maps():
     assert 'const TOUCH = matchMedia("(pointer: coarse)").matches;' in rp
     assert 'TOUCH ? [{ type: "inside", moveOnMouseMove: false, preventDefaultMouseMove: false }' in rp
     assert "dragging: !TOUCH" in rp
-    vw = (STATIC / "wko5_viewer.html").read_text("utf-8")
+    vw = (STATIC / "charts.html").read_text("utf-8")
     assert "const TOUCH_ZOOM = TOUCH ? { moveOnMouseMove: false, preventDefaultMouseMove: false } : {};" in vw
     assert vw.count('{ type: "inside", ...TOUCH_ZOOM }') == 2 and 'type: "inside" }' not in vw
     assert "dragging: !TOUCH" in vw

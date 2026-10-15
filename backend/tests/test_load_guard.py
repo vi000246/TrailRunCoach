@@ -620,7 +620,7 @@ def test_volume_step_base_skips_taper_race_recovery_and_transition_weeks():
 def test_projection_cap_reads_the_normal_weeks():
     from backend.engine import projection as PJ
     h, _, _ = PJ.week_hours("base", [2, 2, 2, 2], [False] * 4, 50.0, 50.0, 42.0, None)
-    assert h == pytest.approx(2.5)                                    # max(2.2, 2 + 0.5)
+    assert h == pytest.approx(2.4)                                    # max(2.2, min(2 + 0.5, 2 × 1.2)), SP-527
     h, _, why = PJ.week_hours("base", [2, 2, 2, 2], [False] * 4, 50.0, 50.0, 42.0, None, cap_ref=5.0)
     assert h == pytest.approx(5.5)
 

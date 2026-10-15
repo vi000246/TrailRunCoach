@@ -1,7 +1,7 @@
 # 多使用者模式：帳號資料庫、擁有者遷移與 Google 登入（SP-384、SP-58）
 
 > 狀態：資料面（SP-384）與 Google 登入（SP-58）都已完成。**登入模式在啟動時決定一次、之後不會變**：
-> `WKO5COACH_ACCOUNTS=1` 加上整組登入設定才是登入模式；一個登入設定都沒有就是原本的擁有者模式；
+> `TRC_ACCOUNTS=1` 加上整組登入設定才是登入模式；一個登入設定都沒有就是原本的擁有者模式；
 > 設了一部分（或讀不到 secret 檔）就**拒絕啟動**（§5.1）。
 > 正式環境要等 SP-387 的前置（固定網域、OAuth client、拿掉 Cloudflare Access）同一次部署才打開，部署後照 §5.6 驗。
 > 規格：`docs/plans/auth-and-demo.plan.md` §2.2、§4、§5、§7。
@@ -11,24 +11,24 @@
 | 東西 | 位置 | 說明 |
 |---|---|---|
 | `accounts.db` | `<server-root>/accounts.db` | users、identities、sessions（只存 token 的 sha256）、shares、waitlist、consents（同意的條款版本與時間）、登入中的 state（10 分鐘）與註冊單（30 分鐘） |
-| 使用者的資料 | `<server-root>/users/<id>/` | 一個人一個資料夾，結構和 `~/.wko5coach` 一樣（自己的 `wko5coach.db`、`plan.json`、`fit/`、快取） |
-| 擁有者的資料 | `~/.wko5coach`（不動） | `users` 第 1 列，`role=owner`，`tenant_dir` 原地指向這裡 |
+| 使用者的資料 | `<server-root>/users/<id>/` | 一個人一個資料夾，結構和 `~/.trailruncoach` 一樣（自己的 `wko5coach.db`、`plan.json`、`fit/`、快取） |
+| 擁有者的資料 | `~/.trailruncoach`（不動） | `users` 第 1 列，`role=owner`，`tenant_dir` 原地指向這裡 |
 
-`<server-root>` 是 `WKO5COACH_SERVER_ROOT`，沒設就是 `WKO5COACH_HOME`（`~/.wko5coach`）。
+`<server-root>` 是 `TRC_SERVER_ROOT`，沒設就是 `TRC_HOME`（`~/.trailruncoach`）。
 `accounts.db` 和 `users/` 在資料登錄表（`backend/data_registry.py`）標成伺服器自己的檔案，**不會進擁有者的備份**——那是別人的資料。
 整台伺服器的備份（含 `accounts.db` 與所有 `users/`）在 SP-387 第 7 條。
 
 ## 2. 擁有者遷移（原地，零搬移）
 
-1. 停掉 app（`docker compose stop`），把 `~/.wko5coach` 整個複製一份當備份。
-2. **把 server key 搬進環境變數**：多使用者模式只吃 `WKO5COACH_SECRET_KEY`，不讀任何租戶資料夾裡的 key 檔
-   （擁有者的 `~/.wko5coach` 也是一個租戶資料夾）。
+1. 停掉 app（`docker compose stop`），把 `~/.trailruncoach` 整個複製一份當備份。
+2. **把 server key 搬進環境變數**：多使用者模式只吃 `TRC_SECRET_KEY`，不讀任何租戶資料夾裡的 key 檔
+   （擁有者的 `~/.trailruncoach` 也是一個租戶資料夾）。
    ```bash
-   cat ~/.wko5coach/secret.key      # 把這串貼進 NAS 的 .env：WKO5COACH_SECRET_KEY=<那串>
+   cat ~/.trailruncoach/secret.key      # 把這串貼進 NAS 的 .env：TRC_SECRET_KEY=<那串>
    ```
    沒設就打開多使用者模式，app 啟動時會停下來（`ServerKeyRequired`），不會另外產生一把新的 key。
    同一把 key 繼續解得開既有的 COROS／TP 憑證；確認 app 正常之後，舊的 `secret.key` 檔可以移走。
-3. 在 `.env` 加 `WKO5COACH_ACCOUNTS=1`，啟動。啟動時會建 `accounts.db`，`users` 第 1 列是擁有者、指向現有資料夾（重跑不會重建）。
+3. 在 `.env` 加 `TRC_ACCOUNTS=1`，啟動。啟動時會建 `accounts.db`，`users` 第 1 列是擁有者、指向現有資料夾（重跑不會重建）。
 4. 驗證：擁有者登入後，總覽、PMC、課表 API 的回應要和遷移前完全相同
    （自動測試：`backend/tests/test_accounts_sp384.py::test_the_owner_answers_the_same_signed_in_as_before`）。
 
@@ -39,7 +39,8 @@
 一般使用者的租戶讀不到（`tenancy.OWNER_ONLY_CAPS`；`backend/tests/test_accounts_sp384.py`）：
 
 - WKO5 資料夾（各模組的 `ATHLETE_DIR` 一律經過 `settings/paths.for_tenant`）
-- 中央氣象署授權碼（`CWA_API_KEY` 或 `weather.json`）：使用者的天氣改用 Open-Meteo
+- 中央氣象署授權碼（`CWA_API_KEY` 或 `weather.json`）：使用者讀不到、也設不了；但站台用這把授權碼下載的氣象署預報
+  全站共用（SP-552：檔案在 server root、同一份只抓一次），所以使用者的賽事天氣也先用中央氣象署
 - TrainingPeaks 的 WKO5 client（`TP_CLIENT_ID`／`tp_client.json`）：TP 條款不准把 developer credentials 給別人
 - 整個資料夾的備份與還原（使用者要的是「下載我的資料」，SP-386）
 - 擁有者的 AI 金鑰（SP-306 做了之後）
@@ -59,26 +60,27 @@
 
 | 設定 | 模式 |
 |---|---|
-| 一個登入設定都沒有（`WKO5COACH_ACCOUNTS` 沒設、`0`，或只有 `1`） | **owner**：每個請求都是擁有者，跟 SP-58 之前完全一樣；`/login` 等登入路徑回 404。`WKO5COACH_PUBLIC_URL` 不算登入設定——它是全站網址（課表訂閱的連結也用，SP-54），擁有者模式照樣可以設（2026-10-13 使用者決定）；開了登入才必填 |
-| `WKO5COACH_ACCOUNTS=1` ＋ §5.2 整組 | **signin**：沒登入只有公開路徑打得開（§5.3），其他 API 回 401、頁面導到 `/login` |
-| 示範 instance（`WKO5COACH_MODE=demo`） | 不受影響（不掛登入路由） |
-| 其他任何組合 | **拒絕啟動**（`LoginConfigError`，訊息寫明缺什麼）。例如：設了 Google client 但 `WKO5COACH_ACCOUNTS` 沒開；開了但少 secret、少 `WKO5COACH_PUBLIC_URL`；`*_FILE` 讀不到；`WKO5COACH_PUBLIC_URL` 不是 https（localhost 除外）或帶路徑；https 但 `WKO5COACH_TRUSTED_PROXIES` 沒設或還是預設值；擁有者的 Google 帳號認不出來（user 1 還沒綁，也沒設 `WKO5COACH_OWNER_*`）；`WKO5COACH_ACCOUNTS` 不是 on／off 的值 |
+| 一個登入設定都沒有（`TRC_ACCOUNTS` 沒設、`0`，或只有 `1`） | **owner**：每個請求都是擁有者，跟 SP-58 之前完全一樣；`/login` 等登入路徑回 404。`TRC_PUBLIC_URL` 不算登入設定——它是全站網址（課表訂閱的連結也用，SP-54），擁有者模式照樣可以設（2026-10-13 使用者決定）；開了登入才必填 |
+| `TRC_ACCOUNTS=1` ＋ §5.2 整組 | **signin**：沒登入只有公開路徑打得開（§5.3），其他 API 回 401、頁面導到 `/login` |
+| 示範 instance（`TRC_MODE=demo`） | 不受影響（不掛登入路由） |
+| 其他任何組合 | **拒絕啟動**（`LoginConfigError`，訊息寫明缺什麼）。例如：設了 Google client 但 `TRC_ACCOUNTS` 沒開；開了但少 secret、少 `TRC_PUBLIC_URL`；`*_FILE` 讀不到；`TRC_PUBLIC_URL` 不是 https（localhost 除外）或帶路徑；https 但 `TRC_TRUSTED_PROXIES` 沒設或還是預設值；擁有者的 Google 帳號認不出來（user 1 還沒綁，也沒設 `TRC_OWNER_*`）；`TRC_ACCOUNTS` 不是 on／off 的值 |
 
-「登入設定」指：`GOOGLE_CLIENT_ID[_FILE]`、`GOOGLE_CLIENT_SECRET[_FILE]`、`WKO5COACH_OWNER_GOOGLE_SUB`、`WKO5COACH_OWNER_EMAIL`、`WKO5COACH_PUBLIC_URL`。
-**部署前先檢查 NAS 的 `.env`**：如果已經預先放了其中任何一個，但 `WKO5COACH_ACCOUNTS` 還沒開，這個版本會拒絕啟動。
+「登入設定」指：`GOOGLE_CLIENT_ID[_FILE]`、`GOOGLE_CLIENT_SECRET[_FILE]`、`TRC_OWNER_GOOGLE_SUB`、`TRC_OWNER_EMAIL`、`TRC_PUBLIC_URL`。
+**部署前先檢查 NAS 的 `.env`**：如果已經預先放了其中任何一個，但 `TRC_ACCOUNTS` 還沒開，這個版本會拒絕啟動。
 
 ### 5.2 環境變數
 
 | 名字 | 用途 |
 |---|---|
-| `WKO5COACH_ACCOUNTS=1` | 多使用者開關（SP-384）；也要 `WKO5COACH_SECRET_KEY` |
+| `TRC_ACCOUNTS=1` | 多使用者開關（SP-384）；也要 `TRC_SECRET_KEY` |
 | `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | Google OAuth client（Web application）。只從 env 或 `*_FILE`（Docker secret）讀，見 `deploy/commercial.md` §2、§5 |
-| `WKO5COACH_PUBLIC_URL` | **必填**。固定的對外網址，只有 origin，例如 `https://coach.yichlin.com`；redirect URI 是 `<它>/oauth/google/callback`。一定要 https；本機開發可用 `http://localhost:8000` |
-| `WKO5COACH_TRUSTED_PROXIES` | https 時**必填**。只填 cloudflared 容器的位址（`/32`），例如 `172.18.0.5/32`。app 只在直接連線端是它時才採用 `CF-Connecting-IP`，登入限流才算得到真正的使用者 IP；填整段 Docker 網段的話，同網段的任何容器都能假造 IP |
-| `WKO5COACH_OWNER_GOOGLE_SUB` | 擁有者 Google 帳號的 `sub`（Google 帳號的固定 ID）。**建議用這個**；設了就只認這個 sub，email 不算 |
-| `WKO5COACH_OWNER_EMAIL` | 沒有 sub 時用：Google 說已驗證、而且等於這個 email 的帳號是擁有者。只設這個時啟動會記一行 warning 建議改用 sub |
-| `WKO5COACH_MAX_USERS` | 註冊上限，預設 100（擁有者與停用的帳號也算）。到上限後新的 Google 帳號只記進候補名單（`waitlist`），不建帳號與租戶 |
-| `WKO5COACH_COOKIE_SECURE=0` | 只限 `http://localhost` 開發；`WKO5COACH_PUBLIC_URL` 是 https 時不管它設什麼，登入 cookie 一律 `Secure` |
+| `TRC_PUBLIC_URL` | **必填**。固定的對外網址，只有 origin，例如 `https://coach.yichlin.com`；redirect URI 是 `<它>/oauth/google/callback`。一定要 https；本機開發可用 `http://localhost:8000` |
+| `TRC_TRUSTED_PROXIES` | https 時**必填**。只填 cloudflared 容器的位址（`/32`），例如 `172.18.0.5/32`。app 只在直接連線端是它時才採用 `CF-Connecting-IP`，登入限流才算得到真正的使用者 IP；填整段 Docker 網段的話，同網段的任何容器都能假造 IP |
+| `TRC_OWNER_GOOGLE_SUB` | 擁有者 Google 帳號的 `sub`（Google 帳號的固定 ID）。**建議用這個**；設了就只認這個 sub，email 不算 |
+| `TRC_OWNER_EMAIL` | 沒有 sub 時用：Google 說已驗證、而且等於這個 email 的帳號是擁有者。只設這個時啟動會記一行 warning 建議改用 sub |
+| `TRC_MAX_USERS` | 註冊上限，預設 100（擁有者與停用的帳號也算）。到上限後新的 Google 帳號只記進候補名單（`waitlist`），不建帳號與租戶 |
+| `TRC_COOKIE_SECURE=0` | 只限 `http://localhost` 開發；`TRC_PUBLIC_URL` 是 https 時不管它設什麼，登入 cookie 一律 `Secure` |
+| `TRC_BG_SYNC` | 背景同步（SP-499，`backend/sync/background.py`）：`on`（預設：擁有者與付費帳號，依最近使用決定多久看一次）、`owner`（只有擁有者）、`off`（全關，只剩每日同步與開網站同步）。不用設就是 `on` |
 
 **app 的埠只給 cloudflared 連**：`8000` 只綁 `127.0.0.1`（`ports: ["127.0.0.1:8000:8000"]`），或乾脆不發布、讓 cloudflared 走同一個
 Docker network。repo 的 `docker-compose.yml` 目前是 `"8000:8000"`（所有介面都開），**這張單沒有改它**：NAS 上 cloudflared 怎麼連進來要
@@ -98,8 +100,8 @@ Docker network。repo 的 `docker-compose.yml` 目前是 `"8000:8000"`（所有�
 
 ### 5.4 擁有者第一次登入
 
-1. 照 §2 遷移完（`WKO5COACH_ACCOUNTS=1`、server key 在 env）。
-2. 在 `.env` 設 `WKO5COACH_OWNER_GOOGLE_SUB`（或 `WKO5COACH_OWNER_EMAIL=<你的 Gmail>`），加上 Google client、`WKO5COACH_PUBLIC_URL`、`WKO5COACH_TRUSTED_PROXIES`，重新啟動。
+1. 照 §2 遷移完（`TRC_ACCOUNTS=1`、server key 在 env）。
+2. 在 `.env` 設 `TRC_OWNER_GOOGLE_SUB`（或 `TRC_OWNER_EMAIL=<你的 Gmail>`），加上 Google client、`TRC_PUBLIC_URL`、`TRC_TRUSTED_PROXIES`，重新啟動。
 3. 打開網站 → 用 Google 登入 → 應該直接回到總覽，看到原本的資料（user 1；擁有者不需要同意條款）。
 4. 這一次登入就把這個 Google 帳號綁到 user 1；之後只有這個帳號（同一個 `sub`）是擁有者，env 的 email 改了或別人用同一個 email
    開了新的 Google 帳號，都搶不走 user 1。要換擁有者的 Google 帳號只能手動改 `accounts.db`（`users.google_sub`、`identities`）。

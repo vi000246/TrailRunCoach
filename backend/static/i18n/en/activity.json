@@ -9,7 +9,7 @@
   "help.pain": "Did it hurt? \"Sore\" is normal post-training soreness, not an injury; \"Pain\" changes your form or pace, or still hurts afterwards; \"Stopped\" means you had to stop.\n\"Pain\" or \"Stopped\" opens an Injury log entry; add the details on the Injury log page.\nBlank is not \"No pain\": the analysis only trusts \"No pain\".\nThis is not a diagnosis; see a doctor or physiotherapist for lasting pain.",
   "help.pack": "Pack carried (kg), used by the Taiwan's 100 Peaks (Baiyue) prediction; blank = not recorded.",
   "help.tags": "Free text, several allowed (30 characters each, up to 20); press Enter after each. The search above finds tags too.",
-  "help.terrain": "Road or trail. Auto = by distance and climb; choosing road / trail overrides the rule, \"Auto\" restores it. With the WKO5 source the terrain is the WKO5 workout type; change it in WKO5.",
+  "help.terrain": "Road or trail. Auto = by distance and climb; choosing road / trail overrides the rule, \"Auto\" restores it. With the comparison folder as the source the terrain is the workout type in the original file; change it in the software that wrote it.",
   "help.exclude": "Excluding is only a flag: the activity stays in the list (marked \"Excluded\") and its file is not deleted, but it no longer counts in the training load chart, power curves, race power or charts. A rule excludes likely vehicle rides or impossible power; you can exclude by hand or mark a rule-excluded one as normal.",
   "help.power": "Read only. Stryd power is always used; watch-estimated power only when turned on in Settings — otherwise the power model and power load ignore it, HR and pace are used as usual.",
   "f.q": "Search name, tags, notes, date…",
@@ -61,6 +61,7 @@
   "src_fill": " (the primary source lacks it, so this source fills in)",
   "src_upload": "Imported",
   "src_upload_long": "an imported FIT file",
+  "src_folder": "Comparison folder",
   "source.synced": "Synced data",
   "source.primary": " (primary: {src})",
   "source.line": "Source: {src} · {n} activities",
@@ -213,5 +214,7 @@
   "dup.unlink": "Back to automatic",
   "dup.saved": "Updated; reload to see it everywhere",
   "archived": "Archived — original file removed",
-  "archived_help": "Older than your activity retention, so its FIT original was removed in the monthly cleanup; distance, time, training load and the rest come from the kept summary and still count in the training load chart and best efforts, but its single-activity charts can no longer be opened."
+  "archived_help": "Older than your activity retention, so its FIT original was removed in the monthly cleanup; distance, time, training load and the rest come from the kept summary and still count in the training load chart and best efforts, but its single-activity charts can no longer be opened.",
+  "not_original": "Not the original file",
+  "not_original_help": "Huawei's activities have no original watch file on intervals.icu: this is the file intervals.icu provides"
 }

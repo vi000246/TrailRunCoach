@@ -20,8 +20,7 @@ by hand:
 The activities are the newest of the data (the interval in the evening of the day
 before the anchor, the trail run on the anchor morning), so every older activity
 keeps its index — what lets `python -m backend.demo.build --root X --add-linked`
-add them to an existing demo base and backend.demo.export_static --update reuse an
-existing static export.
+add them to an existing demo base.
 """
 from __future__ import annotations
 
@@ -175,7 +174,7 @@ def _cp_on(base: Path, day: dt.date) -> float:
 
 
 def _rows(c) -> list[dict]:
-    acts = c.get("/api/v1/wko5/workouts").json()
+    acts = c.get("/api/v1/app/workouts").json()
     return acts if isinstance(acts, list) else acts.get("workouts") or []
 
 
@@ -227,7 +226,7 @@ def add(c, base: Path, manifest: dict, anchor: dt.date, seed: int, small: bool =
             continue
         a["index"] = x["index"]
         # the watch names a run after the pushed workout
-        c.patch(f"/api/v1/wko5/workouts/{x['index']}/activity", json={"name": a["name"]})
+        c.patch(f"/api/v1/app/workouts/{x['index']}/activity", json={"name": a["name"]})
     # the sync's next page view: plan_match pairs the runs with their sessions (stored)
     ss = c.get(SESSIONS).json().get("sessions") or []
     for a in new:

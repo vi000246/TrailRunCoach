@@ -9,7 +9,7 @@ BACKEND_PID=$!
 echo "Backend started (PID $BACKEND_PID) at http://localhost:8000"
 
 echo ""
-echo "WKO5 Coach running:"
+echo "TrailRunCoach running:"
 echo "  Dashboard: http://localhost:8000"
 echo "  API docs:  http://localhost:8000/docs"
 echo ""

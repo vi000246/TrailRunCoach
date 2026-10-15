@@ -1,5 +1,5 @@
 """
-GET /api/v1/wko5/activities/auto in the background: the AUTO activity type /
+GET /api/v1/app/activities/auto in the background: the AUTO activity type /
 effort of every activity (the 活動列表 filters and editor) without holding a
 request — or the server — for minutes.
 
@@ -417,6 +417,17 @@ class _Keys:
         self.pd_glob = pglob
         self._thr_memo: dict = {}
 
+    def detach(self) -> "_Keys":
+        """Hold the Dataset weakly once the keys are built (Job: its later tiers read only own /
+        code / probes / context). Held strongly, a job waiting for its warm / cold tier kept its
+        Dataset alive — the job is the value of _JOBS, keyed on that Dataset — past the Dataset
+        cache's budget (SP-394 第 6 條: 10 tenants, 20 Datasets alive with 6 kept)."""
+        try:
+            self.ds = weakref.proxy(self.ds)
+        except TypeError:                    # already a proxy, or not weak-referenceable
+            pass
+        return self
+
     def _stamp(self, w):
         hit = self._stamps.get(w.idx, self)
         if hit is self:
@@ -482,7 +493,7 @@ class _Keys:
         try:
             hist = ds.athlete.settings.get("runthr") or []
             lthr = (ds.athlete.setting_on("runthr", day), bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist),
-                    ds.setting_source("runthr", "WKO5 設定") if hasattr(ds, "setting_source") else None)
+                    ds.setting_source("runthr", "對照資料夾設定") if hasattr(ds, "setting_source") else None)
         except Exception:                    # noqa: BLE001
             lthr = None
         return lthr
@@ -699,7 +710,7 @@ class Job:
                 with batched_flush(ds):
                     keys, kb = activity_keys(ds, self.recorded, self.entries)
                 today = _today(ds)
-                self.keys, self.kb = keys, kb
+                self.keys, self.kb = keys, kb.detach()
                 self.names = {w.idx: AT.key_of(w.entry.start) for w in ds.workouts}
                 self.tier_by_idx = {w.idx: _tier(w, today) for w in ds.workouts}
                 for w in ds.workouts:
@@ -724,8 +735,7 @@ class Job:
                     for i, v in values.items():
                         self.fresh[names[i]] = v
                     self.n_done += len(values)
-            out = compute_blocking(ds, progress=progress, recorded=self.recorded, only=part,
-                                   context=kb.context) if part else {}
+            out = _compute(ds, progress, self.recorded, part, kb.context) if part else {}
             run_code = kb.code["run"]
             for w in ds.workouts:
                 if w.idx in out:
@@ -773,6 +783,8 @@ class Job:
         self.entries = {}                    # the disk copy is not needed once the job is done
         self.keys = self.kb = None
         self.files = {}
+        with self.lock:                      # run (or, after an error, never run): let them go —
+            self._callbacks = {}             # a closure over the Dataset kept it alive (SP-394 第 6 條)
         if self.state == "computing" and self.superseded:
             self.finished = time.monotonic()
         self.done.set()
@@ -832,6 +844,57 @@ class Job:
                     "stale": bool(self.stale) and self.state != "ready", "error": self.error,
                     "elapsed_s": round(el, 1), "tier": self.step if self.state == "computing" else None,
                     "auto": auto}
+
+
+def _compute(ds, progress, recorded: list, part: set, context) -> dict[int, dict]:
+    """compute_blocking of a job step: a step of `full` size (FULL_FROM activities or more: a code
+    change, a new user) in a worker process (SP-394 第 5 條, backend/workproc.py — in the server it
+    made the pages 2–3× slower), on the Dataset the server keeps for this key, rebuilt there warm
+    from the disk caches; the values come back by file. A smaller step, a Dataset not kept (a
+    test's), a hot-first one still being back-filled, or workers off: here, as before. What the
+    worker left out (its Dataset no longer had the file; it failed or was killed) is computed here."""
+    from backend import workproc
+    key = None
+    if len(part) >= FULL_FROM and workproc.enabled() and not getattr(ds, "deferred", None):
+        from backend.api import wko5views as WV
+        key = WV.key_of(ds)
+    if key is None:
+        return compute_blocking(ds, progress=progress, recorded=recorded, only=part, context=context)
+    file_of = {w.idx: w.entry.file for w in ds.workouts}
+    idx_of = {f: i for i, f in file_of.items()}
+
+    sent: dict = {}
+
+    def relay(values: dict) -> None:
+        sent.update(values)
+        mine = {idx_of[f]: v for f, v in values.items() if f in idx_of and idx_of[f] in part}
+        progress(len(mine), len(part), mine)
+    try:
+        got = workproc.run("backend.api.activity_auto:compute_in_worker", key, [file_of[i] for i in part], recorded,
+                           progress=relay)
+    except workproc.WorkerError as e:        # a worker that failed / was killed: the rest computed here
+        log.warning("activity auto: the worker failed (%s), computing the rest in the server", e)
+        got = sent
+    out = {idx_of[f]: v for f, v in got.items() if f in idx_of and idx_of[f] in part}
+    rest = part - set(out)
+    if rest:
+        out.update(compute_blocking(ds, progress=progress, recorded=recorded, only=rest, context=context))
+    return out
+
+
+def compute_in_worker(key: tuple, files: list, recorded: list, progress) -> dict[str, dict]:
+    """The worker's side (backend/workproc.py): {file: auto values} of `files`, on the Dataset of
+    `key` built in the worker; each chunk's values sent back as they are done."""
+    from backend.api import wko5views as WV
+    ds = WV.worker_dataset(key)
+    file_of = {w.idx: w.entry.file for w in ds.workouts}
+    want = set(files)
+    only = {i for i, f in file_of.items() if f in want}
+
+    def prog(_done, _total, values):
+        progress({file_of[i]: v for i, v in values.items()})
+    out = compute_blocking(ds, progress=prog, recorded=recorded, only=only)
+    return {file_of[i]: v for i, v in out.items()}
 
 
 def _cls(n: int) -> str:

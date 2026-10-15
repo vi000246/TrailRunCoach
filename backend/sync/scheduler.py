@@ -12,7 +12,8 @@ check of the last 60 days (sync/check.weekly_tick, SP-362 A4), the daily cleanup
 FIT objects (sync/purge.cleanup_tick, SP-308), the monthly archive of the FITs past the
 retention (engine/fit_archive.tick, SP-317: the 1st, 03:00–05:00 local, tenants staggered),
 the nightly apply of the received body weights (api/weight.tick, SP-472: 03:00–06:00 local, not
-while a sync or an automatic plan run of the tenant is going) and, once, the rain backfill
+while a sync or an automatic plan run of the tenant is going), the background sync's looks for
+new activities (sync/background.tick_all, SP-499) and, once, the rain backfill
 (api/rain_backfill.tick, SP-299).
 
 Every tenant (SP-384, SP-374 第 5 條): each minute the loop walks accounts.tenants.sync_tenants()
@@ -188,9 +189,19 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
             return session_factory
         from backend.db.database import AsyncSessionLocal
         return AsyncSessionLocal
+    from backend.sync import background
     t_start = _time.monotonic()
+    background.started()
     while True:
         await tick_all(session_factory)
+        # 背景同步 (sync/background.py, SP-499): each tenant's look for new activities, at an
+        # interval by how recently it was used, staggered, one at a time for the server
+        try:
+            await background.tick_all(session_factory)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:               # noqa: BLE001
+            log.warning("background sync tick failed: %s", type(e).__name__)
         # the weekly check of the last 60 days (sync/check.py, SP-362 A4); not in the first
         # minutes after a start, when the warm-up has the CPU
         if _time.monotonic() - t_start >= check.STARTUP_DELAY_S:

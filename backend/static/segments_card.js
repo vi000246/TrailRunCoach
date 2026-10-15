@@ -1,6 +1,6 @@
 /* Single-activity view: a card listing the repeated segments and routes this
  * activity matched, with its rank on each ("第 2 快 / 7 次"), linking to the
- * 路線 page. Loaded by wko5_viewer.html with one script tag; everything else
+ * 路線 page. Loaded by charts.html with one script tag; everything else
  * lives here so the viewer stays untouched.
  *
  * The viewer rebuilds #grid on every load(); this watches #grid and appends
@@ -40,7 +40,7 @@
   async function fill(card, idx) {
     let res = cache.get(idx);
     if (!res) {
-      try { res = await (await fetch(`/api/v1/wko5/workouts/${idx}/segments`)).json(); }
+      try { res = await (await fetch(`/api/v1/app/workouts/${idx}/segments`)).json(); }
       catch { card.querySelector(".body").textContent = T("failed"); return; }
       if (res.built) cache.set(idx, res);
     }

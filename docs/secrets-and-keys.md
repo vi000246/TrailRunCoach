@@ -4,15 +4,15 @@
 
 | 資料 | 放在哪 | 說明 |
 |---|---|---|
-| COROS / TrainingPeaks 登入 token、cookie | 本機資料庫 `~/.wko5coach/wko5coach.db` | 帳密本身預設不保存 |
+| COROS / TrainingPeaks 登入 token、cookie | 本機資料庫 `~/.trailruncoach/wko5coach.db` | 帳密本身預設不保存 |
 | COROS / TrainingPeaks 密碼（只有勾「記住密碼」時） | 同一個資料庫的 `sync_state.coros_password_sealed`、`tp_password_sealed`（+ `tp_username`） | 見下方「記住密碼」 |
 
 另外兩樣不加密、但也不會出現在 repo 或 API 回應裡：
 
 | 資料 | 放在哪 | 說明 |
 |---|---|---|
-| Debug API 的 PIN（SP-371） | 只在伺服器的環境變數 `TRC_DEBUG_PIN`（NAS 的 `.env`） | 產生 debug token 前要輸入；沒設就不能開 debug API。見 `docs/debug-api.md` |
-| Debug API 的 token | 資料庫 `debug_tokens` 只存 SHA-256 雜湊 | token 只在產生時顯示一次，資料庫外流也還原不出來 |
+| Debug API 的 token（個人 API token，SP-371／SP-373） | 資料庫 `debug_tokens` 只存 SHA-256 雜湊；登入模式下 accounts.db `api_tokens` 也只存雜湊（SP-406） | 擁有者在設定頁產生（SP-373 起不用 PIN），只在產生時顯示一次，資料庫外流也還原不出來。見 `docs/debug-api.md` |
+| 本機從正式站同步用的 token（SP-373） | 只在**本機**的環境變數 `TRC_UPSTREAM_TOKEN`（＋代理的 `TRC_PROXY_PASSWORD`） | 正式站產生的 debug token（`export:config`＋`export:plan`）；不進資料庫、不顯示在畫面、log 裡遮掉 |
 
 repo 裡**沒有**任何金鑰、client secret、PIN 或密文。
 
@@ -22,7 +22,7 @@ repo 裡**沒有**任何金鑰、client secret、PIN 或密文。
 用下面任一種方式提供（讀取順序由上到下）：
 
 1. 環境變數 `TP_CLIENT_ID` + `TP_CLIENT_SECRET`
-2. `~/.wko5coach/tp_client.json`：`{"client_id": "...", "client_secret": "..."}`（放在家目錄，不在 repo 內）
+2. `~/.trailruncoach/tp_client.json`：`{"client_id": "...", "client_secret": "..."}`（放在家目錄，不在 repo 內）
 
 設定頁「資料同步」會顯示目前用的是哪個來源（只顯示來源，不顯示值）。
 
@@ -37,8 +37,8 @@ repo 裡**沒有**任何金鑰、client secret、PIN 或密文。
 
 ## 金鑰放在哪
 
-- **讀取順序**：環境變數 `WKO5COACH_SECRET_KEY` → 檔案 `~/.wko5coach/secret.key`。
-- 兩者都沒有、而且還沒有任何密文時，第一次啟動會自動產生 `~/.wko5coach/secret.key`（權限 600）。
+- **讀取順序**：環境變數 `TRC_SECRET_KEY` → 檔案 `~/.trailruncoach/secret.key`。
+- 兩者都沒有、而且還沒有任何密文時，第一次啟動會自動產生 `~/.trailruncoach/secret.key`（權限 600）。
 - 已經有密文卻找不到金鑰時，app 會拒絕產生新金鑰（`SECRET_KEY_MISSING`），避免舊資料永遠解不開。
 - 伺服器部署建議用環境變數或 secrets manager 提供金鑰。產生一把：
 
@@ -50,7 +50,7 @@ repo 裡**沒有**任何金鑰、client secret、PIN 或密文。
 
 ## 換一台電腦
 
-1. 把 `~/.wko5coach/secret.key` 複製到新電腦，或設定 `WKO5COACH_SECRET_KEY`。
+1. 把 `~/.trailruncoach/secret.key` 複製到新電腦，或設定 `TRC_SECRET_KEY`。
 2. 資料庫是本機的，不跟著 repo 走；沒搬資料庫的話，COROS / TP 重新登入一次即可。
 
 ## 金鑰遺失或要輪替

@@ -17,7 +17,7 @@
   const DI = (k) => (W.DI ? W.DI(k) : "");
 
   // ---- which icon -------------------------------------------------------------------------------
-  // 熱適應課 (engine/heat_plan.py) keep kind easy / long, tagged by the title — the sun replaces 「熱」
+  // 熱適應課 stored before SP-569 keep kind easy / long, tagged by the title — the sun replaces 「熱」
   const HEAT = /熱適應|熱水浴|桑拿/;
   // a 強度課 by its family (SP-79): 有氧間歇 → z3, VO2max 間歇 / 速度 → z5; one with no family by its
   // ladder rung or title (the 總覽's old rule)
@@ -138,6 +138,7 @@
   .sc-leg-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 2px 12px; }
   .sc-leg-types span { display: inline-flex; align-items: center; gap: 4px; }
   .sc-leg-act { display: inline-block; width: 16px; height: 12px; border: 1px dotted var(--muted); border-radius: 3px; }
+  .sc-leg-man { margin: 6px 0 0; font-size: 12px; } .sc-leg-man a { color: var(--accent); font-weight: 600; text-decoration: none; }
   .sc-leg .pmk { font-weight: 700; } .sc-leg .pmk-auto { color: var(--accent); } .sc-leg .pmk-user { color: var(--muted); }`;
   if (typeof document !== "undefined" && document.createElement) {
     const st = document.createElement("style");
@@ -175,7 +176,10 @@
       `<div class="sc-leg-pop"><table>` + head("h_type") +
       `<tr><td colspan="2"><div class="sc-leg-types">${TYPES.map((k) => `<span>${icon(k)}${esc(typeName(k))}</span>`).join("")}</div></td></tr>` +
       head("h_status") + STATES.map(([st, pv]) => row(ring(st, 65, { prov: pv }), `<b>${esc(label(st, null, { prov: pv }))}</b> ${esc(tipOf(st, pv, lv))}`)).join("") +
-      head("h_other") + other.map(([ic, txt]) => row(ic, txt)).join("") + `</table></div></details>`;
+      head("h_other") + other.map(([ic, txt]) => row(ic, txt)).join("") + `</table>` +
+      // SP-558: the manual's part on these colours and symbols (not inside the manual itself)
+      (o.manual === false || !W.I18N ? "" : `<p class="sc-leg-man"><a class="an-man" href="/manual/schedule#colors" data-manual="schedule#colors">${esc(W.I18N.t("shell.manual.see"))}</a></p>`) +
+      `</div></details>`;
   }
 
   // SP-402: graded on time only because the run's HR is unreliable (compliance `uncertain`) — a hover /

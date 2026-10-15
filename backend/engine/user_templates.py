@@ -513,6 +513,7 @@ def row(t: dict, qbasis: Optional[str] = None) -> dict:
          "src": t.get("note") or _(SRC), "url": "", "src_kind": "mine", "conv": "", "note": t.get("note") or "",
          "items": WT.main_of(full) or full, "full": full, "equiv": None, "family": fam,
          "fam_sub": fam["id"] if fam else None, "trail_sub": WT.trail_type_of(full),
+         "descent_only": WT.descent_only(full),
          "purpose": "", "cats": t.get("cats") or [], "target_basis": t.get("target_basis"), "mine": True,
          "gpx": t.get("gpx"), "role": WS.rpe_role(full)}
     r["target_types"] = WS.template_target_types(r, qbasis=qbasis)   # SP-84: the same helper as 插入範本

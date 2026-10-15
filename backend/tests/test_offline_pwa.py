@@ -82,13 +82,13 @@ function person(name, id) {
   server.routes["/api/v1/overview/page"] = page("overview");
   server.routes["/api/v1/overview/plan/schedule/page"] = page("schedule");
   server.routes["/api/v1/static/offline.html"] = page("offline");
-  server.routes["/api/v1/wko5/activities/page"] = page("activities");
+  server.routes["/api/v1/app/activities/page"] = page("activities");
   server.routes["/api/v1/overview/status"] = () => json({ who: name, today: "2026-10-14" });
   server.routes["/api/v1/overview/weekplan"] = () => json({ who: name, week: { start: "2026-10-12", end: "2026-10-18" } });
   server.routes["/api/v1/overview/plan/calendar"] = (u) => json({ who: name, start: u.searchParams.get("start"), end: u.searchParams.get("end"), v: server.version });
   for (const p of ["/api/v1/overview/z5", "/api/v1/overview/b2b", "/api/v1/overview/summary", "/api/v1/overview/pmc",
     "/api/v1/sync/settings", "/api/v1/region", "/api/v1/overview/plan/prefs", "/api/v1/overview/plan/prefs/gate",
-    "/api/v1/overview/plan/equivalence", "/api/v1/wko5/activities", "/api/v1/wko5/activities/stats", "/api/v1/achievements"])
+    "/api/v1/overview/plan/equivalence", "/api/v1/app/activities", "/api/v1/app/activities/stats", "/api/v1/achievements"])
     server.routes[p] = (u) => json({ who: name, path: u.pathname, q: u.search });
 }
 let OUT;
@@ -113,11 +113,11 @@ def test_only_listed_gets_are_kept():
 const c = (p, nav) => { const x = O.classify(p.startsWith("http") ? p : ORIGIN + p, ORIGIN, !!nav); return x ? x.kind + ":" + x.tier : null; };
 OUT = {
   status: c("/api/v1/overview/status"), calendar: c("/api/v1/overview/plan/calendar?start=2026-10-12&end=2026-10-18"),
-  acts: c("/api/v1/wko5/activities"), page: c("/api/v1/overview/page", true), sched: c("/api/v1/overview/plan/schedule/page?day=2026-10-14", true),
+  acts: c("/api/v1/app/activities"), page: c("/api/v1/overview/page", true), sched: c("/api/v1/overview/plan/schedule/page?day=2026-10-14", true),
   shell: c("/api/v1/static/shell.js"), echarts: c("https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"),
   otherCdn: c("https://cdn.example.com/x.js"), session: c("/api/v1/session"), fresh: c("/api/v1/overview/plan/fresh"),
-  staticHtml: c("/api/v1/static/compare.html"), offlineHtml: c("/api/v1/static/offline.html"), settingsPage: c("/api/v1/wko5/settings", true),
-  login: c("/login", true), dataset: c("/api/v1/wko5/dataset/status"), samples: c("/api/v1/wko5/workouts/3/samples"),
+  staticHtml: c("/api/v1/static/compare.html"), offlineHtml: c("/api/v1/static/offline.html"), settingsPage: c("/api/v1/app/settings", true),
+  login: c("/login", true), dataset: c("/api/v1/app/dataset/status"), samples: c("/api/v1/app/workouts/3/samples"),
   account: c("/api/v1/account/logout"),
 };
 const E = mk();
@@ -302,7 +302,7 @@ await E.setUser("u7");
 await E.sync({});
 server.down = true;
 const p = await get(E, nav("/api/v1/overview/plan/schedule/page?day=2026-10-15"));
-const other = await get(E, nav("/api/v1/wko5/settings"));               // never kept: the offline page instead
+const other = await get(E, nav("/api/v1/app/settings"));               // never kept: the offline page instead
 const login = E.handleFetch(nav("/login"), ctx);
 OUT = { page: await body(p), pageCache: p.headers.get("x-trc-cache"), other: await body(other), login };
 """)
@@ -356,8 +356,8 @@ OUT = { res, p0, p1, p2, firstIsSession: order[0], p0BeforeP1: lastP0 < firstP1,
               "/api/v1/overview/plan/calendar?start=2026-10-26&end=2026-11-01",
               "/api/v1/overview/pmc?begin=2026-07-16&end=2026-10-14"):
         assert u in p0, u
-    assert set(out["p1"]) == {"/api/v1/wko5/activities/page", "/api/v1/wko5/activities",
-                              "/api/v1/wko5/activities/stats", "/api/v1/achievements?include_hidden=true"}
+    assert set(out["p1"]) == {"/api/v1/app/activities/page", "/api/v1/app/activities",
+                              "/api/v1/app/activities/stats", "/api/v1/achievements?include_hidden=true"}
     assert out["p2"] == []                                    # no API for FIT / chart data yet (SP-325)
     assert out["again"]["done"] == [] and out["callsAgain"] == ["GET /api/v1/session"]
     assert out["refill"]["done"] == ["p1"] and len(out["p1back"]) == 4
@@ -436,11 +436,11 @@ def test_over_the_budget_p2_then_p1_go_and_p0_stays():
     out = run(r"""
 person("alice", 7);
 const big = (kb) => () => new Response("x".repeat(kb * 1024), { headers: { "content-type": "application/json" } });
-server.routes["/api/v1/wko5/activities"] = big(300);
+server.routes["/api/v1/app/activities"] = big(300);
 server.routes["/api/v1/overview/status"] = big(300);
 const E = mk({ budget: 500 * 1024 });
 await E.setUser("u7");
-await get(E, req("/api/v1/wko5/activities"));            // p1, 300 kB
+await get(E, req("/api/v1/app/activities"));            // p1, 300 kB
 await get(E, req("/api/v1/overview/status"));            // p0, 300 kB: over 500 kB, the p1 entry goes
 OUT = { p0: caches.urls("trc-u-u7-p0"), p1: caches.urls("trc-u-u7-p1"), st: await E.status() };
 """)
@@ -453,12 +453,12 @@ def test_storage_full_pushes_out_less_important_tiers_then_retries():
 person("alice", 7);
 const E = mk();
 await E.setUser("u7");
-await get(E, req("/api/v1/wko5/activities"));            // p1
+await get(E, req("/api/v1/app/activities"));            // p1
 let refused = 0;
 caches.full = (url, cache) => { const p1 = caches.c.get("trc-u-u7-p1"); if (url.endsWith("/status") && p1 && p1.m.size) { refused++; return true; } return false; };
 const r = await get(E, req("/api/v1/overview/status"));      // p0: full while p1 is there (p2 dropped first: nothing)
-caches.full = (url) => url.endsWith("/api/v1/wko5/activities/stats");
-await get(E, req("/api/v1/wko5/activities/stats"));          // p1 may not push out p0
+caches.full = (url) => url.endsWith("/api/v1/app/activities/stats");
+await get(E, req("/api/v1/app/activities/stats"));          // p1 may not push out p0
 OUT = { refused, status: r.status, p0: caches.urls("trc-u-u7-p0"), p1: caches.urls("trc-u-u7-p1") };
 """)
     assert out == {"refused": 2, "status": 200, "p0": ["/api/v1/overview/status"], "p1": []}

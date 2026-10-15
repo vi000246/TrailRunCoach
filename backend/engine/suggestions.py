@@ -7,7 +7,7 @@ records the choice server-side so the same suggestion doesn't come back.
 Kinds (the `type` of a row):
   b2b          連續兩天長天 (engine/b2b.py suggestion): a day pair this week or
                next; accepting stores the two days as the user's sessions.
-  race_sim     賽事模擬 (engine/specific_phase.py) 4–3 weeks before the A race: a
+  race_sim     賽事模擬 (engine/specific_phase.py) 6 and 4 weeks before the A race (路跑 4 and 3): a
                day (a day pair for a multi-day trip); accepting stores it as the
                user's session(s) in place of that week's long day.
   test         a due CP / AeT test of this week (overview.week_plan
@@ -29,23 +29,24 @@ Kinds (the `type` of a row):
                (confirm; never automatic), 「還沒」 hides it for 7 days (ids `injury_done:<id>`).
   injury_pattern 「跟受傷前很像」 (engine/injury_exposure.py; off by default,
                only with ≥ 5 analysed injuries) — information, ✕ only.
-  altitude     高度適應提醒 (engine/altitude.py, SP-100): an event whose GPX
-               reaches ≥ 3,000 m, 1–14 days before its start; 15–28 days before it
-               「安排適應週末」 (SP-258: the weekends to sleep 2 nights up high) — information, ✕ only.
+  altitude     高山症預防提醒 (engine/altitude.py, SP-546): a 百岳 trip or an event whose GPX
+               reaches ≥ 3,000 m, 1–7 days before its start, unless the athlete's activities reached
+               3,000 m in the last 3 months — information, ✕ / 稍後提醒 only (SP-546 R1: 稍後提醒 brings it
+               back the day before the trip, not SNOOZE_DAYS later).
+  hr_zone_switch SP-493: the 自動 課表心率區間 switched the zones in effect by itself (plan_auto
+               .check_hr_model, plan.hr_zone_auto) — told once: information, ✕ only, for HR_SWITCH_DAYS
+               (id `hr_zone_switch:<since>`).
 
 Ids (the dismissal key): `b2b:<week>`, `test:<kind>:<week>`, `baseline:<kind>:<week>` (all per
 week: ✕ / 排入 hold for that week, 「不要」 on a B2B too — 「不要」 on a test holds that test for good, below),
 `zone:<detector id>`, `zone_update:<field>:<date>`,
-`altitude:<event id>:<start>:<max m>:<flags>` (the 1–14 day check: the flags say what the reminder
-found, so a dismissed one shows again only when that changes), `altitude_plan:<event id>:<start>`
-(the 15–28 day 安排適應週末 row, SP-258: closed once, it never shows again for that trip — prune
-keeps the close until the trip's start, even on a day the row is not computed; it never hides the
-14-day check).
+`altitude:<event id>:<start>` (SP-546: one per trip — closed once, it does not show again for that trip;
+the same trip moved to another date is a new one).
 A dismissal is dropped once its suggestion is no longer computed (prune), so
 a zone suggestion that fires again later is new and shows again.
 
 稍後提醒 (SP-507, every row but injury_done, whose 「還沒」 already is one): the row is hidden for
-SNOOZE_DAYS, then shows again if it is still computed — unless a test it suggests was done since
+SNOOZE_DAYS (an altitude row: until the day before its trip, SP-546 R1), then shows again if it is still computed — unless a test it suggests was done since
 (`tested`: a done test session, a test the review found, a measured threshold). The record is kept
 under the row's id with `key` = snooze_key(id): a weekly id's next week (`test:cp:<next monday>`) is
 the same suggestion, and a 基線測試 and the weekly test of the same kind are one test.
@@ -73,8 +74,8 @@ ACTIONS = ("accepted", "declined", "dismissed", SNOOZED)
 SNOOZE_DAYS = 7                       # 「一週後再提醒」 (the owner, SP-507)
 ZONE_TESTS = ("aet", "cp")            # schedulable from the box (tt30: described only)
 TEST_TYPES = ("test", "baseline", "zone_test")     # the rows that suggest a test (排入測試 ▸, the overview's 測試)
+ALT = "altitude:"                           # 高山症預防提醒 (SP-546): ends in the trip's start; held until then
 WEEKLY = ("b2b:", "test:", "baseline:")     # ids that end in their week: a dismissal holds for that week
-PLAN_ALT = "altitude_plan:"                 # 安排適應週末 (SP-258): ends in the trip's start; held until then
 
 
 def _monday(day: str) -> str:
@@ -107,12 +108,14 @@ def b2b_rows(inp: dict, today: str, pair_opts) -> list[dict]:
 
 
 def race_sim_rows(inp: dict, opts, stored: list[dict]) -> list[dict]:
-    """The race simulation (engine/specific_phase.sim_suggestion: 賽前第 4–3 週), unless a
-    「賽事模擬」 session is already in the plan. `opts(sg)`: the day (or day-pair) options."""
+    """The race simulation (engine/specific_phase.sim_suggestion: 越野 賽前第 6、4 週, 路跑 4、3), unless a
+    「賽事模擬」 session is already in the plan from its first week up to the race (`until`; SP-523: one
+    accepted under the old 4–3 window still counts). `opts(sg)`: the day (or day-pair) options."""
     sg = (inp.get("cur") or {}).get("race_sim_suggestion")
     if not sg:
         return []
-    lo, hi = sg["weeks"][0], (dt.date.fromisoformat(sg["weeks"][-1]) + dt.timedelta(days=6)).isoformat()
+    lo = sg["weeks"][0]
+    hi = max(sg.get("until") or "", (dt.date.fromisoformat(sg["weeks"][-1]) + dt.timedelta(days=6)).isoformat())
     if any(str(s.get("title") or "").startswith("賽事模擬") and s.get("state") in ("active", "done")
            and lo <= (s.get("day") or "") <= hi for s in stored):
         return []
@@ -289,51 +292,56 @@ def injury_rows(events: list[dict], today: str, blocked: set, rp: Optional[dict]
     return out
 
 
-def _taper_days(e) -> int:
-    """The event's 減量期 days (planning.taper_days for an A event, the B / C mini-taper otherwise);
-    a dict event may carry its own `taper_days`."""
-    from backend.engine import planning as PL
-    if isinstance(e, dict):
-        return int(e.get("taper_days") or 0)
-    try:
-        return PL.taper_days(e) if (getattr(e, "priority", "A") or "A") == "A" else PL.MINI_TAPER_DAYS
-    except Exception:                       # noqa: BLE001 — only the 「走輕鬆路線」 marks depend on it
-        return PL.TAPER_DAYS
-
-
-def altitude_rows(events: list, today: str, alt_of, alts_of, nights_of=None) -> list[dict]:
-    """高度適應提醒 (engine/altitude.py) for the events 1–28 days away (15–28: 安排適應週末, SP-258).
-    `events`: planning.Event (or dicts with id / name / date / days); `alt_of(event)`:
-    altitude.event_altitude (None = no GPX); `alts_of()`: the athlete's altitude per day
-    (altitude.day_altitudes, read once, only when an event 1–14 days away needs it); `nights_of()`:
-    the recorded nights {date: m} (altitude.load_nights, SP-259; None = none, read with alts_of)."""
+def altitude_rows(events: list, today: str, alt_of, alts_of) -> list[dict]:
+    """高山症預防提醒 (engine/altitude.py, SP-546) for the 百岳 / ≥ 3,000 m trips 1–7 days away.
+    `events`: planning.Event (or dicts with id / name / date / kind); `alt_of(event)`:
+    altitude.event_altitude (None = no GPX; a 百岳 still counts); `alts_of()`: the athlete's
+    altitude per day (altitude.day_altitudes, read once, only when such a trip is that close)."""
     from backend.engine import altitude as AL
     d = dt.date.fromisoformat(today)
-    alts = manual = None
+    alts = None
     out = []
     for e in events:
         get = (lambda k: e.get(k)) if isinstance(e, dict) else (lambda k: getattr(e, k, None))
         start = dt.date.fromisoformat(str(get("date"))[:10])
-        if not 0 < (start - d).days <= AL.EARLY_DAYS:
+        if not 0 < (start - d).days <= AL.NOTICE_DAYS:
             continue
         alt = alt_of(e)
-        if not alt or alt.get("max_m") is None or alt["max_m"] < AL.EVENT_MIN_M:
+        if not AL.is_high_trip(get("kind"), alt):
             continue
-        ex = None
-        if (start - d).days <= AL.REMIND_DAYS:
-            if alts is None:
-                alts = alts_of()
-                manual = nights_of() if nights_of is not None else {}
-            ex = AL.exposure(alts, d, start, manual)
-        r = AL.reminder({"id": get("id"), "name": get("name"), "start": start, "days": get("days"),
-                         "taper_days": _taper_days(e)}, alt, ex, d)
+        if alts is None:
+            alts = alts_of()
+        r = AL.reminder({"id": get("id"), "name": get("name"), "start": start, "kind": get("kind")},
+                        alt, AL.exposure(alts, d, start), d)
         if r is None:
             continue
-        # the 15–28 day row: one id per trip, whatever it found (owner 2026-10-07: closed = gone)
-        sid = (f"{PLAN_ALT}{get('id')}:{r['start']}" if "plan" in r["flags"] else
-               f"altitude:{get('id')}:{r['start']}:{r['max_m']}:{'-'.join(r['flags']) or 'none'}")
-        out.append({**r, "id": sid, "type": "altitude", "pick": None, "src": r.get("src") or AL.SRC})
+        # one id per trip (SP-546): closed = gone for that trip; moved to another date = a new one
+        out.append({**r, "id": f"altitude:{get('id')}:{r['start']}", "type": "altitude", "pick": None})
     return out
+
+
+HR_SWITCH_DAYS = 14                    # SP-493: the switch's row stays this long unless closed (zone_update: 14)
+
+
+def hr_switch_rows(rec: Optional[dict], today: str) -> list[dict]:
+    """SP-493: 「課表心率區間自動換成 X」 once — the switch 自動 made by itself (plan.hr_zone_auto with
+    auto: true), from its day for HR_SWITCH_DAYS; ✕ hides it (its id is the day)."""
+    if not isinstance(rec, dict) or not rec.get("auto") or not rec.get("from") or not rec.get("since"):
+        return []
+    try:
+        age = (dt.date.fromisoformat(today[:10]) - dt.date.fromisoformat(str(rec["since"])[:10])).days
+    except ValueError:
+        return []
+    if not 0 <= age <= HR_SWITCH_DAYS:
+        return []
+    from backend.engine.plan_auto import hr_name
+    a, b = hr_name(rec["from"]), hr_name(rec["model"])
+    return [{"id": f"hr_zone_switch:{rec['since']}", "type": "hr_zone_switch", "pick": None,
+             "title": _("課表心率區間自動換成{model}區間", model=b),
+             "reason": _("{a} → {b}：{why}。", a=a, b=b, why=rec.get("reason") or ""),
+             "help": _("課表的心率目標（週卡、間歇課、推到手錶的心率）從今天起用{model}區間；已推到手錶的課會重推一次"
+                       "（自動推送關閉時，課表上會標「要重推」）。訓練負荷（Training load）和活動判讀照舊用 LTHR。"
+                       "想固定用某一種區間，到設定 → 心率 → 課表心率區間選。", model=b)}]
 
 
 SNOOZE = {"injury_done:": 7}            # SP-273 (injuries.DONE_SNOOZE_DAYS): 「還沒」 / ✕ hold this many days
@@ -504,29 +512,14 @@ def injury_done_rows(events: list[dict], marks: list[dict], today: str) -> list[
     return out
 
 
-def _plan_alt_ids(dismissed: dict) -> dict:
-    """A 安排適應週末 close stored before the per-trip id (`altitude:<event>:<start>:<m>:plan…`,
-    SP-258 first version) under its `altitude_plan:<event>:<start>` id, so it stays closed."""
-    out = {}
-    for k, v in dismissed.items():
-        if k.startswith("altitude:"):
-            parts = k[len("altitude:"):].rsplit(":", 3)
-            if len(parts) == 4 and parts[3].startswith("plan"):
-                out.setdefault(f"{PLAN_ALT}{parts[0]}:{parts[1]}", v)
-                continue
-        out[k] = v
-    return out
-
-
 def prune(dismissed: dict, rows: list[dict], today: str) -> dict:
-    """Dismissals whose suggestion is still computed (or a B2B / test of this week or later, or an
-    altitude_plan close before its trip starts) stay; the rest go, so a later, new suggestion shows
-    again."""
+    """Dismissals whose suggestion is still computed (or a B2B / test of this week or later) stay;
+    the rest go, so a later, new suggestion shows again."""
     ids = {r["id"] for r in rows}
     keys = {snooze_key(i) for i in ids}
     mon = _monday(today)
     keep = {}
-    for k, v in _plan_alt_ids(dismissed or {}).items():
+    for k, v in (dismissed or {}).items():
         if v.get("action") == SNOOZED:
             # SP-507: until its day, and after it while the suggestion (any week of it) is still computed
             if str(v.get("until") or "") > today or v.get("key") in keys:
@@ -535,9 +528,28 @@ def prune(dismissed: dict, rows: list[dict], today: str) -> dict:
         if v.get("action") == "declined" and decline_key(k):            # SP-515: until 恢復 (restore)
             keep[k] = v
             continue
-        if k in ids or (v.get("week") and v["week"] >= mon) or (k.startswith(PLAN_ALT) and k.rsplit(":", 1)[-1] >= today):
+        if k in ids or (v.get("week") and v["week"] >= mon) or _trip_ahead(k, today):
             keep[k] = v
     return keep
+
+
+def _trip_start(sid: str) -> Optional[str]:
+    """The trip's start (ISO day) of an altitude id (`altitude:<event>:<start>`, SP-546); None for any other id."""
+    if not sid.startswith(ALT):
+        return None
+    start = sid.rsplit(":", 1)[-1]
+    try:
+        dt.date.fromisoformat(start)
+    except ValueError:
+        return None
+    return start if len(start) == 10 else None
+
+
+def _trip_ahead(sid: str, today: str) -> bool:
+    """An altitude close (`altitude:<event>:<start>`, SP-546) is kept until its trip starts, even on a
+    day the row is not computed (the activities could not be read), so it never comes back."""
+    start = _trip_start(sid)
+    return bool(start) and start >= today
 
 
 def record(dismissed: dict, sid: str, action: str, now: dt.datetime, week: Optional[str] = None,
@@ -548,6 +560,9 @@ def record(dismissed: dict, sid: str, action: str, now: dt.datetime, week: Optio
     at = now.isoformat(timespec="seconds")
     if action == SNOOZED:
         until = (now.date() + dt.timedelta(days=SNOOZE_DAYS)).isoformat()
+        start = _trip_start(sid)
+        if start:       # SP-546 R1: an altitude reminder comes back the day before the trip (not 7 days later)
+            until = max(dt.date.fromisoformat(start) - dt.timedelta(days=1), now.date() + dt.timedelta(days=1)).isoformat()
         return {**(dismissed or {}), sid: {"action": action, "at": at, "until": until, "key": snooze_key(sid),
                                            "tests": list(tests or [])}}
     return {**(dismissed or {}), sid: {"action": action, "at": at, **({"week": week} if week else {})}}

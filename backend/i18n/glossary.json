@@ -26,7 +26,7 @@
     {"zh": ["模型閾值功率"], "en": "Modelled threshold power", "accept": ["threshold power"], "check": true,
      "note": "our own word (SP-391) instead of WKO5's mFTP (kept only in the WKO5 file comparison mode)"},
     {"zh": ["有氧／無氧訓練效果", "有氧訓練效果", "無氧訓練效果"], "en": "Aerobic / Anaerobic training effect", "accept": ["training effect"], "check": true,
-     "note": "SP-497 (owner 2026-10-14, Garmin's / COROS' words) instead of SP-391's 有氧／無氧效果, WKO5's TIS; 1–10, not the watch's 0–5 (said on the card)"},
+     "note": "SP-497 (owner 2026-10-14, Garmin's / COROS' words) instead of SP-391's 有氧／無氧效果, WKO5's TIS; 1–10, not the watch's 0–5 (said in the tile's ?; SP-567: no longer on the tile)"},
     {"zh": ["無氧儲備"], "en": "Anaerobic reserve", "accept": ["anaerobic reserve"], "check": true,
      "note": "SP-497 instead of SP-391's W′ 電池 (W′ balance), WKO5's dFRC"},
     {"zh": ["過度疲勞"], "en": "High Risk", "accept": ["High Risk"], "check": true,

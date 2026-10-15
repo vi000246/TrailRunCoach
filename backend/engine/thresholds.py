@@ -18,7 +18,7 @@ from backend.engine.algorithms.threshold_estimate import (
     DriftPoint, RunThreshold, estimate_aet, estimate_lthr, run_threshold, steady_drift,
 )
 from backend.engine.wko5expr.dataset import Dataset, date_to_day
-from backend.i18n import _
+from backend.i18n import N_, _
 
 WINDOWS = (90, 180)          # try 90 days, widen to 180 if too few runs
 # 「HR at CP」 is a cross-check only — never the LTHR value, never written to the
@@ -50,6 +50,23 @@ def _nan_free(x):
     if isinstance(x, dict):
         return {k: _nan_free(v) for k, v in x.items()}
     return x
+
+
+def _judged_against_cp(ds: Dataset, runs: list, tday: int):
+    """SP-572: which runs' power may say 「hard enough」 against the CP of `tday`
+    (estimate_lthr: best 30 min ≥ 95 % CP) — the runs whose power is the CP's
+    kind. The rule of racepower.athlete._pd_mftp (cp_as_of): when the CP's
+    90-day window has usable power (Stryd, or watch power with
+    power.accept_watch_power) the CP comes from it, and only those runs count;
+    without any it is the wrist-power fit (or a plan test made on the watch),
+    and every run with power counts. Wrist power reads on another scale than a
+    Stryd (~1.3–1.8 ×), so a wrist easy run judged against a Stryd CP looked
+    hard and its HR pulled the estimate down (146 for a true 170 on synthetic
+    runs, test_lthr_without_power_sp294 §5). Returns a predicate."""
+    from backend.engine.racepower import athlete as A
+    usable = any(tday - A.CP_WINDOW_DAYS < w.day < tday + 1 and A.power_ok(ds, w)
+                 and A.power_source(ds, w) != "none" for w in runs)
+    return (lambda w: A.power_ok(ds, w)) if usable else (lambda w: True)
 
 
 def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
@@ -87,21 +104,34 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
         cp_now = plan.threshold_on("cp", today) if plan is not None else None
         if cp_now is None:
             cp_now = ds.cp(runs[-1]) if runs else None
+        if cp_now is None and _has_power(ds, runs):
+            # SP-573: no plan test and no Stryd fit (Dataset.cp) but runs with power — a watch-power
+            # history. The estimate made at load (fitdataset._estimate_settings → runthr) measures
+            # them against cp_as_of, the wrist-power fit; the suggestion (threshold-estimate API,
+            # overview) takes the same route, so it gives the same value instead of nothing
+            from backend.engine.racepower import athlete as A
+            return estimate(ds, today, cp_of=lambda d: A.cp_as_of(ds, d))
     else:
         cp_now = cp_of(today)
 
+    judged = _judged_against_cp(ds, runs, tday)
+
     def pick(days):
         ws = [w for w in runs if math.floor(w.day) > tday - days and w.idx in data]
-        lts = [RunThreshold(**data[w.idx]["lt"]) for w in ws]
+        # the LTHR side only: AeT's drift points are measured against each run's own-date CP
+        lts = [RunThreshold(**data[w.idx]["lt"]) for w in ws if judged(w)]
         dps = [DriftPoint(**data[w.idx]["dp"]) for w in ws if data[w.idx]["dp"]]
         return ws, lts, dps
 
     out = {"cp": cp_now, "today": today.isoformat()}
     for days in WINDOWS:
         ws, lts, dps = pick(days)
-        lt = estimate_lthr(lts, cp_now) if cp_now else None
-        if lt and lt.value is not None or days == WINDOWS[-1]:
-            out["lthr"] = None if lt is None else {**asdict(lt), "days": days, "hr_at_cp_note": HR_AT_CP_NOTE}
+        if not cp_now:
+            out["lthr"] = no_cp_lthr()
+            break
+        lt = estimate_lthr(lts, cp_now)
+        if lt.value is not None or days == WINDOWS[-1]:
+            out["lthr"] = {**asdict(lt), "days": days, "hr_at_cp_note": HR_AT_CP_NOTE}
             break
     lthr_v = (out.get("lthr") or {}).get("value")
     for days in WINDOWS:
@@ -115,6 +145,29 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
                                 "regression" if ae.se else "estimate", ae.se)}
             break
     return out
+
+
+def _has_power(ds: Dataset, runs: list) -> bool:
+    """Some run of the window has power (Stryd or watch), the kind cp_as_of can fit. False for a
+    Dataset that cannot tell (no power_source)."""
+    from backend.engine import power_source as PS
+    from backend.engine.racepower import athlete as A
+    return any(A.power_source(ds, w) in (PS.STRYD, PS.WATCH) for w in runs)
+
+
+# SP-573 (docs/research/lthr-without-power.md §5 單 3): without a CP no LTHR comes from ordinary
+# runs — a run counts when its best 30 min is ≥ 95 % CP, and an HR- or pace-only gate is circular
+# or a lower bound only (§3.2). Say so, and point at the 30-minute test
+NO_CP_REASON = N_("沒有 CP（沒有 Stryd 功率，也沒有 CP 測試），所以不能從一般跑步估 LTHR；"
+                  "可以做一次 30 分鐘 LTHR 測試")
+
+
+def no_cp_lthr() -> dict:
+    """The `lthr` of an estimate without a CP: no value, why, and the 「安排課表」 link of the LTHR
+    test (threshold_confidence.schedule_link, the link its test suggestion carries)."""
+    from backend.engine.threshold_confidence import schedule_link
+    return {"value": None, "n": 0, "hr_at_cp": None, "n_at_cp": 0, "spread": None,
+            "reason": _(NO_CP_REASON), "days": None, "no_cp": True, "links": [schedule_link("tt30")]}
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +402,120 @@ def estimate_mhr(ds: Dataset, today: dt.date) -> dict:
                          "（濾掉光學心率尖刺：3 秒內跳 ≥ 15 bpm 又回來、超過 220、跟著步頻）"
                          + (f"；{out['dropped'][0]} 那次 {out['dropped'][1]} 比其他高太多，當成誤差不採用"
                             if out["dropped"] else ""))
+    if isinstance(memo, dict):
+        memo[mk] = out
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Hard efforts (SP-294, owner 2026-10-14): did the runs of the 365 days hold anything hard enough that
+# their 5-s peak (estimate_mhr) means something? An easy-only runner's peak is the top of his easy runs
+# — 147 against an age formula of 180 on docs/research/lthr-without-power.md §1.5 — so hr_profile.max_hr
+# prefers the age formula when the runs' value is > 10 bpm under it and nothing below counts as hard.
+# A run is hard when (first match wins, newest run first; all 推估 as markers of a hard effort):
+#   race    a race on the plan's calendar that day, or a race word in the title (threshold_confidence._race)
+#   test    an LTHR / max-HR test title (threshold_confidence.test_kind)
+#   power   road power the models may use (Dataset.power_ok) against the run's CP: the best 30 min ≥ 95 %
+#           CP (the LTHR estimate's own 「hard enough」 gate, threshold_estimate.MIN_EFFORT_OF_CP) or the
+#           best 5 min ≥ CP (above CP — the severe domain, where VO2 and HR climb towards their max)
+#   hr      the same two gates on the cleaned HR against an LTHR: the plan's (a test / typed / applied
+#           estimate), else `lthr_ref` — hr_profile passes 0.90 × the age formula, the LTHR the age route
+#           would give. Never the dataset's 0.90 × max-HR prior or the runs' own max: those come from
+#           the very value being judged (circular — §3, 「用心率自己當門檻」).
+# Cost: only asked when the runs' value is > 10 bpm under the age formula; titles first, then channels
+# (newest first, stops at the first hard run; disk-cached per run).
+# ---------------------------------------------------------------------------
+
+HARD_KEY = "hard_effort_v1"
+HARD_DAYS = 365
+HARD_LONG_S, HARD_SHORT_S = 30 * 60, 5 * 60
+HARD_SHORT_FRAC = 1.0
+
+
+def _best_mean(y, win_s: int) -> Optional[float]:
+    from backend.engine.threshold_confidence import best_mean
+    return best_mean(y, win_s)
+
+
+def _hard_by_channels(ds, w, lthr: Optional[float]) -> Optional[str]:
+    """power | hr | None for one run (the channel side of hard_efforts)."""
+    import numpy as np
+    from backend.engine import threshold_confidence as TC
+    from backend.engine.algorithms.threshold_estimate import MIN_EFFORT_OF_CP
+    t = ds.channel(w.idx, "elapsedtime")
+    if t is None:
+        return None
+    t = np.asarray(t, float)
+    c = TC.clean_hr(t, ds.channel(w.idx, "heartrate"), _cadence_spm(ds, w), ds.channel(w.idx, "speed"))
+    g = c[0] if c is not None else (np.arange(0.0, float(np.nanmax(t)) + 1.0) if len(t) else None)
+    if g is None or not len(g):
+        return None
+    pw = ds.channel(w.idx, "power") if "runningtrail" not in (w.tags or []) else None
+    ok = getattr(ds, "power_ok", None)
+    if pw is not None and (ok is None or ok(w)):
+        try:
+            cp = ds.cp(w)
+        except Exception:                   # noqa: BLE001
+            cp = None
+        from backend.engine.session_stimulus import _grid
+        p1 = _grid(t, pw, g) if cp else None
+        if p1 is not None:
+            p30, p5 = _best_mean(p1, HARD_LONG_S), _best_mean(p1, HARD_SHORT_S)
+            if (p30 and p30 >= MIN_EFFORT_OF_CP * cp) or (p5 and p5 >= HARD_SHORT_FRAC * cp):
+                return "power"
+    if lthr and c is not None:
+        h30, h5 = _best_mean(c[1], HARD_LONG_S), _best_mean(c[1], HARD_SHORT_S)
+        if (h30 and h30 >= MIN_EFFORT_OF_CP * lthr) or (h5 and h5 >= HARD_SHORT_FRAC * lthr):
+            return "hr"
+    return None
+
+
+def hard_efforts(ds: Dataset, today: dt.date, lthr_ref: Optional[float] = None) -> list:
+    """[[date ISO, why]] of the newest hard run (the note above; why: race | test | power | hr), or []
+    when the runs of the HARD_DAYS up to `today` hold none. A run that fails to read counts as not hard."""
+    tday = int(math.floor(date_to_day(today)))
+    memo = getattr(ds, "memo", None)
+    mk = ("hard_efforts", tday, len(getattr(ds, "workouts", []) or []), lthr_ref)
+    if isinstance(memo, dict) and mk in memo:
+        return memo[mk]
+    from backend.engine import threshold_confidence as TC
+    from backend.engine import workout_review as WR
+    from backend.engine.wko5expr.dataset import day_to_date
+    runs = sorted((w for w in ds.workouts if w.sport == "run" and tday - HARD_DAYS < math.floor(w.day) <= tday),
+                  key=lambda w: -w.day)
+    out = []
+    for w in runs:                          # the cheap side first: titles and the calendar
+        try:
+            title = WR._title(w)
+            why = "race" if TC._race(ds, w, title) else "test" if TC.test_kind([title]) else None
+        except Exception:                   # noqa: BLE001
+            why = None
+        if why:
+            out = [[day_to_date(w.day).isoformat(), why]]
+            break
+    if not out:
+        plan = getattr(ds, "plan", None)
+        lthr = None
+        try:
+            from backend.engine.planning import threshold_row
+            r = threshold_row(plan, "lthr", today) if plan is not None else None
+            lthr = float(r["value"]) if r else None
+        except Exception:                   # noqa: BLE001
+            lthr = None
+        lthr = lthr or (float(lthr_ref) if lthr_ref else None)
+        cached = getattr(ds, "cached_series", None)
+        for w in runs:
+            def compute(w=w):
+                return _hard_by_channels(ds, w, lthr) or ""
+            try:
+                why = cached(HARD_KEY, w, compute, extra=lthr) if cached is not None else compute()
+            except Exception:               # noqa: BLE001 — an unreadable run is skipped
+                why = ""
+            if why:
+                out = [[day_to_date(w.day).isoformat(), why]]
+                break
+        if cached is not None and hasattr(ds, "flush_series"):
+            ds.flush_series()
     if isinstance(memo, dict):
         memo[mk] = out
     return out

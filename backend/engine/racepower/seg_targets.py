@@ -92,9 +92,11 @@ def vam(seg: dict) -> Optional[float]:
     return gain / t * 3600.0 if t > 0 and gain > 0 else None
 
 
-def hr_cap(plan: dict, aet: Optional[float], lthr: Optional[float]) -> tuple[Optional[float], str]:
+def hr_cap(plan: dict, aet: Optional[float], lthr: Optional[float],
+           thr: Optional[tuple] = None) -> tuple[Optional[float], str]:
     """The race's HR cap: the trail HR model's race HR (x × LTHR) when there
-    is one, else LTHR up to 3 h and AeT beyond (推估); 百岳: AeT."""
+    is one, else LTHR up to 3 h and AeT beyond (推估); 百岳: AeT. `thr` (SP-493,
+    zonebar.threshold_hr): the 「LTHR」 cap as (bpm, label) under the 課表心率區間 in effect."""
     s = plan.get("summary") or {}
     if plan.get("type") == "baiyue":
         cap = s.get("hr_cap") or aet
@@ -105,6 +107,8 @@ def hr_cap(plan: dict, aet: Optional[float], lthr: Optional[float]) -> tuple[Opt
     hours = float(s.get("time_s") or 0.0) / 3600.0
     if hours > LONG_RACE_H and aet:
         return aet, _("AeT（> 3 h 壓在 AeT 附近，推估）")
+    if thr and thr[0]:
+        return thr[0], thr[1]
     if lthr:
         return lthr, "LTHR"
     return aet, "AeT" if aet else ""
@@ -152,7 +156,7 @@ def _walked(seg: dict, k: str) -> bool:
 
 
 def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float] = None,
-               poles: bool = False) -> list[dict]:
+               poles: bool = False, thr: Optional[tuple] = None) -> list[dict]:
     """One row per segment for the race calculator's main chart and its table, every
     plan type: the pace, power and heart-rate target that segment is run by, null where
     that measure is not a valid target there —
@@ -168,7 +172,7 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
     kind = plan.get("type")
     hike = kind == "baiyue"
     cp = ((plan.get("used") or {}).get("cp") or {}).get("value")
-    cap, cap_src = hr_cap(plan, aet, lthr)
+    cap, cap_src = hr_cap(plan, aet, lthr, thr)
     out = []
     for n, s in enumerate(plan.get("segments") or [], 1):
         k = kind_of(s)
@@ -206,7 +210,8 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
     return out
 
 
-def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float] = None) -> Optional[list[dict]]:
+def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float] = None,
+                 thr: Optional[tuple] = None) -> Optional[list[dict]]:
     """Adds `target` {n, mark, kind, basis, chips, text, badge, src} to every
     segment of a trail / 百岳 plan and returns the list; None for road."""
     kind = plan.get("type")
@@ -214,7 +219,7 @@ def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[floa
         return None
     segs = plan.get("segments") or []
     cp = ((plan.get("used") or {}).get("cp") or {}).get("value")
-    cap, cap_src = hr_cap(plan, aet, lthr)
+    cap, cap_src = hr_cap(plan, aet, lthr, thr)
     hike = kind == "baiyue"
     out = []
     for n, s in enumerate(segs, 1):

@@ -1,4 +1,4 @@
-/* Dashboard icons shared by 總覽 (overview.html), 圖表分析 本次重點 (wko5_viewer.html) and the
+/* Dashboard icons shared by 總覽 (overview.html), 圖表分析 本次重點 (charts.html) and the
  * 課表 session cards (sesschip.js).
  *
  *   <script src="/api/v1/static/dashicons.js"></script>

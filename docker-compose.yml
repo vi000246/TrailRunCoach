@@ -1,16 +1,20 @@
 # Local machine only (./deploy.sh). The NAS runs its own compose file with
 # `image: trailruncoach` and no `build:`; see docs/deploy/wko5coach.deploy.md.
 services:
-  wko5coach:
+  trailruncoach:
     build: .
-    container_name: wko5coach
+    container_name: trailruncoach
     ports:
       - "8000:8000"
     environment:
       # Keep HOME matching the host so Path.home() resolves the same paths that are stored in SQLite
       - HOME=${HOME}
     volumes:
-      - ${HOME}/.wko5coach:${HOME}/.wko5coach
+      # the data folder: ~/.trailruncoach. An install from before SP-498 keeps ~/.wko5coach (its DB
+      # holds absolute paths under it, so it is never renamed): TRC_DATA_FOLDER=.wko5coach in .env,
+      # which deploy.sh sets by itself when only ~/.wko5coach exists
+      - ${HOME}/${TRC_DATA_FOLDER:-.trailruncoach}:${HOME}/${TRC_DATA_FOLDER:-.trailruncoach}
+      # the comparison folder (owner only; optional)
       - ${HOME}/WKO5:${HOME}/WKO5
     restart: unless-stopped
 

@@ -52,7 +52,8 @@ SEALED_FILES: list[Path] = []
 SEALED_DB_COLUMNS = (("sync_state", "tp_access_token"), ("sync_state", "tp_refresh_token"),
                      ("sync_state", "tp_web_cookie"), ("sync_state", "coros_access_token"),
                      ("sync_state", "coros_password_sealed"), ("sync_state", "tp_password_sealed"),
-                     ("sync_state", "garmin_token_sealed"), ("sync_state", "garmin_password_sealed"))
+                     ("sync_state", "garmin_token_sealed"), ("sync_state", "garmin_password_sealed"),
+                     ("sync_state", "intervals_token_sealed"))
 
 
 def _db_path() -> Optional[Path]:
@@ -115,7 +116,7 @@ def require_server_key() -> None:
     from backend import accounts
     if accounts.enabled() and not _env_key():
         raise ServerKeyRequired(
-            "WKO5COACH_SECRET_KEY must be set when WKO5COACH_ACCOUNTS=1 (one server key from the "
+            "TRC_SECRET_KEY must be set when TRC_ACCOUNTS=1 (one server key from the "
             f"environment; move the contents of {KEY_FILE} into it — see docs/deploy/accounts.md)")
 
 
@@ -129,8 +130,8 @@ def _fernet() -> Fernet:
         elif ciphertext_exists():
             raise SecretKeyMissing(
                 f"SECRET_KEY_MISSING: encrypted data exists but no key was found at {KEY_FILE} "
-                f"and WKO5COACH_SECRET_KEY is not set. Restore the key file or set "
-                f"WKO5COACH_SECRET_KEY — see {KEY_DOC}. A new key will not be generated. Without the key: "
+                f"and TRC_SECRET_KEY is not set. Restore the key file or set "
+                f"TRC_SECRET_KEY — see {KEY_DOC}. A new key will not be generated. Without the key: "
                 f"{RECOVER_WITHOUT_KEY}")
         else:
             key = Fernet.generate_key().decode()
@@ -140,12 +141,12 @@ def _fernet() -> Fernet:
                 os.chmod(KEY_FILE, 0o600)
             except OSError:
                 pass
-            log.warning("WKO5COACH_SECRET_KEY not set; generated %s (back it up or set the env var)",
+            log.warning("TRC_SECRET_KEY not set; generated %s (back it up or set the env var)",
                         KEY_FILE)
     try:
         return Fernet(key.encode() if isinstance(key, str) else key)
     except (ValueError, TypeError) as e:
-        raise SecretError(f"invalid WKO5COACH_SECRET_KEY / {KEY_FILE}: {e}")
+        raise SecretError(f"invalid TRC_SECRET_KEY / {KEY_FILE}: {e}")
 
 
 def reset_cache() -> None:

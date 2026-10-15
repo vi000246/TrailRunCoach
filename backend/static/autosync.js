@@ -2,7 +2,7 @@
  * 開啟網站時自動同步 — standalone, non-blocking.
  *
  * Include on any page (shell.js can add it with one line, see
- * docs/spec/wko5-coros-sync.spec.md):
+ * docs/spec/ on the sync):
  *     <script src="/api/v1/static/autosync.js" defer></script>
  * or from shell.js:
  *     import("/api/v1/static/autosync.js")   // or append a <script> tag
@@ -16,7 +16,7 @@
  */
 (function () {
   "use strict";
-  const KEY = "wko5coach.autosync.last";
+  const KEY = "trc.autosync.last";
   const MIN_GAP_MS = 10 * 60 * 1000;
   const SRC = { coros: "COROS", garmin: "Garmin", tp: "TP" };
   const T = (k, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, p) : k);
@@ -67,7 +67,7 @@
           show(`已同步 ${res}`, true);
         }
         // the 登入已過期／同步失敗 banner (session_banner.js) reads the new state
-        if (window.WKO5SessionBanner) window.WKO5SessionBanner.refresh();
+        if (window.TRCSessionBanner) window.TRCSessionBanner.refresh();
         return;
       }
       show(`同步中：${busy.map((s) => SRC[s]).join("、")}…`);
@@ -87,7 +87,7 @@
     }
   }
 
-  window.WKO5AutoSync = { run };
+  window.TRCAutoSync = { run };
   const go = () => setTimeout(run, 1500);            // after the page has painted
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go);
   else go();

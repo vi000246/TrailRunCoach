@@ -223,15 +223,15 @@ planned at.
 |---|---|---|
 | 未適應（目標太高） | rep 1 below 98 % of the band's lower bound | same step, target −5 % (ROLE:499) |
 | 未適應 | fewer reps done than planned, or the first miss is rep 2 … second-to-last | same step with rest + 1 min; a second one in a row steps back one |
-| 邊界 | HR back under AeT 60 s into the rest on < 50 % of the reps (brake only), or only the last rep missed and it fell > 5 % | the same step again |
-| 邊界 | every rep in band but time in the target zone < 85 % of the plan (`TIZ_GOAL`, 推估; interval_eval's verdict) | the same step again |
+| 邊界 | HR back under AeT 60 s into the rest on < 50 % of the reps (brake only), or only the last rep missed and it fell more than Allen's limit for the rep length below the 3rd rep (≤ 2 min 10 %, 3 min 8 %, 5 min 5 %, 10 min 4 %, ≥ 20 min 3 %; the 1st rep with < 4 reps; `last_fade_for`, SP-526) | the same step again |
+| 邊界 | every rep in band but time in the target zone < 80 % of the plan (`TIZ_GOAL`, coach consensus, SP-526; interval_eval's verdict) | the same step again |
 | 未適應（疲勞保險） | SP-110, all three: the session's 60-s HR drop (median of its reps) ≥ `FOR_FAST` = 25 % faster than the median of the same-spec sessions (rep length, rest, rest mode — `spec_key`) of the `FOR_DAYS` = 56 before it, with ≥ `FOR_MIN_N` = 5 of them; the same-spec session before it was that fast too (`FOR_STREAK` = 2); and its power missed (`interval_outcome`'s `power_ok` False) | no step forward; the note 「心率恢復變快但功率沒到，可能累積疲勞：…」 (`fatigue_check`, `backend/engine/quality_gate.py:863`); the indicator raises good / info to watch with 「這週間歇不往上加；睡眠、輕鬆跑先顧好…」. Sources Aubry 2015, Bellenger 2016, Buchheit 2014; the 25 % and 2-in-a-row are 推估 (`backend/engine/quality_gate.py:771`) |
 | 達標 | otherwise | the next ladder step |
 | 無法判定 | no bouts or no CP (the old rule counted it as 達標) | the same step again — progress only on 達標 (`unsourced-rules.md` §B4) |
 
-Thresholds: 98 % in-band, 50 % AeT-at-60 s and the 5 % last-rep fade are 推估 (doc §4.2–4.3).
-In-band, last-rep fade and the TIZ goal are the defaults; the values in effect are fitted per
-athlete (SP-69, `engine/interval_calib.py`), refitted at most every `CALIB_EVERY_DAYS` = 7 days
+Thresholds: 98 % in-band and 50 % AeT-at-60 s are 推估 (doc §4.2–4.3); the last-rep fade and the TIZ goal
+are coach consensus, the same for everyone (SP-526). The in-band tolerance is the default; the value in
+effect is fitted per athlete (SP-69, `engine/interval_calib.py`), refitted at most every `CALIB_EVERY_DAYS` = 7 days
 after a sync (SP-320 ④, `calibrate.run_safe`; the manual `POST /calib/run` always runs).
 RPE is not recorded, so the RPE rows are skipped. Reps come from power (`count_reps`, or
 `detect_efforts`). A session judged by: the structure the user edited in the 課表 editor
@@ -727,8 +727,7 @@ rule). The marker is never pushed: `plan_store.push_dict` does not carry it, so 
 session as it is now = the marker's after. Drawing: `backend/static/plan_mark.js` (`window.PlanMark`,
 strings `common.planmark.*`), used by `schedule.html` (`chipHtml`, the dialog's `#sd-mark`) and
 `overview.html` (`sessHtml`: a corner badge on the day-card's icon, outside the title's ellipsis;
-the aria-label reads the label after the duration, never the glyph); the static demo's shim marks
-its local edits / additions ✎ (`backend/demo/static_shim.js` `opPatch` / `opAdd`). The loader selects
+the aria-label reads the label after the duration, never the glyph). The loader selects
 only the columns it needs and parses `after_json` for `restore` rows only; no extra
 `(status, created_at)` index — `status` is indexed already, the rows are one per run, and the
 schema evolution (`db/database._migrate_schema`) only adds columns. Tests:
@@ -1027,3 +1026,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-13 | feature | SP-469 | 還原成自動: an edited auto session, or a deleted one's tombstone, can go back to the generator's (`plan_store.reset_rows` / `revert`, `backend/engine/plan_store.py:610`, `:653`); it is then an unedited auto session, so the automatic run and adapt change it again like any other (rule 3 no longer protects it). `plan_reconcile(reset=True)` (依實際進度重排's 「也重置我改過的課」) does it for all of them; custom sessions, done ones, 「移到別週」 / expired tombstones and a long day an accepted 賽事模擬 replaced are never reverted. The automatic run itself never resets anything. Tests: `backend/tests/test_revert_to_auto_sp469.py` |
 | 2026-10-13 | feature | SP-437 | `plan_store.reconcile_with_adapt` runs `session_structure.apply` on the adapted weeks: a session an adapt rule rewrote (the fatigue fartlek, a step down the ladder) carries its structure's minutes / TSS like the generator's own; idempotent, so unchanged sessions stay unchanged. First run after deploy, demo athlete: 2 sessions' TSS change (outside the push window), no ↻, no re-push, no 課表待確認. Known: adapt's fatigue trim of the easy runs (`adapt._set_minutes`) on one with a stored structure (the 長爬坡有氧, `base_climb.session_fields`) is undone by its structure's time — the watch never got that trim either (not changed here) |
 | 2026-10-13 | feature | SP-437 | One-time relabel: on the first run after the structure rule (`state.structure_v` unset), items that only changed minutes / TSS / target and carry no adapt rule get rule `structure` + reason 「課表改用推到手錶的結構：時間、TSS、目標文字照結構寫（一次性）」 (`plan_auto.mark_structure`) and are left out of the 「> 3 sessions changed」 rule; the state is set once a run applies. The ↻ marker shows them under 「課表改用結構的時間、TSS、目標（一次性）」 (`plan_mark.js` RULES, common.planmark.rule.structure zh-TW / en). The +20 % week TSS rule still applies |
+| 2026-10-14 | feature | SP-526 | Interval verdict and LTHR retest by coach consensus, the same for everyone (owner 2026-10-14, SP-518 Q1-1 / Q1-2 A; `docs/research/coach-consensus-sp518/E-personalized.md`): `TIZ_GOAL` 0.85 → 0.80 (TrainingPeaks / intervals.icu / TrainerPlan 「completed」 green; `quality_gate.TIZ_GOAL`, `interval_eval.TIZ_GOAL` the same number); the last-rep fade by rep length (Hunter Allen, the table's low end: ≤ 2 min 10 %, 3 min 8 %, 5 min 5 %, 10 min 4 %, ≥ 20 min 3 %, linear between; against the 3rd rep, the 1st with < 4 reps; `quality_gate.last_fade_for`) instead of one 5 % against the 1st; the LTHR retest hint after `TEST_AGE_DAYS` 56 days. `interval_last_fade`, `interval_tiz_goal`, `lthr_test_age_days` are no longer calibration items (not listed in 設定 › 自動估算的參數, not fitted); their stored rows are left in the database and not read (the settings layer treats the keys as unknown). The texts say 「教練共識」 instead of 「預設／本人／手動」. `backend/tests/test_coach_consensus_sp526.py`; expectations changed in test_constant_calib, test_quality_gate, test_interval_verdict_why_sp521. |

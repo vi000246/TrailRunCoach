@@ -319,8 +319,8 @@ def test_fatigue_streak_is_the_last_two_easy_or_long_runs_sp404():
 
 
 def test_fatigue_streak_skips_hr_only_overhard_when_hr_quality_is_low_sp404():
-    # no power: 偏強 by HR alone (avg 165 > 94 % of LTHR 170); TSS on plan
-    hr = {"avg_hr": 165, "lthr": 170, "tss": 38}
+    # no power: 偏強 by HR alone (avg 165 > the easy cap 153 + 3, SP-565); TSS on plan
+    hr = {"avg_hr": 165, "easy_cap": {"value": 153.0}, "tss": 38}
     gw = lambda q: _streak_week(_run("easy1", "2026-09-28", 1, hr_quality=q), _run("easy2", "2026-09-29", 2, hr_quality=q))  # noqa: E731
     out, adj, _ = A.adapt(gw("low"), [], ctx(reviews={1: hr, 2: hr}))
     assert not _fatigue_adj(adj) and ids(out)["quality"]["title"] == "閾值 3×10 分"
@@ -436,7 +436,7 @@ def test_fatigue_streak_reads_sp402s_hr_quality_from_the_activity_row_sp404(monk
     ws = [FakeWorkout(start=dt.datetime(2026, 9, d, 7), sport="run", tags=["running"],
                       metrics={"distance": 8.0, "duration": 2700, "movingduration": 2700, "tss": 38.0}) for d in (28, 29)]
     ds = FakeDataset(ws, dt.date(2026, 10, 1))
-    hr = {"avg_hr": 165, "lthr": 170, "tss": 38}                 # 偏強 by HR alone (no power), TSS on plan
+    hr = {"avg_hr": 165, "easy_cap": {"value": 153.0}, "tss": 38}   # 偏強 by HR alone (no power, > cap 153 + 3), TSS on plan
 
     def run(quality):
         monkeypatch.setattr(WR, "run_hr_quality", lambda ds, w: quality)

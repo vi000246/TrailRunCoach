@@ -18,25 +18,30 @@
   const PAGES = [
     { id: "home", href: "/api/v1/overview/page", icon: I('<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/>') },
     { id: "schedule", href: "/api/v1/overview/plan/schedule/page", icon: I('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>') },
-    { id: "charts", href: "/api/v1/wko5/viewer", icon: I('<path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/>') },
+    { id: "charts", href: "/api/v1/app/viewer", icon: I('<path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/>') },
     { id: "plan", href: "/api/v1/plan/page", icon: I('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h3"/>') },
-    { id: "activity", href: "/api/v1/wko5/activities/page", icon: I('<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>') },
+    { id: "activity", href: "/api/v1/app/activities/page", icon: I('<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>') },
     { id: "routes", href: "/api/v1/routes/page", icon: I('<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/>') },
     // 賽事計算機 (the page id stays "racepower": its URL and storage keys)
     { id: "racepower", href: "/api/v1/racepower/page", icon: I('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15h.01M8.5 18h.01M12 18h3.5"/>') },
     // 傷病紀錄 (engine/injuries.py): hidden when its API answers 404 (the demo mode)
-    { id: "injuries", href: "/api/v1/wko5/injuries/page", feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
-    { id: "settings", href: "/api/v1/wko5/settings", icon: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.2 7.5l2 1.2M17.8 15.3l2 1.2M4.2 16.5l2-1.2M17.8 8.7l2-1.2"/><circle cx="12" cy="12" r="6.6"/>') },
+    { id: "injuries", href: "/api/v1/app/injuries/page", feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
+    // 操作手冊 (SP-558, api/manual.py): public, the one page a signed-out visitor's bar has
+    { id: "manual", href: "/manual", icon: I('<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8.5 7.5h7M8.5 11h5"/>') },
+    { id: "settings", href: "/api/v1/app/settings", icon: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.2 7.5l2 1.2M17.8 15.3l2 1.2M4.2 16.5l2-1.2M17.8 8.7l2-1.2"/><circle cx="12" cy="12" r="6.6"/>') },
+    // 關於 (SP-495, api/about.py): version, sources, licences, trademarks; public like the manual, last in 更多
+    { id: "about", href: "/about", icon: I('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><path d="M12 7.5h.01"/>') },
   ];
   // who this page is for (GET /api/v1/session, inlined by the server as TRC_SESSION):
   // the demo instance hides the owner-only pages and locks what it can't do
   const SESSION = window.TRC_SESSION || { mode: "owner", caps: null, user: null };
   const DEMO = SESSION.mode === "demo";
-  // the static read-only demo (backend/demo/export_static.py): no server; static_shim.js answers
-  // the requests, keeps the schedule's edits in this browser and refuses the other writes
-  const STATIC = DEMO && !!window.TRC_STATIC;
   const CAPS = new Set(SESSION.caps || []);
   const can = (cap) => !SESSION.caps || CAPS.has(cap);
+  // signed out (sign-in mode) on a public page — the manual, 關於: their links only, plus 登入; no data is asked for
+  const PUBLIC = SESSION.mode === "signed_out";
+  const PUBLIC_PAGES = new Set(["manual", "about"]);
+  if (PUBLIC) PAGES.splice(0, PAGES.length, ...PAGES.filter((p) => PUBLIC_PAGES.has(p.id)));
   if (DEMO) {
     for (const id of ["settings", "injuries"]) {
       const i = PAGES.findIndex((p) => p.id === id);
@@ -45,8 +50,10 @@
   }
   // less-used pages sit under 「更多」 (owner, 2026-10-02: the bar was too crowded)
   // 成就 is the 成就 tab of 活動列表 (2026-10-02); /api/v1/achievements/page redirects there
-  const MORE = new Set(["activity", "routes", "injuries", "settings"]);
-  for (const p of PAGES) p.more = MORE.has(p.id);
+  // 操作手冊 sits right above 設定 (SP-505: 「選單放在設定頁的上面」)
+  // 關於 (SP-495) last, under 設定
+  const MORE = new Set(["activity", "routes", "injuries", "manual", "settings", "about"]);
+  for (const p of PAGES) p.more = !PUBLIC && MORE.has(p.id);
   // SP-480: 設定's purpose names 計算模式 only for whoever may switch it (SP-464: in sign-in mode an
   // admin; the owner's app and the demo have no `login`)
   const NOMODE = !!SESSION.login && !((SESSION.membership && SESSION.membership.scopes) || []).includes("admin");
@@ -57,7 +64,8 @@
 
   const me = document.currentScript;
   const path = location.pathname.replace(/\/+$/, "");
-  const cur = PAGES.find((p) => p.id === me?.dataset.page) || PAGES.find((p) => path === p.href) || null;
+  const cur = PAGES.find((p) => p.id === me?.dataset.page) || PAGES.find((p) => path === p.href)
+    || PAGES.find((p) => p.id === "manual" && path.startsWith("/manual/")) || null;
 
   const CSS = `
   :root { --shell-top: 53px; }
@@ -148,16 +156,19 @@
   nav.setAttribute("aria-label", T("nav.label"));
   // the language switch shows the other language; remembered in the `lang` cookie (i18n.js setLocale)
   const other = L.locale === "en" ? "zh-TW" : "en";
-  nav.innerHTML = `<a class="an-brand" href="${PAGES[0].href}" title="${T("brand.title")}"><i>${PAGES[1].icon}</i><span>${T("brand")}</span></a>` +
+  const CAL_ICON = I('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>');
+  const LOGIN_ICON = I('<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M14 17l5-5-5-5"/><path d="M19 12H8"/>');
+  const login = () => `<a class="an-item an-login" href="/login?${new URLSearchParams({ next: location.pathname + location.hash })}" title="${T("account.login_title")}">
+      ${LOGIN_ICON}<span class="an-name"><span class="an-long">${T("account.login")}</span><span class="an-short">${T("account.login")}</span></span></a>`;
+  nav.innerHTML = `<a class="an-brand" href="${PUBLIC ? "/manual" : PAGES[0].href}" title="${T("brand.title")}"><i>${CAL_ICON}</i><span>${T("brand")}</span></a>` +
     PAGES.filter((p) => !p.more).map(item).join("") +
-    `<details class="an-more"><summary class="an-item"${cur && cur.more ? ' aria-current="page"' : ""} title="${T("nav.more_title")}">
+    (PUBLIC ? login() : `<details class="an-more"><summary class="an-item"${cur && cur.more ? ' aria-current="page"' : ""} title="${T("nav.more_title")}">
       ${MORE_ICON}<span class="an-name"><span class="an-long">${cur && cur.more ? `${T("nav.more")} · ${cur.name}` : T("nav.more")}</span><span class="an-short">${T("nav.more")}</span></span></summary>
-      <div class="an-menu" role="menu">${PAGES.filter((p) => p.more).map(item).join("")}</div></details>` +
+      <div class="an-menu" role="menu">${PAGES.filter((p) => p.more).map(item).join("")}</div></details>`) +
     `<button type="button" class="an-lang" lang="${other}" data-lang="${other}" title="${T("lang.title")}">${T("lang." + other)}</button>`;
   nav.querySelector(".an-lang").addEventListener("click", (e) => L.setLocale(e.currentTarget.dataset.lang));
-  if (STATIC) nav.querySelector(".an-lang").remove();      // the static demo is exported in one language
   // close 更多 on an outside click / Esc
-  const more = nav.querySelector(".an-more");
+  const more = nav.querySelector(".an-more") || { open: false, contains: () => false };
   document.addEventListener("click", (e) => { if (more.open && !more.contains(e.target)) more.open = false; });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") more.open = false; });
   // sign-in mode (SP-58): 登出 at the end of 更多, with whose account this is
@@ -184,12 +195,12 @@
   }
 
   // optional pages: drop the link when the feature is off (傷病紀錄 in the demo mode); remembered per tab
-  (async () => {
+  if (!PUBLIC) (async () => {
     const FK = "appshell.feature.injuries";
     let on = null;
     try { on = sessionStorage.getItem(FK); } catch (_) {}
     if (on == null) {
-      try { on = (await fetch("/api/v1/wko5/injuries/meta", { cache: "no-store" })).status === 404 ? "0" : "1"; } catch (_) { on = "1"; }
+      try { on = (await fetch("/api/v1/app/injuries/meta", { cache: "no-store" })).status === 404 ? "0" : "1"; } catch (_) { on = "1"; }
       try { sessionStorage.setItem(FK, on); } catch (_) {}
     }
     if (on === "0") nav.querySelectorAll('[data-feature="injuries"]').forEach((a) => a.remove());
@@ -227,7 +238,6 @@
     const r = await nativeFetch(input, { ...(init || {}), headers, credentials: "same-origin" });
     if (DEMO && (r.status === 403 || r.status === 429 || r.status === 413)) {
       r.clone().json().then((j) => {
-        if (j && j.code === "STATIC_SILENT") return;     // the static demo: a background save, refused quietly
         const d = j && (j.detail || j);
         toast((d && d.message) || T("demo.disabled"));
         if (j && j.code === "CSRF") csrfP = null;
@@ -249,7 +259,16 @@
   const SCOPES = MS ? new Set(MS.scopes || []) : null;
   const hasScope = (s) => !SCOPES || SCOPES.has(s);
   window.AppScopes = { has: hasScope, membership: MS };
-  const UPGRADE = "訂閱後可用（NT$99／月）";
+  const UPGRADE = T("scope.upgrade");
+  // SP-569 ⑤: the subscribe hint (scope.upgrade) only for what a subscription adds (membership.upgrade_scopes);
+  // a scope no plan gives (TrainingPeaks' website login …) says it is the site's own, not to subscribe
+  const UPGRADABLE = new Set((MS && MS.upgrade_scopes) || []);
+  const lockReason = (need) => {
+    const missing = need.filter((s) => !hasScope(s));
+    if (missing.some((s) => (MS.paused_sources || []).includes(s))) return T("scope.paused");
+    if (MS.role === "user" && missing.every((s) => UPGRADABLE.has(s))) return UPGRADE;
+    return T(MS.role === "user" ? "scope.site_only" : "scope.none");
+  };
   // the pages' controls by selector (so a page needn't know about plans)
   const SCOPE_SELECTORS = [
     ["calc:backtest", "#bt-run"],
@@ -267,8 +286,7 @@
       const need = el.dataset.scope.split(/\s+/).filter(Boolean);
       if (need.every(hasScope)) continue;
       el.dataset.scopeLocked = "1";
-      const paused = need.some((s) => (MS.paused_sources || []).includes(s));
-      el.title = paused ? "這個資料來源全站暫停中" : (MS.role === "user" ? UPGRADE : "你的帳號沒有這個功能");
+      el.title = lockReason(need);
       if ("disabled" in el) el.disabled = true;
       el.setAttribute("aria-disabled", "true");
       el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation(); toast(el.title); }, true);
@@ -289,8 +307,9 @@
           lastNote = Date.now();
           const what = d.label || d.scope || d.quota || "";
           toast(d.code === "QUOTA_EXCEEDED"
-            ? `${what}已用完${d.upgrade ? "；" + UPGRADE : ""}`
-            : (d.paused ? `${what}：全站暫停中` : `${what}：${d.upgrade ? UPGRADE : "你的帳號沒有這個功能"}`));
+            ? T("scope.quota_used", { what }) + (d.upgrade ? T("scope.sep") + UPGRADE : "")
+            : T("scope.what", { what, why: d.paused ? T("scope.paused_short") : d.upgrade ? UPGRADE
+              : T(MS.role === "user" ? "scope.site_only" : "scope.none") }));
         }).catch(() => {});
       }
       return r;
@@ -319,7 +338,7 @@
   // ---- sign-in mode (SP-58): a session that ended meanwhile (signed out elsewhere, expired,
   // disabled) answers 401 LOGIN_REQUIRED: back to the sign-in page, then to this page; new terms
   // answer 403 TERMS_REQUIRED: to the terms page, then back here
-  if (SESSION.login) {
+  if (SESSION.login && !PUBLIC) {
     const authedFetch = window.fetch;
     let leaving = false;
     window.fetch = async (input, init) => {
@@ -547,21 +566,6 @@
     };
     renderBanner = () => {
       const href = (id) => (PAGES.find((p) => p.id === id) || {}).href || "#";
-      if (STATIC) {
-        const edited = window.TRC_STATIC.hasEdits();
-        banner.innerHTML = `<b class="an-d-tag">${T("demo.tag")}</b>
-          <span>${T("demo.static_text")}</span>
-          <span class="an-d-try">${T("demo.try")}<a href="${href("schedule")}">${T("demo.try_schedule")}</a>·<a href="${href("racepower")}">${T("demo.try_race")}</a>·<a href="${href("plan")}">${T("demo.try_plan")}</a></span>
-          <span class="an-d-sp"></span>
-          <span class="an-d-left">${edited ? T("demo.static_edits") : T("demo.static_none")}</span>
-          <button type="button" class="an-d-reset" title="${T("demo.static_reset_title")}"${edited ? "" : " disabled"}>${T("demo.reset")}</button>`;
-        banner.querySelector(".an-d-reset").addEventListener("click", () => {
-          if (!confirm(T("demo.reset_confirm"))) return;
-          window.TRC_STATIC.reset();
-          location.reload();
-        });
-        return;
-      }
       banner.innerHTML = `<b class="an-d-tag">${T("demo.tag")}</b>
         <span>${T("demo.text")}</span>
         <span class="an-d-try">${T("demo.try")}<a href="${href("schedule")}">${T("demo.try_schedule")}</a>·<a href="${href("racepower")}">${T("demo.try_race")}</a>·<a href="${href("plan")}">${T("demo.try_plan")}</a></span>
@@ -579,8 +583,7 @@
     renderBanner();
     const mountBanner = () => nav.after(banner);
     if (document.body) mountBanner(); else document.addEventListener("DOMContentLoaded", mountBanner);
-    if (STATIC) window.addEventListener("trc-static-overlay", () => renderBanner());
-    else setInterval(() => { const el = banner.querySelector(".an-d-left"); if (el) el.textContent = left(); }, 60e3);
+    setInterval(() => { const el = banner.querySelector(".an-d-left"); if (el) el.textContent = left(); }, 60e3);
 
     // buttons / inputs marked data-cap="sync" (… push, share, thresholds.write …) are
     // locked when the session lacks the cap: disabled, with the reason on hover
@@ -595,10 +598,7 @@
       ["upload.fit", "input[type=file][accept*='.fit' i]:not([accept*='.gpx' i])"],
       ["ai", "[data-ai]"],
     ];
-    // the static demo: writes the live demo allows but a page without a server can't do
-    // (static_shim.js keeps only the schedule's session edits / rest days in the browser)
-    if (STATIC) CAP_SELECTORS.push(["static.write", window.TRC_STATIC.cfg.locks || ""]);
-    const LOCKED = STATIC ? T("demo.static_locked") : T("demo.locked");
+    const LOCKED = T("demo.locked");
     const lock = (root) => {
       if (!root.querySelectorAll) return;
       for (const [cap, sel] of CAP_SELECTORS) {
@@ -616,49 +616,145 @@
         el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation(); toast(LOCKED); }, true);
       }
     };
-    // no WKO5 comparison content in the demo (owner): the help texts' WKO5 references go
-    // 「算法參考 WKO5」/ "based on WKO5's method" (SP-391: where a method comes from) go as a whole
-    const scrub = (s) => s.replace(/（\s*(算法參考\s*)?WKO5\s*）/g, "").replace(/[，、；]\s*算法參考\s*WKO5/g, "")
-      .replace(/算法參考\s*WKO5\s*[：:，]?\s*/g, "")
-      .replace(/\s*\(based on WKO5['’]s method\)|[,;]\s*based on WKO5['’]s method/g, "")
-      .replace(/based on WKO5['’]s method[:,]?\s*/g, "").replace(/WKO5['’]s\s+/g, "")
-      .replace(/WKO5\s*(的定義|定義)?\s*[：:]\s*/g, "")
-      .replace(/(比照|對照|從)\s*WKO5\s*的?/g, "").replace(/WKO5\s*的?\s*/g, "");
-    const clean = (root) => {
-      if (!root) return;
-      if (root.nodeType === 3) { if (root.nodeValue.includes("WKO5")) root.nodeValue = scrub(root.nodeValue); return; }
-      if (root.nodeType !== 1) return;
-      const tt = root.getAttribute && root.getAttribute("title");
-      if (tt && tt.includes("WKO5")) root.setAttribute("title", scrub(tt));
-      if (!root.textContent.includes("WKO5") && !(root.innerHTML || "").includes("WKO5")) return;
-      const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
-      for (let n = w.currentNode; n; n = w.nextNode()) {
-        if (n.nodeType === 3) { if (n.nodeValue.includes("WKO5")) n.nodeValue = scrub(n.nodeValue); }
-        else for (const a of ["title", "aria-label", "placeholder", "data-tip"]) {
-          const v = n.getAttribute(a);
-          if (v && v.includes("WKO5")) n.setAttribute(a, scrub(v));
-        }
-      }
-    };
     const startLock = () => {
-      lock(document); clean(document.body);
-      if (document.title.includes("WKO5")) document.title = scrub(document.title);
+      lock(document);
       new MutationObserver((ms) => {
-        for (const m of ms) {
-          if (m.type === "attributes") { clean(m.target); continue; }
-          if (m.type === "characterData") { clean(m.target); continue; }
-          for (const n of m.addedNodes) { if (n.nodeType === 1) lock(n.parentNode || n); clean(n); }
-        }
-      }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["title"] });
+        for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) lock(n.parentNode || n);
+      }).observe(document.body, { childList: true, subtree: true });
     };
     if (document.body) startLock(); else document.addEventListener("DOMContentLoaded", startLock);
   }
+
+  // ---- ? help → the manual (SP-558) -------------------------------------------------------------
+  // A ? with data-manual="<chapter>#<section>" gets 「看手冊 →」 after its text. A page's own popup
+  // calls ManualLink.decorate(popup, button) when it shows one (and leaves it open while the pointer
+  // moves into it: ManualLink.into(mouseout event); a click inside it is the link's own). A ? whose
+  // text is only its title (the settings page) gets a small popup of its own here on a click. Every
+  // data-manual must name a section that exists (backend/tests/test_manual_sp558.py).
+  // SP-559: a popup whose text names a glossary word (/manual/terms.json: the 名詞表's :::terms) also gets
+  // a last row 「名詞表：長期訓練負荷 · 負荷平衡」 linking to those sections (at most GL_MAX, in the text's
+  // order; the words load once per page, the popup gets its row when they are there).
+  st.textContent += `
+  .an-man-row { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--line, #e1e5ea); white-space: normal; }
+  .an-man { color: var(--accent, #2563eb); font-weight: 600; text-decoration: none; }
+  .an-man:hover { text-decoration: underline; }
+  /* the gap between the ? and its popup: still the popup, so the pointer can reach the link */
+  .qtip-pop:has(.an-man)::before, .qpop:has(.an-man)::before, .an-qpop::before { content: ""; position: absolute; left: 0; right: 0; top: -9px; height: 9px; }
+  .qtip-pop:has(.an-man)::after, .qpop:has(.an-man)::after, .an-qpop::after { content: ""; position: absolute; left: 0; right: 0; bottom: -9px; height: 9px; }
+  .an-gl-lab { color: var(--muted, #6b7280); }
+  .an-gl-row .an-man { font-weight: 600; }
+  .an-qpop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line; text-align: left;
+    background: var(--panel, #fff); color: var(--text, #111); border: 1px solid var(--line, #e1e5ea); border-radius: 8px;
+    padding: 8px 10px; font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+  `;
+  const MAN_RE = /^[a-z0-9][a-z0-9-]*$/;
+  const manHref = (key) => {
+    const [c, a] = String(key || "").split("#");
+    if (!MAN_RE.test(c || "") || (a !== undefined && !MAN_RE.test(a))) return null;
+    return "/manual/" + c + (a ? "#" + a : "");
+  };
+  // a popup with a link: the pointer may move into it, and leaving it closes it (unless pinned)
+  function manLive(pop, btn) {
+    if (pop._manLive) return;
+    pop._manLive = true;
+    pop.style.pointerEvents = "auto";
+    pop.addEventListener("mouseleave", (e) => { if (!(e.relatedTarget && btn.contains(e.relatedTarget)) && !pop.dataset.pinned) pop.remove(); });
+  }
+  // ---- SP-559: glossary words → their sections
+  const GL_MAX = 4;
+  const ASCII = /^[\x20-\x7e]+$/;
+  let gl = null, glP = null;
+  function glCompile(list) {
+    const map = new Map();
+    for (const x of list || []) if (x && x.term && x.url && manHref(String(x.url).replace(/^\/manual\//, "")) === x.url && !map.has(x.term)) map.set(x.term, x.url);
+    const words = [...map.keys()].sort((a, b) => b.length - a.length);
+    const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // a Latin word (CP, LTHR, Chronic load) only as a whole word and as written (the glossary lists
+    // "Chronic load" and "chronic load"; a plain "intensity" in a sentence is not the metric); Chinese anywhere
+    const alt = words.map((w) => (ASCII.test(w) ? `(?<![A-Za-z0-9])${esc(w)}(?![A-Za-z0-9])` : esc(w)));
+    return { map, re: alt.length ? new RegExp(alt.join("|"), "g") : null };
+  }
+  const glLoad = () => glP || (glP = fetch(`/manual/terms.json?lang=${encodeURIComponent(L.locale || "zh-TW")}`, { credentials: "same-origin" })
+    .then((r) => (r && r.ok ? r.json() : null)).catch(() => null).then((j) => (gl = glCompile(j && j.terms))));
+  /** The glossary sections a text names: [{url, word}], in the text's order, at most GL_MAX, not `skip` */
+  function glFind(text, skip) {
+    const out = new Map();
+    if (!gl || !gl.re || !text) return [];
+    for (const m of String(text).matchAll(gl.re)) {
+      const url = gl.map.get(m[0]);
+      if (url && url !== skip && !out.has(url)) out.set(url, m[0]);
+      if (out.size >= GL_MAX) break;
+    }
+    return [...out].map(([url, word]) => ({ url, word }));
+  }
+  function glRow(pop, btn, text, skip) {
+    if (pop.querySelector(".an-gl-row")) return;
+    const hits = glFind(text, skip);
+    if (!hits.length) return;
+    const row = document.createElement("div");
+    row.className = "an-man-row an-gl-row";
+    const lab = document.createElement("span");
+    lab.className = "an-gl-lab"; lab.textContent = T("manual.glossary") + " ";
+    row.appendChild(lab);
+    hits.forEach((h, i) => {
+      if (i) row.appendChild(document.createTextNode(" · "));
+      const a = document.createElement("a");
+      a.className = "an-man an-gl"; a.href = h.url; a.textContent = h.word; a.title = T("manual.glossary_title");
+      row.appendChild(a);
+    });
+    pop.appendChild(row);
+    manLive(pop, btn);
+  }
+  function manDecorate(pop, btn) {
+    if (!pop || !btn) return pop;
+    const text = pop.textContent;
+    const href = btn.dataset ? manHref(btn.dataset.manual) : null;
+    if (href && !pop.querySelector(".an-man")) {
+      const row = document.createElement("div");
+      row.className = "an-man-row";
+      const a = document.createElement("a");
+      a.className = "an-man"; a.href = href; a.textContent = T("manual.see"); a.title = T("manual.see_title");
+      row.appendChild(a);
+      pop.appendChild(row);
+      manLive(pop, btn);
+    }
+    if (gl) glRow(pop, btn, text, href);
+    else glLoad().then(() => { if (pop.isConnected) glRow(pop, btn, text, href); });
+    return pop;
+  }
+  // the pointer left the ? for its popup (which has the link): keep it open
+  const manInto = (e) => !!(e && e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".qtip-pop, .qpop, .an-qpop"));
+  let qpop = null;
+  const qpopHide = () => { if (qpop) { qpop.remove(); qpop = null; } };
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest) return;
+    if (e.target.closest(".an-qpop")) return;
+    const b = e.target.closest("[data-manual][title]:not([data-tip])");
+    if (!b) { qpopHide(); return; }
+    const again = qpop && qpop._for === b;
+    qpopHide();
+    if (again) return;
+    e.preventDefault();
+    qpop = document.createElement("div");
+    qpop.className = "an-qpop"; qpop.setAttribute("role", "note"); qpop._for = b; qpop.dataset.pinned = "1";
+    qpop.textContent = b.title;
+    manDecorate(qpop, b);
+    (b.closest("dialog[open]") || document.body).appendChild(qpop);
+    const r = b.getBoundingClientRect(), w = qpop.offsetWidth, h = qpop.offsetHeight;
+    qpop.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+    qpop.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") qpopHide(); });
+  addEventListener("scroll", qpopHide, { passive: true });
+  window.ManualLink = { href: manHref, decorate: manDecorate, into: manInto, terms: glLoad, find: (t, skip) => glFind(t, skip) };
+  // the words load while the page is idle, so the first ? already has its row
+  if (!PUBLIC && !(cur && cur.id === "manual") && typeof setTimeout === "function") setTimeout(() => { glLoad(); }, 1500);
 
   // ---- dataset build progress -------------------------------------------
   // While the chart Dataset of the data source builds (first start, new FIT
   // files, a changed setting), every page that needs it waits. Instead of a
   // frozen 「載入中…」 they show the build's progress
-  // (GET /api/v1/wko5/dataset/status: 「正在處理第 350／808 筆（解析 FIT）…」):
+  // (GET /api/v1/app/dataset/status: 「正在處理第 350／808 筆（解析 FIT）…」):
   // a bar under the nav, and the text of the page's own loading placeholders.
   const PCSS = `
   .an-build { position: sticky; top: var(--shell-top, 0px); z-index: 39; display: flex; gap: 10px; align-items: center;
@@ -683,7 +779,7 @@
   let tries = 0, wasBuilding = false, wasBackfill = false;
   async function poll() {
     let s = null;
-    try { s = await (await fetch("/api/v1/wko5/dataset/status", { cache: "no-store" })).json(); } catch (_) {}
+    try { s = await (await fetch("/api/v1/app/dataset/status", { cache: "no-store" })).json(); } catch (_) {}
     const building = s && s.state === "building";
     if (building) {
       wasBuilding = true;
@@ -741,10 +837,10 @@
     // a page's first requests may start a build a moment after load
     if (++tries < 4) setTimeout(poll, [600, 1500, 4000][tries - 1] || 4000);
   }
-  setTimeout(poll, 250);
+  if (!PUBLIC) setTimeout(poll, 250);       // signed out: no one's data to wait for
   window.AppShell.datasetStatus = poll;
 
-  if (DEMO) return;          // the demo has no sync, no settings, no first-run wizard
+  if (DEMO || PUBLIC) return;  // the demo has no sync, no settings, no first-run wizard; a visitor neither
 
   // auto-sync on site open (COROS / TP, per the settings page; throttled inside autosync.js)
   const as = document.createElement("script");
@@ -761,11 +857,14 @@
     document.head.appendChild(ff);
   }
 
-  // the floating suggestion box (B2B weekends, due tests, zone retests): every page shows it
-  const sg = document.createElement("script");
-  sg.src = "/api/v1/static/suggestions.js";
-  sg.defer = true;
-  document.head.appendChild(sg);
+  // the floating suggestion box (B2B weekends, due tests, zone retests): every page shows it — but the
+  // manual (SP-558) and 關於 (SP-495), pages for reading that it would cover
+  if (!cur || !PUBLIC_PAGES.has(cur.id)) {
+    const sg = document.createElement("script");
+    sg.src = "/api/v1/static/suggestions.js";
+    sg.defer = true;
+    document.head.appendChild(sg);
+  }
 
   // 地區 tw | intl (engine/region.py): hides the Taiwan-only parts outside Taiwan
   const rg = document.createElement("script");

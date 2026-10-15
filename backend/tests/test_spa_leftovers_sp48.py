@@ -1,7 +1,7 @@
 """SP-48 (React SPA 去留) leftovers, owner decision 2026-10-07.
 
 * The two routes nobody calls any more are gone: PATCH /api/v1/workouts/{id}/activity (the
-  static pages edit an activity through PATCH /api/v1/wko5/workouts/{i}/activity) and the
+  static pages edit an activity through PATCH /api/v1/app/workouts/{i}/activity) and the
   POST /api/v1/expr/evaluate stub.
 * An older DB's AI-coach columns (athlete_settings.ai_provider / ai_api_key / ai_model; the model
   lost them with the AI coach on 2026-10-04) no longer keep the stored API key: init_db clears
@@ -32,25 +32,23 @@ def test_the_spa_only_routes_are_gone_and_the_pages_routes_stay():
     assert ("PATCH", "/api/v1/workouts/{workout_id}/activity") not in routes
     assert not [p for _m, p in routes if p.startswith("/api/v1/expr")]
     assert importlib.util.find_spec("backend.api.expr") is None
-    # what the static pages call (activity.html, wko5_viewer.html) is still mounted
+    # what the static pages call (activity.html, charts.html) is still mounted
     assert ("PATCH", "/api/v1/workouts/{workout_id}/classification") in routes
-    assert ("PATCH", "/api/v1/wko5/workouts/{i}/activity") in routes
-    assert ("PATCH", "/api/v1/wko5/activities") in routes
+    assert ("PATCH", "/api/v1/app/workouts/{i}/activity") in routes
+    assert ("PATCH", "/api/v1/app/activities") in routes
 
 
 def test_no_rule_still_names_the_removed_expr_route():
-    """The demo's write allow-list / no-sandbox / heavy rules, the static demo export's compute
-    POSTs and perf.log's areas listed the stub; the other entries keep matching."""
+    """The demo's write allow-list / no-sandbox / heavy rules and perf.log's areas listed the
+    stub; the other entries keep matching."""
     from backend import applog
     from backend import tenancy_mw as MW
-    from backend.demo import export_static as X
     gone = "/api/v1/expr/evaluate"
     assert not MW.allowed_write("POST", gone)
-    assert not MW.NO_SANDBOX.match(gone) and not MW.HEAVY.match(gone) and not X.COMPUTE_POSTS.match(gone)
+    assert not MW.NO_SANDBOX.match(gone) and not MW.HEAVY.match(gone)
     assert applog.perf_area(gone) == "other"
     for p in ("/api/v1/racepower/predict", "/api/v1/racepower/plan"):
         assert MW.allowed_write("POST", p) and MW.NO_SANDBOX.match(p) and MW.HEAVY.match(p)
-        assert X.COMPUTE_POSTS.match(p)
     assert MW.NO_SANDBOX.match("/api/v1/demo/reset") and MW.HEAVY.match("/api/v1/racepower/course/event/e1")
     assert applog.perf_area("/api/v1/workouts/{workout_id}/classification") == "chart"
 

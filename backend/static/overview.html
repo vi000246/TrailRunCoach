@@ -10,6 +10,7 @@
 <script src="/api/v1/static/plan_mark.js"></script>
 <script src="/api/v1/static/sesschip.js"></script>
 <script src="/api/v1/static/hints.js"></script>
+<script src="/api/v1/static/pmc_chart.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -153,19 +154,30 @@ details.more ul { margin: 0; padding-left: 18px; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
 .cards:has(#b2bcard[hidden]) #todocard { grid-column: 1 / -1; }
 .alerts { display: grid; gap: 6px; } .alerts[hidden] { display: none; }
-details.al { border: 1px solid var(--line); border-radius: 9px; padding: 0; border-left: 4px solid var(--lc, var(--line)); }
-details.al.good { --lc: var(--good); } details.al.watch { --lc: var(--watch); } details.al.bad { --lc: var(--bad); } details.al.info, details.al.na { --lc: var(--line); }
-details.al > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr) 12px; gap: 7px; align-items: center;
-  padding: 7px 10px; font-size: 13px; }
+/* an alert: a <details> when it has more to say (its detail), else a plain row (div.al, SP-551) */
+:is(details, div).al { border: 1px solid var(--line); border-radius: 9px; padding: 0; border-left: 4px solid var(--lc, var(--line)); }
+:is(details, div).al.good { --lc: var(--good); } :is(details, div).al.watch { --lc: var(--watch); } :is(details, div).al.bad { --lc: var(--bad); } :is(details, div).al.info, :is(details, div).al.na { --lc: var(--line); }
+details.al > summary, div.al > .al-row { list-style: none; cursor: pointer; display: grid; grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr) 12px; gap: 7px; align-items: center;
+  padding: 7px 10px; font-size: 13px; border-radius: 8px; }
 details.al > summary::-webkit-details-marker { display: none; }
-details.al > summary .di { font-size: 17px; color: var(--lc); }
+/* SP-551: a click leaves no frame on the row; the keyboard's focus still shows (:focus-visible) */
+details.al > summary:focus { outline: none; }
+details.al > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+:is(details.al > summary, div.al > .al-row) .di { font-size: 17px; color: var(--lc); }
 details.al > summary b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* phone: a long alert title wraps instead of running past the card (its full text is also in the body) */
+/* phone: a long alert title wraps instead of running past the card */
 @media (max-width: 699px) { details.al > summary b { white-space: normal; overflow-wrap: anywhere; } }
 details.al > summary .s { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 details.al > summary::after { content: "▸"; font-size: 10px; color: var(--faint); }
 details.al[open] > summary::after { content: "▾"; }
 details.al .body { padding: 0 10px 9px 35px; font-size: 12.5px; color: var(--muted); }
+/* a row with nothing to open: no ▸, its whole text wraps (nothing hidden behind an ellipsis) */
+div.al > .al-row { cursor: default; grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr); align-items: baseline; }
+div.al > .al-row b { overflow-wrap: anywhere; }
+div.al > .al-row .s { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+/* SP-551: the week notes' class-1 group (static/hints.js .hint-must) is the notes themselves, each with its
+   level's left bar — no extra red frame around them, as the other notes in this list */
+#wk-notes .hint-must { border: 0; border-radius: 0; padding: 0; margin: 0; gap: 6px; }
 .btn { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 3px 10px; cursor: pointer; border-radius: 6px; }
 .btn:hover { border-color: var(--accent); }
 .err { color: var(--bad); }
@@ -315,7 +327,7 @@ details.ind-more > .ind { margin-top: 8px; }
   <div class="cards" data-sec id="s-todo">
     <!-- the Zone 3 / Zone 5 unlock tracks (quality_gate.z5_card, SP-39); the season history is the 基礎期 chart -->
     <section id="z5card" aria-labelledby="z5-h" style="grid-column:1 / -1">
-      <h2 id="z5-h"><span data-i18n="overview.z5.title">3 區／5 區解鎖流程</span> <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer" data-i18n="overview.z5.history">歷程 →</a></h2>
+      <h2 id="z5-h"><span data-i18n="overview.z5.title">3 區／5 區解鎖流程</span> <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/app/viewer" data-i18n="overview.z5.history">歷程 →</a></h2>
       <div id="z5"><div class="loading">…</div></div>
     </section>
     <!-- 待辦與警示 at the bottom, left of B2B (full width while B2B is hidden) -->
@@ -353,7 +365,7 @@ const GLOSS = {
     "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分\n" +
     "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分\n" +
     "• 用比賽：5–10 K 比賽或計時跑\n" +
-    "CP 自動計算（算法參考 WKO5）：測試只是近 90 天功率曲線上的一次全力，課表的 CP 是這條曲線上緣擬合的模型閾值功率（Modelled threshold power）" +
+    "CP 自動計算（PD 模型擬合近 90 天功率曲線的上緣）：測試只是近 90 天功率曲線上的一次全力，課表的 CP 是這條曲線上緣擬合的模型閾值功率（Modelled threshold power）" +
     "（差 3 W 以上才換），不用另外設定；每 4–6 週測一次，賽前 10 天內不要測",
   "間歇門檻": "間歇門檻：基礎期什麼時候可以排間歇（課表偏好可以選方法，每個選項的 ? 有說明）。\n\n" +
     "自動（預設）：有實測 AeT（16 週內）而且 LTHR 不是預設值 → Uphill Athlete 差距法（LTHR ÷ AeT − 1 ≤ 10%），" +
@@ -509,10 +521,11 @@ async function loadStatus() {
 // 提示多寡 level (完整／標準／精簡) opens, folds or drops on this page — pure, run under node by the tests ----
 const OVH = {
   level: (st) => (st && ["full", "standard", "lean"].includes(st.level) ? st.level : "standard"),
-  // R5: an LTHR / max HR of low confidence with a strong signal is class 1 (the 測試 card opens in every level)
+  // R5: a max HR of low confidence with a strong signal is class 1 (the 測試 card opens in every level);
+  // SP-493: not the LTHR — its one reminder is the suggestion box's row
   thrLow(i) {
     const x = i && i.id === "testing" && i.extra && i.extra.thr_check;
-    return !!x && [x.lthr, x.hrmax].some((v) => v && v.confidence === "low" && (v.signals || []).some((g) => g.level === "strong"));
+    return !!x && [x.hrmax].some((v) => v && v.confidence === "low" && (v.signals || []).some((g) => g.level === "strong"));
   },
   // a week note of this catalog row is on the page (R16: OV8e holds the low-intensity text)
   hasNote: (plan, id) => !!(plan && (plan.notes || []).some((n) => n && n.id === id)),
@@ -722,15 +735,17 @@ function thrCheck(i, inBox) {
   if (!x) return "";
   const conf = (c) => ({ high: tD("overview.thr.conf_high"), medium: tD("overview.thr.conf_medium"),
     low: tD("overview.thr.conf_low") })[c] || c;
-  const rows = [["LTHR", x.lthr], [tD("overview.thr.hrmax"), x.hrmax]]
+  // SP-493: the max HR only — 「LTHR 不準／要重測」 is the suggestion box's one row (稍後提醒 there)
+  const rows = [[tD("overview.thr.hrmax"), x.hrmax]]
     .filter(([, v]) => v && v.value != null && v.confidence && v.confidence !== "high")
     .map(([n, v]) => `<div>${esc(tD("overview.thr.line", { name: n, v: Math.round(v.value), c: conf(v.confidence) }))}${
       q((v.signals || []).filter((s) => s.level !== "hint").map((s) => s.text).join("\n"))}</div>`);
   const sugs = (i.extra.test_suggestions || []).filter((s) => String(s.id).startsWith("thr_check:"));
   // R15 (SP-483): the suggested test is the suggestion box's — its 安排課表 links stay there
-  const links = inBox ? "" : sugs.flatMap((s) => s.links || []).map((l) => `<a class="btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join(" ");
+  // (SP-493: never the 30-min LTHR test's link — the box's row is the only place it is offered)
+  const links = inBox ? "" : sugs.flatMap((s) => s.links || []).filter((l) => l.test !== "tt30").map((l) => `<a class="btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join(" ");
   if (!rows.length && !links) return "";
-  const dg = x.diagnosis && x.diagnosis.text ? `<div class="meta">${esc(x.diagnosis.text)}</div>` : "";
+  const dg = x.diagnosis && x.diagnosis.text && x.diagnosis.outlier === "hrmax" ? `<div class="meta">${esc(x.diagnosis.text)}</div>` : "";
   const cool = !inBox && sugs.some((s) => s.wait_cool) ? `<div class="meta">${esc(tD("overview.thr.wait_cool"))}</div>` : "";
   return `<div class="act">${rows.join("")}${dg}${cool}${links}</div>`;
 }
@@ -861,7 +876,7 @@ function extraHtml(a) {
     // the run on a race day is the race (SP-517, as the 課表's SP-504): 比賽 / 行程, not 課表外
     const rl = raceT(a.race, "act", { name: a.race.name });
     return `<button type="button" class="sx sc act race" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`${raceT(a.race, "act_tip", { p: a.race.priority, name: a.race.name })}\n${hm(a.moving_s)} · ${tO("wk.load", { n: n0(a.tss) })}`)}">
-    ${SessChip.icon("race")}<span class="tl sc-t">${esc(rl)}</span><span></span><span class="mn num">${hm(a.moving_s)} · ${esc(tO("wk.load", { n: n0(a.tss) }))}</span></button>`;
+    ${SessChip.icon(a.race.kind === "baiyue" ? "hike" : "race")}<span class="tl sc-t">${esc(rl)}</span><span></span><span class="mn num">${hm(a.moving_s)} · ${esc(tO("wk.load", { n: n0(a.tss) }))}</span></button>`;
   }
   const se = a.session || {}, lab = se.type_label ? `${a.category_label} · ${se.type_label}` : a.category_label;
   return `<button type="button" class="sx sc act" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`課表外：${lab} ${hm(a.moving_s)} · 負荷 ${n0(a.tss)}\n點一下看摘要、配對到課表`)}">
@@ -869,7 +884,7 @@ function extraHtml(a) {
 }
 // ---- end this week card ----
 // a done session / an activity outside the plan: open it on the 課表 page (planned vs actual, the activity link)
-document.addEventListener("click", (e) => { const g = e.target.closest?.(".sx[data-go]"); if (g) { e.stopImmediatePropagation(); location.href = window.TRC_STATIC ? TRC_STATIC.href(g.dataset.go) : g.dataset.go; } }, true);
+document.addEventListener("click", (e) => { const g = e.target.closest?.(".sx[data-go]"); if (g) { e.stopImmediatePropagation(); location.href = g.dataset.go; } }, true);
 // SP-517: the plan's races (A / B / C) and 百岳 trips on the day (the 課表 calendar's `races`, SP-504) — a mark
 // written as on the 課表's day cell (「B 賽：X」, a trip 「C 行程：X」), not a card; the day is then no rest day
 const raceT = (r, k, p) => tO(`wk.${r && r.kind === "baiyue" ? "trip" : "race"}_${k}`, p);
@@ -923,9 +938,15 @@ const HP = () => (PLAN && PLAN.history_pending) || (SP && SP.summary && SP.summa
 const ctlHtml = (c0, c1) => c0 == null || c1 == null ? `長期訓練負荷（Chronic load） ${esc(HP()?.message || "–")}`
   : `長期訓練負荷（Chronic load） <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
 const tsbHtml = (t) => t == null ? "" : `下週一負荷平衡（Load balance） <b>${sgn(t)}</b>`;
-// one week note (its colour = the note's level)
-const noteHtml = (n) => `<details class="al ${esc(n.level)}"><summary>${I(n.level)}<b>${gl(String(n.text).split("：")[0])}</b><span class="s">${gl(String(n.text).split("：").slice(1).join("："))}</span></summary>
-    <div class="body">${gl(n.text)}</div></details>`;
+// one week note (its colour = the note's level): 「標題：一句」 split at the first ： (English: ": "). SP-551:
+// 「展開」 shows the note's own detail (engine/hints.make's `detail`) — a note without one is a plain row that
+// cannot open (it used to open onto its own text again)
+const noteHtml = (n) => {
+  const s = String(n.text ?? ""), m = /：|: /.exec(s), k = m ? m.index : -1;
+  const row = `${I(n.level)}<b>${gl(k < 0 ? s : s.slice(0, k))}</b><span class="s">${gl(k < 0 ? "" : s.slice(k + m[0].length))}</span>`;
+  return n.detail ? `<details class="al ${esc(n.level)}"><summary>${row}</summary><div class="body">${gl(n.detail)}</div></details>`
+    : `<div class="al ${esc(n.level)}"><div class="al-row">${row}</div></div>`;
+};
 // SP-482 (static/hints.js, engine/hints.py): the week notes through 提示多寡 — class 1 in one box, at most 3
 // reminders, the rest under 「還有 N 則提醒」; ▷ / 知道了 ones in 「詳細」. Without hints.js: every note, as before
 function drawNotes(w, st) {
@@ -1101,6 +1122,8 @@ function qShow(t) {
   const d = document.createElement("div");
   d.className = "qpop"; d.setAttribute("role", "tooltip");
   d.textContent = t.dataset.tip;
+  window.ManualLink?.decorate(d, t);            // SP-559: 「名詞表：…」 when the text names a glossary word
+  if (QT.pinned === t) d.dataset.pinned = "1";
   document.body.appendChild(d);
   const r = t.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
   d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
@@ -1110,10 +1133,11 @@ function qShow(t) {
 function qHide() { QT.el?.remove(); QT.el = null; }
 const TIPSEL = ".q, .term, [data-tip]";
 document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(TIPSEL); if (t && !QT.pinned && t.dataset.tip) qShow(t); });
-document.addEventListener("mouseout", (e) => { if (e.target.closest?.(TIPSEL) && !QT.pinned) qHide(); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(TIPSEL) && !QT.pinned && !window.ManualLink?.into(e)) qHide(); });
 document.addEventListener("focusin", (e) => { const t = e.target.closest?.(TIPSEL); if (t && t.dataset.tip && !QT.pinned) qShow(t); });
 document.addEventListener("focusout", () => { if (!QT.pinned) qHide(); });
 document.addEventListener("click", (e) => {
+  if (e.target.closest?.(".qpop")) return;      // its 名詞表 links
   const t = e.target.closest(TIPSEL);
   if (t && t.dataset.tip && !e.target.closest("summary") && QT.pinned !== t) { QT.pinned = t; qShow(t); e.preventDefault(); return; }
   if (t && QT.pinned === t) { QT.pinned = null; qHide(); return; }
@@ -1141,7 +1165,6 @@ addEventListener("scroll", () => { if (QT.pinned) qShow(QT.pinned); else qHide()
 // CTL / ATL lines and TSB bars; a bar's colour = the same Form% band (TSB ÷ yesterday's CTL) as
 // views/training.json's PMC, so a day has one colour on both pages. No zoom, no extras.
 const tO = (k, p) => (window.I18N ? I18N.t("overview." + k, p) : k);
-const TSB_BANDS = [[-0.3, "#e34948"], [-0.1, "#1baf7a"], [0.05, "#a9a1e6"], [0.25, "#6a5cc9"], [Infinity, "#eda100"]];
 const PMC_DAYS = [7, 42, 90], PMC_DAYS_DEFAULT = 42;
 const pmcDays = () => { const n = Number(ls.get("pmcDays", PMC_DAYS_DEFAULT)); return PMC_DAYS.includes(n) ? n : PMC_DAYS_DEFAULT; };
 let PMC = null, PMC_SEQ = 0, PMC_MARKS = [];
@@ -1179,10 +1202,6 @@ function renderPmc() {
   if (!PMC) return;
   const rows = PMC.slice(1).map((r, i) => ({ ...r, prev: PMC[i].ctl }));
   const ctlC = css("--s1"), atlC = css("--s2");
-  const color = (r) => {
-    const f = r.prev > 0 && r.tsb != null ? r.tsb / r.prev : 0;
-    return TSB_BANDS.find(([hi]) => f < hi)[1];
-  };
   $("pmc").setAttribute("aria-label", tO("pmc.aria", { n: pmcDays() }));
   // OV13 (SP-483): the LTHR prior's mark on the chart and its legend; 精簡 says it in the chart's ? only
   const marks = PMC_MARKS.filter((m) => rows.some((r) => r.date === m.date));
@@ -1192,24 +1211,9 @@ function renderPmc() {
     + `<span><i style="background:${atlC};height:3px"></i>${esc(tO("pmc.atl"))}</span>`
     + `<span><i style="background:linear-gradient(90deg,#1baf7a 50%,#e34948 50%)"></i>${esc(tO("pmc.tsb"))}</span>`
     + (onChart ? marks.map((m) => `<span>┆ ${esc(md(m.date))} ${esc(m.text)}</span>`).join("") : "");
-  const one = (v) => v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1);
-  chart("pmc").setOption({ animation: false, textStyle: { fontFamily: "system-ui, sans-serif" },
-    grid: { left: 36, right: 10, top: 10, bottom: 24 },
-    tooltip: { trigger: "axis", backgroundColor: css("--panel"), borderColor: css("--line"), textStyle: { color: css("--text"), fontSize: 12 },
-      formatter: (ps) => { const r = rows[ps[0].dataIndex];
-        return `<b>${esc(I18N.fmt.date(r.date, "mdw"))}</b><br>${esc(tO("pmc.ctl"))} ${one(r.ctl)}<br>${esc(tO("pmc.atl"))} ${one(r.atl)}<br>${esc(tO("pmc.tsb"))} ${r.tsb == null ? "–" : sgn(r.tsb, one)}`; } },
-    xAxis: { type: "category", data: rows.map((r) => md(r.date)), ...axisStyle(), splitLine: { show: false },
-      axisLabel: { color: css("--muted"), fontSize: 11, hideOverlap: true } },
-    yAxis: { type: "value", ...axisStyle(), splitLine: { lineStyle: { color: css("--line"), type: [3, 3] } } },
-    series: [
-      { id: "tsb", name: tO("pmc.tsb"), type: "bar", barCategoryGap: "20%", data: rows.map((r) => ({ value: r.tsb == null ? null : Math.round(r.tsb * 10) / 10, itemStyle: { color: color(r) } })) },
-      { id: "ctl", name: tO("pmc.ctl"), type: "line", data: rows.map((r) => r.ctl), showSymbol: false, z: 3, lineStyle: { width: 2.5, color: ctlC }, itemStyle: { color: ctlC },
-        // SP-289: a dashed line on the day the LTHR prior (0.90 × max HR) was replaced; the text on hover
-        markLine: { symbol: "none", silent: false, label: { show: false }, lineStyle: { type: "dashed", color: css("--muted") },
-          tooltip: { formatter: (p) => esc(p.data.text) },
-          data: (onChart ? marks : []).map((m) => ({ xAxis: md(m.date), text: m.text })) } },
-      { id: "atl", name: tO("pmc.atl"), type: "line", data: rows.map((r) => r.atl), showSymbol: false, z: 3, lineStyle: { width: 1.6, color: atlC }, itemStyle: { color: atlC } },
-    ] }, true);
+  // the drawing is static/pmc_chart.js (shared with the manual's live example, SP-558)
+  chart("pmc").setOption(PmcChart.option(rows, { css, esc, sgn, marks, onChart, label: md,
+    day: (d) => I18N.fmt.date(d, "mdw"), names: { ctl: tO("pmc.ctl"), atl: tO("pmc.atl"), tsb: tO("pmc.tsb") } }), true);
 }
 
 const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：${esc(e.message)}</p>`; };
@@ -1230,7 +1234,7 @@ $("wk-ic").innerHTML = I("time");
   if (STATUS && STATUS.history_pending) {
     const wait = async () => {
       let b = null;
-      try { b = (await (await fetch("/api/v1/wko5/dataset/status", { cache: "no-store" })).json()).backfill; } catch (_) { b = {}; }
+      try { b = (await (await fetch("/api/v1/app/dataset/status", { cache: "no-store" })).json()).backfill; } catch (_) { b = {}; }
       if (b) setTimeout(wait, 15000); else location.reload();
     };
     setTimeout(wait, 15000);

@@ -12,7 +12,7 @@ low < 80% CP, moderate 80–95%, high ≥ 95%.
 """
 from __future__ import annotations
 
-from backend.i18n import _
+from backend.i18n import N_, _
 
 PALLADINO_POWER_ZONES = [
     # (id, name, lo, hi)  — fractions of CP; hi is exclusive, None = open
@@ -141,17 +141,41 @@ SYSTEMS = {
 # the basis, hi exclusive, None = open.
 # ---------------------------------------------------------------------------
 
-# Stryd's five running-power zones, % CP (Stryd 「Power Zones」: Easy 65–80,
-# Moderate 80–90, Threshold 90–100, Interval 100–115, Repetition 115–130).
-# Below 65 % is folded into zone 1 and above 130 % into zone 5 so every
-# second has a zone.
-STRYD_ZONES = [
-    ("1", "Easy", 0.0, 0.80),
+# Stryd's five running-power zones, % CP (SP-363): the zones the Stryd app and PowerCenter show,
+# from the CP Stryd (or here: the 課表) uses. Names and uses: Stryd Help Center 「Power Zones」
+# (help.stryd.com/en/articles/6879348: Zone 1 easy / long runs, Zone 2 marathon / tempo, Zone 3
+# longer intervals / 10 K, Zone 4 intervals / 5 K, Zone 5 short intervals / sprints; its example
+# CP 252 W → Zone 1 164–202 W = 65–80 %) and Stryd's blog 「Train in Your Zones」 (2021-08-04:
+# Easy, Moderate, Threshold, Interval, Repetition; Threshold's top is CP). The edges in between
+# (80 / 90 / 100 / 115 / 130 %) are in the help article's zone chart (an image); SP-378 reads
+# Zone 1 the same way. Descriptive here: the 課表's power targets stay Palladino's.
+STRYD_POWER_ZONES = [
+    # (id, name, lo, hi) — fractions of CP, hi exclusive
+    ("1", "Easy", 0.65, 0.80),
     ("2", "Moderate", 0.80, 0.90),
     ("3", "Threshold", 0.90, 1.00),
     ("4", "Interval", 1.00, 1.15),
-    ("5", "Repetition", 1.15, None),
+    ("5", "Repetition", 1.15, 1.30),
 ]
+STRYD_SOURCE = ("Stryd Power Zones (Stryd Help Center \"Power Zones\", help.stryd.com/en/articles/6879348; "
+                "Stryd blog \"Train in Your Zones\", 2021)")
+
+
+def stryd_rows() -> list[tuple]:
+    """STRYD_POWER_ZONES for time-in-zone: below 65 % counts as Zone 1 and above 130 % as Zone 5,
+    so every second has a zone (Stryd leaves both open)."""
+    rows = list(STRYD_POWER_ZONES)
+    rows[0] = rows[0][:2] + (0.0, rows[0][3])
+    rows[-1] = rows[-1][:3] + (None,)
+    return rows
+
+
+# SP-363: the analysis page's power-zone card can switch to Stryd's five zones (like the HR card);
+# the time in zone counts every second (stryd_rows), the settings table shows Stryd's own edges
+SYSTEMS["stryd"] = {"title": N_("Stryd 功率區間（跑步）"), "unit": "W", "basis": "cp", "zones": stryd_rows()}
+POWER_SYSTEMS = ("palladino", "stryd")
+
+
 # No %HRmax zones (user decision 2026-10-01): a fixed % of HRmax puts LT
 # anywhere from 60 to 90 % HRmax and MLSS at 75–97 % (Iannetta et al. 2020,
 # MSSE 52:466; docs/research/zones-and-thresholds.md §2.1, §3.1). HR zones
@@ -200,7 +224,7 @@ def _in_zone_expr(system: str, lo, hi, threshold: Optional[str] = None) -> str:
         if hi is not None:
             conds.append(f"speed > 60/({hi}*{tpace})")
     else:
-        ch, basis = ("runpower", "cp") if system == "palladino" else ("heartrate", "lthr")
+        ch, basis = ("runpower", "cp") if system in POWER_SYSTEMS else ("heartrate", "lthr")
         basis = threshold or basis
         conds = [f"{ch} > 0"]
         if lo:
@@ -246,7 +270,7 @@ def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
             return {**out, "value": float(rows[-1].cp), "source": _("你的測試 {day}", day=rows[-1].date[:10]),
                     "date": rows[-1].date[:10], "wprime": rows[-1].wprime,
                     "wprime_source": _("測試（兩點法）") if rows[-1].wprime else None}
-        return {**out, "value": ds.cp(ref), "source": "WKO5 mFTP" if ds.settings_from == "wko5" else None}
+        return {**out, "value": ds.cp(ref), "source": "對照資料夾的 mFTP" if ds.settings_from == "wko5" else None}
     if basis == "lthr":
         # an applied estimate is labelled as one, not 「你的測試」 (zones-and-thresholds.md §3.4 change 1)
         from backend.engine.planning import threshold_row
@@ -254,11 +278,11 @@ def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
         if r is not None:
             return {**out, "value": r["value"], "source": r["label"], "date": r["date"],
                     "method": r["method"], "measured": r["measured"]}
-        return {**out, "value": ds.sport_setting("thr", ref), "source": ds.setting_label("runthr", "WKO5 設定")}
+        return {**out, "value": ds.sport_setting("thr", ref), "source": ds.setting_label("runthr", "對照資料夾設定")}
     # threshold pace: a dated setting, else the estimate
     v = ds.sport_setting("tpace", ref)
     if v is not None:
-        return {**out, "value": v, "source": ds.setting_label("runtpace", "WKO5 設定")}
+        return {**out, "value": v, "source": ds.setting_label("runtpace", "對照資料夾設定")}
     from backend.engine.thresholds import estimate_tpace
     est = estimate_tpace(ds, day)
     return {**out, "value": est.get("value"), "source": est.get("reason"),
@@ -277,7 +301,7 @@ def cp_in_effect(ds, end_day: int) -> dict:
         return {"value": None, "source": None, "date": None, "kind": None}
     ci = threshold_info(ds, "cp", ref, end_day)
     return {"value": ds.cp(ref), "kind": ci.get("kind"), "date": ci.get("date"),
-            "source": ci.get("source") or ("WKO5 mFTP" if ds.settings_from == "wko5" else ds.setting_label("runftp"))}
+            "source": ci.get("source") or ("對照資料夾的 mFTP" if ds.settings_from == "wko5" else ds.setting_label("runftp"))}
 
 
 def _no_data_reason(basis: str, T, n_runs: int, days: int) -> str:
@@ -338,8 +362,9 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
             "threshold_source": info.get("source"), "threshold_date": info.get("date"),
             "wprime": info.get("wprime"), "wprime_source": info.get("wprime_source"),
             "no_data_reason": None if total else _no_data_reason(spec["basis"], T, len(runs), days),
-            "source": SOURCE if system == "palladino" else _coros_source(spec) or "WKO5 level tables",
-            "choices": hr_choices() if spec["unit"] == "bpm" else None}
+            "source": {"palladino": SOURCE, "stryd": STRYD_SOURCE}.get(system)
+            or _coros_source(spec) or "Friel / Classic level tables",
+            "choices": hr_choices() if spec["unit"] == "bpm" else power_choices() if system in POWER_SYSTEMS else None}
 
 
 HR_SYSTEMS = ("frielhr", "classichr", "coroslthr", "coroshrr", "coroshrmax")
@@ -348,6 +373,11 @@ HR_SYSTEMS = ("frielhr", "classichr", "coroslthr", "coroshrr", "coroshrmax")
 def hr_choices() -> list[dict]:
     """The HR zone tables a 「心率區間」 card can switch between (the viewer remembers the choice)."""
     return [{"id": k, "title": SYSTEMS[k]["title"]} for k in HR_SYSTEMS]
+
+
+def power_choices() -> list[dict]:
+    """The power zone tables a 「功率區間」 card can switch between (SP-363; the viewer remembers it)."""
+    return [{"id": k, "title": _(SYSTEMS[k]["title"])} for k in POWER_SYSTEMS]
 
 
 def _coros_source(spec: dict) -> Optional[str]:
@@ -508,7 +538,7 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
     # (zones-and-thresholds.md §3.4 change 1 — an LTHR that was an applied estimate shown as 「你的測試」)
     lr = threshold_row(ds.plan, "lthr", day_to_date(ref.day)) if ref is not None else None
     planned = lr is not None
-    lthr_src = lr["label"] if planned else ds.setting_label("runthr", "WKO5 設定")
+    lthr_src = lr["label"] if planned else ds.setting_label("runthr", "對照資料夾設定")
     lthr_measured = bool(lr and lr["measured"])
     if not planned and hist and all(d == dt.date(1980, 1, 1) for d, _ in hist) and lthr_est:
         lthr, lthr_src = float(lthr_est), "自動估算（尚未套用）"
@@ -552,20 +582,12 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
             hrz = None
     rows = []
     for tid, name, plo, phi, hlo, hhi, primary, example, src in WORKOUT_TARGETS:
-        def hr(x):
-            if x is None or lthr is None:
-                return None
-            return aet if x == "aet" else x * lthr
-        h = [hr(hlo), hr(hhi)]
-        if hrz and tid in hrz["targets"]:
-            h = list(hrz["easy"]) if tid in ("z2", "long", "trail") else list(hrz["targets"][tid])
-            if tid in ("z2", "long", "trail"):
-                h[0] = None                         # the easy rows are a cap (≤), as before
+        h = target_hr(tid, hlo, hhi, lthr, aet, hrz)
         rows.append({"id": tid, "name": name, "primary": primary, "example": example, "source": src,
                      "power": [None if plo is None or not cp else plo * cp, None if phi is None or not cp else phi * cp],
                      "power_pct": [plo, phi], "hr": h})
     ci = threshold_info(ds, "cp", ref, end_day)
-    return {"cp": cp, "cp_source": ci.get("source") or ("WKO5 mFTP" if ds.settings_from == "wko5"
+    return {"cp": cp, "cp_source": ci.get("source") or ("對照資料夾的 mFTP" if ds.settings_from == "wko5"
                                                         else ds.setting_label("runftp")),
             "cp_date": ci.get("date"), "terrain_note": TERRAIN_NOTE,
             "lthr": lthr, "lthr_source": lthr_src, "lthr_measured": lthr_measured,
@@ -575,12 +597,30 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
             "aet_pm": None if aet is None else aet_uncertainty(
                 "measured" if aet_measured else "estimate" if (ar is not None or aet_est) else "friel"),
             # the easy-run HR cap of the 課表: a measured AeT, else the model's Z2 top
-            "easy_cap": None if hrz is None else {"value": float(hrz["easy"][1]), "source": hrz["easy_source"]},
+            # (HP.easy_cap — the same cap the activity review and adapt read, SP-565)
+            "easy_cap": (lambda c: c and {"value": c["value"], "source": c["source"]})(HP.easy_cap(hrz)),
             "hr_model": hrz,
             "hr_zones": hrz["label"] if hrz else "Friel % LTHR", "power_zones": "Palladino % CP", "rows": rows}
 
 
-def zones_json(cp: float | None) -> list[dict]:
+def target_hr(tid: str, hlo, hhi, lthr: Optional[float], aet: Optional[float], hrz: Optional[dict]) -> list:
+    """[lo, hi] bpm of a WORKOUT_TARGETS row: the 課表心率區間 in effect (hr_profile.plan_hr_zones:
+    its zones; the easy rows are a cap ≤ the easy-run cap), else Friel × LTHR / the AeT. One rule for
+    this week's card (training_targets) and the projected weeks (projection.target_texts, SP-493)."""
+    if hrz and tid in (hrz.get("targets") or {}):
+        if tid in ("z2", "long", "trail"):
+            return [None, (hrz.get("easy") or [None, None])[1]]     # the easy rows are a cap (≤), as before
+        return list(hrz["targets"][tid])
+
+    def hr(x):
+        if x is None or lthr is None:
+            return None
+        return aet if x == "aet" else x * lthr
+    return [hr(hlo), hr(hhi)]
+
+
+def zones_json(cp: float | None, table: list | None = None) -> list[dict]:
+    """[{id, name, lo, hi, watts}] of a power zone table (default Palladino's) at `cp`."""
     return [{"id": z, "name": n, "lo": lo, "hi": hi,
              "watts": None if not cp else [round(lo * cp), None if hi is None else round(hi * cp)]}
-            for z, n, lo, hi in PALLADINO_POWER_ZONES]
+            for z, n, lo, hi in (table or PALLADINO_POWER_ZONES)]

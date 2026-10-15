@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.models import UserSetting
 
 DEFAULT_USER = 1
-SOURCES = ("coros", "garmin", "trainingpeaks", "local")
+SOURCES = ("coros", "garmin", "trainingpeaks", "intervals", "local")
 
 DEFAULTS: dict[str, Any] = {
     # IANA zone for local workout dates; None = WKO5COACH_TZ env, then the system zone
@@ -56,6 +56,7 @@ DEFAULTS: dict[str, Any] = {
     "sync.primary_source": None,
     "sync.coros.enabled": True,
     "sync.garmin.enabled": True,
+    "sync.intervals.enabled": True,
     "sync.trainingpeaks.enabled": True,
     # log in with OAuth client credentials from TP_CLIENT_ID/SECRET or
     # ~/.wko5coach/tp_client.json (see .env.example). None = auto: on only when the
@@ -64,11 +65,23 @@ DEFAULTS: dict[str, Any] = {
     # outcome of the last run: {at, trigger, status, downloaded, checked, errors, error}
     "sync.coros.last_result": None,
     "sync.garmin.last_result": None,
+    "sync.intervals.last_result": None,
     "sync.trainingpeaks.last_result": None,
     # the last run that worked (status ok / partial): {at, trigger, downloaded}. A
     # failed run never moves it (SP-88: 上次成功同步 on the overview banner)
     "sync.coros.last_ok": None,
     "sync.garmin.last_ok": None,
+    "sync.intervals.last_ok": None,
+    # intervals.icu (SP-346, sync/intervals_client.py); internal bookkeeping, none of it a credential:
+    #   backfill  the first back-fill, newest month first: {next_newest: ISO date, oldest: ISO date,
+    #             done: bool, windows: n listed}; set at connect, moved by every sync run
+    #   seen      the account's icu_last_seen as the daily sync read it: {last_seen: ISO, at: ISO}
+    #             (free accounts unseen for 90 days go dormant; the page reminds on day 83)
+    #   pending   activities the webhook announced, not imported yet: [{id, source, device_name,
+    #             start_date_local, type, file_type}] (at most intervals_client.PENDING_MAX)
+    "sync.intervals.backfill": None,
+    "sync.intervals.seen": None,
+    "sync.intervals.pending": None,
     # the one-time backfill of COROS's post-run self-rating over the last 8 weeks (SP-231,
     # sync/coros_client.backfill_feel): {done, passes, checked, filled, at}; internal
     "sync.coros.rpe_backfill": None,
@@ -99,6 +112,9 @@ DEFAULTS: dict[str, Any] = {
     # sync when a page is opened and the last sync is older than N hours
     "sync.auto_on_open.enabled": True,
     "sync.auto_on_open.hours": 6,
+    # 背景同步 (SP-499, sync/background.py): look for new activities in the background, at an
+    # interval by how recently the account was used; the server's TRC_BG_SYNC decides first
+    "sync.background.enabled": True,
     # which data the charts / overview / race power read: source (the 資料來源
     # above, its folder only) | wko5 (cross-check). Old values (synced / coros /
     # tp) read as source (wko5expr/datasource.current_source)
@@ -112,9 +128,16 @@ DEFAULTS: dict[str, Any] = {
     # folder searched (recursively) for your own exported WKO5 views (*.wko5chart);
     # None = no imported WKO5 views (env WKO5_VIEWS_DIR wins; api/wko5views.views_dir)
     "charts.wko5_views_dir": None,
-    # power-based models (race-power envelope / CP / PD, power TSS, power effort
-    # checks) also read watch-estimated (wrist) power; False = Stryd only
+    # power-based models also read watch-estimated (wrist) power; False = Stryd only
     # (backend/engine/power_source.py). HR / pace paths always use every run.
+    # SP-574 (設定 › 功率 › 進階設定, settings.power.watch_help says the same): on, wrist power
+    # feeds the race-power model (envelope / mean-max, racepower.athlete.pd_model), power
+    # TSS (Power load; divided by the CP in effect, none → rTSS / hrTSS as before), the power
+    # effort checks, and the LTHR estimate's CP (cp_as_of fits both kinds together and
+    # thresholds.estimate judges both). NOT the 課表 / charts CP (Dataset.cp, FitFolderDataset.
+    # stryd_cp_fit): Stryd-only or a CP test the user enters, whatever this says — a wrist-power
+    # fit reads ~1.3–1.8 × a Stryd CP and would skew the power targets and power TSS. To train
+    # by wrist power: enter a CP test made with wrist power (the plan and the test then agree).
     "power.accept_watch_power": False,
     # 使用功率: False = the athlete trains by HR only — the viewer, overview and activity
     # pages hide power-only charts, cards and fields (wko5expr/power_use.py); the models
@@ -143,13 +166,18 @@ DEFAULTS: dict[str, Any] = {
     # (the first 4 weeks' mean daily TSS). Replaces athlete_settings.initial_ctl_run /
     # initial_atl_run (React app, no longer read)
     "athlete.pmc_start": None,
-    # 課表心率區間 (engine/hr_profile.py): lthr (COROS % LTHR, default) | hrr | hrmax — the
-    # 課表's HR targets only; the HR-zone charts keep their own selector
-    "plan.hr_zone_model": "lthr",
+    # 課表心率區間 (engine/hr_profile.py): auto (SP-493, default: picked by which numbers are
+    # believable) | lthr (COROS % LTHR) | hrr | hrmax — the 課表's HR targets only; the HR-zone
+    # charts keep their own selector. No stored row = never chosen = auto; a stored model stays
+    "plan.hr_zone_model": "auto",
     # its switches (engine/threshold_history.py, SP-467: 設定 → 門檻變更紀錄): [{date, from, to}], oldest
     # first, one per change, written by PUT /api/v1/plan/hr-profile; None = never switched since SP-467
     # (the switches before it were not recorded)
     "plan.hr_zone_model_history": None,
+    # SP-493: the 課表心率區間 in effect the app last saw (engine/plan_auto.check_hr_model) —
+    # {model, setting, since, from?, reason, auto?}; a switch 自動 made by itself (auto: true) is told
+    # once in the suggestion box and re-pushes what is on the watch. None = not seen yet
+    "plan.hr_zone_auto": None,
     # workout route map (viewer 單次活動): default basemap id and overlay ids;
     # the map can switch them temporarily (remembered per browser)
     "charts.map.basemap": None,               # None = by 地區 (engine/region.py): tw 魯地圖, intl OSM
@@ -174,9 +202,6 @@ DEFAULTS: dict[str, Any] = {
     # CP 測試方式 (engine/cp_protocols.py): quick 20 min all-out | standard 12′ +
     # 30′ + 3′ | race (a 5–10 K race instead). The athlete chose quick as the default.
     "plan.prefs.cp_test_protocol": "quick",
-    # 熱適應課 (engine/heat_plan.py): auto = only before a hot A/B race; off = never
-    "plan.prefs.heat": "auto",
-    "plan.prefs.heat_method": "run",          # run | overdress | bath | sauna | mixed
     # 間歇門檻 (engine/quality_gate.py): what unlocks base-phase intervals
     "plan.prefs.quality_gate": "auto",        # auto | ua_gap | friel_drift | xu_drift | plateau | weeks | none
     "plan.prefs.quality_gate_weeks": 8,       # weeks mode: base-phase weeks before intervals (2-16)
@@ -214,7 +239,7 @@ DEFAULTS: dict[str, Any] = {
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
     # 睡在高處的紀錄 (engine/altitude.py NIGHTS_KEY, SP-259): [{day, m}] — the night from `day`'s
-    # evening slept at m metres, marked on the 課表 calendar; counted by the 高度適應提醒
+    # evening slept at m metres. SP-546: no longer recorded nor read; old data is kept as it was
     "altitude.nights": [],
     # 自動調整課表 (engine/plan_auto.py): after a sync that imported an activity,
     # reconcile + adapt (engine/adapt.py) + push the next N days to COROS
@@ -275,8 +300,11 @@ DEFAULTS: dict[str, Any] = {
     # fingerprint is the same; also the one-time 「改成精簡？」 answered 不要 (hints.LEAN_ASK)
     "ui.hint_ack": [],
     # debug API for AI agents (SP-371, backend/debug_auth.py; 設定 › 進階): off = /api/v1/debug/* is 404.
-    # Can only be turned on when the server has TRC_DEBUG_PIN; the tokens are the debug_tokens table
+    # Turned on by the owner (SP-373: no server PIN); the tokens are the debug_tokens table
     "debug.api.enabled": False,
+    # a local copy pulling from the production server (SP-373, engine/upstream.py): the last pull's
+    # {at, what, counts, error}; written by the pull only (the address and token stay in the environment)
+    "upstream.last_pull": None,
     # 體重同步 (SP-472, api/weight.py): the nightly apply's last run {last_run (local date), at, status,
     # added, skipped}; written by the apply only
     "weight.sync.state": None,
@@ -302,8 +330,6 @@ PREF_ENUMS = {
     "plan.prefs.interval_target": ("power", "hr"),
     "plan.prefs.target_basis": ("auto", "hr", "power"),
     "plan.prefs.cp_test_protocol": ("quick", "standard", "race"),
-    "plan.prefs.heat": ("auto", "off"),
-    "plan.prefs.heat_method": ("run", "overdress", "bath", "sauna", "mixed"),
     "plan.prefs.quality_gate": ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none"),
     "plan.prefs.aet_test_days": ("weekday", "any"),
     "plan.prefs.aet_test_protocol": ("auto", "xu90", "ua60", "ua40", "evoke60", "friel"),
@@ -396,8 +422,8 @@ def validate(key: str, value: Any) -> None:
         resolve_tz(value, strict=True)
     if key == "athlete.primary_sport" and value not in ("auto", "trail", "road"):
         raise ValueError("primary sport must be auto, trail or road")
-    if key == "sync.primary_source" and value not in ("coros", "garmin", "trainingpeaks"):
-        raise ValueError("data source must be coros, garmin or trainingpeaks")
+    if key == "sync.primary_source" and value not in ("coros", "garmin", "trainingpeaks", "intervals"):
+        raise ValueError("data source must be coros, garmin, trainingpeaks or intervals")
     if key == "sync.schedule.daily_time" and value is not None:
         import re
         if not (isinstance(value, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value)):
@@ -405,6 +431,8 @@ def validate(key: str, value: Any) -> None:
     if key == "archive.retention_years":
         from backend.engine import fit_archive
         fit_archive.validate_years(value)
+    if key == "sync.background.enabled" and not isinstance(value, bool):
+        raise ValueError("sync.background.enabled must be true or false")
     if key == "sync.auto_on_open.hours" and not (isinstance(value, (int, float)) and 0 < value <= 168):
         raise ValueError("auto-sync threshold must be 1-168 hours")
     if key == "weight.sync.state" and value is not None and not isinstance(value, dict):
@@ -465,6 +493,9 @@ def validate(key: str, value: Any) -> None:
         if not (isinstance(value, list) and len(value) <= INJ.CUSTOM_MAX
                 and all(INJ.clean_custom(v) == v for v in value) and len(set(value)) == len(value)):
             raise ValueError(f"injury.custom_areas must be distinct labels of 1-{INJ.CUSTOM_MAX_LEN} characters")
+    if key == "sync.intervals.pending" and value is not None and not (
+            isinstance(value, list) and all(isinstance(x, dict) for x in value)):
+        raise ValueError("sync.intervals.pending must be a list of objects or null")
     if key in ("athlete.coros_profile", "athlete.garmin_profile") and value is not None \
             and not isinstance(value, dict):
         raise ValueError(f"{key} must be an object or null")
@@ -475,13 +506,15 @@ def validate(key: str, value: Any) -> None:
         from backend.engine.load_guard import parse_manual
         if parse_manual(value) is None:
             raise ValueError("athlete.pmc_start must be {date: YYYY-MM-DD, ctl, atl} (0-300) or null")
-    if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
-        raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
+    if key == "plan.hr_zone_model" and value not in ("auto", "lthr", "hrr", "hrmax"):
+        raise ValueError("plan.hr_zone_model must be auto, lthr, hrr or hrmax")
+    if key == "plan.hr_zone_auto" and value is not None and not isinstance(value, dict):
+        raise ValueError("plan.hr_zone_auto must be an object or null")
     if key == "plan.hr_zone_model_history":
         from backend.engine.threshold_history import validate_model_history
         validate_model_history(value)
     if key in ("sync.coros.rpe_backfill", "weather.rain_backfill", "sync.coros.check", "sync.trainingpeaks.check",
-               "sync.coros.consent", "sync.garmin.consent",
+               "sync.coros.consent", "sync.garmin.consent", "sync.intervals.backfill", "sync.intervals.seen",
                "sync.coros.check_weekly", "sync.trainingpeaks.check_weekly") \
             and value is not None and not isinstance(value, dict):
         raise ValueError(f"{key} must be an object or null")

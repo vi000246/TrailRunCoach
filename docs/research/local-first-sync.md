@@ -374,9 +374,128 @@ Actual 的同步做法很適合 TrailRunCoach 的**小筆、使用者自己改�
 |---|---|
 | 伺服器（現在） | 可以排程、不必開 app、token 集中保管。缺點是伺服器要負責 token 安全，所有使用者都從同一個 IP 呼叫 API |
 | 桌面 app | 可行，不會被 CORS 擋，但要開著 app 才會同步。這是 `todo-multi-user-sharing.plan.md` §10 免費版的做法 |
-| 瀏覽器或手機網頁 | COROS 和 TP 的 API 預期不會開放跨網站呼叫（CORS），所以要經過代理，等於又回到伺服器。**這一點仍未實測**（同 §1(c)） |
+| 瀏覽器或手機網頁 | 原本推估 COROS 和 TP 都會擋跨網站呼叫（CORS）。**2026-10-15 實測（§8.1）：COROS 沒擋，TP 擋**；Garmin 擋，intervals.icu 的資料 API 沒擋。所以「瀏覽器直接同步」只對一部分來源技術上做得到，TP 和 Garmin 仍要經過伺服器 |
 
-**建議：** COROS 同步維持在伺服器。這跟 Actual 的銀行同步一樣：伺服器代拿資料，所以伺服器會看到明文。
+**建議：** COROS 同步維持在伺服器。這跟 Actual 的銀行同步一樣：伺服器代拿資料，所以伺服器會看到明文。實測後這個建議不變，理由從「CORS 擋住」改成 §8.1 末尾那幾點。
+
+### 8.1 實測 2026-10-15（SP-315）
+
+**怎麼測。** 從本機用 `curl` 對各端點只送 CORS preflight（`OPTIONS`），帶 `Origin`、`Access-Control-Request-Method`、`Access-Control-Request-Headers`（請求標頭照程式實際送的：COROS 是 `accesstoken`、`yfheader`；TP、intervals.icu、Garmin 是 `authorization`）。另外對每個主機打一次**不帶任何憑證**的 `GET`，看實際回應有沒有 `Access-Control-Allow-Origin`。沒有登入、沒帶 token 或 cookie、沒讀金鑰，也沒送會寫入的請求；每個端點一到兩次。端點取自 `backend/sync/coros_client.py`、`coros_workouts.py`、`tp_client.py`、`intervals_client.py`，Garmin 取 `garminconnect` 套件用的主機。
+
+```bash
+O=https://example.com
+curl -s -i -X OPTIONS "<url>" \
+  -H "Origin: $O" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: accesstoken,yfheader,content-type" \
+  -o /dev/null -D - | grep -iE '^HTTP/|^access-control-|^vary:|^allow:|^server:'
+curl -s -i "<url>" -H "Origin: $O" -o /dev/null -D -      # 無憑證 GET
+```
+
+**結果摘要**（「能」＝回了和請求一樣的 `Access-Control-Allow-Origin`，而且允許程式要送的方法和標頭）
+
+| 來源 | 端點 | 狀態碼 | 瀏覽器能不能直接呼叫 |
+|---|---|---|---|
+| COROS | `teamapi.coros.com` 的 `/account/login`（POST）、`/activity/query`、`/activity/detail/query`、`/activity/detail/download`、`/training/schedule/query`；`teameuapi`、`teamcnapi` 的 `/activity/query` | 200 | **能**。任何 `Origin` 都原樣回傳（`https://example.com`、`http://localhost:8000`，連 `null` 也是），允許 `accesstoken, yfheader, content-type`，還帶 `Allow-Credentials: true` |
+| COROS | 無憑證 `GET /activity/query` | 200（JSON） | 實際回應也帶 `Access-Control-Allow-Origin: https://example.com` |
+| TP | `tpapi.trainingpeaks.com` 的 `/users/v3/user`、`/users/v3/token`、`/fitness/v6/athletes/0/workouts/{start}/{end}`、`…/rawfiledata/0` | 200 | **不能**。preflight 回 200 但**沒有** `Access-Control-Allow-Origin`；換成 `Origin: https://app.trainingpeaks.com` 才回這個標頭，所以是白名單，只放行 TP 自己的網站 |
+| TP | 無憑證 `GET /users/v3/user` | 401 | 沒有 `Access-Control-Allow-Origin` |
+| TP | `oauth.trainingpeaks.com/oauth/token`（POST） | 200 | 標頭上能（`Access-Control-Allow-Origin: *`），但這一步要送 client secret，不能放進網頁；拿到 token 之後要打的 `tpapi` 也被擋，所以沒用 |
+| TP | `home.trainingpeaks.com/login`（POST） | 200 | **不能**。沒有任何 `Access-Control-*`（`Origin: https://app.trainingpeaks.com` 也沒有） |
+| intervals.icu | `/api/v1/athlete/0`、`/api/v1/athlete/0/activities`、`/api/v1/activity/i1/file` | 200 | **能**。原樣回傳 `Origin`，允許 `authorization`，`Max-Age: 3600`；無憑證 `GET` 回 401 也帶 `Access-Control-Allow-Origin` |
+| intervals.icu | `/api/oauth/token`（POST） | 200 | **不能**。沒有 `Access-Control-*`；而且這步本來就要 client secret，只能在伺服器做 |
+| Garmin | `connectapi.garmin.com` 的 `/activitylist-service/…`、`/download-service/files/activity/1` | 403 | **不能**。Cloudflare 直接回 403，沒有 `Access-Control-Allow-Origin`（`Origin: https://connect.garmin.com` 也一樣）。403 可能是 Cloudflare 擋了 curl，不完全是 CORS 的判斷，但結果一樣：網頁拿不到 |
+| Garmin | `sso.garmin.com/sso/signin`（POST） | 403 | **不能**。有 `Allow-Credentials`、`Allow-Methods`，但沒有 `Access-Control-Allow-Origin` |
+
+**標頭原文（節錄）**
+
+```text
+=== OPTIONS https://teamapi.coros.com/activity/query  (ACRM: GET; ACRH: accesstoken,yfheader,content-type)
+HTTP/2 200
+vary: Origin
+vary: Access-Control-Request-Method
+vary: Access-Control-Request-Headers
+access-control-allow-origin: https://example.com
+access-control-allow-methods: GET
+access-control-allow-headers: accesstoken, yfheader, content-type
+access-control-allow-credentials: true
+
+=== OPTIONS https://teamapi.coros.com/account/login  (ACRM: POST; ACRH: content-type)
+HTTP/2 200
+access-control-allow-origin: https://example.com
+access-control-allow-methods: POST
+access-control-allow-headers: content-type
+access-control-allow-credentials: true
+
+=== OPTIONS https://teamapi.coros.com/activity/query  Origin: null
+HTTP/2 200
+access-control-allow-origin: null
+access-control-allow-methods: GET
+access-control-allow-headers: accesstoken, yfheader
+access-control-allow-credentials: true
+
+=== OPTIONS https://tpapi.trainingpeaks.com/users/v3/user  (ACRM: GET; ACRH: authorization)
+HTTP/2 200
+server: Microsoft-IIS/10.0
+access-control-allow-credentials: true
+access-control-allow-methods: GET, POST, PUT, PATCH, DELETE
+access-control-allow-headers: Content-Type, Authorization, Accept, If-Modified-Since, X-Client-Timezone
+
+=== OPTIONS https://tpapi.trainingpeaks.com/users/v3/user  Origin: https://app.trainingpeaks.com
+HTTP/2 200
+access-control-allow-origin: https://app.trainingpeaks.com
+access-control-allow-credentials: true
+access-control-allow-methods: GET, POST, PUT, PATCH, DELETE
+
+=== OPTIONS https://oauth.trainingpeaks.com/oauth/token  (ACRM: POST; ACRH: content-type)
+HTTP/2 200
+access-control-allow-methods: GET, POST
+access-control-allow-headers: Content-Type, Authorization, Accept, X-Client-Timezone
+access-control-allow-origin: *
+
+=== OPTIONS https://home.trainingpeaks.com/login  (ACRM: POST; ACRH: content-type)
+HTTP/2 200
+allow: OPTIONS, TRACE, GET, HEAD, POST
+
+=== OPTIONS https://intervals.icu/api/v1/activity/i1/file  (ACRM: GET; ACRH: authorization)
+HTTP/2 200
+access-control-allow-headers: origin, authorization, accept, content-type, x-requested-with
+access-control-allow-methods: GET, HEAD, POST, PUT, DELETE, TRACE, OPTIONS
+access-control-allow-origin: https://example.com
+access-control-max-age: 3600
+
+=== OPTIONS https://intervals.icu/api/oauth/token  (ACRM: POST; ACRH: content-type)
+HTTP/2 200
+server: cloudflare
+
+=== OPTIONS https://connectapi.garmin.com/activitylist-service/activities/search/activities  (ACRM: GET; ACRH: authorization)
+HTTP/2 403
+server: cloudflare
+
+=== OPTIONS https://sso.garmin.com/sso/signin  (ACRM: POST; ACRH: content-type)
+HTTP/2 403
+access-control-allow-credentials: true
+access-control-allow-headers: Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers
+access-control-allow-methods: GET,POST,OPTIONS
+```
+
+**沒測到的部分**
+- COROS 原始 FIT 的下載網址（活動列表回的 `fitUrl`，或 `/activity/detail/download` 回的檔案網址）在另一個檔案主機上，要登入才拿得到網址，這次沒測。就算 API 放行，那台主機不放行的話，網頁還是拿不到 FIT。
+- 只看了標頭，沒有在真的瀏覽器裡跑。preflight 放行只代表瀏覽器不會擋，不代表帶真 token 的請求一定成功。
+- 這些是 COROS 和 TP 的非公開 API，標頭隨時可能改，結論只代表 2026-10-15 當天。
+
+**結論：** 不是全部都擋。COROS 和 intervals.icu 的資料 API 技術上可以從網頁直接呼叫；TP 和 Garmin 不行，一定要經過伺服器（或桌面 app）。同步仍然維持在伺服器，理由是：
+1. TP、Garmin 本來就只能走伺服器，同步程式要留在伺服器；只為 COROS 多寫一套瀏覽器版不划算。
+2. 自動同步、`plan_auto`、推課表到手錶都要「沒開網頁也會跑」，只有伺服器做得到（§10）。
+3. COROS 放行任何網站（連 `null` 都放行），是它自己的設定，不是對第三方的承諾；非公開 API 隨時會改，不能當成產品依賴。
+4. 網頁直接呼叫 COROS，等於使用者的 COROS 密碼（MD5）和 token 存在瀏覽器裡。這對「伺服器不保管 token」有好處，但也要處理 XSS 偷 token 的風險。這是取捨，不是免費的好處。
+
+**對其他單的影響**
+- **SP-313（手機瀏覽器解析 FIT）**：不受影響。測的是「FIT 已經在手機上之後」解析多快；FIT 從我們自己的伺服器拿（同網站，沒有 CORS 問題）。只有想讓手機直接從 COROS 下載 FIT 時，才要先補測 COROS 檔案主機的 CORS。
+- **SP-314（PWA 離線唯讀快取）**：不受影響。service worker 只快取我們自己網站的課表和摘要，不碰 COROS、TP。不要把第三方 API 放進快取。
+- **SP-325（裝置自己畫圖）**：不受影響。逐秒資料從我們的伺服器拿；不要設計成直接向 COROS、TP 拿，因為 TP、Garmin 一定拿不到，只做 COROS 會變成兩套資料來源。
+- **SP-346（intervals.icu）**：OAuth 換 token 那一步一定在伺服器（沒有 CORS，也要 client secret）。資料 API 雖然網頁能直接打，同步照樣放在伺服器，和其他來源一致。
+- **`todo-multi-user-sharing.plan.md` §1(c)（純瀏覽器 PWA）**：原本「COROS 和 TP 都會擋」只對一半。TP 的部分成立（純瀏覽器版接不了 TP）；COROS 的部分不成立（純瀏覽器版技術上可以直接同步 COROS，不用代理）。
 
 ## 9. 怎麼接到現在的多租戶架構
 
@@ -429,7 +548,7 @@ Actual 的同步做法很適合 TrailRunCoach 的**小筆、使用者自己改�
 | 5 | 試做：小筆資料的變更紀錄同步（只做 `user_settings` 和 `activity_tags`） | M | 3 | `changes` 表、伺服器序號、`/api/v1/sync/changes`。用兩個瀏覽器分頁或兩個 process 模擬離線再合併，寫合併測試。**只有選了 B 才開** |
 | 6 | 試做：手機瀏覽器解析 FIT 的實測 | S | — | 在 iPhone Safari、Android Chrome 上，用 `@garmin/fitsdk` 和 Pyodide＋`fitdecode` 各解析中位數、第 90 百分位、最大的檔案，記時間和記憶體。結果決定 §7 的推估要不要改 |
 | 7 | PWA 唯讀離線快取 | S–M | — | 加 service worker，快取最近一次的課表和摘要。沒訊號時（山上）還能看今天的課。不涉及同步 |
-| 8 | 補測 COROS／TP 的 CORS | S | — | 沿用 `todo-multi-user-sharing` §1(c) 一直沒做的 preflight 實測 |
+| 8 | 補測 COROS／TP 的 CORS | S | — | 沿用 `todo-multi-user-sharing` §1(c) 一直沒做的 preflight 實測。**已做（SP-315，2026-10-15）**：COROS、intervals.icu 放行，TP、Garmin 擋；見 §8.1 |
 | 9 | `plan.json` 等整份 JSON 設定拆成資料列 | M | 3 | 一個賽事、一筆修正各一列。**只有選了 B 或 C 才需要** |
 
 ## 12. 要請使用者決定的問題
@@ -447,6 +566,35 @@ Actual 的同步做法很適合 TrailRunCoach 的**小筆、使用者自己改�
    - 如果同一個人會用桌面 app 加手機，做法 A 就得讓兩台裝置互相同步，複雜度接近本文件的 C。
    - 本研究比較傾向「伺服器也分析」（B）。
 6. **能不能刪 NAS 上的舊 `fits/` 資料夾？**（109 MB，全部是重複檔；單 2）
+
+## 13. 試做結果：小筆資料的變更紀錄同步（SP-312，2026-10-15）
+
+建議單 5 的試做，只有後端端點和測試，**預設關閉**（伺服器設 `TRC_CHANGE_SYNC=1` 才開），頁面照舊走原本的儲存端點。程式在 `backend/db/changelog.py`（規則、伺服器自己的寫入也記進去的 flush hook）、`backend/api/change_sync.py`（`POST /api/v1/sync/changes`），測試 `backend/tests/test_change_sync_sp312.py`。
+
+做法（照 §9）：
+
+- 每個租戶 DB 一張 `changes`：伺服器序號 `seq`（AUTOINCREMENT，不重複發）、變更 id、時間、表、列（設定的 key／標記的 `uid`）、欄、`set`／`add`／`remove`、值、裝置 id、schema 版本、有沒有套用。
+- 裝置送出離線佇列和上次拉到的游標 `(seq, cid)`；伺服器逐筆判定、寫進租戶 DB、編號，回傳游標之後**被改過的列的現值**（不是原始變更）。裝置直接用回來的列蓋掉自己的副本、再把還沒送的改動疊上去。合併規則只寫在伺服器一份，前端不用重寫一套。
+- 游標指到的那筆不在了（還原了備份、或以後清掉舊紀錄）→ 回 `reset` 加全部同步的列，跟新裝置一樣。
+- 過舊的 schema 回 426 `SYNC_CLIENT_TOO_OLD`（請更新）；比伺服器新的回 409（改動留在裝置上）。
+
+合併規則：
+
+- 同一欄：裝置上改的時間晚的贏（同時間比裝置 id）。裝置時鐘比伺服器快的，收到時壓到伺服器現在的時間。輸的那筆留著、標成沒套用。
+- 不同欄：都保留。
+- `tags`：**改成集合合併**，不是整個清單 LWW。裝置一次送「加一個」或「拿掉一個」，每個標籤各自比時間，所以兩台各加一個都會留下。登山杖、路況雖然存成標籤，同步時是兩個單值欄 `poles`、`surface`（LWW），不能當一般標籤加。
+- 課表偏好整組檢查（`plan_prefs.check`）：兩台各改一個上限、合起來不合法時，後到的那筆拒收（`INVALID_COMBINATION`）。
+
+試做發現的擴大代價：
+
+1. **很多設定不只是存值。** 換資料來源會搬檔案、重建去重；課表心率區間要記歷史；疼痛標記會開或併傷病事件（而且 `injury_id` 是整數 id）。試做只開放「端點只存值」的 key（`changelog.SETTING_KEYS`、`plan.prefs.*`），疼痛欄不同步。每多一張表，都要逐一看寫入端點的副作用，搬到套用之後。
+2. **兩條寫入路徑。** 頁面照舊直接寫；用 ORM 寫的會被 flush hook 記成伺服器的變更，但直接用 sqlite 寫的（例如 `race_calc_store`、`event_gpx`）不會，要另外補。
+3. **跨欄規則。** 逐欄 LWW 會拼出不合法的組合，每張表都要有像 `plan_prefs.check` 的整列檢查。
+4. **前端是最大的工作。** IndexedDB 離線佇列、裝置 id、疊回未送的改動、被拒收或被蓋掉時的提示、schema 升版。目前前端只有 SP-314 的唯讀快取。
+5. 紀錄會一直長（沒有清舊的）。以擁有者的量（58 個設定、2 筆標記）不是問題；以後要清，游標檢查會讓舊裝置自動整份重拉。
+6. 備份：`changes` 跟著 DB 快照進備份；還原後裝置會收到 `reset`，不會漏也不會錯接序號。
+
+結論：**目前不擴大。** 先用 SP-314 的唯讀快取；等真的要離線修改時，先擴到 `injury_events`（不含跟活動的連結）、`workout_templates_user`、`race_calc`（已有 `uid`、欄位單純），課表 `plan_sessions` 要先定「`edited` 優先」規則（§5.2），`plan.json` 要先拆列（建議單 9）。
 
 ---
 

@@ -1,0 +1,42 @@
+{
+  "_doc": [
+    "OSM way tags -> surface class, shared with Cairn (inReachLiveTrack v2/server/src/lib/overpass.ts classifySurface; SP-543, SP-555).",
+    "class: Cairn's five classes (dirt / gravel / paved / steps / unknown) with the SP-531 changes: an untagged path / footway / bridleway / cycleway is unknown (Q4), sac_scale >= mountain_hiking and a very bad smoothness are dirt, paving_stones / wood (boardwalk) and the other laid surfaces are paved.",
+    "group: TrailRunCoach's three groups from the user's 土徑 definition (2026-10-14): dirt = 確定土徑 (unstable ground, roots, rock), made = 確定人工 (asphalt, concrete, laid stones, boardwalk, stone steps, gravel forest roads), unsure = 不確定.",
+    "A track point farther than 50 m from every way is unknown / unsure (not in this list: it has no tags)."
+  ],
+  "groups": {"dirt": "dirt", "gravel": "made", "paved": "made", "steps": "made", "unknown": "unsure"},
+  "cases": [
+    {"tags": {"highway": "path", "surface": "ground"}, "class": "dirt", "group": "dirt", "why": "explicit dirt surface"},
+    {"tags": {"highway": "path", "surface": "rock"}, "class": "dirt", "group": "dirt", "why": "rock is unstable footing"},
+    {"tags": {"highway": "path", "surface": "grass"}, "class": "dirt", "group": "dirt", "why": "explicit grass"},
+    {"tags": {"highway": "footway", "surface": "earth"}, "class": "dirt", "group": "dirt", "why": "explicit surface beats the footway class"},
+    {"tags": {"highway": "path"}, "class": "unknown", "group": "unsure", "why": "SP-531 Q4: no surface on a path"},
+    {"tags": {"highway": "footway"}, "class": "unknown", "group": "unsure", "why": "SP-531 Q4: Yangmingshan footways are often stone steps or concrete"},
+    {"tags": {"highway": "bridleway"}, "class": "unknown", "group": "unsure", "why": "path-like, no surface"},
+    {"tags": {"highway": "cycleway"}, "class": "unknown", "group": "unsure", "why": "path-like, no surface"},
+    {"tags": {"highway": "path", "sac_scale": "hiking"}, "class": "unknown", "group": "unsure", "why": "T1 hiking says nothing about the surface"},
+    {"tags": {"highway": "path", "sac_scale": "mountain_hiking"}, "class": "dirt", "group": "dirt", "why": "sac_scale >= mountain_hiking"},
+    {"tags": {"highway": "path", "sac_scale": "demanding_alpine_hiking"}, "class": "dirt", "group": "dirt", "why": "sac_scale >= mountain_hiking"},
+    {"tags": {"highway": "path", "smoothness": "very_bad"}, "class": "dirt", "group": "dirt", "why": "very bad smoothness"},
+    {"tags": {"highway": "footway", "smoothness": "good"}, "class": "unknown", "group": "unsure", "why": "a good smoothness is not a surface"},
+    {"tags": {"highway": "track", "smoothness": "horrible"}, "class": "dirt", "group": "dirt", "why": "a horrible track is rough ground"},
+    {"tags": {"highway": "path", "surface": "asphalt", "sac_scale": "mountain_hiking"}, "class": "paved", "group": "made", "why": "an explicit surface beats sac_scale"},
+    {"tags": {"highway": "footway", "surface": "concrete"}, "class": "paved", "group": "made", "why": "concrete"},
+    {"tags": {"highway": "path", "surface": "paving_stones"}, "class": "paved", "group": "made", "why": "laid stones (user's definition)"},
+    {"tags": {"highway": "footway", "surface": "wood"}, "class": "paved", "group": "made", "why": "boardwalk (棧道)"},
+    {"tags": {"highway": "path", "surface": "sett"}, "class": "paved", "group": "made", "why": "sett"},
+    {"tags": {"highway": "steps"}, "class": "steps", "group": "made", "why": "stone steps (石階)"},
+    {"tags": {"highway": "steps", "surface": "rock"}, "class": "steps", "group": "made", "why": "steps beat a dirt surface"},
+    {"tags": {"highway": "track"}, "class": "gravel", "group": "made", "why": "a forest road without a surface (林道)"},
+    {"tags": {"highway": "track", "surface": "gravel"}, "class": "gravel", "group": "made", "why": "gravel forest road"},
+    {"tags": {"highway": "path", "surface": "compacted"}, "class": "gravel", "group": "made", "why": "compacted"},
+    {"tags": {"highway": "path", "surface": "fine_gravel"}, "class": "gravel", "group": "made", "why": "fine gravel"},
+    {"tags": {"highway": "track", "surface": "dirt"}, "class": "dirt", "group": "dirt", "why": "a dirt track"},
+    {"tags": {"highway": "service", "surface": "unpaved"}, "class": "gravel", "group": "made", "why": "Cairn's unpaved = gravel"},
+    {"tags": {"highway": "residential"}, "class": "paved", "group": "made", "why": "a road"},
+    {"tags": {"highway": "tertiary", "smoothness": "very_bad"}, "class": "paved", "group": "made", "why": "a road stays paved"},
+    {"tags": {"highway": "proposed"}, "class": "unknown", "group": "unsure", "why": "not a way you walk"},
+    {"tags": {}, "class": "unknown", "group": "unsure", "why": "no tags"}
+  ]
+}

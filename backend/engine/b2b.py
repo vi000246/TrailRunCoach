@@ -57,8 +57,8 @@ Structure (doc §2.5):
 
 The exception (doc §2.5, user-approved): an accepted B2B pushes TSB below −30 /
 −20. week_plan would make the next week a recovery week (3:1 → 2:2); instead
-the B2B week and the week after keep their volume, the 4 days after the B2B are
-easy only (no quality / test; UA「three or four light days」, 4 推估), and the
+the B2B week and the week after keep their volume, the POST_EASY_DAYS (3) days after the B2B
+are easy only (no quality / test; SP-527: Gaudette 2, Johnston 3–4 — the median), and the
 3:1 cycle continues. Not when something beyond the expected drop shows up:
 a CTL ramp at load_guard's block line (SP-63; was 8 = the old block) or — in adapt — two red-compliance
 sessions in a row.
@@ -81,7 +81,7 @@ from typing import Callable, Iterable, Optional
 
 from backend.engine import hr_profile as HP
 from backend.engine import load_guard as LG
-from backend.i18n import fmt
+from backend.i18n import M_, fmt
 
 FOLLOWERS = ("long2",)         # always 2 days (the 3-day version was dropped, 2026-10-02)
 ACCEPTED_KEY = "plan.b2b.accepted"   # user_settings: [{week, days: [d1, d2], minutes: [m1, m2], uids, at}]
@@ -95,11 +95,15 @@ LONGEST_FRAC = 0.87            # base built: longest 28 d ≥ day 1 × 0.87 (1 /
 TSB_MIN = -20.0                # week_plan's 維持量 line
 # ---- structure ----------------------------------------------------------------
 DAY2_RATIO = 0.67              # CTS 30:20 (Jones-Wilkins); 0.6–0.7 推估
-SINGLE_DAY2 = (90, 150)        # single-day ≥ 6 h event: day 2 1.5–2.5 h easy (推估, doc §2.5)
+SINGLE_DAY2 = (90, 150)        # single-day ≥ 6 h event: day 2 1.5–2.5 h easy — vert.run 〈What's Back-to-Back Training〉
+                               # (2026): Sunday 「90 minutes to 2.5 hours at an easy, conversational effort」 (SP-528)
 PAIR_SHARE = 0.70              # 推估: the B2B days ≤ 70 % of the week's minutes
 MIN_DAY2 = 60                  # 推估: a "long" day 2 is ≥ 60 min, else no B2B this week
 FUEL_MIN_H = 4.0               # Koop: a fuelling long run is ≥ 4 h
-POST_EASY_DAYS = 4             # UA / Johnston「three or four light days」; 4 推估
+# SP-527 (coach-consensus-sp518/C-long-specific-b2b.md): easy days after a B2B — Gaudette (RunnersConnect
+# 2025) no hard session for 48–72 h (2 days), Johnston (UA)「three or four light days」: median 3 (was 4,
+# UA's top). The 48-h gap between hard days still holds after them.
+POST_EASY_DAYS = 3
 # ---- detection of a done B2B --------------------------------------------------
 DETECT_MIN = 90.0              # 推估: a day counts as a long day from 90 moving minutes
 # ---- evaluation ---------------------------------------------------------------
@@ -112,7 +116,7 @@ SRC_WHEN = ("UA（專項期、longer races）；Koop（最後 2–3 週不硬塞
             "vert.run 百英里指南（最大的在賽前 4–5 週、最後 3 週不做）；每個 3:1 週期一次、次數為推估")
 SRC_DAYS = ("Koop／CTS〈Block Training〉：第 1 天較硬、總量不加；Jones-Wilkins（CTS）30:20；"
             "UA：兩天都 ≤ AeT；Burke 2011：補給 30–60 g/h；第 2 天比例 0.67、背負進度對應次數為推估")
-SRC_POST = "Johnston（UA）「three or four light days」；4 天、不改恢復週為推估"
+SRC_POST = "Gaudette（48–72 小時不排硬課）、Johnston（UA）「three or four light days」：中位數 3 天；不改恢復週為推估"
 SRC_EVAL = ("同 VAM 的心率差（無外部來源，推估）；ΔVAM@AeT（推估）；"
             "2×2 判讀依 UA、Le Meur 2013、Coyle 2001；±3 bpm、±5 % 為推估")
 
@@ -508,11 +512,13 @@ def tsb_exempt(info: Optional[dict], tsb: Optional[float], ramp: Optional[float]
     if LG.ramp_level(ramp, ramp_base) == LG.BLOCK:
         return None
     if info.get("due"):
-        return f"負荷平衡（Load balance）{tsb:+.0f}：本週有你排入的 B2B，負荷平衡下降是預期的，不改成恢復週、量不砍（推估）"
+        return M_("負荷平衡（Load balance）{tsb:+.0f}：本週有你排入的 B2B，負荷平衡下降是預期的，不改成恢復週、量不砍（推估）",
+                  tsb=tsb)
     if info.get("post"):
         p = info["post"]
-        return (f"負荷平衡（Load balance）{tsb:+.0f}：上週末 B2B（{md(p['start'])}–{md(p['end'])}）造成的預期下降，"
-                f"只把之後 {POST_EASY_DAYS} 天排輕鬆、不改成恢復週，3:1 照常（推估）")
+        return M_("負荷平衡（Load balance）{tsb:+.0f}：上週末 B2B（{a}–{b}）造成的預期下降，"
+                  "只把之後 {n} 天排輕鬆、不改成恢復週，3:1 照常（推估）",
+                  tsb=tsb, a=md(p["start"]), b=md(p["end"]), n=POST_EASY_DAYS)
     return None
 
 
@@ -604,7 +610,7 @@ def decorate(ss: list[dict], info: dict, aet: Optional[float], long_cap: Optiona
     long_s["source"] = SRC_DAYS
     for s in fol:
         i = int(s["id"][-1])
-        share = "約第 1 天的 2/3（CTS 30:20）" if not single else "1.5–2.5 小時輕鬆（推估）"
+        share = "約第 1 天的 2/3（CTS 30:20）" if not single else "1.5–2.5 小時輕鬆（vert.run）"
         s["title"] = f"B2B 第 {i} 天｜{base_title}"
         s["detail"] = (f"B2B 第 {i} 天：{share}，{s['minutes']} 分；{hr_t}，不加速；建議下坡多一點（不強制），練多日下坡"
                        f"（Bontemps 2025 重複負荷效應）。"

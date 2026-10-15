@@ -209,7 +209,8 @@ def test_size_limits(tmp_path, monkeypatch):
     run(go())
     lim = UP.limits()
     assert lim["max_files"] == UP.MAX_FILES and lim["max_request_bytes"] == UP.MAX_REQUEST_BYTES
-    assert lim["max_select"] == UP.MAX_SELECT and lim["exts"] == [".fit", ".fit.gz"]
+    assert lim["max_select"] == UP.MAX_SELECT and lim["exts"][:2] == [".fit", ".fit.gz"]
+    assert lim["exts"][2:] == [".tcx", ".tcx.gz", ".gpx", ".gpx.gz"]            # SP-349: turned into FIT
 
 
 def test_defaults_are_sane():

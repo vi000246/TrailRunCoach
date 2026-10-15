@@ -11,6 +11,7 @@ Call the debug API (SP-371, docs/debug-api.md) without hand-building HTTP: an AI
     python -m backend.scripts.debug_fetch thresholds 2026-10-05
     python -m backend.scripts.debug_fetch sync --lines 300
     python -m backend.scripts.debug_fetch export -o config.json
+    python -m backend.scripts.debug_fetch export-plan -o plan.json
 
 The token goes in its own header (X-TRC-Debug-Token) and is read from the environment only (never
 a command-line argument: it would sit in the shell history and the process list); the proxy's
@@ -33,7 +34,7 @@ from typing import Optional
 
 PATHS = {"activity": "/api/v1/debug/activity", "plan": "/api/v1/debug/plan", "day": "/api/v1/debug/day",
          "thresholds": "/api/v1/debug/thresholds", "sync": "/api/v1/debug/sync",
-         "export": "/api/v1/debug/export/config"}
+         "export": "/api/v1/debug/export/config", "export-plan": "/api/v1/debug/export/plan"}
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
@@ -107,6 +108,7 @@ def parser() -> argparse.ArgumentParser:
     p = sub.add_parser("sync", help="sync results and the app-log tail")
     p.add_argument("--lines", type=int)
     sub.add_parser("export", help="the athlete's settings (needs export:config)")
+    sub.add_parser("export-plan", help="the stored plan, every row (needs export:plan)")
     return ap
 
 

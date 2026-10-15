@@ -84,6 +84,15 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 .form .dayplan[hidden] { display: none; }
 .form .dayplan td, .form .dayplan th { padding: 2px 6px; }
 .form .dayplan .hint[hidden] { display: none; }
+/* SP-533: a GPX instead of typing each day */
+.form .dayplan .dpgpx { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin: 4px 0 6px; }
+.form .dayplan .dpgpx label { flex-direction: row; align-items: center; gap: 6px; }
+.form .dayplan .dpgpx input[type=file] { max-width: 100%; }
+.form .dayplan .dpgpx .meta { flex-basis: 100%; }
+.form .dayplan .dpgpx [hidden] { display: none; }
+.form .dayplan .dpgpx .cairnl { flex: 1 1 260px; }
+.form .dayplan .dpgpx .cairnl input { flex: 1; min-width: 0; }
+#cairnres { white-space: pre-line; }
 .hint { color: var(--warn); font-size: 12px; }
 .pri { display: inline-block; min-width: 20px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; padding: 0 4px; }
 .pri.A { background: var(--bad); color: #fff; } .pri.B { background: var(--warn); color: #fff; } .pri.C { background: var(--line); }
@@ -101,6 +110,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 <script src="/api/v1/static/shell.js" data-page="plan"></script>
 <script src="/api/v1/static/hints.js"></script>
 <script src="/api/v1/static/feasibility.js"></script>
+<script src="/api/v1/static/daysplit.js"></script>
 <header>
   <h1>賽事周期</h1>
   <span class="meta" id="todayinfo"></span>
@@ -134,6 +144,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
         <th class="num">爬升 m</th><th class="num">m/km</th><th class="num">預估時間 h</th><th class="num">倒數</th><th>備註</th><th>路線 GPX</th><th></th></tr></thead>
       <tbody id="events"></tbody>
     </table></div>
+    <div class="hint" id="cairnres" hidden></div>
     <input type="file" id="gpxpick" accept=".gpx,.fit,application/gpx+xml" hidden>
     <form class="form" id="evform">
       <input type="hidden" name="id">
@@ -151,8 +162,17 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <label>爬升 m<input type="number" name="climbing_m" step="10" min="0"></label>
       <!-- SP-114: every multi-day trip (百岳, a 分站 越野賽／其他) fills each day; the totals add up -->
       <div id="dayplanwrap" class="dayplan" hidden>
-        <div class="meta" data-i18n="plan.ev.dayplan_help">每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</div>
+        <div class="meta" data-i18n="plan.ev.dayplan_help">沒有 GPX 時，每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</div>
         <!-- SP-412: editing an old trip saved without them — the rows are not required, this asks for them -->
+        <!-- SP-533: a trip with a GPX (attached here, already stored, or to come) needn't type each day -->
+        <div class="dpgpx">
+          <span class="meta" id="dpgpxhave" hidden></span>
+          <label><span data-i18n="plan.ev.gpx_attach">附 GPX</span><input type="file" id="evgpxfile" accept=".gpx,.fit"></label>
+          <label><input type="checkbox" id="evgpxlater"><span data-i18n="plan.ev.gpx_later">之後再上傳 GPX，先不填</span></label>
+          <!-- SP-537: or the trip planned in 疊石 Cairn: its GPX + the nights marked there as the day ends -->
+          <label class="cairnl"><span data-i18n="plan.ev.cairn_attach">或貼疊石 Cairn 分享連結</span><input type="url" id="evcairn" autocomplete="off" spellcheck="false" placeholder="https://…/?gpx=…&amp;share=…"></label>
+          <div class="meta" data-i18n="plan.ev.gpx_help">附了 GPX（或勾「之後再上傳」）就不用逐日填：每天的距離和爬升從 GPX 算。存好之後按這場的「分日」（或賽事計算器的「分日預覽」）設每天的終點（營地航點、OSM 山屋、紀錄的過夜點會列成候選；Cairn 匯入的過夜點直接套用），設之前每天平均分距離（推估）。</div>
+        </div>
         <div id="dayplanold" class="hint" data-i18n="plan.ev.dayplan_old" hidden>這筆舊行程還沒填每天的距離和爬升，可以先照原樣存，總距離、總爬升也可以直接改；沒填時每天的量是用總距離、總爬升平均分的，補上會比較準。要補就每天的距離和爬升都要填。</div>
         <table><thead><tr><th></th><th class="num" data-i18n="plan.ev.day_km">距離 km</th><th class="num" data-i18n="plan.ev.day_gain">爬升 m</th>
           <th class="num" data-i18n="plan.ev.day_loss">下降 m（選填）</th></tr></thead><tbody id="dayplanrows"></tbody></table>
@@ -176,7 +196,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
        then 完備程度 (現在練得夠不夠); here, not on the overview (owner 2026-10-05); the charts are 圖表分析 → 專項期 -->
   <section id="feassec" aria-labelledby="feas-h">
     <h2 id="feas-h"><span data-i18n="plan.feas.title">賽事評估</span> <span class="meta" data-i18n="plan.feas.sub">每場比賽：來不來得及練、現在練得夠不夠</span>
-      <a id="feaschart" href="/api/v1/wko5/viewer" style="float:right" data-i18n="common.feas.chart">看專項期圖表 →</a></h2>
+      <a id="feaschart" href="/api/v1/app/viewer" style="float:right" data-i18n="common.feas.chart">看專項期圖表 →</a></h2>
     <div id="feas" aria-live="polite"></div>
   </section>
 
@@ -198,7 +218,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
   <section id="thresholds">
     <h2 data-i18n="plan.thr.title">閾值測試紀錄（LTHR／AeT／CP）</h2>
     <p class="meta"><span id="thrsum"></span>
-      <a href="/api/v1/wko5/settings#thresholds" data-i18n="plan.thr.edit">到設定修改</a></p>
+      <a href="/api/v1/app/settings#thresholds" data-i18n="plan.thr.edit">到設定修改</a></p>
   </section>
 
   <section>
@@ -249,10 +269,10 @@ function renderNow() {
   cards.push(`<div class="card"><div class="k">下一場 A 賽事</div><div class="v">${next ? esc(next.name) : "–"}</div>
     <div class="s">${next ? `${next.date}，倒數 ${next.days_to} 天` : ""}</div></div>`);
   if (c && c.dashboard) cards.push(`<div class="card"><div class="k">現在該看的圖</div><div class="v" style="font-size:16px">${esc(c.dashboard)}</div>
-    <div class="s"><a href="/api/v1/wko5/viewer?view=${encodeURIComponent("周期化訓練")}&dash=${encodeURIComponent(c.dashboard)}">圖表分析 → 我的圖表 → 周期化訓練</a></div></div>`);
+    <div class="s"><a href="/api/v1/app/viewer?view=${encodeURIComponent("周期化訓練")}&dash=${encodeURIComponent(c.dashboard)}">圖表分析 → 我的圖表 → 周期化訓練</a></div></div>`);
   const th = S.effective_thresholds;   // not `t`: that is the i18n t()
   cards.push(`<div class="card"><div class="k">目前區間用的門檻</div><div class="v" style="font-size:16px">AeT ${fmt(th.aethr.value)}${pmBadge(th.aethr.pm)} / LTHR ${fmt(th.lthr.value)} / CP ${fmt(th.cp.value)} W</div>
-    <div class="s ${th.lthr.wko5_default ? "warn" : ""}">${th.lthr.wko5_default ? t("plan.thr.lthr_default") : th.lthr.source === "plan" ? `LTHR：${esc(th.lthr.label || "季計畫")}` : "心率來自 WKO5 設定"}；AeT：${esc(th.aethr.label || "")}；${esc(t("plan.thr.cp_src", { src: th.cp.label || "–" }))}</div></div>`);
+    <div class="s ${th.lthr.wko5_default ? "warn" : ""}">${th.lthr.wko5_default ? t("plan.thr.lthr_default") : th.lthr.source === "plan" ? `LTHR：${esc(th.lthr.label || "季計畫")}` : "心率來自對照資料夾設定"}；AeT：${esc(th.aethr.label || "")}；${esc(t("plan.thr.cp_src", { src: th.cp.label || "–" }))}</div></div>`);
   $("#now").innerHTML = cards.join("");
 }
 
@@ -351,7 +371,9 @@ function renderEvents() {
 function evHints(e) {
   const tP = (k) => (window.I18N ? I18N.t("plan.ev." + k) : k), out = [];
   if (e.priority === "A" || e.priority === "B") return "";
-  if (e.day_plan_missing && e.days_to >= 0) out.push(tP("dayplan_missing"));
+  const cuts = (e.gpx?.day_splits || []).length, split = Math.max(1, e.days || 1) - 1;
+  // SP-533: a GPX trip has no rows to fill — only its day ends, set in 賽事計算器
+  if (e.day_plan_missing && e.days_to >= 0 && !(e.gpx && cuts === split)) out.push(tP(e.gpx ? "gpx_nosplit" : "dayplan_missing"));
   if (e.gpx_recommended && !e.gpx && e.days_to >= 0) out.push(tP("gpx_missing"));      // an ultra without its GPX
   return out.map((x) => `<div class="hint">⚠ ${esc(x)}</div>`).join("");
 }
@@ -359,22 +381,89 @@ function evHints(e) {
 // the event's GPX (engine/event_gpx.py): upload once here or in 賽事計算器; the calculator, the
 // コース定数 reference lines and share links reuse it
 function gpxCell(e) {
-  const g = e.gpx;
+  const g = e.gpx, tP = (k) => (window.I18N ? I18N.t("plan.ev." + k) : k);
   if (!g) return `<button class="link" data-gpxup="${e.id}" title="上傳這場賽事的 .gpx / .fit 路線；存起來之後賽事計算器、コース定数參考線都會用它">上傳</button>`;
   const t = `${g.filename}\n${fmt(g.km, 1)} km ↑${fmt(g.gain_m)} m ↓${fmt(g.loss_m)} m（平滑後）\n存成 ${Math.max(1, Math.round(g.bytes_gz / 1024))} KB（原檔 ${Math.max(1, Math.round(g.bytes_raw / 1024))} KB）・${g.uploaded_at || ""}`;
   return `<span class="meta" title="${esc(t)}">📍 ${fmt(g.km, 1)} km ↑${fmt(g.gain_m)}</span>
     <a class="link" href="${API}/events/${encodeURIComponent(e.id)}/gpx/file" title="下載原檔">下載</a>
-    <button class="link" data-gpxup="${e.id}" title="換一個 GPX">換檔</button><button class="link" data-gpxdel="${e.id}">刪除</button>`;
+    ${(e.days || 1) > 1 ? `<button class="link" data-gpxsplit="${e.id}">${esc(tP("split_btn"))}</button>` : ""}
+    <button class="link" data-gpxup="${e.id}" title="換一個 GPX">換檔</button><button class="link" data-gpxdel="${e.id}">刪除</button>${cairnCell(e)}`;
+}
+// SP-537: the trip planned in 疊石 Cairn, by its share link — the GPX and the nights marked there become
+// the event's GPX and day ends at once (the days follow; still changeable in the race calculator). The
+// link's token reads Cairn once on the server and is not kept (the row keeps the route's token-free link).
+const tC = (k, p) => (window.I18N ? I18N.t("plan.ev." + k, p) : k);
+function cairnCell(e) {
+  const src = e.gpx && e.gpx.source && e.gpx.source.kind === "cairn" ? e.gpx.source : null;
+  return (src ? ` <a class="link" href="${esc(src.url)}" target="_blank" rel="noopener noreferrer" title="${esc(tC("cairn_from"))}">⛰ Cairn ↗</a>` : "")
+    + ` <button class="link" data-cairnup="${e.id}" title="${esc(tC("cairn_tip"))}">${esc(tC(src ? "cairn_again" : e.gpx ? "cairn_use" : "cairn_btn"))}</button>`;
+}
+async function importEventCairn(eid, url) {
+  const box = $("#cairnres");
+  const r = await fetch(`${API}/events/${encodeURIComponent(eid)}/gpx/cairn`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    box.textContent = tC("cairn_fail", { msg: typeof j.detail === "string" ? j.detail : r.status });
+    box.hidden = false; box.scrollIntoView({ block: "nearest" }); return null;
+  }
+  const c = j.cairn, ds = (j.days && j.days.days) || [];
+  const nights = (c.nights || []).map((x) => tC("cairn_night", { n: x.night, name: x.name || "", km: fmt(x.km, 1) })).join(tC("overnight_sep"));
+  const per = ds.length > 1 ? ds.map((d) => tC("cairn_day", { d: d.day, km: fmt(d.km, 1), up: fmt(d.gain_m) })).join(tC("overnight_sep")) : "";
+  box.textContent = [tC("cairn_done", { name: c.name, days: j.event_days }), nights, per, ...(c.notes || [])].filter(Boolean).join("\n");
+  box.hidden = false;
+  toast(tC("cairn_toast", { days: j.event_days }));
+  return j;
 }
 let gpxFor = null;
 $("#gpxpick").addEventListener("change", async (ev) => {
   const f = ev.target.files[0]; ev.target.value = "";
   if (!f || !gpxFor) return;
-  const fd = new FormData(); fd.append("file", f);
-  const r = await fetch(`${API}/events/${encodeURIComponent(gpxFor)}/gpx`, { method: "POST", body: fd });
-  if (!r.ok) { toast("GPX 失敗：" + (await r.text()).slice(0, 120)); return; }
-  toast("GPX 已存"); load(); loadFeas();
+  const up = await uploadEventGpx(gpxFor, f);
+  if (up) { await load(); await askOvernights(gpxFor, up.overnights); loadFeas(); }
 });
+// upload (or replace) an event's GPX; its answer ({gpx, days, overnights}) when stored, else null
+async function uploadEventGpx(eid, f) {
+  const fd = new FormData(); fd.append("file", f);
+  const r = await fetch(`${API}/events/${encodeURIComponent(eid)}/gpx`, { method: "POST", body: fd });
+  if (!r.ok) { toast("GPX 失敗：" + (await r.text()).slice(0, 120)); return null; }
+  toast("GPX 已存");
+  return r.json();
+}
+// SP-534: a recorded track's nights (停留 ≥ 6 h or the watch off, 推估) become the trip's day ends only
+// when the user says so (SP-522 Q1): SP-535's preview opens with them selected; 確定 stores them
+const EV_KEYS = ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "note", "heat",
+  "pack_kg", "cutoff_hours", "summit_km", "race_format", "poles", "trail_pct"];
+async function askOvernights(eid, N) {
+  if (!N || !(N.stops || []).length) return;
+  await openSplits(eid, N);
+}
+// SP-535: the day-split preview (static/daysplit.js — the same dialog as 賽事計算器): candidates, each day's
+// km / climb / time as the day ends move; nothing is stored until 確定 (取消 changes nothing)
+async function openSplits(eid, N) {
+  const tO = (k, p) => (window.I18N ? I18N.t("plan.ev." + k, p) : k);
+  let pv;
+  try { pv = await call("GET", `/events/${encodeURIComponent(eid)}/gpx/preview`); } catch (e) { return; }
+  const nights = N || pv.overnights;
+  // SP-537: a Cairn import's nights are already the day ends (applied as is); they stay as 🪨 candidates
+  const cairn = pv.source && pv.source.kind === "cairn" ? (pv.source.nights || pv.stored_km.map((km, i) => ({ night: i + 1, km }))) : [];
+  const cands = [...(pv.candidates || []),
+    ...((nights && nights.stops) || []).map((x) => ({ km: x.km, kind: "night", night: x.night, hours: x.hours })),
+    ...cairn.map((x) => ({ km: x.km, kind: "cairn", night: x.night, name: x.name }))];
+  const r = await DaySplit.open({ name: pv.name, days: pv.days, splits: pv.stored_km, total: pv.total_km, profile: pv.profile,
+    pieces: pv.pieces, hours: pv.hours, candidates: cands, osmAttr: pv.osm_attr, applied: cairn.length ? "cairn" : null,
+    proposal: N && (N.stops || []).length ? { kind: "night", splits: N.splits_km, days: N.days } : null });
+  if (!r) return;
+  await call("PUT", `/events/${encodeURIComponent(eid)}/gpx/splits`, { day_splits_km: r.splits });
+  const e = S.events.find((x) => x.id === eid);
+  if (e && Math.max(1, e.days || 1) !== r.days) {
+    const body = Object.fromEntries(EV_KEYS.map((k) => [k, e[k] ?? null]));
+    body.days = r.days; body.day_plan = null; body.note = body.note || "";
+    await call("PUT", "/events", body);
+  }
+  toast(tO("splits_saved", { days: r.days }));
+  await load();
+  loadFeas();
+}
 
 function renderPhases() {
   const rows = manual || S.phases;
@@ -419,9 +508,17 @@ $("#evform").addEventListener("submit", async (ev) => {
   body.days = body.days || 1; body.note = body.note || "";
   body.poles = ev.target.poles.checked;
   body.day_plan = needsDayPlan() ? readDayRows().map((r) => ({ km: r.km, gain_m: r.gain_m, loss_m: r.loss_m })) : null;
-  await call("PUT", "/events", body);
-  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; dayPlanLenient = false; dayPlanTotals = null; cutoffLabels(); dayPlanForm([]);
-  toast("已儲存"); load(); loadFeas();
+  const file = $("#evgpxfile").files[0] || null;
+  const cairn = $("#evcairn").value.trim();
+  body.gpx_pending = !!file || !!cairn || $("#evgpxlater").checked;
+  const saved = await call("PUT", "/events", body);
+  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; dayPlanLenient = false; dayPlanTotals = null; evGpx = null; cutoffLabels(); dayPlanForm([]);
+  toast("已儲存");
+  const up = file && saved.event ? await uploadEventGpx(saved.event.id, file) : null;
+  if (!file && cairn && saved.event) await importEventCairn(saved.event.id, cairn);
+  await load();
+  if (up) await askOvernights(saved.event.id, up.overnights);
+  loadFeas();
 });
 // SP-114: a multi-day trip (百岳, a 分站 越野賽／其他 — not 路跑, not a 連續 race) fills each day's
 // distance and climb; the totals are their sums (read-only while the rows are shown)
@@ -429,7 +526,10 @@ const FORMAT_KINDS = ["race", "other"];
 // SP-412: editing an old multi-day trip that has no per-day numbers on the server (day_plan_missing)
 let dayPlanLenient = false, dayPlanTotals = null;
 const dayFilled = (rows) => rows.some((r) => r && ["km", "gain_m", "loss_m"].some((k) => r[k] != null));
-function dayPlanRequired(rows) { return !dayPlanLenient || dayFilled(rows || readDayRows()); }
+// SP-533: the trip has a GPX (stored, attached in the form) or one is to come: its days come from the GPX
+let evGpx = null;
+const gpxDays = () => !!evGpx || !!$("#evgpxfile").files.length || !!$("#evcairn").value.trim() || $("#evgpxlater").checked;
+function dayPlanRequired(rows) { return !(dayPlanLenient || gpxDays()) || dayFilled(rows || readDayRows()); }
 function syncDayRequired() {
   const req = dayPlanRequired(), f = $("#evform");
   $("#dayplanrows").querySelectorAll('input[data-k="km"], input[data-k="gain_m"]').forEach((x) => { x.required = req; });
@@ -458,6 +558,10 @@ function dayPlanForm(plan) {
   // (SP-412, decision 2026-10-13) has only its totals: editable while its rows are blank
   f.distance_km.readOnly = f.climbing_m.readOnly = on && req;
   $("#dayplanold").hidden = !(on && dayPlanLenient);
+  const have = $("#dpgpxhave");
+  have.hidden = !evGpx;
+  have.textContent = evGpx ? tP("gpx_have", { f: evGpx.filename || "GPX" }) : "";
+  $("#evgpxlater").closest("label").hidden = !!evGpx;
   $("#dayplanrows").innerHTML = on ? Array.from({ length: n }, (_, i) => `<tr><td>${esc(tP("day_n", { n: i + 1 }))}</td>`
     + ["km", "gain_m", "loss_m"].map((k) => `<td><input type="number" data-d="${i}" data-k="${k}" step="${k === "km" ? 0.1 : 10}" min="0"`
       + `${k !== "loss_m" && req ? " required" : ""} value="${old[i]?.[k] ?? ""}"></td>`).join("") + "</tr>").join("") : "";
@@ -473,6 +577,8 @@ function sumDays() {
   if (rows.some((r) => r && r.gain_m != null)) f.climbing_m.value = Math.round(s("gain_m"));
 }
 $("#dayplanrows").addEventListener("input", () => { sumDays(); syncDayRequired(); });
+for (const id of ["#evgpxfile", "#evgpxlater"]) $(id).addEventListener("change", () => syncDayRequired());
+$("#evcairn").addEventListener("input", () => syncDayRequired());
 // SP-412: a total typed into an old trip is what comes back when its rows are emptied again
 for (const k of ["distance_km", "climbing_m"]) $("#evform")[k].addEventListener("input", () => {
   if (dayPlanTotals && !dayFilled(readDayRows())) dayPlanTotals[k] = $("#evform")[k].value;
@@ -520,7 +626,7 @@ function cutoffLabels() {
   $("#summitwrap").hidden = !hike;
 }
 $("#kindsel").addEventListener("change", () => { cutoffLabels(); dayPlanForm(); });
-$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; dayPlanLenient = false; dayPlanTotals = null; cutoffLabels(); dayPlanForm([]); };
+$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; dayPlanLenient = false; dayPlanTotals = null; evGpx = null; cutoffLabels(); dayPlanForm([]); };
 $("#events").addEventListener("click", async (ev) => {
   const ed = ev.target.dataset.edit, del = ev.target.dataset.del;
   if (ed) {
@@ -530,12 +636,18 @@ $("#events").addEventListener("click", async (ev) => {
     f.poles.checked = !!e.poles;
     // SP-412: an old trip saved without its per-day numbers can be saved as it is (the server lets
     // all-blank rows through for it); filling some rows makes every day required again
-    dayPlanLenient = !!e.day_plan_missing && !(e.day_plan || []).length;
+    dayPlanLenient = !!e.day_plan_missing && !(e.day_plan || []).length && !e.gpx;
+    evGpx = e.gpx || null;
     dayPlanTotals = dayPlanLenient ? { distance_km: f.distance_km.value, climbing_m: f.climbing_m.value } : null;
     cutoffLabels(); dayPlanForm(e.day_plan || []);
     $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   if (ev.target.dataset.gpxup) { gpxFor = ev.target.dataset.gpxup; $("#gpxpick").click(); }
+  if (ev.target.dataset.gpxsplit) await openSplits(ev.target.dataset.gpxsplit);
+  if (ev.target.dataset.cairnup) {
+    const url = prompt(tC("cairn_prompt"));
+    if (url && url.trim()) { await importEventCairn(ev.target.dataset.cairnup, url.trim()); await load(); loadFeas(); }
+  }
   if (ev.target.dataset.gpxdel && confirm("刪除這場賽事的 GPX？")) { await call("DELETE", `/events/${encodeURIComponent(ev.target.dataset.gpxdel)}/gpx`); toast("GPX 已刪除"); load(); loadFeas(); }
   if (del && confirm("刪除這場賽事？")) { await call("DELETE", "/events/" + del); toast("已刪除"); load(); loadFeas(); }
 });

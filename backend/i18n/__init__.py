@@ -167,6 +167,36 @@ def _(msgid: str, /, **params: Any) -> str:
     return translate(msgid, None, **params)
 
 
+class Msg(str):
+    """A text from M_(): the request locale's text (a plain str to everything else) that keeps its
+    msgid and parameters, so a result cached in one language can be shown in another (relocalize)."""
+    msgid: str
+    params: dict
+
+    def __reduce__(self):                      # (pickle / deepcopy: the text, the msgid, the params)
+        return (_msg, (str(self), self.msgid, self.params))
+
+
+def _msg(text: str, msgid: str, params: dict) -> Msg:
+    m = Msg(text)
+    m.msgid, m.params = msgid, params
+    return m
+
+
+def M_(msgid: str, /, **params: Any) -> Msg:
+    """_() for a text kept in a cache that every language shares (the plan inputs: a week's
+    「為什麼」, SP-542): the same text, plus what relocalize() needs to show it in another language.
+    A parameter that is itself an M_() text follows the language too."""
+    return _msg(translate(msgid, None, **params), msgid, params)
+
+
+def relocalize(s: Any, loc: Optional[str] = None) -> Any:
+    """An M_() text in `loc` (default: the context's), its M_() parameters too; anything else as it is."""
+    if not isinstance(s, Msg):
+        return s
+    return translate(s.msgid, loc, **{k: relocalize(v, loc) for k, v in s.params.items()})
+
+
 def N_(msgid: str) -> str:
     """Marks a msgid for extraction without translating it (module-level
     tables); translate where it is shown: `_(TABLE[k])`."""
@@ -198,5 +228,5 @@ class UserError(Exception):
                 "params": {k: v for k, v in self.params.items() if isinstance(v, (str, int, float, bool)) or v is None}}
 
 
-__all__ = ["_", "N_", "DEFAULT_LOCALE", "SUPPORTED", "UserError", "current_locale", "instance_default",
+__all__ = ["_", "N_", "M_", "Msg", "relocalize", "DEFAULT_LOCALE", "SUPPORTED", "UserError", "current_locale", "instance_default",
            "normalize", "set_locale", "reset_locale", "use_locale", "translate", "catalog"]

@@ -76,7 +76,7 @@ def test_template_rows_and_categories():
     assert rows["t1a"] == ("quality", "aerobic") and rows["v1a"] == ("quality", "vo2max")
     assert rows["x3015"] == ("quality", "vo2max") and rows["t3b"] == ("quality", "aerobic")
     assert rows["lib:friel_lthr30"][0] == "test" and rows["lib:stryd_cp_3_12"][0] == "test"
-    assert rows["lib:dsw_classic"][0] == "trail" and rows["lib:downhill_ecc"][0] == "trail"
+    assert rows["lib:dsw_classic"][0] == "trail" and "lib:downhill_ecc" not in rows       # SP-539
     for g in T["groups"]:
         assert g["cat"] in {c["id"] for c in T["cats"]}
         for r in g["rows"]:
@@ -224,30 +224,30 @@ def test_session_family_is_computed_for_quality_sessions_only():
 
 
 # ---------------------------------------------------------------------------
-# 越野跑 split into 結構化爬升 / 技術地形 / 下坡 (SP-62); 速度 tab add-ons (SP-32 follow-up)
+# 越野跑 split into 結構化爬升 / 技術地形 (SP-62; 下坡 gone, SP-539); 速度 tab add-ons (SP-32 follow-up)
 # ---------------------------------------------------------------------------
 
 def _work_targets(key):
     return [r["st"]["target"] for r in WS.flat(WT.items_of(WT.BY_KEY[key])) if r["st"]["kind"] == "work"]
 
 
-def test_trail_templates_split_into_three_kinds():
+def test_trail_templates_split_into_two_kinds():
     T = WS.templates()
     trail = next(c for c in T["cats"] if c["id"] == "trail")
-    assert [s["id"] for s in trail["subs"]] == ["climb", "technical", "downhill"]
-    assert [s["label"] for s in trail["subs"]] == ["結構化爬升", "技術地形", "下坡技術／離心"]
+    assert [s["id"] for s in trail["subs"]] == ["climb", "technical"]
+    assert [s["label"] for s in trail["subs"]] == ["結構化爬升", "技術地形"]
     subs = {r["key"]: g["sub"] for g in T["groups"] if g["cat"] == "trail" for r in g["rows"]}
     for k in ("dsw_classic", "dsw_endurance", "koop_uphill", "long_climb", "steep_5", "ua_hill_sprints"):
         assert subs[f"lib:{k}"] == "climb", k
     assert subs["lib:tech_easy"] == subs["lib:tech_hard"] == "technical"
-    assert subs["lib:downhill_ecc"] == "downhill" and subs["hill_sprints"] == "climb"
+    assert subs["hill_sprints"] == "climb"
     assert all(g["sub"] in WT.TRAIL_IDS for g in T["groups"] if g["cat"] == "trail")
     assert sum(1 for t in WT.TEMPLATES if t.trail == "technical") >= 2
     # a structure of your own: by its targets
     b = WT.B()
     assert WT.trail_type_of([b.t("work", 1800, WT.rpe(3, 4, up=200))]) == "technical"
     assert WT.trail_type_of([b.t("work", 1800, WT.rpe(3, 4))]) == "technical"
-    assert WT.trail_type_of([b.t("work", 1800, WT.rpe(3, 5, down=300))]) == "downhill"
+    assert WT.trail_type_of([b.t("work", 1800, WT.rpe(3, 5, down=300))]) == "technical"    # SP-539: no 下坡 kind
     assert WT.trail_type_of([b.rep(4, [b.t("work", 420, WT.hr(0.95, 1.02)), b.t("rest", 420)])]) == "climb"
 
 
@@ -257,15 +257,15 @@ def test_structured_climbs_keep_both_bounds():
             assert t["type"] == "hr" and t["lo"] < t["hi"], k          # SP-61 cancelled: floor and cap
 
 
-def test_technical_and_downhill_have_no_hr_or_power_target():
-    for k in ("tech_easy", "tech_hard", "downhill_ecc"):
+def test_technical_has_no_hr_or_power_target():
+    for k in ("tech_easy", "tech_hard"):
         t = WT.BY_KEY[k]
         assert t.basis == "rpe" and t.purpose and t.src, k
         ws = _work_targets(k)
         assert ws and all(x["type"] == "rpe" for x in ws), k
         for st in (r["st"] for r in WS.flat(WT.items_of(t))):
             assert st["target"]["type"] not in ("power", "pace"), k
-    assert _work_targets("tech_hard")[0]["up"] == 600 and _work_targets("downhill_ecc")[0]["down"] > 0
+    assert _work_targets("tech_hard")[0]["up"] == 600
     st = {"id": "a", "kind": "work", "dur": {"type": "time", "value": 3600}, "target": WT.rpe(3, 4, up=300),
           "note": "技術路段"}
     for basis in ("power", "hr"):
@@ -327,3 +327,12 @@ def test_speed_tab_lists_strides_and_short_hill_sprints():
     # still where they were too
     easy = {r["key"] for g in T["groups"] if g["cat"] == "easy" for r in g["rows"]}
     assert "strides" in easy
+
+
+def test_no_downhill_template_left():
+    """SP-539 (the user 2026-10-14): the downhill work is part of the steady climbing sessions (SP-442),
+    so the 範本 have no 下坡離心 template and no 下坡技術／離心 tab."""
+    T = WS.templates()
+    titles = [r["title"] for g in T["groups"] for r in g["rows"]]
+    assert not any("下坡" in t for t in titles), [t for t in titles if "下坡" in t]
+    assert "downhill" not in WT.TRAIL_IDS and all(t.trail in WT.TRAIL_IDS for t in WT.TEMPLATES if t.cat == "trail")

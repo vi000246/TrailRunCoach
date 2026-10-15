@@ -17,7 +17,7 @@ Inputs (all of them already decided elsewhere):
 「我的範本」 (engine/user_templates.py, SP-36) are ranked with the built-ins by the same rules
 — their interval family (the same-family bonus of the ladder's rung, Zone 5, the phase),
 their length, terrain and type; the key-listed trail rules by the row's 越野跑 kind
-(_trail_key: climb as the long climb, downhill as 下坡離心, technical hard / easy by RPE).
+(_trail_key: climb as the long climb, technical hard / easy by RPE).
 A pick says `mine` (the editor tags it 我的).
 
 The weights are 推估 (no published ranking); the phase rules follow the general →
@@ -47,7 +47,7 @@ PHASE_LABEL = {"base": "基礎期", "specific": "專項期", "taper": "減量期
 
 # trail templates by what they train (phase rules below). 技術地形 (SP-62): the base phase mostly
 # low RPE (may replace part of the long run), the 專項期 one a week close to the race's terrain
-TRAIL_SPECIFIC = {"lib:dsw_classic", "lib:koop_uphill", "lib:long_climb", "lib:downhill_ecc", "lib:steep_10",
+TRAIL_SPECIFIC = {"lib:dsw_classic", "lib:koop_uphill", "lib:long_climb", "lib:steep_10",
                   "lib:steep_15", "lib:tech_hard"}
 # 減量期: no short hard climbing (江晏慶「短距離高強度爬坡排在強化期」, 教練級; SP-96) — the 10″ hill
 # sprints and the 4×7′ 登山王 set
@@ -176,7 +176,7 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
             sc.add(20, f"{PHASE_LABEL[phase]}：" + ("接近比賽的路況" if tk == "lib:tech_hard" else "練賽道的爬升／下坡"))
         elif phase == "base" and tk in TRAIL_BASE:
             sc.add(15, "基礎期：低 RPE 技術地形，可取代部分長跑" if tk == "lib:tech_easy" else "基礎期：有氧爬坡、腿力")
-        if phase == "taper" and tk == "lib:downhill_ecc":
+        if phase == "taper" and row.get("descent_only"):        # a downhill block of your own (SP-539)
             sc.add(-80, "賽前 2 週內不做下坡離心")
         elif phase == "taper" and tk in TAPER_NO_CLIMB:
             sc.add(-80, "減量期不排短距離高強度爬坡（江晏慶，SP-96）")
@@ -220,15 +220,13 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
 def _trail_key(row: dict) -> Optional[str]:
     """The key the trail phase rules look up: a built-in's own; a 我的範本 row's by its 越野跑
     kind (workout_templates.trail_type_of) — the lists hold every built-in kind the same way:
-    結構化爬升 → a long climb (specific and base), 下坡 → 下坡離心 (specific; not in the taper),
-    技術地形 → hard (RPE ≥ 7: specific) or easy (base) by workout_steps.rpe_role."""
+    結構化爬升 → a long climb (specific and base), 技術地形 → hard (RPE ≥ 7: specific) or easy (base)
+    by workout_steps.rpe_role (a descent-only one too: SP-539 dropped the 下坡 kind)."""
     if not row.get("mine"):
         return row.get("key")
     sub = row.get("trail_sub")
     if sub == "climb":
         return "lib:long_climb"
-    if sub == "downhill":
-        return "lib:downhill_ecc"
     if sub == "technical":
         return "lib:tech_hard" if row.get("role") == "quality" else "lib:tech_easy"
     return None

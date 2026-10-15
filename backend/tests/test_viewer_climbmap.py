@@ -1,5 +1,5 @@
 """
-爬坡與地形 › 爬坡段 (SP-218; wko5_viewer.html drawClimbMap): the route map over the elevation profile
+爬坡與地形 › 爬坡段 (SP-218; charts.html drawClimbMap): the route map over the elevation profile
 against km, metric panels picked by buttons, climbs shaded, a picked climb outlined on the map and the
 profile, the climb table with 「跟平常比」. The page's climb-map block's pure helpers run under node;
 synthetic data only.
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-PAGE = Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html"
+PAGE = Path(__file__).resolve().parents[1] / "static" / "charts.html"
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not installed")
 

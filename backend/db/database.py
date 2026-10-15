@@ -117,7 +117,8 @@ async def _migrate_schema():
     create_all creates any missing table and leaves existing ones alone. Retired
     tables (data_registry.RETIRED_TABLES) are dropped; legacy ones
     (data_registry.LEGACY_TABLES, e.g. workout_metrics) are left as they are.
-    The stable ids of the user-edited tables (uid, updated_at; SP-310): db/stable_ids.migrate."""
+    The stable ids of the user-edited tables (uid, updated_at; SP-310): db/stable_ids.migrate.
+    The change log of the sync trial (`changes`, SP-312, db/changelog.py) is a new table: create_all."""
     new_cols = [
         ("workout_files", "coros_activity_id", "TEXT"),
         ("workout_files", "coros_sport_type", "INTEGER"),
@@ -147,6 +148,13 @@ async def _migrate_schema():
         ("sync_state", "garmin_password_sealed", "TEXT"),
         ("sync_state", "garmin_last_sync_at", "DATETIME"),
         ("workout_files", "garmin_activity_id", "TEXT"),
+        ("sync_state", "intervals_token_sealed", "TEXT"),          # intervals.icu (SP-346)
+        ("sync_state", "intervals_athlete_id", "TEXT"),
+        ("sync_state", "intervals_token_refused", "DATETIME"),
+        ("sync_state", "intervals_last_sync_at", "DATETIME"),
+        ("workout_files", "intervals_activity_id", "TEXT"),
+        ("workout_files", "upstream_source", "TEXT"),
+        ("workout_files", "device_name", "TEXT"),
         ("athlete_settings", "threshold_pace_s_per_km", "REAL"),
         ("athlete_settings", "run_ftp_w", "REAL"),
         ("athlete_settings", "initial_ctl_run", "REAL"),
@@ -181,6 +189,7 @@ async def _migrate_schema():
         ("injury_events", "walkrun_from", "TEXT"),                # 「可以開始走跑」 (SP-272)
         ("injury_events", "illness", "TEXT"),
         ("coros_plan_push", "provider", "TEXT DEFAULT 'coros'"),   # sync/workout_targets
+        ("event_gpx", "source_json", "TEXT"),          # where the GPX came from: a Cairn import (SP-537)
     ]
     from backend import data_registry
     async with get_engine().begin() as conn:
@@ -202,6 +211,9 @@ async def _migrate_schema():
         if "garmin_activity_id" in cols:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_workout_files_garmin_activity_id "
                                     "ON workout_files (garmin_activity_id)"))
+        if "intervals_activity_id" in cols:             # SP-346: the same lookup per listed activity
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_workout_files_intervals_activity_id "
+                                    "ON workout_files (intervals_activity_id)"))
         # SP-310: a stable uid (UUID) and updated_at on the tables the user edits, ids for the rows
         # from before, the unique index (db/stable_ids.py)
         from backend.db import stable_ids
@@ -307,3 +319,8 @@ async def init_db():
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await _migrate_schema()
+
+
+# the change-log sync trial's flush hook (SP-312): the app's own writes of the synced rows are logged
+# while TRC_CHANGE_SYNC is on, in every process that writes the DB
+from backend.db import changelog as _changelog  # noqa: E402,F401

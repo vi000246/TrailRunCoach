@@ -72,6 +72,8 @@ SP-291, the level the plan and the status page read too):
            route's top altitude by the athlete's own altitude factor (hikehr.altitude_factor) when it
            is known, else Wehrlin & Hallén 2006 (−6.3 % per 1000 m); by the pack (山本: 0 → 10 → 20 %
            of body weight = 475 → 430 → 395 m/h, 推估) when the event has one. ≤ steady ok, else tight.
+           The text shows both rates and says the level compares 走得順 — above it only 有點趕 (SP-545).
+           A multi-day 百岳 (baiyue_multiday, SP-545) uses need ÷ 走得辛苦 as one effort item, with a turnaround only.
   power    with a running power meter (plan profile power_meter + a CP): CP ÷ body weight ≥ 1.5 W/kg
            ok, else tight (Burtscher 2004: a pack at 300 m/h up to 3,500 m needs ~1.2–1.5 W/kg below
            the anaerobic threshold). Not shown without a power meter.
@@ -278,10 +280,13 @@ def vam_check(e, hd: dict, rates: dict, top_m: Optional[float], weight: Optional
     lv = "ok" if need <= vals["steady"] else "tight"
     txt = _("最難那天要每小時爬約 {need:.0f} m；你走得順約 {s:.0f} m/h、走得辛苦約 {h:.0f} m/h",
             need=need, s=vals["steady"], h=vals["hard"])
+    # SP-545: say which rate the level compares (走得順) and that above it is only 有點趕
     if need > vals["hard"]:
-        txt += _("：要比你目前最用力的爬升還快，撤不撤退看撤退時間那項")
+        txt += _("：比的是走得順，超過只是有點趕；這次連走得辛苦都超過，要比你目前最用力的爬升還快，撤不撤退看撤退時間那項")
     elif lv == "tight":
-        txt += _("：要靠接近閾值的強度撐")
+        txt += _("：比的是走得順，超過走得順只是有點趕，要靠接近閾值的強度撐")
+    else:
+        txt += _("：比的是走得順，在走得順以內")
     return {"level": lv, "text": txt + "（" + "，".join(notes) + "）", "need": round(need), "steady": round(vals["steady"]),
             "hard": round(vals["hard"]), "n": n}
 
@@ -329,8 +334,14 @@ def split_note(line: dict) -> Optional[str]:
     """A multi-day trip split equally (no per-day numbers, no GPX day ends — an event saved before
     SP-114 made them required): its hardest day is likely underestimated."""
     if line.get("multi") and line.get("split_source") == "equal":
-        return day_plan_hint(line["days"])
+        return gpx_split_hint(line["days"]) if line.get("gpx") else day_plan_hint(line["days"])
     return None
+
+
+def gpx_split_hint(days: int) -> str:
+    """SP-533: a multi-day trip whose GPX has no day ends yet — its days are the GPX cut equally (推估)."""
+    return _("GPX 還沒有分日點：{n} 天先每天平均分距離（推估），最硬的那天可能被低估。"
+             "到賽事計算器在剖面上點每天的終點（GPX 的營地航點會列成候選）", n=days)
 
 
 def gpx_hint() -> str:

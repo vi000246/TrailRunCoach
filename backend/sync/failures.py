@@ -33,7 +33,7 @@ from backend.db.models import SyncFailure
 MAX_ATTEMPTS = 5              # automatic attempts in all (owner 2026-10-08)
 MAX_AGE_DAYS = 7              # … or this many days after the first failure
 ERROR_CHARS = 200             # the stored error text (redacted: no token, no signed URL)
-SOURCES = ("coros", "garmin", "tp")
+SOURCES = ("coros", "garmin", "tp", "intervals")
 FAILED, NO_FILE = "failed", "no_file"
 
 

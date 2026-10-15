@@ -1,10 +1,11 @@
 /* 比賽計算機結果的提示 (SP-485 = docs/research/ui-hint-audit.md §7 T4, on SP-482's static/hints.js).
  *
  * One "page" for §5.2's cap: the result card, the 補給 card and the 分段 card share
- *   - one box on top of the result card: every class-1 hint (§4.1 必看) — 沒填補給站 (RC21), 脫水 > 2 % (RC20),
- *     目標太快 (RC6), 超出可持續 (RC14), CP 低於實測 (RC16), 賽前超補 (RC19), rain by R1 (RC2), 冷風／失溫 (RC3w/h)
- *     — in every level, never capped, ordered by §5.2's priority;
- *   - at most Hints.CAP reminders under it, the rest under 「還有 N 則提醒」;
+ *   - one box on top of the result card: every class-1 hint (§4.1 必看) — 目標太快 (RC6), 超出可持續 (RC14),
+ *     CP 低於實測 (RC16), rain by R1 (RC2), 冷風／失溫 (RC3w/h) — in every level, never capped, ordered by §5.2's
+ *     priority; SP-547: the 補給 hints — 沒填補給站 (RC21), 脫水 > 2 % (RC20), 賽前超補 (RC19) and the rest of the
+ *     fuel engine's warnings — in the same kind of box on top of the 補給 card (#fh-box / #fh-rem / #fh-how);
+ *   - at most Hints.CAP reminders on the two cards together, the rest under 「還有 N 則提醒」;
  *   - 「這次怎麼算的」 (collapsed): the method lines (RC1, RC7, RC8, RC9, RC11, RC15, RC22) and whatever the
  *     level puts in 「詳細」 (▷, a ◐ whose condition does not hold, 知道了).
  * The rules of the page (pure, so test_racehints_sp485.py runs them under node):
@@ -147,14 +148,15 @@
     if (typeof el.checkVisibility === "function") return el.checkVisibility();
     return !!(el.offsetParent || el.getClientRects().length);
   }
+  const SEL = ["[data-rh]", ...["rh", "fh"].flatMap((p) => [`#${p}-box .hint-row`, `#${p}-rem > .hint-row`, `#${p}-rem .hint-more > summary`])].join(", ");
   function count(root) {
     const doc = root || document;
-    const els = [...doc.querySelectorAll("[data-rh], #rh-box .hint-row, #rh-rem > .hint-row, #rh-rem .hint-more > summary")];
+    const els = [...doc.querySelectorAll(SEL)];
     return els.filter(visible).length;
   }
   function list(root) {
     const doc = root || document;
-    return [...doc.querySelectorAll("[data-rh], #rh-box .hint-row, #rh-rem > .hint-row, #rh-rem .hint-more > summary")]
+    return [...doc.querySelectorAll(SEL)]
       .filter(visible).map((e) => (e.dataset.rh || e.dataset.hintId || "more") + ": " + e.textContent.trim().slice(0, 60));
   }
 

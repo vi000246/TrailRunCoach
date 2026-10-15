@@ -10,7 +10,7 @@
 
 - `coach.yichlin.com` 已經走 Cloudflare **named tunnel** 到 NAS 的 `:8000`（SP-65，2026-10-05 設好）。
 - 外網進來先經過 **Cloudflare Access**（Zero Trust）的登入頁；`/share` 另外設了 Bypass。這就是 auth plan 裡說的「密碼 proxy」。
-- 示範主機還沒有自己的 hostname（靜態示範在 GitHub Pages，SP-350 搬到 Cloudflare Pages）。
+- 示範主機還沒有自己的 hostname；沒有線上的公開示範（GitHub Pages 的靜態示範 2026-10-14 下線、程式刪除，SP-500）。
 - 部署：image 在 Mac build、傳到 NAS `docker load`，NAS 不 build、不連 GitHub（`docs/deploy/wko5coach.deploy.md`「正式環境：NAS」）。
 
 上線前，下面每一步都不能讓 `coach.yichlin.com` 少掉 Access 那一層，**拿掉 Access 只在第 3 步、和登入同一次部署**。
@@ -18,9 +18,8 @@
 ## 1. 網域與 tunnel ✅（已經有，不用另外準備）
 
 - Google OAuth 的 redirect 用 `https://coach.yichlin.com/oauth/google/callback`（固定網址，tunnel 是 named tunnel，不是每次會變的 quick tunnel）。
-- 示範主機要上線時，在同一條 tunnel 加一個 public hostname（Cloudflare Zero Trust › Networks › Tunnels › 這條 tunnel › Public Hostname），例如：
-  - 靜態示範：`demo.yichlin.com` 指向 Cloudflare Pages（不經 tunnel，見 `deploy/static/README.md` §2b）；
-  - 伺服器版示範（`WKO5COACH_MODE=demo`）：例如 `try.yichlin.com` → `http://localhost:8001`，前面**不**加 Access（§3.8）。
+- 示範主機要上線時，在同一條 tunnel 加一個 public hostname（Cloudflare Zero Trust › Networks › Tunnels › 這條 tunnel › Public Hostname），例如
+  伺服器版示範（`TRC_MODE=demo`）：`try.yichlin.com` → `http://localhost:8001`，前面**不**加 Access（§3.8）。
 - 驗收：`https://coach.yichlin.com` 照舊先問 Access；示範主機打得開、讀不到真實資料（§3.8 的三層保證）。
 
 ## 2. Google OAuth client 👤
@@ -66,22 +65,22 @@
 
 | 名字 | 用途 | 單 |
 |---|---|---|
-| `WKO5COACH_SECRET_KEY` | 封存所有同步憑證的 server key；多使用者模式必填 | SP-384 |
+| `TRC_SECRET_KEY` | 封存所有同步憑證的 server key；多使用者模式必填 | SP-384 |
 | `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | Google 登入 | SP-58 |
 | `PAYMENT_MERCHANT_ID`、`PAYMENT_HASH_KEY`、`PAYMENT_HASH_IV` | 金流（名字待 SP-328 選定金流商後確認） | SP-328 |
-| `TP_CLIENT_ID`、`TP_CLIENT_SECRET` | TP 的 WKO5 client（只限擁有者） | — |
-| `CWA_API_KEY` | 中央氣象署授權碼（只限擁有者） | — |
-| `TRC_DEBUG_PIN` | Debug API 的 PIN | SP-371 |
+| `TP_CLIENT_ID`、`TP_CLIENT_SECRET` | TP 的桌面軟體 client（只限擁有者） | — |
+| `CWA_API_KEY` | 中央氣象署授權碼（只有擁有者能看、能設；站台用它下載的預報全站共用） | SP-552 |
+| `TRC_UPSTREAM_TOKEN`、`TRC_PROXY_PASSWORD` | 本機副本從正式站同步用的 token 與代理密碼（只設在本機，不設在正式站；SP-373 起 `TRC_DEBUG_PIN` 不再讀） | SP-373 |
 
 - **log 裡不印**：每一行 log（app.log、perf.log、`docker logs`）都經過 `applog.redact()`；除了原本的樣式規則（key=value、Bearer、長字串、email），現在也會把上表中**目前有設定的值**整段換成 `***`，不管它長什麼樣（`backend/tests/test_env_secrets_sp387.py`）。
-- **不進任何租戶資料夾**：多使用者模式下 server key 只吃 env（`ServerKeyRequired`，SP-384）；擁有者的 `~/.wko5coach/secret.key` 要搬進 env，步驟在 `docs/deploy/accounts.md` §2。
+- **不進任何租戶資料夾**：多使用者模式下 server key 只吃 env（`ServerKeyRequired`，SP-384）；擁有者的 `~/.trailruncoach/secret.key` 要搬進 env，步驟在 `docs/deploy/accounts.md` §2。
 - compose 範例（NAS，repo 外的 `.env` 不 commit）：
   ```yaml
   services:
-    wko5coach:
-      env_file: /volume1/trc/.env            # WKO5COACH_ACCOUNTS、GOOGLE_CLIENT_ID …
+    trailruncoach:
+      env_file: /volume1/trc/.env            # TRC_ACCOUNTS、GOOGLE_CLIENT_ID …
       environment:
-        - WKO5COACH_SECRET_KEY_FILE=/run/secrets/trc_secret_key
+        - TRC_SECRET_KEY_FILE=/run/secrets/trc_secret_key
         - GOOGLE_CLIENT_SECRET_FILE=/run/secrets/google_client_secret
       secrets: [trc_secret_key, google_client_secret]
   secrets:
@@ -90,7 +89,7 @@
     google_client_secret:
       file: /volume1/trc/secrets/google_client_secret
   ```
-- 驗收：`docker logs wko5coach 2>&1 | grep -F "<secret 的前 8 個字>"` 與 `grep -rF` app.log 都找不到。
+- 驗收：`docker logs trailruncoach 2>&1 | grep -F "<secret 的前 8 個字>"` 與 `grep -rF` app.log 都找不到。
 
 ## 5b. 開發移到 private repo 之後的部署：不需要 deploy key（SP-350、SP-500）
 
@@ -113,17 +112,17 @@ remote 改成 `git@github-trc:vi000246/TrailRunCoach-private.git`，`git fetch` 
 
 其他會拉這個 repo 的地方——2026-10-14 起分成兩個 repo（SP-500）：**開發在 private repo
 `vi000246/TrailRunCoach-private`**；原本的公開 repo `vi000246/TrailRunCoach` 保留，改成不含計算核心的自動鏡像
-（`deploy/public-mirror/README.md`，每次部署後跑一次 `sync`）。
+（`deploy/public-mirror/README.md`；push 到 private 的 `main` 後由 GitHub Action 自動同步）。
 
 | 地方 | 現在 | 要做什麼 |
 |---|---|---|
 | NAS 正式環境 | 不受影響：image 從 Mac 的 private clone 傳過去，NAS 不連 GitHub | 無（舊 `src/` clone 見上） |
 | Mac / 其他電腦的 clone | `origin` 要指 private repo；舊 clone 的 `origin` 還是公開 repo | 照 `deploy/public-mirror/README.md`「另一台電腦」改 remote，並把公開 repo 的 push 關掉 |
-| 公開鏡像的 clone（例 `~/Projects/TrailRunCoach-public`） | 只給 `public_mirror.py sync` 寫入、人推 | 部署後 `sync` → 看 → `push origin main` |
+| 公開鏡像 | GitHub Action `public-mirror.yml` 在 push 到 private `main` 後自動 `sync` 並用 deploy key 推（SP-532） | 無；Action 壞掉時照 `deploy/public-mirror/README.md`「手動同步」 |
 | vault 的 `repo-docs/` 鏡像 | 從本機 clone 讀，不經 GitHub | 無（讀的是 private 的 clone，內容完整） |
 | Claude 的雲端 session | 靠 GitHub App 授權，App 要裝在 **private repo** 上 | 開一個雲端 session 試 clone private repo 一次 |
-| GitHub Actions | 目前沒有 workflow | 無；之後加在 private repo（每月有免費分鐘數） |
-| GitHub Pages 線上示範 | `gh-pages` 分支要刪（裡面有賽事計算機的引擎 zip） | 先照 `deploy/static/README.md` §2b 搬到 Cloudflare Pages；靜態匯出不再打包引擎 zip 另開單 |
+| GitHub Actions | private repo 只有 `public-mirror.yml`（公開鏡像同步） | 無 |
+| GitHub Pages 線上示範 | 2026-10-14 `gh-pages` 已刪、Pages 已關；靜態示範的程式也刪了（不再提供） | 無 |
 | Hugging Face Space（`deploy/hf/`） | 不連 GitHub（`make_space.py` 從本機 clone 複製） | 見下 |
 
 `deploy/hf/make_space.py` 會把 `backend/`、`views/` 的**原始碼**（含計算核心）從本機 private clone 複製進 Space repo。
@@ -134,13 +133,15 @@ Space 是 public 的話，等於把核心公開一份；要放伺服器版示範
 
 - **動到引擎模組或升判讀版本的部署，集中在每週一次深夜**（SP-338）。這類部署會讓所有租戶的衍生快取失效、要重算；集中在深夜一次，重算排進 SP-338 的全域佇列，最近 7 天有登入或同步的租戶先補。
 - 只改畫面、文案、設定頁的部署不受限，隨時可以上。
+- **背景重算的工作行程**（SP-394 第 5 條）：賽事回測和整批的自動分類在另開的 Python 行程裡算（`backend/workproc.py`），不再拖慢同一時間的頁面請求。容器裡因此最多會多兩個行程（每個量到最高約 270 MB：約 110 MB 程式加上該租戶的 Dataset），算在同一個 `mem_limit` 裡，優先權比伺服器低（nice 10）。行程出問題時可設 `TRC_PROCESS_JOBS=0` 退回在伺服器行程裡算（頁面會在回測期間慢 10～20 倍）。
+- **10 個租戶同時重建的記憶體**（SP-394 第 6 條，本機量，約 3 年資料的示範跑者複製 10 份）：整個行程樹（含 FIT 解析與工作行程）峰值 1,961 MB（第一次匯入）／1,979 MB（部署改版）；修正前 3,164 MB，超過容器 3 GB。重量：`python -m backend.scripts.perf_sp394 memory --base <示範資料> --work <暫存資料夾>`。NAS 上 Python 的記憶體用量跟本機差不多（不像 CPU 時間要乘 8.5），但沒在 NAS 量過。
 - 判斷「有沒有動到引擎」：diff 碰到 `backend/engine/**`、`fitcache` 的版本號、`CACHE_VERSION`、`INDEX_VERSION`、`ALGO_VERSION` 任一個就算。
 
 ## 7. NAS 備份 🧑‍💻✅（整台伺服器，SP-384 之後）
 
 多使用者之後，每日備份要涵蓋 `accounts.db` 與所有 `users/<id>/`（接 SP-355）。擁有者自己的備份（設定 › 備份）刻意**不含**別人的資料（`data_registry`：`accounts.db`、`users/**`、`site.json` 是伺服器自己的檔案，`backup=never`），所以另有一支整台伺服器的備份：`backend/accounts/server_backup.py`。
 
-- 👤 設 `WKO5COACH_SERVER_BACKUP_DIR`（NAS 上、伺服器資料夾以外的共用資料夾，例如 `/volume1/trc-backups`；放在伺服器資料夾裡面會被拒絕）。要連 FIT 原檔一起備份再加 `WKO5COACH_SERVER_BACKUP_FIT=1`。
+- 👤 設 `TRC_SERVER_BACKUP_DIR`（NAS 上、伺服器資料夾以外的共用資料夾，例如 `/volume1/trc-backups`；放在伺服器資料夾裡面會被拒絕）。要連 FIT 原檔一起備份再加 `TRC_SERVER_BACKUP_FIT=1`。
 - 多使用者模式下，排程每天跑一次（和擁有者的每日備份同一個迴圈）；也可以手動：`python -m backend.accounts.server_backup`。
 - 每次一個資料夾 `server-YYYYMMDD-HHMMSS/`：`accounts.db` 快照、`site.json`、每位使用者一個 SP-355 格式的 zip（DB 不含同步憑證，加上使用者自己的檔案）、`manifest.json`（人數、大小、失敗的使用者）。保留最近 7 次。
 - 某一位使用者備份失敗不影響其他人，記在 manifest。

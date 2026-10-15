@@ -30,7 +30,9 @@ type (docs/research/vo2max-gate-and-trail-metric.md §2, zones-and-thresholds.md
   AeT test                                           by protocol: 徐國峰 90 / Friel → HR (or pace),
                                                      UA 60 / 40 / Evoke → a fixed power
 A forced basis the thresholds can't fill falls back (power without CP → HR, HR
-without LTHR/AeT → none) with the reason.
+without LTHR/AeT → none) with the reason. SP-493 (owner 2026-10-14): the road intervals' auto
+power goes to HR when the CP is stale — no CP test and no race in base_check.EP_ALL_OUT_DAYS
+(`cp_stale`, week_plan's thresholds; base_check.cp_stale) — the trail rules above stay HR.
 """
 from __future__ import annotations
 
@@ -57,6 +59,9 @@ TIP = ("課表的目標用心率還是功率。\n自動：路跑的輕鬆跑、�
        "心率只當上限提醒；長爬坡只給建議、不設目標；下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。\n"
        "心率：全部用心率區間（設定的課表心率區間；輕鬆跑上限＝Z2 上緣，有實測 AeT 時用實測值）。\n功率：全部用功率區間（Palladino % CP）；"
        "測試和下坡照它們自己的規則。\n每次課表也可以在編輯時改「目標用：自動／心率／功率」，只影響這次課表。")
+
+
+CP_STALE = N_("CP 太舊（最近沒有 CP 測試或比賽）：間歇改用心率")
 
 
 def pref_basis(prefs) -> str:
@@ -146,10 +151,11 @@ def _auto_power_ok() -> bool:
         return True
 
 
-def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
+def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Optional[bool] = None) -> dict:
     """{"basis": hr | power | none, "chosen": auto | hr | power (where it came from),
         "type", "why", "source", "hr_cap": bool (an HR cap note on power sessions),
-        "fallback": "" | reason}."""
+        "fallback": "" | reason}. `cp_stale` (SP-493; default th["cp_stale"]): an auto road interval
+    is run by HR."""
     t = session_type(s)
     own = s.get("target_basis")
     chosen = own if own in ("hr", "power") else pref_basis(prefs)
@@ -169,6 +175,9 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
         basis, fb = "hr", _("功率來源不是 Stryd：用心率")
     if basis == "power" and th and not th.get("cp"):
         basis, fb = "hr", _("沒有 CP：改用心率")
+    stale = cp_stale if cp_stale is not None else bool((th or {}).get("cp_stale"))
+    if basis == "power" and stale and t == "interval" and chosen not in ("hr", "power"):
+        basis, fb = "hr", _(CP_STALE)
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):
         basis, fb = "none", _("沒有 AeT／LTHR：不設目標")
     return {"basis": basis, "chosen": own if own in ("hr", "power") else chosen, "type": t, "why": why + (f"（{fb}）" if fb else ""),

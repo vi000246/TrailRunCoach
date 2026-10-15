@@ -114,6 +114,10 @@ def _status(ds, today: dt.date) -> Status:
         if done is not None:
             return done
         st = Status(ds, today=today, prefs=prefs).compute()
+        # kept below for this tenant: without the Dataset, which the Dataset cache's budget decides
+        # on (SP-394 第 6 條; a test's stand-in may have no detach)
+        if hasattr(st, "detach"):
+            st = st.detach()
         with _lock:
             # LRU per tenant (demo sandboxes, later users); the owner alone keeps one entry warm
             mine = [k for k in _status_cache if k[0] == key[0]]
@@ -408,8 +412,7 @@ def weekplan():
     except ValueError:
         monday = today - dt.timedelta(days=today.weekday())
     ctx = H.week_context(today, monday, phase_start=getattr(getattr(st, "phase", None), "start", None),
-                         cold_week=(w.get("cold_start") or {}).get("week"),
-                         hot_race=bool((w.get("heat") or {}).get("active")))
+                         cold_week=(w.get("cold_start") or {}).get("week"))
     return {**w, "notes": H.notes(w.get("notes"), ctx)}
 
 
@@ -487,10 +490,10 @@ def _specific_chart_href() -> str:
         for name, v in load_custom_views().items():
             for di, d in enumerate(v.get("dashboards") or []):
                 if d.get("id") == "build":
-                    return "/api/v1/wko5/viewer?" + urlencode({"view": name, "dash": di})
+                    return "/api/v1/app/viewer?" + urlencode({"view": name, "dash": di})
     except Exception:                          # noqa: BLE001 — a broken view file: plain viewer link
         pass
-    return "/api/v1/wko5/viewer"
+    return "/api/v1/app/viewer"
 
 
 def _z5_chart_href() -> str:
@@ -502,10 +505,10 @@ def _z5_chart_href() -> str:
             for di, d in enumerate(v.get("dashboards") or []):
                 for ci, c in enumerate(d.get("charts") or []):
                     if c.get("kind") == "z5gate":
-                        return "/api/v1/wko5/viewer?" + urlencode({"view": name, "dash": di, "chart": ci})
+                        return "/api/v1/app/viewer?" + urlencode({"view": name, "dash": di, "chart": ci})
     except Exception:                          # noqa: BLE001 — a broken view file: plain viewer link
         pass
-    return "/api/v1/wko5/viewer"
+    return "/api/v1/app/viewer"
 
 
 @router.get("/page", include_in_schema=False)

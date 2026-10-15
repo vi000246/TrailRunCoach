@@ -606,7 +606,10 @@ def test_interval_outcome_state_machine_rows():
     assert met["outcome"] == "met"
     last_small = QG.interval_outcome(_b(250, 250, 249, 248, 239), spec, cp)       # −4.4 %: still 達標
     assert last_small["outcome"] == "met" and last_small["first_miss"] == 5
-    last_big = QG.interval_outcome(_b(255, 250, 249, 248, 235), spec, cp)         # −7.8 %: 邊界
+    # SP-526: the fall is against the 3rd rep, ≤ 10 % for 1-minute reps (Allen): −5.6 % is 達標 now
+    last_mid = QG.interval_outcome(_b(255, 250, 249, 248, 235), spec, cp)
+    assert last_mid["outcome"] == "met" and last_mid["last_fade"] == 0.10
+    last_big = QG.interval_outcome(_b(255, 250, 249, 248, 222), spec, cp)         # −10.8 %: 邊界
     assert last_big["outcome"] == "border"
     rep2 = QG.interval_outcome(_b(250, 230, 249, 248, 247), spec, cp)
     assert rep2["outcome"] == "unadapted" and rep2["first_miss"] == 2
@@ -993,7 +996,7 @@ def test_each_protocol_session_title_steps_and_hover(key):
     assert steps[0].seconds == p["warm"] * 60 and steps[1].seconds == p["main"] * 60
     if key == "xu90":
         # SP-274: no E pace, no tested CP (cp_measured unset) → the talk test, no HR cap
-        assert steps[1].intensity is None and steps[0].intensity[0] == "hr"
+        assert steps[1].intensity is None and steps[0].intensity is None     # SP-479: no warm-up target
     elif key == "friel":
         assert steps[1].intensity[0] == "hr"                       # steady at AeT
     else:

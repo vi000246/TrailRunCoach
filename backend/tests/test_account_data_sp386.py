@@ -26,7 +26,7 @@ CAL_TOKEN = "ics-feed-token-SP386"
 DEBUG_HASH = "debug-token-hash-SP386"
 SECRET_FILE = b"secret-file-SP386"
 DERIVED_FILE = b"derived-cache-SP386"
-SETTINGS_URL = "/api/v1/wko5/settings"
+SETTINGS_URL = "/api/v1/app/settings"
 
 
 # ---------------------------------------------------------------------------- helpers

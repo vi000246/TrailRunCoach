@@ -17,7 +17,7 @@ from backend.engine import activity_tags as AT
 from backend.engine import sport_map as SM
 from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
 
-PAGE = Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html"
+PAGE = Path(__file__).resolve().parents[1] / "static" / "charts.html"
 VIEWS = Path(__file__).resolve().parents[2] / "views"
 NODE = shutil.which("node")
 T0 = dt.datetime(2026, 9, 28, 7, 0)

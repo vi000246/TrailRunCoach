@@ -520,6 +520,13 @@ EP_NO_TEST_MODES = ("recovery_week", "reentry")
 EP_RACE_DAYS = 10           # no test in the 10 days before an A race (the CP / AeT tests' rule)
 
 
+def cp_stale(today: dt.date, last_cp_test: Optional[str], last_race: Optional[str]) -> bool:
+    """SP-493: the CP has no all-out effort under it — no CP test and no race in the last EP_ALL_OUT_DAYS
+    (the same rule as easy_power_tests' CP side): target_policy runs the road intervals by HR."""
+    hard = [x for x in (_days_ago(today, last_cp_test), _days_ago(today, last_race)) if x is not None and x >= 0]
+    return not hard or min(hard) > EP_ALL_OUT_DAYS
+
+
 def easy_power_blocked(days_to_a: Optional[int], phase: Optional[str], mode: Optional[str],
                        cold_start: bool) -> Optional[str]:
     """Why the easy-power test is not suggested this week (the CP / AeT tests' own limits): "cold_start"
@@ -546,7 +553,9 @@ def _days_ago(today: dt.date, day: Optional[str]) -> Optional[int]:
 def easy_power_tests(note: Optional[dict], today: dt.date, *, lthr: Optional[float] = None,
                      lthr_measured: bool = False, lthr_conf: Optional[str] = None, lthr_prior: bool = False,
                      cp_date: Optional[str] = None, last_cp_test: Optional[str] = None,
-                     last_race: Optional[str] = None, last_aet_test: Optional[str] = None) -> Optional[dict]:
+                     last_race: Optional[str] = None, last_aet_test: Optional[str] = None,
+                     hr_model: str = "lthr", mhr: Optional[float] = None, mhr_conf: Optional[str] = None,
+                     cap_measured: bool = False, model_label: str = "") -> Optional[dict]:
     """SP-471: the tests an easy_power_note points at, from the athlete's own numbers.
 
     * AeT test (an LTHR test too when the LTHR is the doubt) — the HR side: the easy-run cap within
@@ -557,8 +566,14 @@ def easy_power_tests(note: Optional[dict], today: dt.date, *, lthr: Optional[flo
     * neither side: the CP test (the cap sits well below a believable LTHR, so the CP is the likelier
       one to be low).
     A kind done in the last EP_RETEST_DAYS is left out (its result first). Both can be listed, each
-    with its reason. {"summary", "tests": [{"kind", "why", "lthr_doubt"}]}; None without a note or
-    with nothing left."""
+    with its reason. {"summary", "tests": [{"kind", "why", "lthr_doubt", "mhr_doubt"}]}; None without
+    a note or with nothing left.
+
+    SP-493 (owner 2026-10-14, Q1 第 3 題): under the 儲備心率 / 最大心率 課表心率區間 (`hr_model`, the
+    zones in effect) the easy-run cap comes from the max HR, not LTHR: without a measured AeT
+    (`cap_measured`) the HR side is the max HR's confidence (`mhr_conf` low → an AeT test with the
+    max-HR test's link, `mhr_doubt`); the cap is compared with LTHR only when the LTHR is believable
+    (measured, or its confidence not low), and 「LTHR 是自動估算、可信度低」 is not said."""
     nums = (note or {}).get("nums") or {}
     if not note or note.get("src") != "easy_power" or nums.get("power") is None:
         return None
@@ -567,12 +582,20 @@ def easy_power_tests(note: Optional[dict], today: dt.date, *, lthr: Optional[flo
                 "但輕鬆跑功率帶上限是 {hi:.0f} W（{hip:.0f}% CP）",
                 cap=cap, pw=nums["power"], pct=nums["pct"], cp=cp, hi=nums["band_top"], hip=nums["band_top_pct"])
     hr_why = []
-    if lthr and cap and cap >= lthr:
+    other = hr_model in ("hrr", "hrmax")
+    lthr_ok = bool(lthr) and (lthr_measured or (not lthr_prior and lthr_conf not in (None, "low")))
+    mhr_doubt = other and not cap_measured and bool(mhr) and mhr_conf == "low"
+    if mhr_doubt:
+        hr_why.append(_("輕鬆跑上限 {cap:.0f} 是{model} Z2 上緣，從最大心率 {mhr:.0f} 算的，最大心率可信度低",
+                        cap=cap or 0, model=model_label or hr_model, mhr=mhr))
+    if other and not lthr_ok:
+        pass                                    # SP-493: an unbelievable LTHR is no yardstick for a max-HR cap
+    elif lthr and cap and cap >= lthr:
         hr_why.append(_("心率上限 {cap:.0f} 不低於 LTHR {lthr:.0f}：輕鬆跑上限可能設太高", cap=cap, lthr=lthr))
     elif lthr and cap and lthr - cap < EP_CAP_LTHR_GAP_BPM:
         hr_why.append(_("心率上限 {cap:.0f} 跟 LTHR {lthr:.0f} 幾乎一樣（差 {gap:.0f} bpm，不到 {lim:.0f}）："
                         "輕鬆跑上限可能設太高", cap=cap, lthr=lthr, gap=lthr - cap, lim=EP_CAP_LTHR_GAP_BPM))
-    lthr_doubt = bool(lthr) and not lthr_measured and (lthr_prior or lthr_conf == "low")
+    lthr_doubt = not other and bool(lthr) and not lthr_measured and (lthr_prior or lthr_conf == "low")
     if lthr_doubt:
         hr_why.append(_("LTHR {lthr:.0f} 是自動估算、可信度低", lthr=lthr))
     cp_why = []
@@ -593,10 +616,11 @@ def easy_power_tests(note: Optional[dict], today: dt.date, *, lthr: Optional[flo
 
     tests = []
     if hr_why and not recent(last_aet_test):
-        tests.append({"kind": "aet", "lthr_doubt": lthr_doubt,
+        tests.append({"kind": "aet", "lthr_doubt": lthr_doubt, "mhr_doubt": mhr_doubt,
                       "why": why(hr_why, _("建議做 AeT 測試（或 30 分鐘 LTHR 測試）") if lthr_doubt
+                                 else _("建議做 AeT 測試（或最大心率測試）") if mhr_doubt
                                  else _("建議做 AeT 測試"))})
-    if not hr_why and not cp_why and lthr and cap:
+    if not hr_why and not cp_why and lthr and cap and (lthr_ok or not other):
         cp_why.append(_("心率上限離 LTHR {lthr:.0f} 還有 {gap:.0f} bpm、LTHR 可信：比較像是 CP 估低了",
                         lthr=lthr, gap=lthr - cap))
     if cp_why and not recent(last_cp_test):

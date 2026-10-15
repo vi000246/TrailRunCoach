@@ -131,20 +131,27 @@ def test_the_defaults_match_the_server():
     assert int(m.group(3)) * 1048576 == UP.MAX_REQUEST_BYTES and int(m.group(4)) * 1048576 == UP.BATCH_BYTES
     assert int(m.group(5)) == UP.MAX_SELECT and re.findall(r'"([^"]+)"', m.group(6)) == list(UP.EXTS)
     lim = UP.limits()
-    assert set(lim) == {"max_file_bytes", "max_files", "max_request_bytes", "batch_bytes", "max_select", "exts"}
+    assert set(lim) == {"max_file_bytes", "max_track_bytes", "max_files", "max_request_bytes", "batch_bytes",
+                        "max_select", "exts"}
+    m = re.search(r"max_track_bytes: (\d+) \* 1048576 \}", JS)
+    assert m and int(m.group(1)) * 1048576 == UP.MAX_TRACK_BYTES
 
 
 def test_the_picker_offers_files_and_a_folder_and_the_demo_lock_finds_it():
-    assert '<input type="file" accept="${ACCEPT}" multiple hidden data-fi="files">' in JS
-    assert '<input type="file" accept="${ACCEPT}" multiple webkitdirectory hidden data-fi="dir">' in JS
+    assert '<input type="file" accept="${ACCEPT}" multiple hidden data-fi="files" data-cap="upload.fit">' in JS
+    assert ('<input type="file" accept="${ACCEPT}" multiple webkitdirectory hidden data-fi="dir" '
+            'data-cap="upload.fit">') in JS
     accept = re.search(r'const ACCEPT = "([^"]+)"', JS).group(1)
     assert accept.split(",") == list(UP.EXTS)
-    # shell.js locks `upload.fit` controls in the demo by this selector: it must match our inputs
+    # shell.js locks `upload.fit` controls in the demo by this selector (FIT inputs: an accept
+    # without .gpx — the course GPX inputs stay open); since SP-349 the picker takes TCX / GPX too,
+    # so the inputs carry data-cap themselves (the lock reads every [data-cap])
     shell = (STATIC / "shell.js").read_text("utf-8")
     sel = re.search(r'\["upload\.fit", "([^"]+)"\]', shell).group(1)
     assert sel == "input[type=file][accept*='.fit' i]:not([accept*='.gpx' i])"
-    assert ".fit" in accept.lower() and ".gpx" not in accept.lower()
-    assert JS.count('data-cap="upload.fit"') == 2                              # both buttons
+    assert ".fit" in accept.lower() and ".gpx" in accept.lower() and ".tcx" in accept.lower()
+    assert 'for (const el of (root.querySelectorAll ? root.querySelectorAll("[data-cap]")' in shell
+    assert JS.count('data-cap="upload.fit"') == 4                              # both buttons, both inputs
     # the folder button only where the browser can pick a folder (iOS 18.4+, Android Chrome 132+)
     assert '"webkitdirectory" in document.createElement("input")' in JS and '${folderOk ? "" : " hidden"}' in JS
 

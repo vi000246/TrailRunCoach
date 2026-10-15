@@ -242,4 +242,4 @@ def export_text(kind: Optional[str] = None, mclass: Optional[str] = None, q: Opt
 @router.get("/page", include_in_schema=False)
 def page():
     """The 成就 page is now the 成就 tab of 活動列表 (2026-10-02)."""
-    return RedirectResponse("/api/v1/wko5/activities/page#achievements", status_code=307)
+    return RedirectResponse("/api/v1/app/activities/page#achievements", status_code=307)

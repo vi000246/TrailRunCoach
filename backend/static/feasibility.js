@@ -11,7 +11,8 @@
  *
  * 提示多寡 (SP-486 = docs/research/ui-hint-audit.md §7 T5, docs/spec/ui-hints.spec.md): the card keeps the
  * verdict and what changes a decision —
- *   the pills (PL7) and the cutoff / turnaround (PL14): every level
+ *   the pills (PL7) and the cutoff / turnaround (PL14): every level; a multi-day 百岳's effort (SP-545:
+ *     「預估：吃力」 and which item makes it so — the race calculator's effort words): every level
  *   跨級 「分級 a → b」 (PL10 ●◐▷): 完整 always; 標準 when it jumps ≥ 2 classes or hides × 2; 精簡 when it
  *     jumps ≥ 2 classes. The EP multiple (PL11, R13) next to it: 完整 always, 標準 at ≥ 2 times, 精簡 never
  *     (the × 2 reminder, PL12, says it — a class-1 line in every level)
@@ -72,7 +73,7 @@
 
   // SP-486: is this check's number shown next to its pill in level `lv`?
   function chipOn(c, lv) {
-    if (c.id === "cutoff") return true;                              // PL14, class 1
+    if (c.id === "cutoff" || c.id === "effort") return true;         // PL14, class 1; SP-545 the effort's reason
     if (c.id === "hours") return lv === "full";                      // PL17 Koop ●▷▷
     if (c.id === "step") return lv === "full" || c.up >= 2 || (lv === "standard" && !!c.x2);   // PL10 ●◐▷
     return lv !== "lean" || BEHIND.has(c.level);                     // PL9 / PL16: 精簡 only what falls short
@@ -96,7 +97,9 @@
         if (c.ep_ratio != null && (lv === "full" || (lv === "standard" && c.ep_ratio >= 2))) t += " · " + T("k_mult", { x: f1(c.ep_ratio) });
       }
       else if (c.id === "hours" && c.run != null) t = T("k_hours", { h: c.need_h, n: c.run, k: c.need });
-      else if (c.id === "vam" && c.need != null) t = T("k_vam", { n: c.need, s: c.steady });
+      else if (c.id === "vam" && c.need != null) t = T("k_vam", { n: c.need, s: c.steady, h: c.hard });
+      // SP-545 a multi-day 百岳: how hard, and which item makes it so
+      else if (c.id === "effort" && c.pct != null) t = T("k_effort", { what: c.driver_name, p: pct(c.pct) });
       else if (c.id === "power" && c.w_per_kg != null) t = T("k_power", { w: c.w_per_kg });
       // SP-114 a multi-day 百岳: summit-day simulations still possible / done
       else if (c.id === "summit_sim" && c.projected != null) t = T("k_sims_plan", { n: c.projected + (c.done || 0), k: c.need });
@@ -129,7 +132,11 @@
     // SP-292: 資料等級 0 / 1 — the data the verdict stands on (「依你填的資料」／「資料還少」, translated by the
     // engine); its sentence is a line (PL20) below
     const src = r.data_source;
-    out.push(`<div class="feas-r"><span class="q">${esc(T("feas"))}</span><span class="feas-k">${pill(r.level, r.label)}${src ? pill("unknown", src.label) : ""}${nums(r.checks, multi, lv)}</span>`);
+    // SP-545: a multi-day 百岳 says how hard the trip will feel (「預估：吃力」), not 來不來得及; when the
+    // turnaround / late check sets the pill, the effort is a second pill
+    const ef = r.effort, feasQ = ef !== undefined ? T("feas_effort") : T("feas");
+    const efPill = ef && ef.title !== r.label ? pill(ef.level, ef.title) : "";
+    out.push(`<div class="feas-r"><span class="q">${esc(feasQ)}</span><span class="feas-k">${pill(r.level, r.label)}${efPill}${src ? pill("unknown", src.label) : ""}${nums(r.checks, multi, lv)}</span>`);
     if (rd) out.push(`<span class="q">${esc(T("ready"))}</span><span class="feas-k">${pill(rd.level, rd.label)}${nums(rd.checks, multi, lv)}</span>`);
     out.push(`</div>`);
     const ln = lines(r, opts, lv);
@@ -137,14 +144,14 @@
     // the advice not on the card (the milestone, a second tight advice …) stays under 詳細
     const onCard = r.hints ? new Set(r.hints.filter((h) => h.kind === "advice").map((h) => h.text)) : new Set(sg.slice(0, 1));
     const rest = sg.filter((s) => !onCard.has(s));
-    out.push(`<details><summary>${esc(T("detail"))}</summary><h4>${esc(T("feas"))}</h4>${list(r.checks)}`);
+    out.push(`<details><summary>${esc(T("detail"))}</summary><h4>${esc(feasQ)}</h4>${list(r.checks)}`);
     if (rest.length) out.push(`<ul class="feas-more">${rest.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>`);
     if (rd) out.push(`<h4>${esc(T("ready"))}</h4>${list(rd.checks)}`);
     if (ln.detailHtml) out.push(ln.detailHtml);
     // the sources (a second `const src` here — the data level's, above — was a SyntaxError that
     // stopped this whole file: no feasibility card on 賽事周期 since SP-292)
     const refs = [...new Set([...(r.src || []), ...((rd && rd.src) || [])])];
-    out.push(`<p class="feas-m">${esc(T("how_text"))}</p><h4>${esc(T("src"))}</h4>${refs.map((s) => `<p class="feas-m">${esc(s)}</p>`).join("")}</details></div>`);
+    out.push(`<p class="feas-m">${esc(T(ef !== undefined ? "how_text_baiyue" : "how_text"))}</p><h4>${esc(T("src"))}</h4>${refs.map((s) => `<p class="feas-m">${esc(s)}</p>`).join("")}</details></div>`);
     return out.join("");
   }
 

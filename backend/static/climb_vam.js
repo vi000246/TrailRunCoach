@@ -1,5 +1,5 @@
 // 穩定爬坡 VAM:HR (views kind "climbvam" → backend/engine/panels/climb_vam.py). Self-contained:
-// loaded by wko5_viewer.html, which calls cvQuery(c) when it fetches the card and drawClimbVam(box, res)
+// loaded by charts.html, which calls cvQuery(c) when it fetches the card and drawClimbVam(box, res)
 // to draw it; uses the viewer's globals (esc, css, echarts, charts, renderCard, loadToken, ZOOM, fillZoom,
 // pzDark). One route at a time (like for like): each sustained climb is a dot (categorical slot 1, blue) —
 // filled = run, hollow = walked (shape, never colour alone) — and the 8-week rolling median a line (slot 2,
@@ -7,7 +7,7 @@
 // Hover = per-dot tooltip; a table view sits under the chart. With no comparable climb, the card shows how
 // long each activity's longest climb was instead.
 (function () {
-  const KEY = "wko5viewer.climbvam";
+  const KEY = "charts.climbvam";
   const prefs = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; } };
   const save = (patch) => { try { localStorage.setItem(KEY, JSON.stringify({ ...prefs(), ...patch })); } catch {} };
   const colors = () => (window.pzDark && pzDark())

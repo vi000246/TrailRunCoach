@@ -131,6 +131,10 @@ def _no_real_event_gpx(monkeypatch, tmp_path_factory):
     # nor the race calculator's saved inputs (engine/race_calc_store.py)
     from backend.engine import race_calc_store
     monkeypatch.setattr(race_calc_store, "_default_db", lambda: None)
+    # nor a course's stored surface, and no OSM lookup leaves the machine (SP-543: tests pass a fake server)
+    from backend.engine import course_surface
+    monkeypatch.setattr(course_surface, "_default_db", lambda: None)
+    monkeypatch.delenv("TRC_OVERPASS_URL", raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -154,6 +158,16 @@ def _empty_job_queue():
     jobs.reset()
     yield
     jobs.reset()
+
+
+@pytest.fixture(autouse=True)
+def _no_worker_processes(monkeypatch):
+    """The back-test and a whole classification run in a worker process in the app (SP-394 第 5
+    條, backend/workproc.py); a spawned process would not see the fixtures' patched modules (the
+    tmp folders above), so the tests compute in their own process. test_workproc_sp394.py turns
+    them on where it tests them."""
+    from backend import workproc
+    monkeypatch.setenv(workproc.ENV, "0")
 
 
 @pytest.fixture(autouse=True)
@@ -250,9 +264,20 @@ def _no_auto_plan_after_sync(monkeypatch):
     monkeypatch.setattr(plan_auto, "after_settings", lambda *a, **k: None)
     # nor a CP that moved by itself, seen when the 課表 is opened (plan_auto.check_cp, SP-468)
     monkeypatch.setattr(plan_auto, "after_cp_moved", lambda *a, **k: None)
+    # nor a switch of the 自動 課表心率區間 (plan_auto.check_hr_model, SP-493)
+    monkeypatch.setattr(plan_auto, "after_hr_model", lambda *a, **k: None)
     # nor a background calibration run (engine/calibrate.py; test_calibrate calls it itself)
     from backend.engine import calibrate
     monkeypatch.setattr(calibrate, "after_sync", lambda *a, **k: None)
+
+
+@pytest.fixture(autouse=True)
+def _hr_zone_model_default_lthr(monkeypatch):
+    """SP-493 made 自動 the 課表心率區間 a runner who never chose gets (hr_profile.DEFAULT_SETTING). The
+    suite's fixtures were written for the LTHR default: they keep it unless a test sets the model
+    (test_auto_zones_sp493 tests 自動 itself)."""
+    from backend.engine import hr_profile
+    monkeypatch.setattr(hr_profile, "DEFAULT_SETTING", "lthr")
 
 
 @pytest.fixture(autouse=True)
@@ -285,6 +310,24 @@ def _no_live_garmin(monkeypatch):
     yield
     garmin_client._PENDING.clear()
     garmin_limits.reset()
+
+
+@pytest.fixture(autouse=True)
+def _intervals_clean(monkeypatch):
+    """intervals.icu (SP-346): its requests go through sync/http.client, so _no_live_sync_calls
+    already refuses the network; here the app-wide counts, the 0.12-s gap, the connect states and
+    the OAuth app's settings start clean (a developer's TRC_INTERVALS_* never reaches a test)."""
+    from backend.sync import intervals_client, intervals_limits
+    monkeypatch.setattr(intervals_limits, "GAP_S", 0.0)
+    for n in (intervals_client.ENV_CLIENT_ID, intervals_client.ENV_CLIENT_SECRET,
+              intervals_client.ENV_WEBHOOK_SECRET):
+        monkeypatch.delenv(n, raising=False)
+        monkeypatch.delenv(n + "_FILE", raising=False)
+    intervals_limits.reset()
+    intervals_client._STATES.clear()
+    yield
+    intervals_limits.reset()
+    intervals_client._STATES.clear()
 
 
 @pytest.fixture(autouse=True)

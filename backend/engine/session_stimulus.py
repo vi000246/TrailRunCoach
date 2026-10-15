@@ -238,8 +238,8 @@ def hr_peak(peaks: Sequence[float], rank: int = HRPEAK_RANK) -> Optional[float]:
 def verdict(stim: Optional[dict], category: str, hrpeak: Optional[float] = None, easy_hr: bool = False) -> dict:
     """{"stimulus": "z5" | "z3" | None, "t_vo2_eq_s", "t_vo2_power_s", "t_vo2_hr_s", "hr_thr", "z3_s", "why"}.
     Zone 5 only on road / trail (百岳 never auto-Z5; the 「當作間歇判讀」 mark still works).
-    ≥ 4 min of power evidence is Zone 5 even when the average HR stayed ≤ AeT + 3
-    (long warm-up / rests); otherwise an easy average HR means no stimulus."""
+    ≥ 4 min of power evidence is Zone 5 even when the average HR stayed easy (≤ the easy cap + 3,
+    hr_profile.is_easy — SP-565; long warm-up / rests); otherwise an easy average HR means no stimulus."""
     stim = stim or {}
     t_p = float(stim.get("t_vo2_power_s") or 0.0)
     thr = HR_VO2 * hrpeak if hrpeak else None
@@ -253,5 +253,5 @@ def verdict(stim: Optional[dict], category: str, hrpeak: Optional[float] = None,
     if not easy_hr and z3 >= Z3_NEED_S:
         return {**out, "stimulus": "z3", "why": f"Zone 3 {z3 / 60:.0f} 分 ≥ {Z3_NEED_S // 60} 分；"
                                                  f"等效 T@VO2max {eq / 60:.1f} 分 < {Z5_MIN_S // 60} 分"}
-    return {**out, "stimulus": None, "why": "平均心率 ≤ AeT+3" if easy_hr else
+    return {**out, "stimulus": None, "why": "平均心率 ≤ 輕鬆跑上限+3" if easy_hr else
             f"Zone 3 {z3 / 60:.0f} 分 < {Z3_NEED_S // 60} 分、等效 T@VO2max {eq / 60:.1f} 分 < {Z5_MIN_S // 60} 分"}

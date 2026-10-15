@@ -21,8 +21,8 @@ B and C races (SP-95; periodization-cross-sport.md §4.8, §4.8.1, §6.1「SP-95
     run; no interval in the B_INTERVAL_DAYS days before it, no tempo or long run in the
     B_TEMPO_LONG_DAYS before it (Pfitzinger, via [437]; Friel rests 2–3 days [431]); the race is the
     week's key session (a `race` session on its day — the other sessions that day go);
-  * after it planning.recovery_plan(b=True): 短 3 days, 中 5 days of easy runs only; 馬拉松級 and
-    up an A race's recovery days and day rules (no 回量期);
+  * after it planning.recovery_plan(b=True): easy runs only — 短 3 days, 中 one day per 3 km (a trail
+    race's EP; ≤ 7, SP-525 Daniels); 馬拉松級 and up an A race's recovery days and day rules (no 回量期);
   * a C race replaces one quality session or the long run of its week (中 and longer: the long run
     first; 短: the quality session first), the rest unchanged (TrainerRoad [362]; elites race in
     training [416]);
@@ -43,7 +43,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from backend.i18n import _
+from backend.i18n import M_, _
 
 RUN_KINDS = ("easy", "long", "quality", "test", "hike")
 _CLEAR = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
@@ -60,8 +60,9 @@ def _get(p, k):
 
 def a_windows(phases, events, monday: dt.date) -> list[dict]:
     """The A races whose days or first REC_SHORT_DAYS after their last day touch the week of `monday`:
-    [{"race", "id", "start", "end", "no_run", "short", "flat"}] (dates; `flat` None without a big
-    downhill). `phases`: Phase objects or dicts; `events`: planning.Event (for the downhill verdict)."""
+    [{"race", "id", "start", "end", "no_run", "short", "flat", "trip"}] (dates; `flat` None without a big
+    downhill; `trip`: a 百岳 trip, kind baiyue — its notes say 行程, SP-504 R2). `phases`: Phase objects or
+    dicts; `events`: planning.Event (for the downhill verdict)."""
     from backend.engine import planning as P
     sunday = monday + dt.timedelta(days=6)
     by_id = {e.id: e for e in events or ()}
@@ -84,7 +85,8 @@ def a_windows(phases, events, monday: dt.date) -> list[dict]:
                     "start": start, "end": end,
                     "no_run": end + dt.timedelta(days=P.REC_NO_RUN_DAYS),
                     "short": end + dt.timedelta(days=P.REC_SHORT_DAYS),
-                    "flat": end + dt.timedelta(days=P.DOWNHILL_FLAT_DAYS) if dh and dh.get("big") else None})
+                    "flat": end + dt.timedelta(days=P.DOWNHILL_FLAT_DAYS) if dh and dh.get("big") else None,
+                    "trip": ev is not None and _is_baiyue(ev)})
     return out
 
 
@@ -161,20 +163,26 @@ def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, t
                 put(s, terrain="road", climb_m=None)
         if (touched or on_race) and notes is not None:
             date = f"{w['end'].month}/{w['end'].day}"
+            # a 百岳 trip (kind baiyue) is a 行程, not a 賽事 / 比賽 (SP-504 R2)
+            trip, p = bool(w.get("trip")), "B" if w.get("b") else "A"
             if not touched:
                 # only the race day had something (SP-492): a Sunday race, or nothing after it this week
-                txt = _("{p} 賽事「{race}」{date} 當天只排比賽", p="B" if w.get("b") else "A", race=w["race"],
-                        date=f"{first.month}/{first.day}")
+                d0 = f"{first.month}/{first.day}"
+                txt = (_("{p} 行程「{race}」{date} 當天只排行程", p=p, race=w["race"], date=d0) if trip else
+                       _("{p} 賽事「{race}」{date} 當天只排比賽", p=p, race=w["race"], date=d0))
             elif w["short"] > w["end"]:
-                txt = _("{p} 賽事「{race}」{date} 後：前 {n} 天不排跑步和肌力，第 1 週每次 ≤ {max} 分輕鬆跑",
-                        p="B" if w.get("b") else "A", race=w["race"], date=date, n=P.REC_NO_RUN_DAYS,
-                        max=P.REC_SHORT_MIN)
+                kw = {"p": p, "race": w["race"], "date": date, "n": P.REC_NO_RUN_DAYS, "max": P.REC_SHORT_MIN}
+                txt = (_("{p} 行程「{race}」{date} 後：前 {n} 天不排跑步和肌力，第 1 週每次 ≤ {max} 分輕鬆跑", **kw) if trip
+                       else _("{p} 賽事「{race}」{date} 後：前 {n} 天不排跑步和肌力，第 1 週每次 ≤ {max} 分輕鬆跑", **kw))
             else:
-                txt = _("{p} 賽事「{race}」{date} 後", p="B" if w.get("b") else "A", race=w["race"], date=date)
+                txt = (_("{p} 行程「{race}」{date} 後", p=p, race=w["race"], date=date) if trip else
+                       _("{p} 賽事「{race}」{date} 後", p=p, race=w["race"], date=date))
             if touched and on_race:
-                txt += _("；比賽當天只排比賽")
+                txt += _("；行程當天只排行程") if trip else _("；比賽當天只排比賽")
             if w["flat"] is not None:
-                txt += _("；下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課", h=P.DOWNHILL_FLAT_DAYS * 24)
+                h = P.DOWNHILL_FLAT_DAYS * 24
+                txt += (_("；下坡比你近 6 週練過的多，行程後 {h} 小時內走平路、不排硬課", h=h) if trip else
+                        _("；下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課", h=h))
             if gone:
                 txt += _("（{n} 堂排不開，拿掉了，不用補）", n=gone)
             notes.append({"level": "info", "src": "recovery", "text": txt})
@@ -226,8 +234,10 @@ def b_week_factor(events, monday: dt.date, kind: str) -> tuple[float, Optional[s
     if not bs or kind not in ("base", "specific"):
         return 1.0, None
     e = bs[0]
-    return B_WEEK_SHARE, _("B 賽事「{race}」{date}：這週量 {share:.0%}（推估），不排長跑，比賽算這週的重點課",
-                           race=e.name, date=_md(e.start), share=B_WEEK_SHARE)
+    kw = {"race": e.name, "date": _md(e.start), "share": B_WEEK_SHARE}
+    if _is_baiyue(e):                       # a 百岳 trip is a 行程 (SP-504 R2)
+        return B_WEEK_SHARE, M_("B 行程「{race}」{date}：這週量 {share:.0%}（推估），不排長跑，行程算這週的重點課", **kw)
+    return B_WEEK_SHARE, M_("B 賽事「{race}」{date}：這週量 {share:.0%}（推估），不排長跑，比賽算這週的重點課", **kw)
 
 
 def b_windows(events, monday: dt.date) -> list[dict]:
@@ -247,6 +257,7 @@ def b_windows(events, monday: dt.date) -> list[dict]:
         a_like = rp["rec_size"] >= P.MARATHON
         dh = rp.get("downhill") or {}
         out.append({"race": e.name, "id": e.id, "end": e.end, "b": True, "easy": easy, "days": rp["days"],
+                    "trip": _is_baiyue(e),
                     "no_run": e.end + dt.timedelta(days=P.REC_NO_RUN_DAYS) if a_like else e.end,
                     "short": e.end + dt.timedelta(days=P.REC_SHORT_DAYS) if a_like else e.end,
                     "flat": e.end + dt.timedelta(days=P.DOWNHILL_FLAT_DAYS) if dh.get("big") else None})
@@ -321,7 +332,7 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
     for e in sorted((e for e in events if getattr(e, "priority", None) == "B"
                      and monday <= e.start + dt.timedelta(days=0) <= sunday + dt.timedelta(days=B_INTERVAL_DAYS)),
                     key=lambda e: e.start):
-        said = []
+        said, trip = [], _is_baiyue(e)      # a 百岳 trip: 出發前, not 賽前 (SP-504 R2)
         for s in live:
             if s not in keep:
                 continue
@@ -333,21 +344,26 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
                 said.append(_("不排長跑"))
             elif 1 <= out <= B_TEMPO_LONG_DAYS and (k in ("quality", "test", "long")):
                 _as_easy(keep, s, B_EASY_MAX, put, easy_target)
-                said.append(_("賽前 {n} 天內不排節奏跑、長跑", n=B_TEMPO_LONG_DAYS))
+                said.append(_("出發前 {n} 天內不排節奏跑、長跑", n=B_TEMPO_LONG_DAYS) if trip else
+                            _("賽前 {n} 天內不排節奏跑、長跑", n=B_TEMPO_LONG_DAYS))
             elif out == B_INTERVAL_DAYS and k in ("quality", "test") and not _tempo(s):
                 _as_easy(keep, s, B_EASY_MAX, put, easy_target)
-                said.append(_("賽前 {n} 天內不排間歇", n=B_INTERVAL_DAYS))
+                said.append(_("出發前 {n} 天內不排間歇", n=B_INTERVAL_DAYS) if trip else
+                            _("賽前 {n} 天內不排間歇", n=B_INTERVAL_DAYS))
         if monday <= e.start <= sunday:
             rdays = race_days([e], e.start, e.end)
             keep = [s for s in keep if _get(s, "done") or _get(s, "day") not in rdays]
             if races is not None:
                 races.append(race_mark(e, rate, e.start.isoformat() in set(done_days)))
         if notes is not None and (said or monday <= e.start <= sunday):
+            kw = {"race": e.name, "date": _md(e.start), "a": B_INTERVAL_DAYS, "b": B_TEMPO_LONG_DAYS}
+            # a 百岳 trip (kind baiyue) is a 行程, not a 賽事 / 比賽 (SP-504 R2)
+            txt = (_("B 行程「{race}」{date}：出發前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，行程是這週的重點課"
+                     "（Pfitzinger、Friel，教練級）", **kw) if trip else
+                   _("B 賽事「{race}」{date}：賽前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，比賽是這週的重點課"
+                     "（Pfitzinger、Friel，教練級）", **kw))
             notes.append({"level": "info", "src": "race",
-                          "text": _("B 賽事「{race}」{date}：賽前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，比賽是這週的重點課"
-                                    "（Pfitzinger、Friel，教練級）", race=e.name, date=_md(e.start), a=B_INTERVAL_DAYS,
-                                    b=B_TEMPO_LONG_DAYS)
-                          + ("（" + "、".join(dict.fromkeys(said)) + "）" if said else "")})
+                          "text": txt + ("（" + "、".join(dict.fromkeys(said)) + "）" if said else "")})
     # 2. after a B race: easy runs only; 馬拉松級 and up also the A race's first-week rules
     for w in b_windows(events, monday):
         said = False
@@ -361,10 +377,13 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
         if w["short"] > w["end"] or w["flat"] is not None:
             keep = apply(keep, [w], monday, notes, today, blocked, easy_target)
         if said and notes is not None:
+            kw = {"race": w["race"], "date": _md(w["end"]), "n": w["days"]}
             notes.append({"level": "info", "src": "race",
-                          "text": _("B 賽事「{race}」{date} 後 {n} 天只排輕鬆跑（依賽事大小：短 3 天、中 5 天、"
-                                    "馬拉松級以上照 A 賽的恢復期；Pfitzinger，推估）",
-                                    race=w["race"], date=_md(w["end"]), n=w["days"])})
+                          "text": _("B 行程「{race}」{date} 後 {n} 天只排輕鬆跑（依行程大小：短 3 天；中 每 3 km 一天、用 EP、"
+                                    "最多 7 天；馬拉松級以上照 A 級的恢復期；Daniels、Pfitzinger，推估）", **kw)
+                          if w.get("trip") else
+                          _("B 賽事「{race}」{date} 後 {n} 天只排輕鬆跑（依賽事大小：短 3 天；中 每 3 km 一天、越野用 EP、"
+                            "最多 7 天；馬拉松級以上照 A 賽的恢復期；Daniels、Pfitzinger，推估）", **kw)})
     # 3. C races: the race replaces one quality session or the long run
     for e in sorted((e for e in events if getattr(e, "priority", None) == "C" and monday <= e.start <= sunday),
                     key=lambda e: e.start):
@@ -387,10 +406,14 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
             races.append(race_mark(e, rate, e.start.isoformat() in set(done_days)))
         if notes is not None:
             what = (_("長跑") if swap is not None and swap in longs else _("一堂強度課") if swap is not None else "")
-            notes.append({"level": "info", "src": "race",
-                          "text": (_("C 賽事「{race}」{date} 當訓練跑：取代這週的{what}，其他照常", race=e.name,
-                                     date=_md(e.start), what=what) if what else
-                                   _("C 賽事「{race}」{date} 當訓練跑，其他照常", race=e.name, date=_md(e.start)))})
+            kw = {"race": e.name, "date": _md(e.start)}
+            if _is_baiyue(e):               # a 百岳 trip is a 行程, walked as training (SP-504 R2)
+                txt = (_("C 行程「{race}」{date} 當訓練走：取代這週的{what}，其他照常", what=what, **kw) if what else
+                       _("C 行程「{race}」{date} 當訓練走，其他照常", **kw))
+            else:
+                txt = (_("C 賽事「{race}」{date} 當訓練跑：取代這週的{what}，其他照常", what=what, **kw) if what else
+                       _("C 賽事「{race}」{date} 當訓練跑，其他照常", **kw))
+            notes.append({"level": "info", "src": "race", "text": txt})
     return keep
 
 

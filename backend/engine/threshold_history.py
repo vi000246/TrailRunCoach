@@ -39,7 +39,8 @@ NAMES = {"cp": "CP", "lthr": "LTHR", "aethr": "AeT", "mhr": N_("最大心率"), 
          "hr_model": N_("課表心率區間"), "hr_zones": N_("手錶的心率區間設定")}
 UNITS = {"cp": "W", "lthr": "bpm", "aethr": "bpm", "mhr": "bpm", "rhr": "bpm"}
 SOURCES = {"manual": N_("手動"), "test": N_("測試"), "estimate": N_("套用的自動估算"), "pd_fit": N_("PD 擬合"),
-           "auto": N_("自動估算（你的跑步）"), "watch": N_("手錶帳號設定"), "hr_model": N_("心率模型")}
+           "auto": N_("自動估算（你的跑步）"), "watch": N_("手錶帳號設定"), "hr_model": N_("心率模型"),
+           "hr_model_auto": N_("自動區間換了生效的區間")}
 # what a blank 「從」 means for a plan-only threshold (no earlier plan row)
 FROM_AUTO = {"aethr": N_("推估（0.89 × LTHR）"), "mhr": N_("自動"), "rhr": N_("自動")}
 
@@ -58,8 +59,8 @@ ZONES_CHANGED = N_("區間比例改過")
 # ---------------------------------------------------------------------------
 
 def _model_ok(m) -> bool:
-    from backend.engine.hr_profile import PLAN_MODELS
-    return m in PLAN_MODELS
+    from backend.engine.hr_profile import SETTING_MODELS
+    return m in SETTING_MODELS
 
 
 def validate_model_history(value) -> None:
@@ -81,12 +82,14 @@ def validate_model_history(value) -> None:
                          f"(models lthr / hrr / hrmax, at most {MODEL_HISTORY_MAX}) or null")
 
 
-def model_history_add(history, day: dt.date, old: str, new: str) -> Optional[list]:
-    """The journal with one switch appended; None when nothing switched."""
+def model_history_add(history, day: dt.date, old: str, new: str, reason: Optional[str] = None) -> Optional[list]:
+    """The journal with one switch appended; None when nothing switched. `reason` (SP-493): a switch
+    the 自動 setting made by itself (old / new = the models in effect), with why."""
     if old == new:
         return None
     rows = [r for r in history if isinstance(r, dict)] if isinstance(history, list) else []
-    rows.append({"date": day.isoformat(), "from": old, "to": new})
+    rows.append({"date": day.isoformat(), "from": old, "to": new,
+                 **({"auto": True, "reason": reason} if reason is not None else {})})
     return rows[-MODEL_HISTORY_MAX:]
 
 
@@ -236,7 +239,9 @@ def _models(history) -> list:
     from backend.engine.hr_profile import MODEL_SHORT
     rows = [r for r in history if isinstance(r, dict)] if isinstance(history, list) else []
     lab = lambda m: _(MODEL_SHORT[m]) if m in MODEL_SHORT else str(m)    # noqa: E731
-    return [_entry(r["date"], "hr_model", r.get("from"), r.get("to"), "hr_model",
+    # SP-493: a switch the 自動 setting made by itself ({auto: true, reason}) says why
+    return [_entry(r["date"], "hr_model", r.get("from"), r.get("to"), "hr_model_auto" if r.get("auto") else "hr_model",
+                   detail=str(r.get("reason") or "") if r.get("auto") else "",
                    from_label=lab(r.get("from")), to_label=lab(r.get("to")))
             for r in rows if r.get("date")]
 

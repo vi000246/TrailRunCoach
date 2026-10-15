@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from backend import debug_auth as DA
-from backend.tests.debug_fixtures import ADMIN, ALL_SCOPES, DBG, TEST_PIN, bearer
+from backend.tests.debug_fixtures import ADMIN, ALL_SCOPES, DBG, bearer
 from backend.tests.fit_builder import build_run
 
 DAY = dt.date.today() - dt.timedelta(days=2)
@@ -41,7 +41,6 @@ def client(monkeypatch, _fit_root_in_tmp, tmp_path):
         monkeypatch.delenv(v, raising=False)
     monkeypatch.setenv("WKO5COACH_NO_SCHEDULER", "1")
     monkeypatch.setenv("WKO5COACH_HOME", str(tmp_path / "home"))
-    monkeypatch.setenv(DA.PIN_ENV, TEST_PIN)
     DA.reset_limits()
     real_connect = socket.socket.connect
 
@@ -101,7 +100,7 @@ def _keys(x, out):
 def test_activity_view_on_a_real_fit_dataset_and_every_endpoint_read_only(client, tmp_path, monkeypatch):
     from backend.db.database import db_path
     assert client.put(ADMIN, json={"enabled": True}).status_code == 200
-    tok = client.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN, "scopes": ALL_SCOPES}).json()["token"]
+    tok = client.post(f"{ADMIN}/tokens", json={"scopes": ALL_SCOPES}).json()["token"]
     h = bearer(tok)
     before = _tables(db_path())
     r = client.get(f"{DBG}/activity?date={DAY.isoformat()}", headers=h)
@@ -148,7 +147,7 @@ def test_activity_view_on_a_real_fit_dataset_and_every_endpoint_read_only(client
     st = cap["activities"][0]["streams"]
     assert len(st["hr"]) <= 100 and st["every_s"] == 26 and st["every_raised"]["asked"] == 1
     # L4: read:activity alone gets which session and its level, not the plan's data
-    only = client.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN, "scopes": ["read:activity"]}).json()["token"]
+    only = client.post(f"{ADMIN}/tokens", json={"scopes": ["read:activity"]}).json()["token"]
     a1 = client.get(f"{DBG}/activity?date={DAY.isoformat()}", headers=bearer(only)).json()["activities"][0]
     assert set(a1["plan"]) == {"matched", "uid", "level", "why"}
     assert _tables(db_path()) == before

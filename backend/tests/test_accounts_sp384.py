@@ -187,7 +187,7 @@ def test_the_owner_answers_the_same_signed_in_as_before(client):
     ev = {"name": "站主的比賽", "date": "2027-05-01", "priority": "A", "kind": "trail"}
     assert client.put("/api/v1/plan/events", json=ev).status_code == 200      # single-user (no tenant set)
     paths = ["/api/v1/plan", "/api/v1/plan/profile", "/api/v1/overview/pmc", "/api/v1/overview/plan/sessions",
-             "/api/v1/wko5/dataset/status", "/api/v1/region"]
+             "/api/v1/app/dataset/status", "/api/v1/region"]
     for p in paths:
         before = client.get(p)
         after = client.get(p, headers=_as("owner"))

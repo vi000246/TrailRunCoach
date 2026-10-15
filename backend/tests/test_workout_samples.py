@@ -14,7 +14,7 @@ from backend.settings.repository import MAP_BASEMAPS, MAP_OVERLAYS, validate
 from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
 
 TODAY = dt.date(2026, 9, 30)
-VIEWER = Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html"
+VIEWER = Path(__file__).resolve().parents[1] / "static" / "charts.html"
 SETTINGS = Path(__file__).resolve().parents[1] / "static" / "settings.html"
 BASEMAPS = Path(__file__).resolve().parents[1] / "static" / "basemaps.js"
 

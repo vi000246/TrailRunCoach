@@ -33,7 +33,7 @@ Two questions, answered separately:
        ≥ min(10, max(5, 15 % CTL₋₇)) → none (Friel 5–8 / 10 as a share of CTL, 推估); not in the
        first 4 weeks of data (status: ramp_week None)
      last week's running-time step against max(the week before, 4-week mean): > 20 % → none
-       (Nielsen 2014, Damsted 2019); 10–20 % → hold the dose (推估)
+       (Nielsen 2014, Damsted 2019); 10–20 % → hold the dose (10 % = the coaches' mode, SP-528)
      TSB −30…−20 → hold the dose (Friel / TrainingPeaks; < −30 is already a recovery week)
      3:1 recovery week → a 4×1′ fartlek instead of intervals (Palladino)
      48 h from the long run / other hard days → plan_prefs.place() / week_plan
@@ -45,10 +45,12 @@ ladder, dose step and 達標 count (dose_tracks):
      then A3 / A4 / T+ maintenance. Opens on the Zone 3 gate (z3_gate, any one): 4 complete weeks
      of actual training with ≥ 3 runs a week and no 7-day gap (推估; sticky, a ≥ 21-day break
      re-locks), the 90-min drift test < 10 %, or a measured UA gap ≤ 10 %. Its time in zone ≤ 10 %
-     of the week (coach, the book not verified: Daniels' T ≤ 10 % is per session and by mileage, here per
-     week and by time; 5 % for the first session, UA): over that the 巡航版 T1–T3 (3×6′ / 3×8′
+     of the week (UA 「progress toward 10 percent」, TftNA 「around 10 percent of the total weekly time in
+     Zone 3」 — per week, by time; Daniels' T ≤ 10 % per session by mileage a side note; 5 % for the first
+     session, UA): over that the 巡航版 T1–T3 (3×6′ / 3×8′
      / 2×12′, the old Zone 3 rungs) stands in and still counts. Zone 3 + Zone 5 ≤ 20 % of the
-     week's running time (QUALITY_SHARE_MAX, 推估 — Seiler's 80/20 counts sessions, not time; overview.quality_sessions shortens and notes).
+     week's running time (QUALITY_SHARE_MAX — the coaches' median: 80/20 Endurance ≈ 20 % of the running time in
+     Zones 3–5, Campos 2022 ≤ 30 %, UA / Koop ≈ 10 % of the hours; overview.quality_sessions shortens and notes).
   Zone 5: 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4 maintenance — its own gate (SP-39, z5_track):
      a MEASURED AeT (base_check.z5_status: a tested AeT + a measured LTHR within 10 %, or Friel
      drift < 5 % at the tested AeT; the 90-min test is not an AeT test) and the soft 「3 區先」:
@@ -115,9 +117,12 @@ XU_GOOD = 0.10
 XU_HEAT_C = 25.0               # 台灣教練's condition: advice in the session text, not a refusal (heat bands)
 PLATEAU_WEEKS = 8              # 自訂
 EF_PLATEAU = 0.02              # status.EF_TREND
-LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD — by time, 推估: Seiler 2010's 80/20 counts sessions, not time
+LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD — by time, 推估 between Campos 2022 (systematic review: low
+                               # intensity ≥ 70 % of the volume) and 80/20 Endurance / UA / CTS's ≈ 80 % (by time);
+                               # Seiler & Kjerland 2006's 75 / 8 / 17 counts sessions (SP-528, coach-consensus-sp518 B §1)
+LOW_SHARE_BAD = 0.65           # status.LOW_SHARE_WATCH: under it the intensity level is "bad" (SP-551 says it in words)
                                # (estimated-constants-inventory.md §5.1)
-STEP_HOLD, STEP_BLOCK = LG.STEP_HOLD, LG.STEP_BLOCK   # > 20 % block: Nielsen 2014, Damsted 2019; 10–20 % hold 推估
+STEP_HOLD, STEP_BLOCK = LG.STEP_HOLD, LG.STEP_BLOCK   # > 20 % block: Nielsen 2014, Damsted 2019; 10 % = the coaches' mode
 TSB_HOLD = -20.0                           # Friel / TrainingPeaks TSB bands (coach)
 REP_PCT, REP_MIN_S, DOSE_MIN_REPS = 0.95, 40, 4   # 自訂: a short-rep session = ≥ 4 bouts ≥ 40 s at ≥ 95 % CP
 FADE = 0.05                    # workout_review.FADE
@@ -163,12 +168,16 @@ Z3_RELOCK_DAYS = 21            # 推估: ≥ 21 days without running re-locks Zo
 # z3_unlock_weeks / z3_unlock_runs_per_week / z3_unlock_max_gap_days / z3_relock_days); the gate reads the
 # ones in effect through z3_rule(), and its texts say 預設 or 手動.
 Z3_HISTORY_DAYS = 365          # 自訂: how far back the run dates are read
-QUALITY_SHARE_MAX = 0.20       # 推估 — Seiler 2010's 80/20 counts sessions, not time (inventory §5.1); Koop: the week's interval work (Zone 3 + Zone 5 time in zone)
-                               # ≤ 20 % of the planned running time — a planning rule, not a gate
+QUALITY_SHARE_MAX = 0.20       # the week's interval work (Zone 3 + Zone 5 time in zone) ≤ 20 % of the planned running
+                               # time — a planning rule, not a gate. The coaches' median (SP-528, coach-consensus-sp518
+                               # B §2): 80/20 Endurance ≈ 20 % of the running time in Zones 3–5 (verified), Campos 2022
+                               # ≤ 30 %; UA and Koop ≈ 10 % are the careful end — Koop's is 10 % of the HOURS (his 20 %
+                               # counts sessions). Not Seiler's 80/20, which counts sessions
 Z3_SHARE_START = 0.05          # UA: Zone 3 starts at about 5 % of the weekly aerobic volume (the track's first session)
-Z3_SHARE_MAX = 0.10            # coach, the book not verified (second-hand summaries): Daniels' T ≤ 10 % of the weekly
-                               # mileage is per SESSION and by MILEAGE; the app uses it per WEEK and by TIME — the
-                               # per-week Zone 3 cap (estimated-constants-inventory.md §5.3)
+Z3_SHARE_MAX = 0.10            # UA 〈When and How to Add High-Intensity Training〉 「progress toward 10 percent」, TftNA
+                               # 「around 10 percent of the total weekly time in Zone 3」 — per WEEK, by TIME (both
+                               # verified; SP-528, coach-consensus-sp518 B §3); Daniels' T ≤ 10 % of the weekly
+                               # mileage (per SESSION, by MILEAGE) a side note — the per-week Zone 3 cap
 # legacy titles of the old ladders: not counted as steps any more (neutral in planned_spec).
 # The old z3a 「閾值 3×8 分」 is T2's title: a title-only row reads as z3b now.
 LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 分", "間歇 5×3 分", "VO2max 間歇 4×4 分",
@@ -339,7 +348,7 @@ def ua_gap_method(ae: dict, lt: dict) -> dict:
     if not ae.get("measured"):
         return {"state": "missing", "verdict": "沒有實測 AeT，差距法算不出來"}
     if lt.get("value") is None or lt.get("default"):
-        return {"state": "missing", "verdict": "LTHR 還是 WKO5 預設值，差距法算不出來"}
+        return {"state": "missing", "verdict": "LTHR 還是出廠預設值，差距法算不出來"}
     g = ua_gap(ae["value"], lt["value"])
     txt = f"AeT {ae['value']:.0f} / LTHR {lt['value']:.0f}：差距 {g * 100:.0f}%"
     if g <= UA_GAP_MAX:
@@ -622,7 +631,7 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             plan_tiz = sum(works_of(spec))
             # Zone 5 by the band middle on Palladino (≥ 106 % CP; interval_library.CLASS_RANGE)
             z5 = (lo + (hi if hi is not None else lo)) / 2 >= _IL.CLASS_RANGE["Z5"][0]
-            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], lo, hi, z5)
+            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], lo, hi, z5, min(works_of(spec), default=None))
             tiz_ratio = (t_in / plan_tiz) if t_in is not None and plan_tiz else None
         out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": row.get("title"),
                     **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps",
@@ -672,6 +681,22 @@ def planned_variant_spec(row: dict):
 # guardrails (§4.4)
 # ---------------------------------------------------------------------------
 
+def low_share_detail(what: str, pct: Optional[str], aet_t: str, tested: bool, floor: int = 75) -> str:
+    """SP-551: the 「展開」 text of the low-intensity week note — what the share is, why it matters, what
+    happens to Zone 3 / Zone 5 and what an estimated AeT changes. `what` "hr" (the time under AeT) or
+    "power" (running power < 80 % CP); `pct` the 4-week share ("68"), None when only the level is known
+    (專項期: status.i_intensity's level under LOW_SHARE_WATCH, `floor` 65); `aet_t` "150 bpm" or "AeT"."""
+    basis = _("心率在 AeT 以下") if what == "hr" else _("跑步功率在 80% CP 以下")
+    head = (_("近 4 週{basis}的時間只有 {pct}%，低於 {floor}% 的底線（基礎期目標 ≥ 90%）", basis=basis, pct=pct, floor=floor)
+            if pct is not None else _("近 4 週{basis}的時間不到 {floor}%", basis=basis, floor=floor))
+    if tested:
+        return _("{head}：輕鬆跑有太多時間跑在 AeT 以上。3 區照排；5 區先不排，等輕鬆跑壓回 {aet} 以下、"
+                 "占比回到 {floor}% 以上再排。", head=head, aet=aet_t, floor=floor)
+    return _("{head}，看起來輕鬆跑有不少時間跑在 AeT 以上。不過你的 AeT 是估計值，這個占比會跟著估計值移動、不夠準，"
+             "所以課表不因此改：3 區、5 區照排。輕鬆跑仍盡量壓在 {aet} 以下；做一次 AeT 測試，之後就用實測值判斷。",
+             head=head, aet=aet_t)
+
+
 def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = None,
           ramp: Optional[float] = None, step: Optional[float] = None, tsb: Optional[float] = None,
           aet: Optional[float] = None, injury: Optional[str] = None, aet_tested: bool = True,
@@ -686,7 +711,7 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
     volume step comes right after a short break (status.i_volume, load_guard.short_break) — the
     volume rule is skipped and the text goes to "step_note" (the week note)."""
     out = {"block": False, "sub": False, "hold": False, "verdict": "", "action": "", "rule": "", "blocks": [],
-           "verdicts": {}, "warn": "", "step_note": step_exempt or ""}
+           "verdicts": {}, "warn": "", "warn_detail": "", "step_note": step_exempt or ""}
     if step_exempt:
         step = None
     aet_t = f"{aet:.0f} bpm" if aet else "AeT"
@@ -706,15 +731,26 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
     # SP-39 (owner's Zone 3 decision applied to Zone 5): with an estimated AeT the measured share is
     # noisy (the easy line moves with the estimate), so it only warns for Zone 5 too; a tested AeT
     # keeps the 75 % floor blocking Zone 5
-    for share, what in ((low_share, "低強度只有"), (power_low_share, "跑步功率 < 80% CP 只有")):
-        if share is not None and share < LOW_SHARE_MIN and not aet_tested:
-            out["warn"] = out["warn"] or (f"輕鬆跑心率偏高：{what} {share * 100:.0f}%（底線 75%、基礎期目標 ≥ 90%）"
-                                          "——AeT 是估計值、占比不準，只是提醒：3 區、5 區照排")
-        elif share is not None and share < LOW_SHARE_MIN:
-            say("intensity", f"{what} {share * 100:.0f}%（< 75%，底線）：本週 5 區先不排，3 區照排",
+    # SP-551: the week note is one short line (「標題：一句」, the overview's collapsed row) and `warn_detail`
+    # is what 「展開」 shows — why, what the share means, what an estimated AeT changes
+    for share, what in ((low_share, "hr"), (power_low_share, "power")):
+        if share is None or share >= LOW_SHARE_MIN:
+            continue
+        pct = f"{share * 100:.0f}"
+        if aet_tested:
+            label = "低強度只有" if what == "hr" else "跑步功率 < 80% CP 只有"
+            say("intensity", f"{label} {pct}%（< 75%，底線）：本週 5 區先不排，3 區照排",
                 f"輕鬆跑壓在 {aet_t} 以下，下週再看", block=True)
-            out["warn"] = out["warn"] or (f"輕鬆跑心率偏高：{what} {share * 100:.0f}%（底線 75%、基礎期目標 ≥ 90%）"
-                                          "——只是提醒，3 區照排；5 區先不排")
+        if out["warn"]:
+            continue
+        if aet_tested:
+            out["warn"] = (_("輕鬆跑心率偏高：低強度只有 {pct}%，這週 5 區先不排、3 區照排", pct=pct) if what == "hr"
+                           else _("輕鬆跑功率偏高：跑步功率 < 80% CP 只有 {pct}%，這週 5 區先不排、3 區照排", pct=pct))
+        else:
+            out["warn"] = (_("輕鬆跑心率偏高：低強度只有 {pct}%（AeT 是估計值，只是提醒：3 區、5 區照排）", pct=pct)
+                           if what == "hr" else
+                           _("輕鬆跑功率偏高：跑步功率 < 80% CP 只有 {pct}%（只是提醒：3 區、5 區照排）", pct=pct))
+        out["warn_detail"] = low_share_detail(what, pct, aet_t, tested=aet_tested)
     lv = LG.ramp_level(ramp, ramp_base)
     if lv == LG.BLOCK:
         say("ramp", f"{LG.ramp_text(ramp, ramp_base, lv)}：本週不排間歇", "先穩住量", block=True)
@@ -724,7 +760,7 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
         say("volume", f"上週跑步量增 {step * 100:+.0f}%（> 20%，Nielsen 2014／Damsted 2019）：本週不排間歇",
             "本週維持上週的量", block=True)
     elif step is not None and step > STEP_HOLD:
-        say("volume", f"上週跑步量增 {step * 100:+.0f}%（10–20%，推估）：間歇維持上次的量，不往上加", "", hold=True)
+        say("volume", f"上週跑步量增 {step * 100:+.0f}%（10–20%；10% 是教練眾數）：間歇維持上次的量，不往上加", "", hold=True)
     if tsb is not None and -30.0 <= tsb < TSB_HOLD:
         say("tsb", f"負荷平衡（Load balance）{tsb:+.0f}（−30～−20，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", "", hold=True)
     return out
@@ -755,11 +791,36 @@ def guard_blocks(g: dict) -> tuple[Optional[str], Optional[str]]:
 IN_BAND_TOL = 0.98      # 推估 (doc §4.2): a rep is in band at ≥ 98 % of the planned lower bound
 TARGET_DOWN = 0.95      # ROLE:499「下修 5～10%」: first rep already short -> target −5 %
 AET60_MIN_SHARE = 0.5   # 推估 (doc §4.3): HR back under AeT 60 s into the rest on < half the reps = brake
-LAST_FADE = 0.05        # 推估 (doc §4.3): only the last rep missed and it fell > 5 % = 邊界
-TIZ_GOAL = 0.85         # 推估 (interval_eval.TIZ_GOAL): time in zone ≥ 85 % of the chosen variant's plan
-# IN_BAND_TOL, LAST_FADE and TIZ_GOAL are the defaults: the values in effect are per athlete
-# (engine/interval_calib.py — fitted on the athlete's CP tests / planned sessions, shrunk toward
-# these; SP-69). The texts that quote them say whose value it is (calibrate.basis).
+# 最後一趟可以掉多少 (SP-526, coach consensus — docs/research/coach-consensus-sp518/E-personalized.md §1,
+# interval-adaptation.md §3.6.3 / §4.3): only the last rep missed → 達標 while it fell ≤ this far below the
+# 3rd rep (LAST_FADE_REF_REP; the 1st when the session has < 4 reps), by the rep's length — Hunter Allen's
+# 「Intervals to Exhaustion」 stop points, their low end: ≤ 2 min 10 %, 3 min 8 %, 5 min 5 %, 10 min 4 %,
+# ≥ 20 min 3 % (linear between the rows: 推估); further = 邊界. One coach's table (CTS quotes the same book
+# at 15 %): 信心中低. Was one 5 % for every length, fitted per athlete (interval_calib, SP-69) — no longer.
+LAST_FADE_BY_MIN = ((2.0, 0.10), (3.0, 0.08), (5.0, 0.05), (10.0, 0.04), (20.0, 0.03))
+LAST_FADE_REF_REP = 3
+SRC_LAST_FADE = N_("教練共識：Hunter Allen 依每趟長度")
+# 區內時間 (SP-526, coach consensus, E-personalized.md §1): time in the zone ≥ 80 % of the chosen variant's
+# plan — the 「completed」 green of TrainingPeaks, intervals.icu and TrainerPlan (80–120 %); was 85 % (推估)
+# and fitted per athlete (interval_calib, SP-69) — no longer. interval_eval.TIZ_GOAL is this number.
+TIZ_GOAL = 0.80
+SRC_TIZ_GOAL = N_("教練共識：TrainingPeaks、intervals.icu 完成度 80 %")
+# IN_BAND_TOL stays per athlete (engine/interval_calib.py — fitted on the athlete's CP tests, shrunk
+# toward it; SP-69); the texts that quote it say whose value it is (calibrate.basis).
+
+
+def last_fade_for(rep_min: Optional[float]) -> float:
+    """How far the last rep may fall below the reference rep and still be 達標 (LAST_FADE_BY_MIN,
+    linear between the rows; unknown length: the 5-min row)."""
+    tab = LAST_FADE_BY_MIN
+    if rep_min is None or not rep_min > 0:
+        return dict(tab)[5.0]
+    if rep_min <= tab[0][0]:
+        return tab[0][1]
+    for (m0, f0), (m1, f1) in zip(tab, tab[1:]):
+        if rep_min <= m1:
+            return f0 + (f1 - f0) * (rep_min - m0) / (m1 - m0)
+    return tab[-1][1]
 # 疲勞保險 (f-OR, SP-110; doc §4.3, 2026-10-05): a faster HR recovery is not always adaptation —
 # functional overreaching speeds it up too (Aubry 2015: HRR 38 → 45 bpm while performance fell and
 # HRmax 182 → 176; Bellenger 2016 meta-analysis: both adaptation and overreaching raise HRR). It
@@ -785,9 +846,8 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     planned, lo = int(spec[2]), spec[5]
     if not cp or lo is None or not planned:
         return {"outcome": None, "why": "沒有 CP 或目標功率帶"}
-    from backend.engine import calibrate as CAL
     from backend.engine import interval_calib as IC
-    last_fade = IC.last_fade()                    # LAST_FADE or the athlete's own (SP-69)
+    last_fade = last_fade_for(spec[3])            # SP-526: Allen's table by the rep length (spec[3], min)
     floor = IC.in_band_tol() * lo * cp            # IN_BAND_TOL or the athlete's own
     ps = [float(b.get("power") or 0.0) for b in bouts[:planned]]
     inb = [p >= floor for p in ps]
@@ -795,10 +855,13 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     miss = next((i + 1 for i, ok in enumerate(inb) if not ok), None)
     if miss is None and done < 1:
         miss = len(ps) + 1                        # stopped early: the first rep not done
-    fade = (ps[-1] / ps[0] - 1.0) if len(ps) >= 2 and ps[0] else None
-    # SP-110: the power part alone — every rep in band, or only the last one ≤ LAST_FADE off
-    power_ok = done >= 1 and (miss is None or (miss == planned and (fade is None or fade >= -last_fade)))
-    base = {"first_miss": miss, "done": round(done, 2), "fade": fade, "power_ok": power_ok}
+    fade = (ps[-1] / ps[0] - 1.0) if len(ps) >= 2 and ps[0] else None      # last ÷ first (shown)
+    # the verdict's fall: the last rep against the 3rd (Allen), the 1st when there is no 3rd before the last
+    ref = ps[LAST_FADE_REF_REP - 1] if len(ps) > LAST_FADE_REF_REP else (ps[0] if ps else None)
+    vfade = (ps[-1] / ref - 1.0) if len(ps) >= 2 and ref else None
+    # SP-110: the power part alone — every rep in band, or only the last one ≤ the allowed fall off
+    power_ok = done >= 1 and (miss is None or (miss == planned and (vfade is None or vfade >= -last_fade)))
+    base = {"first_miss": miss, "done": round(done, 2), "fade": fade, "last_fade": last_fade, "power_ok": power_ok}
     if miss == 1:
         return {**base, "outcome": "too_high", "why": f"第 1 趟就沒到 {floor:.0f} W：目標功率下修 5%"}
     if done < 1 or (miss is not None and 2 <= miss <= planned - 1):
@@ -809,10 +872,10 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
         share = sum(1 for h in at60 if h <= aet) / len(at60)
         if share < AET60_MIN_SHARE:
             return {**base, "outcome": "border", "why": f"休息 60 秒心率回到 AeT 以下只有 {share * 100:.0f}% 的趟"}
-    if miss == planned and fade is not None and fade < -last_fade:
-        return {**base, "outcome": "border", "why": f"只有最後一趟沒到、掉 {-fade * 100:.0f}%：同一份課表再做一次"}
+    if miss == planned and vfade is not None and vfade < -last_fade:
+        return {**base, "outcome": "border", "why": f"只有最後一趟沒到、掉 {-vfade * 100:.0f}%：同一份課表再做一次"}
     return {**base, "outcome": "met", "why": "每一趟都在目標帶" if miss is None else
-            _("只有最後一趟略掉（≤ {p:.0%}，{basis}）", p=last_fade, basis=CAL.basis(IC.FADE))}
+            _("只有最後一趟略掉（≤ {p:.0%}，{basis}）", p=last_fade, basis=_(SRC_LAST_FADE))}
 
 
 def spec_key(h: dict, spec: tuple) -> tuple:
@@ -905,9 +968,7 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
     same-spec baseline two sessions in a row while its power missed is 未適應, whatever the
     power rows said; out["fatigue"] carries the numbers when the last judged session fired."""
     step, streak, adjust, last, met = 0, 0, {}, None, 0
-    from backend.engine import calibrate as CAL
-    from backend.engine import interval_calib as IC
-    tiz_goal = IC.tiz_goal()                    # TIZ_GOAL or the athlete's own (SP-69)
+    tiz_goal = TIZ_GOAL                         # SP-526: the coaches' 80 %, the same for everyone
     rows = [h for h in history if (h.get("track") or row_track(h)) == track or h.get("unplanned")]
     for i, h in enumerate(rows):
         if h.get("unplanned"):
@@ -946,10 +1007,10 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
         r = h.get("tiz_ratio")
         if oc == "met" and r is not None and r < tiz_goal:
             # interval_eval's verdict: every rep in band but too little time in the zone (stopped
-            # early, reps short) = 部分達到 → the same step again (≥ 85 % of the plan: 推估, §C2)
+            # early, reps short) = 部分達到 → the same step again (≥ 80 % of the plan: TIZ_GOAL, SP-526)
             oc = "border"
             o = {**o, "outcome": oc, "power_ok": False,
-                 "why": _("目標區時間只有計畫的 {r:.0%}（< {goal:.0%}，{basis}）", r=r, goal=tiz_goal, basis=CAL.basis(IC.TIZ))}
+                 "why": _("目標區時間只有計畫的 {r:.0%}（< {goal:.0%}，{basis}）", r=r, goal=tiz_goal, basis=_(SRC_TIZ_GOAL))}
         fat = fatigue_check(rows, i, o) if oc != "unknown" else None
         if fat is not None:
             # 疲勞保險 (SP-110): a faster HR recovery with the power missing is not adaptation
@@ -1312,9 +1373,10 @@ SRC_Z3 = {
     "ratio": "推估（研究 Finding 6 的週內配置：UA 專項期 1 堂 Z3＋1 堂 Z4、Daniels 主課＋T 次課）："
              "每週 1 堂時，目標 ≤ 10 km 路跑 3 區：5 區 = 1:1，半馬以上／越野／沒有 A 賽 2:1；"
              "專項期後段（賽前第 6–3 週）往比賽強度偏（Koop、Uphill Athlete、Haugen 2022；比例為推估）",
-    "volume": "教練（未驗證原書）：Daniels 是單次 T 課不超過週里程 10%，這裡改成每週 3 區時間不超過週量 10%；"
-              "Uphill Athlete：Zone 3 起步約週有氧量 5%",
-    "share": "推估：一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%（Seiler 的 80/20 是堂數，不是時間；Koop）",
+    "volume": "Uphill Athlete：3 區往週量 10% 進展、起步約週有氧量 5%；TftNA：每週 3 區約總時間 10%（都是每週、以時間算）；"
+              "Daniels 單次 T 課不超過週里程 10% 當旁證",
+    "share": "一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%：教練中位數（80/20 Endurance 約 20%、Campos 2022 ≤ 30%；"
+             "UA、Koop 約 10% 是保守的一端，Koop 是時數 10%、堂數 20%）",
 }
 
 
@@ -2286,7 +2348,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
     done1 = state != "reentry" and bool(G.get("open"))
     s2 = ladder(Z3, step, done1)
     tip2 = (_("3 區解鎖後、護欄通過就照排，5 區開放後也照排") + "\n"
-            + _("每週 3 區量 ≤ 週量 10%（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算），放不下排巡航版 3×6／3×8／2×12"))
+            + _("每週 3 區量 ≤ 週量 10%（UA、TftNA：每週、以時間算；Daniels 單次課以里程算當旁證），放不下排巡航版 3×6／3×8／2×12"))
     z3_stages = [
         {"key": "z3_gate", "title": _("3 區解鎖"), "sub": _("有基礎了就能做") if not done1 else "", "items": s1,
          "done": done1, "any": any1, "any_label": note1, "unlocks": _("可以開始排 3 區（有氧間歇／節奏跑）"),
@@ -2479,7 +2541,7 @@ def options(gate: dict, ae: dict, lt: dict, cache: dict, friel, xu, base_weeks, 
         out["ua_gap"] = {"usable": True, "why": _("{aet}、LTHR {lthr:.0f} → 差距 {gap:.0f}%", aet=aet_txt, lthr=lt['value'],
                                                   gap=gate['gap'] * 100)}
     else:
-        out["ua_gap"] = {"usable": False, "why": _("沒有實測 AeT") if not ae["measured"] else _("LTHR 還是 WKO5 預設值")}
+        out["ua_gap"] = {"usable": False, "why": _("沒有實測 AeT") if not ae["measured"] else _("LTHR 還是出廠預設值")}
     try:
         f = cache.get("friel") or friel()
         out["friel_drift"] = {"usable": f["state"] != "missing",
@@ -2599,8 +2661,8 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
             return {**out, "seg_note": _seg_note(ratio, [_("這週輪到 5 區維持課，但{why}，所以不排", why=why)])} \
                 if maint_known else out
         if levels.get("drift") == "bad":
-            return maint_off(none("", "本週沒排 3 區：心率飄移是 bad，先不排強度課"),
-                             _("心率飄移是 bad，這週先不排強度課"))
+            return maint_off(none("", "本週沒排 3 區：心率飄移偏大，先不排強度課"),
+                             _("心率飄移偏大，這週先不排強度課"))
         if kind == "specific" and mode == "recovery_week":
             # SP-97: a 專項期 recovery week keeps one short intensity — the base phase's fartlek 4×1′
             # (the Norwegian coaches keep the intensity, shorten the sessions)
@@ -2626,16 +2688,21 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
                 return maint_off({"allow": True, "spec": SUB, "advance": False, "adjust": None, "track": "z3", "note": v,
                                   "items": [{"track": "z3", "spec": SUB, "advance": False, "adjust": None, "first": False}],
                                   "z3_note": ""}, _("護欄（長期負荷週增量到注意線）這週只排閾值"))
-        warn = ""
+        warn = warn_detail = ""
         had_z5 = "z5" in avail
         if levels.get("intensity") == "bad":
             # the low-intensity share keeps Zone 5 out, Zone 3 goes on with a warning (SP-31); with an
-            # estimated AeT the share is noisy: a warning for Zone 5 too (SP-39)
-            if (gate.get("aet") or {}).get("tested", True):
+            # estimated AeT the share is noisy: a warning for Zone 5 too (SP-39). SP-551: plain words
+            # (the level is status.i_intensity's share < LOW_SHARE_BAD), the why in warn_detail
+            ae = gate.get("aet") or {}
+            tested = ae.get("tested", True)
+            aet_t = f"{ae['value']:.0f} bpm" if ae.get("measured") and ae.get("value") else "AeT"
+            if tested:
                 avail = [t for t in avail if t != "z5"]
-                warn = "輕鬆跑心率偏高（強度分配是 bad）——只是提醒，3 區照排；5 區先不排"
+                warn = _("輕鬆跑心率偏高：低強度時間不夠，這週 5 區先不排、3 區照排")
             else:
-                warn = "輕鬆跑心率偏高（強度分配是 bad）——AeT 是估計值、占比不準，只是提醒：3 區、5 區照排"
+                warn = _("輕鬆跑心率偏高：AeT 是估計值，只是提醒，3 區、5 區照排")
+            warn_detail = low_share_detail("hr", None, aet_t, tested=tested, floor=round(LOW_SHARE_BAD * 100))
         late = ratio.get("segment") == "late" and "z5" in avail
         rules = []
         if maint:
@@ -2646,7 +2713,7 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
                                "就是這週（照目前那一階，不往上爬）"))
             elif had_z5 or maint_known:
                 # the low-intensity share took an open Zone 5, or a track that was under way is closed now
-                why = _("輕鬆跑心率偏高（強度分配是 bad）") if had_z5 else _("5 區目前沒有開放")
+                why = _("輕鬆跑心率偏高（低強度時間不夠）") if had_z5 else _("5 區目前沒有開放")
                 rules.append(_("這場賽事預估 4 小時以上：後段強度課以 3 區（上坡版）為主；這週輪到 5 區維持課，"
                                "但{why}，所以不排", why=why))
         elif late and not ratio.get("z5"):
@@ -2672,7 +2739,7 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
         # (gate["ratio"], 2:1) picks the track, a T+ maintenance turn is scheduled as is, and there is no note.
         seg_note = _seg_note(ratio, rules) if items else ""
         return {**out, "allow": True if kind == "taper" else bool(items), "warn": warn if items else "",
-                "seg_note": seg_note}
+                "warn_detail": warn_detail if items else "", "seg_note": seg_note}
     if first and z5.get("state") == "reentry":
         # inside a re-entry block: E days only (Daniels table 9.2; engine/reentry.py)
         return none(z5.get("text", ""))
@@ -2683,7 +2750,8 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
                                                           else [g.get("rule")])
         g = {"block": keep, "blocks": ["intensity"] if keep else [], "rule": "intensity" if keep else "",
              "verdict": (g.get("verdicts") or {}).get("intensity") or g.get("verdict", "") if keep else "",
-             "sub": False, "hold": False, "warn": g.get("warn", "") if keep else ""}
+             "sub": False, "hold": False, "warn": g.get("warn", "") if keep else "",
+             "warn_detail": g.get("warn_detail", "") if keep else ""}
     b3, b5 = guard_blocks(g)
     if b3 is not None:
         return none(b3)                                    # ramp / volume / … : no interval at all
@@ -2712,6 +2780,7 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
         items = [{**it, "advance": False} for it in items]
     out = _decision(items, avail, gate, n, monday, lock, zt)
     out["warn"] = g.get("warn", "") if items else ""
+    out["warn_detail"] = g.get("warn_detail", "") if items else ""
     return out
 
 
@@ -2816,6 +2885,10 @@ def zone3_work(hours: Optional[float], reps: int = 3) -> int:
 
 # HR range (× LTHR) per dose step; 1-minute reps are too short for HR to settle
 _HR_FRAC = {"z3c": (0.95, 1.00), "z5b": (1.00, 1.03), "z5c": (1.00, 1.03), "z5d": (1.03, 1.06)}
+# SP-493: the interval class (hr_profile.CLASS_ZONES) of each dose step with an HR — its zone of the
+# 儲備心率 / 最大心率 課表心率區間 replaces the × LTHR band (AeT–LTHR = Z3sub, 0.95–1.00 = Z3near, …)
+_HR_CLASS = {"z3": "Z3sub", "z3a": "Z3sub", "z3b": "Z3sub", "sub": "Z3sub", "z3c": "Z3near",
+             "z5b": "Z4", "z5c": "Z4", "z5d": "Z5"}
 
 
 def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = None,
@@ -2826,15 +2899,23 @@ def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = No
     key, title, reps, work, rest, lo, hi, uphill, src = spec
     cp, lthr, aet = th.get("cp"), th.get("lthr"), th.get("aet")
     use_hr = bool(lthr) and not lthr_default          # LTHR still WKO5's default → power / RPE only
+    from backend.engine.hr_profile import class_hr
+    zb = class_hr(th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None, _HR_CLASS.get(key))
     if key == "z3":
         work = zone3_work(hours, reps)
         title = f"Zone 3 間歇 {reps}×{work} 分"
-        parts = [f"心率 {aet:.0f}–{lthr:.0f} bpm"] if aet and lthr else ["心率 AeT–LTHR"]
-        what = f"心率在 AeT–LTHR（Zone 3），總量約 {reps * work} 分（週有氧量的 5%）"
+        parts = [f"心率 {zb[0]}–{zb[1]} bpm"] if zb else [f"心率 {aet:.0f}–{lthr:.0f} bpm"] if aet and lthr \
+            else ["心率 AeT–LTHR"]
+        what = (f"心率在 Zone 3（{zb[0]}–{zb[1]} bpm），總量約 {reps * work} 分（週有氧量的 5%）" if zb else
+                f"心率在 AeT–LTHR（Zone 3），總量約 {reps * work} 分（週有氧量的 5%）")
     else:
         what = f"{lo * 100:.0f}–{hi * 100:.0f}% CP"
         parts = [f"功率 {lo * cp:.0f}–{hi * cp:.0f} W（{what}）"] if cp else [f"RPE 8（{what}）"]
-        if key in ("z3a", "z3b", "sub") and aet and use_hr:
+        if zb and use_hr:
+            parts.append(f"心率 {zb[0]}–{zb[1]} bpm")    # SP-493: the class's zone of the 課表心率區間 in effect
+        elif zb:
+            pass
+        elif key in ("z3a", "z3b", "sub") and aet and use_hr:
             parts.append(f"心率 {aet:.0f}–{lthr:.0f} bpm")
         elif key in _HR_FRAC and use_hr:
             a, b = _HR_FRAC[key]
@@ -2952,7 +3033,7 @@ def _indicator(gate: dict) -> dict:
         why_parts.append(f"建議測試：{tr['text']}")
     why = "；".join(why_parts)
     if k != "base":
-        return {"level": "info", "text": "—", "verdict": "非基礎期：間歇照周期安排（強度分配不是 bad 就排）",
+        return {"level": "info", "text": "—", "verdict": "非基礎期：間歇照周期安排（輕鬆跑心率沒有明顯偏高就排）",
                 "why": why, "action": "", "source": SRC_SEILER}
     dec = week_decision(gate, "base", "base")
     step_txt = ""
@@ -3014,7 +3095,7 @@ def _indicator(gate: dict) -> dict:
 
 OPTION_INFO = {
     "auto": {"source": "台灣教練、徐國峰部落格、Uphill Athlete、Friel、Seiler",
-             "rule": "3 區（有氧間歇／節奏，每趟 15–30 分：2×15 → 3×12 → 2×20 → 1×30，88–95% CP）解鎖後、護欄通過就排——解鎖三選一：{z3_rule}、徐國峰 90 分鐘測試飄移 < 10%、或實測 AeT 的 UA 差距 ≤ 10%；低強度占比不擋 3 區（只提醒；5 區照舊要 ≥ 75%）；每週 3 區量 ≤ 週量 10%（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算），放不下就排巡航版 3×6／3×8／2×12。5 區開放後 3 區照排：每週 2 堂＝3 區＋5 區各 1，每週 1 堂時輪替（目標 ≤ 10 km 路跑 1:1，其他 2:1；推估）；專項期照樣走階梯（越野排上坡版），後段（賽前第 6–3 週）的比例往比賽強度偏：預估 4 小時以上的越野／百岳只排 3 區，半馬以上的路跑 3:1，5 km 路跑 1:2（推估）；一週間歇總量 ≤ 跑步時間 20%（推估；Seiler 的 80/20 是堂數，不是時間）。5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）是另一道關卡，一定要實測 AeT："
+             "rule": "3 區（有氧間歇／節奏，每趟 15–30 分：2×15 → 3×12 → 2×20 → 1×30，88–95% CP）解鎖後、護欄通過就排——解鎖三選一：{z3_rule}、徐國峰 90 分鐘測試飄移 < 10%、或實測 AeT 的 UA 差距 ≤ 10%；低強度占比不擋 3 區（只提醒；5 區照舊要 ≥ 75%）；每週 3 區量 ≤ 週量 10%（UA、TftNA：每週、以時間算；Daniels 單次課以里程算當旁證），放不下就排巡航版 3×6／3×8／2×12。5 區開放後 3 區照排：每週 2 堂＝3 區＋5 區各 1，每週 1 堂時輪替（目標 ≤ 10 km 路跑 1:1，其他 2:1；推估）；專項期照樣走階梯（越野排上坡版），後段（賽前第 6–3 週）的比例往比賽強度偏：預估 4 小時以上的越野／百岳只排 3 區，半馬以上的路跑 3:1，5 km 路跑 1:2（推估）；一週間歇總量 ≤ 跑步時間 20%（教練中位數：80/20 Endurance 約 20%、Campos 2022 ≤ 30%、UA 和 Koop 約 10%）。5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）是另一道關卡，一定要實測 AeT："
                      "① 實測 AeT＋實測 LTHR，LTHR ÷ AeT − 1 ≤ 10%（UA 差距法）、或 ② 在實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%（Friel）；"
                      "90 分鐘測試量不出 AeT，只算 3 區的關卡。另外近 6 週要做過 ≥ 2 堂 3 區（軟條件，推估）。"
                      "低強度占比 < 75% 在實測 AeT 時擋 5 區；AeT 是估計值時只提醒。"

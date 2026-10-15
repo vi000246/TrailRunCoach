@@ -122,14 +122,21 @@ def same_activity(a, b) -> bool:
 
 def choose_canonical(rows: Sequence, primary: Optional[str]):
     """rows: objects with id, source, file_format. Pure; unit tested. The 資料來源's row, else the
-    most complete copy (FORMAT_RANK), else the earliest imported; never a corrupt stub while a
-    readable row exists."""
+    most complete copy (FORMAT_RANK; a file that is not the original one step lower: not_original),
+    else the earliest imported; never a corrupt stub while a readable row exists."""
     readable = [r for r in rows if r.file_format != "corrupt"] or list(rows)
     if primary:
         pref = [r for r in readable if r.source == primary]
         if pref:
             return min(pref, key=lambda r: r.id)
-    return min(readable, key=lambda r: (FORMAT_RANK.get(str(r.file_format or "").lower(), 3), r.id))
+    return min(readable, key=lambda r: (FORMAT_RANK.get(str(r.file_format or "").lower(), 3)
+                                        + (1 if not_original(r) else 0), r.id))
+
+
+def not_original(r) -> bool:
+    """A FIT that is not the watch's own file: Huawei's activities through intervals.icu (its API has
+    no FIT export, SP-346) — ranked after an original copy of the same run."""
+    return str(getattr(r, "upstream_source", None) or "").upper() == "HUAWEI"
 
 
 def group_rows(rows: Sequence, links: Sequence = ()) -> list[list]:

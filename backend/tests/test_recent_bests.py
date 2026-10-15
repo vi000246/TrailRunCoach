@@ -131,7 +131,7 @@ def _pd_chart_index():
 def _get(client, window=None):
     di, ci, _ = _pd_chart_index()
     q = "begin=2026-07-01&end=2026-09-30" + (f"&window={window}" if window else "")
-    r = client.get(f"/api/v1/wko5/views/我的訓練/dashboards/{di}/charts/{ci}?{q}")
+    r = client.get(f"/api/v1/app/views/我的訓練/dashboards/{di}/charts/{ci}?{q}")
     assert r.status_code == 200
     return r.json()
 

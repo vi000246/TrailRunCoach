@@ -258,7 +258,7 @@ def test_body_profile_prefers_settings_then_wko5():
     ds = types.SimpleNamespace(plan=types.SimpleNamespace(profile={"height_cm": 172}), athlete=ath)
     b = A.body_profile(ds, dt.date(2026, 10, 2))
     assert b["height_cm"] == 172 and b["height_cm_src"] == "設定頁"
-    assert b["sex"] == "female" and b["age"] == 34 and b["age_src"] == "WKO5 生日"
+    assert b["sex"] == "female" and b["age"] == 34 and b["age_src"] == "對照資料夾的生日"
     empty = A.body_profile(types.SimpleNamespace(plan=types.SimpleNamespace(profile={}), athlete=None), dt.date(2026, 1, 1))
     assert empty["height_cm"] is None and empty["age"] is None
 

@@ -14,7 +14,7 @@ MOUNT = '<span id="sport-chip"></span><script src="/api/v1/static/sportchip.js" 
 
 
 # the page's top row: the chip goes at its right end (圖表分析: the toolbar, SP-381)
-TOP_ROW = {"wko5_viewer.html": ('<span class="spacer"></span>', '<div class="tb2">'),
+TOP_ROW = {"charts.html": ('<span class="spacer"></span>', '<div class="tb2">'),
            "racepower.html": ("<header>", "</header>"),
            "schedule.html": ('<div class="bar calnav">', '<section class="sync"')}
 
@@ -30,7 +30,7 @@ def test_the_page_mounts_the_sport_chip_in_its_top_row(page):
 def test_the_calculator_and_the_schedule_read_the_main_sport_on_load():
     """The chip reloads the page; each page reads 主要訓練項目 when it loads, so the reload is the switch."""
     rp = (STATIC / "racepower.html").read_text(encoding="utf-8")
-    assert 'j("/api/v1/wko5/primary-sport")' in rp and "SPORT = ps?.sport" in rp
+    assert 'j("/api/v1/app/primary-sport")' in rp and "SPORT = ps?.sport" in rp
     from backend.api import plan_sessions as PSN
     import inspect
     assert "PSP.stored()" in inspect.getsource(PSN)     # the 自動課表's cache key: a switch re-plans

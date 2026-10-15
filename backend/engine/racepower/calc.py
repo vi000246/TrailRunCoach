@@ -1,8 +1,7 @@
 """
 The race calculator's computations (POST /predict, /plan, /course/event/{id})
-on an athlete context — shared by the API (api/racepower.py: the context reads the
-Dataset / DB / files) and the static demo, which runs this module in the browser
-with Pyodide on a context exported as JSON (backend/demo/static_racepower.py).
+on an athlete context — the API's (api/racepower.py: the context reads the
+Dataset / DB / files).
 
 No FastAPI, no database here: everything the athlete's data decides comes from
 `ctx` (see `Context`), failures raise `CalcError(status, detail)` (the API turns it
@@ -37,8 +36,7 @@ class CalcError(Exception):
 
 
 class Context(Protocol):
-    """What the computations read about the athlete (api/racepower.LiveContext,
-    demo/static_racepower.StaticContext)."""
+    """What the computations read about the athlete (api/racepower.LiveContext)."""
 
     def inputs(self) -> dict: ...                       # athlete.derive() for today
     def grade_models(self) -> dict: ...                 # RE(g), hike speed, walking capacity, moving rows
@@ -172,6 +170,17 @@ class SunIn(BaseModel):
     src: Optional[str] = None
 
 
+class WeatherPointIn(BaseModel):
+    """SP-553: one /weather `points` row — a section of the course and its own forecast rows."""
+    i: Optional[int] = None
+    from_km: float
+    to_km: float
+    elevation_m: Optional[float] = None     # the height its rows refer to
+    hourly: Optional[list[HourIn]] = None
+    rain: Optional[list[RainIn]] = None
+    wind: Optional[list[WindIn]] = None
+
+
 class PlanIn(PredictIn):
     distance_km: Optional[float] = None
     mode: Literal["time", "power", "auto"] = "auto"
@@ -207,6 +216,9 @@ class PlanIn(PredictIn):
     # SP-254: the /weather `sun` rows (else NOAA at the GPX start) → segments marked 夜間; the night
     # slowdown % (0 / 5 / 10 / 15, default 0, 推估) lengthens only their dark part
     sun: Optional[list[SunIn]] = None
+    # SP-553: the /weather points along a long course (≤ weather.ROUTE_MAX_POINTS): each segment's heat,
+    # rain, wind and 失溫 use the rows of the section it is in, read at its own clock
+    weather_points: Optional[list[WeatherPointIn]] = Field(None, max_length=12)
     night_slow_pct: float = Field(0.0, ge=0.0, le=15.0)
     # heat acclimation (heat-acclimation.md §5.5): {"mode": auto|none|partial|acclimatised|custom, "s"}
     heat_acclimatisation: Optional[dict] = None
@@ -223,6 +235,12 @@ class PlanIn(PredictIn):
     # SP-252: 百岳 積雪 (hike.SNOW) — × on the climbing legs; none / None = the snow-free time
     snow: Optional[Literal["none", "trodden", "untrodden"]] = None
     peak: Optional[str] = Field(None, max_length=40)   # the page's 地點 (山名): the 玉山 snow-season line
+    # SP-578: the group's timetable (the Cairn import's points, when 「這是團的時刻表」 is ticked) → the
+    # 跟團對照 (`group`), laid over the plan; never changes its numbers
+    group_schedule: Optional[dict] = None
+    # SP-580: a multi-day 百岳 trip's start time per day ('HH:MM', day 1 first; empty = start_time) —
+    # the clock, the night marks and the cold / wind points of each day run from its own start
+    day_starts: list[Optional[str]] = Field([], max_length=20)
 
 
 class ExportIn(PlanIn):
@@ -515,8 +533,25 @@ def event_course(ctx: Context, eid: str, body: Optional[EventCourseIn] = None) -
     c = build(track, course_opts((body or EventCourseIn()).model_dump()))
     sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
     splits = ctx.event_splits(row, e.days or 1) if (e.days or 1) > 1 else []
+    from backend.engine.racepower import overnight as OV
     return py(respond({"course_id": cid, "event_id": eid, "name": track.name or row.get("filename"), **c,
-                       "stop_suggestions": sug, "day_splits_km": splits, "gpx": ctx.event_meta(row)}))
+                       "stop_suggestions": sug, "day_splits_km": splits, "gpx": ctx.event_meta(row),
+                       "overnights": OV.find(track),        # SP-534: asked about on the page, never applied here
+                       "schedule": event_schedule(ctx, row, c["totals"]["km"])}))
+
+
+def event_schedule(ctx: Context, row: dict, km: float) -> Optional[dict]:
+    """SP-577: the Cairn timetable kept with the event's GPX as the import showed it (legs, the group's
+    moving time, the answer to 「這是團的時刻表」); None without one."""
+    from backend.engine.racepower import group as GR
+    sc = ((row or {}).get("source") or {}).get("schedule")
+    if not sc:
+        return None
+    try:
+        rows = (ctx.grade_models() or {}).get("moving_rows_group") or []
+    except Exception:                       # noqa: BLE001
+        rows = []
+    return GR.for_import(sc, km, rows)
 
 
 def resolve_course(ctx: Context, body: PlanIn) -> dict:
@@ -558,7 +593,8 @@ def v1_for(ctx: Context, body: PlanIn, course: dict) -> dict:
     if body.type == "baiyue" and gpx:
         from backend.engine.racepower import course as CO
         pieces = CO.cut_at(course["segments"], body.day_splits_km)
-        days = sorted({p["day"] for p in pieces})
+        # SP-533: the trip's days stay what they are (make_plan has made the cuts fit them)
+        days = range(1, len(body.day_splits_km or []) + 2)
         data["days"] = len(days)
         data["day_plan"] = [{"km": sum(p["dist_m"] for p in pieces if p["day"] == n) / 1000.0,
                              "gain_m": sum(p["gain_m"] for p in pieces if p["day"] == n),
@@ -570,6 +606,26 @@ def v1_for(ctx: Context, body: PlanIn, course: dict) -> dict:
 
 CLIM_TO_PASSES = 3                # SP-257: re-solves with the on-course To (the ETAs move by seconds: 1 in practice)
 CLIM_TO_TOL_C = 0.05              # … until the To read from the new ETAs moves less than this
+
+
+def course_ground(ctx: Context, body: PlanIn) -> Optional[dict]:
+    """SP-544: the course's stored surface (engine/course_surface.py, SP-543) with the user's marks,
+    when TRC_TECH_DIRT_ONLY is on; None otherwise (the technicality on the whole course, as before)."""
+    from backend.engine import course_surface as CS
+    from backend.engine.racepower import surface as SF
+    if not SF.tech_dirt_only() or not body.course:
+        return None
+    cid = body.course.course_id
+    if not cid and body.course.event_id:
+        got = ctx.event_track(body.course.event_id)
+        cid = got[0] if got else None
+    try:
+        row = CS.get(cid) if cid else None
+    except CS.CourseSurfaceError:
+        return None
+    if not row or not row.get("profile"):
+        return None
+    return SF.effective(row["profile"], row.get("overrides"), row.get("manual"))
 
 
 def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
@@ -592,6 +648,8 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
     opts["locks"] = [x.model_dump() for x in body.locks]
     opts["stops"] = [x.model_dump() for x in body.stops]
     opts["hourly"] = [x.model_dump() for x in body.hourly or []]
+    if body.type == "trail" and course.get("source") == "gpx":
+        opts["ground"] = course_ground(ctx, body)
     if body.heat_acclimatisation:
         opts["heat_status"] = {**ctx.heat_status(body.date), "hrc_test": ctx.hrc_test()}
     if body.type == "baiyue" and body.heat_ref_alt_m is None and (body.env_to is None or body.env_to.temp_c is None):
@@ -614,7 +672,9 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
             cpd = inp.get("cp") or {}
             capacity = {"spread": cpd.get("spread"), "lower_bound": cpd.get("lower_bound"),
                         "message": cpd.get("lower_bound_message"),
-                        "lthr": (inp.get("aet") or {}).get("lthr"), "aet": (inp.get("aet") or {}).get("aet")}
+                        "lthr": (inp.get("aet") or {}).get("lthr"), "aet": (inp.get("aet") or {}).get("aet"),
+                        # SP-493: the 「LTHR」 cap under the 課表心率區間 in effect (zonebar.threshold_hr)
+                        "thr": _thr(ctx, (inp.get("aet") or {}).get("lthr"))}
             th = ctx.trail_hr() if body.type == "trail" else None
 
             def run(o: dict, v: dict) -> dict:
@@ -637,13 +697,36 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
     return out
 
 
+def trip_days(body: PlanIn, course: dict) -> tuple[PlanIn, Optional[dict]]:
+    """SP-533: a 百岳 GPX trip's day ends fit its days — the days the page sends are never rewritten
+    by the split points (an n-day trip uses its points only when there are exactly n − 1; else
+    equal km per day, 推估, with a warning). (body with days / day_splits_km set, the warning).
+    A caller that sends split points without `days` (the API before SP-533) gets one day more
+    than its points."""
+    from backend.engine.racepower import course as CO
+    given = [x for x in body.day_splits_km or []]
+    days = body.days if "days" in body.model_fields_set or not given else len(given) + 1
+    km = course["totals"]["km"]
+    cuts, src = CO.day_cuts(given, km, days)
+    warn = None
+    n = max(1, int(days or 1))
+    if src == "equal" and given:
+        warn = H.tag("RC8", _("分日點 {k} 個，跟 {n} 天對不上（要 {m} 個）：先每天平均分距離（推估）。"
+                             "改天數，或清除分日點重新點", k=len(given), n=n, m=n - 1))
+    elif src == "equal":
+        warn = H.tag("RC8", _("還沒有分日點：{n} 天先每天平均分距離（推估），攻頂日可能抓錯。"
+                             "在剖面上點每天的終點，或點營地航點候選", n=n))
+    return body.model_copy(update={"days": n, "day_splits_km": cuts}), warn
+
+
 def make_plan(ctx: Context, body: PlanIn) -> dict:
     course = resolve_course(ctx, body)
-    if body.type == "baiyue" and course.get("source") == "gpx" and not body.day_splits_km and (body.days or 1) > 1:
-        # a multi-day trip without split points: cut the course into equal-km days
-        km = course["totals"]["km"]
-        body = body.model_copy(update={"day_splits_km": [km * i / body.days for i in range(1, body.days)]})
+    split_warn = None
+    if body.type == "baiyue" and course.get("source") == "gpx":
+        body, split_warn = trip_days(body, course)
     out = solve(ctx, body, course)
+    if split_warn:
+        out["warnings"].append(split_warn)
     # SP-257: no forecast — the climatology's daytime To widened to the hours on course, the plan
     # solved again with it (its ETAs, read again, give the To; a daytime race keeps its plan)
     base, clim, nxt = body, None, climatology_to(body, out)
@@ -668,9 +751,10 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     from backend.engine.racepower import night as NI
     from backend.engine.racepower import seg_targets as ST
     aet_d = ctx.inputs().get("aet") or {}
-    out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
+    thr = _thr(ctx, aet_d.get("lthr"))
+    out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"), thr=thr)
     # the main chart / table: pace, power and HR target per segment, null where not valid
-    out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"), poles=body.poles)
+    out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"), poles=body.poles, thr=thr)
     if body.type != "baiyue":
         # the absolute-intensity bar's heart-rate version (SP-118; zonebar.py)
         from backend.engine.racepower import zonebar as ZB
@@ -698,14 +782,31 @@ def rain_reminder(body: PlanIn, out: dict) -> Optional[dict]:
     stops; without a start time or on a multi-day trip, 06–18 of each day) on
     road, trail and 百岳 plans (owner 2026-10-06); None without rain data.
     Display only — the plan is already computed."""
-    if not body.rain:
+    secs = _sections(body)
+    if not body.rain and not any(x.get("rain") for x in secs):
         return None
     from backend.engine.racepower import weather as WX
     s = out.get("summary") or {}
     dur = s.get("time_total_s") or s.get("clock_s") or ((s.get("time_s") or 0) + (s.get("stops_s") or 0)) or None
     days = len(out.get("days") or []) or body.days or 1
     win = WX.race_window(body.date, body.start_time, days, dur)
-    return WX.rain_alert([r.model_dump() for r in body.rain], win, "road" if body.type == "road" else "trail")
+    rows = [r.model_dump() for r in body.rain or []]
+    kind = "road" if body.type == "road" else "trail"
+    if secs:
+        # SP-553: each section's rain over the hours the plan is in that section
+        from backend.engine.racepower import cold as CD
+        pts = CD.points(out, body.date, body.start_time, [x.model_dump() for x in body.stops], days)
+        if pts and pts[0].get("start_km") is not None:
+            r = WX.rain_alert(WX.section_rain_rows(secs, pts, rows), win, kind)
+            if r is not None:
+                r["points"] = len(secs)
+            return r
+    return WX.rain_alert(rows, win, kind)
+
+
+def _sections(body: PlanIn) -> list[dict]:
+    """SP-553: body.weather_points as dicts ([] for the one-point weather)."""
+    return [x.model_dump() for x in body.weather_points or []]
 
 
 def cold_reminders(body: PlanIn, out: dict) -> tuple[Optional[dict], Optional[dict]]:
@@ -713,15 +814,20 @@ def cold_reminders(body: PlanIn, out: dict) -> tuple[Optional[dict], Optional[di
     the /weather `wind` rows on road, trail and 百岳 plans; None without wind data. SP-253: the
     失溫風險 checklist on trail / 百岳 (lowest temperature ≤ 5 °C and rain or wind chill ≤ −5 °C);
     None without race-day rain or wind data. Display only — call after rain_reminder."""
-    if not body.wind and out.get("rain") is None:
+    secs = _sections(body)
+    if not body.wind and not any(x.get("wind") for x in secs) and out.get("rain") is None:
         return None, None
     from backend.engine.racepower import cold as CD
+    from backend.engine.racepower import weather as WX
     days = len(out.get("days") or []) or body.days or 1
     pts = CD.points(out, body.date, body.start_time, [x.model_dump() for x in body.stops], days)
     wind = [r.model_dump() for r in body.wind or []]
-    cw = CD.cold_wind(pts, wind, body.heat_ref_alt_m, body.date) if wind else None
     hours = [r.model_dump() for r in body.hourly or []]
-    return cw, CD.hypothermia(pts, cw, out.get("rain"), body.type, wind, hours, body.heat_ref_alt_m)
+    # SP-553: each segment reads the wind / temperature rows of its own section (and their height)
+    local = WX.local_rows(secs, wind, hours, body.heat_ref_alt_m) \
+        if secs and pts and pts[0].get("start_km") is not None else None
+    cw = CD.cold_wind(pts, wind, body.heat_ref_alt_m, body.date, local=local) if wind or local else None
+    return cw, CD.hypothermia(pts, cw, out.get("rain"), body.type, wind, hours, body.heat_ref_alt_m, local=local)
 
 
 def climatology_to(body: PlanIn, out: dict) -> Optional[dict]:
@@ -769,6 +875,20 @@ def snow_season(body: PlanIn, course: dict, out: dict) -> None:
         sn["season"] = {"url": HK.YUSHAN_SNOW_URL, "single_day": len(out.get("days") or []) <= 1}
 
 
+def _thr(ctx, lthr: Optional[float]) -> Optional[tuple]:
+    """zonebar.threshold_hr with the context's 課表心率區間 (hr_basis); None without a basis / LTHR."""
+    from backend.engine.racepower import zonebar as ZB
+    hb = getattr(ctx, "hr_basis", None)
+    try:
+        b = hb() if hb else None
+    except Exception:                       # noqa: BLE001 — the LTHR cap, as before
+        b = None
+    if not b or not lthr:
+        return None
+    v = ZB.threshold_hr(lthr, b)
+    return v if v[0] else None
+
+
 def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:
     """The 補給 card (engine/racepower/fuel.py) on the predicted segments;
     adds kcal / carbohydrate / water / sodium / fuel_action to each one."""
@@ -805,7 +925,7 @@ def respond(out: dict) -> dict:
 
 
 def predict_response(ctx: Context, body: PredictIn) -> dict:
-    """POST /predict's response (v1; the API and the static demo's worker)."""
+    """POST /predict's response (v1)."""
     return py(respond(predict(ctx, body)))
 
 

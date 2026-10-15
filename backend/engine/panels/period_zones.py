@@ -44,13 +44,14 @@ from typing import Optional
 import numpy as np
 
 from backend.engine.panels import activity_charts as A
+from backend.i18n import _
 
 HIST_KEY = "period_zone_hist_v1"
 
 # + the watch's COROS models (engine/hr_profile.py, user request 2026-10-03): % LTHR,
 # % HRR (id rqhrr: the RQ table) and % HRmax; HRR / HRmax need max / resting HR
 HR_IDS = ("frielhr", "classichr", "seiler3", "coroslthr", "rqhrr", "coroshrmax")
-POWER_IDS = ("palladino", "palladino3")         # Palladino everywhere, no WKO5 iLevels (owner 2026-10-02)
+POWER_IDS = ("palladino", "palladino3", "stryd")   # Palladino by default, no iLevels (2026-10-02); Stryd SP-363
 MODEL_IDS = {"hr": HR_IDS, "power": POWER_IDS}
 DEFAULT_MODEL = {"hr": "frielhr", "power": "palladino"}
 SUMMARY_MODEL = {"hr": "seiler3", "power": "palladino3"}      # the 3 zones the targets are written in
@@ -449,8 +450,9 @@ def compute(ds, b: float, e: float, params: dict, view: str = "total") -> dict:
     sports = parse_sports(params.get("zsports"))
     today = day_to_date(ds.today)
     base = {"zone_kind": kind,
-            "model": {"id": m["id"], "title": m["title"], "source": m["source"], "estimate": bool(m.get("estimate"))},
-            "models": {k: [{"id": x["id"], "title": x["title"], "estimate": bool(x.get("estimate"))} for x in models(k)]
+            # the model names in the page's language (activity_charts marks them N_; SP-363)
+            "model": {"id": m["id"], "title": _(m["title"]), "source": m["source"], "estimate": bool(m.get("estimate"))},
+            "models": {k: [{"id": x["id"], "title": _(x["title"]), "estimate": bool(x.get("estimate"))} for x in models(k)]
                        for k in ("hr", "power")},
             "default_model": DEFAULT_MODEL,
             "sports": list(sports), "sport_choices": [{"id": s, "label": lb} for s, lb in SPORTS],

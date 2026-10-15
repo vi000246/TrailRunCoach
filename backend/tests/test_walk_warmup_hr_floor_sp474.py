@@ -57,23 +57,26 @@ def test_walking_warm_up_resolves_to_no_target_and_a_warm_up_if(name):
 
 
 def test_running_warm_ups_and_an_explicit_warm_up_target_unchanged():
-    """Only the walking warm-up: a running session's warm-up (no walk cap) keeps the easy band; an
-    explicit HR target on a walking warm-up is the user's. (The 陡坡健走's flat cool-down kept the walk
-    band here until the user's 2026-10-13 follow-up: test_steep_walk_cool_down_pushes_no_hr_floor.)"""
+    """Only the auto warm-up: since SP-479 a running session's warm-up has no target either
+    (test_walk_warmup_hr_floor_sp479.py); an explicit HR target on a walking warm-up is the user's. (The
+    陡坡健走's flat cool-down kept the walk band here until the user's 2026-10-13 follow-up:
+    test_steep_walk_cool_down_pushes_no_hr_floor.)"""
     run = {"kind": "quality", "title": "VO2max 間歇 5×4 分上坡", "minutes": 60, "detail": "暖身 15 分；休 3 分"}
     rs = CW.session_steps({**run, "basis": "hr"}, CW.Thresholds.of(TH_WALK))
-    assert rs[0].kind == CW.EX_WARMUP and rs[0].intensity is not None and rs[0].intensity[0] == "hr"
+    assert rs[0].kind == CW.EX_WARMUP and rs[0].intensity is None          # SP-479
     c = WS.session_ctx(STEEP, TH_WALK)
     own = {"kind": "warm", "dur": {"type": "time", "value": 600}, "target": {"type": "hr", "mode": "abs", "lo": 100, "hi": 130}}
     assert WS.resolve(own, c).intensity == ("hr", 100, 130)
 
 
 def test_without_a_walk_cap_the_walking_session_is_the_easy_band_as_before():
-    """No walk cap (no max HR / age): no walk band anywhere (hr_profile.walk_band → the easy band), the
-    warm-up included — unchanged (SP-474 is the walk band's floor)."""
+    """No walk cap (no max HR / age): no walk band anywhere (hr_profile.walk_band → the easy band) —
+    unchanged (SP-474 is the walk band's floor); the warm-up has no target since SP-479, the cool-down keeps
+    the easy band."""
     th = {k: v for k, v in TH_WALK.items() if k != "walk_cap"}
     st = CW.session_steps({**STEEP, "basis": "hr"}, CW.Thresholds.of(th))
-    assert st[0].intensity == st[1].intensity and st[1].intensity is not None
+    assert st[0].intensity is None and st[1].intensity is not None        # SP-479: the warm-up
+    assert st[2].kind == CW.EX_COOLDOWN and st[2].intensity == st[1].intensity
     assert HP.walk_band(None, ("hr", 120, 145)) == ("hr", 120, 145)
 
 

@@ -219,7 +219,7 @@ def none_note(res: dict) -> dict:
 # ---- the viewer's future presets --------------------------------------------------------------
 
 def range_options(plan, today: dt.date) -> dict:
-    """「到階段結束」/「到目標賽」 (wko5_viewer.html FUTURE_PRESETS): {today, phase: {kind, label,
+    """「到階段結束」/「到目標賽」 (charts.html FUTURE_PRESETS): {today, phase: {kind, label,
     end} — the current phase when it ends after today, else None —, race: {date, name, grade} — the
     next A race after today, else the next B race, else None}."""
     from backend.engine import planning

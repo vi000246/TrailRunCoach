@@ -79,7 +79,8 @@ def test_the_course_a_gpx_with_day_ends_then_the_day_plan_then_equal():
     assert c["days"][1]["loss_m"] == 1000                           # blank descent = the climb (推估)
     assert c["descent_assumed"]
     assert RR.course_of(e, gpx("stored"))["days"][0]["gain_m"] == 1800      # the GPX's day ends win
-    assert RR.course_of(e, gpx("camp"))["days"][0]["gain_m"] == 1800
+    # SP-533: camp waypoints are only candidates — a GPX without the user's day ends is not one
+    assert RR.course_of(e, gpx("equal"))["split_source"] == "day_plan"
     c = RR.course_of(e, gpx("equal"))                                       # a GPX cut equally: the user's days
     assert c["split_source"] == "day_plan" and c["filename"] == "dxb.gpx"
     ln = RR.race_line(e, None, "x", c) or RR.race_line(P.Event(**{**e.__dict__, "est_hours": 20.0}), None, "x", c)

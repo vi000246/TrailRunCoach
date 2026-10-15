@@ -1,7 +1,7 @@
 // mFTP 與 VO2max 趨勢 (views kind "pdtrend" → backend/engine/panels/pd_trend.py, SP-466). Self-contained:
-// loaded by wko5_viewer.html, which calls drawPdTrend(box, res); uses the viewer's globals (esc, css,
+// loaded by charts.html, which calls drawPdTrend(box, res); uses the viewer's globals (esc, css,
 // echarts, charts, t, pzDark). Two lines on a time axis, two y axes: mFTP (W, left, blue circles) and
-// WKO5's VO2max (ml/kg/min, right, orange diamonds) — palette slots 1 / 2 like the pole chart, shape too,
+// VO2max (ml/kg/min, right, orange diamonds) — palette slots 1 / 2 like the pole chart, shape too,
 // never colour alone. Each point is one PD fit of the 課表 (never refitted here); no body weight →
 // the VO2max line is left out and the card says why, with a link to the personal settings.
 (function () {
@@ -118,7 +118,7 @@ details.pdtdet table { margin-top: 4px; font-size: 11.5px; }`;
     card.insertAdjacentHTML("beforeend", `<p class="pdtsum">${t("viewer.pdtrend.latest", {
       date: esc(L.date), w: `<b>${num(L.mftp, 0)} W</b>` })} · ${vo2}</p>`);
     if (res.note) {
-      const link = res.no_weight ? ` <a href="/api/v1/wko5/settings#personal">${esc(t("viewer.pdtrend.weight_link"))}</a>` : "";
+      const link = res.no_weight ? ` <a href="/api/v1/app/settings#personal">${esc(t("viewer.pdtrend.weight_link"))}</a>` : "";
       card.insertAdjacentHTML("beforeend", `<p class="pdtnote">${esc(res.note)}${link}</p>`);
     }
     plot(card, res);

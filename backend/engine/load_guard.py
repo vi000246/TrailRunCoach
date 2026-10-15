@@ -93,7 +93,10 @@ SEED_DAYS = 28                 # 推估: the seed = mean daily TSS of the first 
 STARTUP_DAYS = 28              # 推估: no ramp check before the seed window is complete
 
 # ---- weekly volume step --------------------------------------------------------
-STEP_HOLD, STEP_BLOCK = 0.10, 0.20     # > 20 % block: Nielsen 2014, Damsted 2019 (peer-reviewed); 10–20 % hold 推估
+# > 20 % block: Nielsen 2014, Damsted 2019 (peer-reviewed; the lowest running risk line). 10 % = the coaches' mode
+# and median weekly increase (COROS, Runna, Koop / CTS, UA, Fitzgerald, Gaudette …: 8 verified; SP-528,
+# coach-consensus-sp518 A §1) — not 推估; 10–20 % hold
+STEP_HOLD, STEP_BLOCK = 0.10, 0.20
 STEP_AVG_WEEKS = 4
 STEP_SPORTS = ("run",)                 # road + trail runs (sport group "run")
 SHORT_BREAK_MIN = 3                    # 推估: ≥ 3 days without a run is a break (routine rest = 1–2 days)

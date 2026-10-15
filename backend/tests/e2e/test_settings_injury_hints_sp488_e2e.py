@@ -153,7 +153,7 @@ def test_the_physiology_tab_in_the_consistent_state(app, level):
     expect(page.locator("#thr-wko5")).to_be_hidden()
     page.locator("#thr-more-sum").click()                    # the fold holds both cards and the WKO5 line
     expect(page.locator("#thr-more-est .card")).to_have_count(2)
-    expect(page.locator("#thr-more-wko5")).to_contain_text("WKO5 裡的設定")
+    expect(page.locator("#thr-more-wko5")).to_contain_text("對照資料夾裡的設定")
     # ST6: 精簡 keeps where the value comes from on hover only
     src = page.locator('#hr-kv [data-hint-id="ST6"]')
     if level == "lean":
@@ -236,10 +236,10 @@ def _injuries(page, level: str) -> None:
               "condition": "pfp", "onset_date": (today - dt.timedelta(days=24)).isoformat()},
              {"color": "green", "label": "綠燈", "reason": "還沒有標記疼痛的跑步", "phase": "light", "stage": 0, "n": 0, "need": None})]
     body = {"injuries": [{**INJ.event_json(ev, today), "light": light} for ev, light in rows]}
-    page.route("**/api/v1/wko5/injuries", lambda route: route.fulfill(json=body) if route.request.method == "GET"
+    page.route("**/api/v1/app/injuries", lambda route: route.fulfill(json=body) if route.request.method == "GET"
                else route.continue_())
     _level(page, level)
-    open_page(page, "/api/v1/wko5/injuries/page")
+    open_page(page, "/api/v1/app/injuries/page")
     page.locator("#cards .card").first.wait_for()
     page.wait_for_load_state("networkidle")
 
@@ -297,4 +297,4 @@ def test_the_setup_wizard_interrupts_only_on_overview_and_settings(app, page_id,
         expect(page.locator("dialog.sw-dlg")).to_have_count(0)
         line = page.locator('#sw-line[data-hint-id="GL6"] a')
         expect(line).to_have_text("還缺體重：估算可能不準，到設定填 →")
-        assert line.get_attribute("href") == "/api/v1/wko5/settings#general"
+        assert line.get_attribute("href") == "/api/v1/app/settings#general"

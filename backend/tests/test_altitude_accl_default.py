@@ -1,8 +1,8 @@
 """
 SP-260: the 百岳 calculator's 海拔適應 — the personal capacity model takes 「部分」 as the midpoint
 of 已適應 and 未適應 (capacity.A, as env._alt_factor), the default follows the nights slept above
-2,750 m in the 14 days before the trip (≥ 2 → 部分, 推估; activities + the 課表 calendar's records),
-已適應 only when picked, no 部分 on a route under 3,000 m (the page). Synthetic only.
+2,750 m in the 14 days before the trip (≥ 2 → 部分, 推估; the activities), no 部分 on a route under
+3,000 m (the page). SP-546: automatic only — no choice on the page. Synthetic only.
 """
 import datetime as dt
 import json
@@ -54,10 +54,7 @@ def test_the_default_follows_the_nights():
     assert AL.acclimatisation_default(two, TODAY, start)["default"] == "partial"
     one = {D(4): 3100.0, D(3): 3000.0}
     r = AL.acclimatisation_default(one, TODAY, start)
-    assert r["default"] == "unacclimatised" and r["nights"] == 1
-    # + a recorded night (SP-259): 2 → 部分
-    r = AL.acclimatisation_default(one, TODAY, start, {D(2): 3150.0})
-    assert r["default"] == "partial" and r["nights"] == 2 and r["manual"] == 1
+    assert r["default"] == "unacclimatised" and r["nights"] == 1 and "manual" not in r
     # never 已適應 by default, however many nights
     many = {D(n): 3300.0 for n in range(1, 13)}
     assert AL.acclimatisation_default(many, TODAY, start)["default"] == "partial"
@@ -76,28 +73,30 @@ def test_api(monkeypatch):
     monkeypatch.setattr(RP, "today_local", lambda *a, **k: TODAY)
     monkeypatch.setattr(RP, "_dataset", lambda: object())
     monkeypatch.setattr(AL, "day_altitudes", lambda ds, today, days=AL.HISTORY_DAYS: {D(4): 3100.0, D(3): 3000.0})
-    monkeypatch.setattr(AL, "load_nights", lambda user_id=1: {D(2): 3150.0})
     app = FastAPI()
     app.include_router(RP.router)
     c = TestClient(app)
     r = c.get("/api/v1/racepower/altitude-acclimatisation", params={"date": "2026-10-11"}).json()
-    assert r == {"default": "partial", "nights": 2, "manual": 1, "since": "2026-09-27", "start": "2026-10-11"}
-    monkeypatch.setattr(AL, "load_nights", lambda user_id=1: {})
-    assert c.get("/api/v1/racepower/altitude-acclimatisation").json()["default"] == "unacclimatised"
+    # SP-546: the activities only (1 night) — the calendar's recorded nights are no longer read
+    assert r == {"default": "unacclimatised", "nights": 1, "since": "2026-09-27", "start": "2026-10-11"}
+    monkeypatch.setattr(AL, "day_altitudes", lambda ds, today, days=AL.HISTORY_DAYS: {D(4): 3100.0, D(3): 3000.0,
+                                                                                     D(2): 2900.0})
+    assert c.get("/api/v1/racepower/altitude-acclimatisation").json()["default"] == "partial"
 
 
-def test_the_page_defaults_hides_partial_under_3000_and_explains_it():
+def test_the_page_has_no_choice_and_no_line_sp546():
+    """SP-546 (owner 2026-10-14): nothing to fill in — the 海拔 row (已適應／部分／未適應, its ? and the
+    default line) is gone; the calculation takes the automatic value, a saved S.accl is ignored."""
     s = (STATIC / "racepower.html").read_text("utf-8")
-    for el in ("/altitude-acclimatisation?", "function acclDefault()", "function lowRoute()", 'id="accl-line"',
-               '#accl [data-a="partial"]', "z < 3000", "z_max: c.totals.z_max", "S.accl !== acclDefault()"):
+    for el in ("/altitude-acclimatisation?", "function acclDefault()", "function lowRoute()", "z < 3000",
+               "z_max: c.totals.z_max", "function accl() { return acclDefault(); }", "acclimatisation: accl()"):
         assert el in s, el
-    # the user's choice wins: the default only when nothing is picked
-    assert "function accl() { const a = S.accl || acclDefault();" in s
+    for el in ('id="accl"', 'id="accl-line"', 'id="accl-badge"', "S.accl ||", 'bindSeg("accl"', "adv.n.accl",
+               "racepower.accl.tip", "accl.default_partial"):
+        assert el not in s, el
     for loc in ("zh-TW", "en"):
         cat = json.loads((STATIC / "i18n" / loc / "racepower.json").read_text("utf-8"))
-        assert all(cat.get(k) for k in ("accl.tip", "accl.default_partial", "accl.default_none")), loc
-    zh = json.loads((STATIC / "i18n" / "zh-TW" / "racepower.json").read_text("utf-8"))
-    assert "部分適應＝已適應與未適應的中點，是推估" in zh["accl.tip"] and "3,000 m" in zh["accl.tip"]
+        assert not [k for k in cat if k.startswith("accl.") or k == "adv.n.accl"], loc
 
 
 @pytest.mark.parametrize("nights, want", [(0, "unacclimatised"), (1, "unacclimatised"), (2, "partial"), (5, "partial")])

@@ -140,7 +140,8 @@ def test_the_zone5_maintenance_obeys_the_gate_and_the_guardrails():
     assert "5 區維持課" in d["seg_note"] and "沒有開放" in d["seg_note"] and "不排" in d["seg_note"]
     bad = gate(races, levels={"intensity": "bad"})
     d = QG.week_decision(bad, "specific", "specific", monday_of(4))
-    assert [it["track"] for it in d["items"]] == ["z3"] and "5 區維持課" in d["seg_note"] and "強度分配" in d["seg_note"]
+    # a0ebaf82 put the low-intensity reason in plain words (no more 「強度分配」)
+    assert [it["track"] for it in d["items"]] == ["z3"] and "5 區維持課" in d["seg_note"] and "低強度時間不夠" in d["seg_note"]
     ramp = gate(races, guard={"block": True, "blocks": ["ramp"], "rule": "ramp", "verdict": "CTL 增幅太快",
                              "verdicts": {"ramp": "CTL 增幅太快"}})
     d = QG.week_decision(ramp, "specific", "specific", monday_of(4))

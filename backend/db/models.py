@@ -62,6 +62,13 @@ class WorkoutFile(Base):
     coros_sport_type: Mapped[Optional[int]]
     # Garmin Connect's activityId of a row synced from Garmin (sync/garmin_client.py, SP-91)
     garmin_activity_id: Mapped[Optional[str]] = mapped_column(String(40), index=True, nullable=True)
+    # intervals.icu (SP-346, sync/intervals_client.py): the activity id of a row synced from it, the
+    # platform it came into intervals.icu from (its Activity.source: GARMIN_CONNECT, COROS, HUAWEI …;
+    # HUAWEI = not the original file) and the recording device's name (a Garmin one is attributed,
+    # sync/garmin_attribution.py). NULL for every other row
+    intervals_activity_id: Mapped[Optional[str]] = mapped_column(String(40), index=True, nullable=True)
+    upstream_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    device_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     elevation_gain_m: Mapped[Optional[float]] = mapped_column(nullable=True)
     trail_classification: Mapped[Optional[str]] = mapped_column(String(20), default="unknown")
     classification_overridden: Mapped[Optional[bool]] = mapped_column(Boolean, default=False)
@@ -149,6 +156,14 @@ class SyncState(Base):
     garmin_email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     garmin_password_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     garmin_last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # intervals.icu (SP-346, sync/intervals_client.py): the OAuth access token (it has no refresh token
+    # and does not expire) sealed with the server key, never returned; the intervals.icu athlete id
+    # the webhooks name (i<digits>); intervals_token_refused = when intervals.icu answered 401 / 403
+    # (the person revoked the app there), None while it is good
+    intervals_token_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    intervals_athlete_id: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    intervals_token_refused: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    intervals_last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class CorosPlanPush(Base):
@@ -405,6 +420,20 @@ class EventGpx(Base):
     day_splits_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # [km, …] the user's day ends
     camp_km_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)      # camp / hut waypoints' km
     uploaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    source_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)       # SP-537: {kind: cairn, gpx_id, url, name}
+
+
+class CourseSurface(Base):
+    """A course file's surface profile from OpenStreetMap and the user's corrections (SP-543,
+    engine/course_surface.py, plain sqlite3 with the same DDL). sha1 = the course file's (the
+    race calculator's course_id, event_gpx.sha1). New table: created by init_db's create_all."""
+    __tablename__ = "course_surface"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sha1: Mapped[str] = mapped_column(String(40), unique=True)
+    profile_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)     # the OSM lookup (km segments)
+    overrides_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # {segment index: group}
+    manual_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)      # a typed-in split
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class RaceCalc(Base):
@@ -579,3 +608,31 @@ class WeightToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class Change(Base):
+    """One change of a synced user row (SP-312 trial, db/changelog.py; docs/research/local-first-sync.md
+    §5.1, §9): a column of a user_settings key or an activity_tags row, set on a device (pushed through
+    POST /api/v1/sync/changes) or by the server itself (a write through the app's own pages while the
+    trial switch is on). `seq` is the server's own counter (AUTOINCREMENT: never handed out twice, even
+    after rows are deleted); a device only remembers the last (seq, cid) it pulled. `ts` is when the
+    value was set (UTC, naive; a device's clock is clamped to the server's), the last-writer-wins key
+    together with `device_id`. `applied` = it won and was written to the row (a change that lost is
+    kept, unapplied, so a retried push is recognised by `cid`). New table: created by init_db's
+    create_all."""
+    __tablename__ = "changes"
+    __table_args__ = (Index("ix_changes_target", "tbl", "row_id", "col", "item"),
+                      {"sqlite_autoincrement": True})
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    cid: Mapped[str] = mapped_column(String(36), unique=True)       # the change's own id (the device's)
+    ts: Mapped[datetime] = mapped_column(DateTime)                  # when it was set (UTC)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    tbl: Mapped[str] = mapped_column(String(40))                    # user_settings | activity_tags
+    row_id: Mapped[str] = mapped_column(String(100))                # the setting key / the tag's uid
+    col: Mapped[str] = mapped_column(String(40))                    # value | a tag column | tags
+    op: Mapped[str] = mapped_column(String(8), default="set")       # set | add | remove (tags)
+    item: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)   # tags: the tag (lower case)
+    value_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    device_id: Mapped[str] = mapped_column(String(64))              # the device's id; "server" = the app
+    schema_version: Mapped[int] = mapped_column(Integer)
+    applied: Mapped[bool] = mapped_column(Boolean, default=True)

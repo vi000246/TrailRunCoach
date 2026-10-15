@@ -73,6 +73,8 @@ tbody tr.on td { background: var(--soft); }
 td.c-date small { color: var(--muted); margin-left: 4px; }
 td.c-name { white-space: normal; min-width: 12em; max-width: 26em; }
 td.c-name .nm { overflow-wrap: anywhere; }
+.dev { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.devline { font-size: 12.5px; margin: 1px 0 2px; }
 tr.excl td.c-name .nm { text-decoration: line-through; color: var(--muted); }
 td.c-name .sub { display: none; color: var(--muted); font-size: 12px; }
 td.c-act { text-align: right; }
@@ -267,7 +269,7 @@ dialog#exp .row .sp { flex: 1; }
 <script src="/api/v1/static/hints.js"></script>
 <script src="/api/v1/static/fitimport.js"></script>
 <script>
-const API = "/api/v1/wko5";
+const API = "/api/v1/app";
 const T = (k, p) => (window.I18N ? I18N.t("activity." + k, p) : k);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -277,7 +279,7 @@ const num = (v, d = 0) => (v == null || Number.isNaN(+v) ? "—" : (+v).toFixed(
 const SPORTS = ["running", "trail running", "indoor running", "treadmill running", "hiking", "mountaineering", "walking", "cycling", "swimming", "strength", "strength training", "generic"];
 const sportName = (a) => { const k = a.sport_type || a.sport || ""; return SPORTS.includes(k) ? T("sport." + k) : k; };
 // upload: a FIT the user imported (SP-323, backend/sync/upload.py)
-const SRC_SHORT = { coros: "COROS", tp: "TP", wko5: "WKO5", upload: T("src_upload") };
+const SRC_SHORT = { coros: "COROS", garmin: "Garmin", tp: "TP", intervals: "intervals.icu", wko5: T("src_folder"), upload: T("src_upload") };
 const PREF = "activitylist.filters", PER = 50;
 // usePower: settings 「使用功率」 (off = no 平均功率 column, no 功率來源 row)
 // pain: the 傷病紀錄 meta (null in the demo mode: no 疼痛 column / filter / row)
@@ -319,7 +321,7 @@ const title = (a) => a.name || a.title_original || a.label;
 const autoOf = (a) => (S.auto ? S.auto[a.key] || null : null);
 const actOf = (k) => S.acts.find((a) => a.key === k);
 const viewerHref = (a) => a.index == null ? null
-  : `/api/v1/wko5/viewer?${new URLSearchParams({ workout: a.index, label: `${a.start.slice(0, 10)} ${title(a)}` })}`;
+  : `/api/v1/app/viewer?${new URLSearchParams({ workout: a.index, label: `${a.start.slice(0, 10)} ${title(a)}` })}`;
 
 // ---- columns ----------------------------------------------------------------
 const COLS = [
@@ -434,6 +436,14 @@ function srcBadge(a) {
   const tip = T("src_tip", { src: S.originLabels[a.origin] || a.origin }) + (fw !== "hidden" ? T("src_fill") : "");
   return `<span class="badge${fw === "show" ? " fill" : ""}" title="${esc(tip)}">${esc(SRC_SHORT[a.origin] || a.origin)}</span>`;
 }
+// intervals.icu (SP-346, sync/garmin_attribution.py): “Garmin [device model]” in plain text right by the
+// title (Garmin API Brand Guidelines: never only in a tooltip), and 不是原始檔 for Huawei's files
+function devMark(a) {
+  const m = a.device_mark;
+  if (!m) return "";
+  return (m.garmin ? ` <span class="dev">${esc(m.garmin)}</span>` : "")
+    + (m.not_original ? ` <span class="badge" title="${esc(T("not_original_help"))}">${esc(m.not_original_text || T("not_original"))}</span>` : "");
+}
 function painBadge(a) {
   if (!S.pain || a.pain == null) return "";
   const area = a.pain_area ? (S.pain.areas || []).find((x) => x.key === a.pain_area)?.label || "" : "";
@@ -448,7 +458,7 @@ function cell(c, a) {
       const sub = [sportName(a), hms(a.duration), a.climbing != null ? `↑${Math.round(a.climbing)} m` : ""].filter(Boolean).join(" · ");
       return `<span class="nm">${esc(title(a))}</span>${a.excluded ? ` <span class="badge ex">${esc(T("excluded"))}</span>` : ""}` +
         `${a.archived ? ` <span class="badge" title="${esc(T("archived_help"))}">${esc(T("archived"))}</span>` : ""}` +
-        `${a.user_type === "race" ? ` <span class="badge rc">${esc(T("race.badge"))}</span>` : ""}${achBadge(a)}` +
+        `${a.user_type === "race" ? ` <span class="badge rc">${esc(T("race.badge"))}</span>` : ""}${achBadge(a)}${devMark(a)}` +
         `<span class="sub">${esc(sub)} ${painBadge(a)}</span>`;
     }
     case "type": return esc(sportName(a));
@@ -540,7 +550,7 @@ async function loadList() {
   S.merge = r.merge || null; S.originLabels = { upload: T("src_upload_long"), ...(r.origin_labels || {}) };
   S.actMin = new Map();
   for (const a of S.acts) { const m = minOf(a.key); if (m != null && (!S.actMin.has(m) || a.index != null)) S.actMin.set(m, a); }
-  const src = { synced: T("source.synced"), wko5: "WKO5", coros: "COROS", tp: "TrainingPeaks" }[r.source] || r.source;
+  const src = { synced: T("source.synced"), wko5: T("src_folder"), coros: "COROS", tp: "TrainingPeaks" }[r.source] || r.source;
   const prim = S.merge && S.merge.primary ? T("source.primary", { src: ({ coros: "COROS", trainingpeaks: "TrainingPeaks" })[S.merge.primary] || S.merge.primary }) : "";
   $("hdr").textContent = T("source.line", { src: src + prim, n: S.acts.length });
   fillFilterOptions();
@@ -580,6 +590,8 @@ function qtipShow(btn) {
   qtipHide();
   const d = document.createElement("div");
   d.className = "qtip-pop"; d.textContent = btn.dataset.tip;
+  window.ManualLink?.decorate(d, btn);          // SP-559: 「名詞表：…」 when the text names a glossary word
+  if (QTIP.pinned === btn) d.dataset.pinned = "1";
   (btn.closest("dialog[open]") || document.body).appendChild(d);
   const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
   d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
@@ -588,8 +600,9 @@ function qtipShow(btn) {
 }
 function qtipHide() { QTIP.el?.remove(); QTIP.el = null; }
 document.addEventListener("mouseover", (e) => { const b = e.target.closest?.(".qtip"); if (b && !QTIP.pinned) qtipShow(b); });
-document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned) qtipHide(); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned && !window.ManualLink?.into(e)) qtipHide(); });
 document.addEventListener("click", (e) => {
+  if (e.target.closest?.(".qtip-pop")) return;  // its 名詞表 links
   const b = e.target.closest(".qtip");
   if (b && QTIP.pinned !== b) { QTIP.pinned = b; qtipShow(b); e.stopPropagation(); e.preventDefault(); return; }
   QTIP.pinned = null; qtipHide();
@@ -737,7 +750,7 @@ function renderEditor() {
   const p = d?.power, pk = d?.pack;
   const href = viewerHref(a);
   $("ed").innerHTML = `
-    <div class="edhead"><div class="ttl"><h2 id="ed-title">${esc(title(a))} ${srcBadge(a)}</h2>
+    <div class="edhead"><div class="ttl"><h2 id="ed-title">${esc(title(a))} ${srcBadge(a)}</h2>${a.device_mark ? `<div class="devline">${devMark(a)}</div>` : ""}
       <div class="meta">${esc(a.start.slice(0, 16).replace("T", " "))} · ${esc(sportName(a))} · ${hms(a.duration)} · ${a.distance != null ? num(a.distance, 2) + " km" : "—"}${a.climbing != null ? ` · ↑${Math.round(a.climbing)} m` : ""}${qt(T("help.editor"))}</div></div>
       <button type="button" class="x" data-close autofocus aria-label="${esc(T("close"))}">×</button></div>
     <div class="edbody">
@@ -826,7 +839,7 @@ function patchLocal(a, r) {
   if (r.pain_state) { a.pain = r.pain_state.pain; a.pain_area = r.pain_state.pain_area; a.pain_score = r.pain_state.pain_score ?? null; a.injury_id = r.pain_state.injury?.id ?? null; }
 }
 // every edit is a mark in the app's own data (activity_tags, keyed by start time; the pack in
-// racepower_hike_meta.json) — the FIT / TP / WKO5 files are never written
+// racepower_hike_meta.json) — the FIT / TP / comparison-folder files are never written
 async function saveFields(a, patch) {
   setMsg(T("saving"));
   const poleWas = "poles" in patch ? polesOf(a) : null;

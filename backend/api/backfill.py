@@ -32,7 +32,7 @@ complete Dataset, while what reads the last 90 days only is shown at once; else 
 complete Dataset (`when_complete`).
 
 A chunk that fails leaves its files to the complete build (it parses whatever is still unparsed).
-Progress per tenant: `progress()` — GET /api/v1/wko5/dataset/status's `backfill`, shown by
+Progress per tenant: `progress()` — GET /api/v1/app/dataset/status's `backfill`, shown by
 shell.js under the nav. In-process only: after a restart the next build is hot-first again and
 starts a new back-fill of what is still unparsed.
 """

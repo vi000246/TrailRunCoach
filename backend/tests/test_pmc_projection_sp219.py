@@ -255,7 +255,7 @@ def api(monkeypatch, tmp_path):
 
 def _chart(client, c, begin=TODAY - dt.timedelta(days=41), end=TODAY + dt.timedelta(days=20), sports=None):
     q = f"begin={begin}&end={end}" + (f"&sports={sports}" if sports else "")
-    r = client.get(f"/api/v1/wko5/views/v/dashboards/0/charts/{c}?{q}")
+    r = client.get(f"/api/v1/app/views/v/dashboards/0/charts/{c}?{q}")
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -394,7 +394,7 @@ def test_range_options_are_the_phase_end_and_the_next_target_race():
 def test_plan_range_endpoint(api, monkeypatch):
     client, holder = api
     monkeypatch.setattr(PJ, "load_plan", lambda: Plan(events=holder["events"]))
-    r = client.get("/api/v1/wko5/plan-range")
+    r = client.get("/api/v1/app/plan-range")
     assert r.status_code == 200 and r.json()["race"]["date"] == day(6) and r.json()["today"] == T
 
 
@@ -426,7 +426,7 @@ def test_the_bundled_pmc_and_daily_tss_charts_turn_it_on():
 
 def test_the_viewer_offers_future_presets_and_draws_the_projection():
     root = Path(__file__).resolve().parents[1] / "static"
-    html = (root / "wko5_viewer.html").read_text(encoding="utf-8")
+    html = (root / "charts.html").read_text(encoding="utf-8")
     assert 'data-d="phase"' in html and 'data-d="race"' in html and "/plan-range" in html
     assert 'FUTURE_PRESETS = ["phase", "race"]' in html
     assert 'bar_style === "hollow"' in html and "res.projection" in html

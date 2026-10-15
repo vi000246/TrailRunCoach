@@ -244,7 +244,7 @@ def test_season_drift_charts_use_the_card_definition():
         assert "看什麼" in c["description"] and "Uphill Athlete" in c["description"]
     for key in (("我的訓練", "耐久度：長時間後段心率飄移"), ("周期化訓練", "耐久度：長時間後段心率飄移")):
         c = charts[key]
-        # WKO5's stored value: named only in the description's last 方法 line; plain series names
-        assert any("pahr" in s["expression"] for s in c["series"]) and "WKO5 存的 Pa:HR" in c["description"]
+        # the stored Pa:HR: named only in the description's last 方法 line; plain series names
+        assert any("pahr" in s["expression"] for s in c["series"]) and "方法：Pa:HR（全程前半對後半" in c["description"] and "WKO5" not in c["description"]
         assert c["description"].split("\n")[-1].startswith("方法：")
         assert all("Pa:HR" not in s["name"] and "Pw:HR" not in s["name"] for s in c["series"])

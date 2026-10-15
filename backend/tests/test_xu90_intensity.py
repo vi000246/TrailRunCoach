@@ -51,7 +51,7 @@ def test_coros_steps(basis):
     th = _sources()[basis]
     s = AT.session(th, 140.0, 190.0, None, "xu90")
     steps = CW.session_steps(s, CW.Thresholds.of(th))
-    assert steps[0].intensity == CW.easy_hr(CW.Thresholds.of(th))            # warm-up: the easy-run cap
+    assert steps[0].intensity is None                    # warm-up: no target (SP-479; was the easy-run cap)
     w = _work(steps)
     assert w.seconds == 80 * 60
     if basis == "pace":
@@ -169,8 +169,10 @@ def test_test_sessions_have_no_lthr_badge(s):
     assert TC.session_warn(WARN, s, HR_ITEMS) is None
 
 
-def test_an_interval_session_keeps_the_badge():
-    assert TC.session_warn(WARN, {"kind": "quality", "title": "閾值 3×8 分"}, HR_ITEMS) == WARN
+def test_an_interval_session_has_no_badge_since_sp493():
+    """SP-493 (owner 2026-10-14): the LTHR reminder lives only in the suggestion box; the editor and
+    the session cards carry no badge, interval sessions included."""
+    assert TC.session_warn(WARN, {"kind": "quality", "title": "閾值 3×8 分"}, HR_ITEMS) is None
 
 
 

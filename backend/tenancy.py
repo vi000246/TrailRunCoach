@@ -119,10 +119,28 @@ def demo_mode() -> bool:
     return os.environ.get(ENV_MODE, "").strip().lower() == "demo"
 
 
+HOME_DIR = ".trailruncoach"
+OLD_HOME_DIR = ".wko5coach"          # before SP-498
+
+
+def default_home() -> Path:
+    """The data folder without $TRC_HOME: ~/.trailruncoach — or ~/.wko5coach when only that one
+    exists (an install from before SP-498): used where it is, never moved (the DB holds absolute
+    paths under it). Evaluated per call: tests fake home."""
+    home = Path.home()
+    new, old = home / HOME_DIR, home / OLD_HOME_DIR
+    try:
+        if not new.exists() and old.is_dir():
+            return old
+    except OSError:
+        pass
+    return new
+
+
 def home_root() -> Path:
-    """$WKO5COACH_HOME, else ~/.wko5coach (evaluated per call: tests fake home)."""
+    """$TRC_HOME (or its old name $WKO5COACH_HOME, backend/env_names.py), else default_home()."""
     v = os.environ.get(ENV_HOME, "").strip()
-    return Path(v) if v else Path.home() / ".wko5coach"
+    return Path(v) if v else default_home()
 
 
 def owner() -> Tenant:

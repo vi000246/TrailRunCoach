@@ -57,3 +57,4 @@ def test_other_paths_are_untouched(tmp_path):
     assert os.listdir(tmp_path) == ["a.json"]
     assert G.guarded(G.REAL_HOME / "WKO5x") is None
     assert G.guarded(G.REAL_HOME / "WKO5" / "a") == "~/WKO5"
+    assert G.guarded(G.REAL_HOME / ".trailruncoach" / "a") == "~/.trailruncoach"    # the data folder's new name (SP-498)

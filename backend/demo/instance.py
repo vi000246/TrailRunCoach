@@ -45,12 +45,12 @@ def _inside(p: Path, root: Path) -> bool:
 def check_home() -> Path:
     v = os.environ.get(tenancy.ENV_HOME, "").strip()
     if not v:
-        raise DemoStartupError("demo mode needs WKO5COACH_HOME (its own data folder)")
+        raise DemoStartupError("demo mode needs TRC_HOME (its own data folder)")
     home = Path(v)
     real = Path(os.environ.get("WKO5COACH_TEST_REAL_HOME") or Path.home())
-    for owner in (real / ".wko5coach", real / "WKO5"):
+    for owner in (real / ".trailruncoach", real / ".wko5coach", real / "WKO5"):
         if _inside(home, owner):
-            raise DemoStartupError(f"demo mode refuses WKO5COACH_HOME={home}: it is the owner's {owner}")
+            raise DemoStartupError(f"demo mode refuses TRC_HOME={home}: it is the owner's {owner}")
     return home
 
 

@@ -21,7 +21,7 @@ from typing import Optional
 from backend.engine import data_level as DL
 from backend.engine import load_guard as LG
 from backend.engine.reentry import MIN_BREAK
-from backend.engine.planning import KINDS, PHASES, Plan, goals, phase_on
+from backend.engine.planning import KINDS, PHASES, Plan, goals, phase_label, phase_on
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day
 from backend.engine.wko5expr.evaluator import WS, Evaluator
 from backend.files.wko5_athlete import day_to_date
@@ -33,12 +33,18 @@ GOOD, WATCH, BAD, INFO, NA = "good", "watch", "bad", "info", "na"
 SRC_PALLADINO = "Palladino（訓練負荷圖的負荷與長期負荷週增量）"
 SRC_TP_TSB = "Friel／TrainingPeaks（Simmons 2020）負荷平衡（Load balance）區間：−10～−30 有效訓練、< −30 過度（教練）；Palladino A/B/C 賽的負荷平衡"
 # weekly volume step: > 20 % = the risk line (Nielsen et al. 2014 JOSPT 44:739, DOI 10.2519/jospt.2014.5164;
-# Damsted et al. 2019 JOSPT 49:230, DOI 10.2519/jospt.2019.8541 — peer-reviewed); 10–20 % hold = 推估, conservative.
+# Damsted et al. 2019 JOSPT 49:230, DOI 10.2519/jospt.2019.8541 — peer-reviewed); 10 % = the coaches' mode and median
+# (COROS, Runna, Koop / CTS, UA, Fitzgerald, Gaudette …, SP-528 coach-consensus-sp518 A §1), 10–20 % hold, conservative.
 # The 「10 % 法則」 itself has no evidence (unsourced-rules.md §B2)
 SRC_VOLUME = ("週增量 > 20%：Nielsen 2014、Damsted 2019（同儕審查：增 20–30% 以上受傷風險升高；量的是跑步）；"
-              "10–20% 先維持：推估（保守）；只算跑步時間、基準是前一週和前 4 週平均取大（SP-63）")
+              "10%：教練眾數（COROS、Runna、Koop／CTS、UA、Fitzgerald、Gaudette 等），10–20% 先維持（保守）；"
+              "只算跑步時間、基準是前一週和前 4 週平均取大（SP-63）")
 SRC_UA = "Uphill Athlete"
 SRC_SEILER = "Seiler 2006 強度分配；Palladino 金字塔 70–90% 輕鬆"
+# 強度分配's floor (SP-528, coach-consensus-sp518 B §1): 75 % sits between the only stated floor, Campos 2022
+# (systematic review, ≥ 70 %), and the coaches' ≈ 80 % by time (80/20 Endurance, UA, CTS)
+SRC_LOW_SHARE = ("底線 75% 推估，介於 Campos 2022 系統性回顧（低強度 ≥ 70%）和 80/20 Endurance、Uphill Athlete、CTS"
+                 "（依時間約 80%）之間；Seiler & Kjerland 2006 的 75／8／17 是堂數；Palladino 金字塔 70–90% 輕鬆")
 SRC_BOSQUET = "Bosquet 2007 減量統合分析"
 SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
 SRC_CHIANG = "江晏慶（越野跑周期化訓練）"
@@ -52,8 +58,8 @@ TSB_A = (10.0, 20.0)                                        # A race, taper end 
 TSB_PRODUCTIVE = (-30.0, -10.0)                             # Friel: productive training
 TSB_OVERREACH = -30.0
 TSB_STALE = 25.0
-LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # by time, 推估: Seiler's 80/20 counts sessions,
-                                                             # not time (inventory §5.1); Palladino
+LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # by time, 推估 (SRC_LOW_SHARE: between Campos 2022
+                                                             # ≥ 70 % and 80/20 / UA / CTS ≈ 80 %); Palladino
 TAPER_BAND = (0.40, 0.59)                                   # Bosquet: -41…-60%
 DRIFT_GOOD, DRIFT_WATCH = 0.05, 0.10                         # Friel (<5%), 徐國峰 (90' E <10%)
 SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%）；徐國峰（90 分鐘 E 跑 < 10%）"
@@ -134,12 +140,38 @@ class Status:
         self.plan = plan if plan is not None else ds.plan
         self.today = today or day_to_date(ds.today)
         self.tday = int(math.floor(date_to_day(self.today)))
-        self.ev = Evaluator(ds, self.tday - 400, self.tday)
+        self._ev: Optional[Evaluator] = Evaluator(ds, self.tday - 400, self.tday)
         self.phase = phase_on(self.plan, self.today)
         self.kind = self.phase.kind if self.phase else None
         self.goals = goals(self.plan, self.today)
         self.indicators: list[Indicator] = []
         self.actions: list[Action] = []
+
+    @property
+    def ev(self) -> Evaluator:
+        """The 400-day evaluator (made again after detach())."""
+        if self._ev is None:
+            self._ev = Evaluator(self.ds, self.tday - 400, self.tday)
+        return self._ev
+
+    @ev.setter
+    def ev(self, value) -> None:
+        self._ev = value
+
+    def detach(self) -> "Status":
+        """Let the Dataset go once computed: the evaluator (and its memo) is dropped and the
+        Dataset held weakly, the computed values stay. For a Status kept in a cache
+        (api/overview._status_cache, one per tenant): holding the Dataset kept every tenant's
+        Dataset alive after the Dataset cache's memory budget had dropped it (SP-394 第 6 條:
+        10 tenants, every Dataset still in memory). A cache hit's key carries the Dataset's
+        generation, so its caller holds that Dataset and the weak reference is alive."""
+        import weakref
+        self._ev = None
+        try:
+            self.ds = weakref.proxy(self.ds)
+        except TypeError:                   # already a proxy, or a stub without weak references
+            pass
+        return self
 
     # ---- helpers ---------------------------------------------------------
     def _iso(self, day: float) -> str:
@@ -222,7 +254,6 @@ class Status:
         race is within 30 days and its projected S < 0.75 (推估)."""
         from backend.engine import heat as HT
         from backend.engine import heat_data as HD
-        from backend.engine import heat_plan as HP
         acts, meta = HD.exposures()
         passive = HD.completed_passive_dates()
         acts = acts + [{"date": d, "hot_min": HT.MIN_DOSE_MIN} for d in passive]
@@ -230,7 +261,7 @@ class Status:
         s = cur["s"]
         lv = cur["level"]
         level = {"acclimatised": GOOD, "partial": WATCH}.get(lv["id"], INFO)
-        hr = HP.hot_race(self.plan.events, self.today, acts)
+        hr = HD.hot_race(self.plan.events, self.today, acts)
         s_race, action = None, ""
         if hr:
             e = hr["event"]
@@ -238,9 +269,9 @@ class Status:
             s_race = {"center": pj["center"], "low": pj["low"], "high": pj["high"], "event": e.name, "date": e.date}
             if pj["center"] < HT.LEVELS[0][1]:
                 level = BAD
-                start = e.start - dt.timedelta(days=HP.INDUCT[0])
-                action = (f"{e.name}（{e.date}）預估是熱天，比賽日預估 S {pj['center']:.0%}：建議 "
-                          f"{start.month}/{start.day} 起排 5–10 天熱適應課（課表會自動排，見排課頁）")
+                # SP-569: no 熱適應課 in the plan any more — the race-day heat reminder only
+                action = _("{race}（{date}）預估是熱天，比賽日熱適應預估 {s}：比賽當天配速放慢、多補水；"
+                           "賽事計算機已把熱影響算進去", race=e.name, date=e.date, s=f"{pj['center']:.0%}")
         verdict = (f"近 14 天有 {cur['days_14']} 天熱暴露" +
                    (f"，最後一次 {cur['since_last_d']} 天前" if cur["since_last_d"] is not None else "，沒有熱暴露紀錄"))
         if meta.get("missing"):
@@ -283,7 +314,7 @@ class Status:
                              "還沒有目標賽事，先當作基礎期來看",
                              "到「賽事周期」頁加一場 A 賽事，周期會自動排出來", source=SRC_UA)
         left = (dt.date.fromisoformat(p.end) - self.today).days
-        txt = _(PHASES[p.kind])
+        txt = phase_label(p, self.plan.events)        # an A 百岳 trip's days: 行程 (SP-504 R2)
         if nxt:
             why = f"{p.start} ～ {p.end}，還有 {left} 天；下一場 A 賽事「{nxt.name}」倒數 {g['days_to_next_a']} 天"
         else:
@@ -494,7 +525,7 @@ class Status:
                 lvl, v, act = (BAD, f"上週跑步時間比基準多 {step * 100:+.0f}%（> 20%：Nielsen 2014、Damsted 2019 的受傷風險線）",
                                "本週維持上週的量，不要再加")
             elif step is not None and step > LG.STEP_HOLD:
-                lvl, v, act = WATCH, f"上週跑步時間比基準多 {step * 100:+.0f}%（10–20%：先維持，推估）", "本週維持，下週再加"
+                lvl, v, act = WATCH, f"上週跑步時間比基準多 {step * 100:+.0f}%（10–20%：先維持；10% 是教練眾數）", "本週維持，下週再加"
             elif last < avg4 * 0.6 and avg4 > 1:
                 lvl, v, act = WATCH, f"上週只有前 4 週平均的 {last / avg4 * 100:.0f}%", "如果不是刻意恢復，本週補回來"
             else:
@@ -533,7 +564,7 @@ class Status:
             lvl, v, act = WATCH, "減量期高強度歸零了", "保留一次短的強度課（例：4×3 分鐘 @ 98–102% CP）"
         aet = self._aet_now()
         act = act.format(aet=f"{aet:.0f}" if aet else "AeT")
-        return Indicator("intensity", _("強度分配"), lvl, txt, v, why, act, SRC_SEILER, share,
+        return Indicator("intensity", _("強度分配"), lvl, txt, v, why, act, SRC_LOW_SHARE, share,
                          extra={"low_share": share, "high_hours": hi_h, "power_low_share": pshare})
 
     def _aet_now(self) -> Optional[float]:
@@ -927,7 +958,7 @@ class Status:
                 (cp is None or cp.isoformat() < brk["return"]):
             cp_due = True
             worst = WATCH if worst == GOOD else worst
-            why += f"；停跑 {brk['days']} 天：恢復期結束後重測 CP（WKO5 研討會）"
+            why += f"；停跑 {brk['days']} 天：恢復期結束後重測 CP（教練研討會）"
         from backend.engine import cp_protocols as CPP
         proto = self._cp_protocol()
         if worst != GOOD:
@@ -943,7 +974,7 @@ class Status:
         extra = {}
         if ct:
             extra["cp_test"] = ct
-            why += "；" + (_("最近一次 CP 測試 {d}：這次測試後的模型閾值功率（Modelled threshold power）{cp} W（算法參考 WKO5，課表自動採用）",
+            why += "；" + (_("最近一次 CP 測試 {d}：這次測試後的模型閾值功率（Modelled threshold power）{cp} W（課表自動採用）",
                             d=ct["date"], cp=f"{ct['cp']:.0f}") if ct.get("cp") is not None else
                           _("最近一次 CP 測試 {d}：算不出模型閾值功率（Modelled threshold power）", d=ct["date"]))
         # the latest AeT drift test (engine/aet_test.py): UA's three bands
@@ -1002,12 +1033,13 @@ class Status:
             ze = {**ze, "suggestions": list(ze["suggestions"]) + tc["suggestions"]}
             extra["thr_check"] = {k: tc.get(k) for k in ("lthr", "hrmax", "rhr", "diagnosis", "test_results", "warn")}
             dg = tc["diagnosis"]
-            if dg.get("text"):
+            # SP-493 (owner 2026-10-14): 「LTHR 不準／要重測」 is said once, in the suggestion box (稍後提醒
+            # there) — the 測試 card keeps the max HR's line only
+            if dg.get("text") and dg.get("outlier") == "hrmax":
                 why += "；" + dg["text"]
-            for name, key in (("LTHR", "lthr"), (_("最大心率"), "hrmax")):
-                c = (tc.get(key) or {}).get("confidence")
-                if c and c != "high":
-                    why += "；" + _("{name} 可信度{c}", name=name, c=_(TC.CONF_LABEL[c]))
+            c = (tc.get("hrmax") or {}).get("confidence")
+            if c and c != "high":
+                why += "；" + _("{name} 可信度{c}", name=_("最大心率"), c=_(TC.CONF_LABEL[c]))
         self.test_suggestions = ze["suggestions"]
         extra["test_suggestions"] = ze["suggestions"]
         extra["zone_events"] = ze["events"]
@@ -1035,14 +1067,14 @@ class Status:
             self.plan.threshold_on("lthr", self.today) is None
         aet_missing = self.plan.threshold_on("aethr", self.today) is None
         cp_src = "測試" if self.plan.threshold_on("cp", self.today) is not None else \
-            ("WKO5 mFTP" if self.ds.mftp_run is not None else
-             "WKO5 設定值" if self.ds.settings_from == "wko5" else self.ds.setting_label("runftp"))
+            ("對照資料夾的 mFTP" if self.ds.mftp_run is not None else
+             "對照資料夾的設定值" if self.ds.settings_from == "wko5" else self.ds.setting_label("runftp"))
         recent = self.since(28)
         tot = self.ws("athleterange(today-27, today, sum(if(heartrate > 0, deltatime)))")
         with_hr = sum(1 for w in recent if tot.get(w.idx, 0) > 0)
         issues, lvl = [], GOOD
         if thr_default:
-            issues.append("LTHR 還是 WKO5 預設值 160")
+            issues.append("LTHR 還是出廠預設值 160")
             lvl = BAD
         if aet_missing:
             issues.append("AeT 用 0.89×LTHR 估（推估）")
@@ -1115,7 +1147,7 @@ class Status:
         return {
             "today": self.today.isoformat(),
             "phase": None if self.phase is None else {
-                "kind": self.phase.kind, "label": _(PHASES[self.phase.kind]),
+                "kind": self.phase.kind, "label": phase_label(self.phase, self.plan.events),
                 "start": self.phase.start, "end": self.phase.end, "goal": PHASE_GOAL[self.phase.kind]},
             "goals": self.goals,
             "headline": self.headline(),

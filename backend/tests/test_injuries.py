@@ -242,54 +242,54 @@ def api(tmp_path, monkeypatch):
 
 
 def test_api_crud_resolve_and_errors(api):
-    r = api.post("/api/v1/wko5/injuries", json={"area": "knee", "side": "right", "severity": "moderate",
+    r = api.post("/api/v1/app/injuries", json={"area": "knee", "side": "right", "severity": "moderate",
                                                  "onset_date": "2026-08-01"})
     assert r.status_code == 200, r.text
     e = r.json()
     assert e["status"] == "active" and e["label"] == "右膝" and e["open"]
-    assert api.post("/api/v1/wko5/injuries", json={"area": "knee", "onset_date": "2099-01-01"}).status_code == 400
-    assert api.post("/api/v1/wko5/injuries", json={"area": "knee", "severity": "x", "onset_date": "2026-08-01"}).status_code == 400
-    r = api.patch(f"/api/v1/wko5/injuries/{e['id']}", json={"resolved_date": "2026-07-01"})
+    assert api.post("/api/v1/app/injuries", json={"area": "knee", "onset_date": "2099-01-01"}).status_code == 400
+    assert api.post("/api/v1/app/injuries", json={"area": "knee", "severity": "x", "onset_date": "2026-08-01"}).status_code == 400
+    r = api.patch(f"/api/v1/app/injuries/{e['id']}", json={"resolved_date": "2026-07-01"})
     assert r.status_code == 400 and r.json()["detail"] == "RESOLVED_BEFORE_ONSET"
-    r = api.post(f"/api/v1/wko5/injuries/{e['id']}/resolve", json={"date": "2026-08-20"})
+    r = api.post(f"/api/v1/app/injuries/{e['id']}/resolve", json={"date": "2026-08-20"})
     assert r.json()["status"] == "resolved" and r.json()["resolved_date"] == "2026-08-20"
-    r = api.post("/api/v1/wko5/injuries", json={"area": "knee", "onset_date": "2026-09-10"})
+    r = api.post("/api/v1/app/injuries", json={"area": "knee", "onset_date": "2026-09-10"})
     assert r.json()["recurrence_of"] == e["id"]                                      # 21 days later, same area
-    lst = api.get("/api/v1/wko5/injuries").json()["injuries"]
+    lst = api.get("/api/v1/app/injuries").json()["injuries"]
     assert [x["id"] for x in lst] == [r.json()["id"], e["id"]]
-    assert api.delete(f"/api/v1/wko5/injuries/{e['id']}").status_code == 200
-    assert api.get(f"/api/v1/wko5/injuries/{e['id']}/days").status_code == 404
-    m = api.get("/api/v1/wko5/injuries/meta").json()
+    assert api.delete(f"/api/v1/app/injuries/{e['id']}").status_code == 200
+    assert api.get(f"/api/v1/app/injuries/{e['id']}/days").status_code == 404
+    m = api.get("/api/v1/app/injuries/meta").json()
     assert len([a for a in m["areas"] if not a["custom"]]) == 9 and not m["settings"]["pattern_alerts"]
     assert m["settings"]["reentry_step_up"] is True
-    assert api.post("/api/v1/wko5/injuries/areas", json={"label": "足弓"}).status_code == 200
-    assert any(a["key"] == "足弓" and a["custom"] for a in api.get("/api/v1/wko5/injuries/meta").json()["areas"])
-    api.delete("/api/v1/wko5/injuries/areas/足弓")
-    assert not any(a["custom"] for a in api.get("/api/v1/wko5/injuries/meta").json()["areas"])
+    assert api.post("/api/v1/app/injuries/areas", json={"label": "足弓"}).status_code == 200
+    assert any(a["key"] == "足弓" and a["custom"] for a in api.get("/api/v1/app/injuries/meta").json()["areas"])
+    api.delete("/api/v1/app/injuries/areas/足弓")
+    assert not any(a["custom"] for a in api.get("/api/v1/app/injuries/meta").json()["areas"])
 
 
 def test_pattern_alerts_cannot_be_enabled_below_five(api):
-    api.post("/api/v1/wko5/injuries", json={"area": "knee", "onset_date": "2026-06-01", "resolved_date": "2026-06-10"})
-    r = api.put("/api/v1/wko5/injuries/settings", json={"pattern_alerts": True})
+    api.post("/api/v1/app/injuries", json={"area": "knee", "onset_date": "2026-06-01", "resolved_date": "2026-06-10"})
+    r = api.put("/api/v1/app/injuries/settings", json={"pattern_alerts": True})
     assert r.status_code == 400 and "5 次" in r.json()["detail"]
-    assert api.put("/api/v1/wko5/injuries/settings", json={"reentry_step_up": False}).json()["reentry_step_up"] is False
+    assert api.put("/api/v1/app/injuries/settings", json={"reentry_step_up": False}).json()["reentry_step_up"] is False
 
 
 def test_api_analysis_and_timeline(api):
-    api.post("/api/v1/wko5/injuries", json={"area": "knee", "onset_date": "2026-06-01", "resolved_date": "2026-06-10"})
-    a = api.get("/api/v1/wko5/injuries/analysis").json()
+    api.post("/api/v1/app/injuries", json={"area": "knee", "onset_date": "2026-06-01", "resolved_date": "2026-06-10"})
+    a = api.get("/api/v1/app/injuries/analysis").json()
     assert a["tier"] == 1 and a["n"] == 1
-    t = api.get("/api/v1/wko5/injuries/timeline?begin=2026-01-01&end=2026-09-30").json()
+    t = api.get("/api/v1/app/injuries/timeline?begin=2026-01-01&end=2026-09-30").json()
     assert t["bands"][0]["area"] == "knee" and t["weeks"] and t["weeks"][0]["week"] <= "2026-01-01"
-    d = api.get(f"/api/v1/wko5/injuries/{t['bands'][0]['id']}/days").json()["days"]
+    d = api.get(f"/api/v1/app/injuries/{t['bands'][0]['id']}/days").json()["days"]
     assert len(d) == 22 and d[-1]["onset"]
 
 
 def test_demo_mode_hides_everything(api, monkeypatch):
     monkeypatch.setenv("WKO5COACH_MODE", "demo")
     for path in ("", "/meta", "/analysis", "/timeline", "/page"):
-        assert api.get(f"/api/v1/wko5/injuries{path}").status_code == 404
-    assert api.post("/api/v1/wko5/injuries", json={"area": "knee", "onset_date": "2026-06-01"}).status_code == 404
+        assert api.get(f"/api/v1/app/injuries{path}").status_code == 404
+    assert api.post("/api/v1/app/injuries", json={"area": "knee", "onset_date": "2026-06-01"}).status_code == 404
     assert INJ.load_events() == []
     from backend.api.workouts import ActivityUpdate, save_activity_tag
     from fastapi import HTTPException

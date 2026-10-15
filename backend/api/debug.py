@@ -10,14 +10,17 @@ with a dedicated token (backend/debug_auth.py: `X-TRC-Debug-Token`, or `Authoriz
   GET /api/v1/debug/thresholds?date=                                       read:plan or read:activity
   GET /api/v1/debug/sync[?lines=200]                                                       read:sync
   GET /api/v1/debug/export/config                                                      export:config
+  GET /api/v1/debug/export/plan                                                          export:plan
 
-  (web, 設定 › 進階 › Debug API — the page's own session, never a debug token; writes need a
-  same-origin request: Sec-Fetch-Site / Origin)
+  (web, 設定 › 進階 › Debug API — the page's own session, never a debug token; the owner only
+  (SP-373: no server PIN); writes need a same-origin request: Sec-Fetch-Site / Origin)
   GET    /api/v1/settings/debug-api                      state, tokens, the last 100 calls, failures
   PUT    /api/v1/settings/debug-api                      {enabled}
-  POST   /api/v1/settings/debug-api/tokens               {pin, name, scopes, days} → the token, once
+  POST   /api/v1/settings/debug-api/tokens               {name, scopes, days} → the token, once
   DELETE /api/v1/settings/debug-api/tokens/{id}          revoke one
   POST   /api/v1/settings/debug-api/tokens/revoke-all
+  GET    /api/v1/settings/debug-api/upstream             this copy pulls from a production server?
+  POST   /api/v1/settings/debug-api/upstream/pull        {what, apply} → preview / apply (engine/upstream.py)
 
 Read-only for real: the plan views never call plan_sessions.sessions() (it takes the writer lock,
 reconciles and records snapshots); they compute the same thing in memory — plan_store.match_only
@@ -572,51 +575,61 @@ async def export_config(ctx: DA.Ctx = Depends(DA.need("export:config")), db: Asy
     return await finish(ctx, db, body)
 
 
+@router.get("/export/plan")
+async def export_plan(ctx: DA.Ctx = Depends(DA.need("export:plan")), db: AsyncSession = Depends(get_db)):
+    """The stored 課表 (SP-373): every plan_sessions row as stored — the user's own sessions, the
+    edited ones, the deletion markers (so a copy does not bring a deleted session back) —, for a
+    local copy to mirror (engine/upstream.py). Not the COROS push records (coros_plan_push: they
+    belong to the server that pushed)."""
+    from backend.engine import plan_store as PS
+    rows = [{**PS.to_dict(r), "title": r.title} for r in (await PS._rows(db, 1)).values()]   # the stored title
+    rows.sort(key=lambda s: (s.get("day") or "9999", s["uid"]))
+    body = {"schema_version": DV.SCHEMA_VERSION,
+            "exported_at": dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            "sessions": rows, "count": len(rows),
+            "source": _("plan_sessions 資料表（含刪除／取代的標記）；不含 COROS 推送紀錄")}
+    return await finish(ctx, db, body)
+
+
 # ---------------------------------------------------------------------------
 # settings page (the web session; owner only — not mounted in the demo)
 # ---------------------------------------------------------------------------
 
+def owner_only() -> None:
+    """SP-373 / SP-406: only the owner turns the debug API on, makes or revokes a token or pulls
+    from a production server (in sign-in mode every other user gets 403)."""
+    from backend import tenancy
+    if not tenancy.is_owner():
+        raise HTTPException(403, {"code": "OWNER_ONLY", "message": _("只有站主可以使用 Debug API")})
+
+
 async def _state(db: AsyncSession) -> dict:
-    return {"enabled": await DA.enabled(db), "pin_configured": DA.pin_configured(), "pin_env": DA.PIN_ENV,
-            "pin_min_len": DA.PIN_MIN_LEN, "pin_locked_s": DA.pin_locked_for(), "pin": DA.pin_stats(),
+    return {"enabled": await DA.enabled(db),
             "scopes": list(DA.SCOPES), "default_scopes": list(DA.DEFAULT_SCOPES), "days": list(DA.DAYS),
             "default_days": DA.DEFAULT_DAYS, "tokens": await DA.list_tokens(db),
             "audit": await DA.audit_rows(db), "failures": await DA.failure_rows(db), "dropped": DA.dropped(),
             "rate_per_min": 60}
 
 
-@admin_router.get("")
+@admin_router.get("", dependencies=[Depends(owner_only)])
 async def admin_state(db: AsyncSession = Depends(get_db)):
     return await _state(db)
 
 
-@admin_router.put("", dependencies=[Depends(same_origin)])
+@admin_router.put("", dependencies=[Depends(owner_only), Depends(same_origin)])
 async def admin_set(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     from backend.settings.repository import SettingsRepository
     on = body.get("enabled")
     if not isinstance(on, bool):
         raise HTTPException(400, "enabled must be true/false")
-    if on and not DA.pin_configured():
-        raise HTTPException(400, {"code": "NO_PIN", "message": _("伺服器沒有設定 PIN（環境變數 {env}），不能開啟",
-                                                                 env=DA.PIN_ENV)})
     await SettingsRepository(db).set(DA.ENABLED_KEY, on)
     await db.commit()
     return await _state(db)
 
 
-@admin_router.post("/tokens", dependencies=[Depends(same_origin)])
-async def admin_create(request: Request, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
-    from backend.security import ratelimit as RL
-    try:
-        DA.check_pin(body.get("pin"), RL.client_ip(request.scope))
-    except DA.PinError as e:
-        if e.code == "no_pin":
-            raise HTTPException(400, {"code": "NO_PIN", "message": _("伺服器沒有設定 PIN，不能產生 token")})
-        if e.code == "locked":
-            raise HTTPException(429, {"code": "PIN_LOCKED", "retry_s": e.retry_s,
-                                      "message": _("PIN 錯太多次，{m} 分鐘後再試", m=max(1, (e.retry_s + 59) // 60))},
-                                headers={"Retry-After": str(e.retry_s)})
-        raise HTTPException(403, {"code": "PIN_WRONG", "message": _("PIN 不對")})
+@admin_router.post("/tokens", dependencies=[Depends(owner_only), Depends(same_origin)])
+async def admin_create(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """A personal API token (SP-373): the owner's web session is enough — no PIN."""
     try:
         token, view = await DA.create_token(db, body.get("name"), body.get("scopes"), body.get("days"))
     except ValueError as e:
@@ -624,13 +637,37 @@ async def admin_create(request: Request, body: dict = Body(...), db: AsyncSessio
     return {"token": token, **view}
 
 
-@admin_router.delete("/tokens/{token_id}", dependencies=[Depends(same_origin)])
+@admin_router.delete("/tokens/{token_id}", dependencies=[Depends(owner_only), Depends(same_origin)])
 async def admin_revoke(token_id: int = Path_(ge=1, le=2 ** 62), db: AsyncSession = Depends(get_db)):
     n = await DA.revoke(db, token_id)
     return {"revoked": n, **(await _state(db))}
 
 
-@admin_router.post("/tokens/revoke-all", dependencies=[Depends(same_origin)])
+@admin_router.post("/tokens/revoke-all", dependencies=[Depends(owner_only), Depends(same_origin)])
 async def admin_revoke_all(db: AsyncSession = Depends(get_db)):
     n = await DA.revoke(db, None)
     return {"revoked": n, **(await _state(db))}
+
+
+# ---------------------------------------------------------------------------
+# a local copy pulls from the production server (SP-373, engine/upstream.py): one way only
+# ---------------------------------------------------------------------------
+
+@admin_router.get("/upstream", dependencies=[Depends(owner_only)])
+async def upstream_state(db: AsyncSession = Depends(get_db)):
+    from backend.engine import upstream as UP
+    return await UP.state(db)
+
+
+@admin_router.post("/upstream/pull", dependencies=[Depends(owner_only), Depends(same_origin)])
+async def upstream_pull(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """{what: ["config", "plan"], apply: false} → what would change; apply: true writes it."""
+    from backend.engine import upstream as UP
+    what = body.get("what", list(UP.PARTS))
+    apply = body.get("apply", False)
+    if not isinstance(what, list) or not what or any(w not in UP.PARTS for w in what) or not isinstance(apply, bool):
+        raise HTTPException(400, f"what must be a non-empty list of {list(UP.PARTS)}, apply true/false")
+    try:
+        return await UP.pull(db, what, apply)
+    except UP.UpstreamError as e:
+        raise HTTPException(e.status, {"code": e.code, "message": str(e)})

@@ -34,7 +34,7 @@
   // R14: which page this is (shell.js's data-page) — the dialog only on these
   const WIZARD_PAGES = ["home", "settings"];
   const page = (document.querySelector("script[data-page]") || { dataset: {} }).dataset.page || "";
-  const SETTINGS_HREF = "/api/v1/wko5/settings#general";
+  const SETTINGS_HREF = "/api/v1/app/settings#general";
   function missingLine(prof) {
     const miss = (prof.setup && prof.setup.missing) || [];
     if (!prof.setup || !prof.setup.needed || !miss.length || (window.TRC_SESSION || {}).mode === "demo") return;
@@ -95,7 +95,7 @@
     d.innerHTML = `<form method="dialog" novalidate>
       <h3>${esc(T("title"))}</h3>
       <p>${esc(T("intro"))}</p>
-      <p>${esc(T("remind", { days: prof.setup.remind_days || 7 }))}</p>
+      <p>${esc(T("remind", { days: prof.setup.remind_days || 7 }))}${window.ManualLink ? ` <a class="an-man" href="${window.ManualLink.href("start#first-run")}">${esc(window.I18N ? I18N.t("shell.manual.see") : "")}</a>` : ""}</p>
       <label><span>${esc(T("sex"))}${req}</span> <select name="sex" required><option value="">${esc(T("pick"))}</option>
         <option value="male">${esc(T("male"))}</option><option value="female">${esc(T("female"))}</option></select></label>
       <div class="sw-why">${esc(T("sex_why"))}</div>

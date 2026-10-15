@@ -9,8 +9,8 @@
 # The demo data (a year of synthetic activities, the caches, the coming weeks'
 # schedule) is built INTO the image, so the first visitor never waits for a
 # cold build; the running instance rebuilds it in the background once a week
-# (WKO5COACH_DEMO_REBUILD=1) so the last activity stays recent.
-# Nothing of the owner's (~/.wko5coach, ~/WKO5) is in the build context:
+# (TRC_DEMO_REBUILD=1) so the last activity stays recent.
+# Nothing of the owner's (~/.trailruncoach, ~/WKO5) is in the build context:
 # .dockerignore + only backend/ and views/ are copied.
 
 FROM python:3.12-slim
@@ -30,22 +30,22 @@ COPY --chown=user views/ ./views/
 
 USER user
 ENV HOME=/home/user \
-    WKO5COACH_HOME=/home/user/demo \
-    WKO5COACH_FIT_WORKERS=2
+    TRC_HOME=/home/user/demo \
+    TRC_FIT_WORKERS=2
 
 # the demo data + warm caches (minutes, once per image build)
-RUN python -m backend.demo.build --root "$WKO5COACH_HOME"
+RUN python -m backend.demo.build --root "$TRC_HOME"
 
 # HF serves the Space inside an iframe on huggingface.co: the sandbox / CSRF
 # cookies must be SameSite=None; Secure; Partitioned there.
 # The platform's proxy is the direct peer: trust its X-Forwarded-For / CF-Connecting-IP.
-ENV WKO5COACH_MODE=demo \
-    WKO5COACH_DEMO_REBUILD=1 \
-    WKO5COACH_NO_SCHEDULER=1 \
-    WKO5COACH_NO_AUTO_BACKUP=1 \
-    WKO5COACH_THREADS=40 \
-    WKO5COACH_COOKIE_SAMESITE=None \
-    WKO5COACH_TRUSTED_PROXIES=127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128
+ENV TRC_MODE=demo \
+    TRC_DEMO_REBUILD=1 \
+    TRC_NO_SCHEDULER=1 \
+    TRC_NO_AUTO_BACKUP=1 \
+    TRC_THREADS=40 \
+    TRC_COOKIE_SAMESITE=None \
+    TRC_TRUSTED_PROXIES=127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128
 
 EXPOSE 7860
 HEALTHCHECK --interval=60s --timeout=5s --start-period=60s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/healthz', timeout=4)"

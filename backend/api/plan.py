@@ -16,14 +16,14 @@ from backend.i18n import _
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 
 from backend.engine import planning as P
-from backend.engine.zones import SOURCE, aet_uncertainty, zones_json
+from backend.engine.zones import SOURCE, STRYD_POWER_ZONES, STRYD_SOURCE, aet_uncertainty, zones_json
 from backend.files.wko5_athlete import pd_snapshot, read_athlete
 from backend.settings.paths import athlete_dir
 
@@ -127,7 +127,7 @@ def _effective(plan: P.Plan, today: dt.date) -> dict:
         # the 課表's own CP and its words (zones.cp_in_effect): estimate (the PD fit) / setting / wko5
         ci = _cp_in_effect(today)
         kind = ci.get("kind")
-        src = ("estimate" if kind == "estimate" else "wko5_mftp" if ci.get("source") == "WKO5 mFTP"
+        src = ("estimate" if kind == "estimate" else "wko5_mftp" if ci.get("source") == "對照資料夾的 mFTP"
                else "setting" if ci.get("value") is not None else "none")
         cp_eff = {"value": None if ci.get("value") is None else round(float(ci["value"]), 1), "source": src,
                   "label": ci.get("source"), "date": ci.get("date")}
@@ -164,16 +164,17 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
         "begin": b.isoformat(), "end": e.isoformat(),
         "events": [{**P.event_json(x, today), "gpx": EG.meta(gpx.get(x.id))}
                    for x in sorted(plan.events, key=lambda x: x.date)],
-        "phases": [P.phase_json(p) for p in phases],
+        "phases": [P.phase_json(p, plan.events) for p in phases],
         "manual_phases": bool(plan.phases),
         "b_windows": P.b_event_windows(plan.events),
         "current_phase": None if cur is None else {
-            **P.phase_json(cur), "dashboard": PHASE_DASHBOARD.get(cur.kind),
+            **P.phase_json(cur, plan.events), "dashboard": PHASE_DASHBOARD.get(cur.kind),
             "days_left": (P._d(cur.end) - today).days},
         "goals": P.goals(plan, today),
         "thresholds": [t.__dict__ for t in sorted(plan.thresholds, key=lambda t: t.date)],
         "effective_thresholds": (eff := _effective(plan, today)),
-        "power_zones": {"source": SOURCE, "zones": zones_json(eff["cp"]["value"])},
+        "power_zones": {"source": SOURCE, "zones": zones_json(eff["cp"]["value"]),
+                        "stryd": {"source": STRYD_SOURCE, "zones": zones_json(eff["cp"]["value"], STRYD_POWER_ZONES)}},
         "wko5_settings": _wko5_settings(),
         "phase_labels": P.PHASES, "kinds": _kinds(),
         "rules": {"taper_days": P.TAPER_DAYS, "specific_weeks": P.SPECIFIC_WEEKS,
@@ -206,11 +207,15 @@ class EventIn(BaseModel):
     race_format: Optional[str] = None       # SP-114 賽制 stage | continuous (≥ 2 day 越野賽／其他)
     poles: bool = False                     # SP-244 會用登山杖: calculator hints only
     trail_pct: Optional[float] = None       # SP-87 土徑比 % (0–100): ≥ 50 → the 專項期 技術地形 session
+    # SP-533: the page uploads a GPX right after this save (or the user will later): a multi-day trip
+    # may then be saved without typing each day (the days come from the GPX; equal km until its day ends)
+    gpx_pending: bool = False
 
 
 def _gpx_day_plan(data: dict) -> Optional[list[dict]]:
     """The per-day numbers of the event's stored GPX when it has its own day ends (the calculator's
-    split points or camp waypoints; SP-114: a GPX with day ends wins), None otherwise."""
+    split points; SP-114: a GPX with day ends wins; SP-533: camp waypoints are only candidates),
+    None otherwise."""
     if not data.get("id") or int(data.get("days") or 1) < 2:
         return None
     from backend.engine import event_gpx as EG
@@ -218,20 +223,31 @@ def _gpx_day_plan(data: dict) -> Optional[list[dict]]:
         st = EG.day_stats(data["id"], int(data["days"]))
     except Exception:                       # noqa: BLE001 — a broken file: the user's numbers
         return None
-    if not st or st.get("split_source") not in ("stored", "camp") or len(st["days"]) != int(data["days"]):
+    if not st or st.get("split_source") != "stored" or len(st["days"]) != int(data["days"]):
         return None
     return [{"km": d["km"], "gain_m": d["gain_m"], "loss_m": d["loss_m"]} for d in st["days"]]
+
+
+def _has_gpx(eid: Optional[str]) -> bool:
+    if not eid:
+        return False
+    from backend.engine import event_gpx as EG
+    try:
+        return EG.get(eid) is not None
+    except EG.EventGpxError:
+        return False
 
 
 @router.put("/events")
 def put_event(body: EventIn):
     plan = P.Plan.load()
     data = body.model_dump()
+    pending = bool(data.pop("gpx_pending", False))
     gd = _gpx_day_plan(data)
     if gd:
         data["day_plan"] = gd
     try:
-        ev = plan.upsert_event(data)
+        ev = plan.upsert_event(data, gpx=pending or _has_gpx(data.get("id")))
     except P.EventError as e:                  # a bad field: the message is for the user
         raise HTTPException(400, str(e))
     except ValueError as e:
@@ -290,8 +306,49 @@ async def put_event_gpx(eid: str, file: UploadFile = File(...)):
         row = await run_in_threadpool(EG.save, eid, data, file.filename or "")
     except EG.EventGpxError as x:
         raise HTTPException(400, str(x))
+    _fill_totals_from_gpx(eid, row)
     _notify(False)
-    return {"gpx": EG.meta(row), "days": EG.day_stats(eid, e.days or 1)}
+    # SP-534: a recorded track's nights — the page asks before they become the day ends
+    return {"gpx": EG.meta(row), "days": EG.day_stats(eid, e.days or 1),
+            "overnights": await run_in_threadpool(EG.overnights, eid)}
+
+
+def _fill_totals_from_gpx(eid: str, row: dict) -> None:
+    """SP-533: a trip saved without its distance / climb (the GPX was to bring them) takes the GPX's;
+    numbers the user typed stay."""
+    import dataclasses
+    plan = P.Plan.load()
+    e = next((x for x in plan.events if x.id == eid), None)
+    if e is None or (e.distance_km and e.climbing_m is not None):
+        return
+    upd = {}
+    if not e.distance_km:
+        upd["distance_km"] = round(float(row["km"]), 2)
+    if e.climbing_m is None:
+        upd["climbing_m"] = round(float(row["gain_m"]))
+    plan.events = [dataclasses.replace(x, **upd) if x.id == eid else x for x in plan.events]
+    plan.save()
+
+
+@router.get("/events/{eid}/gpx/preview")
+async def get_event_gpx_preview(eid: str):
+    """SP-535: the day-split preview's data — the course pieces, profile, candidates, the stored day
+    ends, the recorded nights and the trip's predicted moving hours (the race calculator's, else the
+    event's own estimate; None when neither). Changes nothing."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.engine import event_gpx as EG
+    e = _plan_event(eid)
+    try:
+        pv = await run_in_threadpool(EG.preview, eid, e.days or 1)
+    except EG.EventGpxError as x:
+        raise HTTPException(400, str(x))
+    if pv is None:
+        raise HTTPException(404, _("這場賽事沒有 GPX"))
+    try:
+        hours = await run_in_threadpool(P.event_hours, e)
+    except Exception:                       # noqa: BLE001 — no time column, the rest still previews
+        hours = None
+    return {**pv, "event_id": eid, "name": e.name, "days": e.days or 1, "hours": hours}
 
 
 class SplitsIn(BaseModel):
@@ -309,6 +366,82 @@ def put_event_gpx_splits(eid: str, body: SplitsIn):
         raise HTTPException(404 if "沒有 GPX" in str(x) else 400, str(x))
     _notify(False)
     return {"gpx": EG.meta(row), "days": EG.day_stats(eid, e.days or 1)}
+
+
+class GroupIn(BaseModel):
+    group: bool
+
+
+@router.put("/events/{eid}/gpx/group")
+def put_event_gpx_group(eid: str, body: GroupIn):
+    """SP-577: 「這是團的時刻表」 for the event's Cairn timetable (kept with the trip; read only, never
+    written back to Cairn)."""
+    from backend.engine import event_gpx as EG
+    _plan_event(eid)
+    try:
+        row = EG.set_group(eid, body.group)
+    except EG.EventGpxError as x:
+        raise HTTPException(404, str(x))
+    return {"gpx": EG.meta(row)}
+
+
+class CairnIn(BaseModel):
+    url: str = Field("", max_length=2000)
+
+
+@router.post("/events/{eid}/gpx/cairn")
+async def import_event_cairn(eid: str, body: CairnIn):
+    """SP-537: the event's GPX and day ends from a 疊石 Cairn share link (one way, Cairn → here). The
+    nights marked in Cairn are applied at once (the user can still change them); the days follow them.
+    The token reads Cairn once and is not kept: the row keeps the route's id and its token-free link."""
+    import dataclasses
+
+    from starlette.concurrency import run_in_threadpool
+    from backend.engine import cairn as CA
+    from backend.engine import event_gpx as EG
+    e = _plan_event(eid)
+    try:
+        imp = await run_in_threadpool(CA.import_link, body.url)
+    except CA.CairnError as x:
+        raise HTTPException(_CAIRN_STATUS.get(x.kind, 400), str(x))
+    try:
+        row = await run_in_threadpool(lambda: EG.save(eid, imp["data"], imp["filename"],
+                                                      day_splits_km=imp["splits_km"] or None,
+                                                      source={**imp["source"], "nights": imp["nights"],
+                                                              "schedule": imp.get("schedule")}))
+    except EG.EventGpxError as x:
+        raise HTTPException(400, str(x))
+    _fill_totals_from_gpx(eid, row)
+    days = int(e.days or 1)
+    if imp["nights"] and days != imp["days"]:
+        days = imp["days"]
+        st = EG.day_stats(eid, days)
+        dp = [{"km": d["km"], "gain_m": d["gain_m"], "loss_m": d["loss_m"]} for d in st["days"]] if st else None
+        plan = P.Plan.load()
+        plan.events = [dataclasses.replace(x, days=days, day_plan=dp) if x.id == eid else x for x in plan.events]
+        plan.save()
+    _notify(False)
+    from backend.api.racepower import group_ratio_rows
+    return {"gpx": EG.meta(row), "days": EG.day_stats(eid, days), "event_days": days,
+            "cairn": _cairn_out(imp, e.date, route_km=row["km"], ratio_rows=group_ratio_rows())}
+
+
+_CAIRN_STATUS = {"link": 400, "gone": 410, "unreachable": 502, "bad": 502}
+
+
+def _cairn_out(imp: dict, date: Optional[str] = None, *, route_km: Optional[float] = None,
+               ratio_rows: Optional[list] = None) -> dict:
+    """What the pages show of an import: the nights, the days, a note, the timetable (SP-576) — never
+    the token."""
+    from backend.engine import cairn as CA
+    from backend.engine.racepower import group as GR
+    notes = [n for n in (CA.note(imp),) if n]
+    if date and imp.get("start_date") and imp["start_date"] != str(date)[:10]:
+        notes.append(_("Cairn 這條行程的出發日是 {cd}，這場賽事是 {ed}：日期沒有改，要改請在這裡改",
+                       cd=imp["start_date"], ed=str(date)[:10]))
+    sched = GR.for_import(imp.get("schedule"), route_km or 0.0, ratio_rows or [])
+    return {"name": imp["name"], "url": imp["source"]["url"], "nights": imp["nights"], "days": imp["days"],
+            "splits_km": imp["splits_km"], "start_date": imp["start_date"], "notes": notes, "schedule": sched}
 
 
 @router.get("/events/{eid}/gpx/file")
@@ -367,7 +500,8 @@ def get_thresholds():
         "today": today.isoformat(),
         "thresholds": [t.__dict__ for t in sorted(plan.thresholds, key=lambda t: t.date)],
         "effective_thresholds": eff,
-        "power_zones": {"source": SOURCE, "zones": zones_json(eff["cp"]["value"])},
+        "power_zones": {"source": SOURCE, "zones": zones_json(eff["cp"]["value"]),
+                        "stryd": {"source": STRYD_SOURCE, "zones": zones_json(eff["cp"]["value"], STRYD_POWER_ZONES)}},
         "wko5_settings": _wko5_settings(),
     }
 
@@ -413,7 +547,7 @@ def put_phases(body: list[PhaseIn]):
     plan.phases = sorted(out, key=lambda x: x.start)
     plan.save()
     _notify(False)
-    return {"phases": [P.phase_json(p) for p in plan.phases]}
+    return {"phases": [P.phase_json(p, plan.events) for p in plan.phases]}
 
 
 @_owner_cached
@@ -442,7 +576,7 @@ def get_profile():
     app_w = _app_weight()
     w_src = _("設定頁") if eff_w is not None else None
     if eff_w is None and wk["weights"]:
-        eff_w, w_src = wk["weights"][-1]["kg"], "WKO5"
+        eff_w, w_src = wk["weights"][-1]["kg"], "對照資料夾"
     sex = plan.profile.get("sex") or wk["sex"]
     from backend.engine import athlete_profile as AP
     from backend.engine import experience as EX
@@ -752,11 +886,20 @@ def hr_profile_view(ds, today: dt.date) -> dict:
         tt = training_targets(ds, int(ds.today))
     except Exception:                       # noqa: BLE001 — no runs yet
         tt = None
+    # SP-493: the zones in effect (自動's pick and why; a locked model is itself)
+    try:
+        eff = HP.effective_model(ds, today, model)
+    except Exception:                       # noqa: BLE001
+        eff = {"model": HP.DEFAULT_PLAN_MODEL, "setting": model, "auto": model == HP.AUTO, "reason": ""}
+    z = (tt or {}).get("hr_model") or {}
+    if z.get("model") in HP.PLAN_MODELS:
+        eff = {**eff, "model": z["model"], "fallback": z.get("fallback")}
+    eff = {**eff, "label": _(HP.MODEL_LABEL[eff["model"]]), "short": _(HP.MODEL_SHORT[eff["model"]])}
     # 「app 和手錶數值對照」 (engine/coros_compare.py, SP-67); None without a COROS account read
     from backend.engine import coros_compare as CC
     return {"max_hr": {k: v for k, v in mx.items() if k != "estimate"}, "rest_hr": rs,
-            "estimate": est, "account": acc, "model": model,
-            "models": [{"id": k, "label": _(HP.MODEL_LABEL[k]), "source": _(HP.SOURCE[k])} for k in HP.PLAN_MODELS],
+            "estimate": est, "account": acc, "model": model, "effective": eff,
+            "models": [{"id": k, "label": _(HP.MODEL_LABEL[k]), "source": _(HP.SOURCE[k])} for k in HP.SETTING_MODELS],
             "plan_zones": (tt or {}).get("hr_model"), "compare": CC.view(tt, mx, rs, acc)}
 
 
@@ -784,8 +927,8 @@ async def put_hr_profile(body: HrProfileIn, db: AsyncSession = Depends(get_db)):
         raise HTTPException(400, _("最大心率 {hr:g} 不合理（120–240）", hr=body.max_hr))
     if body.rest_hr is not None and not 25 <= body.rest_hr <= 120:
         raise HTTPException(400, _("靜息心率 {hr:g} 不合理（25–120）", hr=body.rest_hr))
-    if body.model is not None and body.model not in HP.PLAN_MODELS:
-        raise HTTPException(400, f"model must be one of {HP.PLAN_MODELS}")
+    if body.model is not None and body.model not in HP.SETTING_MODELS:
+        raise HTTPException(400, f"model must be one of {HP.SETTING_MODELS}")
     today = today_local().isoformat()
     changed = False
     plan = P.Plan.load()
@@ -816,7 +959,7 @@ async def put_hr_profile(body: HrProfileIn, db: AsyncSession = Depends(get_db)):
         await repo.set(HP.MODEL_KEY, body.model)
         # SP-467: the switch goes into 門檻變更紀錄 (the model kept no history before)
         hist = TH.model_history_add(await repo.get(TH.MODEL_HISTORY_KEY), dt.date.fromisoformat(today),
-                                    old if old in HP.PLAN_MODELS else HP.DEFAULT_PLAN_MODEL, body.model)
+                                    old if old in HP.SETTING_MODELS else HP.DEFAULT_SETTING, body.model)
         if hist is not None:
             await repo.set(TH.MODEL_HISTORY_KEY, hist)
         await db.commit()

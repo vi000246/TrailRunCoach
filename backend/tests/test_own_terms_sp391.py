@@ -7,7 +7,7 @@ zh 「負荷（Load）」, en "Load" and so on (docs/research/trademark-terms.md
   * the two comparisons (§5.1): the TrainingPeaks source label 「TrainingPeaks 算的負荷（TSS®）」 and
     the load & fitness chart's ? help — they carry the ® and the trademark notice;
   * 「其他平台常寫成 CTL、ATL、TSB」 once, in the fitness chart's help;
-  * values read from the athlete's own WKO5 files (the WKO5 comparison mode), named as WKO5 names them.
+  * values read from the athlete's own comparison folder (the comparison mode), named as that software names them.
 
 Scanned: the frontend catalogs (zh-TW, en), every backend msgid in the code and its English, the bundled
 views (names, titles, descriptions) and their English sidecar, and the Chinese UI strings not wrapped
@@ -41,15 +41,13 @@ ALLOWED = (
     "TSS®",                                       # the comparison (§5.1) with the ® and the notice
     "其他平台常寫成 CTL、ATL、TSB",                 # the fitness chart's help, once
     "Other platforms often call these CTL, ATL and TSB",
-    "Daily % of CTL",                             # the name of a WKO5 chart (「類似 WKO5 的 Daily % of CTL」)
-    "WKO5 快照 CTL",                               # the WKO5 file's own PMC snapshot (comparison mode only)
-    "WKO5 snapshot CTL",
-    "WKO5 模型 mFTP（WKO5 存的快照）",               # the mFTP stored in the WKO5 file (comparison mode)
-    "WKO5 今天存的 mFTP",                           # the backtest: what it does NOT use (the WKO5 file's value)
-    "WKO5 mFTP",                                  # the zone / threshold source label in the WKO5 mode
-    "mFTP {w} W",                                 # panels/cp_ref.py: the line label when the source is "WKO5 mFTP"
-    "WKO5 的 TIS",                                 # 有氧／無氧效果's source: 「算法參考 WKO5 的 TIS」 (owner 2026-10-14)
-    "WKO5's TIS",
+    "Daily % of CTL",                             # the name of an imported chart (views/wko5_fixes.json)
+    "對照資料夾的快照 CTL",                          # the comparison folder's own PMC snapshot (comparison mode only)
+    "Comparison folder snapshot CTL",
+    "對照資料夾的 mFTP（資料夾存的快照）",            # the mFTP stored in the comparison folder (comparison mode)
+    "對照資料夾今天存的 mFTP",                      # the backtest: what it does NOT use (the folder's value)
+    "對照資料夾的 mFTP",                            # the zone / threshold source label in the comparison mode
+    "mFTP {w} W",                                 # panels/cp_ref.py: the line label when the source is 「對照資料夾的 mFTP」
 )
 
 VIEW_TEXT = ("name", "title", "description", "label", "section", "power_note")
@@ -137,7 +135,7 @@ def test_the_guard_catches_the_old_names():
     assert _bad("TSS 64") and _bad("體能 CTL") and _bad("狀況 Form%") and _bad("mFTP 線") and _bad("Normalized NP")
     assert not _bad("負荷 64") and not _bad("TrainingPeaks 算的訓練負荷（TSS®）")
     assert not _bad("tss_source") and not _bad("STSS") and _bad("刺激分數 3")
-    assert not _bad("有氧／無氧訓練效果（Aerobic / Anaerobic training effect）") and not _bad("算法參考 WKO5 的 TIS")
+    assert not _bad("有氧／無氧訓練效果（Aerobic / Anaerobic training effect）") and not _bad("對照資料夾的 mFTP")
 
 
 def test_the_guard_catches_sp391_words_replaced_by_sp497():

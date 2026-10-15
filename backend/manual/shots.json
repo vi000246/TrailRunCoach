@@ -1,0 +1,242 @@
+{
+ "_about": "The manual's screenshots (backend/scripts/manual_shots.py): each is taken in zh-TW and en on the synthetic demo athlete and saved as img/<name>.<locale>.webp. Keys as backend/tests/e2e/shots.py's shot list; \"page\" gets ?lang=<locale> added.",
+ "shots": [
+  {
+   "name": "start-wizard",
+   "page": "overview",
+   "mock": [
+    {
+     "url": "**/api/v1/plan/profile",
+     "set": {
+      "setup.needed": true,
+      "setup.remind": true,
+      "setup.missing": [
+       "weight",
+       "sex",
+       "age"
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": "dialog.sw-dlg"
+    }
+   ],
+   "clip": "dialog.sw-dlg"
+  },
+  {
+   "name": "start-source",
+   "page": "settings",
+   "hash": "#sync",
+   "clip": "#sync",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "start-thresholds",
+   "page": "settings",
+   "hash": "#thresholds",
+   "clip": "#thresholds",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "start-weight",
+   "page": "settings",
+   "hash": "#general",
+   "clip": "#general",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "schedule-week",
+   "page": "schedule",
+   "steps": [
+    {
+     "click": "#view-seg [data-view=week]"
+    },
+    {
+     "wait": ".chip.sc"
+    }
+   ],
+   "clip": "#calwrap",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "schedule-card",
+   "page": "schedule",
+   "viewport": "mobile",
+   "steps": [
+    {
+     "wait": ".chip.sc"
+    }
+   ],
+   "hide": [
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "schedule-dialog",
+   "page": "schedule",
+   "steps": [
+    {
+     "wait": ".chip.sc.fut[data-uid]"
+    },
+    {
+     "click": ".chip.sc.fut[data-uid]"
+    },
+    {
+     "wait": "dialog#sd[open]"
+    }
+   ],
+   "clip": "dialog#sd",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "schedule-replan",
+   "page": "schedule",
+   "steps": [
+    {
+     "wait": ".chip.sc"
+    },
+    {
+     "click": "#rec-btn"
+    },
+    {
+     "wait": "dialog#cf[open]"
+    }
+   ],
+   "clip": "dialog#cf",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "schedule-push",
+   "page": "schedule",
+   "viewport": [
+    1000,
+    380
+   ],
+   "steps": [
+    {
+     "wait": ".chip.sc"
+    },
+    {
+     "click": "#push-caret"
+    },
+    {
+     "wait": "#push-menu"
+    }
+   ],
+   "hide": [
+    ".sugbox"
+   ],
+   "mock": [
+    {
+     "url": "**/api/v1/overview/plan/calendar*",
+     "set": {
+      "coros.authenticated": true
+     }
+    },
+    {
+     "url": "**/api/v1/sync/primary",
+     "set": {
+      "logged_in": true,
+      "enabled": true
+     }
+    }
+   ],
+   "init": "try { localStorage.setItem('schedule.view', JSON.stringify('week')); } catch (e) {}"
+  },
+  {
+   "name": "schedule-calendar",
+   "page": "settings",
+   "hash": "#calendar",
+   "steps": [
+    {
+     "wait": "#calendar"
+    },
+    {
+     "eval": "(() => { const b = document.querySelector('#cal-create'); if (b && !b.hidden && b.offsetParent) b.click(); })()"
+    },
+    {
+     "sleep": 1000
+    }
+   ],
+   "clip": "#calendar",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "glossary-effect",
+   "path": "/api/v1/app/viewer?view=我的訓練&dash=0&chart=6",
+   "viewport": [
+    1000,
+    620
+   ],
+   "steps": [
+    {
+     "wait": "dialog[open] canvas"
+    },
+    {
+     "sleep": 1500
+    }
+   ],
+   "clip": "dialog[open]",
+   "hide": [
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "glossary-tiz",
+   "path": "/api/v1/app/viewer?view=單次活動判讀&dash=1&chart=2&workout=6",
+   "viewport": [
+    1000,
+    620
+   ],
+   "steps": [
+    {
+     "wait": "dialog[open] canvas"
+    },
+    {
+     "sleep": 1500
+    }
+   ],
+   "clip": "dialog[open]",
+   "hide": [
+    ".sugbox"
+   ]
+  }
+ ]
+}

@@ -22,7 +22,7 @@ INTERVALS = 2                      # views/workout.json: 間歇
 
 
 def _workouts(page) -> list[dict]:
-    r = page.request.get("/api/v1/wko5/workouts")
+    r = page.request.get("/api/v1/app/workouts")
     assert r.ok
     j = r.json()
     rows = j if isinstance(j, list) else j.get("workouts") or []

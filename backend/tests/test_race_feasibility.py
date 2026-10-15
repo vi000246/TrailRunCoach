@@ -230,7 +230,7 @@ def test_api_links_the_specific_phase_dashboard(monkeypatch):
     from backend.api import overview as OA
     monkeypatch.setattr("backend.engine.wko5expr.customviews.load_custom_views",
                         lambda: {"周期化訓練": {"dashboards": [{"id": "base", "charts": []}, {"id": "build", "charts": []}]}})
-    assert OA._specific_chart_href() == "/api/v1/wko5/viewer?view=%E5%91%A8%E6%9C%9F%E5%8C%96%E8%A8%93%E7%B7%B4&dash=1"
+    assert OA._specific_chart_href() == "/api/v1/app/viewer?view=%E5%91%A8%E6%9C%9F%E5%8C%96%E8%A8%93%E7%B7%B4&dash=1"
 
 
 def acts(*rows):

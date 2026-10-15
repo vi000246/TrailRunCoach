@@ -2,7 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,23 +27,32 @@ from backend.api import backup as backup_api
 from backend.api import calib as calib_api
 from backend.api import region as region_api
 from backend.api import calendar_feed as calendar_api
-from backend.api import altitude_nights as altitude_nights_api
 from backend.api import debug as debug_api
 from backend.api import account as account_api
 from backend.api import pwa as pwa_api
 from backend.api import weight as weight_api
+from backend.api import manual as manual_api
+from backend.api import intervals as intervals_api
+from backend.api import about as about_api
+from backend.api import change_sync as change_sync_api
 
 
 # pages the demo never serves: the WKO5 comparison, the settings, the injury log and the sign-in page
 DEMO_HIDDEN_PAGES = {"compare", "settings", "injuries", "login"}
 
+# the charts / activities / settings API (wko5views, routes, injuries) and its old prefix (308)
+API_PREFIX = "/api/v1/app"
+OLD_API_PREFIX = "/api/v1/wko5"
+# page files renamed by SP-498: old file stem -> new one (/api/v1/static/<stem>.html answers 308)
+OLD_PAGE_NAMES = {"wko5_viewer": "charts"}
+
 # the removed React SPA's routes that have a static page (bookmarks keep working)
 OLD_SPA_PATHS = {
     "/overview": "/api/v1/overview/page",
-    "/activities": "/api/v1/wko5/activities/page",
+    "/activities": "/api/v1/app/activities/page",
     "/achievements": "/api/v1/achievements/page",
-    "/sync": "/api/v1/wko5/settings",
-    "/config": "/api/v1/wko5/settings",
+    "/sync": "/api/v1/app/settings",
+    "/config": "/api/v1/app/settings",
 }
 
 
@@ -75,6 +84,8 @@ async def lifespan(app: FastAPI):
     # exceptions and performance to stderr + <data folder>/logs/app.log (SP-215, backend/applog.py)
     from backend import applog
     applog.setup()
+    from backend import env_names
+    env_names.warn_old_names()         # WKO5COACH_* still set: say their TRC_* names once (SP-498)
     if demo:
         from backend.demo import instance as DI
         DI.startup_checks()          # refuses to start next to the owner's data (§3.1)
@@ -169,7 +180,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
     from backend.api import session as session_api
     if demo is None:
         demo = tenancy.demo_mode()
-    app = FastAPI(title="WKO5 Coach", lifespan=lifespan)
+    app = FastAPI(title="TrailRunCoach", lifespan=lifespan)
 
     _cors_origins = os.getenv(
         "CORS_ORIGINS",
@@ -193,13 +204,13 @@ def build_app(demo: bool | None = None) -> FastAPI:
                                   plan_auto_api.router, injuries_api.router, backup_api.router, calib_api.router,
                                   archive_api.router,
                                   calendar_api.router, calendar_api.feed_router,
-                                  debug_api.router, debug_api.admin_router, weight_api.router)}
+                                  debug_api.router, debug_api.admin_router, weight_api.router,
+                                  intervals_api.router, change_sync_api.router)}
     routers = [
         workouts.router,
         sync.router, auth.router,        # owner only (sync, connect)
         wko5views.router, achievements_api.router,
         plan_api.router, plan_auto_api.router, plan_sessions_api.router, overview_api.router,
-        altitude_nights_api.router,      # 睡在高處的紀錄 (SP-259, the 課表 calendar)
         racepower_api.router,
         racepower_api.share_router,      # /share/<id>: the only path meant to skip the tunnel's password
         routes_api.router, routes_api.workout_router,
@@ -217,10 +228,20 @@ def build_app(demo: bool | None = None) -> FastAPI:
         # 體重同步 (SP-472): POST …/weight/measurements takes a weight-only token (iOS Shortcut / Health
         # Auto Export), the rest is the 設定頁's; never in the demo
         weight_api.router,
+        # intervals.icu (SP-346): the OAuth callback and the webhook (its own secret, no session);
+        # never in the demo
+        intervals_api.router,
         # Google sign-in, the terms, sign-out (SP-58): 404 unless sign-in is on (accounts/login.py)
         account_api.router,
         # /sw.js and /manifest.webmanifest: the offline copy and 加到主畫面 (SP-314); not in the demo
         pwa_api.router,
+        # 操作手冊 (SP-558): public, signed in or not, also in the demo (accounts/login.PUBLIC_PREFIXES)
+        manual_api.router,
+        # 關於 (SP-495): version, sources, licences, trademarks; public like the manual, also in the demo
+        about_api.router,
+        # the change-log sync trial (SP-312, db/changelog.py): 404 unless TRC_CHANGE_SYNC=1; no page
+        # calls it; never in the demo
+        change_sync_api.router,
     ]
     for r in routers:
         # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),
@@ -238,9 +259,13 @@ def build_app(demo: bool | None = None) -> FastAPI:
     app.state.demo = demo
 
     @app.get("/api/v1/static/{name}.html", include_in_schema=False)
-    def _static_page(name: str):
+    def _static_page(name: str, request: Request):
         """A page opened by its file name (compare.html): rendered like the routed pages
         (language, inlined catalog), not served raw by the mount below."""
+        if name in OLD_PAGE_NAMES:       # renamed page (SP-498): links made before the rename
+            target = f"/api/v1/static/{OLD_PAGE_NAMES[name]}.html"
+            return RedirectResponse(target + ("?" + request.url.query if request.url.query else ""),
+                                    status_code=308)
         if not name.replace("_", "").isalnum() or not (PAGES_DIR / f"{name}.html").is_file():
             raise HTTPException(404, "page not found")
         if demo and name in DEMO_HIDDEN_PAGES:
@@ -258,6 +283,16 @@ def build_app(demo: bool | None = None) -> FastAPI:
             resp.headers["Cache-Control"] = "no-cache"
             return resp
 
+    # the API's old prefix (before SP-498 / SP-494): bookmarks, installed home-screen apps and
+    # shared links get a 308 to the same path under /api/v1/app (method and body kept). Keep it
+    # at least one release after the rename
+    @app.api_route(OLD_API_PREFIX + "/{rest:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+                   include_in_schema=False)
+    def _old_api_prefix(rest: str, request: Request):
+        target = API_PREFIX + "/" + rest
+        if request.url.query:
+            target += "?" + request.url.query
+        return RedirectResponse(target, status_code=308)
 
     app.mount("/api/v1/static", _RevalidatingStatic(directory=str(Path(__file__).parent / "static")), name="pages-static")
 

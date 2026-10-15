@@ -103,7 +103,12 @@ PUBLIC_PATHS = frozenset({
     # manifest without cookies, and the worker before anyone signs in
     "/sw.js", "/manifest.webmanifest",
 } | {terms.URL_PREFIX + d.id for d in terms.DOCUMENTS})
-PUBLIC_PREFIXES = ("/api/v1/static/",)
+# 操作手冊 (SP-558, api/manual.py): /manual and everything under it (the chapters, their search index
+# and pictures) — no one's data in any of it
+PUBLIC_PATHS = PUBLIC_PATHS | {"/manual"}
+# 關於 (SP-495, api/about.py): version, sources, licences, trademarks — exactly /about
+PUBLIC_PATHS = PUBLIC_PATHS | {"/about"}
+PUBLIC_PREFIXES = ("/api/v1/static/", "/manual/")
 _OAUTH_CALLBACK = ("/oauth/", "/callback")
 # never a place to come back to after signing in (loops)
 _NO_RETURN = ("/login", "/signup", "/oauth/", "/api/v1/account/")

@@ -151,7 +151,7 @@ main > section.tab-off { display: none; }
 .ds-a2hs { margin-top: 12px; border: 1px solid var(--accent); background: var(--soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
 .ds-a2hs p { margin: 4px 0 0; }
 @media (max-width: 480px) { .ds-kv { grid-template-columns: 1fr; gap: 0; } .ds-kv dt { margin-top: 8px; font-size: 12px; } }
-/* SP-480: the sentences about 計算模式 (我的算式 / WKO5 對照模式), hidden for whoever cannot switch it */
+/* SP-480: the sentences about 計算模式 (我的算式 / 對照模式), hidden for whoever cannot switch it */
 html.nomode .mode-note { display: none; }
 /* SP-488 (提示多寡): a check that agrees is one line — 可信度 chips, the folded app-vs-watch card and estimates */
 .conf { white-space: nowrap; }
@@ -181,6 +181,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 <script src="/api/v1/static/syncrun.js"></script>
 <script src="/api/v1/static/fitimport.js"></script>
 <script src="/api/v1/static/fitfolder.js"></script>
+<script src="/api/v1/static/exportimport.js"></script>
 <script src="/api/v1/static/device_storage.js"></script>
 <header>
   <h1>設定</h1>
@@ -194,7 +195,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
   </nav>
   <p class="meta tab-note" id="tab-note"></p>
   <section id="general">
-    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；每一天用當天或之前最近的一筆體重紀錄。這裡改的是最新一筆（儲存時用你填的量測日期；同一天的那筆會被取代，之前的紀錄留著）。手動填的優先：體重同步（資料同步分頁）不會改它，也不會用那天和之前的量測蓋掉它。性別決定無氧容量（Anaerobic capacity）的先驗值（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
+    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" data-manual="start#weight" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；每一天用當天或之前最近的一筆體重紀錄。這裡改的是最新一筆（儲存時用你填的量測日期；同一天的那筆會被取代，之前的紀錄留著）。手動填的優先：體重同步（資料同步分頁）不會改它，也不會用那天和之前的量測蓋掉它。性別決定無氧容量（Anaerobic capacity）的先驗值（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
     <div class="row">
       <label><span data-i18n="settings.general.sex">性別</span> <select id="p-sex"><option value="" data-i18n="settings.general.sex_unset">（未填）</option><option value="male" data-i18n="settings.general.male">男</option><option value="female" data-i18n="settings.general.female">女</option></select></label>
       <label><span data-i18n="settings.general.height">身高</span> <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
@@ -287,16 +288,16 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
         </ul>
       </button>
       <button class="mode" data-parity="true">
-        <b>WKO5 對照模式</b>
+        <b>對照模式</b>
         <ul>
-          <li>完全比照 WKO5 的公式和設定</li>
+          <li>完全照對照資料夾的設定和公式算</li>
           <li>用來驗證資料有沒有算對</li>
           <li>不套用資料校正與你的測試值</li>
         </ul>
       </button>
     </div>
     <!-- SP-488 (ST15): the one place that says which settings follow the mode -->
-    <p class="meta mode-note" data-i18n="settings.mode.only_mine">資料校正、排除壞掉的活動檔和閾值測試紀錄只在「我的算式」生效；「WKO5 對照模式」一律用 WKO5 裡的設定。</p>
+    <p class="meta mode-note" data-i18n="settings.mode.only_mine">資料校正、排除壞掉的活動檔和閾值測試紀錄只在「我的算式」生效；「對照模式」一律用對照資料夾裡的設定。</p>
   </section>
 
   <section id="sport">
@@ -317,18 +318,18 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
       <button type="button" id="u-power-auto" hidden>改回自動</button>
     </div>
     <details style="margin-top:6px"><summary class="meta">進階設定</summary>
-      <div class="row"><label><input type="checkbox" id="u-watch"> 功率模型也採用手錶推估功率</label>
-        <button type="button" class="q" aria-label="說明" title="預設只有 Stryd 的功率會進 CP、功率曲線、功率負荷（Power load）和比賽功率；沒有 Stryd 的人用心率。打開後手錶推估功率也算（同一支手錶的功率量尺一致，但準度沒驗證過，數字都當推估）。">?</button></div>
+      <div class="row"><label><input type="checkbox" id="u-watch"> <span data-i18n="settings.power.watch">功率模型也採用手錶推估功率</span></label>
+        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.power.watch_help" title="預設只有 Stryd 的功率會進功率模型，沒有 Stryd 的人用心率。打開後，手錶推估功率也會用在：賽事功率的模型（功率曲線、PD 模型）、功率負荷（Power load）、間歇的功率判讀，還有從跑步估 LTHR 時判斷哪幾次跑得夠硬。課表和圖表的 CP 不會因此改變：還是只用 Stryd 功率擬合，或用你輸入的 CP 測試。手錶功率的量尺跟 Stryd 不同，用它擬合的 CP 可能高很多，課表的功率目標會跟著錯。手錶功率的跑步算功率負荷時也是除以這個 CP；沒有 CP 就照舊用配速或心率算。想用手錶功率練：在「閾值測試紀錄」新增一列，CP 填一次用手錶功率做的 CP 測試，課表和測試就是同一種功率。手錶功率的準度沒驗證過，數字都當推估。">?</button></div>
     </details>
   </section>
 
   <section id="hr">
-    <h2><span data-i18n="settings.hr.title">心率</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.help" title="最大心率：自動從近 365 天的跑步估（持續 5 秒以上的最高心率，濾掉光學心率的尖刺），沒有資料才用手錶（COROS 帳號）的值；你填的值優先。靜息心率：用手錶（COROS 帳號）的值，或你填的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
+    <h2><span data-i18n="settings.hr.title">心率</span> <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.help" title="最大心率依序用：你填的值 → 手錶（COROS 帳號）的值 → 近 365 天跑步裡持續 5 秒以上的最高心率（濾掉光學心率的尖刺）→ 年齡公式 208 − 0.7 × 年齡（推估）。靜息心率：你填的值，沒有就用手錶（COROS 帳號）的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
     <dl class="kv" id="hr-kv"><dt data-i18n="settings.hr.max">最大心率</dt><dd class="meta" data-i18n="settings.pmc.loading">載入中…</dd></dl>
     <div class="est" id="hr-check" hidden></div>
     <div class="row">
       <label><span data-i18n="settings.hr.model">課表心率區間</span> <select id="hr-model"></select></label>
-      <button type="button" class="q" aria-label="說明" id="hr-model-q" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.model_help" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。量過的 AeT（AeT 測試）一定當輕鬆跑上限。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
+      <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" id="hr-model-q" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.model_help" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。「自動」看哪個數字可信：LTHR 可信用乳酸閾值區間，否則最大心率和靜息心率可信用儲備心率區間，都不可信用最大心率區間；換了會通知一次。選其中一種就固定用那種。量過的 AeT（AeT 測試）一定當輕鬆跑上限。活動判讀（輕鬆跑／中強度）和自動調整（輕鬆跑偏強）也用同一個輕鬆跑上限：平均心率不超過上限 +3 算輕鬆。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
       <span class="meta" id="hr-model-note" role="status"></span>
     </div>
     <div class="src cmp" id="hr-cmp" hidden></div>
@@ -343,12 +344,12 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 
   <section id="thresholds">
     <h2><span data-i18n="settings.thr.title">閾值測試紀錄（LTHR／AeT／CP）</span>
-      <button type="button" class="q" id="thr-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套（跟 WKO5 一樣）。心率負荷（HR load）、功率負荷（Power load）、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
+      <button type="button" class="q" data-manual="start#thresholds" id="thr-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套。心率負荷（HR load）、功率負荷（Power load）、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
     <p class="meta" id="thr-now" role="status"></p>
     <p class="meta" id="thr-wko5"></p>
     <div class="est" id="thr-est"><span class="meta" data-i18n="settings.thr.est_loading">正在從你的跑步資料估算 LTHR / AeT…</span></div>
     <div class="est" id="thr-check" hidden></div>
-    <!-- SP-488 (ST11, R5): 標準／精簡 fold the estimate cards that match what is in use (and the WKO5 line) -->
+    <!-- SP-488 (ST11, R5): 標準／精簡 fold the estimate cards that match what is in use  (and the comparison folder line) -->
     <details class="fold" id="thr-more" hidden><summary class="meta" id="thr-more-sum" data-hint-id="ST11"></summary>
       <div class="est" id="thr-more-est"></div><p class="meta" id="thr-more-wko5"></p></details>
     <div class="tw"><table class="wt">
@@ -365,21 +366,28 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
       <ul class="meta" style="margin:4px 0;padding-left:18px">
         <li data-i18n="settings.thr.how_aet">AeT 測試（Uphill Athlete）：暖身 10 分後在跑步機或平路用固定功率跑 40–60 分鐘（課表排 40 分；UA 不建議短於 40 分），前後半段的心率飄移 &lt; 5% 就代表那個心率在有氧閾值以下，逐次往上找到飄移剛好約 5% 的心率。</li>
         <li data-i18n="settings.thr.how_lthr">LTHR 測試（Friel）：單獨一人 30 分鐘全力跑，取最後 20 分鐘的平均心率。</li>
-        <li data-i18n="settings.thr.how_cp">CP 測試的方式在「課表」頁的課表偏好選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。CP 自動計算（算法參考 WKO5）：測試只是近 90 天功率曲線上的一次全力，沒有套用按鈕。這裡沒填的話，課表用 Stryd 功率 PD 模型算出的模型閾值功率（Modelled threshold power；用近 90 天每次跑步的 mean-max 曲線上緣擬合，含 CP 測試；30–60 分鐘的功率；新的擬合跟目前的 CP 差 3 W 以上才換）。這裡手動填的 CP 優先。</li>
+        <li data-i18n="settings.thr.how_cp">CP 測試的方式在「課表」頁的課表偏好選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。CP 自動計算（PD 模型擬合近 90 天功率曲線的上緣）：測試只是近 90 天功率曲線上的一次全力，沒有套用按鈕。這裡沒填的話，課表用 Stryd 功率 PD 模型算出的模型閾值功率（Modelled threshold power；用近 90 天每次跑步的 mean-max 曲線上緣擬合，含 CP 測試；30–60 分鐘的功率；新的擬合跟目前的 CP 差 3 W 以上才換）。這裡手動填的 CP 優先。</li>
       </ul>
     </details>
-    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.pz_h">功率區間（Palladino 官方表，依目前 CP）</summary>
+    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.pz_h">功率區間（Palladino／Stryd，依目前 CP）</summary>
+      <p class="meta" data-i18n="settings.thr.pz_palladino">Palladino 10 區：課表的功率目標用這張</p>
       <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
         <th>% CP</th><th>W</th></tr></thead>
       <tbody id="thr-pz"></tbody></table></div>
-      <p class="meta" id="thr-pzsrc"></p></details>
+      <p class="meta" id="thr-pzsrc"></p>
+      <!-- SP-363: Stryd's five zones at the same CP, for comparison (the 課表 keeps Palladino's) -->
+      <p class="meta" data-i18n="settings.thr.pz_stryd">Stryd 5 區：對照用</p>
+      <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
+        <th>% CP</th><th>W</th></tr></thead>
+      <tbody id="thr-pz-stryd"></tbody></table></div>
+      <p class="meta" id="thr-pzsrc-stryd"></p></details>
     <details id="thr-hist" style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.hist_h">門檻變更紀錄：哪個門檻在哪天變了</summary>
       <p class="meta" data-i18n="settings.thr.hist_intro">課表的心率／功率區間跟著這些門檻走。同一種課的區間跟上一堂不一樣時，看兩堂課日期之間的紀錄。</p>
       <div id="thr-hist-body"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
     </details>
     <div class="sub" id="pmc">
       <b data-i18n="settings.pmc.title">起始長期訓練負荷（Chronic load）／短期負荷（Acute load）</b>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="長期訓練負荷（Chronic load）／短期負荷（Acute load）要有一個起點。順序：你填的值（從那天開始）→ 自動（有訓練負荷（Training load）的前 28 天平均每日負荷，長期負荷和短期負荷都用它）→ 0。總覽、圖表、長期負荷週增量（Chronic load ramp）護欄、負荷平衡（Load balance）&lt; −30 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的長期／短期負荷時才需要填。">?</button>
+      <button type="button" class="q" data-manual="schedule#weekly-load" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="長期訓練負荷（Chronic load）／短期負荷（Acute load）要有一個起點。順序：你填的值（從那天開始）→ 自動（有訓練負荷（Training load）的前 28 天平均每日負荷，長期負荷和短期負荷都用它）→ 0。總覽、圖表、長期負荷週增量（Chronic load ramp）護欄、負荷平衡（Load balance）&lt; −30 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的長期／短期負荷時才需要填。">?</button>
       <div class="est" id="pmc-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
       <div class="row">
         <label><span data-i18n="settings.pmc.date">日期</span> <input type="date" id="pmc-date"></label>
@@ -409,45 +417,51 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
   </section>
 
   <section id="sync">
-    <h2>資料同步</h2>
+    <h2 data-i18n="settings.sync.title">資料同步</h2>
     <p class="meta"><span data-i18n="settings.sync.cred_note">帳號密碼只在登入時用一次，平常保存的只有加密過的登入憑證（token / cookie）。勾了「記住密碼」，密碼才會加密存在伺服器，用來自動重新登入。</span><span id="keystat"></span></p>
     <div class="row">
-      <label>每日自動同步 <input type="time" id="s-daily"> <label><input type="checkbox" id="s-daily-on"> 啟用</label></label>
+      <label><span data-i18n="settings.sync.daily">每日自動同步</span> <input type="time" id="s-daily"> <label><input type="checkbox" id="s-daily-on"> <span data-i18n="settings.sync.on">啟用</span></label></label>
     </div>
     <div class="row">
-      <label><input type="checkbox" id="s-open"> 開啟網站時自動同步，距離上次超過</label>
-      <input type="number" id="s-open-h" min="1" max="168" step="1" style="width:64px"> <label>小時</label>
+      <label><input type="checkbox" id="s-open"> <span data-i18n="settings.sync.open">開啟網站時自動同步，距離上次超過</span></label>
+      <input type="number" id="s-open-h" min="1" max="168" step="1" style="width:64px"> <label data-i18n="settings.sync.hours">小時</label>
+    </div>
+    <div class="row" id="s-bg-row">
+      <label><input type="checkbox" id="s-bg"> <span data-i18n="settings.sync.background">有新活動時在背景自動同步</span></label>
+      <button type="button" class="q" data-manual="faq#background-sync" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.sync.background_help" title="伺服器會定期在背景看手錶有沒有新活動，有就先同步，並在背景算好總覽、課表配對、活動分類和你最近看過的圖表，打開頁面就是最新的。最近常用的帳號大約每 30 分鐘看一次，比較少用的間隔拉長（2～6 小時），一個月沒用就只剩每日自動同步。凌晨 1～5 點不看。所有帳號錯開、一次只同步一個，不會拖慢網站；COROS 暫時擋下時會自動延後再試。Garmin 每天只能自動同步一次，所以不在背景看。">?</button>
+      <span class="meta" id="s-bg-note"></span>
     </div>
     <div class="row">
-      <span>資料來源</span>
-      <div class="seg" role="radiogroup" aria-label="資料來源" id="s-source">
+      <span data-i18n="settings.sync.source">資料來源</span>
+      <div class="seg" role="radiogroup" aria-label="資料來源" data-i18n-attr="aria-label:settings.sync.source" id="s-source">
         <label><input type="radio" name="s-src" value="coros"> COROS</label>
         <label data-src-opt="garmin"><input type="radio" name="s-src" value="garmin"> Garmin</label>
         <label><input type="radio" name="s-src" value="trainingpeaks"> TrainingPeaks</label>
+        <label data-src-opt="intervals"><input type="radio" name="s-src" value="intervals"> intervals.icu</label>
       </div>
-      <button type="button" class="q" aria-label="說明" title="一次只用一個來源：圖表、總覽、功率計算機、CP 測試、自動同步都只用這個來源的資料，其他來源的活動不會拿來補（Garmin 是試運行）。切換後圖表會用新來源的資料重新計算；另一個來源的檔案和登入資料會保留，隨時可以切回來。活動的標籤、RPE、疼痛、背包重量和課表配對是用開始時間對應的，切換後都還在。">?</button>
-      <button class="primary" id="s-save">儲存同步設定</button>
+      <button type="button" class="q" data-manual="start#connect" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.sync.source_help" title="一次只用一個來源：圖表、總覽、功率計算機、CP 測試、自動同步都只用這個來源的資料，其他來源的活動不會拿來補（Garmin 是試運行）。切換後圖表會用新來源的資料重新計算；另一個來源的檔案和登入資料會保留，隨時可以切回來。活動的標籤、RPE、疼痛、背包重量和課表配對是用開始時間對應的，切換後都還在。">?</button>
+      <button class="primary" id="s-save" data-i18n="settings.sync.save">儲存同步設定</button>
     </div>
-    <details style="margin:4px 0 8px"><summary class="meta">進階設定</summary>
+    <details style="margin:4px 0 8px"><summary class="meta" data-i18n="settings.sync.adv">進階設定</summary>
       <div class="row">
         <label>圖表資料來源 <select id="s-chart"><option value="source" id="s-chart-src">資料來源（預設）</option>
-          <option value="wko5">WKO5 資料夾（比對用）</option></select></label>
+          <option value="wko5">對照資料夾（比對用）</option></select></label>
       </div>
       <div class="row"><label>時區 <input id="s-tz" placeholder="自動" style="width:160px" list="s-tz-list"></label>
         <datalist id="s-tz-list"><option value="Asia/Taipei"><option value="Asia/Tokyo"><option value="Asia/Hong_Kong"><option value="Europe/London"><option value="Europe/Berlin"><option value="America/New_York"><option value="America/Los_Angeles"></datalist>
         <label>地區 <select id="s-region"><option value="">自動</option><option value="tw">台灣</option><option value="intl">台灣以外</option></select></label>
         <span class="meta" id="s-tz-eff"></span></div>
       <div class="row"><label>課表推送到 <select id="s-push"></select></label>
-        <button type="button" class="q" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
+        <button type="button" class="q" data-manual="schedule#push" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
       <div class="row"><span class="meta" id="s-tl"></span>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.tl.help" title="課表的「訓練負荷（Training load）」結束條件填的是本 app 算的負荷，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；每次同步後用你自己有 TL 的 COROS 活動重新擬合：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
+        <button type="button" class="q" data-manual="glossary#training-load" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.tl.help" title="課表的「訓練負荷（Training load）」結束條件填的是本 app 算的負荷，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；每次同步後用你自己有 TL 的 COROS 活動重新擬合：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
       <div class="row"><span class="meta" id="s-rpe"></span>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.rpe_load.help" title="課表的「訓練負荷（Training load）」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數。每一檔的預設是通用規則，用 Coggan 公開的公式：每小時負荷 ＝ 強度比² × 100，強度比（Intensity）是這一檔的強度（範圍參考 Seiler 用 session RPE 分的三區、Coggan 功率等級，取點是推估），不是照哪個人調的。每個人的值只從他自己有自評的活動（手錶記錄的 RPE 或 COROS 跑後自評）和實際負荷逐檔擬合：每檔滿 3 筆才開始，資料少、或是很久以前的資料時向預設靠攏；高一檔不會比低一檔少，沒有自己資料、只為了這個被調整的檔標「依相鄰檔調整」。只用來排課填目標：總覽、訓練負荷圖（Training load chart）的負荷一律用手錶記錄，不會用 RPE 修正。">?</button></div>
+        <button type="button" class="q" data-manual="glossary#rpe" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.rpe_load.help" title="課表的「訓練負荷（Training load）」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數。每一檔的預設是通用規則，用 Coggan 公開的公式：每小時負荷 ＝ 強度比² × 100，強度比（Intensity）是這一檔的強度（範圍參考 Seiler 用 session RPE 分的三區、Coggan 功率等級，取點是推估），不是照哪個人調的。每個人的值只從他自己有自評的活動（手錶記錄的 RPE 或 COROS 跑後自評）和實際負荷逐檔擬合：每檔滿 3 筆才開始，資料少、或是很久以前的資料時向預設靠攏；高一檔不會比低一檔少，沒有自己資料、只為了這個被調整的檔標「依相鄰檔調整」。只用來排課填目標：總覽、訓練負荷圖（Training load chart）的負荷一律用手錶記錄，不會用 RPE 修正。">?</button></div>
       <div id="s-failed-wrap" hidden><div class="row"><b data-i18n="settings.syncfail.title">下載失敗的活動</b>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.syncfail.help" title="同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或試滿 7 天，之後停止，可以按「重試」再試。沒有 FIT 檔的手動紀錄也列在這裡，之後有檔案了可以按「重試」。">?</button></div>
+        <button type="button" class="q" data-manual="faq#missing-activity" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.syncfail.help" title="同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或試滿 7 天，之後停止，可以按「重試」再試。沒有 FIT 檔的手動紀錄也列在這裡，之後有檔案了可以按「重試」。">?</button></div>
         <ul class="failed" id="s-failed"></ul></div>
       <div class="row"><button type="button" id="s-check" data-i18n="settings.synccheck.button">完整檢查（找漏掉的活動）</button>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.synccheck.help" title="列出手錶／平台上的全部活動，用活動編號跟這裡的資料比對：平台有、這裡沒有的，可以按「補下載」只下載這幾筆；這裡有、平台沒有的只列出來，不會刪除；另外列出還在下載失敗清單的。COROS 大約要 40～60 秒，檢查時不能同步同一個來源，也不會改變同步進度。有開自動同步（開啟網站時自動同步或每日自動同步）時，每週也會自動檢查最近 60 天，缺的直接補下載；TrainingPeaks 上排了但沒做的課另外計數，不會下載。">?</button>
+        <button type="button" class="q" data-manual="faq#missing-activity" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.synccheck.help" title="列出手錶／平台上的全部活動，用活動編號跟這裡的資料比對：平台有、這裡沒有的，可以按「補下載」只下載這幾筆；這裡有、平台沒有的只列出來，不會刪除；另外列出還在下載失敗清單的。COROS 大約要 40～60 秒，檢查時不能同步同一個來源，也不會改變同步進度。有開自動同步（開啟網站時自動同步或每日自動同步）時，每週也會自動檢查最近 60 天，缺的直接補下載；TrainingPeaks 上排了但沒做的課另外計數，不會下載。">?</button>
         <span class="meta" id="s-check-st"></span></div>
       <ul class="failed" id="s-check-res"></ul>
       <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
@@ -455,12 +469,12 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
         想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
     </details>
     <div class="src" id="src-coros">
-      <h3>COROS <span class="pill" data-f="login">…</span> <span class="pill" data-f="busy" hidden>同步中</span>
-        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> 啟用</label></h3>
+      <h3>COROS <span class="pill" data-f="login">…</span> <span class="pill" data-f="busy" hidden data-i18n="settings.sync.syncing">同步中</span>
+        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> <span data-i18n="settings.sync.enabled">啟用</span></label></h3>
       <div class="row" data-f="loginform">
-        <input type="email" placeholder="COROS 帳號（email）" data-f="user" autocomplete="off">
-        <input type="password" placeholder="密碼" data-f="pass" autocomplete="new-password">
-        <button data-act="login">登入</button>
+        <input type="email" placeholder="COROS 帳號（email）" data-i18n-attr="placeholder:settings.sync.coros_user" data-f="user" autocomplete="off">
+        <input type="password" placeholder="密碼" data-i18n-attr="placeholder:settings.sync.password" data-f="pass" autocomplete="new-password">
+        <button data-act="login" data-i18n="settings.sync.login">登入</button>
       </div>
       <!-- SP-385: the 非官方介面 disclaimer, ticked before connecting (its version is kept) -->
       <div class="row" data-f="consentrow" hidden><label style="font-weight:400"><input type="checkbox" data-f="consent">
@@ -468,78 +482,104 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
       <p class="meta err-text" data-f="sitemsg" role="status" hidden></p>
       <div class="row"><label><input type="checkbox" data-f="remember"> <span data-i18n="settings.sync.remember">記住密碼</span></label>
         <span class="meta" data-i18n="settings.sync.remember_coros">密碼用伺服器的金鑰加密存在伺服器；取消勾選或登出會立即刪除。勾選後，登入過期（24 小時）或憑證失效時會自動重新登入一次。</span></div>
-      <div class="row"><button data-act="logout">登出</button> <span class="meta" data-f="authmsg" role="status"></span></div>
+      <div class="row"><button data-act="logout" data-i18n="settings.sync.logout">登出</button> <span class="meta" data-f="authmsg" role="status"></span></div>
       <dl class="kv" data-f="kv"></dl>
       <div class="row">
-        <label>第一次同步從 <input type="date" data-f="since"></label>
-        <button class="primary" data-act="sync">立即同步</button>
+        <label><span data-i18n="settings.sync.since">第一次同步從</span> <input type="date" data-f="since"></label>
+        <button class="primary" data-act="sync" data-i18n="settings.sync.now">立即同步</button>
         <progress data-f="prog" hidden></progress><span class="meta" data-f="progtxt"></span>
       </div>
       <div class="log" data-f="log"></div>
-      <div class="row"><button class="danger" data-act="purge">刪除這個來源的同步檔案</button></div>
+      <div class="row"><button class="danger" data-act="purge" data-i18n="settings.sync.purge">刪除這個來源的同步檔案</button></div>
     </div>
 
     <!-- SP-91: the Garmin trial (unofficial garminconnect). Login with an optional MFA code step,
          the disclaimer until ticked, the server's state and today's syncs left in plain words -->
     <div class="src" id="src-garmin">
-      <h3>Garmin <span class="pill warn">試運行</span> <span class="pill" data-f="login">…</span>
-        <span class="pill" data-f="busy" hidden>同步中</span>
-        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> 啟用</label></h3>
+      <h3>Garmin <span class="pill warn" data-i18n="settings.sync.trial">試運行</span> <span class="pill" data-f="login">…</span>
+        <span class="pill" data-f="busy" hidden data-i18n="settings.sync.syncing">同步中</span>
+        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> <span data-i18n="settings.sync.enabled">啟用</span></label></h3>
       <p class="meta err-text" data-f="sitemsg" role="status" hidden></p>
       <div data-f="connect">
         <div class="row" data-f="loginform">
-          <input type="email" placeholder="Garmin Connect 帳號（email）" data-f="user" autocomplete="off">
-          <input type="password" placeholder="密碼" data-f="pass" autocomplete="new-password">
-          <button data-act="login">連接 Garmin</button>
+          <input type="email" placeholder="Garmin Connect 帳號（email）" data-i18n-attr="placeholder:settings.sync.garmin_user" data-f="user" autocomplete="off">
+          <input type="password" placeholder="密碼" data-i18n-attr="placeholder:settings.sync.password" data-f="pass" autocomplete="new-password">
+          <button data-act="login" data-i18n="settings.sync.garmin_connect">連接 Garmin</button>
         </div>
         <div class="row" data-f="mfarow" hidden>
-          <input type="text" inputmode="numeric" placeholder="驗證碼" data-f="mfa" autocomplete="one-time-code" style="width:120px">
-          <button data-act="mfa">送出驗證碼</button>
-          <span class="meta">Garmin 把驗證碼寄到你的 email 或手機了；打錯可以重打，10 分鐘內有效。</span>
+          <input type="text" inputmode="numeric" placeholder="驗證碼" data-i18n-attr="placeholder:settings.sync.mfa" data-f="mfa" autocomplete="one-time-code" style="width:120px">
+          <button data-act="mfa" data-i18n="settings.sync.mfa_send">送出驗證碼</button>
+          <span class="meta" data-i18n="settings.sync.mfa_hint">Garmin 把驗證碼寄到你的 email 或手機了；打錯可以重打，10 分鐘內有效。</span>
         </div>
         <div class="row" data-f="consentrow" hidden><label style="font-weight:400"><input type="checkbox" data-f="consent">
           <span data-f="consenttxt"></span></label></div>
       </div>
       <div class="row" data-f="rememberrow"><label><input type="checkbox" data-f="remember"> <span data-i18n="settings.sync.remember">記住密碼</span></label>
         <span class="meta" data-i18n="settings.sync.remember_garmin">密碼用伺服器的金鑰加密存在伺服器；取消勾選或中斷連接會立即刪除。勾選後，Garmin 不再接受登入憑證時會自動重新登入一次（算在每天的同步次數裡；被 Garmin 暫時鎖住的期間不會重新登入）。</span></div>
-      <div class="row"><button data-act="logout">中斷連接</button> <span class="meta" data-f="authmsg" role="status"></span></div>
+      <div class="row"><button data-act="logout" data-i18n="settings.sync.disconnect">中斷連接</button> <span class="meta" data-f="authmsg" role="status"></span></div>
       <dl class="kv" data-f="kv"></dl>
       <div class="row">
-        <label>第一次同步從 <input type="date" data-f="since"></label>
-        <button class="primary" data-act="sync">立即同步</button> <span class="meta" data-f="left"></span>
+        <label><span data-i18n="settings.sync.since">第一次同步從</span> <input type="date" data-f="since"></label>
+        <button class="primary" data-act="sync" data-i18n="settings.sync.now">立即同步</button> <span class="meta" data-f="left"></span>
         <progress data-f="prog" hidden></progress><span class="meta" data-f="progtxt"></span>
       </div>
       <div class="log" data-f="log"></div>
-      <div class="row"><button class="danger" data-act="purge">刪除這個來源的同步檔案</button>
-        <span class="meta">中斷連接不會刪除已匯入的活動。</span></div>
+      <div class="row"><button class="danger" data-act="purge" data-i18n="settings.sync.purge">刪除這個來源的同步檔案</button>
+        <span class="meta" data-i18n="settings.sync.disconnect_keep">中斷連接不會刪除已匯入的活動。</span></div>
+    </div>
+
+    <!-- SP-346: intervals.icu over its official OAuth (activities and their original files only; no
+         workouts pushed). 還沒開放 until the server has its OAuth app; the dormancy reminder from day 83 -->
+    <div class="src" id="src-intervals">
+      <h3>intervals.icu <span class="pill" data-f="login">…</span>
+        <span class="pill" data-f="busy" hidden data-i18n="settings.sync.syncing">同步中</span>
+        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> <span data-i18n="settings.sync.enabled">啟用</span></label></h3>
+      <p class="meta" data-i18n="settings.sync.icu_intro">透過 intervals.icu 自動收到新活動和原始 FIT 檔：Garmin、COROS、Suunto、Polar、Wahoo、Amazfit、華為的手錶連上 intervals.icu 就能用；Apple Watch 要先用 iPhone 上的 App（例如 Intervals Companion、HealthFit）送進 intervals.icu。只讀活動，不會推課表。</p>
+      <p class="meta" data-f="closed" hidden data-i18n="settings.sync.icu_closed">intervals.icu 同步還沒開放：本服務的 intervals.icu 連接申請還在審核中，開放後這裡就能連接。</p>
+      <p class="meta err-text" data-f="dormant" role="status" hidden></p>
+      <div class="row" data-f="connect">
+        <button class="primary" data-act="login" data-i18n="settings.sync.icu_connect">連接 intervals.icu</button>
+        <span class="meta" data-i18n="settings.sync.icu_connect_note">會開啟 intervals.icu 的授權頁，只要求讀取活動的權限；本服務拿不到你的 intervals.icu 密碼。intervals.icu 只給滿 18 歲的人使用。</span>
+      </div>
+      <div class="row"><button data-act="logout" data-i18n="settings.sync.disconnect">中斷連接</button> <span class="meta" data-f="authmsg" role="status"></span></div>
+      <dl class="kv" data-f="kv"></dl>
+      <div class="row">
+        <label><span data-i18n="settings.sync.since">第一次同步從</span> <input type="date" data-f="since"></label>
+        <button class="primary" data-act="sync" data-i18n="settings.sync.now">立即同步</button>
+        <progress data-f="prog" hidden></progress><span class="meta" data-f="progtxt"></span>
+      </div>
+      <div class="log" data-f="log"></div>
+      <p class="meta" data-i18n="settings.sync.icu_notes">經 intervals.icu 拿得到的歷史：COROS 約 3 個月、Garmin 約 1 年，更早的請用匯出檔匯入。Strava 來的活動 intervals.icu 不提供檔案，會略過；華為手錶的檔案不是原始檔，會標示出來。</p>
+      <div class="row"><button class="danger" data-act="purge" data-i18n="settings.sync.purge">刪除這個來源的同步檔案</button>
+        <span class="meta" data-i18n="settings.sync.disconnect_keep">中斷連接不會刪除已匯入的活動。</span></div>
     </div>
 
     <div class="src" id="src-tp">
-      <h3>TrainingPeaks <span class="pill" data-f="login">…</span> <span class="pill" data-f="busy" hidden>同步中</span>
-        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> 啟用</label></h3>
+      <h3>TrainingPeaks <span class="pill" data-f="login">…</span> <span class="pill" data-f="busy" hidden data-i18n="settings.sync.syncing">同步中</span>
+        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> <span data-i18n="settings.sync.enabled">啟用</span></label></h3>
       <div class="row" data-f="loginform">
-        <input type="text" placeholder="TP 帳號" data-f="user" autocomplete="off">
-        <input type="password" placeholder="密碼" data-f="pass" autocomplete="new-password">
+        <input type="text" placeholder="TP 帳號" data-i18n-attr="placeholder:settings.sync.tp_user" data-f="user" autocomplete="off">
+        <input type="password" placeholder="密碼" data-i18n-attr="placeholder:settings.sync.password" data-f="pass" autocomplete="new-password">
       </div>
-      <div class="sub"><b>網站登入</b> <span class="meta">（TrainingPeaks 網站的表單登入，一般帳號都能用）</span>
-        <div class="row"><button data-act="login" data-method="web">用網站登入</button></div></div>
-      <div class="sub"><b>OAuth（WKO5 client）</b>
-        <span class="meta">沿用 WKO5 的 client 憑證登入（有違反服務條款的風險，只限本機使用）。</span>
-        <dl class="kv"><dt>secret 來源</dt><dd data-f="secretsrc">…</dd>
-          <dt>~/.wko5coach/tp_client.json</dt><dd data-f="secretfile">…</dd></dl>
-        <div class="row"><label><input type="checkbox" data-f="usewko5"> 登入時先試 OAuth</label>
-          <button data-act="login" data-method="oauth">用 OAuth 登入</button></div></div>
+      <div class="sub"><b data-i18n="settings.sync.tp_web">網站登入</b> <span class="meta" data-i18n="settings.sync.tp_web_note">（TrainingPeaks 網站的表單登入，一般帳號都能用）</span>
+        <div class="row"><button data-act="login" data-method="web" data-i18n="settings.sync.tp_web_login">用網站登入</button></div></div>
+      <div class="sub"><b data-i18n="settings.sync.tp_oauth">OAuth（桌面軟體的 client）</b>
+        <span class="meta" data-i18n="settings.sync.tp_oauth_note">沿用桌面軟體的 client 憑證登入（有違反服務條款的風險，只限本機使用）。</span>
+        <dl class="kv"><dt data-i18n="settings.sync.tp_secret_src">secret 來源</dt><dd data-f="secretsrc">…</dd>
+          <dt data-i18n="settings.sync.tp_secret_file">app 資料夾的 tp_client.json</dt><dd data-f="secretfile">…</dd></dl>
+        <div class="row"><label><input type="checkbox" data-f="usewko5"> <span data-i18n="settings.sync.tp_try_oauth">登入時先試 OAuth</span></label>
+          <button data-act="login" data-method="oauth" data-i18n="settings.sync.tp_oauth_login">用 OAuth 登入</button></div></div>
       <div class="row"><label><input type="checkbox" data-f="remember"> <span data-i18n="settings.sync.remember">記住密碼</span></label>
         <span class="meta" data-i18n="settings.sync.remember_tp">密碼用伺服器的金鑰加密存在伺服器；取消勾選或登出會立即刪除。勾選後，登入憑證無法再更新時會自動重新登入一次。</span></div>
-      <div class="row"><button data-act="logout">登出</button> <span class="meta" data-f="authmsg" role="status"></span></div>
+      <div class="row"><button data-act="logout" data-i18n="settings.sync.logout">登出</button> <span class="meta" data-f="authmsg" role="status"></span></div>
       <dl class="kv" data-f="kv"></dl>
       <div class="row">
-        <label>第一次同步從 <input type="date" data-f="since"></label>
-        <button class="primary" data-act="sync">立即同步</button>
+        <label><span data-i18n="settings.sync.since">第一次同步從</span> <input type="date" data-f="since"></label>
+        <button class="primary" data-act="sync" data-i18n="settings.sync.now">立即同步</button>
         <progress data-f="prog" hidden></progress><span class="meta" data-f="progtxt"></span>
       </div>
       <div class="log" data-f="log"></div>
-      <div class="row"><button class="danger" data-act="purge">刪除這個來源的同步檔案</button></div>
+      <div class="row"><button class="danger" data-act="purge" data-i18n="settings.sync.purge">刪除這個來源的同步檔案</button></div>
     </div>
 
     <!-- SP-323: 手動匯入 FIT (files or a whole folder; static/fitimport.js, backend/sync/upload.py) -->
@@ -549,11 +589,17 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
       <!-- SP-324: 自動匯入資料夾 (desktop Chrome / Edge: showDirectoryPicker; static/fitfolder.js; hidden elsewhere) -->
       <div id="fit-folder" hidden></div>
     </div>
+
+    <!-- SP-349: 匯入匯出檔 (a platform's whole-account export, a ZIP; static/exportimport.js, backend/sync/archive.py) -->
+    <div class="src" id="src-export">
+      <h3 data-i18n="common.expimport.open">匯入匯出檔</h3>
+      <div id="export-import"></div>
+    </div>
   </section>
 
   <!-- 體重同步 (SP-472; api/weight.py, logic: static/weight_sync.js) -->
   <section id="weightsync">
-    <h2><span data-i18n="settings.wsync.title">體重同步（Apple 健康）</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.wsync.help" title="讓 iPhone 的「捷徑」或 Health Auto Export 把 Apple 健康裡的體重送進來。token 只能送體重，不能讀任何資料、也打不開其他功能；只在產生時顯示一次，伺服器只存雜湊，隨時可以撤銷。">?</button></h2>
+    <h2><span data-i18n="settings.wsync.title">體重同步（Apple 健康）</span> <button type="button" class="q" data-manual="start#weight" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.wsync.help" title="讓 iPhone 的「捷徑」或 Health Auto Export 把 Apple 健康裡的體重送進來。token 只能送體重，不能讀任何資料、也打不開其他功能；只在產生時顯示一次，伺服器只存雜湊，隨時可以撤銷。">?</button></h2>
     <p class="meta" data-i18n="settings.wsync.intro">網頁讀不到 Apple 健康，要由 iPhone 主動送過來：產生一個 token，照下面的步驟設好捷徑，以後打開體重計 App 就會自動送出最新的體重。</p>
     <div class="row"><label for="ws-url" data-i18n="settings.wsync.url">送到這個網址（POST）</label>
       <input type="text" id="ws-url" readonly style="flex:1;min-width:240px">
@@ -604,13 +650,13 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     <div class="row">
       <button class="primary" id="b-run">立即備份</button>
       <button id="b-restore">還原…</button>
-      <button type="button" class="q" aria-label="說明" title="選一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫和檔案另存一份到 ~/.wko5coach/backups（也列在清單裡，可以還原回去），然後換成備份裡的資料；備份裡沒有的檔案不會動，分享連結不會還原。完成後請重新啟動 App。這台電腦的備份設定（資料夾、自動備份）和 COROS／TrainingPeaks 的登入不會被覆蓋——登入不在備份裡，新電腦還原後要登入一次。舊版的加密備份（.zip.enc）不能還原。">?</button>
+      <button type="button" class="q" aria-label="說明" title="選一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫和檔案另存一份到 app 資料夾的 backups（也列在清單裡，可以還原回去），然後換成備份裡的資料；備份裡沒有的檔案不會動，分享連結不會還原。完成後請重新啟動 App。這台電腦的備份設定（資料夾、自動備份）和 COROS／TrainingPeaks 的登入不會被覆蓋——登入不在備份裡，新電腦還原後要登入一次。舊版的加密備份（.zip.enc）不能還原。">?</button>
       <span class="meta" id="b-msg" role="status"></span>
     </div>
     <details style="margin-top:6px"><summary class="meta">進階設定</summary>
       <div class="row">
         <label><input type="checkbox" id="b-fit"> 同時備份 FIT 原始檔</label>
-        <button type="button" class="q" aria-label="說明" title="同步下來的 FIT 檔（~/.wko5coach/fit）以 gzip 壓縮放進備份，備份檔會大很多。不勾也沒關係：FIT 檔之後可以從 COROS／TrainingPeaks 重新同步。還原時只補回這台電腦沒有的檔案，不會覆蓋。">?</button>
+        <button type="button" class="q" aria-label="說明" title="同步下來的 FIT 檔（app 資料夾的 fit）以 gzip 壓縮放進備份，備份檔會大很多。不勾也沒關係：FIT 檔之後可以從 COROS／TrainingPeaks 重新同步。還原時只補回這台電腦沒有的檔案，不會覆蓋。">?</button>
       </div>
     </details>
     <p class="meta" id="b-note"></p>
@@ -770,7 +816,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 
   <section id="fixes">
     <h2>資料校正</h2>
-    <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到 .wko4 原始檔，隨時可以撤銷。</p>
+    <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到原始活動檔，隨時可以撤銷。</p>
     <div class="row">
       <button id="scanbtn">掃描壞點</button>
       <button id="fixbtn" class="primary" disabled>套用勾選的修正</button>
@@ -793,8 +839,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 
   <!-- Debug API for AI agents (SP-371, docs/debug-api.md; logic: static/debug_api.js) -->
   <section id="debugapi">
-    <h2><span data-i18n="settings.debug.title">Debug API（給 AI agent）</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.help" title="讓 AI agent 用 token 透過 HTTPS 唯讀查詢活動、課表、門檻、同步狀態，或匯出設定，用來除錯。只能讀，不能改任何東西；token 只在產生時顯示一次，伺服器只存雜湊。">?</button></h2>
-    <p class="meta" id="dbg-nopin" hidden data-i18n="settings.debug.no_pin">伺服器沒有設定 PIN（環境變數 TRC_DEBUG_PIN，至少 6 碼），不能開啟。</p>
+    <h2><span data-i18n="settings.debug.title">Debug API（給 AI agent）</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.help" title="讓 AI agent 或你自己的本機用個人 token 透過 HTTPS 唯讀查詢活動、課表、門檻、同步狀態，或匯出設定和課表。只能讀，不能改任何東西；token 只在產生時顯示一次，伺服器只存雜湊。">?</button></h2>
     <div class="row"><label><input type="checkbox" id="dbg-on"> <span data-i18n="settings.debug.enable">開啟 Debug API</span></label>
       <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.enable_help" title="關閉時 /api/v1/debug/ 底下的網址一律回 404。只認專用的 token，網頁登入的 cookie 叫不動；每個 token 每分鐘最多 60 次。">?</button></div>
     <div id="dbg-body" hidden>
@@ -811,10 +856,21 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     </div>
   </section>
 
+  <!-- a local copy pulls from production (SP-373, engine/upstream.py; logic: static/debug_api.js).
+       Shown only when this machine's environment names a production server -->
+  <section id="upstream" hidden>
+    <h2><span data-i18n="settings.upstream.title">從正式站同步</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.upstream.help" title="把正式站的設定和課表拉到這台：只從正式站讀，不會改正式站的任何東西。這台的設定、門檻、賽事、傷病紀錄、活動的手動標記和課表會換成正式站的；活動檔不拉（這台自己同步）。套用後這台不再自動推課表到 COROS。">?</button></h2>
+    <p class="meta" id="up-host"></p>
+    <div class="row"><label><input type="checkbox" id="up-config" checked> <span data-i18n="settings.upstream.part_config">設定（門檻、體重、賽事、課表偏好、傷病、活動標記）</span></label>
+      <label><input type="checkbox" id="up-plan" checked> <span data-i18n="settings.upstream.part_plan">課表</span></label></div>
+    <div class="row"><button id="up-preview" data-i18n="settings.upstream.preview">看會改什麼</button>
+      <button class="primary" id="up-apply" disabled data-i18n="settings.upstream.apply">套用到這台</button>
+      <span class="meta" id="up-msg"></span></div>
+    <ul class="meta" id="up-result"></ul>
+  </section>
+
   <dialog id="dbg-dlg">
     <h2 data-i18n="settings.debug.new">產生 token</h2>
-    <div class="row"><label><span data-i18n="settings.debug.pin">PIN 碼</span> <input type="password" id="dbg-pin" autocomplete="off" style="width:140px"></label>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.pin_help" title="伺服器環境變數 TRC_DEBUG_PIN 的值。連續輸錯 5 次會鎖 15 分鐘。">?</button></div>
     <div class="row"><label><span data-i18n="settings.debug.name">名稱</span> <input type="text" id="dbg-name" maxlength="40" value="agent" style="width:160px"></label>
       <label><span data-i18n="settings.debug.days">有效期</span> <select id="dbg-days"></select></label></div>
     <div class="row" id="dbg-scopes"></div>
@@ -824,7 +880,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 </main>
 <div class="toast" id="toast"></div>
 <script>
-const API = "/api/v1/wko5";
+const API = "/api/v1/app";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num = (v) => v == null ? "–" : Math.round(v).toLocaleString();
@@ -853,7 +909,7 @@ document.querySelectorAll(".mode").forEach((b) => b.onclick = async () => {
   const body = parity ? { parity: true } : { ...(await j(`${API}/config`)).mountain_preset, parity: false };
   await j(`${API}/config`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   await loadMode();
-  toast(parity ? "已切到 WKO5 對照模式" : "已切到我的算式");
+  toast(parity ? "已切到對照模式" : "已切到我的算式");
 });
 
 async function loadApplied() {
@@ -885,7 +941,7 @@ $("scanbtn").onclick = async () => {
 $("fixbtn").onclick = async () => {
   const picked = [...$("fixlist").querySelectorAll("input:checked")].map((el) => proposals[+el.dataset.i]);
   if (!picked.length) return;
-  if (!confirm(`要套用 ${picked.length} 筆修正嗎？（不會改到 .wko4 原始檔，隨時可以撤銷）`)) return;
+  if (!confirm(`要套用 ${picked.length} 筆修正嗎？（不會改到原始活動檔，隨時可以撤銷）`)) return;
   const res = await j(`${API}/corrections/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ proposals: picked }) });
   toast(`已套用 ${res.added.length} 筆`); $("fixlist").innerHTML = ""; $("fixbtn").disabled = true;
@@ -1109,9 +1165,11 @@ function renderHr(r) {
   $("hr-model").innerHTML = r.models.map((m) => `<option value="${esc(m.id)}"${m.id === r.model ? " selected" : ""}>${esc(m.label)}</option>`).join("");
   const cur = r.models.find((m) => m.id === r.model);
   $("hr-model-q").title = $("hr-model-q").title.split("\n\n")[0] + (cur ? "\n\n" + cur.source : "");
-  const z = r.plan_zones;
-  $("hr-model-note").textContent = !z ? "" : z.fallback ? z.fallback
-    : t("settings.hr.easy", { lo: z.easy[0], hi: z.easy[1], src: z.easy_source });
+  const z = r.plan_zones, ef = r.effective;
+  // SP-493: 自動 says which zones are in effect and why (「自動 → 目前用：儲備心率（…）」)
+  const auto = r.model === "auto" && ef ? t("settings.hr.auto_now", { model: ef.label, reason: ef.reason || "" }) : "";
+  $("hr-model-note").textContent = [auto, !z ? "" : z.fallback ? z.fallback
+    : t("settings.hr.easy", { lo: z.easy[0], hi: z.easy[1], src: z.easy_source })].filter(Boolean).join("　");
   const man = (x) => x && x.kind === "manual";
   $("hr-max").value = man(r.max_hr) ? Math.round(r.max_hr.value) : "";
   $("hr-max").placeholder = r.estimate && r.estimate.value ? r.estimate.value : (r.account && r.account.max_hr) || "";
@@ -1211,7 +1269,7 @@ async function loadThr() {
 }
 function renderThr() {
   const ef = TS.effective_thresholds, w = TS.wko5_settings.runthr, m = TS.wko5_settings.runmhr;
-  // ST10: 「LTHR 是 WKO5 預設值」 and 「WKO5 出廠值」 said once — the one red line where it matters (SP-488)
+  // ST10: the LTHR-is-the-default and factory-default notes said once — the one red line where it matters (SP-488)
   $("thr-now").innerHTML = esc(t("settings.thr.now", { aet: num(ef.aethr.value), lthr: num(ef.lthr.value), cp: num(ef.cp.value) }))
     + pmBadge(ef.aethr.pm) + (ef.lthr.wko5_default ? ` <span class="err-text" data-hint-id="ST10">${esc(t("settings.thr.lthr_default"))}</span>` : "")
     + (ef.cp.label ? `<span class="meta">${esc(t("settings.thr.cp_src", { src: ef.cp.label }))}</span>` : "")
@@ -1229,10 +1287,14 @@ function renderThr() {
     <td><button class="x" data-trm="${i}">${esc(t("settings.thr.remove"))}</button></td></tr>`).join("")
     || `<tr><td colspan="6" class="meta">${esc(t("settings.thr.empty"))}</td></tr>`;
   const pz = TS.power_zones;
-  $("thr-pz").innerHTML = pz.zones.map((z) => `<tr><td>${esc(z.id)}</td><td>${esc(z.name)}</td>
+  const pzRows = (zs) => zs.map((z) => `<tr><td>${esc(z.id)}</td><td>${esc(z.name)}</td>
     <td>${Math.round(z.lo * 100)}${z.hi ? "–" + Math.round(z.hi * 100) : "+"}%</td>
     <td>${z.watts ? z.watts[0] + (z.watts[1] ? "–" + z.watts[1] : "+") : "–"}</td></tr>`).join("");
+  $("thr-pz").innerHTML = pzRows(pz.zones);
   $("thr-pzsrc").textContent = t("settings.thr.pz_src", { src: pz.source });
+  // SP-363: Stryd's five zones at the same CP (for comparison; the 課表 keeps Palladino's)
+  $("thr-pz-stryd").innerHTML = pz.stryd ? pzRows(pz.stryd.zones) : "";
+  $("thr-pzsrc-stryd").textContent = pz.stryd ? t("settings.thr.pz_stryd_src", { src: pz.stryd.source }) : "";
 }
 let E = null, WKO5_HTML = "", WKO5_RED = false;
 async function loadThrEstimate() {
@@ -1241,7 +1303,7 @@ async function loadThrEstimate() {
   drawEst();
 }
 // ST11 (●◐▷, SP-488): 完整 shows both estimate cards; 標準 only one that differs from what is in use (≥ 1 bpm,
-// it has 「套用」) and folds the rest; 精簡 folds them all. The WKO5 line goes in the same fold unless it is
+// it has 「套用」) and folds the rest; 精簡 folds them all. The comparison folder line goes in the same fold unless it is
 // the red factory-default line (ST10). The fold's one line says what is inside.
 function drawEst() {
   if (!TS) return;
@@ -1266,6 +1328,7 @@ function drawEst() {
       <div class="v">${ok ? est.value + " bpm" + pmBadge(est.pm) : "–"} <small>${ok && curV != null ? esc(t("settings.thr.est_cur", { v: num(curV) })) : ""}</small></div>
       <div class="s">${esc(est ? est.reason : "")}${ok && est.spread ? esc(t("settings.thr.est_spread", { lo: est.spread[0], hi: est.spread[1] })) : ""}${est && est.days ? esc(t("settings.thr.est_days", { n: est.days })) : ""}</div>
       ${help ? `<div class="s">${esc(help)}</div>` : ""}
+      ${!ok && est && (est.links || []).length ? `<div class="s">${est.links.map((l) => `<a href="${esc(l.href)}">${esc(l.label)}</a>`).join(" ")}</div>` : ""}
       ${ok && !same ? `<button class="primary" data-apply="${key}" data-v="${est.value}">${esc(t("settings.thr.est_apply", { v: est.value }))}</button>`
         : ok ? `<div class="s">${esc(t("settings.thr.est_same"))}</div>` : ""}</div>`;
     // the condition (R-less, §1 ST11): the estimate differs from what is in use by ≥ 1
@@ -1332,9 +1395,11 @@ function renderThrCheck() {
   const strong = (v) => (v.signals || []).some((x) => x.level === "strong");
   const mark = (html, id, v) => html.replace('<div class="card">',
     `<div class="card${v.confidence === "low" && strong(v) ? " must" : ""}" data-hint-id="${id}"${v.confidence === "low" && strong(v) ? ' data-hint-cls="1"' : ""}>`);
-  CONF.lthr = asCard(lt, res("tt30").some((r) => r.apply)) ? null : lt;
+  // SP-493: the LTHR card is not a reminder any more (the suggestion box's row is) — no 低 card / red edge,
+  // only 完整 or a test result to 套用
+  CONF.lthr = !!lt && lt.value != null && (FULL() || res("tt30").some((r) => r.apply)) ? null : lt;
   CONF.hrmax = asCard(hm, !!cand || res("hrmax").some((r) => r.apply)) ? null : hm;
-  box("thr-check", CONF.lthr || !lt ? "" : mark(card("LTHR", lt, lnote + dg + tests("tt30")), "ST8", lt));
+  box("thr-check", CONF.lthr || !lt ? "" : mark(card("LTHR", lt, lnote + dg + tests("tt30")), "ST8", { ...lt, confidence: "" }));
   box("hr-check", CONF.hrmax || !hm ? "" : mark(card(t("settings.thr.chk_hrmax"), hm,
     (TC.diagnosis && TC.diagnosis.outlier === "hrmax" ? dg : "") + candHtml + tests("hrmax")), "ST7", hm));
   CONF.why = { lthr: [...(lt && lt.signals || []).filter((x) => x.level !== "hint").map((x) => x.text), TC.warn && TC.warn.lthr && TC.warn.lthr.note,
@@ -1536,12 +1601,26 @@ loadRace();
 
 // ---- 資料同步 -------------------------------------------------------------
 const SYNC = "/api/v1/sync";
-const SRC_NAME = { coros: "COROS", garmin: "Garmin", tp: "TrainingPeaks" };
-const SRC_LABEL = { env: "環境變數", file: "~/.wko5coach/tp_client.json",
-  none: "未設定（只能用網站登入）" };
+const SRC_NAME = { coros: "COROS", garmin: "Garmin", tp: "TrainingPeaks", intervals: "intervals.icu" };
+const SRC_LABEL = { env: 1, file: 1, none: 1 };     // the TP client secret's sources (settings.sync.tp_src_*)
 const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("zh-TW", { hour12: false }) : "–";
 const box = (src) => $(`src-${src}`);
 const f = (src, name) => box(src).querySelector(`[data-f="${name}"]`);
+// SP-569 ③: the source boxes' words in the page's language (settings.sync.*)
+const tSy = (k, p) => I18N.t("settings.sync." + k, p);
+// a sync's last result: 「成功：下載 3、檢查 40、錯誤 0（…）」
+function syncRes(r) {
+  const st = { ok: "st_ok", partial: "st_partial", failed: "st_failed", aborted: "st_aborted" }[r.status];
+  return esc(tSy("res", { status: st ? tSy(st) : r.status, dl: r.downloaded, checked: r.checked, err: r.errors }))
+    + (r.error ? esc(tSy("res_error", { msg: r.error })) : "");
+}
+// 上次同步／上次結果／同步檔案／活動期間 (`res`: already escaped)
+function syncKv(s, st, res) {
+  return `<dt>${esc(tSy("kv_last"))}</dt><dd>${fmtTime(s.last_sync_at)}</dd>
+    <dt>${esc(tSy("kv_result"))}</dt><dd>${res}</dd>
+    <dt>${esc(tSy("kv_files"))}</dt><dd>${esc(tSy("kv_files_v", { n: st.files ?? 0, size: st.size || "0 B", folder: st.folder || "" }))}</dd>
+    <dt>${esc(tSy("kv_range"))}</dt><dd>${st.date_from ? esc(tSy("kv_range_v", { from: st.date_from, to: st.date_to, rows: st.rows })) : "–"}</dd>`;
+}
 let SS = null, SOURCES = null;
 
 // 「負荷」 TSS → COROS TL (engine/coros_tl.describe): the model per TSS source, n, weight, backtest error (推估)
@@ -1580,6 +1659,13 @@ async function loadSyncSettings() {
   $("s-daily-on").checked = !!SS.daily_sync_time;
   $("s-open").checked = !!SS.auto_on_open;
   $("s-open-h").value = SS.auto_on_open_hours ?? 6;
+  // 背景同步 (SP-499): off for the free tier (nightly) or when the server has it off
+  const bg = SS.background || {};
+  $("s-bg").checked = SS.background_sync !== false && bg.available !== false;
+  $("s-bg").disabled = bg.available === false;
+  $("s-bg-note").textContent = bg.why === "plan" ? t("settings.sync.background_plan")
+    : bg.why === "off" ? t("settings.sync.background_off") : "";
+  $("s-bg-row").hidden = bg.why === "demo";
   showSource(SS.primary_source || "coros");
   $("s-chart-src").textContent = `${SS.primary_label || "COROS"}（資料來源，預設）`;
   $("s-chart").value = SS.chart_data_source === "wko5" ? "wko5" : "source";
@@ -1601,13 +1687,15 @@ async function loadSyncSettings() {
   $("u-power-auto").hidden = SS.use_power_stored == null;
   $("u-watch").checked = !!SS.accept_watch_power;
   document.querySelectorAll('input[name="m-ovl"]').forEach((c) => c.checked = (SS.map_overlays || []).includes(c.value));
-  f("tp", "secretsrc").textContent = SRC_LABEL[SS.tp_client_credentials_source] || SS.tp_client_credentials_source;
-  f("tp", "secretfile").textContent = SS.tp_client_file_exists ? "存在（內容不顯示）" : "不存在";
+  f("tp", "secretsrc").textContent = SRC_LABEL[SS.tp_client_credentials_source]
+    ? tSy("tp_src_" + SS.tp_client_credentials_source) : SS.tp_client_credentials_source;
+  f("tp", "secretfile").textContent = tSy(SS.tp_client_file_exists ? "tp_file_yes" : "tp_file_no");
   f("tp", "usewko5").checked = SS.tp_use_wko5_client !== false && SS.tp_client_credentials_configured;
   f("tp", "usewko5").disabled = !SS.tp_client_credentials_configured;
   box("tp").querySelector('[data-method="oauth"]').disabled = !SS.tp_client_credentials_configured;
   f("coros", "enabled").checked = SS.coros_enabled; f("tp", "enabled").checked = SS.trainingpeaks_enabled;
   f("garmin", "enabled").checked = SS.garmin_enabled !== false;
+  f("intervals", "enabled").checked = SS.intervals_enabled !== false;
   $("keystat").innerHTML = SS.secret_key_status === "missing"
     ? ` <span class="pill err">找不到加密金鑰</span> ${esc(SS.secret_key_hint || "")}` : "";
 }
@@ -1637,8 +1725,9 @@ async function loadSources() {
     const expired = !!auth.expired;
     pill.className = "pill " + (auth.authenticated ? "ok" : expired ? "err" : "warn");
     pill.textContent = auth.authenticated
-      ? (src === "coros" ? `已登入 ${auth.email || ""}` : `已登入（${({ web: "網站", oauth: "OAuth", token: "token" })[auth.method] || ""}）`)
-      : expired ? "登入已過期" : "未登入";
+      ? (src === "coros" ? tSy("logged_in", { who: auth.email || "" })
+        : tSy("logged_in_via", { how: ({ web: tSy("how_web"), oauth: "OAuth", token: "token" })[auth.method] || "" }))
+      : expired ? tSy("expired") : tSy("logged_out");
     f(src, "loginform").hidden = !!auth.authenticated;
     box(src).querySelectorAll('[data-act="login"]').forEach((b) => b.hidden = !!auth.authenticated);
     box(src).querySelector('[data-act="logout"]').hidden = !auth.authenticated && !expired;
@@ -1648,22 +1737,18 @@ async function loadSources() {
       if (!auth.password_saved) {
         // suggest 記住密碼 so the next expiry renews itself
         f(src, "remember").checked = true;
-        authMsg(src, "登入已過期，請重新登入。建議勾選「記住密碼」，之後過期會自動重新登入。", "err-text");
+        authMsg(src, tSy("expired_hint"), "err-text");
       } else {
-        authMsg(src, "登入已過期，用記住的密碼自動重新登入也失敗了（密碼可能已變更），請重新登入。", "err-text");
+        authMsg(src, tSy("expired_auto_failed"), "err-text");
       }
     }
     f(src, "busy").hidden = !s.busy;
-    const res = r ? `${({ ok: "成功", partial: "部分失敗", failed: "失敗", aborted: "中斷" })[r.status] || r.status}：`
-      + `下載 ${r.downloaded}、檢查 ${r.checked}、錯誤 ${r.errors}${r.error ? "（" + esc(r.error) + "）" : ""}`
-      + esc(syncTook(r.secs)) : "–";
-    f(src, "kv").innerHTML = `<dt>上次同步</dt><dd>${fmtTime(s.last_sync_at)}</dd>
-      <dt>上次結果</dt><dd>${res}</dd>
-      <dt>同步檔案</dt><dd>${st.files} 個、${esc(st.size)}（${esc(st.folder)}）</dd>
-      <dt>活動期間</dt><dd>${st.date_from ? `${st.date_from} ~ ${st.date_to}（${st.rows} 筆）` : "–"}</dd>`;
+    const res = r ? syncRes(r) + esc(syncTook(r.secs)) : "–";
+    f(src, "kv").innerHTML = syncKv(s, st, res);
     box(src).querySelector('[data-act="purge"]').disabled = !st.files && !st.rows;
   }
   loadGarmin();
+  loadIntervals();
   loadCorosSite();
   loadFailed();
   loadCheck();
@@ -1765,11 +1850,12 @@ $("s-save").onclick = async () => {
   const body = {
     daily_sync_time: $("s-daily-on").checked ? $("s-daily").value : null,
     auto_on_open: $("s-open").checked, auto_on_open_hours: Number($("s-open-h").value) || 6,
+    ...($("s-bg").disabled ? {} : { background_sync: $("s-bg").checked }),
     chart_data_source: $("s-chart").value, push_provider: $("s-push").value || "coros",
     timezone: $("s-tz").value.trim() || null, region_override: $("s-region").value || null,
   };
   try { await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    toast("已儲存同步設定"); loadSyncSettings(); }
+    toast(tSy("saved")); loadSyncSettings(); }
   catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
 };
 
@@ -1779,13 +1865,14 @@ function showSource(src) {
   box("coros").hidden = src !== "coros";
   box("garmin").hidden = src !== "garmin";
   box("tp").hidden = src !== "trainingpeaks";
+  box("intervals").hidden = src !== "intervals";
 }
 let SWITCH_TO = null;
 $("s-source").addEventListener("change", (e) => {
   const to = e.target.value;
   if (!SS || to === SS.primary_source) return;
   SWITCH_TO = to;
-  const name = { coros: "COROS", garmin: "Garmin", trainingpeaks: "TrainingPeaks" }, from = name[SS.primary_source] || "";
+  const name = { coros: "COROS", garmin: "Garmin", trainingpeaks: "TrainingPeaks", intervals: "intervals.icu" }, from = name[SS.primary_source] || "";
   $("sd-title").textContent = `改用 ${name[to]} 當資料來源？`;
   $("sd-body").innerHTML = `圖表、總覽、功率計算機和 CP 測試會<b>只用 ${esc(name[to])} 的資料重新計算</b>`
     + `（第一次要讀完所有 FIT 檔，會比較久），自動同步也只同步 ${esc(name[to])}。`
@@ -1813,7 +1900,7 @@ $("m-save").onclick = async () => {
 
 // 主要訓練項目 (engine/primary_sport.py): the setting, the sport in effect and the suggestion
 async function loadSport() {
-  const ps = await j("/api/v1/wko5/primary-sport").catch(() => null);
+  const ps = await j("/api/v1/app/primary-sport").catch(() => null);
   if (!ps) return;
   $("u-sport").value = ps.setting || "auto";
   SPORT = ps;
@@ -1854,10 +1941,11 @@ $("u-watch").onchange = async (e) => {
   try { await putSetting({ accept_watch_power: e.target.checked }); toast("已更新：圖表會重算"); loadSyncSettings(); }
   catch (err) { toast("失敗：" + err.message.slice(0, 80)); e.target.checked = !e.target.checked; }
 };
-f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.checked }).then(() => toast("已更新"));
-f("tp", "enabled").onchange = (e) => putSetting({ trainingpeaks_enabled: e.target.checked }).then(() => toast("已更新"));
-f("garmin", "enabled").onchange = (e) => putSetting({ garmin_enabled: e.target.checked }).then(() => toast("已更新"));
-f("tp", "usewko5").onchange = (e) => putSetting({ tp_use_wko5_client: e.target.checked }).then(() => toast("已更新"));
+f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.checked }).then(() => toast(tSy("updated")));
+f("tp", "enabled").onchange = (e) => putSetting({ trainingpeaks_enabled: e.target.checked }).then(() => toast(tSy("updated")));
+f("garmin", "enabled").onchange = (e) => putSetting({ garmin_enabled: e.target.checked }).then(() => toast(tSy("updated")));
+f("intervals", "enabled").onchange = (e) => putSetting({ intervals_enabled: e.target.checked }).then(() => toast(tSy("updated")));
+f("tp", "usewko5").onchange = (e) => putSetting({ tp_use_wko5_client: e.target.checked }).then(() => toast(tSy("updated")));
 
 // a button's request in progress: label 「登入中…」 etc., disabled (no double
 // login: COROS keeps only the latest token), then the outcome next to it
@@ -1905,6 +1993,54 @@ async function loadCorosSite() {
   } catch (_) { /* the rest of the page still works */ }
 }
 
+// ---- intervals.icu (SP-346): OAuth connect (the browser goes to intervals.icu and comes back with
+// ?intervals=connected | denied | failed | expired), 中斷連接 (disconnect-app), 還沒開放 before the
+// server has its OAuth app, the back-fill's progress and the day-83 dormancy reminder
+async function loadIntervals() {
+  let s;
+  try { s = await j("/api/v1/auth/intervals/status"); } catch (_) { return; }
+  const src = (SOURCES || {}).intervals || {}, st = src.stats || {}, r = src.last_result;
+  const closed = !s.configured || s.site_off || !s.allowed;
+  const pill = f("intervals", "login");
+  pill.className = "pill " + (s.authenticated ? "ok" : s.expired ? "err" : closed ? "" : "warn");
+  pill.textContent = s.authenticated ? tSy("icu_connected") : s.expired ? tSy("expired")
+    : closed ? tSy("icu_closed_pill") : tSy("icu_not_connected");
+  f("intervals", "closed").hidden = !closed;
+  f("intervals", "connect").hidden = closed || !!s.authenticated;
+  box("intervals").querySelector('[data-act="logout"]').hidden = !s.authenticated && !s.expired;
+  box("intervals").querySelector('[data-act="sync"]').disabled = !s.authenticated;
+  if (s.expired) authMsg("intervals", tSy("icu_refused"), "err-text");
+  const dz = s.dormancy, dm = f("intervals", "dormant");
+  dm.hidden = !(dz && dz.remind);
+  if (dz && dz.remind) dm.textContent = dz.dormant ? tSy("icu_dormant", { days: dz.days })
+    : tSy("icu_dormant_soon", { days: dz.days, left: dz.days_left });
+  f("intervals", "busy").hidden = !src.busy;
+  const res = r ? syncRes(r) + esc(syncTook(r.secs)) : "–";
+  let kv = syncKv(src, st, res);
+  if (s.authenticated && dz) kv += `<dt>${esc(tSy("icu_seen"))}</dt><dd>${esc(tSy("icu_seen_v", { when: fmtTime(dz.last_seen), days: dz.days }))}</dd>`;
+  if (s.backfill) kv += `<dt>${esc(tSy("icu_backfill"))}</dt><dd>${esc(s.backfill.done ? tSy("icu_backfill_done")
+    : tSy("icu_backfill_v", { until: s.backfill.next_newest, oldest: s.backfill.oldest }))}</dd>`;
+  if (s.authenticated && !s.webhook) kv += `<dt>${esc(tSy("icu_webhook"))}</dt><dd>${esc(tSy("icu_webhook_off"))}</dd>`;
+  f("intervals", "kv").innerHTML = kv;
+  box("intervals").querySelector('[data-act="purge"]').disabled = !st.files && !st.rows;
+}
+async function intervalsConnect(btn) {
+  try {
+    const r = await busy(btn, tSy("icu_opening"), () => j("/api/v1/auth/intervals/connect", { method: "POST" }));
+    location.href = r.url;                     // intervals.icu's authorize page; it sends the browser back
+  } catch (e) { authMsg("intervals", tSy("icu_connect_failed", { msg: reason(e) }), "err-text"); }
+}
+(function intervalsReturn() {
+  const q = new URLSearchParams(location.search), v = q.get("intervals");
+  if (!v) return;
+  q.delete("intervals");
+  history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash);
+  const ok = v === "connected";
+  const msg = tSy({ connected: "icu_back_connected", denied: "icu_back_denied", expired: "icu_back_expired" }[v] || "icu_back_failed");
+  toast(msg);
+  setTimeout(() => authMsg("intervals", msg, ok ? "ok-text" : "err-text"), 0);
+})();
+
 // ---- Garmin (SP-91 試運行): connect with an optional MFA step, the disclaimer until ticked, the
 // server's state (switch / breaker / this account paused) and today's syncs left, in plain words
 let GARMIN = { site: {}, disclaimer: { version: null } };
@@ -1919,7 +2055,8 @@ async function loadGarmin() {
   if (opt) opt.hidden = closed && SS && SS.primary_source !== "garmin";
   const pill = f("garmin", "login"), expired = !!gs.expired;
   pill.className = "pill " + (gs.authenticated ? "ok" : expired ? "err" : "warn");
-  pill.textContent = gs.authenticated ? `已連接 ${gs.email || ""}` : expired ? "登入已過期" : gs.mfa_pending ? "等待驗證碼" : "未連接";
+  pill.textContent = gs.authenticated ? tSy("connected", { who: gs.email || "" }) : expired ? tSy("expired")
+    : gs.mfa_pending ? tSy("mfa_pending") : tSy("not_connected");
   f("garmin", "connect").hidden = closed || !!gs.authenticated;
   f("garmin", "loginform").hidden = !!gs.mfa_pending;
   f("garmin", "mfarow").hidden = !gs.mfa_pending;
@@ -1944,13 +2081,8 @@ async function loadGarmin() {
   const sync = box("garmin").querySelector('[data-act="sync"]');
   sync.disabled = !gs.authenticated || site.state !== "ok";
   sync.title = site.state === "limit" ? site.message : "";
-  const res = r ? `${({ ok: "成功", partial: "部分失敗", failed: "失敗", aborted: "中斷" })[r.status] || r.status}：`
-    + `下載 ${r.downloaded}、檢查 ${r.checked}、錯誤 ${r.errors}${r.error ? "（" + esc(r.error) + "）" : ""}`
-    + (r.more ? "；今天的下載量已到上限，剩下的明天繼續" : "") + esc(syncTook(r.secs)) : "–";
-  f("garmin", "kv").innerHTML = `<dt>上次同步</dt><dd>${fmtTime(s.last_sync_at)}</dd>
-    <dt>上次結果</dt><dd>${res}</dd>
-    <dt>同步檔案</dt><dd>${st.files ?? 0} 個、${esc(st.size || "0 B")}（${esc(st.folder || "")}）</dd>
-    <dt>活動期間</dt><dd>${st.date_from ? `${st.date_from} ~ ${st.date_to}（${st.rows} 筆）` : "–"}</dd>`;
+  const res = r ? syncRes(r) + (r.more ? esc(tSy("res_more")) : "") + esc(syncTook(r.secs)) : "–";
+  f("garmin", "kv").innerHTML = syncKv(s, st, res);
   box("garmin").querySelector('[data-act="purge"]').disabled = !st.files && !st.rows;
 }
 function garminErr(e) {
@@ -2036,8 +2168,14 @@ async function login(src, method, btn) {
 async function logout(src, btn) {
   authMsg(src, "登出中…");
   try {
-    await busy(btn, "登出中…", () => j(`/api/v1/auth/${src}/logout`, { method: "POST" }));
+    const out = await busy(btn, "登出中…", () => j(`/api/v1/auth/${src}/logout`, { method: "POST" }));
     if (src === "garmin") { authMsg(src, "已中斷連接（登入憑證和儲存的密碼已刪除，已匯入的活動保留）", "ok-text"); toast("已中斷連接"); }
+    else if (src === "intervals") {
+      // disconnect-app failed at intervals.icu: the token is deleted here anyway; say where to remove the app
+      authMsg(src, tSy(out && out.remote === "failed" ? "icu_disconnected_remote_failed" : "icu_disconnected"),
+        out && out.remote === "failed" ? "err-text" : "ok-text");
+      toast(tSy("icu_disconnected_short"));
+    }
     else { authMsg(src, "已登出（儲存的密碼已刪除）", "ok-text"); toast("已登出"); }
   } catch (e) { authMsg(src, "登出失敗：" + reason(e), "err-text"); }
   loadSources();
@@ -2104,9 +2242,9 @@ function openPurge(src) {
   $("pd-title").textContent = `刪除 ${name} 的同步檔案`;
   $("pd-body").innerHTML = `會刪除 <b>${esc(name)}</b> 的 <b>${st.files}</b> 個 FIT 檔（<b>${esc(st.size)}</b>，${esc(st.folder)}），`
     + `以及資料庫裡的 ${st.rows} 筆活動紀錄，並重設同步進度（之後重新同步會重新下載）。`
-    + `WKO5 資料夾和另一個來源的檔案不受影響。`
+    + `對照資料夾和另一個來源的檔案不受影響。`
     + (SS.chart_data_source !== "wko5" && SS.primary_folder === src
-      ? `<br><b>這是目前的資料來源：刪除後圖表沒有資料${SS.wko5_available ? "，會改用 WKO5 資料夾" : ""}，重新同步才會回來。</b>` : "");
+      ? `<br><b>這是目前的資料來源：刪除後圖表沒有資料${SS.wko5_available ? "，會改用對照資料夾" : ""}，重新同步才會回來。</b>` : "");
   $("pd-word").textContent = name; $("pd-input").value = ""; $("pd-from").value = ""; $("pd-to").value = "";
   $("pd-ok").disabled = true; $("purge-dlg").showModal();
 }
@@ -2125,17 +2263,18 @@ $("pd-ok").onclick = async () => {
     if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
     const res = await r.json();
     toast(`已刪除 ${res.files_deleted} 個檔案、${res.rows_deleted} 筆紀錄`
-      + (res.chart_source_switched_to_wko5 ? "；圖表已改回 WKO5 資料夾" : ""));
+      + (res.chart_source_switched_to_wko5 ? "；圖表已改回對照資料夾" : ""));
     $("purge-dlg").close(); loadSyncSettings(); loadSources();
   } catch (e) { toast("刪除失敗：" + e.message.slice(0, 100)); }
 };
 
-for (const src of ["coros", "garmin", "tp"]) {
+for (const src of ["coros", "garmin", "tp", "intervals"]) {
   box(src).addEventListener("click", (e) => {
     const act = e.target.dataset.act; if (!act) return;
     const btn = e.target.closest("button[data-act]");
     if (!btn || btn.disabled) return;
     if (act === "login" && src === "garmin") { garminLogin(btn); return; }
+    if (act === "login" && src === "intervals") { intervalsConnect(btn); return; }
     if (act === "mfa") { garminMfa(btn); return; }
     if (act === "login") login(src, btn.dataset.method, btn);
     if (act === "logout") logout(src, btn);
@@ -2438,7 +2577,7 @@ const TABS = {
   personal: ["general", "sport", "map", "account"],
   body: ["hr", "thresholds", "power"],
   data: ["sync", "weightsync", "backup", "archive", "device", "calendar"],
-  advanced: ["mode", "calib", "fixes", "debugapi"],
+  advanced: ["mode", "calib", "fixes", "debugapi", "upstream"],
 };
 const TAB_OF = Object.fromEntries(Object.entries(TABS).flatMap(([k, ids]) => ids.map((id) => [id, k])));
 const tabOf = (sec) => TAB_OF[sec.id] || "advanced";
@@ -2540,6 +2679,8 @@ loadAccount();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 // 匯入 FIT (SP-323): the imported files sit in the 資料來源's folder, so its stats change too
 if (window.FitImport) FitImport.mount($("fit-import"), { listLink: true, onDone: (r) => { if (r.added || r.duplicate) loadSources(); } });
+// 匯入匯出檔 (SP-349): a whole-account export in the background; its activities change the sources' stats too
+if (window.ExportImport) ExportImport.mount($("export-import"), { onDone: (st) => { if (st.added || st.duplicate) loadSources(); } });
 // 自動匯入資料夾 (SP-324): only desktop Chrome / Edge show it (FitFolder.mount hides it elsewhere)
 if (window.FitFolder) FitFolder.mount($("fit-folder"), { onDone: (r) => { if (r.added || r.duplicate) loadSources(); } });
 </script>

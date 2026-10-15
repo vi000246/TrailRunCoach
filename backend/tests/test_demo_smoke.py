@@ -14,8 +14,8 @@ import pytest
 
 from backend.tests import demo_fixtures as F
 
-PAGES = ["/demo", "/api/v1/overview/page", "/api/v1/overview/plan/schedule/page", "/api/v1/wko5/viewer",
-         "/api/v1/plan/page", "/api/v1/wko5/activities/page", "/api/v1/routes/page", "/api/v1/racepower/page",
+PAGES = ["/demo", "/api/v1/overview/page", "/api/v1/overview/plan/schedule/page", "/api/v1/app/viewer",
+         "/api/v1/plan/page", "/api/v1/app/activities/page", "/api/v1/routes/page", "/api/v1/racepower/page",
          "/api/v1/overview/plan/compliance/page"]
 SKIP = {"/api/v1/session"}
 
@@ -95,7 +95,7 @@ def test_every_page_and_data_route(demo):
         if r.status_code >= 500:
             failed.append(f"{path}: {r.status_code} {r.text[:200]}")
     assert not failed, "\n".join(failed)
-    acts = c.get("/api/v1/wko5/workouts").json()
+    acts = c.get("/api/v1/app/workouts").json()
     rows = acts if isinstance(acts, list) else acts.get("workouts") or []
     assert len(rows) >= 10
 

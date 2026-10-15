@@ -6,12 +6,17 @@
 set -e
 cd "$(dirname "$0")"
 
-echo "==> Building and starting WKO5 Coach + Portainer..."
-docker compose up --build -d
+# the data folder: an install from before SP-498 keeps ~/.wko5coach (never moved)
+if [ -z "${TRC_DATA_FOLDER:-}" ] && [ ! -e "$HOME/.trailruncoach" ] && [ -d "$HOME/.wko5coach" ]; then
+  export TRC_DATA_FOLDER=.wko5coach
+fi
+
+echo "==> Building and starting TrailRunCoach + Portainer..."
+docker compose up --build -d --remove-orphans   # the service was called wko5coach before SP-498
 
 echo ""
-echo "✓ WKO5 Coach  →  http://localhost:8000"
+echo "✓ TrailRunCoach →  http://localhost:8000"
 echo "✓ Portainer   →  http://localhost:9000  (first launch: create admin password)"
 echo ""
-echo "Logs: docker compose logs -f wko5coach"
+echo "Logs: docker compose logs -f trailruncoach"
 echo "Stop: docker compose down"

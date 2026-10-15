@@ -14,7 +14,8 @@ Order:
      floor (0.95 × 88 % CP) for reps ≥ Z3_MIN_S.
 
 auto_reps (SP-519, display only): the set of ≥ 3 similar efforts at ≥ 95 % CP
-with rests between that lets an easy / long run's 間歇 page show itself.
+with rests between that lets an easy / long run's 間歇 page show itself; efforts
+starting in the run's first 10 minutes do not count (SP-519 R1).
 
 Laps come from the activity's FIT: `ds.laps(idx)` when the dataset offers it
 (tests), else the FIT blob WKO5 keeps inside the .wko4 (`original_bytes`), else
@@ -260,6 +261,9 @@ AUTO_REST_RATIO = 0.80     # 推估: a rest averages ≤ 80 % of the power of th
 AUTO_REST_X = 3.0          # 推估: a rest ≤ 3 × the longer rep next to it …
 AUTO_REST_MIN_S = 180.0    # … or ≤ 3 min — longer, and the efforts are separate climbs / surges, not a set
 AUTO_LAP_MIN_S = 30.0      # 推估: a lap shorter than this is a stride or a stray press, not a rep
+AUTO_SKIP_START_S = 600.0  # SP-519 R1 (user 2026-10-14, 「排除開跑前 10 分」): an effort starting in the first
+                           #   10 min (elapsed) is the start, a traffic light, HR still climbing — not a rep
+                           #   (the owner's 9/2: three surges in minutes 1–6 showed the page); 推估
 
 
 def similar_set(bouts: list[dict], ratio: float = AUTO_LEN_RATIO) -> list[dict]:
@@ -304,6 +308,11 @@ def best_set(bouts: list[dict], pg: np.ndarray) -> list[dict]:
     return best
 
 
+def _after_start(bouts: list[dict]) -> list[dict]:
+    """The bouts that start AUTO_SKIP_START_S or later into the run."""
+    return [b for b in bouts if b["start_s"] >= AUTO_SKIP_START_S]
+
+
 def _auto_laps(ds, w, pg: np.ndarray, cp: float) -> list[dict]:
     """The laps run at ≥ AUTO_PCT × CP (their mean from the samples) and ≥ AUTO_LAP_MIN_S."""
     out = []
@@ -321,9 +330,9 @@ def auto_reps(ds, w, s: Optional[dict], cp: Optional[float]) -> Optional[dict]:
     ≥ AUTO_MIN_REPS efforts at ≥ AUTO_PCT × CP, about the same length, with a rest between
     each two (best_set) — the watch's laps first (a pushed or pressed rep is its own lap:
     exact edges, 30-s reps too), else the power pattern (count_reps: 10-s power ≥ 95 % CP
-    for ≥ 40 s). None otherwise, and without power or CP: HR lags a 1-min rep by most of it
-    and pace on a climb says nothing of the effort, so a run without power keeps its one
-    sentence."""
+    for ≥ 40 s). Only efforts starting AUTO_SKIP_START_S or later count (R1). None otherwise,
+    and without power or CP: HR lags a 1-min rep by most of it and pace on a climb says
+    nothing of the effort, so a run without power keeps its one sentence."""
     if s is None or s.get("power") is None or not cp:
         return None
     t, pw = s["t"], s["power"]
@@ -331,11 +340,12 @@ def auto_reps(ds, w, s: Optional[dict], cp: Optional[float]) -> Optional[dict]:
     if grid is None or len(p) < 60:
         return None
     pg = np.nan_to_num(p)
-    laps = best_set(_auto_laps(ds, w, pg, cp), pg)
+    laps = best_set(_after_start(_auto_laps(ds, w, pg, cp)), pg)
     if len(laps) >= AUTO_MIN_REPS:
         return {"bouts": laps, "source": "auto_lap"}
     from backend.engine.quality_gate import count_reps
-    found = best_set([{**r, "source": "auto"} for r in count_reps(t, pw, cp) if r["power"] >= AUTO_PCT * cp], pg)
+    found = best_set(_after_start([{**r, "source": "auto"} for r in count_reps(t, pw, cp)
+                                   if r["power"] >= AUTO_PCT * cp]), pg)
     if len(found) >= AUTO_MIN_REPS:
         return {"bouts": found, "source": "auto"}
     return None

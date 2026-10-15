@@ -15,6 +15,16 @@ Where the numbers come from (resolution order, per date):
               「推估」), only without a watch value — training runs rarely reach
               HRmax, so it is a floor (the user's last 365 days peak at 191,
               the watch says 202)
+           4. the age formula (Tanaka, 「推估」): without 1–3, or (SP-294, owner
+              2026-10-14) when 3 is more than AGE_OVER_RUNS_BPM under it and the
+              runs hold no hard effort (thresholds.hard_efforts: a race, a test,
+              ≥ 95 % CP / LTHR for 30 min or ≥ CP / LTHR for 5 min; the LTHR the
+              plan's, else 0.90 × the age formula) — an easy-only
+              runner's peak is the top of his easy runs, not his max
+           How far each is believed (threshold_confidence): 1 test → high, typed →
+           medium; 2 medium once a run of the last 90 days held 10 s within 5 bpm
+           of it (SP-493 R1), else low; 3 and 4 low. Only a believed max HR lets
+           自動 pick 儲備心率.
   rest HR  1. plan thresholds `rhr` dated on or before the day            「你的設定 YYYY-MM-DD」
            2. the COROS account (zoneData.rhr)                            「來自手錶」
            3. none → the HRR model says 「沒有靜息心率，到設定填」
@@ -40,8 +50,14 @@ Power, Threshold, Anaerobic Endurance, Anaerobic Power):
   hrr    % HRR 59 / 74 / 84 / 88 / 95 — the same table as 徐國峰 RQ (zones.RQ_HRR_ZONES)
   hrmax  % HRmax 50 / 60 / 70 / 80 / 90 (from the account; no published source)
 
+自動 (SP-493, the default; owner 2026-10-14): the 課表心率區間 setting `auto` picks the model by
+which numbers are believable (threshold_confidence.auto_pick): a reliable LTHR (a test / an LTHR
+you entered within AUTO_LTHR_DAYS, or an automatic estimate nothing contradicts) → lthr; else a
+believable max HR and resting HR → hrr; else hrmax. A runner who never chose keeps `auto`; a model
+chosen by hand stays locked. The model in effect ("生效區間") is what every 課表 HR target reads.
+
 Two independent uses (owner 2026-10-03):
-  A. 設定 → 課表心率區間 (`plan.hr_zone_model`: lthr default | hrr | hrmax) sets the
+  A. 設定 → 課表心率區間 (`plan.hr_zone_model`: auto default | lthr | hrr | hrmax) sets the
      HR targets of the 課表 only (plan_hr_zones below; zones.training_targets,
      coros_workouts / workout_steps easy_hr + _work_hr) and the structure editor's
      HR 區間 choice (workout_steps.hr_model_zones; SP-30).
@@ -59,8 +75,12 @@ from backend.i18n import N_, _
 
 ACCOUNT_KEY = "athlete.coros_profile"       # user_settings: the COROS account's HR settings
 MODEL_KEY = "plan.hr_zone_model"            # user_settings: 課表心率區間
-PLAN_MODELS = ("lthr", "hrr", "hrmax")
-DEFAULT_PLAN_MODEL = "lthr"
+PLAN_MODELS = ("lthr", "hrr", "hrmax")      # the zone models (what a 生效區間 can be)
+AUTO = "auto"                               # SP-493: pick the model by which numbers are believable
+SETTING_MODELS = (AUTO,) + PLAN_MODELS      # what the setting can hold
+DEFAULT_SETTING = AUTO                      # SP-493: a runner who never chose (no stored row) is 自動
+DEFAULT_PLAN_MODEL = "lthr"                 # the zones' own default (plan_hr_zones without a model)
+AUTO_LTHR_DAYS = 183                        # SP-493 (owner 2026-10-14):「近半年實測」
 
 ZONE_IDS = ("Z1", "Z2", "Z3", "Z4", "Z5", "Z6")
 ZONE_NAMES = (N_("恢復"), N_("有氧耐力"), N_("有氧動力"), N_("閾值"), N_("無氧耐力"), N_("無氧動力"))
@@ -70,9 +90,12 @@ DEFAULT_RATIOS = {
     "hrmax": (0.50, 0.60, 0.70, 0.80, 0.90),
 }
 MODEL_LABEL = {"lthr": N_("乳酸閾值心率（COROS % LTHR 6 區）"), "hrr": N_("儲備心率（COROS % HRR 6 區）"),
-               "hrmax": N_("最大心率（COROS % HRmax 6 區）")}
-MODEL_SHORT = {"lthr": N_("COROS 乳酸閾"), "hrr": N_("COROS 儲備心率"), "hrmax": N_("COROS 最大心率")}
+               "hrmax": N_("最大心率（COROS % HRmax 6 區）"), AUTO: N_("自動（看哪個數字可信）")}
+MODEL_SHORT = {"lthr": N_("COROS 乳酸閾"), "hrr": N_("COROS 儲備心率"), "hrmax": N_("COROS 最大心率"),
+               AUTO: N_("自動")}
 SOURCE = {
+    AUTO: N_("自動：LTHR 可信（半年內實測或你填的，或自動估算沒有矛盾）→ 乳酸閾值區間；否則最大心率和靜息心率可信 → "
+             "儲備心率區間；都不可信 → 最大心率區間。生效的區間換了會通知一次，已推到手錶的課會重推"),
     "lthr": N_("COROS 乳酸閾值心率區間：<80／80–90／90–95／95–102／102–106／>106% LTHR"
                "（coros.com「COROS Heart Rate Zones: The Ultimate Guide」）"),
     "hrr": N_("COROS 儲備心率區間：59／74／84／88／95% HRR，HRR = 最大心率 − 靜息心率"
@@ -90,6 +113,12 @@ NO_REST = N_("沒有靜息心率，到設定填")
 TANAKA_A, TANAKA_B = 208.0, 0.7
 LTHR_OF_MHR = 0.90
 AGE_MHR_SOURCE = N_("推估（年齡公式，個人可以差 10 bpm 以上）")
+# SP-294 (owner 2026-10-14): the runs' max more than this under the age formula, and no hard effort in
+# them → the age formula. 10 bpm: the individual SD of Tanaka's formula is about that size (cold-start.md
+# §4.3, 未驗證) — a smaller gap is within the formula's own error, so the runner's own value stays.
+AGE_OVER_RUNS_BPM = 10.0
+AGE_OVER_RUNS_SOURCE = N_("推估（年齡公式 {age_v:.0f}，個人可以差 10 bpm 以上；近 365 天跑步最高 {run_v:.0f}，"
+                          "但沒有比賽、測試或閾值以上的跑步，只能算下限，低了 {d:.0f} bpm 不採用）")
 LTHR_PRIOR_SOURCE = N_("推估（最大心率的 90 %）")
 # the easy runs' backup when the HR numbers are a prior (§4.3: the talk test, 教練常見做法, 未驗證)
 TALK_TEST = N_("心率數字是推估的，以能完整講一句話的強度為準（說話測試）")
@@ -160,9 +189,34 @@ def account(user_id: int = 1) -> Optional[dict]:
 
 
 def plan_model(user_id: int = 1) -> str:
+    """The 課表心率區間 SETTING: auto | lthr | hrr | hrmax. No stored row = never chosen = auto
+    (SP-493); a model the user picked (stored) stays. effective_model() says which zones are in effect."""
     from backend.engine.wko5expr.datasource import read_setting
-    v = read_setting(MODEL_KEY, DEFAULT_PLAN_MODEL, user_id)
-    return v if v in PLAN_MODELS else DEFAULT_PLAN_MODEL
+    v = read_setting(MODEL_KEY, DEFAULT_SETTING, user_id)
+    return v if v in SETTING_MODELS else DEFAULT_SETTING
+
+
+def effective_model(ds=None, day: Optional[dt.date] = None, setting: Optional[str] = None) -> dict:
+    """The model in effect (生效區間): {"model": lthr | hrr | hrmax, "setting", "auto": bool,
+    "reason": text | "", "why": code}. A locked setting is itself; `auto` asks
+    threshold_confidence.auto_choice on the Dataset's today (its own memo) — without a Dataset,
+    or when it fails, the LTHR model (the zones' default)."""
+    st = setting if setting in SETTING_MODELS else plan_model()
+    if st != AUTO:
+        return {"model": st, "setting": st, "auto": False, "reason": "", "why": "locked"}
+    pick = None
+    if ds is not None:
+        try:
+            from backend.engine import threshold_confidence as TC
+            from backend.engine.wko5expr.dataset import day_to_date
+            today = day_to_date(int(ds.today)) if getattr(ds, "today", None) is not None else (day or dt.date.today())
+            pick = TC.auto_choice(ds, getattr(ds, "plan", None), today)
+        except Exception:                   # noqa: BLE001 — a dataset without a plan / samples (tests)
+            pick = None
+    if not pick:
+        return {"model": DEFAULT_PLAN_MODEL, "setting": AUTO, "auto": True, "reason": "", "why": "none"}
+    return {"model": pick["model"], "setting": AUTO, "auto": True, "reason": pick.get("reason") or "",
+            "why": pick.get("why") or ""}
 
 
 def stamp(user_id: int = 1) -> str:
@@ -218,14 +272,28 @@ def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = Tru
     if watch is not None:
         note = _("；近 365 天跑步最高 {v:.0f}（推估）", v=ev) if ev is not None else ""
         return {"value": watch, "kind": "coros", "source": _("來自手錶（COROS 帳號）") + note, "estimate": est}
-    if ev is not None:
-        return {"value": ev, "kind": "estimate", "source": _("推估（近 365 天跑步）"), "estimate": est}
     a = _age_on(ds, day)
+    if ev is not None:
+        am = age_max_hr(a) if a is not None else None
+        if am is not None and am - ev > AGE_OVER_RUNS_BPM and not _hard_efforts(ds, day, LTHR_OF_MHR * am):
+            # SP-294: an easy-only runner's peak is a floor far under his max — the age formula instead
+            return {"value": am, "kind": "age", "estimate": est, "age": a, "runs_value": ev,
+                    "source": _(AGE_OVER_RUNS_SOURCE, age_v=am, run_v=ev, d=am - ev)}
+        return {"value": ev, "kind": "estimate", "source": _("推估（近 365 天跑步）"), "estimate": est}
     if a is not None:
         # SP-289: the last layer — Tanaka's age formula, labelled 推估
         return {"value": age_max_hr(a), "kind": "age", "source": _(AGE_MHR_SOURCE), "estimate": est, "age": a}
     return {"value": None, "kind": None, "source": None, "estimate": est,
             "reason": _(NO_MAX) if not est else f"{_(NO_MAX)}（{est.get('reason')}）"}
+
+
+def _hard_efforts(ds, day: dt.date, lthr_ref: Optional[float]) -> list:
+    """thresholds.hard_efforts; on an error [[None, "error"]] — never 「no hard effort」 by accident."""
+    try:
+        from backend.engine.thresholds import hard_efforts
+        return hard_efforts(ds, day, lthr_ref)
+    except Exception:                       # noqa: BLE001
+        return [[None, "error"]]
 
 
 def age_max_hr(age: Optional[int]) -> Optional[float]:
@@ -317,14 +385,16 @@ def band(rows: list, z_from: int, z_to: int) -> tuple:
 def plan_hr_zones(lthr: Optional[float], aet: Optional[float], aet_measured: bool,
                   mhr: Optional[float], rhr: Optional[float], model: Optional[str] = None,
                   acc: Optional[dict] = None, mhr_source: Optional[str] = None,
-                  rhr_source: Optional[str] = None) -> Optional[dict]:
+                  rhr_source: Optional[str] = None, auto: Optional[dict] = None) -> Optional[dict]:
     """The workouts' HR zones under the 課表心率區間 model (JSON-able), or None
     without any HR basis. A model without its data falls back to the LTHR model
     with the reason. A MEASURED AeT still caps easy runs in every model (a
     measured threshold beats a % formula); an estimated / 0.89 × LTHR AeT does not.
 
     {"model", "requested", "label", "fallback", "basis_text", "rows": [{id, name, lo, hi}], "mhr",
-     "easy": [lo, hi], "easy_source", "work": {class: [lo, hi]}, "targets": {target id: [lo, hi]}}"""
+     "easy": [lo, hi], "easy_source", "work": {class: [lo, hi]}, "targets": {target id: [lo, hi]},
+     "lthr_ratios": the LTHR model's edges (frac_hr), "setting": auto | the model, "auto": the
+     effective_model dict when the setting is 自動 (SP-493), else None}"""
     want = model if model in PLAN_MODELS else DEFAULT_PLAN_MODEL
     use, fallback = want, None
     z = zone_rows(want, lthr, mhr, rhr, acc)
@@ -346,6 +416,8 @@ def plan_hr_zones(lthr: Optional[float], aet: Optional[float], aet_measured: boo
         basis += "；" + "、".join(s for s in (_("最大心率：{src}", src=mhr_source) if mhr_source else "",
                                             _("靜息心率：{src}", src=rhr_source) if rhr_source and use == "hrr" else "") if s)
     return {"model": use, "requested": want, "label": _(MODEL_LABEL[use]), "short": _(MODEL_SHORT[use]),
+            "setting": AUTO if auto else want, "auto": auto or None,
+            "lthr_ratios": list(ratios("lthr", acc)),
             "fallback": fallback, "basis_text": basis, "source": _(SOURCE[use]),
             "rows": [{"id": i, "name": n, "lo": lo, "hi": hi} for i, n, lo, hi in rows],
             "mhr": float(mhr) if mhr and use in ("hrr", "hrmax") else None,    # Z6's top (workout_steps)
@@ -356,15 +428,17 @@ def plan_hr_zones(lthr: Optional[float], aet: Optional[float], aet_measured: boo
 
 def plan_hr_zones_for(ds, day: dt.date, lthr: Optional[float], aet: Optional[float],
                       aet_measured: bool) -> Optional[dict]:
-    """plan_hr_zones with the setting, max / rest HR in effect on `day` and the COROS account."""
-    model = plan_model()
+    """plan_hr_zones with the model in effect (effective_model: the setting, or 自動's pick — SP-493),
+    max / rest HR in effect on `day` and the COROS account."""
+    eff = effective_model(ds, day)
+    model = eff["model"]
     acc = account()
     m = r = None
     if model in ("hrr", "hrmax"):
         m = max_hr(ds, day, acc)
         r = rest_hr(ds, day, acc) if model == "hrr" else None
     return plan_hr_zones(lthr, aet, aet_measured, (m or {}).get("value"), (r or {}).get("value"), model, acc,
-                         (m or {}).get("source"), (r or {}).get("source"))
+                         (m or {}).get("source"), (r or {}).get("source"), eff if eff["auto"] else None)
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +448,8 @@ def plan_hr_zones_for(ds, day: dt.date, lthr: Optional[float], aet: Optional[flo
 
 EASY_CAP = "輕鬆跑上限"
 EASY_CAP_MEASURED = "（實測 AeT）"
-EASY_CAP_TIP = N_("輕鬆跑上限＝課表心率區間的 Z2 上緣；有實測 AeT 時用實測值")   # _() where shown (overview)
+EASY_CAP_TIP = N_("輕鬆跑上限＝課表心率區間的 Z2 上緣；有實測 AeT 時用實測值。"
+                  "活動判讀和自動調整也用同一個上限：平均心率不超過上限 +3 bpm 算輕鬆（+3 是心率每天自然的落差）")   # _() where shown (overview)
 
 
 def easy_cap_measured(src) -> bool:
@@ -410,6 +485,83 @@ def below(label: str) -> str:
 def easy_cap_hr(bpm: Optional[float] = None, measured: bool = False) -> str:
     """The HR target text of an easy / long / hike session: 「心率 ≤ 輕鬆跑上限 148 bpm」."""
     return "心率 ≤ " + easy_cap_label(None, bpm, measured)
+
+
+# ---------------------------------------------------------------------------
+# 「輕鬆」: one definition (SP-565, owner 2026-10-14). Before, three: the 課表's cap (the Z2 top
+# above), the activity review's 「avg HR ≤ AeT + 3」 (AeT = 0.89 × LTHR without a plan AeT) and
+# adapt's 偏強 「avg HR > 94 % LTHR」 — under 儲備心率 the same run could be easy by the 課表 and too
+# hard by the review. Now every one reads easy_cap: the Z2 top of the zones in effect (自動's pick or
+# the locked model, SP-493), a measured AeT when there is one. A run is easy when its average HR is
+# ≤ the cap + EASY_TOL_BPM (is_easy).
+# ---------------------------------------------------------------------------
+
+EASY_TOL_BPM = 3.0     # HR's natural day-to-day spread (Lamberts & Lambert 2009: 3 ± 1 bpm), not a margin
+                       # the coaches allow (= workout_review.AET_MARGIN, SP-528)
+
+
+def easy_cap(hrz: Optional[dict]) -> Optional[dict]:
+    """The easy-run HR cap of plan_hr_zones' dict: {"value" (bpm), "source", "measured", "model"};
+    None without one. The one reader of the cap (the 課表, the activity review, adapt)."""
+    e = (hrz or {}).get("easy")
+    if not isinstance(e, (list, tuple)) or len(e) != 2 or not e[1]:
+        return None
+    return {"value": float(e[1]), "source": hrz.get("easy_source") or "", "measured": bool(hrz.get("aet_measured")),
+            "model": hrz.get("model")}
+
+
+def easy_cap_for(ds, day: dt.date, lthr: Optional[float], aet: Optional[float] = None) -> Optional[dict]:
+    """easy_cap on `day` for an activity (workout_review, adapt): the zones in effect
+    (plan_hr_zones_for: the model in effect, the max / rest HR on `day`) with the plan's MEASURED
+    AeT on `day` (planning.threshold_row; an applied estimate is not a measured one) — what
+    zones.training_targets builds for the 課表. Without zones (no LTHR and no max HR, or the WKO5
+    cross-check mode, which keeps Friel as the 課表 does) the AeT `aet` given (the review's own:
+    the plan's AeT, else 0.89 × LTHR), as zones.target_hr. Memoised on the Dataset per day,
+    LTHR, the plan's dated thresholds, the language (the source text) and the HR settings (stamp)."""
+    parity = bool(getattr(getattr(ds, "config", None), "parity", False))
+    memo = getattr(ds, "memo", None)
+    key = None
+    if isinstance(memo, dict):
+        from backend.i18n import current_locale
+        try:
+            rows = repr(getattr(getattr(ds, "plan", None), "thresholds", None))
+        except Exception:                   # noqa: BLE001
+            rows = None
+        try:
+            st = stamp()
+        except Exception:                   # noqa: BLE001 — no settings DB (tests)
+            st = None
+        key = ("easy_cap", day.isoformat(), lthr, aet, parity, current_locale(), rows, st)
+        if key in memo:
+            return memo[key]
+    cap = None
+    if not parity:
+        try:
+            from backend.engine.planning import threshold_row
+            plan = getattr(ds, "plan", None)
+            ar = threshold_row(plan, "aethr", day) if plan is not None else None
+            measured = bool(ar and ar["measured"])
+            cap = easy_cap(plan_hr_zones_for(ds, day, lthr, ar["value"] if measured else None, measured))
+        except Exception:                   # noqa: BLE001 — a dataset without a plan / settings (tests)
+            cap = None
+    if cap is None and aet:
+        cap = {"value": float(aet), "source": "AeT", "measured": False, "model": None}
+    if key is not None:
+        memo[key] = cap
+    return cap
+
+
+def is_easy(avg_hr: Optional[float], cap) -> bool:
+    """「輕鬆」 by heart rate: the average HR ≤ the easy cap (easy_cap's dict or bpm) + EASY_TOL_BPM.
+    False without either number."""
+    v = cap.get("value") if isinstance(cap, dict) else cap
+    return bool(avg_hr and v and float(avg_hr) <= float(v) + EASY_TOL_BPM)
+
+
+def over_easy(avg_hr: Optional[float], cap) -> bool:
+    """The other side of is_easy: an average HR above the cap + EASY_TOL_BPM (False without either)."""
+    v = cap.get("value") if isinstance(cap, dict) else cap
+    return bool(avg_hr and v and float(avg_hr) > float(v) + EASY_TOL_BPM)
 
 
 # ---------------------------------------------------------------------------
@@ -544,3 +696,45 @@ def work_band(hrz: Optional[dict], cls: Optional[str]) -> Optional[tuple]:
     if hi is None or lo is None:
         return None
     return round(lo), round(hi)
+
+
+def not_lthr(hrz: Optional[dict]) -> bool:
+    """The 課表 zones in effect are not the LTHR model (儲備心率 / 最大心率): the × LTHR targets of the
+    課表 (interval texts, a template's % LTHR) follow those zones instead (SP-493)."""
+    return bool(hrz) and hrz.get("model") in ("hrr", "hrmax") and bool(hrz.get("rows"))
+
+
+def frac_hr(frac: Optional[float], hrz: Optional[dict], lthr: Optional[float]) -> Optional[float]:
+    """frac × LTHR as a 課表 target under the zones in effect (SP-493): the LTHR model → frac × LTHR;
+    儲備心率 / 最大心率 → the same place in the same COROS zone of that model (0.95 × LTHR is the
+    bottom of the threshold zone Z4 in both; linear inside a zone, the open Z1 / Z6 go on with
+    Z2's / Z5's slope, never above the max HR). None without a basis. Only for PRESCRIBED
+    fractions (a template's % LTHR, the race calculator's 「LTHR」 cap): a ratio fitted on the
+    runner's own HR ÷ LTHR (the trail HR model) is already in bpm and stays × LTHR."""
+    if frac is None:
+        return None
+    if not not_lthr(hrz):
+        return float(frac) * float(lthr) if lthr else None
+    edges = [float(x) for x in (hrz.get("lthr_ratios") or DEFAULT_RATIOS["lthr"])][:5]
+    bpm = [float(r["hi"]) for r in hrz["rows"][:5]]
+    if len(edges) != 5 or len(bpm) != 5 or any(b is None for b in bpm):
+        return float(frac) * float(lthr) if lthr else None
+    f = float(frac)
+    if f <= edges[0]:
+        slope = (bpm[1] - bpm[0]) / (edges[1] - edges[0])
+        v = bpm[0] - (edges[0] - f) * slope
+    elif f >= edges[4]:
+        slope = (bpm[4] - bpm[3]) / (edges[4] - edges[3])
+        v = bpm[4] + (f - edges[4]) * slope
+    else:
+        i = next(k for k in range(4) if edges[k] <= f <= edges[k + 1])
+        v = bpm[i] + (f - edges[i]) / (edges[i + 1] - edges[i]) * (bpm[i + 1] - bpm[i])
+    top = hrz.get("mhr")
+    return min(v, float(top)) if top else v
+
+
+def class_hr(hrz: Optional[dict], cls: Optional[str]) -> Optional[tuple]:
+    """(lo, hi) bpm of an interval class for the 課表 TEXT (SP-493): the class's COROS zone
+    (work_band, what the push gives a library step) when the zones in effect are 儲備心率 / 最大心率;
+    None under the LTHR model (the texts keep their × LTHR bands there)."""
+    return work_band(hrz, cls) if not_lthr(hrz) else None

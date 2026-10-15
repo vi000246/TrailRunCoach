@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import re
 from typing import Optional
 
 import numpy as np
@@ -69,6 +70,29 @@ def _clock(start: Optional[str], secs: float) -> Optional[str]:
     t = dt.datetime(2000, 1, 1, h, m) + dt.timedelta(seconds=round(secs))
     day = (t.date() - dt.date(2000, 1, 1)).days
     return t.strftime("%H:%M") + (f" (+{day})" if day else "")
+
+
+_HHMM = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
+
+
+def day_starts(opts: dict, n_days: int) -> list:
+    """SP-580: each day's start time ('HH:MM'): PlanIn.day_starts[n − 1] when given (a group's timetable
+    starts each day at its own hour, e.g. 03:00 for a summit day), else start_time — a one-day plan is
+    start_time as before."""
+    base = opts.get("start_time")
+    given = opts.get("day_starts") or []
+    out = []
+    for n in range(1, max(1, int(n_days or 1)) + 1):
+        v = given[n - 1] if n - 1 < len(given) else None
+        out.append(v if isinstance(v, str) and _HHMM.match(v.strip()) and n > 1 else base)
+    return out
+
+
+def start_of(plan: dict, day: int, fallback: Optional[str]) -> Optional[str]:
+    """The start time of a plan's day `day` (summary.day_starts, SP-580), else `fallback`."""
+    ds = ((plan or {}).get("summary") or {}).get("day_starts") or []
+    n = int(day or 1)
+    return ds[n - 1] if 0 < n <= len(ds) and ds[n - 1] else fallback
 
 
 def _stops_before(stops, km: float) -> float:
@@ -237,13 +261,32 @@ def _cum_times(rows) -> list[float]:
     return out
 
 
-def _segment_heat(hourly: list, start: dt.datetime, segs: list, rows: list, stops) -> list:
+def _weather_sections(opts: dict) -> list[dict]:
+    """SP-553: the /weather points along the course (`weather_points`), each {i, from_km, to_km, z,
+    rows} with its hourly rows parsed; [] for the one-point weather of before."""
+    out = []
+    for p in opts.get("weather_points") or []:
+        rows = sorted((x for x in (WX._hour_row(r.get("t"), r.get("temp_c"), r.get("rh_pct"), r.get("dew_c"))
+                                   for r in p.get("hourly") or []) if x), key=lambda r: r["t"])
+        out.append({"i": p.get("i"), "from_km": p.get("from_km"), "to_km": p.get("to_km"),
+                    "z": p.get("elevation_m"), "rows": rows})
+    return out
+
+
+def _segment_heat(hourly: list, start: dt.datetime, segs: list, rows: list, stops, secs=None) -> list:
     """Conditions at each segment's midpoint clock (start + time before it +
-    aid stops up to its start + half its own time); None outside the rows."""
+    aid stops up to its start + half its own time); None outside the rows.
+    SP-553: with weather sections, the rows of the section the segment is in (`wx_point` = its
+    index, `z_ref` = the height those rows refer to), else the race's one point."""
     out, before = [], 0.0
     for s, r in zip(segs, rows):
         when = start + dt.timedelta(seconds=before + 0.5 * r["t"] + _stops_before(stops, s["start_km"]))
-        h = WX.hourly_at(hourly, when)
+        sec = WX.section_for(secs, s.get("start_km"), s.get("end_km")) if secs else None
+        h = WX.hourly_at(sec["rows"], when) if sec and sec["rows"] else None
+        if h is not None:
+            h["wx_point"], h["z_ref"] = sec["i"], sec["z"]
+        else:
+            h = WX.hourly_at(hourly, when)
         if h is not None:
             h["clock"] = when.strftime("%H:%M")
         out.append(h)
@@ -255,6 +298,8 @@ def _at_height(h: Optional[dict], z_ref: Optional[float], z: Optional[float]) ->
     """Conditions moved from the weather point's elevation z_ref to the
     segment's z: temperature by env.segment_temp (−0.0065 K/m), RH kept, dew
     point rebuilt. No z_ref / z → unchanged."""
+    if h is not None and h.get("z_ref") is not None:
+        z_ref = h["z_ref"]              # SP-553: a section's rows refer to that section's point
     if h is None or z_ref is None or z is None:
         return h
     t = ENV.segment_temp(h["temp_c"], z_ref, z)
@@ -455,6 +500,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     warnings: list[str] = []
     segs = [dict(s) for s in course["segments"]]
     gpx = course.get("source") == "gpx"
+    # SP-544: the trail technicality only on each segment's dirt share (opts["ground"] = the course's
+    # surface, engine/racepower/surface.py; calc sets it when TRC_TECH_DIRT_ONLY is on)
+    tech_ground = None
+    if kind == "trail" and gpx and opts.get("ground"):
+        from backend.engine.racepower import surface as SF
+        tech_ground = SF.apply_tech_dirt(segs, grade_re, opts["ground"])
     accl = opts.get("acclimatisation") or "acclimatised"
     frm = {x: env["from"][x] for x in ("altitude_m", "temp_c", "rh_pct")}
     to = {x: env["to"][x] for x in ("altitude_m", "temp_c", "rh_pct")}
@@ -591,6 +642,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     # ---- per-segment, time-of-day heat (推估) ----------------------------
     stops = opts.get("stops") or []
     heat_rows, start_dt, heat_reason = _heat_context(opts)
+    wx_secs = _weather_sections(opts) if heat_rows else []      # SP-553: points along the course
     # each segment's temperature at its own height (GPX + the weather point's elevation)
     z_ref = opts.get("heat_ref_alt_m") if gpx else None
     one_to = {"temp_c": to["temp_c"], "rh_pct": to["rh_pct"]}
@@ -609,8 +661,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     if heat_rows:
         prev = _cum_times(st["res"]["rows"])
         for n in range(1, HEAT_MAX_PASSES + 1):
-            seg_heat = [_at_height(h, z_ref, sg.get("z_mean"))
-                        for h, sg in zip(_segment_heat(heat_rows, start_dt, segs, st["res"]["rows"], stops), segs)]
+            seg_heat = [_at_height(h, z_ref, sg.get("z_mean") if gpx else None)
+                        for h, sg in zip(_segment_heat(heat_rows, start_dt, segs, st["res"]["rows"], stops, wx_secs),
+                                         segs)]
             if hr_est is not None:
                 # the time-weighted race-day Hadley of the hours each segment is run
                 from backend.engine import heat as HT
@@ -626,6 +679,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                 break
         out_n = sum(1 for h in seg_heat if h is None)
         heat_info.update(mode="hourly", outside=out_n, badge="推估")
+        if wx_secs:
+            heat_info["points"] = len({h["wx_point"] for h in seg_heat if h and h.get("wx_point") is not None})
         if not heat_info["converged"]:
             warnings.append(H.tag("RC12", f"逐時熱修正沒有收斂（{HEAT_MAX_PASSES} 次後 ETA 仍差 {heat_info['delta_s']:.1f} 秒）：分段溫度是近似值"))
         if out_n:
@@ -663,7 +718,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         wmodel = "wko5"
     if wmodel in ("wko5", "skiba_run") and w_prime:
         if wmodel == "wko5":
-            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "無氧儲備（Anaerobic reserve，算法參考 WKO5：70 % τ 300 s + 30 % τ 25 s）"
+            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "無氧儲備（Anaerobic reserve，回充：70 % τ 300 s + 30 % τ 25 s）"
         else:
             vals, lab = PC.wbal_skiba(rows, segs, cp, w_prime, "running"), "τ = 372·e^(−0.02·D) + 102（跑步擬合）"
         wb = {"model": wmodel, "values": vals, "label": lab, "badge": None if wmodel == "wko5" else "推估",
@@ -716,6 +771,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             "capped": r["capped"], "locked": r.get("locked", False), "notes": notes,
             "badge": None if (v2_primary and trusted) else "推估", "trusted": trusted, "hint": HINT_30S,
             **_heat_fields(seg_heat[i] if seg_heat else None, env["to"], z_ref, s.get("z_mean")),
+            "wx_point": (seg_heat[i] or {}).get("wx_point") if seg_heat else None,     # SP-553
         })
     if wb:
         for sg, val in zip(out_segs, wb["values"]):
@@ -742,7 +798,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         share = steep / dsum if dsum else 0.0
         if share > HR_FIRST_SHARE:
             hr_first = {"steep_share": share, "lthr": capacity.get("lthr"), "aet": capacity.get("aet")}
-            cap_txt = f"上限 LTHR {capacity['lthr']:.0f} bpm" if capacity.get("lthr") else "上限 LTHR"
+            thr = capacity.get("thr")             # SP-493: under 儲備心率 / 最大心率 the zones' threshold HR
+            cap_txt = (f"上限 {thr[1]} {thr[0]:.0f} bpm" if thr and thr[1] != "LTHR" else
+                       f"上限 LTHR {capacity['lthr']:.0f} bpm" if capacity.get("lthr") else "上限 LTHR")
             warnings.append(H.tag("RC9", f"{share:.0%} 的路段坡度超過 8 %（Stryd 功率驗證的範圍外）：以心率為主（{cap_txt}，"
                             f"長距離壓在 AeT 附近），功率為輔（推估）"))
     if dmg > DAMAGE_NOTE:
@@ -815,7 +873,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                "finish_eta": _clock(opts.get("start_time"), T + _stops_before(stops, km + 1)),
                "stops_s": _stops_before(stops, km + 1), "badge": None if v2_primary else "推估",
                "alpha_used": alpha_used, "sigma": sigma, "beta": beta, "damage": dmg, "hr_first": hr_first,
-               "cp2": cp2, "tech": grade_re.tech_factor() if trail and hasattr(grade_re, "tech_factor") else None,
+               "cp2": cp2, "tech": grade_re.tech_factor() if trail and hasattr(grade_re, "tech_factor") else None, "tech_ground": tech_ground,
                # SP-250: whether the 路況 choice is offered (available) and which one was used
                "surface": {"available": True, "used": surface, "total_from_hr": hr_est is not None,
                            "n": (grade_re.tech_surface or {}).get("n"), "min_n": (grade_re.tech_surface or {}).get("min_n"),
@@ -923,13 +981,14 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
     day = 1
     day_start = 0.0
     stops = opts.get("stops") or []
+    starts = day_starts(opts, max([int(s.get("day") or 1) for s in segs] or [len(r1.get("days") or []) or 1]))
     for s, r, a in zip(segs, rows1, alt):
         t = r["t"] * c / lam
         if s.get("day", 1) != day:
             day, day_start = s["day"], cum
         cum += t
         v = s["dist_m"] / t
-        clock = _clock(opts.get("start_time"), (cum - day_start) / ratio + _stops_before(stops, s["end_km"]))
+        clock = _clock(starts[min(day, len(starts)) - 1], (cum - day_start) / ratio + _stops_before(stops, s["end_km"]))
         out.append({**{x: s.get(x) for x in ("i", "start_km", "end_km", "dist_m", "gain_m", "loss_m", "grade",
                                              "max_grade", "z_mean", "z_max", "cls", "cls_label", "walk", "day")},
                     "terrain": s["terrain"], "eta_factor": r["eta"], "f_day": r["f_day"], "A": a,
@@ -986,13 +1045,15 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
                "water_ml": [0.7 * kcal, 0.8 * kcal] if kcal is not None else None,
                "hr_cap": used.get("aet", {}).get("value"),
                "total_method": "v2" if v2_primary else "v1", "category": "hike", "mode": mode,
-               "acclimatisation": accl, "moving_ratio": ratio, "badge": None if v2_primary else "推估",
+               "acclimatisation": accl, "moving_ratio": ratio, "badge": None if v2_primary else "推估", "day_starts": starts,
                # racepower-v2.md §8: Hadley only on running segments → 百岳 keeps one heat value
                "heat": {"mode": "single", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
                         "reason": "百岳用單一溫度（逐時熱修正只用在跑步）", "badge": None}}
     summary["snow"] = _snow_summary(opts.get("snow"), snow, t1, t1_base, t1_hi, lam, ratio, stops, km)
+    group = _group_compare_v1(opts, out, lam) if gpx else None
+    summary["biggest_day"] = day_load(days, hdays, group, warnings)
     return {"type": "baiyue", "summary": summary, "effort": he, "segments": out, "days": days,
-            "crosscheck": cross, "fatigue": fat, "profile": course.get("profile"), "wpts": course.get("wpts"),
+            "group": group, "crosscheck": cross, "fatigue": fat, "profile": course.get("profile"), "wpts": course.get("wpts"),
             "course_totals": course["totals"], "course_warnings": course.get("warnings") or [],
             "warnings": warnings + (v1.get("warnings") or []), "validated": validated,
             "compare": {"auto": {"time_s": t1}}}
@@ -1168,6 +1229,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     out = []
     cum = 0.0
     day, day_start = 1, 0.0
+    starts = day_starts(opts, n_days)
     for r in rows:
         s = r["s"]
         t = r["t"] / lam
@@ -1175,7 +1237,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
             day, day_start = s["day"], cum
         cum += t
         v = s["dist_m"] / t
-        clock = _clock(opts.get("start_time"), (cum - day_start) / ratio + _stops_before(stops, s["end_km"]))
+        clock = _clock(starts[min(day, len(starts)) - 1], (cum - day_start) / ratio + _stops_before(stops, s["end_km"]))
         sig = math.sqrt(cap.sigma_loo ** 2 + sum(x * x for x in r["sigma"].values()))
         out.append({**{x: s.get(x) for x in ("i", "start_km", "end_km", "dist_m", "gain_m", "loss_m", "grade",
                                              "max_grade", "z_mean", "z_max", "cls", "cls_label", "walk", "day")},
@@ -1265,24 +1327,122 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                "kcal": kcal, "water_ml": [0.7 * kcal, 0.8 * kcal], "hr_cap": used.get("aet", {}).get("value"),
                "total_method": "capacity", "category": "hike", "mode": mode, "acclimatisation": accl,
                "moving_ratio": ratio, "moving_ratio_group": ratio_grp, "moving_ratio_solo": ratio_solo,
-               "badge": None if v2_primary else "推估", "days": n_days,
+               "badge": None if v2_primary else "推估", "days": n_days, "day_starts": starts,
                "heat": {"mode": "lapse", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
                         "reason": "百岳：登山口／測站溫度依遞減率推算到每段", "badge": "推估", "ref_alt_m": z0},
                "heat_accl": ({k: hacc[k] for k in ("mode", "s", "s_from", "a", "source", "badge", "a_literature",
                                                    "a_reason", "a_supported")} if hacc else None)}
     summary["snow"] = _snow_summary(opts.get("snow"), snow, t1, t1_base, t1_hi, lam, ratio, stops, km)
+    group = _group_compare(opts, rows, cap, band_f, ratio_grp) if gpx else None
+    summary["biggest_day"] = day_load(days, hdays, group, warnings)
     capj = cap.to_json()
     cur = ((cap.alpha.get("diagnostics") or {}).get("versions") or {}).get("current") or {}
     capj["alt_current"] = cur.get("pct_per_km")
     capj["level"] = (cap.delta.get("level") or {}).get("d")
     capj["alpha"] = {k: v for k, v in capj["alpha"].items() if k != "diagnostics"}
     capj.pop("bins", None)
-    return {"type": "baiyue", "summary": summary, "effort": he, "segments": out, "days": days,
+    return {"type": "baiyue", "summary": summary, "effort": he, "segments": out, "days": days, "group": group,
             "crosscheck": cross, "fatigue": {"factors": {}, "warning": None}, "capacity": capj,
             "profile": course.get("profile"), "wpts": course.get("wpts"),
             "course_totals": course["totals"], "course_warnings": course.get("warnings") or [],
             "warnings": warnings + [w for w in (v1.get("warnings") or []) if "Tobler" not in w],
             "validated": validated, "compare": {"auto": {"time_s": t1}}}
+
+
+def _group_legs(opts: dict, ratio: float) -> Optional[dict]:
+    """SP-578: the group's timetable sent with the plan (PlanIn.group_schedule, the Cairn import's points)
+    as legs; None without one."""
+    from backend.engine import cairn as CA
+    from backend.engine.racepower import group as GR
+    sc = CA.clean_schedule(opts.get("group_schedule"))
+    if not sc:
+        return None
+    lg = GR.legs(sc["points"], ratio)
+    return lg if lg["legs"] else None
+
+
+def _group_compare(opts: dict, rows: list, cap, band_f: float, ratio_grp: float) -> Optional[dict]:
+    """SP-578: each leg of the group's timetable against the capacity model run the other way (group.py);
+    the rows' own times are only read. Your time = the AeT capacity time (λ 1, × band_f back to AeT)."""
+    from backend.engine.racepower import capacity as CAP
+    from backend.engine.racepower import group as GR
+    lg = _group_legs(opts, ratio_grp)
+    if lg is None:
+        return None
+    crow = []
+    for r in rows:
+        s = r["s"]
+        k = r["H"] * band_f * r["A"] * r["f_time"] * r["f_day"]
+        ok = r["v"] > 0 and math.isfinite(r["t"]) and k > 0
+        crow.append({"start_km": s["start_km"], "end_km": s["end_km"], "grade": s["grade"], "day": s.get("day", 1),
+                     "t_aet": r["t"] * band_f if ok else 0.0, "base": r["v"] * r["snow"] / k if ok else None,
+                     "e_delta": math.exp(cap.d(max(s["grade"], CAP.FLAT_G))), "L": r["L"], "eta": r["eta"]})
+    out = GR.compare(crow, lg, cap, _cap_band_factor(cap), cap.sigma_loo)
+    if out is not None:
+        out["ratio"] = ratio_grp
+    return out
+
+
+def _group_compare_v1(opts: dict, segs: list, lam: float) -> Optional[dict]:
+    """SP-578 without a capacity model (no running data): the speed ratio only (group.compare's e = r)."""
+    from backend.engine.racepower import group as GR
+    ratio, _src = HK.moving_ratio(opts.get("moving_rows_group") or [])
+    lg = _group_legs(opts, ratio)
+    if lg is None:
+        return None
+    crow = [{"start_km": s["start_km"], "end_km": s["end_km"], "grade": s["grade"], "day": s.get("day", 1),
+             "t_aet": s["t"] * lam, "base": None} for s in segs]
+    out = GR.compare(crow, lg, None)
+    if out is not None:
+        out["ratio"] = ratio
+    return out
+
+
+# ---- SP-581: each day of a multi-day trip against the heaviest day you have walked -----------------
+# The multi-day fatigue (f_day) and the next day's recovery have no model good enough (f_day is 1.0):
+# instead, numbers you can compare (research SP-575 §3.3): the day's EP (km + climb/100) against your
+# heaviest hiking day's, the metres down with the pack (the eccentric load behind the next day's sore
+# legs, Maeo 2017), and a next-day reminder after a heavy one (thresholds 推估).
+HEAVY_DESCENT_M = 1000.0
+
+
+def day_load(days: list, hdays: list, group: Optional[dict], warnings: list) -> Optional[dict]:
+    """Adds to each day {ep, vs_biggest_pct, over_biggest, pack_descent_m, recovery: [reasons]} (multi-day
+    only) and the reminders to `warnings`; returns the heaviest day walked ({date, name, ep, km, gain_m})
+    or None."""
+    big = max(hdays or [], key=lambda d: d.get("ep") or 0, default=None)
+    if big is not None and not big.get("ep"):
+        big = None
+    if len(days or []) < 2:
+        return _big_out(big)
+    hard = {d["day"]: d for d in (group or {}).get("days") or []}
+    for d in days:
+        d["ep"] = d["km"] + (d["gain_m"] or 0) / 100.0
+        d["pack_descent_m"] = d["loss_m"] or 0.0
+        d["vs_biggest_pct"] = (d["ep"] / big["ep"] - 1.0) * 100.0 if big else None
+        d["over_biggest"] = bool(big) and d["ep"] > big["ep"]
+        d["recovery"] = []
+    for i, d in enumerate(days):
+        if d["over_biggest"]:
+            warnings.append(H.tag("RC14", _("第 {n} 天比你走過最重的一天重 {pct:.0f} %（EP {ep:.1f}；你最重的一天 {date} EP {big:.1f}）",
+                                             n=d["day"], pct=d["vs_biggest_pct"], ep=d["ep"], date=big.get("date") or "",
+                                             big=big["ep"])))
+        why = []
+        if d["pack_descent_m"] >= HEAVY_DESCENT_M:
+            why.append("descent")
+        if (hard.get(d["day"]) or {}).get("long_hard"):
+            why.append("above_aet")
+        if why and i + 1 < len(days):
+            nxt = days[i + 1]
+            nxt["recovery"] = why
+            warnings.append(H.tag("RC14", _("第 {n} 天{what}：第 {m} 天腿可能還沒恢復，前 1 小時放慢（推估）", n=d["day"], m=nxt["day"],
+                                             what=_("背包下坡 {d:.0f} m", d=d["pack_descent_m"]) if "descent" in why
+                                             else _("跟團在 AeT 以上超過 3 小時"))))
+    return _big_out(big)
+
+
+def _big_out(big: Optional[dict]) -> Optional[dict]:
+    return {k: big.get(k) for k in ("date", "name", "ep", "km", "gain_m")} if big else None
 
 
 SHRINK_N_TRUST = 30

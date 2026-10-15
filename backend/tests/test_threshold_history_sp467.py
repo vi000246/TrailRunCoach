@@ -215,7 +215,8 @@ def test_switching_the_hr_model_is_recorded_once_per_change(hr_api):
         await API.put_hr_profile(API.HrProfileIn(model="hrr"), db)       # same model: nothing new
         await API.put_hr_profile(API.HrProfileIn(model="lthr"), db)
         return await SettingsRepository(db, 1).get(TH.MODEL_HISTORY_KEY)
-    assert run(go()) == [{"date": "2026-10-13", "from": "lthr", "to": "hrr"},
+    # SP-493: never chosen = 自動 (the stored setting's default)
+    assert run(go()) == [{"date": "2026-10-13", "from": "auto", "to": "hrr"},
                          {"date": "2026-10-13", "from": "hrr", "to": "lthr"}]
 
 

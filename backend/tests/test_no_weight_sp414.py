@@ -194,7 +194,7 @@ def test_page_says_what_cannot_be_computed_and_where_to_fill_it():
     static = Path(__file__).resolve().parents[1] / "static"
     page = (static / "racepower.html").read_text("utf-8")
     assert 'id="noweight"' in page and "INP.weight.value" in page
-    assert "/api/v1/wko5/settings#personal" in page
+    assert "/api/v1/app/settings#personal" in page
     assert "F?.unavailable" in page and "!PLAN?.fuel?.unavailable" in page     # the 補給 card says why
     for loc in ("zh-TW", "en"):
         cat = json.loads((static / "i18n" / loc / "racepower.json").read_text("utf-8"))

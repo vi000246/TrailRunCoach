@@ -74,11 +74,13 @@ def test_bad_file_and_bad_id_write_nothing(store):
     assert not (root / "ev1.gz").exists() and EG.get("ev1") is None
 
 
-def test_day_stats_splits_stored_then_camps_then_equal(store):
+def test_day_stats_splits_stored_else_equal_camps_only_candidates(store):
     trip = synth_gpx([(8, 1200), (8, -1200)], camps=[8.0])
     EG.save("h", trip, "trip.gpx")
     s = EG.day_stats("h", 2)
-    assert s["split_source"] == "camp" and s["splits_km"] == [pytest.approx(8.0, abs=0.05)]
+    # SP-533: the camp waypoint is a candidate, not a day end — even when 1 camp fits 2 days
+    assert s["split_source"] == "equal" and s["candidates_km"] == [pytest.approx(8.0, abs=0.05)]
+    assert s["splits_km"] == [pytest.approx(8.0, abs=0.05)]                  # 16 km ÷ 2 (推估)
     d1, d2 = s["days"]
     assert d1["gain_m"] == pytest.approx(1200, rel=0.05) and d1["loss_m"] < 30
     assert d2["loss_m"] == pytest.approx(1200, rel=0.05) and d2["gain_m"] < 30
@@ -167,9 +169,11 @@ def test_api_upload_reuse_after_restart_splits_delete(api):
     r = api.post("/api/v1/plan/events/h/gpx", files={"file": ("t.gpx", trip)})
     assert r.status_code == 200 and r.json()["gpx"]["filename"] == "t.gpx" and len(r.json()["days"]["days"]) == 2
     assert api.get("/api/v1/plan/events/h/gpx/file").content == trip
-    # the race calculator loads it without an upload, with the camp split for the 2-day trip
+    # the race calculator loads it without an upload; SP-533: no day ends of the user's yet (the
+    # camp waypoint is a candidate in the course's wpts), so none come with it
     c = api.post("/api/v1/racepower/course/event/h", json={}).json()
-    assert c["event_id"] == "h" and c["day_splits_km"] == [pytest.approx(8.0, abs=0.05)]
+    assert c["event_id"] == "h" and c["day_splits_km"] == []
+    assert [w["km"] for w in c["wpts"] if w["camp"]] == [pytest.approx(8.0, abs=0.05)]
     # a server restart empties the course cache: a plan naming the event reloads it (no 410)
     RP._courses.clear()
     body = RP.PlanIn(type="baiyue", course=RP.CourseRef(course_id=c["course_id"], event_id="h"))

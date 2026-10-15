@@ -99,11 +99,13 @@ def points(plan: dict, date: Optional[str], start_time: Optional[str], stops=Non
         if plan.get("type") == "baiyue":
             ratio = float((plan.get("summary") or {}).get("moving_ratio") or 1.0) or 1.0
             day, day_start, prev = None, 0.0, 0.0
+            from backend.engine.racepower import planner as PL
             for s in segs:
                 n = int(s.get("day") or 1)
                 if n != day:
                     day, day_start = n, prev
-                base = t0 + dt.timedelta(days=n - 1)
+                # SP-580: each day from its own start time (summary.day_starts), else the race's
+                base = (_start(date, PL.start_of(plan, n, start_time)) or t0) + dt.timedelta(days=n - 1)
                 b = base + dt.timedelta(seconds=(s["cum_s"] - s["t"] - day_start) / ratio
                                         + _stops_before(stops, s["start_km"]))
                 out.append({"i": s.get("i"), "start_km": s["start_km"], "end_km": s["end_km"], "z": s.get("z_mean"),
@@ -204,20 +206,23 @@ def _ranges(hits: list[dict]) -> list[dict]:
 
 
 def cold_wind(pts: list[dict], rows: Optional[list[dict]], z_ref: Optional[float] = None,
-              date: Optional[str] = None) -> Optional[dict]:
+              date: Optional[str] = None, local=None) -> Optional[dict]:
     """The SP-251 reminder over the points (points()): {alert, level (frostbite | cold | gust |
     None), min_wc_c, max_gust_kmh, min_temp_c, n, ranges: [{start_km, end_km, from, to,
-    min_wc_c, max_gust_kmh, min_temp_c}], per_km}. None when no point has wind data."""
-    if not rows or not pts:
+    min_wc_c, max_gust_kmh, min_temp_c}], per_km}. None when no point has wind data.
+    `local` (SP-553, weather.local_rows): a point → {wind, z} of its own section along the course."""
+    if (not rows and local is None) or not pts:
         return None
     evald, hits = [], []
     for n, p in enumerate(pts):
-        w = wind_at(rows, mid(p))
+        lr = local(p) if local is not None else None
+        rr, zr = (lr["wind"], lr["z"]) if lr is not None else (rows, z_ref)
+        w = wind_at(rr, mid(p)) if rr else None
         if w is None:
             continue
         t = w.get("temp_c")
-        if t is not None and z_ref is not None and p.get("z") is not None:
-            t = t + LAPSE_C_PER_M * (float(p["z"]) - float(z_ref))
+        if t is not None and zr is not None and p.get("z") is not None:
+            t = t + LAPSE_C_PER_M * (float(p["z"]) - float(zr))
         if t is None:
             t = p.get("temp_c")
         wc = wind_chill_c(t, w.get("wind_kmh"))
@@ -255,22 +260,25 @@ def cold_wind(pts: list[dict], rows: Optional[list[dict]], z_ref: Optional[float
 # ---------------------------------------------------------------------------
 
 def min_temp(pts: list[dict], wind_rows: Optional[list[dict]] = None, hourly_rows: Optional[list[dict]] = None,
-             z_ref: Optional[float] = None) -> Optional[float]:
+             z_ref: Optional[float] = None, local=None) -> Optional[float]:
     """The lowest temperature over the points: the forecast's at each midpoint (the wind rows,
-    else the hourly rows) moved to the point's height, else the segment's plan temperature."""
+    else the hourly rows) moved to the point's height, else the segment's plan temperature.
+    `local` (SP-553): a point → {wind, hourly (parsed, sorted), z} of its own section."""
     from backend.engine.racepower import weather as WX
     hrs = sorted((x for x in (WX._hour_row(r.get("t"), r.get("temp_c"), r.get("rh_pct"), r.get("dew_c"))
                               for r in hourly_rows or []) if x), key=lambda r: r["t"])
     out = []
     for p in pts:
         when = mid(p)
-        w = wind_at(wind_rows, when) if wind_rows else None
+        lr = local(p) if local is not None else None
+        wr, hr, zr = (lr["wind"], lr["hourly"], lr["z"]) if lr is not None else (wind_rows, hrs, z_ref)
+        w = wind_at(wr, when) if wr else None
         t = w.get("temp_c") if w else None
-        if t is None and hrs:
-            h = WX.hourly_at(hrs, when)
+        if t is None and hr:
+            h = WX.hourly_at(hr, when)
             t = h["temp_c"] if h else None
-        if t is not None and z_ref is not None and p.get("z") is not None:
-            t = t + LAPSE_C_PER_M * (float(p["z"]) - float(z_ref))
+        if t is not None and zr is not None and p.get("z") is not None:
+            t = t + LAPSE_C_PER_M * (float(p["z"]) - float(zr))
         if t is None:
             t = p.get("temp_c")
         if t is not None:
@@ -280,12 +288,12 @@ def min_temp(pts: list[dict], wind_rows: Optional[list[dict]] = None, hourly_row
 
 def hypothermia(pts: list[dict], cold: Optional[dict], rain: Optional[dict], kind: str,
                 wind_rows: Optional[list[dict]] = None, hourly_rows: Optional[list[dict]] = None,
-                z_ref: Optional[float] = None) -> Optional[dict]:
+                z_ref: Optional[float] = None, local=None) -> Optional[dict]:
     """The SP-253 check on a trail / 百岳 plan: {alert, min_temp_c, wet, windy, min_wc_c}. None on
     road, without race-day rain or wind data, or without any temperature."""
     if kind not in ("trail", "baiyue") or (rain is None and cold is None):
         return None
-    t = min_temp(pts, wind_rows, hourly_rows, z_ref)
+    t = min_temp(pts, wind_rows, hourly_rows, z_ref, local)
     if t is None:
         return None
     wet = bool(rain and rain.get("alert"))

@@ -1,8 +1,9 @@
 """SP-234: CWA 鄉鎮天氣預報 in the race-day weather chain — the nearest 鄉鎮公所,
 temperature moved from its height to the race height (−0.65 °C / 100 m, RH
-kept). Owner decision 2026-10-06: after Open-Meteo, as its fallback, until a
-station comparison exists — chain 登山 (5 km) → Open-Meteo → 鄉鎮 → climatology
-→ manual. CWA, the elevation API and Open-Meteo are all fakes: no network."""
+kept). SP-552: before Open-Meteo (CWA first for everyone; Open-Meteo only where CWA has
+nothing) — chain 登山 (5 km) → 鄉鎮 → Open-Meteo → climatology → manual; CWA_TOWN_FIRST
+= False gives back the 2026-10-06 order (Open-Meteo, then 鄉鎮). CWA, the elevation API
+and Open-Meteo are all fakes: no network."""
 import datetime as dt
 
 import pytest
@@ -101,16 +102,33 @@ def test_parse_reads_the_township_format_with_geocode():
     assert len(bt["hourly"]) == 24 and bt["hourly"][6]["temp"] == 20 and bt["hourly"][6]["rh"] == 80
 
 
-def test_with_a_key_and_open_meteo_answering_open_meteo_is_used(tmp_path):
+def test_the_township_forecast_comes_before_open_meteo_sp552(tmp_path):
+    g = Fake(om_fails=False)                         # Open-Meteo would answer: it is not asked
+    r = _run(tmp_path, g)
+    assert r["provider"] == "cwa_town_hourly"
+    assert [t["provider"] for t in r["tried"]] == ["cwa_hourly", "cwa_town_hourly"]
+    assert WX.OM_FORECAST not in g.urls()
+    assert "中央氣象署" in r["detail"]["attribution"]
+
+
+def test_with_the_switch_off_open_meteo_comes_first_as_on_2026_10_06(tmp_path, monkeypatch):
+    monkeypatch.setattr(WX, "CWA_TOWN_FIRST", False)
     g = Fake(om_fails=False)
     r = _run(tmp_path, g)
     assert r["provider"] == "open_meteo"
-    assert [t["provider"] for t in r["tried"]][-1] == "open_meteo"
     assert not any(t["provider"].startswith("cwa_town") for t in r["tried"])
     assert not any(u.endswith(WX.CWA_TOWN_HOURLY) or u == WX.OM_ELEVATION for u in g.urls())
 
 
-def test_open_meteo_failing_falls_back_to_the_township_forecast_with_lapse(tmp_path):
+def test_no_township_point_near_goes_to_open_meteo(tmp_path):
+    g = Fake(om_fails=False)
+    r = _run(tmp_path, g, lat=35.36, lon=138.73)     # 富士山: CWA has nothing there
+    assert r["provider"] == "open_meteo"
+    provs = [(t["provider"], t["ok"]) for t in r["tried"]]
+    assert provs.index(("cwa_town_hourly", False)) < provs.index(("open_meteo", True))
+
+
+def test_the_township_forecast_with_lapse(tmp_path):
     g = Fake()
     r = _run(tmp_path, g)
     assert r["provider"] == "cwa_town_hourly"
@@ -127,9 +145,8 @@ def test_open_meteo_failing_falls_back_to_the_township_forecast_with_lapse(tmp_p
     assert r["hourly"] and all(h["temp_c"] == approx(16.75) and h["rh_pct"] == approx(80) for h in r["hourly"])
     provs = [(t["provider"], t["ok"]) for t in r["tried"]]
     assert provs[0][0] == "cwa_hourly" and not provs[0][1]          # no 登山 point within 5 km
-    # the 「嘗試」 order: 登山 ✕ → Open-Meteo ✕ → 鄉鎮 ✓
-    assert provs.index(("open_meteo", False)) < provs.index(("cwa_town_hourly", True))
-    assert any(u == WX.OM_FORECAST for u in g.urls())
+    assert provs[-1] == ("cwa_town_hourly", True)                    # 登山 ✕ → 鄉鎮 ✓
+    assert WX.OM_FORECAST not in g.urls()
 
 
 def test_without_a_race_elevation_both_heights_come_from_one_elevation_call(tmp_path):
@@ -166,7 +183,7 @@ def test_beyond_three_days_the_weekly_blocks_are_used(tmp_path):
 
 
 def test_no_key_falls_through_with_the_reason(tmp_path, monkeypatch):
-    monkeypatch.setattr(WX, "load_key", lambda *a, **k: None)
+    monkeypatch.setattr(WX, "site_key", lambda *a, **k: None)
     g = Fake()
     r = _run(tmp_path, g, key=None)
     assert r["provider"] == "manual"

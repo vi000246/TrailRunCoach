@@ -21,8 +21,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
-SOURCES = ("wko5", "coros", "garmin", "tp")          # what a Dataset can be built from
-FIT_SOURCES = ("coros", "garmin", "tp")              # the synced folders (garmin: SP-91)
+SOURCES = ("wko5", "coros", "garmin", "tp", "intervals")          # what a Dataset can be built from
+FIT_SOURCES = ("coros", "garmin", "tp", "intervals")              # the synced folders (garmin: SP-91, intervals: SP-346)
 
 
 def _db_path() -> Optional[Path]:

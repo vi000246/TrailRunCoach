@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
-PAGE = (STATIC / "wko5_viewer.html").read_text("utf-8")
+PAGE = (STATIC / "charts.html").read_text("utf-8")
 NODE = shutil.which("node")
 needs_node = pytest.mark.skipif(NODE is None, reason="node not installed")
 
@@ -48,7 +48,7 @@ console.log(JSON.stringify(ctx.OUT));
 
 
 def test_the_page_has_the_marked_block():
-    assert BLOCK, "wko5_viewer.html: // ---- card count (SP-506) ---- block"
+    assert BLOCK, "charts.html: // ---- card count (SP-506) ---- block"
 
 
 @needs_node

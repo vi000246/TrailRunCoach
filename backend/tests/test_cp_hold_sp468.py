@@ -284,8 +284,8 @@ def test_review_card_shows_the_mftp_and_offers_no_apply(monkeypatch):
     card = R.review(ds, w, "cp_test")
     assert card["empty"] is None and "action" not in card
     text = " ".join(s["data"]["value"] for s in card["series"] if s["data"]["kind"] == "value")
-    assert "模型閾值功率（Modelled threshold power）196 W" in text and "算法參考 WKO5" in text and "套用" not in text
-    assert "W′" not in text.split("算法參考 WKO5")[0]                           # no two-point W′
+    assert "模型閾值功率（Modelled threshold power）196 W" in text and "mean-max 上緣的 PD 模型" in text and "WKO5" not in text and "套用" not in text
+    assert "W′" not in text.split("mean-max 上緣的 PD 模型")[0]                           # no two-point W′
     ev = R.cp_eval(ds, w, R.measure(ds, w), R.classify(ds, w))
     assert ev["cp"] == approx(195.5) and "apply" not in ev and "ref" not in ev
 
@@ -311,7 +311,7 @@ def test_race_power_page_test_is_wko5s_mftp_and_not_a_suggestion_to_apply():
     t = T.detect(_laps(300.0, 170, 260.0, 172))                       # a valid two-point model
     e = T.estimate(t, 68.0, "male", pd=lambda: PD)
     assert e["method"] == "pd_model" and e["cp"] == approx(195.5) and e["w_prime"] == 5000.0
-    assert "WKO5" in e["label"] and "套用" not in e["label"] + e["note"]
+    assert "PD 模型" in e["label"] and "WKO5" not in e["label"] and "套用" not in e["label"] + e["note"]
     e0 = T.estimate(t, 68.0, "male")
     assert e0["method"] == "pd_model" and e0["cp"] is None and "算不出" in e0["note"]
 

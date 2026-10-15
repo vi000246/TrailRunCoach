@@ -79,6 +79,17 @@ async def start_garmin_sync(
     return await _sse_sync(db, "garmin", athlete_id, since)
 
 
+@router.post("/intervals/start")
+async def start_intervals_sync(
+    athlete_id: int = 1,
+    since: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """「立即同步」 intervals.icu (SP-346): the recent activities, the webhook queue, the failed list and
+    the back-fill's next part (sync/intervals_client.py). Server-Sent Events, as COROS."""
+    return await _sse_sync(db, "intervals", athlete_id, since)
+
+
 @router.get("/sources")
 async def sync_sources(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     """Everything the settings page shows per source: login state, enabled,
@@ -174,7 +185,7 @@ async def compare_sources_api(a: str = "wko5", b: str = "coros", since: Optional
     from backend.settings.paths import for_tenant
     wdir = for_tenant(ATHLETE_DIR)                  # the owner's folder only (SP-384)
     if "wko5" in (a, b) and not wko5_available(wdir):
-        raise HTTPException(404, "NO_WKO5_FOLDER")
+        raise HTTPException(404, "NO_COMPARISON_FOLDER")
     return await asyncio.to_thread(compare, a, b, wdir, since)
 
 
@@ -184,9 +195,9 @@ async def delete_source_files(source: str, athlete_id: int = 1,
                               db: AsyncSession = Depends(get_db)):
     """Delete one source's synced FIT files + DB rows (confined to
     ~/.wko5coach/fit/<source>/), rebuild de-dup, reset the cursor.
-    source ∈ {coros, garmin, tp}; 409 SYNC_BUSY while that source syncs."""
+    source ∈ {coros, garmin, tp, intervals}; 409 SYNC_BUSY while that source syncs."""
     if source not in storage.SOURCES:
-        raise HTTPException(400, "source must be coros, garmin or tp")
+        raise HTTPException(400, "source must be coros, garmin, tp or intervals")
     try:
         return await purge.delete_source_files(db, source, athlete_id, date_from, date_to)
     except runner.SyncBusy:
@@ -296,15 +307,17 @@ async def sync_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
 
 
 class SyncSettingsBody(BaseModel):
-    primary_source: Optional[str] = None          # 資料來源 (the only one used): coros | garmin | trainingpeaks (sync/primary.py)
+    primary_source: Optional[str] = None          # 資料來源 (the only one used): coros | garmin | trainingpeaks | intervals (sync/primary.py)
     timezone: Optional[str] = None
     coros_enabled: Optional[bool] = None
     garmin_enabled: Optional[bool] = None
+    intervals_enabled: Optional[bool] = None
     trainingpeaks_enabled: Optional[bool] = None
     tp_use_wko5_client: Optional[bool] = None     # null = auto (on when creds configured)
     daily_sync_time: Optional[str] = None         # "HH:MM" or null (off)
     auto_on_open: Optional[bool] = None
     auto_on_open_hours: Optional[float] = None
+    background_sync: Optional[bool] = None        # 有新活動時在背景自動同步 (sync/background.py, SP-499)
     chart_data_source: Optional[str] = None       # source (the 資料來源) | wko5
     map_basemap: Optional[str] = None             # workout map default basemap id
     map_overlays: Optional[list[str]] = None      # workout map default overlay ids
@@ -319,11 +332,13 @@ class SyncSettingsBody(BaseModel):
 _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_source": "sync.primary_source",
                  "timezone": "athlete.timezone",
                  "coros_enabled": "sync.coros.enabled", "garmin_enabled": "sync.garmin.enabled",
+                 "intervals_enabled": "sync.intervals.enabled",
                  "trainingpeaks_enabled": "sync.trainingpeaks.enabled",
                  "tp_use_wko5_client": "sync.trainingpeaks.use_wko5_client",
                  "daily_sync_time": "sync.schedule.daily_time",
                  "auto_on_open": "sync.auto_on_open.enabled",
                  "auto_on_open_hours": "sync.auto_on_open.hours",
+                 "background_sync": "sync.background.enabled",
                  "chart_data_source": "charts.data_source",
                  "map_basemap": "charts.map.basemap", "map_overlays": "charts.map.overlays",
                  "use_power": "charts.power.enabled", "accept_watch_power": "power.accept_watch_power",
@@ -363,6 +378,9 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     out["primary_source"] = await P.current(repo.db, repo.user_id)
     out["primary_label"] = P.LABELS[out["primary_source"]]
     out["primary_folder"] = P.FOLDER[out["primary_source"]]
+    # 背景同步 (SP-499): whether this account can have it (the server's switch, the plan) and how often
+    from backend.sync import background
+    out["background"] = background.describe()
     # 地區 (engine/region.py): the map default follows it while none is chosen
     from backend.engine import region as RG
     out["region"], out["region_how"] = RG.region(repo.user_id)
@@ -398,7 +416,7 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     from backend.settings.secrets import KEY_DOC, RECOVER_WITHOUT_KEY, key_status
     out["secret_key_status"] = key_status()      # env|file|missing|none
     if out["secret_key_status"] == "missing":
-        out["secret_key_hint"] = (f"SECRET_KEY_MISSING: deploy the key (chezmoi apply) or set WKO5COACH_SECRET_KEY — see "
+        out["secret_key_hint"] = (f"SECRET_KEY_MISSING: deploy the key (chezmoi apply) or set TRC_SECRET_KEY — see "
                                   f"{KEY_DOC}; or {RECOVER_WITHOUT_KEY}")
     return out
 
@@ -568,6 +586,120 @@ async def upload_fit(request: Request, db: AsyncSession = Depends(get_db)):
         await runner.after_import(db, upload.SOURCE, {"status": "partial" if res["failed"] else "ok",
                                                       "downloaded": added, "trigger": "upload"}, athlete_id)
     return res
+
+
+# ---------------------------------------------------------------------------- 匯入匯出檔 (SP-349)
+
+class ArchiveStart(BaseModel):
+    name: str
+    size: int
+
+
+def _archive_error(e) -> UserError:
+    from backend.sync import archive as AR
+    r = e.reason
+    if r == "busy":
+        return UserError(N_("另一個匯出檔還在處理，請等它完成"), code="ARCHIVE_BUSY", status=409)
+    if r == "not_found":
+        return UserError(N_("找不到這次匯入，請重新選擇檔案"), code="ARCHIVE_NOT_FOUND", status=404)
+    if r == "offset":
+        return UserError(N_("上傳的位置對不上，請重新選擇同一個檔案接著傳"), code="ARCHIVE_OFFSET", status=409,
+                         received=int(e.params.get("received") or 0))
+    if r == "too_large":
+        return UserError(N_("匯出檔最大 {gb} GB"), code="ARCHIVE_TOO_LARGE", status=413,
+                         gb=AR.MAX_ARCHIVE_BYTES // 1024 ** 3)
+    if r == "empty":
+        return UserError(N_("檔案是空的"), code="ARCHIVE_EMPTY", status=400)
+    if r == "nothing":
+        return UserError(N_("沒有可以重試的檔案"), code="ARCHIVE_NOTHING_TO_RETRY", status=409)
+    return UserError(N_("只能匯入 ZIP 檔"), code="ARCHIVE_NOT_ZIP", status=400)
+
+
+@router.get("/upload/archive")
+async def archive_status():
+    """The tenant's latest export import (state, progress, results), or null; and the limits."""
+    from backend.sync import archive as AR
+    _may_upload()
+    return {"import": AR.latest(), "limits": AR.limits()}
+
+
+@router.post("/upload/archive")
+async def archive_start(body: ArchiveStart):
+    """「匯入匯出檔」: start (or resume) the upload of one ZIP (sync/archive.py); the page then PUTs
+    it in pieces of `limits.chunk_bytes` at `received`."""
+    import asyncio
+    from backend.db.current import current_athlete_id
+    from backend.sync import archive as AR
+    _may_upload()
+    try:
+        return await asyncio.to_thread(AR.create, body.name, int(body.size), current_athlete_id())
+    except AR.ArchiveError as e:
+        raise _archive_error(e)
+
+
+@router.get("/upload/archive/{imp_id}")
+async def archive_one(imp_id: str):
+    from backend.sync import archive as AR
+    _may_upload()
+    try:
+        s = AR.status(imp_id)
+    except AR.ArchiveError as e:
+        raise _archive_error(e)
+    if s is None:
+        raise _archive_error(AR.ArchiveError("not_found"))
+    return s
+
+
+@router.put("/upload/archive/{imp_id}")
+async def archive_piece(imp_id: str, request: Request, offset: int = 0):
+    """One piece of the ZIP (raw body, ≤ chunk_bytes) at `offset`; the last one queues the work
+    (background, in parts: GET the status for the progress)."""
+    import asyncio
+    from backend.sync import archive as AR
+    _may_upload()
+    try:
+        size = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        size = 0
+    if size > AR.CHUNK_BYTES:
+        raise _archive_error(AR.ArchiveError("too_large"))
+    buf = bytearray()
+    async for part in request.stream():
+        buf += part
+        if len(buf) > AR.CHUNK_BYTES:
+            raise _archive_error(AR.ArchiveError("too_large"))
+    try:
+        s = await asyncio.to_thread(AR.append, imp_id, int(offset), bytes(buf))
+    except AR.ArchiveError as e:
+        raise _archive_error(e)
+    if s.pop("start", False):
+        AR.start(imp_id, asyncio.get_running_loop())
+        s = AR.status(imp_id)
+    return s
+
+
+@router.post("/upload/archive/{imp_id}/retry")
+async def archive_retry(imp_id: str):
+    """「重試」: go on where the work stopped, and try the files that failed for a passing reason again."""
+    import asyncio
+    from backend.sync import archive as AR
+    _may_upload()
+    try:
+        return AR.retry(imp_id, asyncio.get_running_loop())
+    except AR.ArchiveError as e:
+        raise _archive_error(e)
+
+
+@router.delete("/upload/archive/{imp_id}")
+async def archive_delete(imp_id: str):
+    """「清除」: forget the import (its archive and results; a running one stops after its current
+    file). The imported activities stay."""
+    from backend.sync import archive as AR
+    _may_upload()
+    try:
+        return {"deleted": AR.delete(imp_id)}
+    except AR.ArchiveError as e:
+        raise _archive_error(e)
 
 
 @router.get("/tp/settings")

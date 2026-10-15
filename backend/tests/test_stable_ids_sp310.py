@@ -357,18 +357,18 @@ def test_activity_tag_upsert_on_a_table_from_before_sp310(tmp_path):
 
 def test_injury_new_and_edited_rows_through_the_api(api, tmp_path):     # noqa: F811
     p = tmp_path / "app.db"
-    r = api.post("/api/v1/wko5/injuries", json={"area": "knee", "onset_date": "2026-08-01"})
+    r = api.post("/api/v1/app/injuries", json={"area": "knee", "onset_date": "2026-08-01"})
     assert r.status_code == 200, r.text
     e = r.json()
     assert HEX32.match(e["uid"]) and isinstance(e["id"], int)
     (uid, ts), = _rows(p, "injury_events")
     assert uid == e["uid"] and _now_ish(ts)
     _age(p, "injury_events")
-    r = api.patch(f"/api/v1/wko5/injuries/{e['id']}", json={"note": "改"})       # the integer id, as before
+    r = api.patch(f"/api/v1/app/injuries/{e['id']}", json={"note": "改"})       # the integer id, as before
     assert r.status_code == 200 and r.json()["uid"] == e["uid"]
     (uid2, ts2), = _rows(p, "injury_events")
     assert uid2 == e["uid"] and _now_ish(ts2)
-    lst = api.get("/api/v1/wko5/injuries").json()["injuries"]
+    lst = api.get("/api/v1/app/injuries").json()["injuries"]
     assert [(x["id"], x["uid"]) for x in lst] == [(e["id"], e["uid"])]
 
 

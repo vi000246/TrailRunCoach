@@ -150,10 +150,12 @@ def test_auto_sync_starts_stale_sources_only(tmp_path, monkeypatch):
         await s.commit()
         # COROS (the 資料來源, the default) is fresh; TP is stale but not in use
         r = await auto_sync(1, s)
-        assert r["started"] == [] and r["skipped"] == {"coros": "fresh", "garmin": "not_in_use", "tp": "not_in_use"}
+        assert r["started"] == [] and r["skipped"] == {"coros": "fresh", "garmin": "not_in_use", "tp": "not_in_use",
+                                                       "intervals": "not_in_use"}
         await SettingsRepository(s, 1).set("sync.primary_source", "trainingpeaks")
         r = await auto_sync(1, s)
-        assert r["started"] == ["tp"] and r["skipped"] == {"coros": "not_in_use", "garmin": "not_in_use"}
+        assert r["started"] == ["tp"] and r["skipped"] == {"coros": "not_in_use", "garmin": "not_in_use",
+                                                            "intervals": "not_in_use"}
         assert started == [("tp", "open")]
         await SettingsRepository(s, 1).set("sync.auto_on_open.enabled", False)
         assert (await auto_sync(1, s))["started"] == []

@@ -93,6 +93,9 @@ SEG_MIN_S = 60.0
 WALK_HEAVY = 0.5               # 推估: ≥ half the moving time walked (< 130 spm) = walking-heavy outing
 CLEAR_DIFF = 0.03              # 推估: "clearly differs" = class medians ≥ 3 points apart
 STORE = None      # fixed file (tests); None = <tenant shared>/racepower_backtest.json
+# SP-544: track -> the surface of the activity's own course (surface.effective), or None. Set by a
+# run that looks the tracks up (Overpass); None = the technicality-on-dirt comparison is skipped
+GROUND_OF: Optional[Callable] = None
 
 
 def _store() -> Path:
@@ -292,6 +295,32 @@ def surface_split_summary(rows: list[dict]) -> dict:
            "downhill": {"pooled": stats(_seg_errs(tr, "err", both)), "split": stats(_seg_errs(tr, "err_surf", both))}}
     p, q = out["downhill"]["pooled"]["median_abs"], out["downhill"]["split"]["median_abs"]
     out["no_worse"] = bool(out["downhill"]["pooled"]["n"]) and p is not None and q is not None and q <= p
+    return out
+
+
+def tech_dirt_summary(rows: list[dict]) -> Optional[dict]:
+    """SP-544's comparison: on the trail cases whose course surface was looked up (GROUND_OF), the
+    whole-course error with the technicality on every flat / descent (err_v2, mode B; err_c, mode
+    C on the capacity samples) against it only on the dirt share (err_v2_ground / err_c_ground).
+    `no_worse` = the race-like cases' median |error| is not above the current one in mode B (and
+    in mode C when there are capacity samples). None when nothing was compared."""
+    tr = [r for r in rows if r.get("category") == "trail" and r.get("err_v2_ground") is not None]
+    if not tr:
+        return None
+    race = [r for r in tr if r.get("intensity") == "race" or r.get("activity_type") == "race" or r.get("cap_sample")]
+    cap = [r for r in tr if r.get("err_c") is not None and r.get("err_c_ground") is not None]
+    out = {"cases": len(tr), "race_like": len(race),
+           "all": {"before": stats([r["err_v2"] for r in tr]), "after": stats([r["err_v2_ground"] for r in tr])},
+           "race": {"before": stats([r["err_v2"] for r in race]), "after": stats([r["err_v2_ground"] for r in race])},
+           "capacity": {"before": stats([r["err_c"] for r in cap]), "after": stats([r["err_c_ground"] for r in cap])},
+           "rows": [{"date": r.get("date"), "label": r.get("label"), "intensity": r.get("intensity"),
+                     "err_v2": r["err_v2"], "err_v2_ground": r["err_v2_ground"], "err_c": r.get("err_c"),
+                     "err_c_ground": r.get("err_c_ground"), "ground": r.get("ground")} for r in tr]}
+
+    def ok(k):
+        b, a = out[k]["before"]["median_abs"], out[k]["after"]["median_abs"]
+        return b is None or (a is not None and a <= b)
+    out["no_worse"] = bool(race) and ok("race") and ok("capacity")
     return out
 
 
@@ -544,6 +573,19 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
         s["M"] = m
     model = PC.RunModel(weight, gre.re, gre.v_max)
     res = PC.solve_power_mode(p_act, segs, model)
+    # SP-544: the same course with the technicality only on its dirt share (GROUND_OF)
+    segs_g, ground, res_g = None, None, None
+    if trail and GROUND_OF is not None:
+        try:
+            eff = GROUND_OF(track)
+        except Exception:                   # noqa: BLE001 — no surface: not compared
+            eff = None
+        if eff:
+            from backend.engine.racepower import surface as SFC
+            segs_g = [dict(x) for x in segs]
+            ground = SFC.apply_tech_dirt(segs_g, gre, eff)
+            if ground:
+                res_g = PC.solve_power_mode(p_act, segs_g, model)
     res_cls = PC.solve_power_mode(p_act, segs, PC.RunModel(weight, gre_cls.re, gre_cls.v_max))
     res_ng = PC.solve_power_mode(p_act, segs, PC.RunModel(weight, gre_ng.re, gre_ng.v_max)) if gre_ng else None
     # SP-229: the same model with the gait chosen by the predicted speed (GaitRE.re_at)
@@ -601,6 +643,8 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
            "strategy": empirical_strategy(segs, act), "segments": seg_rows, "grade_n": gre.n_samples,
            "tech": gre.tech_factor() if trail and hasattr(gre, "tech_factor") else None,
            "surface": case.get("surface") if trail else None, "surface_split": gre_sf is not None}
+    if res_g is not None:
+        out.update(ground=ground, err_v2_ground=res_g["T"] / t_act - 1.0)
     if case.get("aet_test"):
         # a submaximal anchor: the HR model's power at this run's HR vs the actual power
         hc = ctx.get("hrcap") or {}
@@ -626,6 +670,8 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
                 return DF.p_sus(t, cap["cp"], cap["w_prime"], cap["tte"], cap["k"], cp2=cap["cp2"])
             rc = PC.solve_auto_mode(1.0, psus, segs, model, cap["cp"])
             out.update(t_c=rc["T"], err_c=rc["T"] / t_act - 1.0, p_c=rc["P"])
+            if res_g is not None:
+                out["err_c_ground"] = PC.solve_auto_mode(1.0, psus, segs_g, model, cap["cp"])["T"] / t_act - 1.0
             out.update(_hr_eval(ctx, cap, t_act, p_train, psus, lambda ps: PC.solve_auto_mode(
                 1.0, ps, segs, model, cap["cp"])["T"] / t_act - 1.0))
     return out
@@ -1197,7 +1243,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
             "capacity_samples": {"counts": kinds, "rows": samples,
                                  "trail_race_like": [s for s in samples if s["category"] == "trail" and s["ok"]]},
             "hr_capacity": {k: v for k, v in hr_now.items() if k != "points"} | {"points": hr_now.get("points")},
-            "trail_hr": trail_hr, "user_marked": len(marked),
+            "trail_hr": trail_hr, "user_marked": len(marked), "tech_dirt": tech_dirt_summary(rows),
             "power_source": A.power_summary(ds, [w for w in all_runs if A.outdoor(w)]),
             "notes": [A.GROUP_HIKE_NOTE + "；只有你標記為自己走的登山才會成為回測案例",
                       "能力樣本看「努力度」不看「是不是比賽」：你標記的努力度優先（全力＝一定算、其他＝一定不算）；"
@@ -1210,7 +1256,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
                       "總時間 = 移動時間（驗證目標）＋ 非移動時間（之前比賽的停留，另外預估、另外列）",
                       "你標記為比賽或全力的活動不受 365 天限制（每場仍用前一天的資料預測）；自動偵測的樣本只看近 365 天",
                       "越野心率配速模型（推估）：effort km ÷ 移動時間 對 移動心率/LTHR，加耐久衰減；不需要功率",
-                      "每一場都用活動前一天的資料、排除該活動；不用 WKO5 今天存的 mFTP / TTE，"
+                      "每一場都用活動前一天的資料、排除該活動；不用對照資料夾今天存的 mFTP / TTE，"
                       "改用當天以前的 mean-max 重算 PD 模型（模型閾值功率 / TTE），再加上 CP 下限",
                       "強度分類用每次活動當天以前的 LTHR / AeT（計畫測試只算當天以前做過的；否則用當天以前資料的自動估算，"
                       "每次跑步對照它當天以前重算的 CP）",
@@ -1484,9 +1530,12 @@ def state() -> dict:
     return st
 
 
-def start_background(ds_factory: Callable, today: Optional[dt.date] = None) -> bool:
+def start_background(ds_factory: Callable, today: Optional[dt.date] = None,
+                     run: Optional[Callable] = None) -> bool:
     """Queue this tenant's back-test (the server runs one at a time, others wait their turn —
-    SP-338 第 2 條); False when one of this tenant's is already queued or running."""
+    SP-338 第 2 條); False when one of this tenant's is already queued or running. `run(prog)`:
+    computes and saves it elsewhere (SP-394 第 5 條: api/racepower runs it in a worker process,
+    backend/workproc.py — it held the GIL for minutes); default here, on `ds_factory()`."""
     from backend import jobs
     st = _state_of()
     with _run_lock:
@@ -1499,7 +1548,10 @@ def start_background(ds_factory: Callable, today: Optional[dt.date] = None) -> b
         try:
             def prog(i, n, c):
                 st["progress"] = job.progress = {"i": i, "n": n, "label": c.get("label")}
-            save(backtest(ds_factory(), today, prog))
+            if run is not None:
+                run(prog)
+            else:
+                save(backtest(ds_factory(), today, prog))
         except Exception as e:              # noqa: BLE001
             st["error"] = f"{type(e).__name__}: {str(e)[:200]}"
         finally:

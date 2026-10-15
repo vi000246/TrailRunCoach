@@ -297,12 +297,21 @@ def _power(c: Ctx, lo: float, hi: float) -> Optional[tuple]:
     return ("power", round(lo * c.cp), round(hi * c.cp)) if c.cp else None
 
 
+def hrp_band(c: Ctx, hrp) -> tuple:
+    """(lo, hi) bpm of a template's own % LTHR (`hrp`) under the 課表心率區間 in effect (SP-493:
+    hr_profile.frac_hr — the same place in the same zone of 儲備心率 / 最大心率; × LTHR under the
+    LTHR model)."""
+    from backend.engine.hr_profile import frac_hr
+    lo, hi = frac_hr(hrp[0], c.hrz, c.lthr), frac_hr(hrp[1], c.hrz, c.lthr)
+    return round(lo), round(hi)
+
+
 def _work_hr(c: Ctx, tg: dict) -> Optional[tuple]:
     """HR of a band step (coros_workouts._work_hr): the text's bpm, else the class's % LTHR."""
     if tg.get("hr"):
         return ("hr", int(tg["hr"][0]), int(tg["hr"][1]))
     if tg.get("hrp") and c.lthr:                 # a template's own % LTHR (workout_templates)
-        return ("hr", round(tg["hrp"][0] * c.lthr), round(tg["hrp"][1] * c.lthr))
+        return ("hr", *hrp_band(c, tg["hrp"]))
     from backend.engine.hr_profile import work_band
     wb = work_band(c.hrz, tg.get("cls") or "Z3near")      # 課表心率區間: the class's COROS zone
     if wb:
@@ -1221,6 +1230,19 @@ def _rpe(tg: dict, c: Ctx) -> Resolved:
                     err="RPE 下限比上限高" if lo > hi else "")
 
 
+def _auto_easy(tg: dict, c: Ctx) -> Resolved:
+    """An auto easy target (intent easy): power (plo / phi) when the basis is power, else the easy HR band."""
+    if tg.get("plo") is not None and c.basis == "power":
+        p = _power(c, tg["plo"], tg["phi"])
+        if p:
+            return _from_int(p, c)
+        return _from_int(easy_hr(c), c, warn="沒有 CP：改用心率")
+    if tg.get("plo") is not None and c.basis == "none":
+        return Resolved("none", text="不設目標")
+    e = easy_hr(c)
+    return _from_int(e, c, warn="" if e else "沒有 AeT／LTHR：不設目標")
+
+
 def resolve(st: dict, c: Ctx) -> Resolved:
     tg = st.get("target") or OPEN
     ty = tg.get("type", "auto")
@@ -1239,15 +1261,16 @@ def resolve(st: dict, c: Ctx) -> Resolved:
                 # floor (hr_profile.walk_band) is above a warming-up / coming-down HR and the watch kept
                 # alerting; their TSS takes NONE_IF["warm"] / ["cool"] like any no-target warm-up / cool-down
                 return Resolved("none", text="不設目標")
-            if tg.get("plo") is not None and c.basis == "power":
-                p = _power(c, tg["plo"], tg["phi"])
-                if p:
-                    return _from_int(p, c)
-                return _from_int(easy_hr(c), c, warn="沒有 CP：改用心率")
-            if tg.get("plo") is not None and c.basis == "none":
-                return Resolved("none", text="不設目標")
-            e = easy_hr(c)
-            return _from_int(e, c, warn="" if e else "沒有 AeT／LTHR：不設目標")
+            r = _auto_easy(tg, c)
+            if st.get("kind") == "warm":
+                # SP-479 (the owner 2026-10-14, B): every other auto-easy warm-up — running sessions, walking
+                # ones without a walk cap — has no target either: the easy band's floor (e.g. 0.75 × LTHR,
+                # the plan zones' Z2 bottom) is above a HR still coming up, and COROS takes an HR target only
+                # as lo–hi (no cap alone). It is still run easy: the chart and the TSS keep the easy band's
+                # ≈ % CP (frac). The cool-down keeps the easy band (coming down from higher up, the floor
+                # rarely bites); a target set by hand (or a template's own) is the user's.
+                return Resolved("none", frac=r.frac, text="不設目標")
+            return r
         # band
         if c.basis == "none":
             return Resolved("none", text="不設目標")
@@ -1300,8 +1323,7 @@ def resolve(st: dict, c: Ctx) -> Resolved:
             if not c.tpace:
                 if tg.get("hrp") and c.lthr:
                     # the step's HR fallback (the MP segment): an HR band, still with the warning
-                    r = _from_int(("hr", round(tg["hrp"][0] * c.lthr), round(tg["hrp"][1] * c.lthr)), c, auto=False,
-                                  warn=no_tpace_text())
+                    r = _from_int(("hr", *hrp_band(c, tg["hrp"])), c, auto=False, warn=no_tpace_text())
                     r.need = "tpace"
                     return r
                 # a warning, not an error: the session can be saved and pushed, that step just

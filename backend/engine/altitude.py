@@ -1,60 +1,38 @@
 """
-高度適應提醒 (SP-100): before an event whose highest point is ≥ 3,000 m, the
-floating suggestion box (engine/suggestions.altitude_rows) shows what the
-athlete's own recent altitude says, 14 days before the start. Information only:
-the plan is not changed.
+高山症預防提醒 (SP-546, owner 2026-10-14; before: SP-100 / SP-258 / SP-259): in the week before a
+百岳 trip (event kind baiyue) or an event whose GPX tops out at ≥ 3,000 m, the floating suggestion
+box (engine/suggestions.altitude_rows) shows one row with what prevents altitude sickness — unless
+the athlete's own activities reached 3,000 m or higher in the last 3 months (Shen 2024: that is
+what goes with less AMS). Nothing to fill in, nothing on any page: the owner — 「只是用來預防高山症，
+跟本專案做的事無關」 — dropped the manual inputs (the 課表 calendar's 「睡在高處」 record, SP-259; the
+race calculator's 海拔適應 choice, SP-260) and the 28-day 「安排適應週末」 row (SP-258). Information
+only: the plan is not changed. It can be closed (✕) or put off (稍後提醒) as every row.
 
-安排適應週末 (SP-258, owner 2026-10-06 / 2026-10-07; docs/research/altitude-training.md §2.2,
-§2.3, §4.2 單 1): the row starts 28 days out (EARLY_DAYS) so CDC's 2 nights still fit a weekend.
-15–28 days before: one row 「安排適應週末」 that lists the weekends inside the 14 days before the
-start (the weekend whose Sunday is the departure day counts; the ones inside the event's 減量期
-marked 「走輕鬆路線」) — and no place (owner 2026-10-07: 松雪樓 dropped, no other names, just the
-reminder). It can be closed (✕) for that trip for good (suggestions.altitude_rows gives it the id
-`altitude_plan:<event>:<start>`, kept by suggestions.prune until the trip starts). When the trip's
-first night is above 3,000 m (owner: 玉山、嘉明湖 kind of trips) 「行前一晚住約 2,500 m」
-(玉山國家公園) is only in its 說明 (?), never in the row's text. 1–14 days before: the checks
-below, as before; its 說明 says 「行前一晚住 2,500 m 左右」 too, with no place named (owner
-2026-10-08). Beidleman 2018 (High Alt Med Biol 19:329, abstract): 2 days at 3,000 m before
-4,300 m, AMS 83 % → 43 %.
-
-The event's altitude comes from its stored GPX (engine/event_gpx.py): the
-highest point (the course's smoothed profile, z_max) and — for a multi-day trip
-whose nights are known from the GPX (stored day splits or camp waypoints) — the
-altitude of each night's stop. Without a GPX there is nothing to say.
+The event's altitude comes from its stored GPX (engine/event_gpx.py): the highest point (the
+course's smoothed profile, z_max) and — for a multi-day trip whose nights are known from the GPX
+(the day splits the user set; SP-533: camp waypoints are only candidates) — the altitude of each
+night's stop. A 百岳 trip without a GPX still gets the row (every 百岳 is ≥ 3,000 m), only without
+the heights.
 
 Rules (docs/research/periodization-cross-sport.md §3.3 / §6.1 T6;
 docs/research/mountaineering-physiology-scholars.md §3, SP-107 #4d):
 
-  * CDC Yellow Book (Hackett & Shlim, full text): ≥ 2 nights above 2,750 m in
-    the 14 days before the trip help (the closer the better); above 3,000 m the
-    sleeping altitude should not rise more than 500 m a night; a first night
-    above 3,400 m is high risk;
-    「Training and physical fitness do not affect risk」. Acclimatisation is
-    partly kept 12 days back at low altitude (Beidleman 2017, J Appl Physiol
-    123:1214 [400]).
-  * Schneider…Bärtsch 2002 (MSSE, abstract): pre-exposure = > 4 days above
-    3,000 m in the 2 months before; with it and a slow ascent, susceptible
-    climbers' AMS 58 % → 7 %.
-  * Shen 2024 (J Formos Med Assoc, abstract; 1,021 people seen at 排雲山莊, 57 %
-    AMS — patients, not every climber): no climb above 3,000 m in the last 3
-    months and a first climb above 3,000 m go with AMS.
-  The research is mostly about 4,000 m and higher; applying it at 3,000–3,950 m
-  is 推估.
+  * Shen 2024 (J Formos Med Assoc, abstract; 1,021 people seen at 排雲山莊, 57 % AMS — patients,
+    not every climber): no climb above 3,000 m in the last 3 months and a first climb above
+    3,000 m go with AMS → the reminder's switch (RECENT_DAYS, HIGH_M) and its 「第一次」 line.
+  * CDC Yellow Book (Hackett & Shlim, full text): above 3,000 m the sleeping altitude should not
+    rise more than 500 m a night; a first night above 3,400 m is high risk; with symptoms don't go
+    higher, descend when they get worse; 「Training and physical fitness do not affect risk」.
+  * 玉山國家公園 [H13]: a night at about 2,500 m before a trip whose first night is above 3,000 m.
+  The research is mostly about 4,000 m and higher; applying it at 3,000–3,950 m is 推估.
 
-The athlete's altitude (推估): each activity's highest altitude (the elevation
-channel, the highest held about 30 s so a GPS spike doesn't count), on every date the
-activity covers. A night counts as spent above 2,750 m when the days on both sides
-of it reached 2,750 m (a multi-day activity, or activities on consecutive days) —
-where the tent or hut was is not in the data.
+The athlete's altitude (推估): each activity's highest altitude (the elevation channel, the highest
+held about 30 s so a GPS spike doesn't count), on every date the activity covers.
 
-睡在高處的紀錄 (SP-259, owner 2026-10-06: on the 課表 calendar's day, no symptoms): the
-athlete marks 「這一晚睡在 X m」 on a day (the night from that evening to the next morning), stored
-as user_settings NIGHTS_KEY = [{day, m}] — e.g. a drive up to 松雪樓 and a climb the next day,
-which the activities can't see. `exposure` counts a night when the activities say so OR it is
-recorded at ≥ 2,750 m; nights are counted per date, so one night is never counted twice. A
-recorded night at ≥ 3,000 m also makes its evening and the next morning 「到過 3,000 m 以上」
-days for the Schneider / Shen lines (推估). No record = exactly the old result. The record
-dialog can be filled from a plan event's GPX night (the camp of that night, `event_night`).
+The race calculator's 百岳 altitude curve (SP-260, `acclimatisation_default`) is automatic only:
+≥ 2 nights above 2,750 m in the 14 days before the trip (CDC's count, from the activities) → 部分,
+else 未適應. Recorded nights (user_settings NIGHTS_KEY, SP-259) stay in the database untouched but
+nothing reads them any more.
 """
 from __future__ import annotations
 
@@ -65,32 +43,30 @@ from typing import Optional
 from backend.i18n import _
 
 EVENT_MIN_M = 3000.0                # 推估: the reminder's line (research mostly ≥ 4,000 m)
-REMIND_DAYS = 14                    # CDC: the 14 days before the trip
+REMIND_DAYS = 14                    # CDC: the 14 days before the trip (the calculator's night count)
+NOTICE_DAYS = 7                     # SP-546 (owner 2026-10-14): the reminder in the week before the trip
 SLEEP_M = 2750.0                    # CDC: > 2,750 m
 NIGHTS = 2                          # CDC: ≥ 2 nights
-HIGH_M = 3000.0                     # Schneider 2002 / Shen 2024: above 3,000 m
+HIGH_M = 3000.0                     # Schneider 2002 / Shen 2024: above 3,000 m (台灣百岳)
 PRE_DAYS = 60                       # Schneider 2002: the 2 months before
-PRE_MIN_DAYS = 5                    # Schneider 2002: > 4 days
 RECENT_DAYS = 90                    # Shen 2024: the last 3 months
 FIRST_NIGHT_M = 3400.0              # CDC: a first night above 3,400 m = high risk
 NIGHT_STEP_M = 500.0                # CDC: ≤ +500 m a night above 3,000 m
 HISTORY_DAYS = 3 * 365              # 推估: how far back 「從來沒上過 3,000 m」 looks
 SPIKE_S = 30.0                      # s: the highest altitude held ~30 s (one GPS spike doesn't count)
 KEY = "altitude_max_v1"             # Dataset.cached_series: {"max_m", "secs"} per activity
-# SP-258 (owner 2026-10-06: 28, not 21): the row starts this many days out; 15–28 = 安排適應週末
-EARLY_DAYS = 28
 EVE_M = 2500.0                      # 玉山國家公園 [H13]: 「應先於海拔2,500公尺左右地區適應高度（約1晚）」
 EVE_FIRST_NIGHT_M = 3000.0          # owner 2026-10-06: the 行前一晚 line only for a first night > 3,000 m
-# no place is named in either row (owner 2026-10-07 / 2026-10-08): 「行前一晚住 2,500 m 左右」 only
+TRIP_KIND = "baiyue"                # planning.KINDS: a 百岳 trip gets the reminder even without a GPX
 
 SRC = ("CDC Yellow Book（Hackett & Shlim，High-Altitude Travel and Altitude Illness）；"
-       "Schneider…Bärtsch 2002（Med Sci Sports Exerc 34:12）；Shen 2024（J Formos Med Assoc 123:1161）")
-SRC_PLAN = "CDC Yellow Book（Hackett & Shlim）；Beidleman 2018（High Alt Med Biol 19:329）"
+       "Shen 2024（J Formos Med Assoc 123:1161）")
 
 
-def _src_plan() -> str:
-    """The 安排適應週末 row's sources (SRC_PLAN + 玉山國家公園, whose name is translated)."""
-    return SRC_PLAN + "；" + _("玉山國家公園管理處〈高山生理、高山症預防及處理〉")
+def _src(eve: bool) -> str:
+    """The row's sources (+ 玉山國家公園, whose name is translated, when the 行前一晚 line is in it)."""
+    return SRC + (_("；") + _("玉山國家公園管理處〈高山生理、高山症預防及處理〉") if eve else "")
+
 
 
 # ---------------------------------------------------------------------------
@@ -98,9 +74,9 @@ def _src_plan() -> str:
 # ---------------------------------------------------------------------------
 
 def event_altitude(eid: str, days: int = 1, *, db_path=None, root=None) -> Optional[dict]:
-    """{"max_m", "nights": [m per night] | None, "nights_source": stored | camp | None} from the
-    event's stored GPX, None without one. Nights only from day splits or camp waypoints (equal-km
-    days would put the night anywhere)."""
+    """{"max_m", "nights": [m per night] | None, "nights_source": stored | None} from the
+    event's stored GPX, None without one. Nights only from the user's day splits (equal-km days
+    would put the night anywhere; camp waypoints are candidates, SP-533)."""
     from backend.engine import event_gpx as EG
     row = EG.get(eid, db_path)
     if row is None or row.get("z_max") is None:
@@ -109,10 +85,8 @@ def event_altitude(eid: str, days: int = 1, *, db_path=None, root=None) -> Optio
     n = max(1, int(days or 1))
     if n < 2:
         return out
-    cuts = EG.splits_for(row, n)
-    src = ("stored" if cuts and EG.clean_splits(row.get("day_splits") or [], row["km"]) == cuts
-           else "camp" if cuts and EG.clean_splits(row.get("camp_km") or [], row["km"]) == cuts else None)
-    if src is None:
+    cuts, src = EG.split_source(row, n)
+    if src != "stored":                     # SP-533: camp waypoints are candidates, not nights
         return out
     try:
         got = EG.track(eid, row, db_path=db_path, root=root)
@@ -182,31 +156,26 @@ def day_altitudes(ds, today: dt.date, days: int = HISTORY_DAYS) -> dict:
     return out
 
 
-def exposure(alts: dict, today: dt.date, start: dt.date, manual: Optional[dict] = None) -> dict:
+
+def exposure(alts: dict, today: dt.date, start: dt.date) -> dict:
     """What the days say before a trip starting `start`:
-    {"nights": nights above SLEEP_M from start − 14 days to today (CDC), "pre_days": days above
-     HIGH_M in the last 60 days (Schneider), "recent": any day above HIGH_M in the last 90 days
-     (Shen), "ever": any day above HIGH_M in the data, "manual": how many of `nights` only the
-     records give}. `manual`: {date: m} recorded nights (SP-259, load_nights); None / {} = the
-     activities alone (the result before SP-259)."""
-    manual = manual or {}
+    {"nights": nights above SLEEP_M from start − 14 days to today (CDC; a night counts when the
+     days on both sides of it reached SLEEP_M), "pre_days": days above HIGH_M in the last 60 days
+     (Schneider), "recent": any day above HIGH_M in the last 90 days (Shen), "ever": any day
+     above HIGH_M in the data}."""
     since = start - dt.timedelta(days=REMIND_DAYS)
-    act = {d for d, m in alts.items() if since <= d < today and m >= SLEEP_M
-           and alts.get(d + dt.timedelta(days=1), -1e9) >= SLEEP_M}
-    rec = {d for d, m in manual.items() if since <= d < today and m >= SLEEP_M}
+    nights = sum(1 for d, m in alts.items() if since <= d < today and m >= SLEEP_M
+                 and alts.get(d + dt.timedelta(days=1), -1e9) >= SLEEP_M)
     high = {d for d, m in alts.items() if m >= HIGH_M and d <= today}
-    for d, m in manual.items():                 # a night up high: its evening and the next morning (推估)
-        if m >= HIGH_M:
-            high |= {x for x in (d, d + dt.timedelta(days=1)) if x <= today}
-    return {"nights": len(act | rec),
+    return {"nights": nights,
             "pre_days": sum(1 for d in high if d > today - dt.timedelta(days=PRE_DAYS)),
             "recent": any(d > today - dt.timedelta(days=RECENT_DAYS) for d in high),
-            "ever": bool(high), "manual": len(rec - act)}
+            "ever": bool(high)}
 
 
 # 百岳計算機的海拔適應預設 (SP-260, owner 2026-10-06; altitude-training.md §4.1): ≥ 2 nights above
-# 2,750 m in the 14 days before the trip (CDC's count, the same as the reminder) → 部分, else 未適應
-# (推估: 「部分」 is itself the midpoint of the two curves); 已適應 only when the athlete picks it.
+# 2,750 m in the 14 days before the trip (CDC's count) → 部分, else 未適應 (推估: 「部分」 is itself
+# the midpoint of the two curves). SP-546: the only value (no choice on the page any more).
 # Routes under 3,000 m (EVENT_MIN_M) get no 部分 on the page.
 PARTIAL_NIGHTS = NIGHTS
 
@@ -215,18 +184,18 @@ def accl_default(nights: int) -> str:
     return "partial" if nights >= PARTIAL_NIGHTS else "unacclimatised"
 
 
-def acclimatisation_default(alts: dict, today: dt.date, date: Optional[dt.date],
-                            manual: Optional[dict] = None) -> dict:
-    """The calculator's default for a trip on `date` (None or past = today): {"default", "nights",
-    "manual", "since", "start"} — nights counted as exposure() does (activities + records)."""
+def acclimatisation_default(alts: dict, today: dt.date, date: Optional[dt.date]) -> dict:
+    """The calculator's value for a trip on `date` (None or past = today): {"default", "nights",
+    "since", "start"} — nights counted as exposure() does (the activities)."""
     start = max(date or today, today)
-    ex = exposure(alts, today, start, manual)
-    return {"default": accl_default(ex["nights"]), "nights": ex["nights"], "manual": ex["manual"],
+    ex = exposure(alts, today, start)
+    return {"default": accl_default(ex["nights"]), "nights": ex["nights"],
             "since": (start - dt.timedelta(days=REMIND_DAYS)).isoformat(), "start": start.isoformat()}
 
 
 # ---------------------------------------------------------------------------
-# 睡在高處的紀錄 (SP-259): user_settings NIGHTS_KEY = [{"day": ISO, "m": int}]
+# 睡在高處的紀錄 (SP-259, dropped by SP-546): user_settings NIGHTS_KEY = [{"day": ISO, "m": int}]
+# stays in the database (no destructive migration) and is still validated on write, read by nothing
 # ---------------------------------------------------------------------------
 
 NIGHTS_KEY = "altitude.nights"
@@ -254,89 +223,20 @@ def validate_nights(value) -> None:
         seen.add(e["day"])
 
 
-def clean_m(m) -> int:
-    """A typed altitude → whole metres (raises ValueError)."""
-    try:
-        v = float(m)
-    except (TypeError, ValueError):
-        raise ValueError(_("高度要是數字（公尺）"))
-    if not math.isfinite(v) or not 0 < v <= NIGHT_MAX_M:
-        raise ValueError(_("高度要在 1–{mx:,} m 之間", mx=NIGHT_MAX_M))
-    return int(round(v))
-
-
-def set_night(nights: list, day: str, m: Optional[int]) -> list:
-    """The list with `day`'s night set to `m` (None = removed), sorted by day."""
-    out = [e for e in (nights or []) if e.get("day") != day]
-    if m is not None:
-        out.append({"day": day, "m": int(m)})
-    return sorted(out, key=lambda e: e["day"])
-
-
-def nights_map(value) -> dict:
-    """{date: m} of a stored list; {} when it is bad."""
-    try:
-        validate_nights(value or [])
-    except ValueError:
-        return {}
-    return {dt.date.fromisoformat(e["day"]): float(e["m"]) for e in value or []}
-
-
-def load_nights(user_id: int = 1) -> dict:
-    """The recorded nights {date: m} (synchronous read-only sqlite, like blackouts.load)."""
-    from backend.engine.wko5expr.datasource import read_setting
-    return nights_map(read_setting(NIGHTS_KEY, [], user_id))
-
-
-def event_night(events, day: dt.date, alt_of) -> Optional[dict]:
-    """The plan event night on `day` (a ≥ 2 day trip's nights are its first day … its second-last
-    day) whose altitude its GPX knows: {"m", "event_id", "name", "night"} — fills the record
-    dialog (SP-259 「從百岳賽事的營地自動帶入」); None otherwise. `alt_of(event)`: event_altitude."""
-    for e in events or []:
-        n = int(getattr(e, "days", 1) or 1)
-        try:
-            first = dt.date.fromisoformat(str(getattr(e, "date", ""))[:10])
-        except ValueError:
-            continue
-        i = (day - first).days
-        if n < 2 or not 0 <= i < n - 1:
-            continue
-        nights = (alt_of(e) or {}).get("nights") or []
-        if i < len(nights) and nights[i]:
-            return {"m": int(round(nights[i])), "event_id": e.id, "name": e.name, "night": i + 1}
-    return None
-
 
 # ---------------------------------------------------------------------------
 # the reminder
 # ---------------------------------------------------------------------------
 
-def weekends(start: dt.date, today: dt.date, taper_days: int = 0) -> list[dict]:
-    """安排適應週末 (SP-258): the weekends whose two nights (Friday and Saturday) both fall inside
-    the 14 days before `start` (CDC's window) and not before today — [{"sat", "sun", "taper"}];
-    the weekend whose Sunday is the departure day counts (its two nights are before the trip,
-    owner 2026-10-07). `taper`: the weekend reaches into the event's last `taper_days` days."""
-    since = start - dt.timedelta(days=REMIND_DAYS)
-    fri = since + dt.timedelta(days=(4 - since.weekday()) % 7)        # the first Friday ≥ since
-    out = []
-    while fri + dt.timedelta(days=2) <= start:
-        if fri >= today:
-            sat, sun = fri + dt.timedelta(days=1), fri + dt.timedelta(days=2)
-            out.append({"sat": sat.isoformat(), "sun": sun.isoformat(),
-                        "taper": bool(taper_days) and sun >= start - dt.timedelta(days=int(taper_days))})
-        fri += dt.timedelta(days=7)
-    return out
+def _sent(x: str) -> str:
+    """One sentence with its full stop (「。」 in Chinese, "." in English)."""
+    return _("{x}。", x=x)
 
 
-def _md(iso: str) -> str:
-    d = dt.date.fromisoformat(iso)
-    return f"{d.month}/{d.day}"
-
-
-def _weekend_label(w: dict) -> str:
-    a, b = dt.date.fromisoformat(w["sat"]), dt.date.fromisoformat(w["sun"])
-    txt = f"{a.month}/{a.day}–{b.day}" if a.month == b.month else f"{_md(w['sat'])}–{_md(w['sun'])}"
-    return txt + (_("（減量期：走輕鬆路線）") if w["taper"] else "")
+def is_high_trip(kind: Optional[str], alt: Optional[dict]) -> bool:
+    """A 百岳 trip (every 百岳 is ≥ 3,000 m, GPX or not) or an event whose GPX reaches EVENT_MIN_M."""
+    top = (alt or {}).get("max_m")
+    return kind == TRIP_KIND or (top is not None and top >= EVENT_MIN_M)
 
 
 def first_night_high(alt: Optional[dict]) -> Optional[float]:
@@ -346,72 +246,30 @@ def first_night_high(alt: Optional[dict]) -> Optional[float]:
     return float(nights[0]) if nights and nights[0] > EVE_FIRST_NIGHT_M else None
 
 
-def _plan_row(ev: dict, alt: dict, start: dt.date, today: dt.date) -> dict:
-    """15–28 days before (SP-258): 安排適應週末, the weekends of the 14-day window listed. No place
-    named (owner 2026-10-07); 行前一晚 only in the 說明."""
-    m = alt["max_m"]
-    ws = weekends(start, today, ev.get("taper_days") or 0)
-    flags = ["plan"]
-    title = _("「{name}」最高約 {m:,.0f} m：安排適應週末", name=ev.get("name") or "", m=m)
-    if ws:
-        what = _("出發前 14 天內找一個週末，在 2,750 m 以上睡 2 晚。可選：{days}",
-                 days="、".join(_weekend_label(w) for w in ws))
-    else:
-        what = _("出發前 14 天內在 2,750 m 以上連睡 2 晚")
-    reason = what + "。"
-    help_ = [_("CDC 建議出發前 14 天內在 2,750 m 以上睡至少 2 晚，越接近出發越好。Beidleman 2018："
-               "先在 3,000 m 住 2 天再上 4,300 m，高山症從 83% 降到 43%。"),
-             what + "。"]
-    if any(w["taper"] for w in ws):
-        help_.append(_("標「減量期」的週末一樣可以去，白天走輕鬆的路線、不要走長距離（推估）。"))
-    n1 = first_night_high(alt)
-    if n1 is not None:
-        flags.append("eve")
-        help_.append(_("第一晚睡在約 {m:,.0f} m：行前一晚住 2,500 m 左右（玉山國家公園建議；這一晚低於 2,750 m，"
-                       "不算進適應週末的 2 晚）。", m=n1))
-    help_ += [_("最高點與每晚的高度來自賽事的 GPX。研究多在 4,000 m 以上，套到 3,000–3,950 m 是推估。"
-                "出發前 14 天內會改成檢查你最近的高度紀錄。只是提醒，不會改課表。"),
-              _("按 ✕ 關掉後，這趟行程不再顯示這個提醒；出發前 14 天內的高度檢查照常出現。"),
-              _("來源：{src}", src=_src_plan())]
-    return {"event_id": ev.get("id"), "start": start.isoformat(), "days_to": (start - today).days,
-            "max_m": round(m), "nights": alt.get("nights") or None, "flags": flags, "title": title,
-            "reason": reason, "help": "\n".join(help_), "weekends": ws, "src": _src_plan()}
-
-
-def reminder(ev: dict, alt: dict, ex: Optional[dict], today: dt.date) -> Optional[dict]:
-    """The box row for one event (engine/suggestions.altitude_rows adds the id), or None when
-    the event is under 3,000 m or not 1–28 days away. `ev`: {id, name, start, days, taper_days}.
-    15–28 days: 安排適應週末 (`ex` not read, may be None); 1–14 days: the checks on `ex`."""
+def reminder(ev: dict, alt: Optional[dict], ex: dict, today: dt.date) -> Optional[dict]:
+    """The box row for one trip (engine/suggestions.altitude_rows adds the id), or None when it is
+    not a high trip (is_high_trip), not 1–7 days away, or the athlete reached ≥ 3,000 m in the last
+    3 months (`ex["recent"]`, exposure). `ev`: {id, name, start, kind}; `alt`: event_altitude (None =
+    no GPX)."""
     start = ev["start"] if isinstance(ev["start"], dt.date) else dt.date.fromisoformat(str(ev["start"])[:10])
     days_to = (start - today).days
-    if alt is None or alt.get("max_m") is None or alt["max_m"] < EVENT_MIN_M or not 0 < days_to <= EARLY_DAYS:
+    if not is_high_trip(ev.get("kind"), alt) or not 0 < days_to <= NOTICE_DAYS or ex.get("recent"):
         return None
-    if days_to > REMIND_DAYS:
-        return _plan_row(ev, alt, start, today)
-    m = alt["max_m"]
+    alt = alt or {}
+    top = alt.get("max_m")
+    name = ev.get("name") or ""
+    title = (_("「{name}」最高約 {m:,.0f} m：預防高山症", name=name, m=top) if top is not None
+             else _("「{name}」：預防高山症", name=name))
+    status = _("近 3 個月沒有到 3,000 m 以上：高山症風險較高（Shen 2024）")
+    act = _("上升放慢，出現頭痛、噁心等症狀就不再往上，變嚴重就下撤（CDC）")
     lines, flags = [], []
-    if ex["nights"] >= NIGHTS:
-        status = _("近 14 天有 {n} 晚在 2,750 m 以上：已有部分適應（CDC）", n=ex["nights"])
-        flags.append("acc")
-    elif ex["nights"]:
-        status = _("近 14 天有 1 晚在 2,750 m 以上；CDC 建議出發前 14 天內至少 2 晚，越接近出發越好")
-        flags.append("one")
-    else:
-        status = _("CDC 建議：出發前 14 天內在 2,750 m 以上睡至少 2 晚，越接近出發越好")
-    if ex["pre_days"] >= PRE_MIN_DAYS:
-        lines.append(_("近 2 個月有 {n} 天到 3,000 m 以上：有事前暴露（Schneider 2002：有事前暴露又慢慢上升，"
-                       "容易高山症的人發生率從 58% 降到 7%）", n=ex["pre_days"]))
-        flags.append("pre")
-    elif ex["recent"]:
-        lines.append(_("近 2 個月到 3,000 m 以上只有 {n} 天，還不算事前暴露（Schneider 2002：> 4 天）",
-                       n=ex["pre_days"]))
-        flags.append("recent")
-    else:
-        lines.append(_("近 3 個月沒有到 3,000 m 以上：高山症風險較高（Shen 2024）"))
-    if not ex["ever"]:
+    if not ex.get("ever"):
         lines.append(_("紀錄裡沒有到過 3,000 m 以上：第一次上 3,000 m 是高山症的相關因子（Shen 2024）"))
         flags.append("first")
     nights = alt.get("nights") or []
+    eve = first_night_high(alt) is not None
+    if eve:
+        lines.append(_("第一晚在 3,000 m 以上：行前一晚住 2,500 m 左右（玉山國家公園建議）"))
     if nights and nights[0] > FIRST_NIGHT_M:
         lines.append(_("第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC）", m=nights[0]))
         flags.append("n1")
@@ -422,20 +280,17 @@ def reminder(ev: dict, alt: dict, ex: Optional[dict], today: dt.date) -> Optiona
                        a=i, b=i + 1, d=nights[i] - nights[i - 1]))
         flags.append("jump")
     fit = _("體能好壞不影響高山症風險（CDC）：練得好不代表不會高山症")
-    title = _("「{name}」最高約 {m:,.0f} m：出發前的高度適應", name=ev.get("name") or "", m=m)
-    reason = status + "。" + (lines[0] if lines else "") + ("。" if lines else "") + fit + "。"
-    # SP-258: 行前一晚 only in the 說明 here — the row's title, text and id stay as before; no place
-    # named (owner 2026-10-08, like the 適應週末 row)
-    n1 = first_night_high(alt)
-    eve = [_("第一晚在 3,000 m 以上：行前一晚住 2,500 m 左右（玉山國家公園建議）。")] if n1 is not None else []
-    # SP-259: where the nights came from, and how to add one the activities can't see
-    rec = ([_("其中 {n} 晚來自你在課表日曆記的「睡在高處」。", n=ex["manual"])] if ex.get("manual") else []) + \
-        [_("開車上山過夜、隔天才爬，活動看不到這一晚：在課表日曆那一天按右鍵（手機長按）記「睡在高處」。")]
-    help_ = "\n".join(
-        [status + "。"] + rec + [x + "。" for x in lines] + eve + [fit + "。",
-         _("最高點與每晚的高度來自賽事的 GPX（每晚 = 分段點或營地）；你的高度來自活動的海拔紀錄，"
-           "前後兩天都到 2,750 m 以上才算在高處過夜（推估）。研究多在 4,000 m 以上，套到 3,000–3,950 m 是推估。"
-           "只是提醒，不會改課表。"),
-         _("來源：{src}", src=SRC)])
-    return {"event_id": ev.get("id"), "start": start.isoformat(), "days_to": days_to, "max_m": round(m),
-            "nights": nights or None, "flags": flags, "title": title, "reason": reason, "help": help_}
+    help_ = "\n".join([_sent(x) for x in [status, act] + lines + [fit]] + [
+        _("出發前 7 天內提醒，按「稍後提醒」到出發前一天再提醒；近 3 個月有活動到 3,000 m 以上就不提醒（看活動的海拔紀錄，推估）。"
+          "研究多在 4,000 m 以上，套到 3,000 m 左右是推估。只是提醒，不會改課表。"),
+        _("來源：{src}", src=_src(eve))])
+    return {"event_id": ev.get("id"), "start": start.isoformat(), "days_to": days_to,
+            "max_m": round(top) if top is not None else None, "nights": nights or None, "flags": flags,
+            "title": title, "reason": _reason(), "help": help_, "src": _src(eve)}
+
+
+def _reason() -> str:
+    """The box's text (3 lines at most): the status and act lines of reminder() as one msgid, so English can
+    leave out the Shen 2024 half (SP-546 R1: it pushed "(CDC)." past the third line); that line and its
+    source stay first in the ? help, in both languages."""
+    return _("近 3 個月沒有到 3,000 m 以上：高山症風險較高（Shen 2024）。上升放慢，出現頭痛、噁心等症狀就不再往上，變嚴重就下撤（CDC）。")

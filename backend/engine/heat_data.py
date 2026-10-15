@@ -2,7 +2,8 @@
 The athlete's heat-acclimation state from their own history (the I/O side of
 engine/heat.py): per-activity heat exposure from route_weather's
 activity_weather.json (Open-Meteo archive at each activity's point, filled by
-the routes build), completed passive heat sessions, and the projection to a
+the routes build), completed passive heat sessions (only rows from before SP-569: the plan
+no longer schedules any), and the projection to a
 race day. docs/research/heat-acclimation.md §2.4, §4.3, §5.3.
 """
 from __future__ import annotations
@@ -138,8 +139,7 @@ def status(today: Optional[dt.date] = None, race_day: Optional[dt.date] = None,
 
 def project_status(base: dict, race_day: Optional[dt.date] = None, planned: Optional[dict] = None) -> dict:
     """A status() (any race day, or none) for `race_day`: the race-day projection and
-    the source line. status() ends here; the static demo exports status(race_day=None)
-    and projects it in the browser to the date the race calculator asks for."""
+    the source line. status() ends here."""
     out = {k: v for k, v in base.items() if k not in ("s_race", "source", "warning")}
     if race_day:
         pj = HT.project(base["s"], dt.date.fromisoformat(base["today"]), race_day, planned)
@@ -232,3 +232,22 @@ def event_is_hot(ev, acts: list[dict]) -> dict:
     if r is None:
         return {"hot": False, "source": "同月份的歷史天氣不足：當作不熱"}
     return {"hot": r, "source": "你往年同一時期戶外活動的 Hadley 中位數" + (" > 150" if r else " ≤ 150")}
+
+
+HOT_RACE_WINDOW_D = 30           # an A / B race this close that is hot: the 熱適應 card's race-day S
+
+
+def hot_race(events, today: dt.date, acts: list) -> Optional[dict]:
+    """The first A / B event within HOT_RACE_WINDOW_D days that is hot (event_is_hot):
+    {"event", "days_to", "source"} or None. The 熱適應 card's race-day projection
+    (status.i_heat); SP-569: no heat sessions are scheduled for it any more."""
+    for e in sorted(events or [], key=lambda e: e.start):
+        if (e.priority or "").upper() not in ("A", "B"):
+            continue
+        days = (e.start - today).days
+        if days < 0 or days > HOT_RACE_WINDOW_D:
+            continue
+        h = event_is_hot(e, acts)
+        if h["hot"]:
+            return {"event": e, "days_to": days, "source": h["source"]}
+    return None

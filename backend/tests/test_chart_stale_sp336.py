@@ -2,7 +2,7 @@
 was drawn before, GET …/charts/{c}?stale=1 answers that drawing marked `stale` at once and
 computes the new one in the background; GET /render/ready says when it is there.
 
-Never stale: without ?stale=1 (the static demo export, scripts), for a demo tenant, or when the
+Never stale: without ?stale=1 (scripts), for a demo tenant, or when the
 background computation of that key failed. Synthetic data only (FakeDataset)."""
 import datetime as dt
 import threading
@@ -66,7 +66,7 @@ def api(monkeypatch, tmp_path):
 
 def _get(client, c=0, stale=True, begin=TODAY - dt.timedelta(days=89), end=TODAY):
     q = f"begin={begin}&end={end}" + ("&stale=1" if stale else "")
-    r = client.get(f"/api/v1/wko5/views/v/dashboards/0/charts/{c}?{q}")
+    r = client.get(f"/api/v1/app/views/v/dashboards/0/charts/{c}?{q}")
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -78,7 +78,7 @@ def _points(j):
 def _wait_ready(client, key, timeout=10.0):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
-        r = client.get(f"/api/v1/wko5/render/ready?keys={key}").json()
+        r = client.get(f"/api/v1/app/render/ready?keys={key}").json()
         if key in r["ready"] or key in r["failed"]:
             return r
         time.sleep(0.05)
@@ -95,7 +95,7 @@ def test_new_data_shows_the_old_chart_then_the_new_one(api):
     old = _get(client)
     assert time.monotonic() - t0 < 5
     assert old["stale"]["key"] and _points(old) == _points(first)
-    assert client.get(f"/api/v1/wko5/render/ready?keys={old['stale']['key']}").json()["pending"] == [old["stale"]["key"]]
+    assert client.get(f"/api/v1/app/render/ready?keys={old['stale']['key']}").json()["pending"] == [old["stale"]["key"]]
     gate.set()
     assert old["stale"]["key"] in _wait_ready(client, old["stale"]["key"])["ready"]
     new = _get(client)
@@ -119,7 +119,7 @@ def test_without_stale_the_request_waits_for_the_new_chart(api):
     client, holder, gate, st = api
     first = _get(client, stale=False)
     holder["ds"] = _ds(200, extra=[TODAY - dt.timedelta(days=3)])
-    new = _get(client, stale=False)                  # the static demo export, scripts
+    new = _get(client, stale=False)                  # scripts
     assert "stale" not in new and len(_points(new)) == len(_points(first)) + 1
 
 
@@ -183,12 +183,12 @@ def test_viewer_defaults_to_90_days_remembers_the_preset_and_swaps_stale_cards()
     import json
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "static"
-    html = (root / "wko5_viewer.html").read_text(encoding="utf-8")
+    html = (root / "charts.html").read_text(encoding="utf-8")
     assert 'DEFAULT_RANGE = "90"' in html and 'RANGE_PRESETS = ["7", "42", "90", "365", "ytd", "all"]' in html
     assert "range: S.range" in html                                   # saved with the other viewer choices
     assert "365 * 864e5" not in html                                  # the old one-year default is gone
     assert '"&stale=1"' in html and "/render/ready?keys=" in html and "markStale(card, res.stale" in html
-    assert "TRC_STATIC_CFG" in html                                   # the static demo never asks for stale
+    assert 'STALE_OK = (window.TRC_SESSION || {}).mode !== "demo"' in html   # the demo never asks for stale
     for loc in ("zh-TW", "en"):
         cat = json.loads((root / "i18n" / loc / "viewer.json").read_text(encoding="utf-8"))
         assert all(cat.get(k) for k in ("updating", "updating_tip", "progress", "progress_old")), loc
@@ -199,7 +199,7 @@ def test_a_workout_chart_keeps_its_key_across_a_new_activity_and_a_new_day(api):
     """Review #2: the viewer asks a single-activity chart with only ?workout=; its key no longer
     carries the defaulted [today − 365, today] range."""
     client, holder, gate, st = api
-    url = "/api/v1/wko5/views/v/dashboards/0/charts/2?workout=150"
+    url = "/api/v1/app/views/v/dashboards/0/charts/2?workout=150"
     first = client.get(url)
     assert first.status_code == 200, first.text
     n = st["calls"]
@@ -257,7 +257,7 @@ def test_the_app_shuts_the_refresh_pool_down():
 
 def test_viewer_gives_up_waiting_without_stale():
     from pathlib import Path
-    html = (Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html").read_text(encoding="utf-8")
+    html = (Path(__file__).resolve().parents[1] / "static" / "charts.html").read_text(encoding="utf-8")
     assert "renderCard(card, v, di, c, q, token, { stale: false })" in html     # give up: computed in the request
     assert "STALE.tries = 0; STALE.timer" not in html                            # not reset by every new card
 

@@ -132,10 +132,10 @@ def test_a_user_gets_nomode_and_the_admin_does_not(app, c):
     u = browser(app, "203.0.113.21")
     sign_up(u, "g-user", "runner@example.com")
     for cl, want in ((u, True), (c, False)):
-        r = cl.get("/api/v1/wko5/settings")
+        r = cl.get("/api/v1/app/settings")
         assert r.status_code == 200
         assert _nomode(_inlined_session(r)) is want
-        assert cl.get("/api/v1/wko5/config").json()["can_switch"] is (not want)
+        assert cl.get("/api/v1/app/config").json()["can_switch"] is (not want)
 
 
 def test_the_owners_app_and_the_demo_have_no_login():

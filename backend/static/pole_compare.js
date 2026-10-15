@@ -1,12 +1,12 @@
 // 有杖 vs 沒杖 (views kind "polecompare" → backend/engine/panels/pole_compare.py, SP-243). Self-contained:
-// loaded by wko5_viewer.html, which calls drawPoleCompare(box, res); uses the viewer's globals (esc, css,
+// loaded by charts.html, which calls drawPoleCompare(box, res); uses the viewer's globals (esc, css,
 // echarts, charts, t, pzDark). One measure at a time (a segmented switch, remembered per browser): grade bins
 // on a category axis, the two groups as two marks per bin — 有杖 = blue circle, 沒杖 = orange diamond
 // (palette slots 1, 2, validated light + dark; shape too, never colour alone), each labelled with its n.
 // A group with n < min_n gets no mark (its n stays under the axis label). No verdict line: the caveat
 // (heavier pack, steeper, longer on the pole days) is shown on the card. A table view sits under the chart.
 (function () {
-  const KEY = "wko5viewer.polecompare";
+  const KEY = "charts.polecompare";
   const prefs = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; } };
   const save = (patch) => { try { localStorage.setItem(KEY, JSON.stringify({ ...prefs(), ...patch })); } catch {} };
   const colors = () => (window.pzDark && pzDark())

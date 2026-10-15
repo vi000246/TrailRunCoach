@@ -65,7 +65,6 @@ decisions on the workbook's ambiguities (D1–D10) are in
 | `watch_export.py` | Plan → watch workout steps (lap-button legs or distance steps) | `backend/engine/racepower/watch_export.py:198` |
 | `race_calc_store.py` | Page inputs + last result saved per season-plan event (table `race_calc`; each row a stable `uid` + UTC `updated_at`, SP-310) | `backend/engine/race_calc_store.py:95` |
 | `event_gpx.py` | One stored GPX / FIT per season-plan event (+ day splits) | `backend/engine/event_gpx.py:145` |
-| static demo | calc.py in the browser (Pyodide) on an exported context | `backend/demo/static_racepower.py:343` |
 
 ## Derived inputs (`derive`)
 
@@ -275,15 +274,15 @@ newest confirmed road race of the last 365 days:
 `race_conditions` (`backend/engine/racepower/weather.py:937`) tries, in order, and logs every
 attempt in `tried`. With `event_id` and no peak / coordinates, the location is the start of the
 event's stored GPX:
+Every tenant starts with CWA (SP-552: CWA open data may be used commercially with the source
+named; Open-Meteo only fills what CWA has not got — 8–16 days out, outside Taiwan, the
+climatology, heights):
 1. CWA 登山三天 hourly (F-B0053-035), then 登山一週 day/night (F-B0053-033) — whole-file
-   downloads from the fileapi, compacted and cached as `cwa_<id>.json` in the tenant's shared data
-   folder (`weather.home()`), refreshed when ≥ 3 h old; a stale cache is used when there is no key
-   or the fetch fails (`backend/engine/racepower/weather.py:728`). Locations match by name, else nearest ≤ 5 km;
-   daytime 06–18 values only.
-2. Open-Meteo forecast (≤ 16 days, lat/lon/elevation). It requests one extra day when the horizon
-   allows, for races that run past midnight.
-3. CWA 鄉鎮天氣預報 (SP-234), the fallback when the Open-Meteo forecast has no data or fails:
-   臺灣未來3天 F-D0047-089 (temperature / dew point / RH hourly on day 1, 3-hourly to day 3) when the event fits in 3 days, else 臺灣未來1週 F-D0047-091 (12-hour
+   downloads from the fileapi, compacted and cached as `cwa_<id>.json`, refreshed when ≥ 3 h old;
+   a stale cache is used when there is no key or the fetch fails. Locations match by name, else
+   nearest ≤ 5 km; daytime 06–18 values only.
+2. CWA 鄉鎮天氣預報 (SP-234): 臺灣未來3天 F-D0047-089 (temperature / dew point / RH hourly on
+   day 1, 3-hourly to day 3) when the event fits in 3 days, else 臺灣未來1週 F-D0047-091 (12-hour
    blocks). Same key, same fileapi download and 3 h disk cache as the mountain files. The nearest
    point (the 鄉鎮市區公所, `CWA_TOWN_MATCH_KM` 20 km, 推估) by coordinates; the files have no
    elevation, so the point's height (and the race's, when not given) comes from Open-Meteo's
@@ -293,10 +292,24 @@ event's stored GPX:
    `town_elevation_m`, `target_elevation_m`, `lapse_m`, `offset_c`; the page names the 鄉鎮 and the
    metres / °C moved. No key, no coordinates, offline, no point within 20 km or no elevation →
    the next step, with the reason in `tried` (`cwa_town`, `cwa_town_hourly`, `cwa_town_weekly`).
-   After Open-Meteo by the owner's decision (2026-10-06) until the station comparison SP-234
-   suggests (needs CWA observations, i.e. the key) shows which is closer — **open**. The
-   elevation lookup uses Open-Meteo's host too: when all of Open-Meteo is down, the fallback works
-   only for points whose height is already cached.
+   Before the Open-Meteo forecast since SP-552 (`CWA_TOWN_FIRST`; False gives back the owner's
+   2026-10-06 order, Open-Meteo first, until a station comparison exists — **open**). The 鄉鎮
+   product's wind is still left out (valley point), so a race only the 鄉鎮 product covers has no
+   wind rows. The elevation lookup uses Open-Meteo's host: when it is down, the step works only
+   for points whose height is already cached.
+3. Open-Meteo forecast (≤ 16 days, lat/lon/elevation). It requests one extra day when the horizon
+   allows, for races that run past midnight.
+
+Shared CWA cache (SP-552): the four CWA files and `cwa_town_elevation.json` are one copy for the
+whole site in the server root (`weather.site_dir()` = `accounts.server_root()`: the owner's folder
+unless `TRC_SERVER_ROOT` says otherwise; data registry scope INSTANCE), fetched with the site's key
+(`weather.site_key()`: env `CWA_API_KEY` / `CWA_API_KEY_FILE`, else the owner's `weather.json`)
+whoever asks. One download at a time per file (a per-file lock; while it runs, the other requests
+get the old copy at once, or wait when there is none); written atomically; parsed once per process
+while the file is unchanged (`weather.cwa_doc`). A tenant other than the owner still never reads,
+sets or sees the key: `GET /weather/key` tells it only `shared: true`. Each CWA answer carries
+`detail.attribution` (「天氣資料來源：中央氣象署」; the 鄉鎮 one adds Open-Meteo for the heights), shown
+under the 環境 card. The climatology stays per tenant.
 4. Open-Meteo archive climatology (SP-210, `fetch_climatology`): the month centred on the race
    date (±15 days) in each of the last 10 years, queried at the target elevation (0.01°, 10 m),
    each hour the mean of ERA5, ERA5-Land and ECMWF IFS 9 km (the three-model mean had the smallest
@@ -314,6 +327,32 @@ products (登山 and 鄉鎮, the latter lapse-corrected), the Open-Meteo forecas
 provide it; the weekly blocks and manual give `null`. `hourly_at` (`backend/engine/racepower/weather.py:673`) interpolates temperature and dew
 point linearly between the bracketing rows and rebuilds RH from them. It takes the edge row up to
 1.5 h past either end, and returns nothing beyond that.
+
+Along the course (SP-553): `GET /weather` with `course_id` (the uploaded GPX) or an `event_id` with a
+stored GPX, and a forecast for the race's own point (`FORECAST_PROVIDERS`; far-off dates on the
+climatology keep the one point), adds `points`: the course cut into ⌈km ÷ `ROUTE_POINT_KM` (10)⌉
+equal sections, at most `ROUTE_MAX_POINTS` (6), none under `ROUTE_MIN_KM` (8 km) (all 推估) —
+`route_sections`, each point the track sample nearest its section's middle; `route_conditions` runs
+the chain at each point by its own coordinates (no name match) with `forecast_only` (no climatology:
+its ten archive calls per point). Each point `{i, from_km, to_km, km, lat, lon, elevation_m (the
+height its rows refer to), provider, label, detail, hourly, rain, wind}`. Calls per race: the CWA
+files are the site's (SP-552: no call per point), Open-Meteo at most once per point and memoised for
+an hour per process (`om_forecast`, `OM_MEMO_TTL_S`, 256 entries), the town heights cached for good —
+at most 1 + 6 forecast calls. The page sends them back as `weather_points` (each section's hourly
+rows only when it sends `hourly`); the planner reads each segment's heat from the rows of the section
+holding its middle (`section_for`; `wx_point` on the segment) at its own clock and moves it from that
+section's height to the segment's (`_at_height`), else the race's one point. The rain reminder counts
+each section's rows over the hours the plan is in it (`section_rain_rows`; `rain.points`), the 冷風
+and 失溫 checks read each segment's section rows and height (`local_rows`, `cold.cold_wind` /
+`min_temp(local=…)`). Without a start time the reminders use the one point, as before. 百岳 heat is
+still one To lapsed per segment (its planner has no hourly heat). The card lists the sections
+(`#wx-route`).
+
+疊石 Cairn link (SP-553, SP-531 Q2: links only): `GET /weather` reads the plan event's note
+(`event_id`, or `link_event` when the place came from the query) for a Cairn route link and rebuilds it
+from its ids only (`cairn_url`: `https://map.yichlin.com/?gpx=<id>[&share=<token>]`, Cairn's route pick and
+share link) → `cairn: {url}`, shown under the 環境 card (`#cairn-link`); none → nothing shown.
+TrailRunCoach stores no Cairn id of its own (SP-537 would).
 
 Night climatology in the single To (SP-257, docs/research/night-and-sleep.md §3 G5 / §4.2 單 4):
 the climatology's `values` are its daytime 06:00–17:59 mean, so a race run at night had a single To
@@ -433,10 +472,10 @@ hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山)
 | GET | `/api/v1/racepower/grade-model` | gait-aware RE(g) (run / walk bins, walk share, technicality per class and per downhill bin) / v_max(g) / v_h(g), the HR hike-window summary and its basis (`backend/api/racepower.py:394`); one fit per key at a time — /plan, this route and a second tab on a cold cache wait for the same computation (`_grade_models`, `backend/api/racepower.py:334`, `backend/singleflight.py`; SP-366) |
 | GET | `/api/v1/racepower/cadence-check` | SP-230: the climbing (≥ 3 % windows) cadence histogram of the year's outdoor runs (5-spm bins, disk-cached per activity `racepower_climb_cadence_v1`) against the 130 spm walk line: two groups or one, the valley, whether 130 sits in it, a hint; report only, the line never moves (`backend/engine/racepower/runwalk.py`, page section 爬坡步頻分布); one scan per key for concurrent requests (`_climb_cadence`, `backend/api/racepower.py:432`; SP-366). Both are warmed last by the warm-up's low-priority thread, after the activity classification job, owner only (`warm_charts`, `backend/api/racepower.py:414`) |
 | GET | `/api/v1/racepower/heat-status?date=` | heat-acclimation S today, its history and the race-day projection (`backend/api/racepower.py:491`) |
-| GET | `/api/v1/racepower/altitude-acclimatisation?date=` | SP-260: the 百岳 海拔適應 default for a trip — nights above 2,750 m in the 14 days before it (activities + the 課表 calendar's records) → `{default, nights, manual, since, start}` (`backend/api/racepower.py:498`, `altitude.acclimatisation_default`) |
+| GET | `/api/v1/racepower/altitude-acclimatisation?date=` | SP-260: the 百岳 海拔適應 default for a trip — nights above 2,750 m in the 14 days before it (activities; SP-546: no records) → `{default, nights, since, start}` (`backend/api/racepower.py:498`, `altitude.acclimatisation_default`) |
 | GET / POST | `/api/v1/racepower/hike-meta` | pack per trip (`racepower_hike_meta.json`, matched by file else start time) (`backend/api/racepower.py:551`) |
 | GET / POST | `/api/v1/racepower/solo-hikes` | the opted-in solo hikes (`{"files": [.wko4 names]}`); only these calibrate EP/h, the walking model, the hike back-test and the 登山 conversion (`backend/api/racepower.py:574`) |
-| GET / POST | `/api/v1/racepower/backtest`, `/backtest/run` | stored back-test + run state / start a background run (`backend/api/racepower.py:703`, `backend/api/racepower.py:709`) |
+| GET / POST | `/api/v1/racepower/backtest`, `/backtest/run` | stored back-test + run state / start a background run (`backend/api/racepower.py:703`, `backend/api/racepower.py:709`); the run computes in a worker process (SP-394 第 5 條: `_backtest_runner` / `backtest_in_worker`, `backend/api/racepower.py:756`, `backend/workproc.py`) |
 | POST | `/api/v1/racepower/export/plan` | 「匯出至課表」: the plan as the race-day session of the stored plan (kind `race`, `ext_key` `racecalc:<event id>`); `event_id` required (400 without, 404 unknown; 400 for a multi-day 百岳 trip); `push: false` = preview, `push: true` writes it, `overwrite: true` needed when the earlier export was changed on the 課表 page (else 409 `EDITED`) (see Watch export) (`backend/api/racepower.py:857`) |
 | POST / GET / DELETE | `/api/v1/racepower/share`, `/shares`, `/shares/{sid}` | create a read-only share of the /plan result (`share_title`, `include_weight`, `expires_days`), list, delete (`backend/api/racepower.py:797`) |
 | GET | `/share/{sid}`, `/share/{sid}/data` | public share page and its frozen snapshot (own prefix, no-store / noindex / no-referrer; 410 after expiry) (`backend/api/racepower.py:835`) |
@@ -473,6 +512,24 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
   distance, 5 decimals) and each waypoint keeps its `lat` / `lon`, for the course map. A share
   snapshot keeps only `km` / `z` and no waypoints (`backend/engine/racepower/share.py:115`), so a
   share link carries no coordinates.
+- **Ground — 土徑比** (SP-543, `backend/engine/racepower/surface.py`, stored per course file by
+  `backend/engine/course_surface.py`, API `GET/POST/PUT /surface/{course_id}`): the OSM ways within
+  60 m of the course (Overpass at `$TRC_OVERPASS_URL`, ≤ 100 corridor points in chunks of 25, one
+  request at a time, 40 s budget, all-or-nothing), each track point every 20 m takes the class of
+  the nearest way within 50 m (Cairn's rules + SP-531: an untagged path / footway is unknown,
+  sac_scale ≥ mountain_hiking / a very bad smoothness is dirt, laid surfaces are paved; shared
+  cases `backend/tests/fixtures/osm_surface_cases.json`), runs < 60 m join their neighbour. Three
+  groups: 確定土徑 (dirt) / 確定人工 (gravel, paved, steps) / 不確定 (unknown). The page shows the
+  split under 路線 with © OpenStreetMap contributors; the unsure stretches are dashed on the course
+  map and a click marks them; the split can also be typed in. A failed lookup is 路面未知 and never
+  blocks the calculation; it is not stored (the next visit tries again).
+- **Technicality on the dirt only** (SP-544, off unless `TRC_TECH_DIRT_ONLY=1`): with the course's
+  stored surface, each trail segment at g ≤ +2 % keeps the technicality factor only on its dirt +
+  unsure share (`surface.apply_tech_dirt`: `re_mult = (1 + share·(f − 1)) / f`, applied by
+  `pacing.course_time`); the plan's `summary.tech_ground` says how much, shown under the 路面 row.
+  The back-test compares it when a run sets `backtest.GROUND_OF` (`tech_dirt_summary`). 2026-10-14
+  on the owner's data (33 trail runs with power, no trail race-like case): median |mode-B error|
+  9.37 % → 9.76 %, 12 better / 18 worse — left off.
 
 ### Models
 
@@ -604,10 +661,10 @@ suggestion.
   athletes span 4.6–7.5 (range ÷ 2.847 = 1.02; the n = 8 range-to-SD step is ours) plus half the
   Wehrlin–Coffman gap (VO2max vs fixed-HR speed, 1.25; 推估). A(z) = exp(b/100·max(0, z−300)/1000);
   acclimatised × Bassett acclimatised ÷ unacclimatised (推估); partial = the midpoint of the two
-  (SP-260, as `env._alt_factor`; 推估, warned with `planner.PARTIAL_NOTE`). The page's 百岳 default
-  (nothing picked): ≥ 2 nights above 2,750 m in the 14 days before the trip (activities + the 課表
-  calendar's records, `altitude.acclimatisation_default`, GET `/api/v1/racepower/altitude-acclimatisation?date=`)
-  → partial, else unacclimatised; acclimatised only when picked; no partial on a route under 3,000 m.
+  (SP-260, as `env._alt_factor`; 推估, warned with `planner.PARTIAL_NOTE`). The page's 百岳 value
+  (SP-546: automatic only, no 海拔 choice on the page): ≥ 2 nights above 2,750 m in the 14 days before
+  the trip (activities, `altitude.acclimatisation_default`, GET `/api/v1/racepower/altitude-acclimatisation?date=`)
+  → partial, else unacclimatised; no partial on a route under 3,000 m; other race types acclimatised.
 - **Flat / descent** (§3.4): v_flat = min(median walked flat speed of trail runs × p(L), Pandolf⁻¹
   at g); uphill never faster than flat; v_down = personal walked descent windows shrunk to
   c_cap·Tobler, × (W+2)/(W+L) ÷ η, capped at c_cap·Tobler(g), c_cap = p75 of speed ÷ Tobler over
@@ -668,8 +725,10 @@ Design: `docs/research/heat-acclimation.md`.
 - The athlete's HR heat coefficient β (bpm per Hadley unit, moving HR to Hadley 120) is a calibration
   item (`heat_calib.hr_beta`: route-effort OLS with route fixed effects, ≥ 30 efforts and a Hadley
   span ≥ 40, shrunk toward a 0.3 default, 推估); the trail HR model and other heat users read it.
-- Calculator: `#heat-accl` (自動 / 未適應 / 部分 0.5 / 已適應 0.9 / 自訂), `heat_acclimatisation` in
-  /plan, `GET /heat-status?date=`; road / trail show 熱影響 raw → after, the range and the
+- Calculator: SP-569 — automatic only, no 熱適應 choice on the page (like SP-546's 海拔): the page always
+  sends `heat_acclimatisation = {"mode": "auto"}` (a choice saved in an old scenario is ignored), the server
+  projects the race-day S from the activities' weather (`heat_data.status`, as `GET /heat-status?date=`);
+  the API still takes none / partial / acclimatised / custom; road / trail show 熱影響 raw → after, the range and the
   finish-time range; segments carry `heat_eff_pct`. 百岳 applies H per segment via the lapse rate.
 - HRC (`heat.hr_cost`, `heat_data.steady_segments`) is an observation; its trend only gates a (above).
 
@@ -1074,7 +1133,7 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   day ends clicked on a multi-day course are saved back.
 - **Required inputs** are marked (red *); 百岳 跟團／自己走 is a required box; 計算 lists what is missing.
 - **進階計算選項** (SP-214, `backend/static/racepower.html:364`): the tuning options with working
-  defaults sit in one collapsed panel — 分段 (and its parameters), 策略, 坡道彈性, 海拔, 熱, 熱適應,
+  defaults sit in one collapsed panel — 分段 (and its parameters), 策略, 坡道彈性, 熱,
   心率帶 (百岳), 夜間, effort km. Its summary names what was changed from the defaults; the core inputs
   stay in view.
 - **effort km 公式** (trail; `effort_formula`, `backend/engine/racepower/calc.py:332`): picks the
@@ -1119,8 +1178,7 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   /cadence-check) load when their section opens, on every race type (the road plan uses the grade
   curve too; owner 2026-10-08). A connection that drops (「Failed to fetch」) or a gateway answer
   (502–504, 520–524) shows a short message with 重試 instead of the raw error, and a chart sends one
-  request at a time (SP-366, `chartErr` / `NET_STATUS`, `backend/static/racepower.html:2218`). The
-  static export opens both so the demo has their answers (`backend/demo/export_static.py`). Explanations sit behind ? icons; references stay out of the page. A GPX
+  request at a time (SP-366, `chartErr` / `NET_STATUS`, `backend/static/racepower.html:2218`). Explanations sit behind ? icons; references stay out of the page. A GPX
   course also gets the course map (SP-41; see **Course map** under Share links).
 - The 熱 row toggles the per-segment heat (推估 badge; on by default). The hourly rows go with the plan
   only when the race-day temperature / humidity are the fetched values, not ones the user typed.
@@ -1128,9 +1186,6 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   百岳 presets; region `intl` hides the 百岳 chips, peak lists and the CWA key. The header's 專項 chip
   (`backend/static/sportchip.js`, `backend/static/racepower.html:269`, SP-450; the same as 圖表分析's) switches
   主要訓練項目 here: it saves the setting and reloads, and `init()` reads it again.
-- The static demo (`backend/demo/static_racepower.py`): `static_shim.js` answers the page's POSTs
-  from precomputed answers, else from a Web Worker running calc.py in Pyodide on an exported
-  `LiveContext` snapshot (`collect()` → `StaticContext`); weather is never fetched there.
 
 ### Fuelling (`backend/engine/racepower/fuel.py:514`)
 
@@ -1347,8 +1402,7 @@ weather from the event GPX start. `backend/tests/test_plan_store.py` covers the 
 generator's race, reconcile keeping the export, restore, the moved race, the weekly TSS, and the
 plan push sending the race and removing the old calculator workout. `backend/tests/test_race_goal.py`: goal basis, levels,
 pace / power goals through /plan. `backend/tests/test_event_gpx.py`: stored GPX, day splits, reuse
-after restart. `backend/tests/test_static_racepower.py`: calc on the exported context equals the live
-API (road, goals, trail GPX, multi-day 百岳) and the Pyodide bundle needs no server modules.
+after restart.
 Per-athlete items: `test_heat_calib.py`, `test_effort_calib.py`, `test_terrain_calib.py`.
 
 Added since 2026-10-04:
@@ -1360,8 +1414,7 @@ athlete's own late-race fade while the whole-race time stays the HR model's.
 `backend/tests/test_backtest_long_races.py` (SP-240): the ≥ 8 h races listed apart, with and without
 decay. `backend/tests/test_race_format.py` (SP-114): 賽制 分站 / 連續, sleep points, the hardest
 stretch. `backend/tests/test_racepower_page_adv.py` (SP-214): the core inputs in view and the tuning
-options in the collapsed 進階計算選項 panel. `backend/tests/test_altitude_nights.py` (SP-259): nights
-marked on the 課表 calendar count for the altitude reminder like nights the activities show.
+options in the collapsed 進階計算選項 panel.
 `backend/tests/test_racepower_charts_sp366.py` (SP-366): a flat road runner gets both chart answers;
 concurrent /grade-model fits and /cadence-check scans run once; every race type loads the charts; under
 node, a dropped connection and 502 / 524 read as the message with 重試 (a 400 keeps its text), one
@@ -1478,11 +1531,11 @@ when set, but nothing fills it from the routes module yet.
 
 | Decision | Choice | Alternatives | Rationale |
 |---|---|---|---|
-| Race-day weather chain | 登山 → Open-Meteo → 鄉鎮 (fallback) → climatology → manual (`backend/engine/racepower/weather.py:1039`) | 鄉鎮 before Open-Meteo, as first built | No station comparison yet shows which is closer in Taiwan; 鄉鎮 points sit in valleys and need the lapse correction. Owner 2026-10-06 on SP-234 |
+| Race-day weather chain | 登山 → 鄉鎮 → Open-Meteo → climatology → manual, for every tenant, CWA files shared by the site (`backend/engine/racepower/weather.py` `race_conditions`, `CWA_TOWN_FIRST`) | Open-Meteo before 鄉鎮 (owner 2026-10-06 on SP-234, until a station comparison); CWA for the owner only (SP-384) | SP-552 (SP-531 W1, owner 2026-10-14): CWA open data may be used commercially, Open-Meteo's free tier may not, so CWA comes first wherever it has data; one switch gives the old order back |
 | Rain reminder scope | Trail, 百岳 and road (own wording); without a start time only 06–18 is checked (`backend/engine/racepower/weather.py:108`) | Trail / 百岳 only, as in the ticket | Rain matters on road too; thresholds stay as proposed (推估). Owner 2026-10-06 on SP-249 |
 | Cold thresholds | Wind chill ≤ −10 °C or gusts ≥ 50 km/h; 失溫風險 at lowest temperature ≤ 5 °C with rain or wind chill ≤ −5 °C; no 強制裝備 checklist (`backend/engine/racepower/cold.py:52`) | Stricter or looser bands; a mandatory-gear list | Kept as proposed (ECCC bands, 推估). Owner 2026-10-06 on SP-251 / SP-253 |
 | Night slowdown | Optional 0 / 5 / 10 / 15 %, default 0 %, no learning from the athlete's own night runs (`backend/engine/racepower/night.py:24`) | A default slowdown; a personal fit | No study separates darkness from fatigue (Brager 2020's 35.9 % includes fatigue). Owner 2026-10-06 on SP-254 |
-| 百岳 acclimatisation default | ≥ 2 nights above 2,750 m in the 14 days before → 部分, else 未適應; the user's pick is kept; 部分 hidden under 3,000 m (`backend/engine/altitude.py:219`) | Always 未適應; 已適應 by default | CDC's 2 nights; 部分 = midpoint is 推估. Owner 2026-10-06 on SP-260 |
+| 百岳 acclimatisation default | ≥ 2 nights above 2,750 m in the 14 days before → 部分, else 未適應; automatic only since SP-546 (no pick); never 部分 under 3,000 m (`backend/engine/altitude.py:219`) | Always 未適應; 已適應 by default | CDC's 2 nights; 部分 = midpoint is 推估. Owner 2026-10-06 on SP-260 |
 | Stryd-trusted grades | −2 … +8 % only, or ≥ 30 personal windows in the bin (`backend/engine/racepower/grade_model.py:39`) | \|g\| ≤ 8 % (descents counted as validated) | van Rassel 2026 validated 0–8 % uphill only; accept that more descents show 推估. SP-246 |
 | Observed HRmax look-back | 730 days (`MAXIMAL["hrmax_window_days"]`, `backend/engine/racepower/maximal.py:84`) | 365 days, as the other windows | Maximal efforts are rare and HRmax falls only ~0.7 bpm / yr (Tanaka 2001). SP-265 follow-up |
 | Calculator export target | 「匯出至課表」: the race-day session of the stored plan, pushed with the plan (`backend/api/racepower.py:856`) | A direct COROS workout push (`/export/coros`, retired) | One place for the race day; an edit on the 課表 is not silently overwritten (409). SP-43 |
@@ -1551,3 +1604,11 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-13 | bugfix | SP-468 (the user 2026-10-13) | A detected CP test's CP is always WKO5's PD mFTP up to the test day (no two-point, no single bout with the W′ prior; none without a fit, the test kept for the back-test); the page no longer says 「這只是建議，要到賽季計畫自己套用」 nor 「尚未套用」 (`backend/engine/racepower/cptest.py:107`, `backend/engine/racepower/athlete.py:1060`, `backend/static/racepower.html`) |
 | 2026-10-13 | bugfix | SP-461 | Per kg, every run's RE is at the run's own-day weight (`athlete.run_mass`): the cached per-run row (key `racepower_v1`, its key now carries the mass) was keyed on the own-day weight but computed with today's, so a new weight entry left older runs at the old "today" (a warm and a cold cache gave different road REs) and derive's RE (today's weight) and the grade windows (own-day weight) rested on two weights; the trail RE in derive and LSS/kg follow. Changes the numbers of anyone whose weight changed within the year (demo athlete 63.5 → 62.0 kg: road / trail RE +1.8–1.9 %, predicted times −2.0 %, trail plan totals unchanged, segment times up to 1.5 % (5.2 % at an extreme target)); without a weight nothing changes (bitwise). |
 | 2026-10-13 | feature | SP-482 | Warnings become hint objects `{id, cls, prio, smart, text, detail, show, ack, fp}` (docs/spec/ui-hints.spec.md): the engine keeps strings, each tagged with its inventory id by `hints.tag` (`Tagged`, a `str`: every string check still works; RC6 目標太快, RC14 撐不住, RC16 CP 低於實測, RC20 脫水, RC21 沒填補給站, RC28 沒有體重 (class 1), RC13a 高山症, method notes RC1 / RC7 / RC8 / RC11 …); `calc.respond` (`backend/engine/racepower/calc.py:792`) converts `warnings`, `course_warnings` and `fuel.warnings` in the /plan, /predict (`calc.predict_response`), /course and /course/event responses and the static worker; an untagged / old saved string is id RC, shown as before. `racepower.html` / `share.html` read both; `share.snapshot` filters by text (`hints.text`). Tests changed to read `w["text"]` and assert the id (test_racepower_v2 T15, test_race_climatology_night, test_racepower_fuel, test_no_weight_sp414) |
+| 2026-10-14 | perf | SP-394 第 5 條 | The back-test (`POST /backtest/run`) computes in a worker process (`backend/workproc.py`): its queued `backtest` job reads / builds this tenant's Dataset, then waits while a spawned process rebuilds it warm from the disk caches, runs `backtest` and saves `racepower_backtest.json`; progress relayed as before. Measured (52-week demo, this PC): in the server a back-test made the 課表 calendar ×10–19 (p50; NAS 推估 ~0.8 → ~8–16 s) and the overview status ×13–21; in the worker ×0.8–1.5. `TRC_PROCESS_JOBS=0` (the tests) computes it in the server as before. Tests: `backend/tests/test_workproc_sp394.py` |
+| 2026-10-14 | removal | SP-500 | The static demo is gone (owner 2026-10-14: no static demo any more): `backend/demo/export_static.py`, `static_racepower.py` (calc.py in Pyodide), `static_racepower_worker.js`, `static_shim.js`, `static_steps.py`, their tests and `deploy/static/`. calc.py stays the API's module on `LiveContext`. |
+| 2026-10-14 | feature | SP-546 | The 海拔 row (已適應／部分／未適應, its ? and the default line) is gone from the page (owner 2026-10-14: nothing to fill in): `accl()` = the automatic value (百岳: ≥ 2 nights above 2,750 m in the 14 days before, from the activities → 部分, else 未適應; other types 已適應); a saved `S.accl` is ignored; `/altitude-acclimatisation` no longer reads the calendar's recorded nights (no `manual`). |
+| 2026-10-14 | feature | SP-552 | CWA forecasts shared by the whole site: the 登山 / 鄉鎮 files and the town heights in the server root (`site_dir()`), fetched with the site's key (`site_key()`) for every tenant, one download per file at a time, parsed once per process; every tenant's chain is 登山 → 鄉鎮 → Open-Meteo → climatology (`CWA_TOWN_FIRST`); CWA answers carry `detail.attribution` 中央氣象署; `/weather/key` adds `shared`; tests in `test_weather_shared_sp552.py`, `test_race_township.py` |
+| 2026-10-14 | feature | SP-553 | Race-day weather along the course: `/weather` `points` (≤ 6 sections of 10 km, forecast only, Open-Meteo memoised 1 h, CWA files shared); the plan's `weather_points` → each segment's heat (`wx_point`), the rain, 冷風 and 失溫 reminders from its own section at its own clock; the 疊石 Cairn link from the event's note (`cairn_url`); tests in `test_route_weather_sp553.py` |
+| 2026-10-14 | feature | SP-543 | 土徑比: the course's ground from the self-hosted Overpass (`surface.py`, table `course_surface` per course file), three groups 確定土徑 / 確定人工 / 不確定, unsure stretches dashed and clickable on the course map, a typed-in split, 路面未知 on failure (never blocks the calculation) |
+| 2026-10-14 | feature | SP-544 | The trail technicality only on the dirt + unsure share of each segment behind `TRC_TECH_DIRT_ONLY` (off: the back-test on the owner's trail runs was worse, 9.37 % → 9.76 %); `summary.tech_ground`, the line under 路面, the back-test's `tech_dirt` comparison via `GROUND_OF` |
+| 2026-10-14 | feature | SP-569 | The 熱適應 row (自動／未適應／部分／已適應／自訂 %, its ? and the S line) is gone from the page (user 2026-10-14: nothing to choose or keep up by hand): `heatAcclBody()` = `{mode: "auto"}`, a saved `S.heatAccl` is ignored; the race-day heat effect and its block in the results stay. |

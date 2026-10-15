@@ -30,7 +30,7 @@ def test_threshold_intervals_repeat_block():
     s = sess("quality", "閾值 3×10 分", 60, detail="休 2–3 分鐘；暖身 15 分、緩和 10 分")
     text = IP.session_event(s, TH)["description"]
     lines = text.split("\n")
-    assert lines[0].startswith("- 暖身 15m ") and lines[0].endswith("% LTHR")
+    assert lines[0] == "- 暖身 15m"                                    # SP-479: no target on the warm-up
     assert lines[1] == "" and lines[2] == "Main Set 3x"
     assert lines[3] == f"- 主課 10m {round(0.95 * 300)}-{round(1.01 * 1.05 * 300)}w"   # SP-378: × 1.05 on the watch
     assert lines[4] == "- 恢復 3m"

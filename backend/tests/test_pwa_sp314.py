@@ -121,7 +121,7 @@ def test_the_build_id_follows_the_files_contents(tmp_path):
 # ---------------------------------------------------------------------------- the wiring
 
 PAGE_FILES = {"/api/v1/overview/page": "overview.html", "/api/v1/overview/plan/schedule/page": "schedule.html",
-              "/api/v1/static/offline.html": "offline.html", "/api/v1/wko5/activities/page": "activity.html"}
+              "/api/v1/static/offline.html": "offline.html", "/api/v1/app/activities/page": "activity.html"}
 
 
 @pytest.mark.skipif(NODE is None, reason="node not installed")

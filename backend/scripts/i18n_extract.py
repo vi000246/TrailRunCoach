@@ -52,7 +52,7 @@ VIEWS = ROOT / "views"
 
 PY_SKIP = ("backend/tests/*", "backend/scripts/*", "backend/i18n/*")
 HTML_ATTRS = ("title", "placeholder", "aria-label", "alt", "value", "content", "label")
-GETTEXT = ("_", "N_")
+GETTEXT = ("_", "N_", "M_")          # M_: _() that keeps its msgid (backend/i18n relocalize, SP-542)
 
 # CJK ideographs + kana (コース定数), not CJK punctuation alone (・（）「」 etc.)
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿぀-ゟ゠-ヺ]")

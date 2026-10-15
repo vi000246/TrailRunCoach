@@ -60,7 +60,8 @@ SYNCED = ("sync_ok", "sync_partial")   # a sync that worked (a failed / skipped 
 def last_syncs(since: float = 0.0) -> dict[str, float]:
     """tenant id -> the time (epoch s) of its newest sync that worked at or after `since`, from
     this log and its rotated copy (accounts/tenants.active_tenants, SP-394). COROS and Garmin
-    only: the sources that write here."""
+    only: the sources that write here. A background sync (trigger "background", SP-499) is not
+    counted: it runs whether anyone uses the account or not."""
     out: dict[str, float] = {}
     p = path()
     for f in (p.with_name(p.name + ".1"), p):
@@ -74,6 +75,8 @@ def last_syncs(since: float = 0.0) -> dict[str, float]:
             except ValueError:
                 continue
             at, tid = r.get("at"), r.get("tenant")
+            if r.get("trigger") == "background":
+                continue                 # SP-499: the server's own look, not a person's use
             if r.get("event") in SYNCED and tid and isinstance(at, (int, float)) and at >= since:
                 out[tid] = max(out.get(tid, 0.0), float(at))
     return out

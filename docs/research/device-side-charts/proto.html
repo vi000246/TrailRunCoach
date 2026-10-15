@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SP-325 device-side charts prototype</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<style>
+  body { font: 13px system-ui, sans-serif; margin: 12px; background: #fff; color: #222; }
+  .plot { width: 100%; height: 320px; }
+  .small { height: 200px; }
+  pre { white-space: pre-wrap; font-size: 11px; }
+</style>
+</head>
+<body>
+<h3>SP-325 原型：裝置自己算、自己畫（示範資料）</h3>
+<div id="hp" class="plot"></div>
+<div id="hz" class="plot small"></div>
+<div id="pz" class="plot small"></div>
+<div id="ht" class="plot small"></div>
+<pre id="out"></pre>
+<script>
+"use strict";
+// ---- the proposed plot data: Float32 little-endian, column-major rows [t, hr, power, speed, elev, dist]
+const POINTS = 1500, NP_WINDOW = 30, NP_SCALE = 100, STOP_KMH = 1.6;
+const q = new URLSearchParams(location.search);
+const W = q.get("w"), STEP = +(q.get("step") || 5), REPS = +(q.get("reps") || 5);
+
+function decode(buf, n) {
+  const a = new Float32Array(buf), col = (k) => a.subarray(k * n, (k + 1) * n);
+  return { n, t: col(0), hr: col(1), power: col(2), speed: col(3), elev: col(4), dist: col(5) };
+}
+// the plot data at `step` s (what the server would send): every step-th second
+function decimate(d, step) {
+  const m = Math.ceil(d.n / step), out = { n: m };
+  for (const k of ["t", "hr", "power", "speed", "elev", "dist"]) {
+    const src = d[k], dst = new Float32Array(m);
+    for (let i = 0, j = 0; i < d.n; i += step, j++) dst[j] = src[i];
+    out[k] = dst;
+  }
+  return out;
+}
+const fin = (v) => v === v && v !== Infinity && v !== -Infinity;
+
+// ---- hrpower on the device (activity_charts.hrpower, on samples `dt` s apart)
+function hrpower(d, dt, ref) {
+  const n = d.n, step = Math.max(1, Math.ceil(n / POINTS)), K = Math.ceil(n / step);
+  const win = Math.max(1, Math.round(NP_WINDOW / dt));
+  // trailing 30-s power (≥ half the window finite)
+  const r30 = new Float64Array(n).fill(NaN);
+  let s = 0, c = 0;
+  for (let i = 0; i < n; i++) {
+    const v = d.power[i]; if (fin(v) && v >= 0) { s += v; c++; }
+    if (i >= win) { const o = d.power[i - win]; if (fin(o) && o >= 0) { s -= o; c--; } }
+    if (i >= win - 1 && c >= win * 0.5) r30[i] = s / c;
+  }
+  const x = new Array(K), hr = new Array(K), pw = new Array(K), hmax = new Array(K);
+  const keys = ["mov", "hn", "hs", "pn", "ps", "nn", "n4", "bn", "bh", "bp", "d"];
+  const cum = {}; for (const k of keys) cum[k] = new Float64Array(K + 1);
+  const acc = {}; for (const k of keys) acc[k] = 0;
+  for (let k = 0; k < K; k++) {
+    let hs = 0, hn = 0, ps = 0, pn = 0, mx = -Infinity;
+    for (const kk of keys) cum[kk][k] = acc[kk];
+    for (let i = k * step; i < Math.min(n, (k + 1) * step); i++) {
+      const h = d.hr[i], p = d.power[i], r = r30[i], hv = fin(h) && h > 0, pv = fin(p) && p >= 0, nv = fin(r);
+      if (hv) { hs += h; hn++; if (h > mx) mx = h; }
+      if (nv) { ps += r; pn++; }
+      const sp = d.speed[i];
+      acc.mov += dt * (!(fin(sp) && sp <= STOP_KMH) ? 1 : 0);
+      if (hv) { acc.hn += dt; acc.hs += h * dt; }
+      if (pv) { acc.pn += dt; acc.ps += p * dt; }
+      if (nv) { acc.nn += dt; acc.n4 += Math.pow(r / NP_SCALE, 4) * dt; }
+      if (hv && pv) { acc.bn += dt; acc.bh += h * dt; acc.bp += p * dt; }
+    }
+    x[k] = d.t[k * step];
+    hr[k] = hn ? Math.round(hs / hn) : null; pw[k] = pn ? Math.round(ps / pn) : null; hmax[k] = mx > -Infinity ? mx : null;
+    cum.d[k] = fin(d.dist[k * step]) ? d.dist[k * step] : (k ? cum.d[k - 1] : 0);
+  }
+  for (const kk of keys) if (kk !== "d") cum[kk][K] = acc[kk];
+  cum.d[K] = fin(d.dist[n - 1]) ? d.dist[n - 1] : cum.d[K - 1];
+  return { x, hr, power: pw, hr_max: hmax, cum, n: d.t[n - 1] + dt, ref };
+}
+// time in zones (activity_charts.time_in), bounds from the server (thresholds stay there)
+function zoneTimes(vals, rows, dt) {
+  const secs = rows.map(() => 0);
+  for (let i = 0; i < vals.length; i++) {
+    const v = vals[i]; if (!(fin(v) && v > 0)) continue;
+    for (let z = 0; z < rows.length; z++) { const lo = rows[z].from || 0, hi = rows[z].to; if (v >= lo && (hi == null || v < hi)) { secs[z] += dt; break; } }
+  }
+  return secs;
+}
+// hr variation and trend (activity_charts.hr_variation + hrtrend), unweighted regression on the samples
+function hrtrend(d, dt) {
+  let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0;
+  for (let i = 0; i < d.n; i++) { const h = d.hr[i]; if (!(fin(h) && h > 0)) continue; const x = d.t[i]; n++; sx += x; sy += h; sxx += x * x; sxy += x * h; syy += h * h; }
+  const m = (n * sxy - sx * sy) / (n * sxx - sx * sx), b = (sy - m * sx) / n, avg = sy / n;
+  const sd = Math.sqrt((syy - n * avg * avg) / (n - 1));
+  const win = Math.max(1, Math.round(60 / dt)), step = Math.max(1, Math.ceil(d.n / POINTS)), pts = [];
+  let s = 0, c = 0; const sm = new Float64Array(d.n).fill(NaN);
+  for (let i = 0; i < d.n; i++) {
+    const v = d.hr[i]; if (fin(v) && v > 0) { s += v; c++; }
+    if (i >= win) { const o = d.hr[i - win]; if (fin(o) && o > 0) { s -= o; c--; } }
+    if (i >= win - 1 && c >= win * 0.5) sm[i] = s / c;
+  }
+  for (let i = 0; i < d.n; i += step) pts.push([d.t[i], fin(sm[i]) ? Math.round(sm[i] * 10) / 10 : null]);
+  const x0 = d.t[0], x1 = d.t[d.n - 1];
+  return { points: pts, trend_line: [[x0, m * x0 + b], [x1, m * x1 + b]], avg, sd, slope_bpm_h: m * 3600 };
+}
+
+// ---- ECharts options (the same for both paths)
+let charts = null;
+function init() {
+  if (charts) charts.forEach((c) => c.dispose());
+  charts = ["hp", "hz", "pz", "ht"].map((id) => echarts.init(document.getElementById(id)));
+}
+function drawAll(hp, hz, pz, ht) {
+  const pts = (ys) => hp.x.map((x, i) => [x, ys[i]]);
+  const mark = (v) => v == null ? [] : [{ yAxis: v }];
+  charts[0].setOption({
+    animation: false,
+    grid: [{ left: 50, right: 10, top: 10, height: "40%" }, { left: 50, right: 10, top: "53%", bottom: 26 }],
+    axisPointer: { link: [{ xAxisIndex: "all" }] }, tooltip: { trigger: "axis" },
+    brush: { xAxisIndex: [0, 1], brushType: "lineX", brushMode: "single", brushLink: "all" },
+    xAxis: [{ type: "value", gridIndex: 0, min: 0, max: hp.n, axisLabel: { show: false } }, { type: "value", gridIndex: 1, min: 0, max: hp.n }],
+    yAxis: [{ type: "value", gridIndex: 0, scale: true }, { type: "value", gridIndex: 1, scale: true }],
+    series: [
+      { type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(hp.hr), showSymbol: false, lineStyle: { width: 1 }, markLine: { silent: true, symbol: "none", data: mark(hp.ref.lthr) } },
+      { type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(hp.power), showSymbol: false, lineStyle: { width: 1 }, markLine: { silent: true, symbol: "none", data: mark(hp.ref.cp) } },
+    ],
+  });
+  const bar = (chart, z) => chart.setOption({ animation: false, grid: { left: 40, right: 10, top: 10, bottom: 30 },
+    xAxis: { type: "category", data: z.names }, yAxis: { type: "value" }, series: [{ type: "bar", data: z.secs.map((s) => Math.round(s / 60)) }] });
+  bar(charts[1], hz); bar(charts[2], pz);
+  charts[3].setOption({ animation: false, grid: { left: 40, right: 10, top: 10, bottom: 30 }, xAxis: { type: "value" }, yAxis: { type: "value", scale: true },
+    series: [{ type: "line", data: ht.points, showSymbol: false, lineStyle: { width: 1 } }, { type: "line", data: ht.trend_line, showSymbol: false, lineStyle: { type: "dashed" } }] });
+  window.__sync = performance.now();
+  return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));    // painted
+}
+const defModel = (z) => z.models.find((m) => m.id === z.default && m.available) || z.models.find((m) => m.available);
+
+async function run() {
+  const meta = await (await fetch(`w${W}_meta.json`)).json();
+  const buf1 = await (await fetch(`w${W}_1s.f32`)).arrayBuffer();
+  const full = decode(buf1, meta.n);
+  const plot = STEP === 1 ? full : decimate(full, STEP);
+  const bytes = plot.n * 6 * 4;
+  const plotBuf = new ArrayBuffer(bytes); { const a = new Float32Array(plotBuf); ["t", "hr", "power", "speed", "elev", "dist"].forEach((k, j) => a.set(plot[k], j * plot.n)); }
+  const srv = {}; for (const k of ["hrpower", "hrzones", "powerzones", "hrtrend"]) srv[k] = await (await fetch(`w${W}_${k}.json`)).text();
+  const zh = defModel(JSON.parse(srv.hrzones)), zp = defModel(JSON.parse(srv.powerzones));
+  const ref = JSON.parse(srv.hrpower).ref;
+  // the Cache API (SP-314 keeps p1/p2 there): store once, then time a read back
+  const cache = await caches.open("sp325-proto");
+  await cache.put(`/plot/${W}/${STEP}`, new Response(plotBuf, { headers: { "content-type": "application/octet-stream" } }));
+  const R = { device_setoption: [], server_setoption: [], device_cache_read: [], device_decode: [], device_compute: [], device_draw: [], device_total: [], server_parse: [], server_draw: [], server_total: [] };
+  for (let rep = 0; rep < REPS + 1; rep++) {
+    // device path: read the plot data from the Cache API, decode, compute, draw
+    init();
+    let t0 = performance.now();
+    const ab = await (await cache.match(`/plot/${W}/${STEP}`)).arrayBuffer();
+    let t1 = performance.now();
+    const d = decode(ab, plot.n);
+    let t2 = performance.now();
+    const hp = hrpower(d, STEP, ref);
+    const hz = { names: zh.rows.map((r) => r.id), secs: zoneTimes(d.hr, zh.rows, STEP) };
+    const pz = { names: zp ? zp.rows.map((r) => r.id) : [], secs: zp ? zoneTimes(d.power, zp.rows, STEP) : [] };
+    const ht = hrtrend(d, STEP);
+    let t3 = performance.now();
+    await drawAll(hp, hz, pz, ht);
+    let t4 = performance.now();
+    if (rep) { R.device_setoption.push(window.__sync - t3); R.device_cache_read.push(t1 - t0); R.device_decode.push(t2 - t1); R.device_compute.push(t3 - t2); R.device_draw.push(t4 - t3); R.device_total.push(t4 - t0); }
+    window.__dev = { hz, pz, ht: { avg: ht.avg, sd: ht.sd, slope_bpm_h: ht.slope_bpm_h }, whole: wholeStats(hp) };
+    // server path: the answers already here (as the browser has them after the request), parse + draw
+    init();
+    t0 = performance.now();
+    const H = JSON.parse(srv.hrpower), HZ = JSON.parse(srv.hrzones), PZ = JSON.parse(srv.powerzones), HT = JSON.parse(srv.hrtrend);
+    t1 = performance.now();
+    const mz = (z) => { const m = defModel(z); return m ? { names: m.rows.map((r) => r.id), secs: m.rows.map((r) => r.seconds) } : { names: [], secs: [] }; };
+    await drawAll({ x: H.x, hr: H.hr || [], power: H.power || [], n: H.n, ref: H.ref }, mz(HZ), mz(PZ), HT);
+    t2 = performance.now();
+    if (rep) { R.server_setoption.push(window.__sync - t1); R.server_parse.push(t1 - t0); R.server_draw.push(t2 - t1); R.server_total.push(t2 - t0); }
+  }
+  const med = (a) => { const s = [...a].sort((x, y) => x - y); return +s[s.length >> 1].toFixed(1); };
+  const out = { w: W, step: STEP, n_points: plot.n, plot_bytes: bytes, server_json_bytes: Object.values(srv).reduce((a, s) => a + s.length, 0) };
+  for (const k in R) out[k] = med(R[k]);
+  out.device = window.__dev;
+  document.getElementById("out").textContent = JSON.stringify(out, null, 1);
+  window.__result = out;
+}
+// whole-activity numbers from the running totals (ACT.stats over every bucket)
+function wholeStats(hp) {
+  const c = hp.cum, K = hp.x.length, d = (k) => c[k][K] - c[k][0];
+  const hr = d("hs") / d("hn"), p = d("ps") / d("pn"), np = NP_SCALE * Math.pow(d("n4") / d("nn"), 0.25);
+  return { moving: d("mov"), km: c.d[K] - c.d[0], hr, p, np };
+}
+run().catch((e) => { document.getElementById("out").textContent = "ERROR " + e.stack; window.__result = { error: String(e) }; });
+</script>
+</body>
+</html>

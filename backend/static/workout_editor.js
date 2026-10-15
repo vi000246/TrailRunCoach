@@ -17,7 +17,7 @@
  * and, once saved as a session, its own copy of the route profile (`route`, carried through as is):
  * when there is a route GPX, POST /steps/check returns `elev` (engine/user_templates.route_elevation)
  * and the chart switches to the route's distance axis (km; each step from `elev.x`), the elevation
- * drawn as a light background like the chart viewer's (wko5_viewer.html drawClimbProfile).
+ * drawn as a light background like the chart viewer's (charts.html drawClimbProfile).
  * Without one the chart stays on the time axis.
  *
  * Every number shown (targets, totals, issues, the watch preview) comes from
@@ -506,7 +506,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         : dt === "load" ? this.loadIn(st, r, dis)
         : st.dur.est ? `<span class="we-lap" title="直到按下計圈；總時間用課表寫的最短時間估">≈ ${mmss(st.dur.est)}</span>` : "";
       const ov = st.target && st.target.type !== "auto";
-      const tb = r ? `<span class="src${ov ? " ov" : ""}">${ov ? "指定" : "自動"}</span><b>${r.type === "none" ? "不設目標" : `${esc(r.label)} ${esc(r.text)}`}</b>${r.sub ? `<span class="s">${esc(r.sub)}</span>` : ""}` +
+      const tb = r ? `<span class="src${ov ? " ov" : ""}">${ov ? "指定" : "自動"}</span><b>${r.type === "none" ? esc(tr("workout.no_target")) : `${esc(r.label)} ${esc(r.text)}`}</b>${r.sub ? `<span class="s">${esc(r.sub)}</span>` : ""}` +
         (r.err ? `<span class="e">✕ ${esc(r.err)}</span>` : r.warn ? `<span class="w">⚠ ${esc(r.warn)}</span>` : "") : `<span class="s">…</span>`;
       return `<div class="we-row${this.sel === st.id ? " sel" : ""}" draggable="${!this.ro}" tabindex="0" data-id="${st.id}" style="--zc:${this.zc(r, st)}">
         <span class="grip" aria-hidden="true" title="拖曳排序">⋮⋮</span>
@@ -573,7 +573,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         else if (ty === "pace") h += `<input class="dur" data-f="tlo" value="${mmss(t.lo)}" aria-label="快的一端 分:秒/km">–<input class="dur" data-f="thi" value="${mmss(t.hi)}" aria-label="慢的一端 分:秒/km"><span class="faint">/km</span>`;
         else h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo)}" aria-label="下限">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi)}" aria-label="上限"><span class="faint">${ty === "power" ? "W" : "bpm"}</span>`;
       }
-      h += r ? `<span class="res">＝ ${r.type === "none" ? "不設目標" : esc(`${r.label} ${r.text}`)}${r.sub ? " · " + esc(r.sub) : ""}</span>` : "";
+      h += r ? `<span class="res">＝ ${r.type === "none" ? esc(tr("workout.no_target")) : esc(`${r.label} ${r.text}`)}${r.sub ? " · " + esc(r.sub) : ""}</span>` : "";
       if (ty !== "auto") h += `<button type="button" class="btn" data-a="tauto">↺ 回到自動</button>`;
       return h + `</div>`;
     }
@@ -593,7 +593,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     legend() {
       const z = [[1, "< 75% CP"], [2, "75–88%"], [3, "88–101%"], [4, "101–106%"], [5, "≥ 106%"]];
       this.$("we-legend").innerHTML = z.map(([c, l]) => `<span><i style="background:var(--wz${c})"></i>${l}</span>`).join("") +
-        `<span><i style="background:var(--bar)"></i>不設目標</span><span><i style="background:repeating-linear-gradient(45deg,var(--bar) 0 3px,var(--panel) 3px 5px)"></i>直到按下計圈</span>${q(TIP.chart)}` +
+        `<span><i style="background:var(--bar)"></i>${esc(tr("workout.no_target"))}</span><span><i style="background:repeating-linear-gradient(45deg,var(--bar) 0 3px,var(--panel) 3px 5px)"></i>直到按下計圈</span>${q(TIP.chart)}` +
         this.elevLegend();
     }
     elevLegend() {
@@ -618,7 +618,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const nt = noTpaceText(), T = this.tpls || {};
       const isNt = (x) => x === nt || x === T.no_tpace_text;
       // POST /steps/check decides (threshold_confidence.session_warn: never on a test session);
-      // the static demo's port has no thr_warn — the old rule there
+      // a response without thr_warn: the old rule
       const hw = "thr_warn" in v ? warnText(v.thr_warn)
         : this.doc && usesHr(this.doc.items) && (this.sess().kind || "") !== "test" ? hrWarn(this.ctx) : "";
       // a manual LTHR: medium, no warning, but a small 「手動輸入，沒有驗證」 (SP-277)
@@ -708,7 +708,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const n = o.rep.length ? o.rep.map((x) => `第 ${x.i + 1}/${x.n} 趟`).join(" · ") + " · " : "";
       t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : (o.load ? `負荷 ${o.load.tss} · ` : "") + mmss(o.sec) + (o.est ? "（推估）" : "")}` +
         (km ? ` · ${esc(tr("workout.elev_km", { a: kmTxt(km[0]), b: kmTxt(km[1]) }))}` : "") + `<br>` +
-        (r ? `${r.type === "none" ? "不設目標" : `${esc(r.label)} <b class="num">${esc(r.text)}</b>`}${r.sub ? ` <span class="meta">${esc(r.sub)}</span>` : ""}` : "") +
+        (r ? `${r.type === "none" ? esc(tr("workout.no_target")) : `${esc(r.label)} <b class="num">${esc(r.text)}</b>`}${r.sub ? ` <span class="meta">${esc(r.sub)}</span>` : ""}` : "") +
         (st.note ? `<br><span class="meta">${esc(st.note)}</span>` : "");
       t.hidden = false;
       t.style.left = Math.min(box.width - 100, Math.max(100, e.clientX - box.left)) + "px";
@@ -1114,7 +1114,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     openBox() { this.$("we-box").open = true; const t = this.root.querySelector(".we-row input.dur"); if (t && !this.ro) t.focus(); }
   }
 
-  // endOptions: the 時長類型 <option>s of one step for a context (pure; tests/test_static_steps.py)
+  // endOptions: the 時長類型 <option>s of one step for a context (pure; tests/test_coros_tl.py)
   window.WorkoutEditor = { mount: (root, opts) => new Editor(root, opts), request: req,
     endOptions: (ctx, st) => Editor.prototype.endOpts.call({ ctx }, st),
     // SP-57 (tests/test_rpe_load.py): a 「負荷」 step's dur after an edit, and its input html

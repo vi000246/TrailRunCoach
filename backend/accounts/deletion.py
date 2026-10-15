@@ -11,11 +11,11 @@ In order:
      skip them (store.users() leaves disabled users out)
   2. still holding them:
      a. each connected platform is disconnected at the platform when there is a call for it
-        (REVOKE) — today there is none: COROS and Garmin are signed in with the account's
+        (REVOKE) — intervals.icu only (DELETE /api/v1/disconnect-app with its OAuth token, SP-346;
+        its webhook map entry goes too): COROS and Garmin are signed in with the account's
         password through unofficial APIs and TrainingPeaks by its password grant, and no
-        revoke / logout endpoint of theirs is used anywhere in the app; intervals.icu
-        (DELETE /api/v1/disconnect-app) is still a stub (SP-346) and stores no token. A revoke
-        that fails is logged and reported; the deletion goes on
+        revoke / logout endpoint of theirs is used anywhere in the app. A revoke that fails is
+        logged and reported; the deletion goes on
      b. the platform credentials are deleted from sync_state (the registry's secret_fields and
         local_fields: tokens, sealed passwords, the accounts' e-mails and ids), and the Garmin
         login waiting for its MFA code is dropped
@@ -58,11 +58,17 @@ JOB_WAIT_S = 60.0
 CONNECTED_BY = {
     "coros": ("coros_access_token", "coros_password_sealed"),
     "garmin": ("garmin_token_sealed", "garmin_password_sealed"),
+    "intervals": ("intervals_token_sealed",),
     "tp": ("tp_access_token", "tp_refresh_token", "tp_web_cookie", "tp_password_sealed"),
 }
-# source -> async revoke(source, credentials as stored): disconnect at the platform. Empty: no
-# platform the app connects to has a revoke call in use (module docstring, 2a)
-REVOKE: dict[str, Callable[[str, dict], Awaitable[None]]] = {}
+async def _intervals_revoke(source: str, creds: dict) -> None:
+    from backend.sync import intervals_client
+    await intervals_client.revoke(source, creds)
+
+
+# source -> async revoke(source, credentials as stored): disconnect at the platform (module
+# docstring, 2a): intervals.icu's DELETE /api/v1/disconnect-app (SP-346)
+REVOKE: dict[str, Callable[[str, dict], Awaitable[None]]] = {"intervals": _intervals_revoke}
 
 
 class DeletionError(RuntimeError):

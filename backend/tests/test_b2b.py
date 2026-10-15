@@ -227,7 +227,7 @@ def test_detect_consecutive_long_days():
 
 def test_post_b2b_week_and_tsb_exempt():
     c = ctx(last_recovery=False, post_from={"start": "2026-09-26", "end": "2026-09-27"})
-    assert c["post"]["until"] == "2026-10-01"                               # 4 easy days
+    assert c["post"]["until"] == "2026-09-30"                               # 3 easy days (SP-527)
     assert "不改成恢復週" in B2B.tsb_exempt(c, -34.0)
     assert B2B.tsb_exempt(c, -34.0, ramp=9.0) is None                       # ramp beyond the limit
     assert B2B.tsb_exempt(c, -10.0) is None
@@ -388,11 +388,12 @@ def test_week_after_an_accepted_b2b_easy_days_no_recovery_week():
     # TSB < −20 with the ramp under the block line (a block-level ramp is no exception)
     heavy = {"tph": 1.2, "b2b_tph": 2.2}
     _, _, _, wp = _week(today=today, last_week="b2b", accepted=[last], **heavy)
-    assert wp["b2b"]["post"]["until"] == "2026-10-08"
+    assert wp["b2b"]["post"]["until"] == "2026-10-07"                     # 3 easy days (SP-527)
     assert wp["load"]["tsb_today"] < -20                           # the planned drop
     assert wp["mode"] == "specific"                                # not converted to a recovery week
     assert any("B2B" in w and "不改成恢復週" in w for w in wp["why"])
-    assert not any(s["kind"] in ("quality", "test") for s in wp["sessions"])
+    # the 3 easy days (SP-527: was 4) hold no quality / test; after them the week may have one again
+    assert not any(s["kind"] in ("quality", "test") and s["day"] <= "2026-10-07" for s in wp["sessions"])
     assert any(n.get("src") == "b2b" for n in wp["notes"])
     # the same two long days done without accepting a B2B: no exception (accepted B2B only)
     _, _, _, wp = _week(today=today, last_week="b2b", **heavy)

@@ -1,4 +1,4 @@
-/* Leaflet maps shared by the single-activity route map (wko5_viewer.html), the routes page
+/* Leaflet maps shared by the single-activity route map (charts.html), the routes page
  * (routes.html) and the race calculator's course map (racepower.html): the basemaps /
  * overlays with the settings-page default, and the route drawing (halo + line + start /
  * finish, the hover marker, the nearest-point lookup).

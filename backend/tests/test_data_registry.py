@@ -129,7 +129,8 @@ def test_what_stays_on_this_machine_is_marked_local():
         assert not set(t.local_fields) & set(t.cursor_fields), t.name
     ss = R.table("sync_state")
     assert {"coros_email", "tp_username", "coros_user_id", "garmin_email"} <= set(ss.local_fields)
-    assert set(ss.cursor_fields) == {"last_sync_at", "last_sync_cursor", "coros_last_sync_at", "garmin_last_sync_at"}
+    assert set(ss.cursor_fields) == {"last_sync_at", "last_sync_cursor", "coros_last_sync_at", "garmin_last_sync_at",
+                                     "intervals_last_sync_at"}
     assert {t.name for t in R.TABLES if t.local} == {"debug_tokens", "debug_audit", "debug_auth_failures",
                                                      "weight_tokens"}           # SP-472: the weight API's tokens
     from backend.engine.debug_view import secret_key
@@ -345,7 +346,7 @@ def test_backup_refuses_a_registry_entry_it_cannot_write(tmp_path, monkeypatch):
 SECRET_USERS = {      # the modules that may read the credential columns: login, sync, status flags
     "api/auth.py", "api/plan_sessions.py", "api/sync.py", "db/database.py", "db/models.py",
     "settings/secrets.py", "sync/coros_client.py", "sync/garmin_client.py", "sync/runner.py",
-    "sync/session_check.py",
+    "sync/session_check.py", "sync/intervals_client.py",          # intervals.icu (SP-346)
     "sync/tp_client.py", "data_registry.py",
     # 刪除帳號 (SP-386): reads them only to disconnect at the platform itself, then wipes them
     # before the tenant folder goes; nothing is returned or logged
@@ -397,7 +398,7 @@ def test_secret_columns_and_files_are_only_used_by_login_and_sync_code():
 
 def test_no_api_response_carries_a_secret(tmp_path, monkeypatch):
     """Credentials planted in sync_state (sealed and legacy plaintext) appear in no GET response of
-    the routers that read sync_state (the static demo export saves GET responses)."""
+    the routers that read sync_state."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from backend.api import auth, sync

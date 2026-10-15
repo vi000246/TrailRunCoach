@@ -59,6 +59,23 @@ def hr_systems(lthr: Optional[float], mhr: Optional[float] = None, rhr: Optional
     return out
 
 
+def threshold_hr(lthr: Optional[float], basis: Optional[dict] = None) -> tuple[Optional[float], str]:
+    """(bpm, label) of the race's 「LTHR」 cap under the 課表心率區間 in effect (SP-493): the LTHR model
+    → (LTHR, "LTHR"); 儲備心率 / 最大心率 → 1.00 × LTHR placed in that model's zones (hr_profile
+    .frac_hr: where the threshold zone puts it), so the cap matches the zones the 課表 and this bar use.
+    The trail HR model's race HR (fitted on the runner's own HR ÷ LTHR) is not this — it stays."""
+    from backend.engine import hr_profile as HP
+    b = basis or {}
+    if not lthr:
+        return None, ""
+    if b.get("model") not in ("hrr", "hrmax"):
+        return float(lthr), "LTHR"
+    hrz = HP.plan_hr_zones(lthr, None, False, b.get("mhr"), b.get("rhr"), b["model"], b.get("acc"))
+    if not HP.not_lthr(hrz):
+        return float(lthr), "LTHR"
+    return round(HP.frac_hr(1.0, hrz, lthr)), _("閾值心率（{model}）", model=hrz["short"])
+
+
 def hr_bar(plan: dict, lthr: Optional[float], basis: Optional[dict] = None) -> dict:
     """The heart-rate version of the bar for a road / trail plan: {"hr" (bpm or None),
     "hr_source", "reason" (why there is no HR, else None), "default" (the system to show

@@ -16,6 +16,7 @@ v2 (docs/research/racepower-v2.md §10.2):
     GET  /backtest      stored leave-one-out back-test;  POST /backtest/run  recompute
     POST /export/plan   plan → the race-day session in the 課表 (preview, or push=true writes it)
     GET/PUT/DELETE /saved/{event_id}   the page's inputs + last result per plan event
+    GET/POST/PUT /surface/{course_id}  the course's ground from OSM: 確定土徑 / 確定人工 / 不確定 (SP-543)
 """
 from __future__ import annotations
 
@@ -131,10 +132,18 @@ def _event(eid: str):
 @router.get("/weather")
 def weather(date: Optional[str] = None, days: int = 1, event_id: Optional[str] = None,
             peak: Optional[str] = None, lat: Optional[float] = None, lon: Optional[float] = None,
-            elevation: Optional[float] = None, cwa: bool = True):
+            elevation: Optional[float] = None, cwa: bool = True, course_id: Optional[str] = None,
+            link_event: Optional[str] = None):
     name = None
+    note = None
+    if link_event and not event_id:
+        try:                                     # only for the Cairn link (SP-553); the place is the query's
+            note = getattr(_event(link_event), "note", None)
+        except HTTPException:
+            note = None
     if event_id:
         e = _event(event_id)
+        note = getattr(e, "note", None)
         date = date or e.date
         days = e.days or days
         pk = WX.find_peak(e.name)
@@ -166,7 +175,46 @@ def weather(date: Optional[str] = None, days: int = 1, event_id: Optional[str] =
     r = WX.race_conditions(date=d, days=max(1, days), lat=lat, lon=lon, elevation_m=elevation,
                            name=name, use_cwa=cwa)
     r["peak"] = WX.find_peak(name) if name else None
+    r["points"] = _route_points(r, d, max(1, days), course_id, event_id, cwa)
+    # SP-553: the same route in 疊石 Cairn — SP-537: the route the event's GPX was imported from, else a
+    # link in the event's note
+    r["cairn"] = _cairn_link(event_id or link_event, note)
     return r
+
+
+def _cairn_link(eid: Optional[str], note: Optional[str]) -> Optional[dict]:
+    if eid:
+        from backend.engine import event_gpx as EG
+        try:
+            u = EG.cairn_url(EG.get(eid))
+        except EG.EventGpxError:
+            u = None
+        if u:
+            return {"url": u, "from": "import"}
+    u = WX.cairn_url(note)
+    return {"url": u, "from": "note"} if u else None
+
+
+def _route_points(r: dict, date: dt.date, days: int, course_id: Optional[str], event_id: Optional[str],
+                  cwa: bool) -> Optional[list]:
+    """SP-553: a long course's weather at up to WX.ROUTE_MAX_POINTS points (one per WX.ROUTE_POINT_KM),
+    each section's rows for the planner to read at its own clock. Only when the race's own point got a
+    forecast (no points for the climatology: far-off dates keep the one point) and a track is known
+    (the uploaded GPX `course_id`, else the event's stored GPX). None otherwise."""
+    if r.get("provider") not in WX.FORECAST_PROVIDERS:
+        return None
+    tr = None
+    if course_id:
+        tr = LIVE.course_track(course_id)
+    if tr is None and event_id:
+        got = _event_track(event_id)
+        tr = got[1] if got is not None else None
+    if tr is None:
+        return None
+    secs = WX.route_sections(tr.lat, tr.lon, tr.ele)
+    if not secs:
+        return None
+    return WX.route_conditions(secs, date=date, days=days, use_cwa=cwa)
 
 
 class KeyIn(BaseModel):
@@ -195,8 +243,7 @@ def save_key(body: KeyIn):
 
 class LiveContext:
     """calc.Context on this process's athlete: the Dataset, the season plan and the local
-    files, memoised as before (inputs(), _grade_models(), ...). The static demo runs the
-    same computations on an exported copy (backend/demo/static_racepower.py)."""
+    files, memoised as before (inputs(), _grade_models(), ...)."""
 
     def inputs(self) -> dict:
         return inputs()
@@ -230,8 +277,11 @@ class LiveContext:
         return _event_track(eid)
 
     def event_splits(self, row: dict, days: int) -> list[float]:
+        """The event's own day ends (the user's, when they make `days` days); [] = none yet —
+        the plan then cuts equal days and says so (推估, SP-533)."""
         from backend.engine import event_gpx as EG
-        return EG.splits_for(row, days)
+        cuts, src = EG.split_source(row, days)
+        return cuts if src == "stored" else []
 
     def event_meta(self, row: dict) -> Optional[dict]:
         from backend.engine import event_gpx as EG
@@ -321,8 +371,58 @@ async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] =
         "sigma_m": sigma_m, "eps_m": eps_m, "min_len_m": min_len_m, "flat_pct": flat_pct, "split": split,
         "official_gain_m": official_gain_m}))
     from backend.engine.racepower import fuel as FU
+    from backend.engine.racepower import overnight as OV
     sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
-    return _py(CALC.respond({"course_id": cid, "name": track.name or file.filename, **c, "stop_suggestions": sug}))
+    # SP-534: a recorded multi-day track's nights — a proposal the page asks about before applying
+    nights = await run_in_threadpool(OV.find, track)
+    return _py(CALC.respond({"course_id": cid, "name": track.name or file.filename, **c, "stop_suggestions": sug,
+                             "overnights": nights}))
+
+
+class CairnCourseIn(BaseModel):
+    url: str = Field("", max_length=2000)
+    split: Optional[str] = None
+    sigma_m: Optional[float] = None
+    eps_m: Optional[float] = None
+    min_len_m: Optional[float] = None
+    flat_pct: Optional[float] = None
+    official_gain_m: Optional[float] = None
+
+
+@router.post("/course/cairn")
+async def cairn_course(body: CairnCourseIn):
+    """SP-537: a course from a 疊石 Cairn share link — the upload's answer for Cairn's GPX, + the nights
+    marked in Cairn as the day ends (`day_splits_km`, applied at once; the page can still change them)
+    and the days. The token reads Cairn once and is not kept."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.api.plan import _CAIRN_STATUS, _cairn_out
+    from backend.engine import cairn as CA
+    from backend.engine.racepower import fuel as FU
+    from backend.engine.racepower import gpx as GPX
+    try:
+        imp = await run_in_threadpool(CA.import_link, body.url)
+        track = await run_in_threadpool(GPX.parse, imp["data"], imp["filename"])
+    except CA.CairnError as e:
+        raise HTTPException(_CAIRN_STATUS.get(e.kind, 400), str(e))
+    except GPX.GpxError as e:
+        raise HTTPException(502, str(e))
+    cid = hashlib.sha1(imp["data"]).hexdigest()
+    _cache_course(cid, track)
+    c = await run_in_threadpool(_build, track, _course_opts(body.model_dump(exclude={"url"})))
+    sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
+    out = _cairn_out(imp, route_km=c["totals"]["km"], ratio_rows=group_ratio_rows())
+    return _py(CALC.respond({"course_id": cid, "name": imp["name"], **c, "stop_suggestions": sug,
+                             "day_splits_km": imp["splits_km"], "days": imp["days"], "cairn": out,
+                             "overnights": None}))
+
+
+def group_ratio_rows() -> list:
+    """SP-576: the past group hikes' moving / elapsed rows (the timetable's stops when Cairn has none);
+    [] when the models can't be had (the 80 % default then)."""
+    try:
+        return _grade_models().get("moving_rows_group") or []
+    except Exception:                       # noqa: BLE001
+        return []
 
 
 def _cache_course(cid: str, track) -> None:
@@ -534,15 +634,16 @@ def heat_status(date: Optional[str] = None):
 
 @router.get("/altitude-acclimatisation")
 def altitude_acclimatisation(date: Optional[str] = None):
-    """百岳的海拔適應預設 (SP-260; engine/altitude.acclimatisation_default): nights above 2,750 m in
-    the 14 days before `date` (activities + the 課表 calendar's records) → partial | unacclimatised."""
+    """百岳的海拔適應 (SP-260; engine/altitude.acclimatisation_default): nights above 2,750 m in the 14
+    days before `date` (the activities; SP-546: no records, no choice on the page) → partial |
+    unacclimatised."""
     from backend.engine import altitude as AL
     today = today_local()
     try:
         alts = AL.day_altitudes(_dataset(), today)
-    except Exception:                       # noqa: BLE001 — no data: the records alone
+    except Exception:                       # noqa: BLE001 — no data: no nights
         alts = {}
-    return _py(AL.acclimatisation_default(alts, today, CALC.race_day(date), AL.load_nights()))
+    return _py(AL.acclimatisation_default(alts, today, CALC.race_day(date)))
 
 
 class HikeMetaIn(BaseModel):
@@ -673,7 +774,8 @@ def _hr_basis() -> Optional[dict]:
             return hit[1]
         acc = HP.account()
         mx, rs = HP.max_hr(ds, day, acc), HP.rest_hr(ds, day, acc)
-        b = {"model": HP.plan_model(), "acc": acc, "mhr": mx.get("value"), "rhr": rs.get("value")}
+        # SP-493: the zones in effect (自動's pick, or the model chosen)
+        b = {"model": HP.effective_model(ds, day)["model"], "acc": acc, "mhr": mx.get("value"), "rhr": rs.get("value")}
     except Exception:                       # noqa: BLE001 — the bar keeps its LTHR tables
         import traceback
         traceback.print_exc()
@@ -748,7 +850,43 @@ def backtest_result():
                                              Depends(MS.use_quota("backtest"))])
 def backtest_run():
     from backend.engine.racepower import backtest as BT
-    return {"started": BT.start_background(_dataset), "state": BT.state()}
+    run = _backtest_runner()                 # None: workers off — start_background's default, as before
+    started = BT.start_background(_dataset, run=run) if run is not None else BT.start_background(_dataset)
+    return {"started": started, "state": BT.state()}
+
+
+def _backtest_runner():
+    """The back-test in a worker process (SP-394 第 5 條, backend/workproc.py): it computes in
+    Python for minutes (NAS ~160 s) and, in the server, made every page ~10× slower meanwhile.
+    The queued job (`backtest`, one for the server) builds / reads this tenant's Dataset first, so
+    the worker loads it warm from the disk caches. None (in the server, as before) when workers are
+    off (WKO5COACH_PROCESS_JOBS=0, the tests)."""
+    from backend import workproc
+    if not workproc.enabled():
+        return None
+
+    def run(prog) -> None:
+        from backend.api import wko5views as WV
+        from backend.engine.racepower import backtest as BT
+        ds = _dataset()
+        key = WV.key_of(ds)
+        if key is None:                      # not a kept Dataset: compute it here
+            BT.save(BT.backtest(ds, None, prog))
+            return
+        del ds
+        workproc.run("backend.api.racepower:backtest_in_worker", key,
+                     progress=lambda i, n, label: prog(i, n, {"label": label}))
+    return run
+
+
+def backtest_in_worker(key: tuple, progress) -> bool:
+    """The worker's side (backend/workproc.py): this tenant's back-test on the Dataset of `key`,
+    stored where GET /backtest reads it."""
+    from backend.api import wko5views as WV
+    from backend.engine.racepower import backtest as BT
+    ds = WV.worker_dataset(key)
+    BT.save(BT.backtest(ds, None, lambda i, n, c: progress(i, n, c.get("label"))))
+    return True
 
 
 def _thresholds(p: dict) -> dict:
@@ -962,6 +1100,92 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
             "action": r["action"], "previous": r["previous"], "old_watch": old_watch, "written": bool(body.push),
             "uid": ss["uid"] if known else None,
             "plan_url": f"/api/v1/overview/plan/schedule/page?day={ss['day']}" + (f"&uid={ss['uid']}" if known else "")}
+
+
+# ---------------------------------------------------------------------------
+# SP-543: the course's ground from OpenStreetMap (engine/racepower/surface.py), stored per
+# course file (engine/course_surface.py): 確定土徑 / 確定人工 / 不確定
+# ---------------------------------------------------------------------------
+
+class SurfaceIn(BaseModel):
+    event_id: Optional[str] = None          # the event whose stored GPX this is (after a restart)
+    refresh: bool = False                   # look it up again (drops the marks)
+
+
+class SurfaceEditIn(BaseModel):
+    overrides: Optional[dict] = None        # {segment index: dirt / made / unsure}
+    manual: Optional[dict] = None           # {dirt, made, unsure} whole %, adding up to 100
+    clear_manual: bool = False
+
+
+def _surface_track(cid: str, eid: Optional[str]):
+    """The Track of course `cid`: the upload cache, else the event's stored GPX with that sha1."""
+    with _courses_lock:
+        tr = _courses.get(cid)
+    if tr is None and eid:
+        got = _event_track(eid)
+        if got is not None and got[0] == cid:
+            tr = got[1]
+    return tr
+
+
+def _surface_id(cid: str) -> str:
+    from backend.engine import course_surface as CS
+    try:
+        return CS.check_id(cid)
+    except CS.CourseSurfaceError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/surface/{cid}")
+def get_surface(cid: str):
+    """The stored surface of a course (status none: never looked up)."""
+    from backend.engine import course_surface as CS
+    from backend.engine.racepower import surface as SF
+    return SF.view(_surface_id(cid), CS.get(cid))
+
+
+@router.post("/surface/{cid}")
+def course_surface(cid: str, body: Optional[SurfaceIn] = None):
+    """The stored surface, or look it up on the Overpass server ($TRC_OVERPASS_URL) and store it.
+    A failed lookup is an answer too (status unknown: the page says 路面未知), never an error:
+    the calculator works without it."""
+    from backend.engine import course_surface as CS
+    from backend.engine.racepower import surface as SF
+    body = body or SurfaceIn()
+    _surface_id(cid)
+    row = CS.get(cid)
+    if row and row.get("profile") and not body.refresh:
+        return SF.view(cid, row)
+    track = _surface_track(cid, body.event_id)
+    if track is None:
+        return SF.view(cid, None, SF.SurfaceError("course", "no track"))
+    try:
+        prof = SF.analyse(track)
+    except SF.SurfaceError as e:
+        return SF.view(cid, None, e)
+    try:
+        return SF.view(cid, CS.save(cid, profile=prof))
+    except CS.CourseSurfaceError:
+        return SF.view(cid, {"profile": prof})          # no DB (a demo / test): shown, not kept
+
+
+@router.put("/surface/{cid}")
+def edit_surface(cid: str, body: SurfaceEditIn):
+    """The user's marks on the segments and / or a typed-in split; stored with the course."""
+    from backend.engine import course_surface as CS
+    from backend.engine.racepower import surface as SF
+    _surface_id(cid)
+    row = CS.get(cid)
+    if not row or not row.get("profile"):
+        raise HTTPException(404, "no surface")
+    try:
+        manual = None if body.clear_manual else (SF.clean_manual(body.manual) if body.manual else False)
+        ov = SF.clean_overrides(body.overrides, len(row["profile"].get("segs") or [])) \
+            if body.overrides is not None else None
+        return SF.view(cid, CS.save(cid, overrides=ov, manual=manual))
+    except (ValueError, CS.CourseSurfaceError) as e:
+        raise HTTPException(400, str(e))
 
 
 # ---------------------------------------------------------------------------

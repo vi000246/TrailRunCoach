@@ -21,7 +21,7 @@ VIEW = "單次活動判讀"
 
 
 def _first_run(page) -> dict:
-    r = page.request.get("/api/v1/wko5/workouts")
+    r = page.request.get("/api/v1/app/workouts")
     assert r.ok
     j = r.json()
     rows = j if isinstance(j, list) else j.get("workouts") or []

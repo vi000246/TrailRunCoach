@@ -444,6 +444,8 @@ function qtipShow(btn) {
   const d = document.createElement("div");
   d.className = "qtip-pop";
   d.textContent = btn.dataset.tip;
+  window.ManualLink?.decorate(d, btn);          // SP-559: 「名詞表：…」 when the text names a glossary word
+  if (QTIP.pinned === btn) d.dataset.pinned = "1";
   document.body.appendChild(d);
   const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
   d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
@@ -452,8 +454,9 @@ function qtipShow(btn) {
 }
 function qtipHide() { QTIP.el?.remove(); QTIP.el = null; }
 document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(".qtip"); if (t && !QTIP.pinned) qtipShow(t); });
-document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned) qtipHide(); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned && !window.ManualLink?.into(e)) qtipHide(); });
 document.addEventListener("click", (e) => {
+  if (e.target.closest?.(".qtip-pop")) return;  // its 名詞表 links
   const t = e.target.closest(".qtip");
   if (t && QTIP.pinned !== t) { QTIP.pinned = t; qtipShow(t); return; }
   QTIP.pinned = null; qtipHide();

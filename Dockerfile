@@ -7,7 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
-# The bundled views (training/workout/periodization, the WKO5 chart fixes, the
+# The bundled views (training/workout/periodization, the imported-chart fixes, the
 # views/i18n sidecar) are read at runtime from the repo root (customviews.REPO_VIEWS).
 COPY views/ ./views/
 

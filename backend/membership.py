@@ -72,8 +72,8 @@ SCOPES: dict[str, str] = {
     "sync:coros_mcp": "COROS 官方 MCP（SP-348）",
     "sync:tp_web": "TrainingPeaks 網站登入（只限站主）",
     # the owner's own
-    "wko5": "WKO5 資料夾",
-    "tp:wko5_client": "TrainingPeaks 的 WKO5 client",
+    "wko5": "對照資料夾",
+    "tp:wko5_client": "TrainingPeaks 的桌面軟體 client",
     "admin": "全站設定與使用者管理（SP-351）",
     # second wave: defined, granted to nobody yet
     "coach:read_students": "教練看學員資料（SP-56）",
@@ -84,7 +84,7 @@ SCOPES: dict[str, str] = {
     "link:participant_ability": "inReachLiveTrack 讀報名者能力值",
 }
 SOURCE_SCOPES = ("sync:coros_credential", "sync:garmin_trial", "sync:intervals", "sync:coros_mcp", "sync:tp_web")
-SYNC_SOURCE_SCOPE = {"coros": "sync:coros_credential", "garmin": "sync:garmin_trial",
+SYNC_SOURCE_SCOPE = {"coros": "sync:coros_credential", "garmin": "sync:garmin_trial", "intervals": "sync:intervals",
                      "tp": "sync:tp_web"}      # runner's sources
 LINK_SCOPES = ("link:gpx_sync", "link:calc", "link:participant_ability")
 
@@ -355,7 +355,10 @@ def check_service_token(token: Optional[str], scope: str):
 def session_view(tenant=None) -> dict:
     """What GET /api/v1/session tells the pages."""
     m = member(tenant)
-    out = {"role": m.role, "plan": m.plan, "scopes": sorted(scopes(tenant)), "paused_sources": sorted(sources_off())}
+    out = {"role": m.role, "plan": m.plan, "scopes": sorted(scopes(tenant)), "paused_sources": sorted(sources_off()),
+           # SP-569 ⑤: what a subscription adds — only these may say 「訂閱後可用」 (TrainingPeaks' website
+           # login, the data folder, admin: the site's own, a subscription never adds them)
+           "upgrade_scopes": sorted(ROLE_SCOPES[SUBSCRIBER] - ROLE_SCOPES[USER])}
     if m.expires_at:
         out["plan_expires_at"] = m.expires_at
     out["quotas"] = {k: usage(k, m=m) for k in QUOTAS.get(m.plan, {})} if m.role in (USER, SUBSCRIBER) else {}

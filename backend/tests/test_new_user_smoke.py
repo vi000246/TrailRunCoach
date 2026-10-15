@@ -125,7 +125,7 @@ def test_new_user_every_page_and_data_route(client):
 
 def test_new_user_activity_routes(client):
     """The per-activity pages (the routes with an index) for a synced run."""
-    acts = client.get("/api/v1/wko5/workouts").json()
+    acts = client.get("/api/v1/app/workouts").json()
     rows = acts if isinstance(acts, list) else acts.get("workouts") or acts.get("rows") or []
     assert rows, acts
     assert len(rows) == 20
@@ -135,7 +135,7 @@ def test_new_user_activity_routes(client):
         path = getattr(r, "path", "")
         if "GET" not in (getattr(r, "methods", None) or set()):
             continue
-        if not path.startswith("/api/v1/wko5/workouts/") or path.count("{") != 1:
+        if not path.startswith("/api/v1/app/workouts/") or path.count("{") != 1:
             continue
         url = path.replace("{idx}", str(idx)).replace("{i}", str(idx))
         if "{" in url:
@@ -151,15 +151,15 @@ def test_new_user_activity_routes(client):
 def test_new_user_every_chart(client):
     """Every chart of every view (圖表分析): athlete charts over the range,
     workout charts for one synced run."""
-    idx = client.get("/api/v1/wko5/workouts").json()[0]["index"]
-    views = client.get("/api/v1/wko5/views").json()
+    idx = client.get("/api/v1/app/workouts").json()[0]["index"]
+    views = client.get("/api/v1/app/views").json()
     failed, n = [], 0
     for v in views:
         if v.get("error"):
             continue
         for d in v["dashboards"]:
             for c in d["charts"]:
-                url = f"/api/v1/wko5/views/{v['name']}/dashboards/{d['index']}/charts/{c['index']}"
+                url = f"/api/v1/app/views/{v['name']}/dashboards/{d['index']}/charts/{c['index']}"
                 resp = client.get(url, params={"workout": idx})
                 n += 1
                 if resp.status_code >= 500:

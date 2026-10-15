@@ -100,7 +100,8 @@ def _rescale(plan: dict, factors: list[float], start_time: Optional[str], stops)
         for key in ("speed_ms", "speed_kmh", "vert_m_per_h"):
             if s.get(key) is not None:
                 s[key] = s[key] * k
-        s["eta"] = PL._clock(start_time, ((cum - day_start) / ratio if hike else cum) + PL._stops_before(stops, s["end_km"]))
+        st = PL.start_of(plan, day, start_time) if hike else start_time          # SP-580: that day's start
+        s["eta"] = PL._clock(st, ((cum - day_start) / ratio if hike else cum) + PL._stops_before(stops, s["end_km"]))
     added = cum - sum(t0)
     base_T = plan["_night_T0"]
     T = base_T + added

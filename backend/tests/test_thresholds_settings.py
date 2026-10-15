@@ -88,7 +88,7 @@ def test_plan_page_shows_a_read_only_summary_with_a_link():
     p = (STATIC / "plan.html").read_text("utf-8")
     sec = p[p.index('<section id="thresholds">'):]
     sec = sec[:sec.index("</section>")]
-    assert 'href="/api/v1/wko5/settings#thresholds"' in sec and "<input" not in sec and "<button" not in sec
+    assert 'href="/api/v1/app/settings#thresholds"' in sec and "<input" not in sec and "<button" not in sec
     assert '"/thresholds"' not in p and "savethr" not in p and "threshold-estimate" not in p
     assert "到下方填測試結果" not in p
     for loc in ("zh-TW", "en"):

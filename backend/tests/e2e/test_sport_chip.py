@@ -25,7 +25,7 @@ SEL = "#sport-chip select#sport-sel"
 
 
 def _setting(page) -> str:
-    r = page.request.get("/api/v1/wko5/primary-sport")
+    r = page.request.get("/api/v1/app/primary-sport")
     assert r.ok
     return r.json()["setting"]
 

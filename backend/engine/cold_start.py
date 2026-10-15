@@ -41,13 +41,16 @@ import datetime as dt
 from typing import Optional
 
 from backend.engine import data_level as DL
-from backend.i18n import N_, _
+from backend.i18n import M_, N_, _
 
 DEFAULT_HOURS = 1.5       # owner 2026-10-06; 推估 (NHS Couch to 5K's end point: 3 × 30 min a week [C10])
 DEFAULT_RUNS = 3           # NHS Couch to 5K [C10], TrainingPeaks' novice trail plan [C12]: 3 runs, a day apart
 RUN30_FLOOR_H = 1.5        # 「能連續跑 30 分鐘」 → ≥ 3 × 30 min (NHS end point [C10]; as a floor 推估, §4.2)
-LONG_SHARE = 0.40          # 推估 (cold-start.md §4.2): a week < SHORT_WEEK_MIN — long run ≤ 40 % of it
-SHORT_WEEK_MIN = 120       # the existing line: the 50 % share of the long run applies from 120 min
+LONG_SHARE = 0.40          # 推估, no coach source (SP-528, coach-consensus-sp518 C §1: Daniels loosens to 30 % of the
+                           # mileage for low volume, Knopp's low-volume plans ≈ 50 %; no coach says 「less volume,
+                           # stricter share」) — a beginner's margin: a week < SHORT_WEEK_MIN, long run ≤ 40 % of it
+SHORT_WEEK_MIN = 120       # the existing line: the 50 % share of the long run applies from 120 min (the coaches'
+                           # 「more than half is too much」 red line, C §1)
 LONG_MIN_WEEK = 90         # 推估: a week under 3 × 30 min has no separate long run
 LEVEL0_DAYS = DL.LEVEL0_DAYS   # cold-start.md §4.1 等級 0: no run or hike in the last 28 days (= load_guard.SEED_DAYS)
 RAMP_WEEKS = 4             # 推估 (§4.2): the start level stands in until 4 weeks of data — the Zone 3 rule's
@@ -128,8 +131,8 @@ def note(ctx: dict, runs: Optional[int] = None, hr_prior: bool = False) -> dict:
 def why(ctx: dict) -> str:
     """The volume line of the week's 「為什麼」."""
     if ctx["source"] == "survey":
-        return _("新使用者第一週：週量 = 你填的每週 {h:.1f} 小時（不打折）", h=ctx["hours"])
-    return _("新使用者第一週：起步量每週 {h:g} 小時（{n} 次 × 30 分，推估）", h=ctx["hours"], n=ctx["runs"])
+        return M_("新使用者第一週：週量 = 你填的每週 {h:.1f} 小時（不打折）", h=ctx["hours"])
+    return M_("新使用者第一週：起步量每週 {h:g} 小時（{n} 次 × 30 分，推估）", h=ctx["hours"], n=ctx["runs"])
 
 
 def long_share_cap(long_min: float, total_min: float) -> float:

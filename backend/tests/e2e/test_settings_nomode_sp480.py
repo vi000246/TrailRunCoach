@@ -57,7 +57,7 @@ def _open(page, *, signin: bool, admin: bool, level: str | None = None):
             body = r.json()
             body["can_switch"] = admin
             route.fulfill(response=r, json=body)
-        page.route("**/api/v1/wko5/config", config)
+        page.route("**/api/v1/app/config", config)
     page.add_init_script(FLASH)
     open_page(page, _server.PAGES["settings"] + "#advanced")
     # loadMode has run: GET /config answered and the section shows / stays hidden

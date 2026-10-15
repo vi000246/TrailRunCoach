@@ -154,9 +154,10 @@ def test_the_same_activity_from_coros_is_one_activity(tmp_path, garmin):
 def test_garmin_is_the_second_data_source_and_the_one_source_rule_holds():
     from backend.settings.repository import validate
     from backend.sync import primary as P, workout_targets as WT
-    assert P.DB_SOURCES == ("coros", "garmin", "trainingpeaks")             # COROS → Garmin → TP
-    assert P.folder("garmin") == "garmin" and P.other_folders("garmin") == ("coros", "tp")
-    assert P.other_folders("coros") == ("garmin", "tp") and P.LABELS["garmin"] == "Garmin"
+    # COROS → Garmin → TP (→ intervals.icu, SP-346)
+    assert P.DB_SOURCES == ("coros", "garmin", "trainingpeaks", "intervals")
+    assert P.folder("garmin") == "garmin" and P.other_folders("garmin") == ("coros", "tp", "intervals")
+    assert P.other_folders("coros") == ("garmin", "tp", "intervals") and P.LABELS["garmin"] == "Garmin"
     validate("sync.primary_source", "garmin")
     with pytest.raises(ValueError):
         validate("sync.primary_source", "polar")

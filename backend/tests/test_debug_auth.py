@@ -1,8 +1,8 @@
 """
-Debug API authentication (SP-371, backend/debug_auth.py): off → 404; Bearer token only (no cookie);
-the PIN from the environment (constant-time, 5 wrong → 15-minute lock, never in the repo); only the
-token's hash stored; scopes → 403; expiry / revoke → 401; tenant-bound; rate limits → 429; an audit
-row for every call. Synthetic data, in-memory DB (debug_fixtures.debug_env); the two-tenant case
+Debug API authentication (SP-371, SP-373, backend/debug_auth.py): off → 404; Bearer token only (no
+cookie); personal tokens made by the owner with no PIN (SP-373), 7 / 30 / 90 / 365 days or never; only
+the token's hash stored; scopes → 403; expiry / revoke → 401; tenant-bound; rate limits → 429; an
+audit row for every call. Synthetic data, in-memory DB (debug_fixtures.debug_env); the two-tenant case
 uses two tenant folders in tmp_path.
 """
 import ast
@@ -16,8 +16,7 @@ from sqlalchemy import func, select, text, update
 from backend import debug_auth as DA
 from backend.db.models import DebugAudit, DebugToken
 from backend.security import ratelimit as RL
-from backend.tests.debug_fixtures import (ADMIN, ALL_SCOPES, DBG, ENDPOINTS, TEST_PIN, bearer, debug_env, enable,
-                                          make_token)
+from backend.tests.debug_fixtures import ADMIN, ALL_SCOPES, DBG, ENDPOINTS, bearer, debug_env, enable, make_token
 from backend.tests.test_plan_store import run
 
 REPO = Path(__file__).resolve().parents[2]
@@ -110,8 +109,8 @@ def test_a_token_without_export_config_gets_403(monkeypatch, tmp_path):
             assert e.c.get(DBG + p, headers=bearer(only_sync)).status_code == 403, p
         full = make_token(e, ALL_SCOPES)
         assert e.c.get(DBG + "/export/config", headers=bearer(full)).status_code == 200
-        assert e.c.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN, "scopes": ["write:plan"]}).status_code == 400
-        assert e.c.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN, "days": 365}).status_code == 400
+        assert e.c.post(f"{ADMIN}/tokens", json={"scopes": ["write:plan"]}).status_code == 400
+        assert e.c.post(f"{ADMIN}/tokens", json={"days": 1000}).status_code == 400
 
 
 def _tenant_app(monkeypatch, home: Path, as_user: str | None = None):
@@ -142,7 +141,6 @@ def test_tokens_are_bound_to_their_tenant(monkeypatch, tmp_path):
     from backend.db import database
     from backend.engine.planning import Plan
     from backend.tests.debug_fixtures import no_dataset
-    monkeypatch.setenv(DA.PIN_ENV, TEST_PIN)
     monkeypatch.setenv("WKO5COACH_NO_SCHEDULER", "1")
     monkeypatch.setattr(debug_api, "_dataset", no_dataset)
     DA.reset_limits()
@@ -153,7 +151,7 @@ def test_tokens_are_bound_to_their_tenant(monkeypatch, tmp_path):
         Plan(profile={"height_cm": 170 if name == "A" else 160}).save(home / "plan.json")
         with _tenant_app(monkeypatch, home) as c:
             assert c.put(ADMIN, json={"enabled": True}).status_code == 200
-            r = c.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN, "scopes": ALL_SCOPES, "name": f"tok-{name}"})
+            r = c.post(f"{ADMIN}/tokens", json={"scopes": ALL_SCOPES, "name": f"tok-{name}"})
             toks[name] = r.json()["token"]
             c.portal.call(database.dispose, home / "wko5coach.db")
     # each token reads its own tenant only
@@ -176,7 +174,7 @@ def test_tokens_are_bound_to_their_tenant(monkeypatch, tmp_path):
 def test_only_the_hash_of_a_token_is_stored(monkeypatch, tmp_path):
     with debug_env(monkeypatch, tmp_path) as e:
         enable(e)
-        r = e.c.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN, "name": "claude"})
+        r = e.c.post(f"{ADMIN}/tokens", json={"name": "claude"})
         body = r.json()
         tok = body["token"]
         assert tok.startswith(DA.TOKEN_PREFIX) and len(tok) > 40
@@ -194,54 +192,57 @@ def test_only_the_hash_of_a_token_is_stored(monkeypatch, tmp_path):
         assert row.token_hash == DA.hash_token(tok) and row.prefix == tok[:len(DA.TOKEN_PREFIX) + 4]
 
 
-# ---------------------------------------------------------------- PIN
-def test_no_pin_in_the_environment_means_no_debug(monkeypatch, tmp_path):
-    with debug_env(monkeypatch, tmp_path, pin=None) as e:
+# ---------------------------------------------------------------- personal tokens (SP-373)
+def test_a_personal_token_needs_no_pin_and_may_never_expire(monkeypatch, tmp_path):
+    monkeypatch.delenv("TRC_DEBUG_PIN", raising=False)
+    with debug_env(monkeypatch, tmp_path) as e:
         st = e.c.get(ADMIN).json()
-        assert st["pin_configured"] is False and st["enabled"] is False
-        r = enable(e)
-        assert r.status_code == 400 and r.json()["detail"]["code"] == "NO_PIN"
-        r = e.c.post(f"{ADMIN}/tokens", json={"pin": "anything-at-all"})
-        assert r.status_code == 400 and r.json()["detail"]["code"] == "NO_PIN"
-        # even with the switch stored on (an old row), nothing answers without a PIN
-        from backend.settings.repository import SettingsRepository
-        run(SettingsRepository(e.db).set(DA.ENABLED_KEY, True))
-        run(e.db.commit())
-        assert e.c.get(DBG + "/sync").status_code == 404
-    with debug_env(monkeypatch, tmp_path, pin="12345") as e:            # shorter than PIN_MIN_LEN: not set
-        assert e.c.get(ADMIN).json()["pin_configured"] is False
+        assert "pin_configured" not in st and st["days"] == [7, 30, 90, 365, 0] and st["default_days"] == 90
+        assert enable(e).status_code == 200                       # no server PIN needed to turn it on
+        r = e.c.post(f"{ADMIN}/tokens", json={"name": "laptop", "scopes": ALL_SCOPES, "days": 0})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["never_expires"] is True and body["expires_at"] is None and body["active"] is True
+        tok = body["token"]
+        # ten years on, it still works
+        real = DA._now
+        monkeypatch.setattr(DA, "_now", lambda: real() + dt.timedelta(days=3650))
+        assert e.c.get(DBG + "/sync", headers=bearer(tok)).status_code == 200
+        listed = e.c.get(ADMIN).json()["tokens"][0]
+        assert listed["never_expires"] is True and listed["expires_at"] is None and not listed["expired"]
+        # and revoking it stops it at once
+        assert e.c.delete(f"{ADMIN}/tokens/{body['id']}").json()["revoked"] == 1
+        r = e.c.get(DBG + "/sync", headers=bearer(tok))
+        assert r.status_code == 401 and r.json()["detail"]["code"] == "TOKEN_REVOKED"
+        # a year-long one has its date; the default is 90 days
+        y = e.c.post(f"{ADMIN}/tokens", json={"days": 365}).json()
+        assert y["never_expires"] is False and y["expires_at"][:4] == str((real() + dt.timedelta(days=3650 + 365)).year)
+        d = e.c.post(f"{ADMIN}/tokens", json={}).json()
+        made = dt.datetime.fromisoformat(d["created_at"].rstrip("Z"))
+        assert dt.datetime.fromisoformat(d["expires_at"].rstrip("Z")) - made == dt.timedelta(days=90)
 
 
-def test_a_wrong_pin_gets_no_token_and_five_lock_it_for_15_minutes(monkeypatch, tmp_path):
-    now = [1000.0]
-    monkeypatch.setattr(RL, "clock", lambda: now[0])
+def test_only_the_owner_turns_it_on_and_manages_tokens(monkeypatch, tmp_path):
+    from backend import tenancy
     with debug_env(monkeypatch, tmp_path) as e:
         enable(e)
-        for i in range(DA.PIN_MAX_FAILS - 1):
-            r = e.c.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN + "x"})
-            assert r.status_code == 403 and r.json()["detail"]["code"] == "PIN_WRONG" and "token" not in r.json()
-        r = e.c.post(f"{ADMIN}/tokens", json={"pin": "nope"})                  # the 5th
-        assert r.status_code == 429 and r.json()["detail"]["code"] == "PIN_LOCKED"
-        assert run(e.db.execute(select(func.count(DebugToken.id)))).scalar_one() == 0
-        now[0] += DA.PIN_LOCK_S - 5                                          # 14 m 55 s later: the right PIN too
-        r = e.c.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN})
-        assert r.status_code == 429 and "token" not in r.json()
-        assert e.c.get(ADMIN).json()["pin_locked_s"] > 0
-        now[0] += 10                                                          # the lock ran out
-        assert e.c.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN}).status_code == 200
-        assert e.c.get(ADMIN).json()["pin_locked_s"] == 0
+        tok = make_token(e, ["read:sync"])
+        owner = [False]
+        monkeypatch.setattr(tenancy, "is_owner", lambda t=None: owner[0])   # sign-in mode, someone else
+        for r in (e.c.get(ADMIN), enable(e, False), e.c.post(f"{ADMIN}/tokens", json={}),
+                  e.c.delete(f"{ADMIN}/tokens/1"), e.c.post(f"{ADMIN}/tokens/revoke-all"),
+                  e.c.get(f"{ADMIN}/upstream"), e.c.post(f"{ADMIN}/upstream/pull", json={})):
+            assert r.status_code == 403 and r.json()["detail"]["code"] == "OWNER_ONLY", r.text
+        owner[0] = True
+        st = e.c.get(ADMIN).json()
+        assert st["enabled"] is True and [k["active"] for k in st["tokens"]] == [True]
+        assert e.c.get(DBG + "/sync", headers=bearer(tok)).status_code == 200
 
 
-def test_pin_compare_is_constant_time_on_hashes():
-    src = (REPO / "backend" / "debug_auth.py").read_text("utf-8")
-    assert "hmac.compare_digest" in src and "sha256" in src
-    assert re.search(r"pin\s*==|==\s*want|want\s*==", src) is None
-
-
-def test_the_repo_holds_no_pin_value():
-    """The PIN comes only from TRC_DEBUG_PIN: no default in the code (os.environ.get / getenv with a
-    second argument), and every place that documents the variable leaves the value empty or a
-    <placeholder>."""
+def test_the_repo_holds_no_upstream_token_value():
+    """The token a local copy pulls with (SP-373) comes only from TRC_UPSTREAM_TOKEN: no default in
+    the code, and every place that documents the variable leaves the value empty or a <placeholder>."""
+    from backend.engine import upstream as UP
     for p in (REPO / "backend").rglob("*.py"):
         rel = p.relative_to(REPO).as_posix()
         if rel.startswith("backend/tests/"):
@@ -249,10 +250,10 @@ def test_the_repo_holds_no_pin_value():
         tree = ast.parse(p.read_text("utf-8"))
         for n in ast.walk(tree):
             if isinstance(n, ast.Call) and getattr(n.func, "attr", getattr(n.func, "id", "")) in ("get", "getenv") \
-                    and n.args and (isinstance(n.args[0], ast.Name) and n.args[0].id == "PIN_ENV"
-                                    or isinstance(n.args[0], ast.Constant) and n.args[0].value == DA.PIN_ENV):
-                assert len(n.args) == 1 and not n.keywords, f"{rel}:{n.lineno} reads {DA.PIN_ENV} with a default"
-    assign = re.compile(re.escape(DA.PIN_ENV) + r"\s*[=:]\s*([^\s#`'\"]*)")
+                    and n.args and (isinstance(n.args[0], ast.Name) and n.args[0].id == "TOKEN_ENV"
+                                    or isinstance(n.args[0], ast.Constant) and n.args[0].value == UP.TOKEN_ENV):
+                assert len(n.args) == 1 and not n.keywords, f"{rel}:{n.lineno} reads {UP.TOKEN_ENV} with a default"
+    assign = re.compile(re.escape(UP.TOKEN_ENV) + r"[ \t]*[=:][ \t]*([^\s#`'\"]*)")
     files = [REPO / ".env.example", REPO / "Dockerfile", REPO / "docker-compose.yml"]
     files += list((REPO / "docs").rglob("*.md")) + list((REPO / "deploy").rglob("*")) + [REPO / "README.md"]
     seen = False
@@ -266,7 +267,5 @@ def test_the_repo_holds_no_pin_value():
         for m in assign.finditer(txt):
             seen = True
             v = m.group(1)
-            assert v == "" or re.fullmatch(r"<[^>]*>?|\$\{?\w+\}?|\.\.\.", v), f"{f.name}: {DA.PIN_ENV}={v!r}"
-    assert seen, ".env.example documents TRC_DEBUG_PIN (empty)"
-
-
+            assert v == "" or re.fullmatch(r"<[^>]*>?|\$\{?\w+\}?|\.\.\.|trcd_\.\.\.", v), f"{f.name}: {UP.TOKEN_ENV}={v!r}"
+    assert seen, ".env.example documents TRC_UPSTREAM_TOKEN (empty)"

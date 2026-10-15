@@ -1,4 +1,4 @@
-"""本次重點 / 飄移判讀 as small cards (workout_review `cards`, wko5_viewer drawReviewCards).
+"""本次重點 / 飄移判讀 as small cards (workout_review `cards`, charts.html drawReviewCards).
 Synthetic data only (no WKO5 folder, no real DB)."""
 import datetime as dt
 import json
@@ -100,7 +100,7 @@ def test_strength_session_cards_only_time_and_hr():
 
 
 def test_viewer_draws_cards_and_hides_the_text_rows():
-    html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
+    html = (STATIC / "charts.html").read_text(encoding="utf-8")
     assert "function drawReviewCards(" in html and "res.cards?.length" in html
     assert "/api/v1/static/dashicons.js" in html
     assert (STATIC / "dashicons.js").exists()

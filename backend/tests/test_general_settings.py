@@ -161,7 +161,7 @@ def test_sex_or_default():
     mk = lambda prof, wk=None: SimpleNamespace(plan=SimpleNamespace(profile=prof),
                                                athlete=SimpleNamespace(root={3001: {3017: wk}} if wk else {}))
     assert CPP.sex_or_default(mk({"sex": "female"})) == ("female", "設定頁")
-    assert CPP.sex_or_default(mk({}, "female")) == ("female", "WKO5")
+    assert CPP.sex_or_default(mk({}, "female")) == ("female", "對照資料夾")
     assert CPP.sex_or_default(mk({})) == ("male", "預設（男，推估）")
 
 

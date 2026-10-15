@@ -16,14 +16,15 @@ D0 = dt.date(2026, 8, 3)
 
 def _row(k, drop, key="v1a", power_ok=True, rest_drop=None):
     """Session k (weekly) of variant `key` (z5a: 5×2′ at 106–112 % CP, rest 2′): 5 reps, each rep's
-    60-s HR drop `drop`; power_ok False = the last rep 8 % down (邊界 by power)."""
-    ps = [280.0] * 5 if power_ok else [280.0] * 4 + [257.0]
+    60-s HR drop `drop`; power_ok False = the last rep 12.5 % down (邊界 by power: 2-min reps may fall
+    10 %, Allen — SP-526; was 8 % against one 5 % for every length)."""
+    ps = [280.0] * 5 if power_ok else [280.0] * 4 + [245.0]
     return {"date": (D0 + dt.timedelta(days=7 * k)).isoformat(), "track": "z5", "variant_key": key,
             "rung_key": "z5a", "cp": CP, "bouts": [{"power": p, "hr_drop60": drop, "hr_at60": 120.0} for p in ps]}
 
 
 def _base(n=5, key="v1a"):
-    # 邊界 sessions (the last rep fades 8 %): the step stays at z5a, the baseline grows
+    # 邊界 sessions (the last rep fades 12.5 %): the step stays at z5a, the baseline grows
     return [_row(k, 30.0, key, power_ok=False) for k in range(n)]
 
 

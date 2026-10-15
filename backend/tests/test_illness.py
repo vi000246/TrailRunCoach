@@ -175,23 +175,23 @@ def test_week_plan_fever_no_run_then_a_recovery_first_run():
 # ---------------------------------------------------------------------------
 
 def test_api_illness_event(api):  # noqa: F811
-    m = api.get("/api/v1/wko5/injuries/meta").json()
+    m = api.get("/api/v1/app/injuries/meta").json()
     assert m["illness"] == {"cold": "輕微感冒", "fever": "發燒或全身症狀"} and "流鼻水" in m["illness_help"]["cold"]
     assert set(m["categories"]) == {"injury", "illness"}
-    bad = api.post("/api/v1/wko5/injuries", json={"category": "illness", "onset_date": "2026-09-20"})
+    bad = api.post("/api/v1/app/injuries", json={"category": "illness", "onset_date": "2026-09-20"})
     assert bad.status_code == 400 and bad.json()["detail"] == "INVALID_ILLNESS"
-    assert api.post("/api/v1/wko5/injuries", json={"category": "illness", "illness": "covid",
+    assert api.post("/api/v1/app/injuries", json={"category": "illness", "illness": "covid",
                                                    "onset_date": "2026-09-20"}).status_code == 400
-    r = api.post("/api/v1/wko5/injuries", json={"category": "illness", "illness": "fever", "area": "knee",
+    r = api.post("/api/v1/app/injuries", json={"category": "illness", "illness": "fever", "area": "knee",
                                                 "severity": "severe", "onset_date": "2026-09-20",
                                                 "resolved_date": "2026-09-24"})
     assert r.status_code == 200, r.text
     e = r.json()
     assert e["category"] == "illness" and e["illness"] == "fever" and e["label"] == "生病（發燒或全身症狀）"
     assert e["area"] == "unknown" and e["severity"] == "mild" and e["status"] == "resolved"
-    p = api.patch(f"/api/v1/wko5/injuries/{e['id']}", json={"illness": "cold"}).json()
+    p = api.patch(f"/api/v1/app/injuries/{e['id']}", json={"illness": "cold"}).json()
     assert p["label"] == "生病（輕微感冒）"
-    inj = api.post("/api/v1/wko5/injuries", json={"area": "knee", "onset_date": "2026-09-21"}).json()
+    inj = api.post("/api/v1/app/injuries", json={"area": "knee", "onset_date": "2026-09-21"}).json()
     assert inj["category"] == "injury" and inj["illness"] is None and inj["label"] == "膝"
 
 

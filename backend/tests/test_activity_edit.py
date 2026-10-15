@@ -369,7 +369,7 @@ def test_activity_list_page_single_edit_and_i18n():
     page = (STATIC / "activity.html").read_text(encoding="utf-8")
     # one activity at a time: no batch selection / bulk bar
     assert 'id="bulk"' not in page and "S.checked" not in page and 'type="checkbox" aria-label' not in page
-    assert 'data-edit=' in page and 'id="ed"' in page and "/api/v1/wko5/viewer?" in page
+    assert 'data-edit=' in page and 'id="ed"' in page and "/api/v1/app/viewer?" in page
     assert "/activities/stats" in page and "S.usePower" in page
     zh, en = _catalog("zh-TW"), _catalog("en")
     used = {k for k in re.findall(r'\bT\("([\w.]+)"', page) if k[-1] not in "._"}   # T("key"); T("col." + k) below
@@ -390,7 +390,7 @@ def test_nav_order_and_activity_list_name():
     import re
     ids = re.findall(r'\{ id: "(\w+)"', shell)
     assert ids == ["home", "schedule", "charts", "plan", "activity", "routes", "racepower",
-                   "injuries", "settings"]                                  # 成就 is a tab of 活動列表
+                   "injuries", "manual", "settings", "about"]               # 成就 is a tab of 活動列表; 操作手冊 (SP-558), 關於 (SP-495)
     assert _catalog("zh-TW", "shell")["page.activity.name"] == "活動列表"
     assert not any(k.startswith("page.achievements.") for k in _catalog("zh-TW", "shell"))
 
@@ -402,7 +402,7 @@ def test_achievements_merged_into_the_activity_list():
     assert not (STATIC / "achievements.html").exists()
     from backend.api import achievements as AP
     r = AP.page()
-    assert r.status_code == 307 and r.headers["location"] == "/api/v1/wko5/activities/page#achievements"
+    assert r.status_code == 307 and r.headers["location"] == "/api/v1/app/activities/page#achievements"
     page = (STATIC / "activity.html").read_text(encoding="utf-8")
     assert len(re.findall(r'j\(`\$\{ACH\}\?include_hidden=true`\)', page)) == 2   # the init prefetch + loadAch's fallback
     assert 'location.hash === "#achievements"' in page and 'id="f-ach"' in page and 'id="tab-ach"' in page
@@ -417,11 +417,11 @@ def test_achievements_merged_into_the_activity_list():
 
 
 def test_viewer_drops_the_card_and_links_the_edit_page():
-    html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
+    html = (STATIC / "charts.html").read_text(encoding="utf-8")
     assert "activity_tags_card.js" not in html and not (STATIC / "activity_tags_card.js").exists()
-    assert 'id="edit-act"' in html and "/api/v1/wko5/activities/page" in html
+    assert 'id="edit-act"' in html and "/api/v1/app/activities/page" in html
     shell = (STATIC / "shell.js").read_text(encoding="utf-8")
-    assert 'id: "activity"' in shell and "/api/v1/wko5/activities/page" in shell
+    assert 'id: "activity"' in shell and "/api/v1/app/activities/page" in shell
     page = (STATIC / "activity.html").read_text(encoding="utf-8")
     assert 'data-page="activity"' in page and "\u81ea\u7d44" not in page
     from backend.api import wko5views as V
@@ -432,7 +432,7 @@ def test_climb_card_is_map_profile_and_table():
     """SP-218 (owner 2026-10-08) replaced the single dual-axis climb plot: the 爬坡段 card is the route map
     over an elevation profile with stacked metric panels (like the map chart), synced on the distance
     axis; the option itself is tested under node in test_viewer_climbmap.py."""
-    html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
+    html = (STATIC / "charts.html").read_text(encoding="utf-8")
     assert "function drawClimbProfile" not in html
     body = html[html.index("async function drawClimbMap"):html.index("// ---- end climb map ----")]
     assert "drawMap(card, { workout: D.workout, _zoom: res._zoom }, { into: mapBox, chart: false" in body

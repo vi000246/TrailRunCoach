@@ -275,6 +275,14 @@ def activity_detail(ds, w, streams: Iterable[str] = (), every: int = 10, gps: bo
         aj = WV._activity_json(ds, w)
         out["basic"]["label"] = aj.get("label")
         out["basic"]["terrain"] = aj.get("terrain")
+        mk = aj.get("device_mark")
+        if mk and mk.get("garmin"):
+            # Garmin API Brand Guidelines (SP-346, sync/garmin_attribution.py): an AI reading this
+            # activity keeps “Garmin [device model]” and says its insights come in part from Garmin
+            out["attribution"] = {"device": mk["garmin"], "text": mk.get("derived"),
+                                  "rule": _("回答引用這筆活動時要保留這段 Garmin 標示")}
+        if mk and mk.get("not_original"):
+            out["basic"]["not_original"] = mk.get("not_original_text")
         out["tags"] = {k: aj.get(k) for k in aj if k not in ("types", "efforts", "file", "workout")}
         out["tags"]["source"] = _("auto + 使用者覆寫（activity_tags）")
     except Exception as e:                  # noqa: BLE001
@@ -473,7 +481,7 @@ def log_tail(n: int = 200) -> dict:
     from backend import applog
     p = applog.log_file()
     if p is None:
-        return {"file": None, "lines": [], "why": _("沒有 app.log（WKO5COACH_LOG_FILE=0 或還沒寫過）")}
+        return {"file": None, "lines": [], "why": _("沒有 app.log（TRC_LOG_FILE=0 或還沒寫過）")}
     lines: list[str] = []
     for f in (p.with_name(p.name + ".1"), p):
         try:

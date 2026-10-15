@@ -26,7 +26,7 @@ from backend.engine import routes as R
 from backend.engine.algorithms import route_match as RM
 
 router = APIRouter(prefix="/api/v1/routes", tags=["routes"])
-workout_router = APIRouter(prefix="/api/v1/wko5", tags=["routes"])
+workout_router = APIRouter(prefix="/api/v1/app", tags=["routes"])
 
 def _weather_client():
     """Open-Meteo archive client (racepower/weather.py); WKO5COACH_ROUTES_WEATHER=0 turns it off."""

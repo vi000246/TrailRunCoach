@@ -1,5 +1,6 @@
 """SP-296: the intensity budget's and the Zone 3 cap's sources are corrected, the numbers are not
-(docs/research/estimated-constants-inventory.md §5.1, §5.3)."""
+(docs/research/estimated-constants-inventory.md §5.1, §5.3); SP-528 corrected them again from the coach
+consensus (docs/research/coach-consensus-sp518/B-intensity.md)."""
 from backend.engine import overview as O
 from backend.engine import quality_gate as QG
 from backend.engine import status as ST
@@ -12,14 +13,20 @@ def test_numbers_unchanged():
 
 
 def test_source_texts_say_the_units():
-    assert "Seiler 的 80/20 是堂數，不是時間" in QG.SRC_Z3["share"]
+    # SP-528 (coach-consensus-sp518 B §2–§3): the budget is the coaches' median by time (80/20 Endurance,
+    # Campos 2022, UA / Koop — Koop's 10 % is hours, his 20 % sessions); the Zone 3 cap is UA / TftNA per week
+    # by time, Daniels' per-session mileage cap a side note
+    share = QG.SRC_Z3["share"]
+    assert "80/20 Endurance" in share and "Campos 2022" in share and "Koop 是時數 10%、堂數 20%" in share
+    assert "Seiler" not in share
     vol = QG.SRC_Z3["volume"]
-    assert "未驗證原書" in vol and "單次" in vol and "里程" in vol and "每週" in vol
+    assert "Uphill Athlete" in vol and "TftNA" in vol and "每週、以時間算" in vol and "單次" in vol and "里程" in vol
     rule = QG.OPTION_INFO["auto"]["rule"]
-    assert "Seiler 的 80/20 是堂數" in rule and "未驗證原書" in rule and "（Daniels）" not in rule
+    assert "教練中位數：80/20 Endurance 約 20%" in rule and "UA、TftNA：每週、以時間算" in rule
+    assert "未驗證原書" not in rule and "（Daniels）" not in rule
 
 
 def test_reserved_note_names_the_unit():
     notes = []
     O._reserved_out(notes, 30.0, 0.0, "z3")
-    assert "Seiler 的 80/20 是堂數" in notes[0]["text"] and "80/20；推估" not in notes[0]["text"]
+    assert "教練中位數：80/20 Endurance 約 20%" in notes[0]["text"] and "80/20；推估" not in notes[0]["text"]

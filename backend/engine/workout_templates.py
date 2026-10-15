@@ -10,8 +10,9 @@ converted and the template's `conv` says so (推估).
 Categories follow the session's 類型: easy (輕鬆跑 / LSD), quality (強度課, split by
 family_of() into 有氧間歇 / VO2max 間歇 / 速度 — intensity first, then rep length; SP-32,
 docs/research/coach-schools-zones-periodization.md R1), test, trail (越野跑, split by the
-template's `trail` into 結構化爬升 / 技術地形 / 下坡技術／離心 — SP-62). Every template carries a
-one-line `purpose` (訓練目的) from the same report's Finding 7.
+template's `trail` into 結構化爬升 / 技術地形 — SP-62; the 下坡技術／離心 kind and its 下坡離心
+template went with SP-539: the downhill work is part of the steady climbing sessions, SP-442).
+Every template carries a one-line `purpose` (訓練目的) from the same report's Finding 7.
 
 Targets
   pw(lo, hi)     power × CP          hr(lo, hi)   heart rate × LTHR
@@ -113,7 +114,7 @@ class Template:
     conv: str = ""           # what is converted (推估)
     note: str = ""
     purpose: str = ""        # 訓練目的, one line (PURPOSE)
-    trail: str = ""          # trail only: climb | technical | downhill (TRAIL_TYPES, SP-62)
+    trail: str = ""          # trail only: climb | technical (TRAIL_TYPES, SP-62)
 
 
 
@@ -137,7 +138,6 @@ PURPOSE = {
     "hill_sprint": N_("≥ 20% 坡 8–10 秒全力，訓練爆發力與肌肉徵召，不是有氧課（Uphill Athlete；Lydiard）"),
     "hill_rep": N_("在較低衝擊下達到高心肺負荷，訓練有氧能力與爬坡力量（Roche；CTS）"),
     "me": N_("讓腿部在高比例最大力量下重複上千次，限制來自腿而不是呼吸（Uphill Athlete）"),
-    "downhill": N_("透過重複回合效應減少賽後肌肉損傷，放在賽前最後幾週（Roche）"),
     "technical": N_("在路況差的技術路段練腳步、判斷與節奏，瓶頸是地形不是心肺，所以看 RPE 不看心率（Koop；Uphill Athlete）"),
     "test": N_("重新校正錨點，讓所有區間跟著真實體能移動（Friel；Uphill Athlete）"),
 }
@@ -187,11 +187,9 @@ _S10, _S10B = _steep(0.10)
 _S15, _S15B = _steep(0.15)
 STEEP_SRC = "Pandolf 1977（同代謝率的坡度）；UA trekking（跑步機坡度替代背包）"
 STEEP_URL = "https://doi.org/10.1152/jappl.1977.43.4.577"
-# 技術地形 / 下坡 (SP-62): the structure is the app's (推估); D+ / D− sized for the time
+# 技術地形 (SP-62): the structure is the app's (推估); D+ sized for the time
 TECH_SRC = KOOP + "（賽道專項：練和比賽相同的地形）；" + UA
 TECH_CONV = N_("結構是這個 app 的建議（推估）：時間＋爬升＋RPE，不設心率、功率目標；爬升量依你的路線調")
-DOWNHILL_M = 350
-DOWNHILL_CONV = N_("下降量 ≈ 25′ × 約 7 km/h × 12% 坡（推估）；不設心率、功率目標")
 STEEP_CONV = N_("坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率：陡坡健走、登山的課表用爬坡上限（75% 最大心率或 RPE ≤ 13，萩原・山本 2011），其他課表用輕鬆跑上限")
 
 TEMPLATES: list[Template] = [
@@ -410,13 +408,6 @@ TEMPLATES: list[Template] = [
              conv=STEEP_CONV, note=N_("不背包；第 2 階段"), purpose=PURPOSE["me"], trail="climb"),
     Template("steep_15", "trail", f"陡坡健走 {_S15['grade']:g}%（模擬背 15% 體重）", STEEP_SRC, STEEP_URL, _S15B,
              conv=STEEP_CONV, note=N_("不背包；行程背包約體重 15% 時"), purpose=PURPOSE["me"], trail="climb"),
-    Template("downhill_ecc", "trail", "下坡離心預適應 25′",
-             "Assumpção et al. 2020 Sci Rep；Bontemps et al. 2020 Sports Med；Koop（TrainRight）",
-             "https://pmc.ncbi.nlm.nih.gov/articles/PMC7606541/", lambda b: [
-        b.warm(10, "平路暖身"), b.t("work", 25 * 60, rpe(3, 5, down=DOWNHILL_M), "−10～−15% 下坡，輕鬆到中等"),
-        b.cool(10, "平路緩和")],
-        basis="rpe", src_kind="peer", conv=DOWNHILL_CONV, note=N_("賽前 ≥ 2 週做；效果約 9 週，之後 2–3 天輕鬆；下坡功率、心率都不準，看 RPE"),
-        purpose=PURPOSE["downhill"], trail="downhill"),
     # 技術地形 (SP-62): time + climb + RPE; no HR / power target (footing limits the pace, HR stays
     # low, so hrTSS under-reads — the load is still the watch's record). Low RPE = the long-run
     # slot (aerobic), RPE ≥ 7 = a quality session (workout_steps.rpe_role).
@@ -494,14 +485,13 @@ FAMILY_IDS = tuple(f["id"] for f in FAMILIES)
 FAMILY_LABEL = {f["id"]: f["label"] for f in FAMILIES}
 SUB_LABEL = {"tempo": N_("長 tempo"), "cruise": N_("巡航間歇"), "supra": N_("巡航（超閾值）"),
              "short": N_("短間歇")}
-# 越野跑's three kinds (SP-62, the user's decision 2026-10-04): by terrain and purpose
+# 越野跑's kinds (SP-62, the user's decision 2026-10-04): by terrain and purpose. 下坡技術／離心 is gone
+# (SP-539, the user 2026-10-14): the downhill work is part of the steady climbing sessions (SP-442)
 TRAIL_TYPES = [
     {"id": "climb", "label": N_("結構化爬升"),
      "tip": N_("階梯步道、坡度穩定的路線（登山王、Koop 上坡 tempo、陡坡健走）：每組時間＋強度，心率／功率上下限照設")},
     {"id": "technical", "label": N_("技術地形"),
      "tip": N_("路況差的技術路段：時間＋爬升＋RPE，不設心率、功率目標（只給參考）；RPE ≥ 7 算強度課")},
-    {"id": "downhill", "label": N_("下坡技術／離心"),
-     "tip": N_("練下坡：時間＋下降量，不設心率、功率目標（下坡功率不準）")},
 ]
 TRAIL_IDS = tuple(t["id"] for t in TRAIL_TYPES)
 TRAIL_LABEL = {t["id"]: t["label"] for t in TRAIL_TYPES}
@@ -682,19 +672,25 @@ BASIS_LABEL = {"power": "功率", "hr": "心率", "pace": "配速", "rpe": "RPE"
 
 
 def trail_type_of(items: list) -> str:
-    """The 越野跑 kind of a structure (SP-62): an RPE work step with only a descent → downhill,
-    any other RPE work step → technical (time + climb + RPE), else climb (HR / power bands on
-    a steady grade). A library template says its own (`Template.trail`)."""
+    """The 越野跑 kind of a structure (SP-62): an RPE work step → technical (time + climb /
+    descent + RPE; a descent-only one too since SP-539 dropped the 下坡 kind), else climb (HR /
+    power bands on a steady grade). A library template says its own (`Template.trail`)."""
+    rp = [st for st in _flat(items) if st.get("kind") in ("work", "other")
+          and (st.get("target") or {}).get("type") == "rpe"]
+    return "technical" if rp else "climb"
+
+
+def descent_only(items: list) -> bool:
+    """Every RPE work step has a descent and no climb (a downhill / eccentric block of your own): kept
+    out of the taper by the 推薦 (template_recs), as the 下坡離心 template was before SP-539."""
     rp = [(st.get("target") or {}) for st in _flat(items) if st.get("kind") in ("work", "other")
           and (st.get("target") or {}).get("type") == "rpe"]
-    if not rp:
-        return "climb"
-    return "downhill" if all(t.get("down") and not t.get("up") for t in rp) else "technical"
+    return bool(rp) and all(t.get("down") and not t.get("up") for t in rp)
 
 
 def row(t: Template) -> dict:
     """One 插入範本 row; 強度課 rows also carry their family (family_of: `sub` = the tab id),
-    越野跑 rows their kind (`sub` = climb / technical / downhill; `role` = workout_steps.rpe_role)."""
+    越野跑 rows their kind (`sub` = climb / technical; `role` = workout_steps.rpe_role)."""
     full = items_of(t)
     fam = family_of(full) if t.cat == "quality" else None
     sub = fam["id"] if fam else (t.trail or trail_type_of(full)) if t.cat == "trail" else None

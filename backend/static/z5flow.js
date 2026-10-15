@@ -1,7 +1,7 @@
 // 3 區／5 區解鎖流程 (quality_gate.z5_flow = z5_card()["flow"]): two independent, parallel tracks
 // (SP-39) — 3 區 (its gate, then the A1–A4 ladder) and 5 區 (its gate: a measured AeT + the soft
 // 「近 6 週 ≥ 2 堂 3 區」, then V1–V4) — each with its own 「你現在在這裡，下一步」 and checklist.
-// Shared by the 總覽 card (overview.html) and the 基礎期 panel (wko5_viewer.html, kind "z5gate").
+// Shared by the 總覽 card (overview.html) and the 基礎期 panel (charts.html, kind "z5gate").
 // The tracks sit side by side once the box is wide (container query), stacked on a phone. Each stage:
 // a badge (✓ / its number), a tag word (state is never colour alone), a checklist ☑ / ☐ with one short
 // 「what to do」 line and, on an unticked session / test, a 「安排課表」 link (item.action.href: the

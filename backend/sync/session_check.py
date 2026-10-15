@@ -42,8 +42,9 @@ from backend.db.models import SyncState
 
 log = logging.getLogger(__name__)
 
-SOURCES = ("coros", "garmin", "tp")
-TOKEN_FIELD = {"coros": "coros_access_token", "garmin": "garmin_token_sealed", "tp": "tp_access_token"}
+SOURCES = ("coros", "garmin", "tp", "intervals")
+TOKEN_FIELD = {"coros": "coros_access_token", "garmin": "garmin_token_sealed", "tp": "tp_access_token",
+               "intervals": "intervals_token_sealed"}
 CHECK_TTL_S = 300            # a checked login is trusted this long (the page never hammers COROS / TP)
 UNKNOWN_TTL_S = 60           # a check that could not reach the server is retried sooner
 
@@ -137,7 +138,8 @@ async def check(db: AsyncSession, source: str, athlete_id: int = 1) -> str:
         key = _key(source, athlete_id)
         prev = _CACHE.get(key, (None,))[0]       # stale answer, if any
         try:
-            result = await {"coros": _check_coros, "garmin": _check_garmin, "tp": _check_tp}[source](db, athlete_id)
+            result = await {"coros": _check_coros, "garmin": _check_garmin, "tp": _check_tp,
+                            "intervals": _check_intervals}[source](db, athlete_id)
         except Exception as e:                   # noqa: BLE001 — a check never breaks the page
             log.warning("%s login check failed: %s", source.upper(), type(e).__name__)
             result = UNKNOWN
@@ -189,6 +191,20 @@ async def _check_garmin(db: AsyncSession, athlete_id: int) -> str:
     if st is None or not st.garmin_token_sealed:
         return LOGGED_OUT
     return EXPIRED if st.garmin_token_expires is not None else OK
+
+
+# ---------------------------------------------------------------------------
+# intervals.icu (SP-346)
+# ---------------------------------------------------------------------------
+
+async def _check_intervals(db: AsyncSession, athlete_id: int) -> str:
+    """No live check: the OAuth token has no expiry (intervals.icu has no refresh tokens). It is good
+    until intervals.icu answered 401 / 403 during a sync (the person removed the app there:
+    intervals_token_refused set, sync/intervals_client.py) — then 「請重新連接 intervals.icu」."""
+    st = await _state(db, athlete_id)
+    if st is None or not st.intervals_token_sealed:
+        return LOGGED_OUT
+    return EXPIRED if st.intervals_token_refused is not None else OK
 
 
 # ---------------------------------------------------------------------------

@@ -313,7 +313,7 @@ function renderDetail() {
   <div class="panel card"><h3>每次成績 <span class="meta">勾 A / B 兩次來比較；排名依${timeName}</span></h3>
     <div class="tablewrap"><table id="etab"></table></div>
     <div id="more"></div>
-    <div class="note">${up ? "VAM = 淨爬升 ÷ 移動時間；" : down ? "下降率 = 淨下降 ÷ 移動時間；" : ""}⚠ = 移動時間不到經過時間一半，VAM 可能偏高；心率、功率為移動中的時間加權平均；最高心率 = 這段原始取樣的最大值；30 s 功率 = 完全落在這段內的 30 秒平均最大值；心率負荷（HR load）占比 = 這段的心率負荷 ÷ 整個活動的心率負荷（算法參考 WKO5）；錶溫為手錶感測器（受體溫、日照影響，僅供參考）。</div>
+    <div class="note">${up ? "VAM = 淨爬升 ÷ 移動時間；" : down ? "下降率 = 淨下降 ÷ 移動時間；" : ""}⚠ = 移動時間不到經過時間一半，VAM 可能偏高；心率、功率為移動中的時間加權平均；最高心率 = 這段原始取樣的最大值；30 s 功率 = 完全落在這段內的 30 秒平均最大值；心率負荷（HR load）占比 = 這段的心率負荷 ÷ 整個活動的心率負荷；錶溫為手錶感測器（受體溫、日照影響，僅供參考）。</div>
     ${wxNote ? `<div class="note">${wxNote}</div>` : ""}</div>`;
   $("back").onclick = () => { document.body.classList.remove("has-detail"); history.pushState({}, "", location.pathname); };
   $("dname").onclick = rename;
@@ -489,10 +489,10 @@ function drawTable() {
 function openWorkout(idx) {
   // the viewer restores its last state from localStorage; point it at this activity
   try {
-    const st = JSON.parse(localStorage.getItem("wko5viewer") || "{}");
-    localStorage.setItem("wko5viewer", JSON.stringify({ ...st, mode: "workout", workout: idx, workoutLabel: null }));
+    const st = JSON.parse(localStorage.getItem("charts") || "{}");
+    localStorage.setItem("charts", JSON.stringify({ ...st, mode: "workout", workout: idx, workoutLabel: null }));
   } catch {}
-  location.href = window.TRC_STATIC ? TRC_STATIC.href("/api/v1/wko5/viewer") : "/api/v1/wko5/viewer";   // the static demo's file
+  location.href = "/api/v1/app/viewer";
 }
 
 async function loadCompare() {

@@ -43,6 +43,13 @@ and one change-log row says 「CP 220 → 226 W：未來 N 堂課的功率目標
 推送」. With plan.auto.push off the stored plan and the log are updated, the
 row says 「…，待推送」 and nothing is sent; each item says 已重新推送 / 待推送 /
 只在 app. plan.auto.enabled off: nothing (the next enabled run catches up).
+
+課表心率區間 switch (SP-493): the zones in effect (week_plan thresholds' hr_model.model) are kept in
+state["hr_model"] like the CP. When the 自動 setting switches them by itself (check_hr_model, on
+opening the 課表 / any page's suggestion box), the run re-plans and re-sends every session already on
+the watch (their HR targets), and one change-log row says 「課表心率區間（自動）：A → B（why）：已推到
+手錶的 N 堂課已重新推送」 (「…，待推送」 as for the CP). The switch itself is recorded once
+(plan.hr_zone_auto, the 門檻變更紀錄) and told once in the suggestion box (suggestions.hr_switch_rows).
 """
 from __future__ import annotations
 
@@ -367,6 +374,77 @@ def cp_summary(old: float, new: float, n: int, pushed: bool) -> str:
             ("並重新推送" if pushed else "，待推送"))
 
 
+HR_ZONE_KEY = "plan.hr_zone_auto"          # SP-493: the 課表心率區間 in effect last seen (check_hr_model)
+
+
+def hr_of(inp: dict) -> Optional[dict]:
+    """The 課表心率區間 in effect of the inputs: {"model", "setting", "reason"} (week_plan thresholds'
+    hr_model, hr_profile.plan_hr_zones), or None without one."""
+    hrz = (inp.get("thresholds") or {}).get("hr_model")
+    if not isinstance(hrz, dict) or not hrz.get("model"):
+        return None
+    return {"model": hrz["model"], "setting": hrz.get("setting") or hrz.get("requested") or hrz["model"],
+            "reason": ((hrz.get("auto") or {}).get("reason") or "")}
+
+
+def hr_name(model: Optional[str]) -> str:
+    from backend.engine import hr_profile as HP
+    names = {"lthr": _("乳酸閾值"), "hrr": _("儲備心率"), "hrmax": _("最大心率")}
+    return names.get(model or "", _(HP.MODEL_SHORT.get(model, str(model))))
+
+
+def hr_summary(old: str, new: str, reason: str, n: int, pushed: bool) -> str:
+    """The change-log row of a switch the 自動 課表心率區間 made (SP-493)."""
+    head = _("課表心率區間（自動）：{a} → {b}", a=hr_name(old), b=hr_name(new)) + (_("（{why}）", why=reason) if reason else "")
+    if not n:
+        return head + _("：課表的心率目標已更新")
+    return head + (_("：已推到手錶的 {n} 堂課已重新推送", n=n) if pushed else _("：已推到手錶的 {n} 堂課待重新推送", n=n))
+
+
+async def check_hr_model(db, inp: dict) -> Optional[dict]:
+    """SP-493: the 課表心率區間 in effect (hr_of) against the one last seen (plan.hr_zone_auto). The first
+    time: recorded, nothing said. A switch 自動 made by itself (the setting auto before and now): recorded
+    as {model, setting, since, from, reason, auto: true} — the suggestion box tells it once
+    (suggestions.hr_switch_rows), the 門檻變更紀錄 gets a row — and the cp_change-like run starts (it
+    re-sends the sessions already on the watch; plan.auto.enabled off: they show 要重推 on the 課表 by
+    their fingerprint). A model the user picked: recorded quietly (put_hr_profile logged it). Returns the
+    new record when it switched, else None. Never raises (the page must load)."""
+    from backend.settings.repository import SettingsRepository
+    try:
+        eff = hr_of(inp)
+        if eff is None or inp.get("stale"):
+            return None
+        repo = SettingsRepository(db)
+        rec = await repo.get(HR_ZONE_KEY)
+        today = inp.get("today") or dt.date.today().isoformat()
+        base = {"model": eff["model"], "setting": eff["setting"], "since": today, "reason": eff["reason"]}
+        if not isinstance(rec, dict) or not rec.get("model"):
+            await repo.set(HR_ZONE_KEY, base)
+            await db.commit()
+            return None
+        if rec["model"] == eff["model"]:
+            if rec.get("setting") != eff["setting"]:
+                await repo.set(HR_ZONE_KEY, {**rec, "setting": eff["setting"]})
+                await db.commit()
+            return None
+        auto = eff["setting"] == "auto" and rec.get("setting") == "auto"
+        new = {**base, "from": rec["model"], **({"auto": True} if auto else {})}
+        await repo.set(HR_ZONE_KEY, new)
+        if auto:
+            from backend.engine import threshold_history as TH
+            hist = TH.model_history_add(await repo.get(TH.MODEL_HISTORY_KEY), dt.date.fromisoformat(today[:10]),
+                                        rec["model"], eff["model"], eff["reason"])
+            if hist is not None:
+                await repo.set(TH.MODEL_HISTORY_KEY, hist)
+        await db.commit()
+        if auto and (await settings(db))["enabled"] and not busy():
+            after_hr_model()
+        return new if auto else None
+    except Exception:                       # noqa: BLE001 — never fail the page over it
+        log.warning("plan: HR zone check failed", exc_info=True)
+        return None
+
+
 def stamp(inp: dict) -> str:
     acts = inp.get("activities") or []
     key = [inp.get("today"), len(acts), sorted(str(a.get("index")) for a in acts),
@@ -619,11 +697,11 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
         todo += [s for s in API.on_watch(new, rows, today, bl)
                  if s["uid"] in extra and s["uid"] not in have and s["kind"] != NOTICE_KIND]
         th = inp.get("thresholds") or {}
-        need = [s for s in todo if prov.status_of(PS.push_dict(s), th, rows.get(s["uid"]), today)["status"]
+        need = [s for s in todo if prov.status_of(PS.push_dict(s, th=th), th, rows.get(s["uid"]), today)["status"]
                 in ("not_pushed", "outdated", "failed")]
         if not need and not stale and not missed:
             return {"status": "unchanged", "start": today, "end": end, "sent": 0, "removed": 0}
-        res = await prov.push_sessions(db, [PS.push_dict(s) for s in todo], th, today,
+        res = await prov.push_sessions(db, [PS.push_dict(s, th=th) for s in todo], th, today,
                                        stale_keys=stale, missed_keys=missed)
         sent = sum(1 for x in res.get("sessions") or [] if x.get("changed"))
         # a copy that didn't come off the watch is a failure too (SP-358: it used to count as nothing)
@@ -650,7 +728,7 @@ async def _push_notice(db, s: dict, inp: dict, today: str) -> dict:
     from backend.sync import workout_targets as WT
     try:
         prov = await WT.active(db)
-        res = await prov.push_sessions(db, [PS.push_dict(s)], inp.get("thresholds") or {}, today)
+        res = await prov.push_sessions(db, [PS.push_dict(s, th=inp.get("thresholds"))], inp.get("thresholds") or {}, today)
         st = (res.get("sessions") or [{}])[0]
         return {"status": "ok" if st.get("status") in ("pushed", "updated") else "failed",
                 "error": st.get("error"), "notice": True}
@@ -756,7 +834,7 @@ async def _log_cp(db, old: float, new: float, items: list[dict], cfg: dict, out:
     for i in items:
         s = cur.get(i["uid"])
         if i["uid"] in rows and s is not None:
-            st = prov.status_of(PS.push_dict(s), th, rows[i["uid"]], today)["status"]
+            st = prov.status_of(PS.push_dict(s, th=th), th, rows[i["uid"]], today)["status"]
             label = "已重新推送" if st == "pushed" else "待推送"
         else:
             label = "只在 app"
@@ -771,6 +849,35 @@ async def _log_cp(db, old: float, new: float, items: list[dict], cfg: dict, out:
                      push={**(push or {"status": "held"}), "pending": pending_n})
     return {"old": old, "new": new, "n": len(marked), "pushed": pushed, "pending": pending_n,
             "status": "已重新推送" if pushed else "待推送"}
+
+
+async def _log_hr(db, old: str, new: str, reason: str, uids: set, cfg: dict, out: dict, th: dict,
+                  today: str) -> dict:
+    """SP-493: the change-log row of a switch the 自動 課表心率區間 made — the sessions on the watch from
+    today on, each 已重新推送 / 待推送 (as _log_cp)."""
+    from backend.engine import plan_store as PS
+    from backend.sync import workout_targets as WT
+    cur = {s["uid"]: s for s in await PS.load(db)}
+    prov = WT.get(WT.DEFAULT)
+    try:
+        prov = await WT.active(db)
+        rows = await prov.all_rows(db)
+    except Exception:                       # noqa: BLE001
+        rows = {}
+    marked = []
+    for uid in sorted(uids):
+        s = cur.get(uid)
+        if uid not in rows or s is None or s.get("state") != "active" or (s.get("day") or "") < today:
+            continue
+        st = prov.status_of(PS.push_dict(s, th=th), th, rows[uid], today)["status"]
+        marked.append({"uid": uid, "action": "changed", "day": s.get("day"), "title": s.get("title"),
+                       "reason": _("心率目標換成新的區間"), "push": "已重新推送" if st == "pushed" else "待推送"})
+    pending_n = sum(1 for i in marked if i["push"] == "待推送")
+    pushed = bool(cfg.get("push")) and not pending_n and (out.get("push") or {}).get("status") != "failed"
+    push = out.get("push") if cfg.get("push") else {"status": "off"}
+    await _add_entry(db, trigger="hr_model", status="applied", summary=hr_summary(old, new, reason, len(marked), pushed),
+                     items=marked, push={**(push or {"status": "held"}), "pending": pending_n})
+    return {"old": old, "new": new, "n": len(marked), "pushed": pushed, "pending": pending_n}
 
 
 RUN_TRIES = 3               # inputs out of date inside the lock: recompute outside twice, then inside
@@ -842,9 +949,15 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
     # % CP, but COROS running workouts take absolute watts — recompute and re-push
     cp_new, cp_old = cp_of(inp), _f(state.get("cp"))
     cp_changed = bool(cp_new and cp_old and round(cp_new) != round(cp_old))
-    if not force and state.get("stamp") == stp and not cp_changed:
-        if cp_new and cp_old is None:
-            await _set_state(db, {**state, "cp": cp_new})        # the baseline, no event
+    # SP-493: the 課表心率區間 in effect switched by the 自動 setting — re-plan, re-send what is on the watch
+    hr = hr_of(inp)
+    hr_new, hr_old = (hr or {}).get("model"), state.get("hr_model")
+    hr_changed = bool(hr_new and hr_old and hr_new != hr_old and (hr or {}).get("setting") == "auto")
+    if not force and state.get("stamp") == stp and not cp_changed and not hr_changed:
+        if (cp_new and cp_old is None) or (hr_new and hr_old != hr_new):
+            # the baselines, no event (a model the user picked: put_hr_profile's run re-plans it)
+            await _set_state(db, {**state, **({"cp": cp_new} if cp_new else {}),
+                                  **({"hr_model": hr_new} if hr_new else {})})
         out = {"status": "noop", "reason": "沒有新的活動"}
         if state.get("remote"):
             # 課表待確認 copies an interrupted push left on the watch (review M2): off now
@@ -880,9 +993,12 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
     fp = fingerprint(fw) if fw else None
     out: dict = {"status": "noop", "items": items}
     held = bool(big and cfg["confirm_big"] and not force)
+    hr_uids = {s["uid"] for s in new if s.get("state") == "active" and (s.get("day") or "") >= today} \
+        if hr_changed else set()
     job: dict = {"inp": inp, "today": today, "cfg": cfg, "trigger": trigger, "errors": errors, "remote": remote,
                  "held": held, "notice": None, "entry": None, "window": False, "days": days, "items": items,
-                 "cp_items": cp_items, "cp": (cp_old, cp_new) if cp_changed else None}
+                 "cp_items": cp_items, "cp": (cp_old, cp_new) if cp_changed else None,
+                 "hr": (hr_old, hr_new, (hr or {}).get("reason") or "", hr_uids) if hr_changed else None}
 
     if held:
         if fp in (state.get("rejected") or []):
@@ -927,6 +1043,8 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
         job.update(window=bool(cfg["push"]), big=big, fp=fp, ref=ref)
     if cp_new:
         state["cp"] = cp_new
+    if hr_new:
+        state["hr_model"] = hr_new
     state["stamp"] = stp
     if not held:
         # the phase baseline moves only once a plan is applied: a held phase
@@ -997,7 +1115,7 @@ async def _push_phase(db, job: dict, out: dict) -> dict:
                         else {"status": "held"}
                 elif job.get("window"):
                     push = await push_window(db, await PS.load(db), job["inp"], job["today"], job["days"],
-                                             {i["uid"] for i in job["cp_items"]})
+                                             {i["uid"] for i in job["cp_items"]} | (job["hr"][3] if job.get("hr") else set()))
             except Exception as e:          # noqa: BLE001 — the push never breaks the run / the sync
                 log.warning("auto plan push failed: %s", type(e).__name__)
                 push = {"status": "failed", "error": f"{type(e).__name__}: {e}"[:500]}
@@ -1015,8 +1133,8 @@ async def _push_phase(db, job: dict, out: dict) -> dict:
         if job["entry"] is not None:
             await _set_push(db, job["entry"], push)
             out = {**out, "push": push}
-        # a push that only re-sends a CP change is logged by _log_cp (below), not twice
-        elif push.get("status") not in ("unchanged", "off") and not job["cp_items"]:
+        # a push that only re-sends a CP change is logged by _log_cp (below), not twice (an HR-zone switch: _log_hr)
+        elif push.get("status") not in ("unchanged", "off") and not job["cp_items"] and not job.get("hr"):
             e = await _add_entry(db, trigger=job["trigger"], status="applied", summary=summary(job["items"]),
                                  items=job["items"], before=[], after=[], big=job["big"] or None,
                                  fingerprint=job["fp"], push=push, ref_id=job["ref"])
@@ -1027,6 +1145,9 @@ async def _push_phase(db, job: dict, out: dict) -> dict:
         old, new = job["cp"]
         out["cp_change"] = await _log_cp(db, old, new, job["cp_items"], cfg, out, job["trigger"],
                                          inp.get("thresholds") or {}, today)
+    if job.get("hr"):
+        old, new, reason, uids = job["hr"]
+        out["hr_change"] = await _log_hr(db, old, new, reason, uids, cfg, out, inp.get("thresholds") or {}, today)
     return out
 
 
@@ -1261,6 +1382,12 @@ async def check_cp(db, inp: dict) -> bool:
     return True
 
 
+def _after_hr_model() -> None:
+    """check_hr_model found the 自動 課表心率區間 switched (SP-493): a run re-plans and re-sends the
+    sessions on the watch (trigger hr_model)."""
+    _start_run("hr_model")
+
+
 def _after_settings() -> None:
     """api/calib.py calls this after a 進階設定 value the plan reads changed (the Zone 3
     unlock rule, SP-295): a background run re-plans with it, like a sync would."""
@@ -1290,3 +1417,4 @@ def _start_run(trigger: str) -> None:
 after_thresholds = _after_thresholds     # the hook api/plan.py calls (tests replace it)
 after_settings = _after_settings         # the hook api/calib.py calls (tests replace it)
 after_cp_moved = _after_cp_moved         # the hook check_cp calls (tests replace it)
+after_hr_model = _after_hr_model         # the hook check_hr_model calls (tests replace it)

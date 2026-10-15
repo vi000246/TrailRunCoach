@@ -208,7 +208,7 @@ details.mon .mon-full { margin-top: 3px; white-space: normal; }
 </dialog>
 
 <script>
-const API = "/api/v1/wko5/injuries";
+const API = "/api/v1/app/injuries";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const S = { meta: null, list: [], tl: null, an: null, metric: "run_h", months: 18, acwr: false, sev: new Set(["mild", "moderate", "severe"]),
@@ -237,14 +237,15 @@ const errText = (e) => ERR[e.message] || (S.meta?.errors || {})[e.message] || e.
 
 // ---- 「?」 help (hover; tap pins it) -------------------------------------------
 const QT = { el: null, pin: null };
-function qShow(b) { qHide(); const d = document.createElement("div"); d.className = "qtip-pop"; d.textContent = b.dataset.tip; document.body.appendChild(d);
+function qShow(b) { qHide(); const d = document.createElement("div"); d.className = "qtip-pop"; d.textContent = b.dataset.tip;
+  window.ManualLink?.decorate(d, b); if (QT.pin === b) d.dataset.pinned = "1"; document.body.appendChild(d);   // SP-559: 名詞表 links
   const r = b.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
   d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
   d.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`; QT.el = d; }
 function qHide() { QT.el?.remove(); QT.el = null; }
 document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(".qtip"); if (t && !QT.pin) qShow(t); });
-document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QT.pin) qHide(); });
-document.addEventListener("click", (e) => { const t = e.target.closest(".qtip");
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QT.pin && !window.ManualLink?.into(e)) qHide(); });
+document.addEventListener("click", (e) => { if (e.target.closest?.(".qtip-pop")) return; const t = e.target.closest(".qtip");
   if (t && QT.pin !== t) { QT.pin = t; qShow(t); e.stopPropagation(); e.preventDefault(); return; } QT.pin = null; qHide(); }, true);
 // chart tooltip
 const TIP = document.createElement("div"); TIP.className = "tip"; TIP.hidden = true; document.body.appendChild(TIP);

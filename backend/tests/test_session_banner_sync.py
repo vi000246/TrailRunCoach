@@ -182,10 +182,10 @@ def test_logged_out_only_after_it_synced_and_nothing_when_sync_is_off(tmp_path):
 
 def test_the_overview_banner_and_the_auto_sync_show_the_failure():
     js = (STATIC / "session_banner.js").read_text(encoding="utf-8")
-    assert "/api/v1/auth/session-alerts" in js and "WKO5SessionBanner" in js
+    assert "/api/v1/auth/session-alerts" in js and "TRCSessionBanner" in js
     assert "visibilitychange" in js and "last_ok_at" in js and "session.relogin" in js
     auto = (STATIC / "autosync.js").read_text(encoding="utf-8")
-    assert '"failed"' in auto and "WKO5SessionBanner.refresh" in auto
+    assert '"failed"' in auto and "TRCSessionBanner.refresh" in auto
     for page in ("overview.html", "schedule.html"):
         assert "/api/v1/static/session_banner.js" in (STATIC / page).read_text(encoding="utf-8")
     for loc in ("zh-TW", "en"):

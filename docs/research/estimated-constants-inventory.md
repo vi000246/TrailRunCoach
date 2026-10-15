@@ -137,7 +137,7 @@
 |---|---|---|---|---|
 | `reentry.py:43-85` | `MIN_BREAK` 6、`CROSS_MIN` 45、`CROSS_SHARE` 0.5、`LONG_CAP_MIN` 90、`TARGETS_AFTER_DAYS` 14、`CAT4_STEPS`、`CAT4_Z3_WEEKS` 12、`STEP_UP_MIN`（9） | 架構是 Daniels 表 9.2（教練）；其餘推估 | 中（只在停跑後） | D；`CROSS_*` 是 C |
 | `planning.py:45-49` | `TRANSITION_WEEKS` 3、`TRANSITION_MIN_DAYS` 7、`LONG_EVENT_HOURS` 6、`B_RECOVERY_DAYS` 3（5） | Friel、Canova（教練）；低端取值推估。`B_RECOVERY_DAYS` 見下面 B 賽事那一列 | 中 | C（已有偏好設定） |
-| `planning.py` `SPECIFIC_WEEKS` | 專項期 8 週（1） | 教練級：Friel Build 8–9 週 [18]、Canova 6–8 週 [130]、vert.run 最後 8–10 週 [131]、江晏慶強化 2–3 週＋巔峰約 6 週 [454]（換算成 8 週是推估）。原本只寫 Koop、UA（文字）（SP-104） | 高 | D |
+| `planning.py` `SPECIFIC_WEEKS` | 專項期 8 週（1） | 教練級：Friel Build 8–9 週 [18]、Canova 6–8 週 [130]、vert.run 100 英里指南「12 to 16 weeks of focused 100-mile training」[131]（原寫「最後 8–10 週」，SP-518 C 重讀更正，SP-528）、江晏慶強化 2–3 週＋巔峰約 6 週 [454]（換算成 8 週是推估）。原本只寫 Koop、UA（文字）（SP-104） | 高 | D |
 | `planning.py` B 賽事 | `MINI_TAPER_DAYS` 5、`B_RECOVERY_DAYS` 3（2） | 教練級、部分二手：TrainerRoad 比賽當週減量 [362]、Friel 賽前休 2–3 天 [431]、Pfitzinger 賽前 5 天不做間歇、4 天不做節奏跑和長跑、賽後約 5 天恢復 [437]（二手轉述）。3 天恢復是推估；SP-95 要改成依距離。之前清單沒列（SP-104 補列） | 中 | D |
 | `overview.py` `strength_n` | 基礎期、轉換期、恢復期每週 2 次肌力，其他 1 次（1） | UA；賽季每週 1 次可維持 13 週（Rønnestad 2010，自行車 [407]）（SP-104） | 低 | D |
 | `specific_phase.py:41-59` | `FRAC`（每週佔賽事的比例表）、`ROAD_FRAC`、`STEP` 1.15、`SIM_WEEKS`、爬坡課的 7 個門檻（18） | コース定數（山本正嘉）、江晏慶、Koop、Pfitzinger；比例表本身推估 | **高**（決定專項期長跑多長） | C；見 SP-75 |

@@ -348,9 +348,9 @@ def range_stats(res: dict, ka: int, kb: int) -> dict:
 
 HR_MODELS = [
     {"id": "frielhr", "title": N_("Friel 7 區（% LTHR）"), "basis": "lthr", "zones": lambda: Z.FRIEL_HR,
-     "source": "Friel 心率區間（WKO5 的 Friel HR 表，% LTHR）"},
-    {"id": "classichr", "title": N_("WKO5 Classic 5 區（% LTHR）"), "basis": "lthr", "zones": lambda: Z.CLASSIC_HR,
-     "source": "WKO5 Classic HR 區間（% LTHR）"},
+     "source": "Friel 心率區間（Friel HR 表，% LTHR）"},
+    {"id": "classichr", "title": N_("Classic 5 區（% LTHR）"), "basis": "lthr", "zones": lambda: Z.CLASSIC_HR,
+     "source": "Classic HR 區間（% LTHR）"},
     {"id": "seiler3", "title": N_("Seiler 3 區（AeT／LTHR）"), "basis": "aet_lthr",
      "source": "Seiler 三區模型：1 區 < 第一閾值、2 區 兩閾值之間、3 區 > 第二閾值；這裡第一閾值用 AeT、第二用 LTHR"},
     # the watch's own three models (engine/hr_profile.py, user request 2026-10-03). The
@@ -368,14 +368,16 @@ HR_MODELS = [
 POWER_MODELS = [
     {"id": "palladino", "title": N_("Palladino 10 區（% CP）"), "basis": "cp", "zones": lambda: Z.PALLADINO_POWER_ZONES,
      "source": Z.SOURCE},
-    # power zones are Palladino's everywhere (owner 2026-10-02): the Coggan (cycling % FTP) and
-    # Stryd sets are gone, and so are WKO5 iLevels (owner 2026-10-02); a remembered choice falls
-    # back to the default.
+    # power zones are Palladino's by default (2026-10-02): the Coggan (cycling % FTP) set and the
+    # iLevels are gone (a remembered choice falls back to the default); Stryd's five zones came back
+    # as a choice (SP-363, zones.STRYD_POWER_ZONES).
     {"id": "palladino3", "title": N_("3 區（Palladino 80／95% CP）"), "basis": "cp",
      "zones": lambda: [("1", N_("低強度"), 0.0, Z.PALLADINO_3ZONE["low"]),
                        ("2", N_("中強度"), Z.PALLADINO_3ZONE["low"], Z.PALLADINO_3ZONE["high"]),
                        ("3", N_("高強度"), Z.PALLADINO_3ZONE["high"], None)],
      "source": "Palladino 的三區摘要（低 < 80% CP、中 80–95%、高 ≥ 95%），即功率版的 Seiler 三區"},
+    {"id": "stryd", "title": N_("Stryd 5 區（% CP）"), "basis": "cp", "zones": Z.stryd_rows,
+     "source": Z.STRYD_SOURCE},
 ]
 MODELS = {"hr": HR_MODELS, "power": POWER_MODELS}
 # defaults: Friel % LTHR and Palladino % CP (docs/research/zones-and-thresholds.md §3.1–3.2)

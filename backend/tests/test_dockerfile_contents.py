@@ -1,6 +1,6 @@
 """The production image must contain every repo-root folder the backend reads at
 runtime. The Dockerfile once copied only backend/, so /app/views was missing and
-/api/v1/wko5/views returned [] in production. Reads only repo files."""
+/api/v1/app/views returned [] in production. Reads only repo files."""
 import fnmatch
 from pathlib import Path
 

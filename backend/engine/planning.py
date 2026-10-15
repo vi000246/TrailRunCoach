@@ -40,7 +40,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from backend.i18n import N_, _
+from backend.i18n import M_, N_, _
 
 PLAN_PATH: Optional[Path] = None      # fixed file (tests); None = the tenant's plan.json
 
@@ -126,6 +126,8 @@ PHASES = {
     # and then drop it again for the 轉換期.
     "rebuild": N_("回量期"),
 }
+# SP-504 R2: an A 百岳 trip's (kind baiyue) days are a 行程, not a 賽事 (phase_label)
+TRIP_PHASE = N_("行程")
 KINDS = {"race": "越野賽", "baiyue": "百岳", "road": "路跑賽", "other": "其他"}
 PRIORITIES = ("A", "B", "C")
 EVENT_HEAT = ("auto", "hot", "cool")      # Event.heat (heat-acclimation.md §5.4)
@@ -383,9 +385,16 @@ REC_NO_RUN_DAYS = 2
 REC_SHORT_DAYS = 7
 REC_SHORT_MIN = 40
 REBUILD_MIN_DAYS = 7               # a shorter remainder before the next race's 專項期 → no 回量期 (推估)
-# B races (SP-95; Pfitzinger, via [437], 二手轉述): 短 3 days, 中 5 days of easy running only;
-# 馬拉松級 and up as an A race's 恢復期 days (no 回量期). Cuts by event_size, 推估.
+# B races (SP-95): 短 3 days of easy running only (Pfitzinger, via [437], 二手轉述; Daniels' 10K = 3);
+# 中: one easy day per B_REC_KM_PER_DAY km of the race (SP-525, Daniels 「following any race, take 1 E
+# day of running for every 3K of race distance」 — 10K 3, 15K 5, half 7, 30K 10; Pfitzinger & Latter:
+# 15K and up 「an extra several days or even another week」), the km of a trail race its EP (km + climb ÷
+# the EP divisor, as event_size — owner 2026-10-14, SP-518 Q1-4 B), at least 短's days and at most what an
+# A race of the same size gets (REC_BY_SIZE: 7); without a distance B_REC_DAYS[MEDIUM] (5, the old
+# Pfitzinger value); 馬拉松級 and up as an A race's 恢復期 days (no 回量期). Cuts by event_size, 推估.
+# (docs/research/coach-consensus-sp518/D-taper-race-post.md §4c)
 B_REC_DAYS = {SHORT: 3, MEDIUM: 5}
+B_REC_KM_PER_DAY = 3.0
 # Two A races (SP-95, §4.8.1): closer than A_GAP_HINT_WEEKS → 恢復 → (回量) → 中間訓練 (the 專項期
 # left, its weekly hours ≤ INTER_PEAK of the first race's pre-taper level — Higdon [429] / [430]:
 # 4 weeks apart 50–65 %, 6 weeks 75–90 %; 推估) → 再減量, no 轉換期. A trail / 超馬級 first race
@@ -451,10 +460,34 @@ def recovery_plan(ev, b: bool = False) -> dict:
             rec, bumped = min(size + 1, HUNDRED), "size"
             days, rb = REC_BY_SIZE[rec]
     if b:
-        days, rb = B_REC_DAYS.get(rec, days), 0
+        days, rb = (b_medium_days(ev) if rec == MEDIUM else B_REC_DAYS.get(rec, days)), 0
     out = {"size": size, "rec_size": rec, "days": days, "rebuild": rb, "downhill": dh, "bumped": bumped}
     base = recovery_plan_text(ev, out, b)
     return {**out, "text": base}
+
+
+def b_rec_km(ev) -> Optional[float]:
+    """The distance a 中 B race's recovery counts (SP-525): a road race's km, any other its EP
+    (event_ep: km + climb ÷ the EP divisor, as event_size; its km when the climb is unknown); None
+    without a distance."""
+    if not ev.distance_km:
+        return None
+    if ev.kind != "road":
+        ep = event_ep(ev)
+        if ep is not None:
+            return ep
+    return float(ev.distance_km)
+
+
+def b_medium_days(ev) -> int:
+    """A 中 B race's easy-only days (SP-525): one per B_REC_KM_PER_DAY km of b_rec_km (rounded),
+    ≥ B_REC_DAYS[SHORT], ≤ the A race days of the size (REC_BY_SIZE[MEDIUM]); B_REC_DAYS[MEDIUM]
+    without a distance."""
+    km = b_rec_km(ev)
+    if km is None:
+        return B_REC_DAYS[MEDIUM]
+    n = math.floor(km / B_REC_KM_PER_DAY + 0.5)
+    return int(min(max(n, B_REC_DAYS[SHORT]), REC_BY_SIZE[MEDIUM][0]))
 
 
 def recovery_plan_text(ev, rp: dict, b: bool = False) -> str:
@@ -477,8 +510,8 @@ def recovery_plan_text(ev, rp: dict, b: bool = False) -> str:
     if rp["bumped"] == "rebuild":
         txt += _("，回量期多 1 週")
     elif rp["bumped"] == "size":
-        base_days = (B_REC_DAYS.get(rp["size"], REC_BY_SIZE[rp["size"]][0]) if b
-                     else REC_BY_SIZE[rp["size"]][0])
+        base_days = ((b_medium_days(ev) if rp["size"] == MEDIUM else B_REC_DAYS.get(rp["size"], REC_BY_SIZE[rp["size"]][0]))
+                     if b else REC_BY_SIZE[rp["size"]][0])
         if rp["days"] > base_days:
             txt += _("，恢復多給 {d} 天", d=rp["days"] - base_days)
         elif rp["rebuild"] > REC_BY_SIZE[rp["size"]][1]:
@@ -752,7 +785,10 @@ class Plan:
         tmp.replace(path)
 
     # ---- edits ------------------------------------------------------------
-    def upsert_event(self, data: dict) -> Event:
+    def upsert_event(self, data: dict, gpx: bool = False) -> Event:
+        """Add or replace an event. `gpx`: the trip has a GPX (stored, or uploaded right after this
+        save — SP-533): its per-day numbers come from the GPX, so blank day rows are let through
+        (rows filled in part are still checked)."""
         data = {k: v for k, v in data.items() if k in Event.__dataclass_fields__}
         if data.get("priority") not in PRIORITIES:
             data["priority"] = "A"
@@ -791,6 +827,8 @@ class Plan:
         was = next((e for e in self.events if data.get("id") and e.id == data["id"]), None)
         if was is not None and was.day_plan_missing and not was.day_plan and day_plan_blank(data.get("day_plan")):
             data["day_plan"] = None
+        elif gpx and day_plan_blank(data.get("day_plan")):
+            data["day_plan"] = None         # SP-533: a GPX instead of typing each day
         else:
             data["day_plan"] = clean_day_plan(data, days)
         if data["day_plan"]:
@@ -994,7 +1032,7 @@ def _md(d: dt.date) -> str:
 def _span(days: int) -> str:
     """「N 週」 from 14 days on, else 「N 天」."""
     days = max(0, int(days))
-    return _("{n} 週", n=days // 7) if days >= 14 else _("{n} 天", n=days)
+    return M_("{n} 週", n=days // 7) if days >= 14 else M_("{n} 天", n=days)     # (M_: in a week's why, SP-542)
 
 
 def _after_prev_notes(ev: Event, prev: Event, cursor: dt.date, spec_start: dt.date, taper_start: dt.date,
@@ -1209,6 +1247,21 @@ def event_json(e: Event, today: dt.date) -> dict:
             "day_plan_missing": e.day_plan_missing, "gpx_recommended": e.gpx_recommended}
 
 
-def phase_json(p: Phase) -> dict:
-    return {**asdict(p), "label": p.label,
+def phase_label(p, events=()) -> str:
+    """The phase's label (Phase.label); an event phase of a 百岳 trip (kind baiyue: its event_id, else the
+    event starting on its first day) is 行程, not 賽事 (SP-504 R2). `p`: a Phase or a dict."""
+    g = (lambda k: p.get(k)) if isinstance(p, dict) else (lambda k: getattr(p, k, None))
+    kind = g("kind")
+    if kind == "event":
+        eid, start = g("event_id"), str(g("start") or "")[:10]
+        ev = next((e for e in events or () if eid and e.id == eid), None) \
+            or next((e for e in events or () if e.start.isoformat() == start), None)
+        if ev is not None and getattr(ev, "kind", None) == "baiyue":
+            return _(TRIP_PHASE)
+    return _(PHASES[kind]) if kind in PHASES else str(kind)
+
+
+def phase_json(p: Phase, events=()) -> dict:
+    """`events`: the plan's (phase_label: an A 百岳 trip's phase is 行程)."""
+    return {**asdict(p), "label": phase_label(p, events),
             "days": (_d(p.end) - _d(p.start)).days + 1}

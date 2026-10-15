@@ -68,17 +68,20 @@ def test_feasibility_counts_the_simulations_still_possible_not_the_weekly_volume
     assert "weekly" not in ids(r["checks"]) and "hours" not in ids(r["checks"])
     c = next(c for c in r["checks"] if c["id"] == "summit_sim")
     assert c["level"] == "ok" and c["projected"] >= BM.SIM_NEED and c["need_m"] == 1500
-    assert "攻頂日是第 1 天" in c["text"] and "要 3 次" in c["text"]
-    assert r["level"] == "ok" and r["race_day"]["climb_m"] == 1500
+    assert "攻頂日是第 1 天" in c["text"] and "建議做 3 次" in c["text"]
+    # SP-545: the card's level is how hard the summit day feels — a 1200 m best day vs 1500 m: 超出 (yellow)
+    assert r["level"] == "tight" and r["effort"]["key"] == "over" and r["race_day"]["climb_m"] == 1500
     assert any("Training for Mountaineering" in s for s in r["src"]) and not any("Big Vert" in s for s in r["src"])
 
 
-def test_feasibility_over_suggests_a_lower_route_one_more_day_or_later():
+def test_feasibility_no_simulation_left_is_a_suggestion_with_a_shorter_summit_day():
+    """SP-545: no simulation left is a yellow suggestion (was 「over」 + 「來不及」)."""
     e = trip(start="2026-11-14")                          # 6 weeks out, 400 m now
     r = run(e, [row(5, 400.0)])
     c = next(c for c in r["checks"] if c["id"] == "summit_sim")
-    assert c["level"] == "over" and r["level"] == "over" and c["projected"] == 0
-    assert "低一級的路線" in r["suggestions"][0] and not any("組別" in s for s in r["suggestions"])
+    assert c["level"] == "tight" and r["level"] == "tight" and c["projected"] == 0
+    assert "多排一天把攻頂日拆短" in r["suggestions"][0] and not any("組別" in s for s in r["suggestions"])
+    assert not any("來不及" in s for s in r["suggestions"])
     assert "downgrade" not in r
 
 
@@ -112,7 +115,7 @@ def test_readiness_counts_simulations_with_a_pack():
     assert "記下那次背多少" in c["text"]
     rd2 = run(e, rows + [row(1, 1500.0, 11.0)])["readiness"]
     assert rd2["checks"][0]["level"] == "ok"
-    assert run(e, [])["readiness"]["checks"][0]["level"] == "short"
+    assert run(e, [])["readiness"]["checks"][0]["level"] == "tight"           # SP-545: a suggestion, never red
 
 
 def test_races_hook_and_trail_races_unchanged(monkeypatch):
@@ -302,7 +305,9 @@ def test_sp112_checks_a_multi_day_baiyue_keeps_and_drops():
     got = ids(r["checks"])
     assert not {"weekly", "climb", "hours"} & set(got)
     assert {"step", "vam", "power", "summit_sim"} <= set(got)
-    assert next(c for c in r["checks"] if c["id"] == "step")["level"] == "over" and r["level"] == "over"
+    # SP-545: 跨級 stays as a detail, at most yellow; the level is the effort (2500 m vs a 1200 m best day: 超出)
+    assert next(c for c in r["checks"] if c["id"] == "step")["level"] == "tight" and r["level"] == "tight"
+    assert r["label"] == "預估：超出"
     assert any("低一級的路線" in s for s in r["suggestions"]) and not any("比賽" in s for s in r["suggestions"])
     # readiness: SP-112 adds no check there; the long day / week / hours go, B2B is kept
     assert set(BM.DROP_READY) == {"long", "weekly", "hours"}

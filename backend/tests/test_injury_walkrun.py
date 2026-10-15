@@ -263,15 +263,15 @@ def test_illness_layoff_has_no_walk_run(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_api_walkrun_button(api):  # noqa: F811
-    m = api.get("/api/v1/wko5/injuries/meta").json()
+    m = api.get("/api/v1/app/injuries/meta").json()
     assert m["labels"]["walkrun_button"] == "可以開始走跑" and "Ohio State Wexner" in m["labels"]["walkrun_help"]
-    e = api.post("/api/v1/wko5/injuries", json={"area": "knee", "severity": "severe", "onset_date": "2026-09-10"}).json()
-    r = api.post(f"/api/v1/wko5/injuries/{e['id']}/walkrun", json={"date": "2026-09-20"})
+    e = api.post("/api/v1/app/injuries", json={"area": "knee", "severity": "severe", "onset_date": "2026-09-10"}).json()
+    r = api.post(f"/api/v1/app/injuries/{e['id']}/walkrun", json={"date": "2026-09-20"})
     assert r.status_code == 200 and r.json()["walkrun_from"] == "2026-09-20"
-    assert api.post(f"/api/v1/wko5/injuries/{e['id']}/walkrun", json={"date": "2026-09-01"}).status_code == 400
-    ill = api.post("/api/v1/wko5/injuries", json={"category": "illness", "illness": "cold",
+    assert api.post(f"/api/v1/app/injuries/{e['id']}/walkrun", json={"date": "2026-09-01"}).status_code == 400
+    ill = api.post("/api/v1/app/injuries", json={"category": "illness", "illness": "cold",
                                                   "onset_date": "2026-09-20"}).json()
-    assert api.post(f"/api/v1/wko5/injuries/{ill['id']}/walkrun").status_code == 400
+    assert api.post(f"/api/v1/app/injuries/{ill['id']}/walkrun").status_code == 400
 
 
 def test_migration_adds_walkrun_from():

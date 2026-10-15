@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
-PAGE = (STATIC / "wko5_viewer.html").read_text("utf-8")
+PAGE = (STATIC / "charts.html").read_text("utf-8")
 TREE = re.search(r"\nfunction renderTree\(\) \{.*?\n\}", PAGE, re.S).group(0)
 
 

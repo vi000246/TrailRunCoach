@@ -2,9 +2,11 @@
 
 Version 1.0, 2026-10-05
 
-> No longer offered: the repository is private from 2026-10 on and takes no external
-> contributions (SP-350). Kept as the record of the terms that contributions received while it
-> was public were made under.
+> Pull requests to the public repository (https://github.com/vi000246/TrailRunCoach, a mirror
+> of the private repository without the calculation core) are made under this agreement: write
+> "I agree to the Contributor License Agreement in CLA.md" in the pull request
+> (CONTRIBUTING.md). The maintainer applies accepted changes in the private repository, and the
+> mirror brings them back to the public one.
 
 This agreement is between you (the "Contributor") and vi000246 (the "Maintainer"), the
 copyright holder of TrailRunCoach (the "Project", https://github.com/vi000246/TrailRunCoach).

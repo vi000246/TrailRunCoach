@@ -144,7 +144,7 @@ def api(monkeypatch, tmp_path, _fit_root_in_tmp):
 def _get(client, variant=None):
     di, ci, _ = _index()
     q = "begin=2026-08-01&end=2026-09-30" + (f"&variant={variant}" if variant else "")
-    r = client.get(f"/api/v1/wko5/views/我的訓練/dashboards/{di}/charts/{ci}?{q}")
+    r = client.get(f"/api/v1/app/views/我的訓練/dashboards/{di}/charts/{ci}?{q}")
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -165,7 +165,7 @@ def test_pct_variant_matches_the_tss_variant_day_by_day(api):
     p = _get(api, "pct")
     assert t["variant"] == "tss" and p["variant"] == "pct" and p["variant_toggle"]
     assert [c["key"] for c in p["variant_choices"]] == ["tss", "pct"]
-    assert p["description"] != t["description"] and "Daily % of CTL" in p["description"]
+    assert p["description"] != t["description"] and "÷ 前一天的長期訓練負荷" in p["description"]
     tb, pb = _bars(t), _bars(p)
     day = lambda x: dt.date.fromisoformat(str(x)[:10])          # noqa: E731 — x is an ISO date
     ctl = {day(x): y for x, y in t["series"][4]["data"]["points"] if y is not None}

@@ -10,7 +10,8 @@
  *            the settings page's 不再建議的測試 has 恢復)
  *    ✕      POST …/suggestions/dismiss {id, action: "dismissed"}
  *   「稍後提醒」 POST …/suggestions/dismiss {id, action: "snoozed"} (SP-507: back in 7 days, not if the test
- *            was done meanwhile; every row but injury_done, whose 「還沒」 already is one)
+ *            was done meanwhile; an altitude row: the day before its trip, SP-546 R1; every row but injury_done,
+ *            whose 「還沒」 already is one)
  *
  * Dismissals live on the server (they survive reloads and devices); a
  * suggestion comes back only when a new one arises. Loaded by shell.js on
@@ -37,6 +38,7 @@
   // i18n: common.sugg.* (static/i18n/i18n.js; the common catalog is inlined on every page)
   const T = (k, p) => (window.I18N ? window.I18N.t("common.sugg." + k, p) : k);
   const KIND = { b2b: "B2B", test: T("kind.test"), baseline: T("kind.baseline"), zone_test: T("kind.zone_test"), zone_update: T("kind.zone_update"),
+    hr_zone_switch: T("kind.zone_update"),        // SP-493: the 自動 課表心率區間 switched (told once)
     injury_rest: T("kind.injury"), injury_hold: T("kind.injury"), injury_pattern: T("kind.injury"), injury_done: T("kind.injury"),
     altitude: T("kind.altitude") };
 
@@ -120,9 +122,12 @@
     return "";
   }
 
-  // SP-507: 稍後提醒 — not on injury_done (its 「還沒」 is the same 7 days)
-  const snoozeBtn = (r) => (r.type === "injury_done" ? "" :
-    `<button type="button" class="sg-btn" data-act="snooze" title="${esc(T(testy(r) ? "snooze_tip_test" : "snooze_tip"))}">${esc(T("snooze"))}</button>`);
+  // SP-507: 稍後提醒 — not on injury_done (its 「還沒」 is the same 7 days); SP-546 R1: an altitude row comes back
+  // the day before its trip
+  const snoozeTip = (r) => (r.type === "altitude" ? "snooze_tip_altitude" : testy(r) ? "snooze_tip_test" : "snooze_tip");
+  // SP-493: nor on hr_zone_switch (told once: ✕ only)
+  const snoozeBtn = (r) => (r.type === "injury_done" || r.type === "hr_zone_switch" ? "" :
+    `<button type="button" class="sg-btn" data-act="snooze" title="${esc(T(snoozeTip(r)))}">${esc(T("snooze"))}</button>`);
   const testy = (r) => ["test", "baseline", "zone_test"].includes(r.type) || (r.links || []).some((l) => l.test);
   // SP-515: 「不要」 on a test holds that test in every later week (settings: 不再建議的測試 → 恢復)
   const declineTip = (r) => (["test", "baseline"].includes(r.type) ? ` title="${esc(T("decline_tip_test"))}"` : "");

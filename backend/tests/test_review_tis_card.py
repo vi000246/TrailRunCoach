@@ -45,7 +45,8 @@ def test_tis_tile_with_power_matches_the_evaluator():
         assert 1 <= a <= 10 and 1 <= an <= 10
         assert R.tis_scores(ds, w) == (a, an)
         assert c["kind"] == "stat" and c["value"] == f"{a:.0f}／{an:.0f}" and c["power"] is True
-        assert c["sub"] == "1–10，跟手錶的 0–5 不同"
+        assert "sub" not in c                       # SP-567: the scale is said in the ? only
+        assert "1–10，跟手錶的 0–5 不同" in c["tip"]
         assert f"有氧訓練效果（Aerobic training effect）{a:.0f}、無氧訓練效果（Anaerobic training effect）{an:.0f}" in c["tip"] and "怎麼看：" in c["tip"] and "方法：" in c["tip"]
     # the steady run below threshold has no anaerobic stimulus; the intervals do
     assert R.tis_scores(ds, ds.workouts[0])[1] == 1
@@ -71,7 +72,7 @@ def test_tis_tile_no_garmin_style_level_names():
     ds = FakeDataset([_run(TODAY, minutes=52, power=200.0)], TODAY, settings=SETTINGS)
     c = _cards(ds)["tis"]
     for word in ("Recovery", "Maintaining", "Improving", "Highly", "Overreaching", "恢復", "維持", "提升", "過量"):
-        assert word not in c["value"] + c["sub"] + c["tip"], word
+        assert word not in c["value"] + c.get("sub", "") + c["tip"], word
 
 
 def test_tis_tile_english():
@@ -79,7 +80,8 @@ def test_tis_tile_english():
     ds = FakeDataset([_run(TODAY, minutes=52, power=200.0)], TODAY, settings=SETTINGS)
     with use_locale("en"):
         c = _cards(ds)["tis"]
-    assert c["label"] == "Aerobic / Anaerobic training effect" and c["sub"] == "1–10, not the watch's 0–5"
+    assert c["label"] == "Aerobic / Anaerobic training effect" and "sub" not in c
+    assert "1–10, not the watch's 0–5" in c["tip"]
     assert "How to read:" in c["tip"] and not any("一" <= ch <= "鿿" for ch in c["tip"])
 
 
@@ -100,10 +102,10 @@ def test_tis_tile_has_no_typical_value_comparison():
     ds = FakeDataset([_run(TODAY, minutes=52, power=200.0)], TODAY, settings=SETTINGS)
     c = _cards(ds)["tis"]
     for word in ("中位數", "典型", "平常值", "median", "typical"):
-        assert word not in c["value"] + c["sub"] + c["tip"], word
+        assert word not in c["value"] + c.get("sub", "") + c["tip"], word
 
 
 def test_viewer_hides_power_tiles_when_power_is_off():
-    html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
+    html = (STATIC / "charts.html").read_text(encoding="utf-8")
     body = html.split("function drawReviewCards(", 1)[1].split("\n}", 1)[0]
     assert "S.usePower !== false || !c.power" in body

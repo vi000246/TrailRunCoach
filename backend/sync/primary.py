@@ -1,8 +1,8 @@
 """
 資料來源 (2026-10-02, owner decision): ONE synced source is used at a time.
 
-Setting `sync.primary_source`: "coros" | "garmin" | "trainingpeaks" (Garmin since the SP-91
-trial; the settings page lists them in that order). The chosen source is
+Setting `sync.primary_source`: "coros" | "garmin" | "trainingpeaks" | "intervals" (Garmin since
+the SP-91 trial, intervals.icu since SP-346; the settings page lists them in that order). The chosen source is
 the only one read anywhere — the chart Dataset reads only its folder
 (wko5expr/datasource.py), automatic syncs only sync it (sync/runner.py
 auto_plan), the CP-test / race-power scan reads only its files
@@ -23,10 +23,11 @@ import datetime as dt
 from typing import Optional
 
 SETTING_KEY = "sync.primary_source"
-DB_SOURCES = ("coros", "garmin", "trainingpeaks")          # workout_files.source / settings names
-FOLDER = {"coros": "coros", "garmin": "garmin", "trainingpeaks": "tp"}  # -> sync/storage.py folder names
+DB_SOURCES = ("coros", "garmin", "trainingpeaks", "intervals")          # workout_files.source / settings names
+FOLDER = {"coros": "coros", "garmin": "garmin", "trainingpeaks": "tp",
+          "intervals": "intervals"}                                      # -> sync/storage.py folder names
 DB_OF = {v: k for k, v in FOLDER.items()}
-LABELS = {"coros": "COROS", "garmin": "Garmin", "trainingpeaks": "TrainingPeaks"}
+LABELS = {"coros": "COROS", "garmin": "Garmin", "trainingpeaks": "TrainingPeaks", "intervals": "intervals.icu"}
 DEFAULT = "coros"
 
 
@@ -38,7 +39,7 @@ def to_db(name: Optional[str]) -> Optional[str]:
 
 
 def normalize(value) -> Optional[str]:
-    """The stored setting -> "coros" | "garmin" | "trainingpeaks", None for an old /
+    """The stored setting -> "coros" | "garmin" | "trainingpeaks" | "intervals", None for an old /
     unknown value that still has to be migrated."""
     v = to_db(value) if isinstance(value, str) else None
     return v if v in DB_SOURCES else None
@@ -62,7 +63,7 @@ def other_folder(value) -> str:
 
 
 def other_folders(value) -> tuple:
-    """Every synced folder NOT in use (COROS, Garmin, TP order)."""
+    """Every synced folder NOT in use (COROS, Garmin, TP, intervals.icu order)."""
     f = folder(value)
     return tuple(x for x in FOLDER.values() if x != f)
 

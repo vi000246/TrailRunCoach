@@ -10,6 +10,7 @@
 <script src="/api/v1/static/basemaps.js"></script>
 <script src="/api/v1/static/hints.js"></script>
 <script src="/api/v1/static/racehints.js"></script>
+<script src="/api/v1/static/daysplit.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -20,6 +21,8 @@
   --lo: #1baf7a; --mid: #eda100; --hi: #e34948; --bar: #b9b8b1;
   --e1: #7cc6a4; --e2: #2f9e6e; --e3: #e0a21b; --e4: #e0662b; --e5: #c62828;
   --c-sd: #3f6fb5; --c-d: #86a9dc; --c-f: #b9b8b1; --c-u: #e8a15a; --c-su: #c9542c; --needbg: #fdeeee;
+  --sf-dirt: #8a5a2b; --sf-made: #6b7280; --sf-unsure: #7c3aed;
+  --g-wait: #4f7fc0; --g-easy: #2f9e6e; --g-right: #9bb32c; --g-hard: #e0862b; --g-behind: #c62828;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -31,6 +34,8 @@
     --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
     --e1: #3f8f6c; --e2: #23805a; --e3: #b8860b; --e4: #c2521f; --e5: #d64545;
     --c-sd: #5b8ad0; --c-d: #37557f; --c-f: #5a5954; --c-u: #a8692c; --c-su: #d06a3f; --needbg: #3a2020;
+    --sf-dirt: #c08a55; --sf-made: #9ca3af; --sf-unsure: #a78bfa;
+    --g-wait: #6d97d6; --g-easy: #3fb07e; --g-right: #a9c23a; --g-hard: #e8913a; --g-behind: #e05252;
   }
 }
 :root[data-theme="dark"] {
@@ -42,6 +47,8 @@
   --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
   --e1: #3f8f6c; --e2: #23805a; --e3: #b8860b; --e4: #c2521f; --e5: #d64545;
   --c-sd: #5b8ad0; --c-d: #37557f; --c-f: #5a5954; --c-u: #a8692c; --c-su: #d06a3f; --needbg: #3a2020;
+    --sf-dirt: #c08a55; --sf-made: #9ca3af; --sf-unsure: #a78bfa;
+  --g-wait: #6d97d6; --g-easy: #3fb07e; --g-right: #a9c23a; --g-hard: #e8913a; --g-behind: #e05252;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
@@ -116,6 +123,14 @@ dialog#share-dlg::backdrop { background: rgba(0,0,0,.35); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .chip { border: 1px solid var(--line); border-radius: 12px; padding: 1px 9px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chip b { color: var(--text); font-weight: 600; }
+button.chip { font: inherit; font-size: 12px; background: var(--panel); cursor: pointer; }
+.chip.on { border-color: var(--accent); color: var(--accent); }
+#split-cands { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+#split-cands .warn { flex-basis: 100%; padding-left: 0; margin: 2px 0 0; }
+#split-cands .chip .src { font-size: 11px; color: var(--muted); }
+#split-cands .osm-attr { flex-basis: 100%; font-size: 11px; color: var(--muted); }
+#overnight-ask { border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px; color: var(--text); line-height: 1.6; }
+#overnight-ask .btn { margin: 4px 6px 0 0; }
 .num { font-variant-numeric: tabular-nums; }
 .tablewrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -145,6 +160,16 @@ tr.hl td { background: var(--soft); }
 .maphint button { font: inherit; font-size: 11.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
   border-radius: 4px; padding: 1px 8px; cursor: pointer; }
 #course-map-wrap .legend { margin-bottom: 8px; }
+/* SP-543: the course's ground (確定土徑 / 確定人工 / 不確定) */
+.ground { display: grid; gap: 4px; flex: 1 1 320px; min-width: 0; }
+.groundbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); max-width: 420px; }
+.groundbar i { display: block; height: 100%; }
+.groundtxt { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-size: 12.5px; }
+.groundtxt .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.groundedit { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12.5px; }
+.groundedit input { width: 64px; }
+.groundpop { display: grid; gap: 6px; font-size: 12.5px; }
+.groundpop .btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .envgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 @media (max-width: 700px) { .envgrid { grid-template-columns: 1fr; } }
 .envbox { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
@@ -181,11 +206,17 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margi
 .zbar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin-top: 4px; position: relative; }
 .zbar div.z { height: 100%; display: grid; place-items: center; font-size: 11px; color: #fff; font-weight: 600; overflow: hidden; white-space: nowrap; }
 .zbar .needle { position: absolute; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--text); border-radius: 2px; box-shadow: 0 0 0 2px var(--panel); }
-.zhead { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 12px; font-size: 13px; font-weight: 600; }
-.zhead .meta { font-weight: 400; }
-.zhead .zsys select { width: auto; max-width: 100%; padding: 2px 6px; font-size: 12.5px; }
+/* SP-548: absolute intensity is one small grey line under the 努力度 bar; its strip, zones and the heart-rate
+   zone model are folded into a closed 「區間細節」, the strip grey with only the race's zone in colour */
+#zbar-box { margin-top: 8px; font-size: 12px; color: var(--muted); }
+#zbar-box .zline { margin: 2px 0; }
+#zbar-box .zmore > summary { font-size: 12px; margin: 4px 0; }
+#zbar-box .zsys select { width: auto; max-width: 100%; padding: 2px 6px; font-size: 12px; }
+#zbar-box .zbar { height: 14px; }
+.zbar.gray div.z { background: var(--line); color: var(--faint); box-shadow: inset -1px 0 var(--panel); }
+.zbar.gray div.z.cur { color: #fff; }
 .zleg { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11.5px; color: var(--muted); margin: 2px 0 4px; }
-.zleg i { display: inline-block; width: 10px; height: 8px; border-radius: 2px; margin-right: 4px; }
+.zleg i { display: inline-block; width: 10px; height: 8px; border-radius: 2px; margin-right: 4px; background: var(--line); }
 .zleg .cur { color: var(--text); font-weight: 600; }
 .eline { font-size: 13.5px; margin: 4px 0; }
 /* segments */
@@ -198,6 +229,38 @@ td input.lock { width: 72px; padding: 2px 5px; }
 td select.terr { width: 80px; padding: 2px 5px; }
 .drop { border: 1px dashed var(--line); border-radius: 8px; padding: 10px; text-align: center; color: var(--muted); font-size: 13px; }
 .drop.over { border-color: var(--accent); background: var(--soft); }
+.cairn-imp { margin-top: 8px; font-size: 13px; }
+.cairn-imp > label { color: var(--muted); }
+.cairn-row { display: flex; gap: 6px; margin-top: 4px; }
+.cairn-row input { flex: 1; min-width: 0; }
+#cairn-msg:empty { display: none; }
+#cairn-msg { margin-top: 4px; line-height: 1.6; }
+#cairn-msg .warn-t { color: var(--watch); }
+/* SP-579: 跟團對照 — the group's timetable leg by leg, the tiers in colour */
+#group-sec .head { font-size: 14.5px; line-height: 1.6; margin: 4px 0 8px; }
+#group-sec .gnotes { margin: 6px 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+#group-sec .gnotes li.w { color: var(--watch); }
+.gchip { display: inline-block; padding: 1px 8px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.gchip.wait { background: var(--g-wait); } .gchip.easy { background: var(--g-easy); } .gchip.right { background: var(--g-right); color: #1b1b1b; }
+.gchip.hard { background: var(--g-hard); } .gchip.behind { background: var(--g-behind); }
+#group-sec td.zone { font-size: 12px; color: var(--muted); min-width: 150px; }
+#group-sec td.zone b { color: var(--bad); font-weight: 600; }
+#group-sec .glegend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; margin: 6px 0; }
+#group-sec td.leg { min-width: 120px; }
+#group-sec .gnarrow { display: none; }
+@media (max-width: 640px) {             /* phone: the leg's numbers and tier under its name, no side scroll */
+  #group-sec .gwide { display: none; }
+  #group-sec .gnarrow { display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.6; white-space: normal; }
+  #group-sec td { white-space: normal; }
+  #group-sec td.leg { min-width: 0; }
+}
+.daystarts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end; grid-column: 1 / -1; font-size: 13px; }
+.daystarts > span { color: var(--muted); width: 100%; }
+.daystarts label { display: flex; flex-direction: column; gap: 2px; }
+.daystarts input { width: 140px; }
+.grp-ask { margin-top: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; line-height: 1.6; }
+.grp-ask label { font-weight: 600; cursor: pointer; }
+.grp-ask .meta { display: block; }
 .tabs { display: inline-flex; margin-left: auto; }
 #sticky { position: sticky; top: 0; z-index: 4; }
 /* required inputs: a red * and a highlighted field until filled */
@@ -233,11 +296,12 @@ input.need, .drop.need { border-color: var(--bad); box-shadow: 0 0 0 1px var(--b
 .cmp tr { cursor: pointer; }
 .cmp td.fuel { white-space: normal; min-width: 160px; font-size: 12px; color: var(--muted); }
 .pole { display: block; font-size: 12px; color: var(--muted); }      /* SP-244 會用登山杖 hint */
-/* SP-485: the class-1 box on top of the result, the reminders, 「這次怎麼算的」, the pole line, the rain line */
-#rh-box .hint-must { margin: 4px 0 8px; font-size: 13px; color: var(--text); }
-#rh-box .hint-must .hint-text b, #rh-box .em { color: var(--bad); }
-#rh-rem { margin: 8px 0 0; font-size: 12.5px; color: var(--watch); display: grid; gap: 2px; }
-#rh-how > summary, #calc-other > summary { cursor: pointer; }
+/* SP-485: the class-1 box on top of the result, the reminders, 「這次怎麼算的」, the pole line, the rain line;
+   SP-547: the same three on the 補給 card (#fh-*) for the 補給 hints */
+#rh-box .hint-must, #fh-box .hint-must { margin: 4px 0 8px; font-size: 13px; color: var(--text); }
+#rh-box .hint-must .hint-text b, #rh-box .em, #fh-box .hint-must .hint-text b { color: var(--bad); }
+#rh-rem, #fh-rem { margin: 8px 0 0; font-size: 12.5px; color: var(--watch); display: grid; gap: 2px; }
+#rh-how > summary, #fh-how > summary, #calc-other > summary { cursor: pointer; }
 #pole-line { margin: 0 0 6px; }
 #rain-card { color: var(--watch); margin-top: 6px; }
 .chead { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 4px; }
@@ -279,7 +343,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
 </header>
 <main>
   <!-- SP-414: shown while the settings have no body weight (INP.weight.value null) -->
-  <div id="noweight" class="noweight" role="status" hidden><span data-i18n="racepower.noweight.banner">沒有體重：百岳能力模型、背包預設、熱量／補給、W/kg 算不出（越野／路跑預測改用你的速度／瓦，照樣算），請到 設定 → 個人資料 填寫。</span> <a href="/api/v1/wko5/settings#personal" data-i18n="racepower.noweight.link">去填體重 →</a></div>
+  <div id="noweight" class="noweight" role="status" hidden><span data-i18n="racepower.noweight.banner">沒有體重：百岳能力模型、背包預設、熱量／補給、W/kg 算不出（越野／路跑預測改用你的速度／瓦，照樣算），請到 設定 → 個人資料 填寫。</span> <a href="/api/v1/app/settings#personal" data-i18n="racepower.noweight.link">去填體重 →</a></div>
   <section id="target-sec" class="tab-calc">
     <h2>目標 <span class="meta">從賽季計畫帶入，或自己輸入</span></h2>
     <div class="toolbar">
@@ -329,6 +393,10 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <div class="seg" id="csrc"><button data-c="manual">手動</button><button data-c="gpx">GPX</button></div>
       <span class="meta" id="course-line"></span>
     </div>
+    <!-- SP-543: the ground under the GPX course from OpenStreetMap (renderGround; api /surface/{course_id}) -->
+    <div class="row hidden" id="ground-row"><span class="lbl" data-i18n="racepower.ground.label">路面</span>
+      <div class="ground" id="ground-body"></div>
+    </div>
     <div id="course-manual" class="form">
       <label><span>距離 (km)<b class="req">*</b></span><input id="dist" type="number" step="0.1" min="0.1"></label>
       <label>爬升 (m)<input id="gain" type="number" step="10" min="0"></label>
@@ -337,15 +405,27 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     </div>
     <div id="course-gpx" class="hidden">
       <div class="drop" id="drop"><b class="req">*</b> 把 .gpx / .fit 拖到這裡，或 <label class="btn" style="display:inline-block">選擇檔案<input id="gpxfile" type="file" accept=".gpx,.fit,application/gpx+xml" hidden></label></div>
+      <!-- SP-537: a trip planned in 疊石 Cairn, by its share link: its GPX + the nights marked there as the day ends -->
+      <div class="cairn-imp"><label for="cairn-url" data-i18n="racepower.cairn.label">或貼疊石 Cairn 的分享連結（過夜點直接當分日點）</label>
+        <div class="cairn-row"><input id="cairn-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"
+          data-i18n-attr="placeholder:racepower.cairn.ph" placeholder="https://…/?gpx=…&amp;share=…">
+          <button class="btn" id="cairn-go" type="button" data-i18n="racepower.cairn.go">匯入</button></div>
+        <div class="meta" id="cairn-msg" aria-live="polite"></div>
+        <!-- SP-577: the Cairn trip's timetable — 「這是團的時刻表」, asked once, kept with the trip -->
+        <div class="grp-ask hidden" id="grp-ask"></div></div>
       <div class="form" style="margin-top:8px">
         <label>官方爬升 (m，選填)<input id="ogain" type="number" step="10" min="0" placeholder="用來校正 GPS 海拔"></label>
         <label class="bf">天數<input id="tripdays" type="number" min="1" max="10" step="1" value="3"></label>
       </div>
       <ul class="warn" id="course-warn"></ul>
+      <!-- SP-534: the nights found in a recorded track — asked, never applied by themselves -->
+      <div class="note hidden" id="overnight-ask"></div>
     </div>
     <div class="form" style="margin-top:6px">
       <label>日期<input id="date" type="date"></label>
       <label>起跑 / 起登時間<input id="start" type="time"></label>
+      <!-- SP-580: a multi-day 百岳 trip's start time per day (day 1 = 起登時間); a group timetable fills them -->
+      <div class="bf daystarts hidden" id="daystarts"></div>
       <label class="bf">背負 (kg)<input id="pack" type="number" step="0.5" min="0" placeholder="預設"></label>
       <!-- SP-252: 積雪 → × on the climbing legs (hike.SNOW); the line under 預估結果 only when picked -->
       <label class="bf"><span data-i18n="racepower.snow.label">積雪</span><select id="snow" title="有踏跡：爬升段 × 1.5；無踏跡：爬升段 × 2–3（經驗法則，日本嚮導）" data-i18n-attr="title:racepower.snow.tip">
@@ -381,7 +461,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     </details>
     <!-- SP-214: tuning options with working defaults, collapsed; the summary names what was changed -->
     <details class="calc-adv" id="calc-adv">
-      <summary><b data-i18n="racepower.adv.title">進階計算選項</b> <span class="meta" id="adv-sum" data-i18n="racepower.adv.hint">分段、配速策略、海拔、熱：預設就好，要調再展開</span></summary>
+      <summary><b data-i18n="racepower.adv.title">進階計算選項</b> <span class="meta" id="adv-sum" data-i18n="racepower.adv.hint">分段、配速策略、熱：預設就好，要調再展開</span></summary>
       <div class="row"><span class="lbl">分段</span>
         <div class="seg" id="split"><button data-s="grade">依坡段</button><button data-s="km">每公里</button><button data-s="none">不分段</button></div>
         <details id="split-adv"><summary data-i18n="racepower.adv.split_params">切段參數</summary>
@@ -402,24 +482,11 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <label class="meta">下坡 −<input id="hdown" type="number" step="1" min="0" max="30" style="width:56px"> %</label>
         <span class="help" tabindex="0">?<span class="tip">上坡時功率可以比平均高一點、下坡讓它自然掉下來，平均功率不變。上坡 +5% 以內沒有額外的生理成本；上限 12%。持續超過 CP 太久的坡段會自動縮小。</span></span>
       </div>
-      <div class="row"><span class="lbl">海拔</span>
-        <div class="seg" id="accl"><button data-a="acclimatised">已適應</button><button data-a="partial">部分適應</button><button data-a="unacclimatised">未適應</button></div>
-        <span class="badge watch hidden" id="accl-badge">推估</span>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.accl.tip">未適應：剛上山，每升高 1000 m 有氧能力約少 6.3%（300 m 起算）。已適應：較樂觀的海拔曲線。部分適應＝已適應與未適應的中點，是推估（沒有研究量過部分適應）。百岳沒選時：出發前 14 天內在 2,750 m 以上睡了 2 晚以上（活動，加上課表日曆記的「睡在高處」）預設部分適應，否則未適應；已適應只在你自己選時用。路線最高不到 3,000 m 時不提供部分適應。</span></span>
-        <span class="meta" id="accl-line"></span>
-      </div>
       <div class="row rf"><span class="lbl">熱</span>
         <label class="meta"><input type="checkbox" id="hourlyheat" checked> 逐段熱修正（依起跑時間與各段 ETA 取逐時氣溫、露點）</label>
         <span class="badge watch">推估</span>
         <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.heat.tip">取得比賽日天氣後，如果有逐時資料，每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。逐時資料來自中央氣象署三天預報或 Open-Meteo 預報；超過 16 天的日期用近 10 年同一個月每個小時的平均。GPX 路線時，每段溫度再依該段海拔換算（每升高 100 m 約低 0.65 °C，濕度不變）。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時資料（中央氣象署一週預報、離線、還沒取得天氣）或沒填起跑時間時，全程用同一個溫度。</span></span>
         <span class="meta" id="heat-line"></span>
-      </div>
-      <div class="row"><span class="lbl">熱適應</span>
-        <div class="seg" id="heat-accl"><button data-h="auto">自動</button><button data-h="none">未適應</button><button data-h="partial">部分</button><button data-h="acclimatised">已適應</button><button data-h="custom">自訂 %</button></div>
-        <input id="heat-s" type="number" min="0" max="100" step="5" style="width:64px" class="hidden" placeholder="S %">
-        <span class="badge watch">推估</span>
-        <span class="help" tabindex="0">?<span class="tip">熱適應指數 S（0–100 %）：近期每天在 Hadley ≥ 150（例如 28 °C / 75 %）的移動分鐘，每天 ≥ 60 分算滿劑量，連續 5 天約 70 %（Pandolf 1998），停止後每天掉約 2.5 %（Daanen 2018）。比賽的熱懲罰乘上 (1 − 0.75 × S)（Racinais 2015 兩週拿回約 77 %；0.75 是推估）。自動 = 從你的紀錄推算到比賽日。部分 = 50 %、已適應 = 90 % 是推估的固定值。你自己的心率資料目前不支持「夏末熱懲罰比較小」，所以一律標推估。</span></span>
-        <span class="meta" id="heat-accl-line"></span>
       </div>
       <div class="row bf"><span class="lbl">心率帶</span>
         <div class="seg" id="hrband"><button data-b="aet">AeT（多日建議）</button><button data-b="cap">能力上限（≤ 3 h）</button></div>
@@ -451,6 +518,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
 
   <section id="results" class="tab-calc"><h2>預估結果</h2><div class="loading">讀取你的活動資料中（第一次約需一分鐘）…</div></section>
 
+  <!-- SP-579: 跟團對照 — the group's timetable (Cairn, 「這是團的時刻表」) against your capacity, leg by leg -->
+  <section id="group-sec" class="tab-calc hidden"><div id="group"></div></section>
   <section id="fuel-sec" class="tab-calc hidden"><div id="fuel"></div></section>
 
   <section id="profile-sec" class="tab-calc hidden">
@@ -458,17 +527,19 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.chart.tip">橫軸是距離（公里），縱軸一次看一種：配速、功率或心率。淺色底是海拔剖面。每段的目標由模型依坡度算：可跑的坡（3–8 %）和平路看功率；陡坡（> 8 %）或要走的段看心率上限；越野的下坡不看功率也不看心率，求控制、安全，所以那幾段在功率／心率圖上是空的。長距離（> 3 小時）的心率上限壓在 AeT。滑過圖或點表格看每段的細節。</span></span></h2>
     <div class="note hidden" id="pole-line" data-rh="RC24"></div>
     <div id="course-map-wrap" class="hidden"><div class="cmap" id="course-map"></div><div class="maphint" id="course-map-hint" hidden></div>
-      <div class="legend" id="course-map-legend"></div></div>
+      <div class="legend" id="course-map-legend"></div><div class="legend" id="course-map-ground"></div></div>
     <div class="chead"><div class="seg" id="measure"><button data-m="pace" data-i18n="racepower.m.pace">配速</button><button data-m="power" class="rf" data-i18n="racepower.m.power">功率</button><button data-m="hr" data-i18n="racepower.m.hr">心率</button></div>
       <div class="legend" id="chart-legend"></div></div>
     <div class="profile" id="profile"></div>
     <div class="cmp tablewrap" id="segcmp"></div>
     <details id="seg-all"><summary data-i18n="racepower.seg.all">全部欄位（鎖定功率、地形、熱）</summary><div class="tablewrap" id="segtable"></div></details>
-    <div class="toolbar" id="daysplit-bar" style="margin-top:8px"><label class="meta bf"><input type="checkbox" id="splitmode"> 在剖面上點選分日點</label>
-      <span class="meta bf" id="splits-line"></span><button class="btn bf" id="clearsplits">清除分日</button>
+    <div class="toolbar" id="daysplit-bar" style="margin-top:8px"><button class="btn bf" id="splitpreview" data-i18n="racepower.split.preview">✂ 分日預覽</button>
+      <span class="meta bf" id="splits-line"></span>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
       <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">📅 匯出至課表</button><span class="meta" id="coros-why" hidden></span>
       <button class="btn" id="share">🔗 分享</button></div>
+    <!-- SP-533: camp / hut waypoints (every pass) as day-end candidates; a mismatch of day ends and days -->
+    <div class="note hidden" id="split-cands"></div>
     <dialog id="coros-dlg" class="dlg">
       <h2><span data-i18n="racepower.coros.title">匯出至課表</span> <span class="meta" id="cx-prov"></span>
         <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">把這場比賽的分段寫成課表上比賽日的一堂課：可以在課表頁編輯每一步，再從課表頁推到手錶。越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「直到按下計圈」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %；陡坡和走路段只看心率上限（不設推估功率，沒有心率上限就是自由）；越野下坡不設目標。百岳只帶心率（不帶功率、配速）；多日百岳不能匯出，只有單日（單攻）可以。預估訓練負荷（Training load）的無目標段用計算機預測的比賽心率 ÷ LTHR，比賽完成後跟實際負荷比對，自動算出個人校正（場數少時接近 1）。一場賽事只有一堂：再匯出會覆蓋上次匯出的課。</span></span></h2>
@@ -502,7 +573,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     </section>
     <section>
       <h2><span data-i18n="racepower.env.title">環境</span> <span class="meta" data-i18n="racepower.env.sub">自動帶入，不用填</span>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.env.tip">From = 你平常訓練的條件（你功率量到的地方）：近 90 天跑步的中位海拔，溫濕度取那些跑步當下的歷史天氣，沒有時用你所有活動的中位溫濕度。To = 比賽日：選了賽事、日期和地點（山名、座標或 GPX 起點）就自動查預報（中央氣象署 → Open-Meteo），超過 16 天的日期用近 10 年同一個月（比賽日前後 15 天）的平均，含一天裡每個小時的冷熱。兩邊的差換成環境係數 M。要自己改按 ✎。</span></span></h2>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.env.tip">From = 你平常訓練的條件（你功率量到的地方）：近 90 天跑步的中位海拔，溫濕度取那些跑步當下的歷史天氣，沒有時用你所有活動的中位溫濕度。To = 比賽日：選了賽事、日期和地點（山名、座標或 GPX 起點）就自動查預報（先用中央氣象署：登山預報 → 鄉鎮預報；中央氣象署沒有的日期或地點才用 Open-Meteo），超過 16 天的日期用近 10 年同一個月（比賽日前後 15 天）的平均，含一天裡每個小時的冷熱。兩邊的差換成環境係數 M。要自己改按 ✎。</span></span></h2>
       <div class="envchips">
         <div class="echip"><span class="k"><span data-i18n="racepower.env.from">From 訓練</span> <span class="badge" id="from-badge"></span></span><b id="from-v">–</b><span class="s" id="from-s"></span></div>
         <div class="echip"><span class="k"><span data-i18n="racepower.env.to">To 比賽日</span> <span class="badge" id="to-badge">未取得</span></span><b id="to-v">–</b><span class="s" id="wx-meta"></span><span class="s hidden" id="to-clim"></span></div>
@@ -510,6 +581,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       </div>
       <div class="kv" id="env-kv" style="margin-top:8px"></div>
       <div class="note hidden" id="rain-card" data-rh="RC2"></div>
+      <div class="note hidden" id="wx-route"></div>
+      <a class="note hidden" id="cairn-link" target="_blank" rel="noopener noreferrer" data-i18n="racepower.env.cairn">在疊石 Cairn 看這條路線的行程與即時天氣圖層 ↗</a>
       <details id="env-adv"><summary data-i18n="racepower.env.adv">進階：自己改 From / To（藍框 = 你改過的值，清空回到自動）</summary>
       <div class="envgrid">
         <div class="envbox"><b>From 訓練</b>
@@ -528,10 +601,10 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         </div>
       </div>
       <div id="wx-tried" class="note"></div>
-      <details data-tw-only><summary>中央氣象署授權碼（登山預報，選填）</summary>
+      <details data-tw-only><summary data-i18n="racepower.env.cwa_summary">中央氣象署授權碼（站主設定，全站共用）</summary>
         <div class="toolbar" style="margin-top:6px"><input id="cwakey" placeholder="CWA-XXXXXXXX-…" style="max-width:260px" autocomplete="off">
           <button class="btn" id="cwasave">儲存</button><span class="meta" id="cwastatus"></span></div>
-        <div class="note">到 opendata.cwa.gov.tw 免費註冊 → 會員 → API 授權碼。只存在本機 ~/.wko5coach/weather.json。沒有授權碼會改用 Open-Meteo。</div>
+        <div class="note" data-i18n="racepower.env.cwa_note">到 opendata.cwa.gov.tw 免費註冊 → 會員 → API 授權碼。只有站主能設定（存在站台資料夾的 weather.json，或環境變數 CWA_API_KEY）。站上所有人的賽事天氣都先用中央氣象署，同一份預報全站只下載一次、共用快取；沒有授權碼時改用 Open-Meteo。</div>
       </details>
       </details>
       <div class="note" id="attrib"></div>
@@ -654,11 +727,10 @@ function applySport() {
   document.querySelectorAll('[data-preset="trail30"], [data-preset="yushan"]').forEach((b) => b.classList.toggle("hidden", road));
 }
 const S = Object.assign({ mode: "auto", tunit: "time", punit: "w", effort: 1, csrc: "manual", split: "grade", strategy: "even",
-  amount: null, measure: "pace", accl: null, hup: 5, hdown: 10, heatAccl: { mode: "auto", s: null }, trip: null, hrband: "aet" },   // trip: 跟團／自己走 has no default (must pick)
+  amount: null, measure: "pace", hup: 5, hdown: 10, trip: null, hrband: "aet" },   // trip: 跟團／自己走 has no default (must pick)
   ls.get("ui", {}));
 const T = (k, p) => (window.I18N ? I18N.t("racepower." + k, p) : k);
 const TR = T;                     // for functions where T is a local (renderBacktest's terrain block)
-let HEAT = null;                          // /heat-status for the race date
 let ALTD = null;                          // /altitude-acclimatisation for the race date (SP-260)
 let HIKEMETA = null;                      // /hike-meta rows
 let COURSE = ls.get("course", null);      // {course_id, name, km, gain_m} — the file itself is not stored
@@ -697,17 +769,17 @@ function setType(t) {
   document.querySelectorAll(".tf").forEach((e) => e.classList.toggle("hidden", t !== "trail"));
   ["re-sec", "cp-sec", "rg-sec", "zone-sec", "gm-sec", "cad-sec"].forEach((id) => $(id).classList.toggle("hidden", hike));
   $("hike-sec").classList.toggle("hidden", !hike);
-  if (!S.accl) segOn("accl", "a", accl());
   // user decision 2026-09-30: a 百岳 trip defaults to 3 days
   if (hike && !S.daysInit) { if ((Number($("days").value) || 1) === 1) $("days").value = 3; $("tripdays").value = $("tripdays").value || 3; S.daysInit = true; saveUI(); }
   renderDayPlan(); syncForm();
 }
-// SP-260 (百岳): with no choice, the 海拔 default follows the nights slept above 2,750 m in the 14 days
-// before the trip (≥ 2 → 部分, /altitude-acclimatisation); a route topping out under 3,000 m has no 部分
+// SP-260 (百岳): the 海拔 curve follows the nights slept above 2,750 m in the 14 days before the trip
+// (≥ 2 → 部分, /altitude-acclimatisation, the activities); a route topping out under 3,000 m has no 部分.
+// SP-546 (owner 2026-10-14): automatic only — no choice and no line on the page (a saved S.accl is ignored)
 function routeTop() { const z = S.csrc === "gpx" ? COURSE?.z_max : num("t-alt"); return z == null || !isFinite(z) ? null : +z; }
 function lowRoute() { const z = routeTop(); return type === "baiyue" && z != null && z < 3000; }
 function acclDefault() { return type !== "baiyue" ? "acclimatised" : ALTD?.default === "partial" && !lowRoute() ? "partial" : "unacclimatised"; }
-function accl() { const a = S.accl || acclDefault(); return a === "partial" && lowRoute() ? "unacclimatised" : a; }
+function accl() { return acclDefault(); }
 async function loadAltAccl() {
   const before = accl();
   try { ALTD = await j(`${API}/altitude-acclimatisation?${new URLSearchParams({ date: $("date").value || "" })}`); } catch { ALTD = null; }
@@ -726,11 +798,7 @@ function syncForm() {
   $("goal-basis").textContent = "";
   segOn("mode", "m", md); segOn("tunit", "u", S.tunit); segOn("punit", "u", S.punit); segOn("effort", "e", S.effort);
   segOn("csrc", "c", S.csrc); segOn("split", "s", S.split); segOn("strategy", "k", S.strategy); segOn("measure", "m", measure());
-  segOn("accl", "a", accl());
-  segOn("heat-accl", "h", S.heatAccl?.mode || "auto"); segOn("tripkind", "k", S.trip); segOn("hrband", "b", S.hrband);
-  $("heat-s").classList.toggle("hidden", S.heatAccl?.mode !== "custom");
-  if (S.heatAccl?.s != null && $("heat-s").value === "") $("heat-s").value = Math.round(S.heatAccl.s * 100);
-  heatAcclLabel();
+  segOn("tripkind", "k", S.trip); segOn("hrband", "b", S.hrband);
   $("mode-time").classList.toggle("hidden", md !== "time");
   $("mode-power").classList.toggle("hidden", md !== "power");
   $("mode-auto").classList.toggle("hidden", md !== "auto");
@@ -741,17 +809,43 @@ function syncForm() {
   $("course-manual").classList.toggle("hidden", S.csrc !== "manual");
   $("course-gpx").classList.toggle("hidden", S.csrc !== "gpx");
   $("hills-row").classList.toggle("hidden", type === "baiyue" || S.csrc !== "gpx");
-  $("accl-badge").classList.toggle("hidden", accl() !== "partial");
-  document.querySelector('#accl [data-a="partial"]').classList.toggle("hidden", lowRoute());
-  $("accl-line").textContent = type === "baiyue" && !S.accl && ALTD
-    ? T(acclDefault() === "partial" ? "accl.default_partial" : "accl.default_none", { n: ALTD.nights }) : "";
   const amt = S.amount ?? (S.strategy === "positive" && type === "trail" ? 3 : 2);
   $("amount").value = amt; $("amount-v").textContent = S.strategy === "even" ? "" : amt + "%";
   $("amt-box").classList.toggle("hidden", S.strategy === "even");
   $("hup").value = S.hup; $("hdown").value = S.hdown;
   const fixed = [1, 0.95, 0.85].includes(Number(S.effort));
   $("effort-custom").textContent = fixed ? "" : `自訂 ${Math.round(S.effort * 100)}%（拖動努力度條設定）`;
-  courseLine(); markRequired(); renderAdvSum();
+  courseLine(); markRequired(); renderAdvSum(); renderDayStarts();
+}
+// SP-580: each day's own start time (multi-day 百岳): day 1 is 起登時間, the others here — a group's
+// timetable fills them (03:00 for a summit day); empty = the same as day 1
+function tripDays() { return type !== "baiyue" ? 1 : Math.max(1, (S.csrc === "gpx" ? num("tripdays") : num("days")) || 1); }
+function renderDayStarts() {
+  const el = $("daystarts"), n = tripDays();
+  el.classList.toggle("hidden", n < 2);
+  if (n < 2) { el.innerHTML = ""; return; }
+  const ds = S.daystarts || [];
+  el.innerHTML = `<span>${esc(T("ds.label"))}</span>` + Array.from({ length: n - 1 }, (_, i) => i + 2).map((d) =>
+    `<label>${esc(T("ds.day", { d }))}<input type="time" data-dsday="${d}" value="${esc(ds[d - 1] || "")}"></label>`).join("");
+  el.querySelectorAll("input[data-dsday]").forEach((x) => x.onchange = () => {
+    S.daystarts = [...(S.daystarts || [])]; S.daystarts[+x.dataset.dsday - 1] = x.value || null; saveUI(); schedule(); });
+}
+function dayStartsBody() {
+  const n = tripDays();
+  if (n < 2) return [];
+  const ds = S.daystarts || [];
+  return Array.from({ length: n }, (_, i) => i === 0 ? ($("start").value || null) : (ds[i] || null));
+}
+// a group timetable's day starts on the trip's days (a day begins at its first leg; the day ends are SPLITS)
+function fillDayStarts(sc) {
+  if (!sc?.days?.length) return;
+  const ds = [];
+  for (const d of sc.days) {
+    const n = 1 + SPLITS.filter((k) => k <= d.from_km + 0.05).length;
+    if (ds[n - 1] == null) ds[n - 1] = d.start;
+  }
+  if (ds[0]) $("start").value = ds[0];
+  S.daystarts = ds.map((x, i) => (i === 0 ? null : x || null)); saveUI(); saveForm(); renderDayStarts();
 }
 // SP-214: the 進階計算選項 summary names what differs from the defaults, so a closed panel still says it
 // (visible text, not a hover tip). Only options that apply to the current race type count.
@@ -760,9 +854,7 @@ function advChanged() {
   if (S.split !== "grade" || !["sigma", "eps", "minlen", "flatpct"].every(blank)) out.push(T("adv.n.split"));
   if (!hike && S.strategy !== "even") out.push(T("adv.n.strategy"));
   if (!hike && S.csrc === "gpx" && (Number(S.hup) !== 5 || Number(S.hdown) !== 10)) out.push(T("adv.n.hills"));
-  if (S.accl && S.accl !== acclDefault()) out.push(T("adv.n.accl"));
   if (!hike && !$("hourlyheat").checked) out.push(T("adv.n.hourly"));
-  if ((S.heatAccl?.mode || "auto") !== "auto") out.push(T("adv.n.heat_accl"));
   if (hike && (S.hrband !== "aet" || !blank("packdays") || !blank("heatz"))) out.push(T("adv.n.hike"));
   if (type === "trail" && $("formula").value !== "fitted_run") out.push(T("adv.n.formula"));
   if (Number($("nightslow").value || 0) > 0) out.push(T("adv.n.night"));
@@ -814,27 +906,13 @@ $("calc").onclick = () => {
   }
   clearTimeout(timer); saveForm(); saveUI(); run();
 };
-function heatAcclLabel() {
-  const b = document.querySelector('#heat-accl button[data-h="auto"]');
-  const s = HEAT?.s_race?.center ?? HEAT?.s;
-  if (b) b.textContent = ok(s) ? `自動（${Math.round(s * 100)} %）` : "自動";
-  let t = "";
-  if (HEAT) {
-    t = `今天 S ${Math.round(HEAT.s * 100)} %（${esc(HEAT.level?.label || "")}）· ${esc(HEAT.source || "")}`;
-    if (HEAT.s_race) t += ` · 比賽日 ${Math.round(HEAT.s_race.low * 100)}–${Math.round(HEAT.s_race.high * 100)} %`;
-    if (HEAT.warning) t += ` · ${esc(HEAT.warning)}`;
-  }
-  $("heat-accl-line").innerHTML = t;
-}
+// SP-569 (user 2026-10-14): 熱適應 is automatic only — no choice on the page (a heat choice saved in S is
+// ignored): the server projects the race-day S from the recent activities' weather (heat_data.status)
+// in planner.heat_acclimation's auto mode
 async function loadHeat() {
-  try { HEAT = await j(`${API}/heat-status?${new URLSearchParams({ date: $("date").value || "" })}`); } catch { HEAT = null; }
-  heatAcclLabel();
-  loadAltAccl();                          // SP-260: the 百岳 海拔 default for the same date
+  loadAltAccl();                          // SP-260: the 百岳 海拔 default for the race date
 }
-function heatAcclBody() {
-  const m = S.heatAccl?.mode || "auto";
-  return m === "custom" ? { mode: m, s: Math.max(0, Math.min(100, num("heat-s") ?? 0)) / 100 } : { mode: m };
-}
+function heatAcclBody() { return { mode: "auto" }; }
 function courseLine() {
   const evId = $("event").value, ev = (INP?.events || []).find((e) => e.id === evId);
   if (S.csrc === "gpx" && COURSE) {
@@ -845,17 +923,52 @@ function courseLine() {
   }
   else if (S.csrc === "gpx") $("course-line").textContent = "尚未上傳";
   else $("course-line").textContent = "";
+  renderGroupAsk();
+  loadGround();
+}
+// SP-577: a Cairn trip with a timetable — 「這是團的時刻表」, ticked when the data says so (several typed
+// times a day, or the route recruiting in Cairn; never for a route older than Cairn's 「who wrote it」).
+// The answer is kept with the trip (COURSE.group; with the event's GPX on the server). Read only.
+function groupSigText(sc) {
+  const g = sc.signals || {}, out = [];
+  if (g.user_days?.length) out.push(T("grp.sig_user", { u: g.n_user, n: g.n }));
+  else if (g.n_estimate > g.n_user) out.push(T("grp.sig_estimate", { e: g.n_estimate, n: g.n }));
+  if (g.recruit) out.push(T("grp.sig_recruit"));
+  if (g.legacy) out.push(T("grp.sig_legacy"));
+  return out.join(T("grp.sep"));
+}
+function renderGroupAsk() {
+  const el = $("grp-ask"), sc = S.csrc === "gpx" ? COURSE?.group : null;
+  el.classList.toggle("hidden", !sc);
+  if (!sc) { el.innerHTML = ""; return; }
+  const sig = groupSigText(sc);
+  el.innerHTML = `<label><input type="checkbox" id="grp-on"${sc.group ? " checked" : ""}> ${esc(T("grp.ask"))}</label>`
+    + `<span class="meta">${esc(T("grp.ask_sub", { legs: sc.legs?.length ?? 0, days: sc.days?.length ?? 0 }))}${sig ? " · " + esc(sig) : ""}</span>`;
+  $("grp-on").onchange = (ev) => setGroup(ev.target.checked);
+}
+function setGroup(on) {
+  if (!COURSE?.group) return;
+  COURSE.group.group = on; ls.set("course", COURSE);
+  if (COURSE.event_id) fetch(`/api/v1/plan/events/${encodeURIComponent(COURSE.event_id)}/gpx/group`,
+    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ group: on }) }).catch(() => {});
+  if (on && COURSE.group.prefill && type === "baiyue") { $("target").value = hms(COURSE.group.moving_s); saveForm(); }
+  if (on && type === "baiyue" && !S.trip) { S.trip = "group"; saveUI(); syncForm(); }
+  if (on) fillDayStarts(COURSE.group);                                // SP-580
+  schedule();
 }
 // ---------------- the plan event's stored GPX (engine/event_gpx.py) ----------------
 let LAST_FILE = null;                      // the last uploaded file, so it can be attached to the event
 async function loadEventGpx(eid, keep = false) {          // keep: the restored locks / terrain / splits stay
   try {
     const c = await post(`${API}/course/event/${encodeURIComponent(eid)}`, { split: S.split, ...Object.fromEntries(courseOpts(false)) });
-    COURSE = { course_id: c.course_id, event_id: eid, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null };
+    COURSE = { course_id: c.course_id, event_id: eid, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null,
+      group: c.schedule || null };    // SP-577: the Cairn timetable kept with the event
     ls.set("course", COURSE); if (!keep) { LOCKS = {}; TERRAIN = {}; SPLITS = c.day_splits_km || []; }
+    NIGHTS = c.overnights || null;
+    CAIRN_NIGHTS = c.gpx?.source?.kind === "cairn" ? (c.gpx.source.nights || null) : null;   // SP-535 / 537
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
     STOP_SUGG = c.stop_suggestions || [];
-    S.csrc = "gpx"; saveUI(); syncForm(); renderStops();
+    S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); renderNightsAsk();
     return true;
   } catch (e) {
     if (COURSE?.event_id) { COURSE = null; ls.set("course", null); }
@@ -863,6 +976,7 @@ async function loadEventGpx(eid, keep = false) {          // keep: the restored 
   }
 }
 async function attachGpx(eid) {
+  if (!LAST_FILE && COURSE?.cairn && $("cairn-url").value.trim()) { await importCairn(); return; }   // SP-537
   if (!LAST_FILE) { alert("請重新選一次 GPX 檔案"); return; }
   const fd = new FormData(); fd.append("file", LAST_FILE);
   try {
@@ -880,6 +994,105 @@ function saveEventSplits() {
   clearTimeout(splitTimer);
   splitTimer = setTimeout(() => fetch(`/api/v1/plan/events/${encodeURIComponent(eid)}/gpx/splits`,
     { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {}), 800);
+}
+// ---------------- SP-543: the ground under the GPX course from OpenStreetMap ----------------
+// 確定土徑 / 確定人工 / 不確定 (engine/racepower/surface.py), stored with the course file; the
+// unsure stretches are dashed on the course map, a click says what they are
+const GROUPS = ["dirt", "made", "unsure"];
+const GROUND_COLOR = { dirt: "--sf-dirt", made: "--sf-made", unsure: "--sf-unsure" };
+const OSM_GROUP = { dirt: "dirt", gravel: "made", paved: "made", steps: "made", unknown: "unsure" };
+let GROUND = null;                          // the /surface answer for COURSE.course_id
+let GROUND_EDIT = false;
+async function loadGround(refresh = false) {
+  const c = COURSE;
+  if (S.csrc !== "gpx" || !c?.course_id) { GROUND = null; renderGround(); return; }
+  if (!refresh && GROUND && GROUND.course_id === c.course_id) { renderGround(); return; }
+  GROUND = { course_id: c.course_id, status: "loading" }; GROUND_EDIT = false; renderGround();
+  let g;
+  try { g = await post(`${API}/surface/${encodeURIComponent(c.course_id)}`, { event_id: c.event_id || null, refresh }); }
+  catch (e) { g = { course_id: c.course_id, status: "unknown", message: e.message }; }
+  if (COURSE?.course_id !== c.course_id) return;
+  GROUND = g; renderGround(); if (CMAP) renderCourseMap();
+}
+async function editGround(body) {
+  const cid = GROUND?.course_id; if (!cid) return;
+  try {
+    GROUND = await j(`${API}/surface/${encodeURIComponent(cid)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) { const m = $("ground-msg"); if (m) m.textContent = e.message; else alert(e.message); return false; }
+  renderGround(); if (CMAP) { CMAP.map.closePopup(); renderCourseMap(); }
+  schedule();
+  return true;
+}
+function groundMarks() {                    // the user's marks as {segment index: group}
+  const o = {}; (GROUND?.segs || []).forEach((x, i) => { if (x.user) o[i] = x.g; }); return o;
+}
+function markGround(i, g) {
+  const o = groundMarks(), s = GROUND.segs[i];
+  if (OSM_GROUP[s.c] === g) delete o[i]; else o[i] = g;      // back to what OSM says: no mark
+  editGround({ overrides: o });
+}
+function renderGround() {
+  const row = $("ground-row"), b = $("ground-body");
+  if (S.csrc !== "gpx" || !COURSE?.course_id || !GROUND) { row.classList.add("hidden"); return; }
+  row.classList.remove("hidden");
+  const osm = `<a class="faint" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">${esc(GROUND.attribution || "© OpenStreetMap contributors")}</a>`;
+  if (GROUND.status === "loading") { b.innerHTML = `<span class="meta">${esc(T("ground.loading"))}</span>`; return; }
+  if (GROUND.status !== "ok") {
+    b.innerHTML = `<span class="meta">${esc(GROUND.message ? T("ground.unknown_why", { why: GROUND.message }) : T("ground.unknown"))}</span>` +
+      `<span class="meta">${esc(T("ground.unknown_ok"))} <button class="btn" type="button" id="ground-retry">${esc(T("ground.retry"))}</button></span>`;
+    $("ground-retry").onclick = () => loadGround(true);
+    return;
+  }
+  const p = GROUND.pct, sw = (g) => css(GROUND_COLOR[g]);
+  const bar = GROUPS.filter((g) => p[g] > 0).map((g) => `<i style="width:${p[g]}%;background:${sw(g)}" title="${esc(T("ground." + g))} ${p[g]} %"></i>`).join("");
+  const txt = GROUPS.map((g) => `<span><i class="sw" style="background:${sw(g)}"></i>${esc(T("ground." + g))} ${p[g]} %</span>`).join("");
+  const nUser = (GROUND.segs || []).filter((x) => x.user).length;
+  const note = GROUND.manual ? T("ground.typed") : nUser ? T("ground.marked", { n: nUser }) : T("ground.from_osm");
+  let h = `<div class="groundbar">${bar}</div><div class="groundtxt">${txt}<span class="meta">${esc(note)}</span>` +
+    `<button class="btn" type="button" id="ground-edit">${esc(T("ground.edit"))}</button>${help(esc(T("ground.tip")))} ${osm}</div>`;
+  // SP-544: the plan put the technicality on the dirt share only (TRC_TECH_DIRT_ONLY): how much of the flats / descents
+  const tg = PLAN?.summary?.tech_ground && PLAN.course_id === GROUND.course_id ? PLAN.summary.tech_ground : null;
+  if (tg) h += `<div class="meta" id="ground-tech">${esc(T("ground.tech", { applied: tg.applied, unsure: tg.unsure, made: tg.made }))}${help(esc(T("ground.tech_tip")))}</div>`;
+  if (GROUND_EDIT) {
+    h += `<div class="groundedit">` + GROUPS.map((g) => `<label>${esc(T("ground." + g))} <input type="number" min="0" max="100" step="1" data-g="${g}" value="${p[g]}"> %</label>`).join("") +
+      `<button class="btn primary" type="button" id="ground-save">${esc(T("ground.save"))}</button>` +
+      (GROUND.manual ? `<button class="btn" type="button" id="ground-clear">${esc(T("ground.clear"))}</button>` : "") +
+      `<button class="btn" type="button" id="ground-cancel">${esc(T("ground.cancel"))}</button><span class="meta" id="ground-msg"></span></div>`;
+  }
+  b.innerHTML = h;
+  $("ground-edit").onclick = () => { GROUND_EDIT = !GROUND_EDIT; renderGround(); };
+  if (GROUND_EDIT) {
+    $("ground-save").onclick = async () => {
+      const m = {}; b.querySelectorAll(".groundedit input").forEach((x) => { m[x.dataset.g] = Math.round(Number(x.value) || 0); });
+      if (GROUPS.reduce((a, g) => a + m[g], 0) !== 100) { $("ground-msg").textContent = T("ground.sum"); return; }
+      GROUND_EDIT = false; if (!(await editGround({ manual: m }))) { GROUND_EDIT = true; }
+    };
+    if ($("ground-clear")) $("ground-clear").onclick = () => { GROUND_EDIT = false; editGround({ clear_manual: true }); };
+    $("ground-cancel").onclick = () => { GROUND_EDIT = false; renderGround(); };
+  }
+}
+// the course map: the unsure stretches and the ones the user marked, dashed; a click picks the group
+function renderGroundMap() {
+  if (!GROUND_EDIT) renderGround();          // the plan's technicality line (SP-544)
+  if (!CMAP) return;
+  CMAP.ground.clearLayers();
+  const G = GROUND?.status === "ok" && GROUND.course_id === COURSE?.course_id ? GROUND : null;
+  $("course-map-ground").innerHTML = G ? `<span><i style="background:${css(GROUND_COLOR.unsure)}"></i>${esc(T("ground.map_unsure"))}</span>` +
+    `<span><i style="background:${css(GROUND_COLOR.dirt)}"></i><i style="background:${css(GROUND_COLOR.made)}"></i>${esc(T("ground.map_marked"))}</span>` +
+    `<span><a class="faint" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">${esc(G.attribution)}</a></span>` : "";
+  if (!G) return;
+  (G.segs || []).forEach((s, i) => {
+    if (s.g !== "unsure" && !s.user) return;
+    L.polyline(kmPath(s.a, s.b), { color: css(GROUND_COLOR[s.g]), weight: 6, opacity: 0.95, dashArray: "7 6" })
+      .bindTooltip(`${f1(s.a)}–${f1(s.b)} km · ${esc(T("ground." + s.g))}${s.user ? " · " + esc(T("ground.yours")) : ""}`)
+      .on("click", (ev) => {
+        const box = document.createElement("div"); box.className = "groundpop";
+        box.innerHTML = `<b>${f1(s.a)}–${f1(s.b)} km</b><span class="meta">${esc(T("ground.pick"))}</span><div class="btns">` +
+          GROUPS.map((g) => `<button class="btn${g === s.g ? " primary" : ""}" type="button" data-g="${g}">${esc(T("ground." + g))}</button>`).join("") + "</div>";
+        box.querySelectorAll("button").forEach((x) => { x.onclick = () => markGround(i, x.dataset.g); });
+        L.popup().setLatLng(ev.latlng).setContent(box).openOn(CMAP.map);
+      }).addTo(CMAP.ground);
+  });
 }
 function applyPreset(p) {
   S.csrc = "manual"; setType(p.type); $("dist").value = p.dist; $("gain").value = p.gain; $("loss").value = ""; $("days").value = p.days;
@@ -903,7 +1116,7 @@ function readDayPlan(raw) {
   return full ? rows.map((r) => ({ km: r.km, gain_m: r.gain_m || 0, loss_m: r.loss_m ?? null })) : null;
 }
 const FORM = ["dist", "gain", "loss", "days", "date", "target", "tpace", "tpower", "tspeed", "pack", "formula", "nightslow", "peak", "latlon", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct",
-  "tripdays", "packdays", "heatz", "heat-s"];
+  "tripdays", "packdays", "heatz"];
 function formValues() { const o = {}; FORM.forEach((k) => o[k] = $(k).value); o.ptrain = $("ptrain").checked; o.hourlyheat = $("hourlyheat").checked; o.snow = $("snow").value; return o; }
 // snow: a page saved before SP-252 has none → 無, never the previous event's choice
 function setForm(o) { FORM.forEach((k) => { if (o[k] != null) $(k).value = o[k]; }); $("ptrain").checked = !!o.ptrain; $("hourlyheat").checked = o.hourlyheat !== false; $("snow").value = o.snow || "none"; }
@@ -934,11 +1147,78 @@ async function uploadGpx(file) {
     const c = await r.json();
     LAST_FILE = file;
     COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null };
-    ls.set("course", COURSE); LOCKS = {}; SPLITS = (c.wpts || []).filter((w) => w.camp).map((w) => +w.km.toFixed(2)); TERRAIN = {};
+    // SP-533: the camp / hut waypoints are candidates (renderSplitCands), never day ends by themselves
+    ls.set("course", COURSE); LOCKS = {}; SPLITS = []; TERRAIN = {}; NIGHTS = c.overnights || null; CAIRN_NIGHTS = null;
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
     STOP_SUGG = c.stop_suggestions || [];
-    S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); schedule(); autoWeather();
+    S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); renderNightsAsk(); schedule(); autoWeather();
   } catch (e) { $("course-line").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+// SP-537: a trip from 疊石 Cairn by its share link (one way): its GPX, and the nights marked there
+// (「☾ 在此過夜」) applied at once as the day ends — they can still be changed on the profile. With a
+// season-plan event picked, the GPX and day ends are stored with the event (its days follow the nights).
+// The link's token reads Cairn once on the server and is not kept.
+async function importCairn() {
+  const url = $("cairn-url").value.trim(), msg = $("cairn-msg"), evId = $("event").value;
+  if (!url) { msg.innerHTML = `<span class="err">${esc(T("cairn.empty"))}</span>`; return; }
+  msg.textContent = T("cairn.busy");
+  const postJson = async (u, body) => {
+    const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : T("cairn.fail", { s: r.status }));
+    return j;
+  };
+  try {
+    let info, days;
+    if (evId) {
+      const j = await postJson(`/api/v1/plan/events/${encodeURIComponent(evId)}/gpx/cairn`, { url });
+      info = j.cairn; days = j.event_days;
+      const ev = (INP?.events || []).find((e) => e.id === evId);
+      if (ev) ev.days = days;
+      if (!(await loadEventGpx(evId))) throw new Error(T("cairn.fail", { s: "" }));
+      COURSE.cairn = true; ls.set("course", COURSE);
+    } else {
+      const c = await postJson(`${API}/course/cairn`, { url, split: S.split, ...Object.fromEntries(courseOpts(false)) });
+      info = c.cairn; days = c.days; LAST_FILE = null;
+      COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null, cairn: true,
+        group: c.cairn?.schedule || null };
+      ls.set("course", COURSE); LOCKS = {}; TERRAIN = {}; NIGHTS = null; SPLITS = [...(c.day_splits_km || [])];
+      $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
+      STOP_SUGG = c.stop_suggestions || [];
+      S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); renderNightsAsk();
+    }
+    if ((days > 1 || info.schedule) && type !== "baiyue") setType("baiyue");
+    SPLITS = [...(info.splits_km || [])]; $("tripdays").value = days;
+    CAIRN_NIGHTS = (info.nights || []).map((x) => ({ night: x.night, km: x.km, name: x.name || "" }));   // SP-535
+    const list = (info.nights || []).map((x) => T("cairn.night", { n: x.night, name: x.name || "", km: f1(x.km) })).join(T("overnight.sep"));
+    msg.innerHTML = `<b>${esc(T("cairn.done", { name: info.name, days }))}</b>${list ? " " + esc(list) : ""}`
+      + (info.nights?.length ? `<br>${esc(T("cairn.how"))}` : "")
+      + (info.notes || []).map((n) => `<br><span class="warn-t">${esc(n)}</span>`).join("")
+      + (info.schedule?.group ? schedPrefill(info.schedule) : "");
+    if (info.schedule?.group && !S.trip) { S.trip = "group"; saveUI(); syncForm(); }
+    if (info.schedule?.group) fillDayStarts(info.schedule);          // SP-580
+    wireSchedGo(); courseLine();
+    schedule(); autoWeather();
+  } catch (e) { msg.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+// SP-576: a Cairn timetable — the group's total moving time (its stops taken off: the ones written in
+// Cairn, else × the past group days' moving ratio, 80 % without records) fills 「目標時間」. Only the
+// field: the mode stays, so the calculator's own numbers don't change until 「目標時間」 is picked.
+function schedHow(sc) {
+  const ratio = { pct: Math.round(sc.ratio * 100), src: sc.ratio_n ? T("cairn.ratio_yours", { n: sc.ratio_n }) : T("cairn.ratio_default") };
+  if (sc.ratio_used && sc.rest_s > 0) return T("cairn.sched_mixed", { m: Math.round(sc.rest_s / 60), ...ratio });
+  return sc.ratio_used ? T("cairn.sched_ratio", ratio) : T("cairn.sched_rest", { m: Math.round(sc.rest_s / 60) });
+}
+function schedPrefill(sc) {
+  if (!sc) return "";
+  if (!sc.prefill) return `<br><span class="warn-t">${esc(T("cairn.sched_partial", { km: f1(sc.km), pct: Math.round(sc.cover * 100) }))}</span>`;
+  $("target").value = hms(sc.moving_s); saveForm();
+  return `<br>${esc(T("cairn.sched_line", { t: hm(sc.moving_s), clock: hm(sc.clock_s), how: schedHow(sc) }))}`
+    + (mode() !== "time" ? ` <button class="btn" type="button" id="sched-go">${esc(T("cairn.sched_go"))}</button>` : "");
+}
+function wireSchedGo() {
+  const b = $("sched-go");
+  if (b) b.onclick = () => { S.mode = "time"; saveUI(); syncForm(); b.remove(); schedule(); };
 }
 function courseOpts(asForm) {
   const o = [["sigma_m", num("sigma")], ["eps_m", num("eps")], ["min_len_m", num("minlen")], ["flat_pct", num("flatpct")], ["official_gain_m", num("ogain")]]
@@ -1163,7 +1443,8 @@ let WX_KEY = null;
 function wxKey() {
   const loc = getLoc(), date = $("date").value, sel = $("event").value;
   if (!date || !(loc || sel)) return null;
-  return [date, Math.max(1, Number($("days").value) || 1), loc ? `${(+loc.lat).toFixed(3)},${(+loc.lon).toFixed(3)}` : "ev:" + sel].join("|");
+  return [date, Math.max(1, Number($("days").value) || 1), loc ? `${(+loc.lat).toFixed(3)},${(+loc.lon).toFixed(3)}` : "ev:" + sel,
+    S.csrc === "gpx" && COURSE?.course_id ? COURSE.course_id : ""].join("|");
 }
 function autoWeather() {
   const k = wxKey();
@@ -1179,6 +1460,9 @@ async function getWeather() {
   if (loc) { q.set("lat", loc.lat); q.set("lon", loc.lon); if (loc.elevation != null) q.set("elevation", loc.elevation); if (loc.name) q.set("peak", loc.name); }
   else if (sel) q.set("event_id", sel);
   else { $("wx-meta").textContent = T("env.need_loc"); return; }
+  // SP-553: the GPX course → its weather at several points along it (each section read at its own clock)
+  if (S.csrc === "gpx" && COURSE?.course_id) q.set("course_id", COURSE.course_id);
+  if (sel) q.set("link_event", sel);       // its note may hold the Cairn link (the place still comes from above)
   const key = wxKey();
   $("wx-meta").textContent = T("env.fetching");
   try {
@@ -1206,9 +1490,25 @@ async function getWeather() {
         : w.hourly?.length ? `；逐時 ${w.hourly.length} 筆，可逐段修正熱` : "；沒有逐時資料，熱用這個平均值") : T("env.none");
     $("wx-tried").innerHTML = "嘗試：" + w.tried.map((t) => `<span class="${t.ok ? "ok" : "faint"}">${esc(t.provider)} ${t.ok ? "✓" : "✕ " + esc(t.reason || "")}</span>`).join(" → ");
     $("attrib").textContent = (d.attribution || "");
+    renderWxRoute(w);
     renderEnvChips();
     schedule();
   } catch (e) { $("wx-meta").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+// SP-553: the points along the course (one line per section) and the link to the same route in 疊石 Cairn
+function renderWxRoute(w) {
+  const pts = w?.points || [];
+  const el = $("wx-route");
+  if (!pts.length) { el.classList.add("hidden"); el.innerHTML = ""; }
+  else {
+    el.classList.remove("hidden");
+    el.innerHTML = `<b>${esc(T("env.route_title", { n: pts.length }))}</b> <span class="meta">${esc(T("env.route_sub"))}</span><ul>` +
+      pts.map((p) => `<li>${esc(T("env.route_row", { from: (+p.from_km).toFixed(0), to: (+p.to_km).toFixed(0),
+        z: p.elevation_m != null ? Math.round(p.elevation_m) : "–", src: p.label || p.provider }))}${p.detail?.cwa_location ? `（${esc(p.detail.cwa_location)}）` : ""}</li>`).join("") + "</ul>";
+  }
+  const a = $("cairn-link");
+  if (w?.cairn?.url) { a.href = w.cairn.url; a.classList.remove("hidden"); } else { a.removeAttribute("href"); a.classList.add("hidden"); }
 }
 
 // ---------------- plan ----------------
@@ -1228,6 +1528,9 @@ function planBody(extra = {}) {
     to_provider: tempOverridden() ? null : (WX?.provider || null),
     heat_acclimatisation: heatAcclBody(), surface: type === "trail" ? (S.surface || null) : null,
     rain: WX?.rain || null, wind: WX?.wind || null, sun: WX?.sun || null,
+    // SP-553: each section's rows (its hourly ones only when the race-day temperature is the forecast's, as `hourly`)
+    weather_points: WX?.points?.length ? WX.points.map((p) => ({ i: p.i, from_km: p.from_km, to_km: p.to_km, elevation_m: p.elevation_m,
+      hourly: !tempOverridden() && $("hourlyheat").checked ? p.hourly : null, rain: p.rain, wind: p.wind })) : null,
     night_slow_pct: Number($("nightslow").value || 0), ...extra };
   if (type === "baiyue") {
     body.trip_kind = S.trip; body.hr_band = S.hrband;
@@ -1237,6 +1540,9 @@ function planBody(extra = {}) {
     body.snow = $("snow").value || "none";
     const pk = $("peak").value.trim() || (INP?.events || []).find((e) => e.id === $("event").value)?.name || "";
     body.peak = pk ? pk.slice(0, 40) : null;
+    // SP-578: the group's timetable (Cairn, 「這是團的時刻表」 ticked) → the 跟團對照 laid over the plan
+    if (S.csrc === "gpx" && COURSE?.group?.group) body.group_schedule = { points: COURSE.group.points };
+    body.day_starts = dayStartsBody();             // SP-580
   }
   // the elevation the race-day temperature refers to (owner decision 2026-10-06: each GPX segment's
   // temperature follows its own height): a typed To altitude, else the fetched weather's point
@@ -1273,7 +1579,7 @@ function planBody(extra = {}) {
   return body;
 }
 function renderAll() {
-  renderResults(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
+  renderResults(); renderGroup(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
   renderStops(); renderExportBtn(); renderSurface(); renderRain(); fillSleepDefaults();
   if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
 }
@@ -1345,10 +1651,13 @@ function renderRain() {
 }
 // SP-485: every hint of the result page (the result, 補給 and 分段 cards are one page for §5.2's cap) →
 // {box, reminders, how} (static/racehints.js): class 1 in one box on top — rain by R1, 積雪, the outdoor
-// line (SP-251 冷風 / SP-253 失溫 / night, its details collapsed), 目標太快, 賽前超補, the engine's class-1 warnings
-// (沒填補給站, 脫水 > 2 %, 超出可持續, CP 低於實測) —; ≤ 3 reminders; the method lines in 「這次怎麼算的」.
+// line (SP-251 冷風 / SP-253 失溫 / night, its details collapsed), 目標太快, the engine's class-1 warnings
+// (超出可持續, CP 低於實測) —; ≤ 3 reminders; the method lines in 「這次怎麼算的」.
 // `own` = the page's own class-2 hints, `how` = the page's own lines for 「這次怎麼算的」. The course's GPX
 // warnings stay at the upload (RC17, #course-warn).
+// SP-547: the 補給 hints (賽前超補 and every warning of engine/racepower/fuel.py: 沒填補給站, 脫水 > 2 %, 糧食,
+// 基礎代謝, the 熱量 cross-check) are on the 補給 card (fuelHints), not here; the two cards share the cap.
+let RH_SHOWN = 0;                                  // the reminders the result card shows (fuelHints gets the rest of the cap)
 function resultHints(P, own = [], how = []) {
   const R = RH(), list = [];
   const r = P.rain;
@@ -1367,19 +1676,44 @@ function resultHints(P, own = [], how = []) {
     const msg = T("goal." + g.level, { pct: Math.round(Math.abs(g.faster) * 100) });
     list.push(R.make("RC6", msg, { html: `🎯 <b class="${g.level === "too_fast" ? "err" : "wn"}">${esc(msg)}</b>` }));
   }
-  const ld = P.fuel?.loading;
-  if (P.type !== "baiyue" && ld?.g_day) list.push(R.make("RC19", T("hint.carb_load", { label: ld.label || "", g: rng(ld.g_day, n0, "g").replace(/<[^>]+>/g, "") })));
-  list.push(...own, ...(P.warnings || []), ...((P.fuel || {}).warnings || []));
+  list.push(...own, ...(P.warnings || []));
   const x = R.page(list, { level: level(), acks: HL.acks, how });
+  RH_SHOWN = x.counts.shown;
   return {
     box: x.box ? `<div id="rh-box">${x.box}</div>` : "",
     reminders: x.reminders ? `<div id="rh-rem">${x.reminders}</div>` : "",
     how: x.how ? `<details id="rh-how"><summary>${esc(T("how.title"))}</summary>${x.how}</details>` : "",
   };
 }
-// 「知道了」 / 「再提醒我」 on the result's reminders: redraw the result card
+// SP-547: the 補給 card's hints → {box, reminders, how} like resultHints: 賽前超補 (RC19) and the fuel engine's
+// warnings — 沒填補給站 (RC21) and 脫水 > 2 % (RC20) in the box on top of the card, 糧食 (RC18) / 基礎代謝 (RC28)
+// as reminders, the 熱量 cross-check (RC22) in the card's 「這次怎麼算的」. The reminders get what the result card
+// left of the page's cap (Hints.CAP; renderFuel runs after renderResults).
+function fuelHints(P) {
+  const R = RH(), F = P.fuel || {}, list = [];
+  if (!R) return { box: "", reminders: "", how: "" };
+  const ld = F.loading;
+  // SP-547 R1: one sentence, no grams — the amount is only on the 「賽前超補」 tile below (fuel.loading: a real load
+  // > 90 min, over 1–2 days for an ultra; else a normal high-carb day)
+  if (P.type !== "baiyue" && ld?.g_day) {
+    const k = !ld.carb_load ? "hint.carb_normal" : F.category === "ultra" ? "hint.carb_load_2d" : "hint.carb_load";
+    list.push(R.make("RC19", T(k)));
+  }
+  list.push(...(F.warnings || []));
+  const cap = Math.max(0, (window.Hints ? Hints.CAP : 3) - RH_SHOWN);
+  const x = R.page(list, { level: level(), acks: HL.acks, cap });
+  return {
+    box: x.box ? `<div id="fh-box">${x.box}</div>` : "",
+    reminders: x.reminders ? `<div id="fh-rem">${x.reminders}</div>` : "",
+    how: x.how ? `<details id="fh-how"><summary>${esc(T("how.title"))}</summary>${x.how}</details>` : "",
+  };
+}
+// 「知道了」 / 「再提醒我」 on the result's and the 補給 card's reminders: redraw both (they share the cap)
 function bindHints() {
-  if (window.Hints) Hints.bind($("results"), (st) => { HL = st; renderResults(); });
+  if (!window.Hints) return;
+  const redraw = (st) => { HL = st; renderResults(); renderFuel(); };
+  Hints.bind($("results"), redraw);
+  Hints.bind($("fuel"), redraw);
 }
 // SP-252: 積雪 picked → one line in the attention box (× 2 and × 3 both for 無踏跡), plus the 玉山 雪季措施
 // line with the park's notice when the route is 玉山. "" when 積雪 is 無.
@@ -1421,10 +1755,13 @@ function effortBar(e, hike) {
 // ---- zone bar (SP-118): absolute intensity — the race's average in the power or heart-rate zones ----
 // Follows the training basis (/goal-basis): power → Palladino % CP; heart rate → a heart-rate zone system
 // at the calculator's predicted race HR (PLAN.hr_bar, engine/racepower/zonebar.py), the system picked
-// here and remembered (default: the 課表心率區間 model). No predicted HR → the power bar and the reason.
+// here and remembered (default: the 課表心率區間 model). No predicted HR → the power zones and the reason.
+// SP-548: the colour strip looked like the 努力度 bar above it, which is what matters for a race. Absolute
+// intensity is now one small grey line (average, zone, its name); the strip — grey, only the race's zone in
+// colour — every zone with its range and the heart-rate zone model sit in a closed 「區間細節」.
 const ZB_SYS_KEY = "hrsys";
 const zbColor = (i, n) => `hsl(${Math.round(140 - 140 * i / Math.max(1, n - 1))} 60% 42%)`;   // green (easy) → red
-// {kind: "power"} | {kind: "hr", sys, hr}; `why` = the reason a heart-rate basis shows the power bar
+// {kind: "power"} | {kind: "hr", sys, hr}; `why` = the reason a heart-rate basis shows the power zones
 function zoneBarSpec(plan, basis, pick) {
   if (basis?.basis !== "hr") return { kind: "power" };
   const hb = plan.hr_bar;
@@ -1435,17 +1772,18 @@ function zoneBarSpec(plan, basis, pick) {
   const sys = [pick, hb.default].find((k) => avail.includes(k)) || avail[0];
   return { kind: "hr", sys, hr: hb.hr };
 }
-// the colour strip with zone ids on it, a tick scale and a legend of every zone shown (no hover needed)
+// the grey strip with zone ids on it (only the race's zone in colour), a tick scale and a legend of every zone
 function zoneStrip(rows, val, lo, hi, ticks, tickText, rangeText) {
   const X = (f) => Math.max(0, Math.min(100, (f - lo) / (hi - lo) * 100));
   const at = rows.findIndex((r) => val >= r.lo && (r.hi == null || val < r.hi));
-  let h = `<div class="zbar">`, leg = "";
+  let h = `<div class="zbar gray">`, leg = "";
   rows.forEach((r, i) => {
-    const a = Math.max(lo, r.lo), b = Math.min(hi, r.hi ?? hi);
+    const a = Math.max(lo, r.lo), b = Math.min(hi, r.hi ?? hi), cur = i === at;
+    const bg = cur ? ` style="background:${zbColor(i, rows.length)}"` : "";
+    leg += `<span class="${cur ? "cur" : ""}"><i${bg}></i><b>${esc(r.id)}</b> ${esc(r.name)} <span class="faint">${esc(rangeText(r))}</span></span>`;
     if (!(b > a)) return;
-    const w = X(b) - X(a), col = zbColor(i, rows.length);
-    h += `<div class="z${i === at ? " cur" : ""}" style="width:${w}%;background:${col}">${w >= 6 ? esc(r.id) : ""}</div>`;
-    leg += `<span class="${i === at ? "cur" : ""}"><i style="background:${col}"></i><b>${esc(r.id)}</b> ${esc(r.name)} <span class="faint">${esc(rangeText(r))}</span></span>`;
+    const w = X(b) - X(a);
+    h += `<div class="z${cur ? " cur" : ""}" style="width:${w}%${cur ? ";background:" + zbColor(i, rows.length) : ""}">${w >= 6 ? esc(r.id) : ""}</div>`;
   });
   h += `<div class="needle" style="left:${X(val)}%"></div></div><div class="escale">`;
   // the end ticks align inwards, so 50 / 130 are not cut off at the card's edge
@@ -1453,9 +1791,9 @@ function zoneStrip(rows, val, lo, hi, ticks, tickText, rangeText) {
     return `<span style="left:${x}%${tf}">${esc(tickText(t))}</span>`; }).join("") + "</div>";
   return { html: h + `<div class="zleg">${leg}</div>`, zone: at >= 0 ? rows[at] : null };
 }
-function zoneBar(p, cp) {
+function zoneBar(p, cp, open = false) {
   const spec = zoneBarSpec(PLAN, BASIS, ls.get(ZB_SYS_KEY, null));
-  let head = "", body = "", line = "";
+  let more = "", line = "";
   if (spec.kind === "hr") {
     const hb = PLAN.hr_bar, S0 = hb.systems[spec.sys], rows = S0.rows, hr = spec.hr;
     const top = rows[rows.length - 1].lo;
@@ -1464,25 +1802,25 @@ function zoneBar(p, cp) {
     const ticks = []; for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
     const st = zoneStrip(rows, hr, lo, hi, ticks, (t) => String(t), (r) => r.hi == null ? `${Math.round(r.lo)}+` : r.lo ? `${Math.round(r.lo)}–${Math.round(r.hi)}` : `< ${Math.round(r.hi)}`);
     const opts = Object.entries(hb.systems).map(([k, s]) => `<option value="${esc(k)}"${k === spec.sys ? " selected" : ""}${s.rows?.length ? "" : " disabled"}>${esc(s.title)}${s.rows?.length ? "" : "（" + esc(s.reason || "") + "）"}</option>`).join("");
-    head = `${esc(T("zbar.title_hr"))} <span class="meta">${esc(T("zbar.axis_hr"))}</span>${help(esc(T("zbar.tip")))}
-      <label class="meta zsys">${esc(T("zbar.system"))} <select id="zbar-sys">${opts}</select></label>`;
-    body = st.html;
-    line = T("zbar.line_hr", { hr: Math.round(hr), sys: S0.short, zone: st.zone ? st.zone.id : "–", name: st.zone ? st.zone.name : "" })
-      + (hb.hr_source ? ` · ${hb.hr_source}` : "") + (S0.basis_text ? ` · ${S0.basis_text}` : "");
+    line = T("zbar.line_hr", { hr: Math.round(hr), sys: S0.short, zone: st.zone ? st.zone.id : "–" }) + (st.zone?.name ? ` · ${st.zone.name}` : "");
+    const src = [hb.hr_source, S0.basis_text].filter(Boolean).join(" · ");
+    more = `<label class="zsys">${esc(T("zbar.system"))} <select id="zbar-sys">${opts}</select></label>${st.html}`
+      + `<div class="faint">${esc(T("zbar.axis_hr"))}${src ? " · " + esc(src) : ""}</div>`;
   } else {
     const z = PLAN.zones || []; if (!z.length || !cp) return "";
     const st = zoneStrip(z, p / cp, 0.5, 1.3, [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3], (t) => String(Math.round(t * 100)),
       (r) => `${Math.round(r.lo * 100)}${r.hi == null ? "+" : "–" + Math.round(r.hi * 100)}%`);
-    head = `${esc(T("zbar.title_power"))} <span class="meta">${esc(T("zbar.axis_power"))}</span>${help(esc(T("zbar.tip")))}`;
-    body = st.html;
-    line = T("zbar.line_power", { pct: pct(p / cp), w: W(p), zone: zoneOf(p, cp), name: st.zone ? st.zone.name : "" });
+    line = T("zbar.line_power", { pct: pct(p / cp), w: W(p), zone: zoneOf(p, cp) }) + (st.zone?.name ? ` · ${st.zone.name}` : "");
+    more = st.html + `<div class="faint">${esc(T("zbar.axis_power"))}</div>`;
   }
-  return `<div id="zbar-box"><div class="zhead">${head}</div>${body}<div class="meta">${esc(line)}</div>`
-    + (spec.why ? `<div class="note wn" data-rh="RCz">${esc(spec.why)}</div>` : "") + `</div>`;
+  // the reason a heart-rate basis shows the power zones: grey and small like the line (it was a yellow note)
+  return `<div id="zbar-box"><div class="zline">${esc(line)}${help(esc(T("zbar.tip")))}</div>`
+    + (spec.why ? `<div class="zline" data-rh="RCz">${esc(spec.why)}</div>` : "")
+    + `<details class="zmore"${open ? " open" : ""}><summary>${esc(T("zbar.more"))}</summary>${more}</details></div>`;
 }
 function wireZoneBar() {
   const sel = $("zbar-sys"); if (!sel) return;
-  sel.onchange = () => { ls.set(ZB_SYS_KEY, sel.value); $("zbar-box").outerHTML = zoneBar(PLAN.summary.power, PLAN.used.cp.value); wireZoneBar(); };
+  sel.onchange = () => { ls.set(ZB_SYS_KEY, sel.value); $("zbar-box").outerHTML = zoneBar(PLAN.summary.power, PLAN.used.cp.value, true); wireZoneBar(); };
 }
 // ---- end zone bar ----
 
@@ -1617,10 +1955,11 @@ function renderBaiyue() {
   h += `</div><h3>難度${est("results", T("est.w.effort"), e.badge)}${help("需要的速度 ÷ 你平常的速度。切點用你自己過去登山日 EP/h 的分佈（25%、中位數、75%、90%）。")}</h3>`;
   h += effortBar(e, true);
   h += `<div class="eline">需要你平常速度的 <b>${pct(e.r)}</b> → ${esc(e.label)}</div>`;
-  h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">km</th><th class="n">爬升</th><th class="n">下降</th><th class="n">移動</th><th class="n">時鐘</th><th class="n">熱量</th><th class="n">飲水</th></tr></thead><tbody>` +
+  const dl = P.days.length > 1;          // SP-581
+  h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">km</th><th class="n">爬升</th><th class="n">下降</th><th class="n">移動</th><th class="n">時鐘</th>${dl ? dayLoadHead() : ""}<th class="n">熱量</th><th class="n">飲水</th></tr></thead><tbody>` +
     P.days.map((d) => `<tr><td>第 ${d.day} 天</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td><td class="n">${n0(d.loss_m)} m</td>
-      <td class="n">${hrs(d.moving_h)}</td><td class="n">${hrs(d.clock_h)}</td><td class="n">${n0(d.kcal)}</td>
-      <td class="n">${waterL(d.water_ml)}</td></tr>`).join("") + `</tbody></table></div>`;
+      <td class="n">${hrs(d.moving_h)}</td><td class="n">${hrs(d.clock_h)}</td>${dl ? dayLoadCells(d) : ""}<td class="n">${n0(d.kcal)}</td>
+      <td class="n">${waterL(d.water_ml)}</td></tr>`).join("") + `</tbody></table></div>` + (dl ? dayLoadNote(s.biggest_day) : "");
   const c = P.crosscheck || {};
   const x = resultHints(P);
   h += x.reminders + x.how;
@@ -1631,6 +1970,66 @@ function renderBaiyue() {
   bindHints();
 }
 
+// ---------------- SP-579: 跟團對照 (engine/racepower/group.py) ----------------
+// Each leg of the group's timetable: the group's time, yours (AeT capacity), the tier and its heart-rate
+// zone in words (no bpm: β ≈ 0), the legs behind / waiting; per day the time above AeT. The plan's own
+// numbers are untouched; the pack and closing-time reminders are text only (SP-575 Q1-7, 8).
+const GTIERS = ["wait", "easy", "right", "hard", "behind"];
+const gTier = (t) => T("group.tier." + t);
+const gChip = (t, e) => `<span class="gchip ${t}">${esc(gTier(t))}${ok(e) ? ` ${Math.round(e * 100)}%` : ""}</span>`;
+function gZone(x) {
+  let z = T(x.up_share < 0.5 ? "group.zone_down." + x.tier : "group.zone." + x.tier);
+  if (x.tier === "behind" && x.behind_s > 60) z += " " + T("group.behind_by", { m: Math.round(x.behind_s / 60) });
+  return z;
+}
+function gLegAt(km) { return (PLAN?.group?.legs || []).find((x) => km >= x.from_km && km <= x.to_km); }
+function renderGroup() {
+  const g = PLAN?.type === "baiyue" ? PLAN.group : null, sec = $("group-sec");
+  sec.classList.toggle("hidden", !g);
+  if (!g) { $("group").innerHTML = ""; return; }
+  const L = g.legs, hard = L.filter((x) => x.tier === "hard"), behind = L.filter((x) => x.tier === "behind");
+  const legName = (x) => `${x.from} → ${x.to}`;
+  let head = T("group.head", { tier: gTier(g.main) });
+  head += behind.length ? T("group.head_behind", { n: behind.length, list: behind.slice(0, 3).map((x) => T("group.day_leg", { d: x.trip_day, leg: legName(x) })).join(T("grp.sep")) })
+    : T("group.head_nobehind");
+  if (hard.length) head += T("group.head_hard", { h: hrs(hard.reduce((a, x) => a + x.moving_s, 0) / 3600) });
+  let h = `<h2>${esc(T("group.title"))} <span class="meta">${esc(T("group.sub"))}</span>${badge(T("est.badge"))}${help(esc(T("group.tip")))}</h2>`;
+  h += `<div class="head">${esc(head)}</div>`;
+  const notes = [g.rest_ratio ? T("group.rest_ratio", { pct: Math.round((g.ratio || 0.8) * 100) }) : T("group.rest_cairn")];
+  if (g.speed_only) notes.push(T("group.speed_only"));
+  h += `<ul class="gnotes">${notes.map((n) => `<li>${esc(n)}</li>`).join("")}<li class="w">🎒 ${esc(T("group.pack"))}</li><li class="w">⏰ ${esc(T("group.close"))}</li></ul>`;
+  // per day
+  h += `<div class="tablewrap"><table><thead><tr><th>${esc(T("group.col.day"))}</th><th>${esc(T("group.col.worst"))}</th><th class="n">${esc(T("group.col.group"))}</th><th class="n">${esc(T("group.col.you"))}</th>
+    <th class="n gwide">${esc(T("group.col.above"))}</th><th class="gwide">${esc(T("group.col.note"))}</th></tr></thead><tbody>` +
+    g.days.map((d) => { const rest = [d.behind_n ? T("group.n_behind", { n: d.behind_n }) : "", d.wait_n ? T("group.n_wait", { n: d.wait_n }) : "",
+      d.long_hard ? T("group.long_hard") : ""].filter(Boolean), sep = T("grp.sep");
+      const narrow = (d.above_aet_s ? [T("group.above_h", { h: hm(d.above_aet_s) })] : []).concat(rest).join(sep);
+      return `<tr><td>${esc(T("group.day", { d: d.day }))}<div class="gnarrow meta">${esc(narrow)}</div></td><td>${gChip(d.worst)}</td><td class="n">${hm(d.group_s)}</td><td class="n">${hm(d.you_s)}</td>
+      <td class="n gwide">${d.above_aet_s ? hm(d.above_aet_s) : "–"}</td><td class="zone gwide">${esc(rest.join(sep))}</td></tr>`; }).join("") + `</tbody></table></div>`;
+  // per leg
+  h += `<details open id="group-legs"><summary>${esc(T("group.legs", { n: L.length }))}</summary><div class="tablewrap"><table><thead><tr>
+    <th>${esc(T("group.col.leg"))}</th><th class="gwide">${esc(T("group.col.times"))}</th><th class="n gwide">${esc(T("group.col.group"))}</th><th class="n gwide">${esc(T("group.col.you"))}</th>
+    <th class="gwide">${esc(T("group.col.effort"))}</th><th class="gwide">${esc(T("group.col.zone"))}</th></tr></thead><tbody>` +
+    L.map((x) => { const rest = x.rest === "cairn" ? (x.rest_s ? T("group.minus_rest", { m: Math.round(x.rest_s / 60) }) : T("group.no_rest")) : T("group.times_ratio", { pct: Math.round((g.ratio || 0.8) * 100) });
+      return `<tr><td class="leg">${esc(T("group.day", { d: x.trip_day }))} · ${esc(legName(x))}<div class="meta">${f1(x.from_km)}–${f1(x.to_km)} km</div>
+        <div class="gnarrow">${gChip(x.tier, x.e)} ${esc(x.from_eta)} → ${esc(x.to_eta)} · ${esc(T("group.narrow", { g: hm(x.moving_s), y: hm(x.you_s) }))}<div class="meta">${esc(rest)} · ${esc(gZone(x))}</div></div></td>
+      <td class="num gwide">${esc(x.from_eta)} → ${esc(x.to_eta)}</td>
+      <td class="n gwide">${hm(x.moving_s)}<div class="meta">${esc(rest)}</div></td>
+      <td class="n gwide">${hm(x.you_s)}</td><td class="gwide">${gChip(x.tier, x.e)}</td><td class="zone gwide">${esc(gZone(x))}</td></tr>`; }).join("") + `</tbody></table></div></details>`;
+  h += `<div class="glegend">${GTIERS.map((t) => `<span>${gChip(t)} ${esc(T("group.cut." + t))}</span>`).join("")}</div>`;
+  $("group").innerHTML = h;
+}
+// SP-581: multi-day fatigue has no model good enough — instead each day against the heaviest day you have
+// walked (EP = km + climb/100) and the metres down with the pack; a heavy day flags the next (推估)
+function dayLoadHead() { return `<th class="n">${esc(T("dl.vs"))}${help(esc(T("dl.tip")))}</th><th class="n">${esc(T("dl.down"))}</th>`; }
+function dayLoadCells(d) {
+  const v = d.vs_biggest_pct, rec = (d.recovery || []).length;
+  const vs = ok(v) ? `<span class="${d.over_biggest ? "no" : ""}">${v >= 0 ? "+" : "−"}${Math.round(Math.abs(v))} %${d.over_biggest ? " ⚠" : ""}</span>` : "–";
+  return `<td class="n">${vs}</td><td class="n">${n0(d.pack_descent_m)} m<div class="meta">${f1(d.pack_kg)} kg${rec ? ` · <span class="wn" title="${esc(T("dl.rec_tip"))}">${esc(T("dl.rec"))}</span>` : ""}</div></td>`;
+}
+function dayLoadNote(b) {
+  return `<div class="meta">${esc(b ? T("dl.ref", { date: b.date || "", ep: f1(b.ep), km: f1(b.km), gain: n0(b.gain_m) }) : T("dl.noref"))}</div>`;
+}
 const SIGMA_ZH = { model: "模型（回測）", pack: "背負", alt: "海拔", time: "日內", day: "多日" };
 function renderBaiyueCapacity() {
   const P = PLAN, s = P.summary, e = P.effort, c = P.capacity, b = s.band, g = s.group_time_s;
@@ -1664,10 +2063,11 @@ function renderBaiyueCapacity() {
     個人：${ok(dg.current) ? `跨趟 ${f1(dg.current)} %（這裡混了趟次差異）` : ""} · 趟內（趟次固定效果）${ok(al.personal) ? f1(al.personal) + " % ± " + f1(al.se) : "無法估"}<br>
     Coffman 2020 固定心率負重：−3.8 %（換算）</div></div>`;
   h += `<h3>難度${est("results", T("est.w.effort"), e.badge)}</h3>` + effortBar(e, true) + `<div class="eline">需要能力速度的 <b>${pct(e.r)}</b> → ${esc(e.label)}</div>`;
-  h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">km</th><th class="n">爬升</th><th class="n">下降</th><th class="n">背負</th><th class="n">能力移動</th><th class="n">時鐘</th><th class="n">跟團移動</th><th class="n">熱量</th><th class="n">飲水</th></tr></thead><tbody>` +
+  const dl = P.days.length > 1;          // SP-581: each day vs the heaviest day walked, the descent with the pack
+  h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">km</th><th class="n">爬升</th><th class="n">下降</th><th class="n">背負</th><th class="n">能力移動</th><th class="n">時鐘</th><th class="n">跟團移動</th>${dl ? dayLoadHead() : ""}<th class="n">熱量</th><th class="n">飲水</th></tr></thead><tbody>` +
     P.days.map((d) => `<tr><td>第 ${d.day} 天</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td><td class="n">${n0(d.loss_m)} m</td><td class="n">${f1(d.pack_kg)} kg</td>
-      <td class="n">${hrs(d.moving_h)}</td><td class="n">${hrs(d.clock_h)}</td><td class="n">${d.group_h ? hrs(d.group_h) : "–"}</td><td class="n">${n0(d.kcal)}</td>
-      <td class="n">${waterL(d.water_ml)}</td></tr>`).join("") + `</tbody></table></div>`;
+      <td class="n">${hrs(d.moving_h)}</td><td class="n">${hrs(d.clock_h)}</td><td class="n">${d.group_h ? hrs(d.group_h) : "–"}</td>${dl ? dayLoadCells(d) : ""}<td class="n">${n0(d.kcal)}</td>
+      <td class="n">${waterL(d.water_ml)}</td></tr>`).join("") + `</tbody></table></div>` + (dl ? dayLoadNote(s.biggest_day) : "");
   const cc = P.crosscheck || {};
   const x = resultHints(P);
   h += x.reminders + x.how;
@@ -1692,7 +2092,7 @@ function renderFuel() {
   const F = PLAN?.fuel, sec = $("fuel-sec");
   if (F?.unavailable) {             // SP-414: no body weight — the card says so instead of numbers
     sec.classList.toggle("hidden", ls.get("tab", "calc") !== "calc");
-    $("fuel").innerHTML = `<h2>🍽 補給</h2><div class="note noweight">${esc(F.unavailable)} <a href="/api/v1/wko5/settings#personal">${esc(T("noweight.link"))}</a></div>`;
+    $("fuel").innerHTML = `<h2>🍽 補給</h2><div class="note noweight">${esc(F.unavailable)} <a href="/api/v1/app/settings#personal">${esc(T("noweight.link"))}</a></div>`;
     return;
   }
   if (!F || !F.kcal_band) { sec.classList.add("hidden"); return; }
@@ -1700,7 +2100,8 @@ function renderFuel() {
   const hike = F.category === "hike", c = F.cho, w = F.water, na = F.sodium, ld = F.loading;
   const meth = Object.keys(F.methods || {}).map((k) => FUEL_METHOD[k] || k).join("、");
   EST.fuel = [];
-  let h = `<h2>🍽 補給 <span class="meta">${esc(F.label)} · 建議值，自己準備</span>%%EST%%${help("熱量用預估的分段功率與時間算，碳水、水、鈉照賽事類型、預估時間和各段氣溫給範圍。每個數字旁的 ? 有算法和來源。沒有個人的流汗率和腸胃訓練紀錄，所以水量是一般範圍、碳水不超過 90 g/h。")}</h2><div class="tiles">`;
+  const fx = fuelHints(PLAN);
+  let h = `<h2>🍽 補給 <span class="meta">${esc(F.label)} · 建議值，自己準備</span>%%EST%%${help("熱量用預估的分段功率與時間算，碳水、水、鈉照賽事類型、預估時間和各段氣溫給範圍。每個數字旁的 ? 有算法和來源。沒有個人的流汗率和腸胃訓練紀錄，所以水量是一般範圍、碳水不超過 90 g/h。")}</h2>${fx.box}<div class="tiles">`;
   const kTip = hike
     ? "行動熱量 = Pandolf 公式（體重、當天背負、每段速度和坡度）逐段加總；下坡 Pandolf 不適用，改用 Minetti 走路曲線推估。範圍包含 Yamamoto（app 原本的百岳熱量）：Pandolf 對重背負常低估。"
     : "功率法：每段 Stryd 功率 × 時間 ÷ (22.1 % × 4.184)，坡度 > 4 % 用 21.6 %。坡度 > 8 %、走路段和下坡改用 1.07 kcal/kg/km × Minetti 坡度比例。Stryd 自己的「kJ ≈ kcal」會少算約 8 %：跑步不能直接把 kJ 當 kcal。範圍 ±10–15 %：個人差異、疲勞、陡坡低估加起來。";
@@ -1762,8 +2163,9 @@ function renderFuel() {
       ev.map((e) => `<tr class="k-${e.kind}">${hike ? `<td>${e.day}</td>` : ""}<td class="num">${esc(e.eta || "–")}</td><td class="n">${dur(e.t_s)}</td><td class="n">${f1(e.km)}</td><td>${icon(e)}</td><td class="act">${esc(e.action)}</td></tr>`).join("") +
       `</tbody></table></div>`;
   }
-  // SP-485: the card's warnings are on the result page (resultHints): 沒填補給站 / 脫水 > 2 % in the box on top,
-  // the rest as reminders or in 「這次怎麼算的」
+  // SP-547: the card's own hints (fuelHints): 沒填補給站 / 脫水 > 2 % / 賽前超補 in the box under the title,
+  // the rest as reminders or in 「這次怎麼算的」 here
+  h += fx.reminders + fx.how;
   const cc = F.crosscheck || {};
   if (!hike && cc.fletcher) h += `<details><summary>交叉檢查</summary><ul class="meta" style="padding-left:18px;margin:0">
     <li>Fletcher 2009（1.05–1.11 kcal/kg/km × 坡度調整 ${f1(cc.fletcher.adj_km)} km）：${rng(cc.fletcher.range, n0, "kcal")}</li>
@@ -1816,6 +2218,8 @@ function rowTip(r) {
   if (r.basis === "safe") lines.push(esc(T("safe")));
   if (r.fuel) lines.push("🍬 " + esc(r.fuel));
   if (r.night) lines.push("🌙 " + esc(T("night.col")));
+  const gx = hike ? gLegAt((r.start_km + r.end_km) / 2) : null;      // SP-579
+  if (gx) lines.push(`${gChip(gx.tier, gx.e)} ${esc(gx.from)} → ${esc(gx.to)} · ${esc(gZone(gx))}`);
   return lines.join("<br>");
 }
 function renderProfile() {
@@ -1839,7 +2243,11 @@ function renderProfile() {
   $("pole-line").classList.toggle("hidden", !pl);
   $("pole-line").textContent = pl;
   $("pole-line").title = pl ? (RH().poleSummary(R).src || "") : "";
-  $("splits-line").textContent = SPLITS.length ? "分日點：" + SPLITS.map((x) => x.toFixed(1) + " km").join("、") : "";
+  $("splits-line").textContent = SPLITS.length ? T("split.line", { list: SPLITS.map((x) => x.toFixed(1) + " km").join("、") }) : "";
+  renderSplitCands(); renderNightsAsk();
+  // SP-533: the candidates not taken yet, dotted on the profile
+  const candLines = hike && S.csrc === "gpx" ? splitCands().filter((w) => nearSplit(w.km) < 0)
+    .map((w) => ({ xAxis: w.km, lineStyle: { color: css("--muted"), type: "dotted" }, label: { formatter: T("split.cand_mark"), color: css("--muted") } })) : [];
   // the target as steps; a measure that is not a target on a segment leaves a gap there
   const step = [];
   for (const r of R) {
@@ -1858,10 +2266,18 @@ function renderProfile() {
   const hv = R.find((r) => r.i === HOVER && !SEL.has(r.i));
   if (hv) walkAreas.push([{ xAxis: hv.start_km, itemStyle: { color: css("--accent"), opacity: 0.28 } }, { xAxis: hv.end_km }]);
   const series = [];
+  // SP-579: 跟團對照 — each leg of the group's timetable in its tier's colour, the legs behind outlined
+  const GL = hike ? (P.group?.legs || []) : [];
+  if (GL.length) series.push({ name: T("group.title"), type: "line", yAxisIndex: 1, data: [], silent: true, z: 0,
+    markArea: { silent: true, data: GL.map((x) => [{ xAxis: x.from_km, itemStyle: { color: css("--g-" + x.tier), opacity: 0.36,
+      borderColor: x.tier === "behind" ? css("--g-behind") : "transparent", borderWidth: x.tier === "behind" ? 2 : 0 } }, { xAxis: x.to_km }]) } });
   if (pr) {
     series.push({ name: T("elev"), type: "line", yAxisIndex: 1, data: pr.km.map((x, i) => [x, pr.z[i]]), symbol: "none", silent: true, z: 1,
       lineStyle: { color: css("--bar"), width: 1 }, areaStyle: { color: css("--bar"), opacity: 0.28 },
-      markLine: SPLITS.length ? { symbol: "none", silent: true, lineStyle: { color: css("--accent"), type: "dashed" }, label: { formatter: "分日", color: css("--accent") }, data: SPLITS.map((x) => ({ xAxis: x })) } : undefined });
+      markLine: SPLITS.length || candLines.length ? { symbol: "none", silent: true, lineStyle: { color: css("--accent"), type: "dashed" }, label: { formatter: T("split.mark"), color: css("--accent") },
+        // SP-533: day ends that don't make the trip's days aren't used (equal km): drawn grey, 「未套用」
+        data: [...SPLITS.map((x) => splitsUsed() ? { xAxis: x }
+          : { xAxis: x, lineStyle: { color: css("--muted"), type: "dashed" }, label: { formatter: T("split.unused"), color: css("--muted") } }), ...candLines] } : undefined });
     const st = stopsOf();
     if (st.length) {
       const zAt = (k) => { const i = pr.km.findIndex((x) => x >= k); return i <= 0 ? pr.z[Math.max(0, i)] : pr.z[i - 1] + (pr.z[i] - pr.z[i - 1]) * (k - pr.km[i - 1]) / ((pr.km[i] - pr.km[i - 1]) || 1); };
@@ -1903,14 +2319,14 @@ function renderProfile() {
     (m !== "pace" && R.some((r) => M.val(r) == null) ? `<span>${esc(T(m === "power" ? "legend.gap_power" : "legend.gap_hr"))}</span>` : "") +
     // SP-224: one HR cap for the whole race; late in a trail race HR drops by itself (Kerhervé 2015)
     (m === "hr" && P.type === "trail" ? `<span>${esc(T("legend.hr_fade"))}</span>` : "") +
-    (P.summary.runwalk && !hike ? `<span class="faint">${esc(T(P.summary.runwalk.personal ? "rw.legend_you" : "rw.legend_default"))}</span>` : "");
+    (P.summary.runwalk && !hike ? `<span class="faint">${esc(T(P.summary.runwalk.personal ? "rw.legend_you" : "rw.legend_default"))}</span>` : "") +
+    (GL.length ? GTIERS.filter((t) => GL.some((x) => x.tier === t)).map((t) => `<span><i style="background:${css("--g-" + t)};opacity:.55"></i>${esc(T("group.legend", { t: gTier(t) }))}</span>`).join("") : "");
   const c = chart("profile");
   c.getZr().off("click");
   c.getZr().on("click", (ev) => {
     if (!c.containPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY])) return;
     const p = c.convertFromPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY]); if (!p) return;
     const k = p[0]; if (!(k >= 0 && k <= km)) return;
-    if (hike && $("splitmode").checked) { SPLITS = [...SPLITS, +k.toFixed(2)].sort((a, b) => a - b); saveEventSplits(); schedule(); return; }
     const r = rowAt(k); if (r) { pickSeg(r.i, !!ev.event?.shiftKey); const row = document.querySelector(`#segcmp [data-row="${r.i}"]`); if (row) row.scrollIntoView({ block: "nearest" }); }
   });
   // synced hover with the course map: the chart's axis pointer moves the map marker
@@ -1977,6 +2393,7 @@ function renderCourseMap() {
     L.control.scale({ imperial: false }).addTo(map);
     CMAP = { map, key, ll, km: pr.km, z: pr.z, rkey: null, fitted: false,
       route: L.layerGroup().addTo(map), hl: L.layerGroup().addTo(map), marks: L.layerGroup().addTo(map),
+      ground: L.layerGroup().addTo(map),
       marker: MapLayers.marker(), near: MapLayers.picker(map, ll) };
     const fit = () => { if (!CMAP.fitted && el.clientWidth) { map.fitBounds(L.latLngBounds(ll), { padding: [16, 16] }); CMAP.fitted = true; } };
     fit();
@@ -2013,12 +2430,91 @@ function renderCourseMap() {
   CMAP.route.eachLayer((l) => l.bringToFront?.());
   // aid stations (the editor's rows) and the GPX's own waypoints
   CMAP.marks.clearLayers();
-  for (const w of P.wpts || []) if (ok(w.lat) && ok(w.lon))
-    L.circleMarker([w.lat, w.lon], { radius: 4, color: "#fff", weight: 1.5, fillColor: "#6b7280", fillOpacity: 1 })
-      .bindTooltip(`${esc(w.name || "")} · ${f1(w.km)} km`).addTo(CMAP.marks);
+  const wByPlace = new Map();               // SP-533: a waypoint passed twice is one marker with both km
+  for (const w of P.wpts || []) if (ok(w.lat) && ok(w.lon)) {
+    const key = `${w.name}|${w.lat}|${w.lon}`;
+    wByPlace.set(key, [...(wByPlace.get(key) || []), w]);
+  }
+  for (const ws of wByPlace.values()) {
+    const osm = ws[0].src === "osm";        // SP-536: an OSM hut / camp (candidate), not the GPX's own point
+    L.circleMarker([ws[0].lat, ws[0].lon], { radius: 4, color: "#fff", weight: 1.5, fillColor: osm ? "#8b5cf6" : "#6b7280", fillOpacity: 1 })
+      .bindTooltip(`${osm ? "🛖 " : ""}${esc(ws[0].name || (osm ? T("split.osm_noname") : ""))}${osm ? ` (${esc(T(ws[0].kind === "camp_site" ? "split.osm_camp" : "split.osm_hut"))}, © OpenStreetMap contributors)` : ""} · ${ws.map((w) => f1(w.km)).join(" / ")} km`).addTo(CMAP.marks);
+  }
   for (const st of stopsOf())
     L.circleMarker(kmLatLng(st.km), { radius: 7, color: "#fff", weight: 2, fillColor: css("--s3"), fillOpacity: 1 })
       .bindTooltip(`${stopIcon(st.type)} ${esc(stopName(st.type))}${st.name ? " " + esc(st.name) : ""} · ${f1(st.km)} km`).addTo(CMAP.marks);
+  renderGroundMap();                        // SP-543
+}
+// SP-534: the nights of a recorded track (停留 ≥ 6 h or the watch off, 推估): a proposal with 套用 / 不用 —
+// never applied by itself (SP-522 Q1, owner 2026-10-14). 不用 is remembered per file (course_id).
+let NIGHTS = null;
+let CAIRN_NIGHTS = null;                    // SP-537: the nights of the Cairn trip imported last (preview candidates)
+const nightsNo = () => ls.get("overnight_no", []);
+function renderNightsAsk() {
+  const box = $("overnight-ask"), N = NIGHTS;
+  const same = N && SPLITS.length === N.splits_km.length && N.splits_km.every((k, i) => Math.abs(SPLITS[i] - k) < 0.05);
+  const show = S.csrc === "gpx" && COURSE && N && (N.stops || []).length && !same && !nightsNo().includes(COURSE.course_id);
+  box.classList.toggle("hidden", !show);
+  if (!show) { box.innerHTML = ""; return; }
+  const list = N.stops.map((x) => T("overnight.stop", { n: x.night, km: f1(x.km), h: f1(x.hours) })).join(T("overnight.sep"));
+  const ev = (INP?.events || []).find((e) => e.id === COURSE.event_id);
+  const evDays = ev && (ev.days || 1) !== N.days ? `<br><span class="meta">${esc(T("overnight.event_days", { d: ev.days || 1, n: N.days }))}</span>` : "";
+  box.innerHTML = `<b>${esc(T("overnight.found", { n: N.stops.length, days: N.days }))}</b> ${esc(list)}`
+    + `<br><span class="meta">${esc(T("overnight.how", { h: N.min_stop_h }))}</span>${evDays}<br>`
+    + `<button type="button" class="btn primary" id="overnight-yes">${esc(T("overnight.apply", { days: N.days }))}</button>`
+    + `<button type="button" class="btn" id="overnight-no">${esc(T("overnight.no"))}</button>`;
+  $("overnight-yes").onclick = () => openSplitPreview(N);      // SP-535: the preview is the confirmation
+  $("overnight-no").onclick = () => { ls.set("overnight_no", [...nightsNo(), COURSE.course_id].slice(-50)); renderNightsAsk(); };
+}
+// SP-533: day-end candidates = the GPX's camp / hut waypoints, one per pass (an out-and-back passes a
+// hut twice); SP-534: the nights of a recorded track. They are chosen in the day-split preview (SP-535,
+// openSplitPreview), never applied by themselves; the plan uses the day ends only when they make the
+// trip's days (else equal km, 推估 — the server says so).
+const nearSplit = (k) => SPLITS.findIndex((x) => Math.abs(x - k) < 0.05);
+const splitsUsed = () => S.csrc !== "gpx" || SPLITS.length === Math.max(1, num("tripdays") || 1) - 1;
+function splitCands() {
+  const km = PLAN?.summary?.km ?? Infinity;
+  return (PLAN?.wpts || []).filter((w) => w.camp && w.km > 0.05 && w.km < km - 0.05);
+}
+function renderSplitCands() {
+  const box = $("split-cands"), on = PLAN?.type === "baiyue" && S.csrc === "gpx";
+  const C = on ? splitCands() : [], n = Math.max(1, num("tripdays") || 1);
+  const nN = on && NIGHTS ? (NIGHTS.stops || []).length : 0;
+  let h = "";
+  // SP-533 / 534 / 536: how many candidates of each kind (⛺ the GPX's own waypoints, 🛖 the OpenStreetMap
+  // list, 🌙 the recorded nights); they are chosen in the day-split preview
+  const nG = C.filter((w) => w.src !== "osm").length, nO = C.length - nG;
+  if (C.length || nN) h += `<span>${esc(T("split.cands_n", { list: [nG ? `⛺ ${nG}` : "", nO ? `🛖 ${nO}` : "", nN ? `🌙 ${nN}` : ""].filter(Boolean).join(" · ") }))}</span>`;
+  if (nO) h += `<span class="osm-attr">${esc(T("split.osm_note"))} <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></span>`;
+  if (on && SPLITS.length && SPLITS.length !== n - 1) h += `<div class="warn">${esc(T("split.mismatch", { k: SPLITS.length, n, m: n - 1 }))}</div>`;
+  else if (on && !SPLITS.length && n > 1) h += `<div class="warn">${esc(T("split.equal", { n }))}</div>`;   // SP-522 Q1 (4a)
+  box.innerHTML = h;
+  box.classList.toggle("hidden", !h);
+}
+// SP-535: the day-split preview (static/daysplit.js — the same dialog as 賽季計畫): candidate buttons, a
+// tap / drag on its profile, each day's km / climb / moving time as the day ends move (the time: this
+// result's segment times shared out, 推估). The day ends and the days change only on 確定.
+async function openSplitPreview(N) {
+  const segs = PLAN?.segments || [];
+  if (!COURSE || S.csrc !== "gpx" || !segs.length) return;
+  const by = PLAN.type === "baiyue";
+  const r = await DaySplit.open({
+    name: COURSE.name, days: Math.max(1, num("tripdays") || 1), splits: SPLITS, total: PLAN.summary?.km ?? COURSE.km,
+    profile: PLAN.profile || { km: [], z: [] },
+    pieces: segs.map((x) => [x.start_km, x.end_km, x.gain_m || 0, x.loss_m || 0, by ? x.t : undefined]),
+    candidates: [...splitCands().map((w) => w.src === "osm"     // SP-536: the OpenStreetMap list, credited in the preview
+        ? { km: w.km, kind: "hut", src: "osm", osm_kind: w.kind, name: w.name, name_en: w.name_en, pass: w.pass, passes: w.passes }
+        : { km: w.km, kind: "camp", name: w.name, pass: w.pass, passes: w.passes }),
+      ...((NIGHTS && NIGHTS.stops) || []).map((x) => ({ km: x.km, kind: "night", night: x.night, hours: x.hours })),
+      ...(CAIRN_NIGHTS || []).map((x) => ({ km: x.km, kind: "cairn", night: x.night, name: x.name }))],
+    // SP-537: a Cairn import's nights are the day ends already (applied as is); the preview edits them
+    applied: CAIRN_NIGHTS && CAIRN_NIGHTS.length ? "cairn" : null,
+    proposal: N ? { kind: "night", splits: N.splits_km, days: N.days } : null,
+  });
+  if (!r) return;
+  if (type !== "baiyue") setType("baiyue");
+  SPLITS = r.splits; $("tripdays").value = r.days;
+  saveEventSplits(); renderNightsAsk(); schedule();
 }
 // the compact table under the chart: each segment's target pace / power / HR, split and fuelling
 function renderSegCompact() {
@@ -2243,7 +2739,7 @@ function renderCP() {
     ${(INP.cp.tests || []).map((t) => `<div class="note">${esc(t.estimate.cp != null
       ? T("cp.test_mftp", { date: t.date, label: t.estimate.label, cp: W(t.estimate.cp) })
       : T("cp.test_nofit", { date: t.date, note: t.estimate.note || "" }))}</div>`).join("")}
-    <div class="note">預設：PD 模型（算法參考 WKO5，用近 90 天 mean-max 含同步的 FIT 重算）的模型閾值功率（Modelled threshold power）／TTE 當長時間的錨點，20 分鐘以內用 CP 測試的 CP＋無氧容量；低於下限時提高到下限。</div>`;
+    <div class="note">預設：PD 模型（用近 90 天 mean-max 含同步的 FIT 重算）的模型閾值功率（Modelled threshold power）／TTE 當長時間的錨點，20 分鐘以內用 CP 測試的 CP＋無氧容量；低於下限時提高到下限。</div>`;
 }
 function renderRiegel() {
   const r = INP.riegel, env = INP.envelope;
@@ -2546,7 +3042,7 @@ function restore(x) {
   if (!x || typeof x !== "object") return;
   Object.keys(S).forEach((k) => delete S[k]);
   Object.assign(S, { mode: "auto", tunit: "time", punit: "w", effort: 1, csrc: "manual", split: "grade", strategy: "even", amount: null,
-    measure: "pace", accl: null, hup: 5, hdown: 10, heatAccl: { mode: "auto", s: null }, trip: null, hrband: "aet" }, x.S || {});
+    measure: "pace", hup: 5, hdown: 10, trip: null, hrband: "aet" }, x.S || {});
   setForm(x.form || {});
   Object.keys(ovr).forEach((k) => delete ovr[k]); Object.assign(ovr, x.ovr || {});
   ls.set("prior", x.prior ?? "");
@@ -2632,7 +3128,9 @@ function renderEvents() {
   $("event").onchange = () => chooseEvent($("event").value);
 }
 async function keyStatus() {
-  try { const s = await j(`${API}/weather/key`); $("cwastatus").textContent = s.configured ? `已設定 ${s.masked}（${s.source}）` : "未設定"; } catch {}
+  // SP-552: a tenant other than the owner never sees the key, only that the site has one (shared CWA cache)
+  try { const s = await j(`${API}/weather/key`); $("cwastatus").textContent = s.configured ? T("env.cwa_set", { masked: s.masked, source: s.source })
+    : s.shared ? T("env.cwa_shared") : T("env.cwa_unset"); } catch {}
 }
 $("cwasave").onclick = async () => {
   try { const s = await post(`${API}/weather/key`, { key: $("cwakey").value }); $("cwakey").value = "";
@@ -2649,7 +3147,6 @@ bindSeg("mode", "m", "mode"); bindSeg("tunit", "u", "tunit"); bindSeg("punit", "
 bindSeg("csrc", "c", "csrc", (x) => x, () => { LOCKS = {}; }); bindSeg("split", "s", "split", (x) => x, () => { LOCKS = {}; });
 bindSeg("strategy", "k", "strategy", (x) => x, () => { S.amount = null; });
 document.querySelectorAll("#measure button").forEach((b) => b.onclick = () => { S.measure = b.dataset.m; saveUI(); if (PLAN) { renderProfile(); renderSegCompact(); } });
-bindSeg("accl", "a", "accl");
 // SP-250 路況: clicking the chosen one again clears it (no choice = the pooled factor, as before)
 document.querySelectorAll("#surface button").forEach((b) => b.onclick = () => {
   S.surface = S.surface === b.dataset.s ? null : b.dataset.s; renderSurface(); schedule(); });
@@ -2661,12 +3158,8 @@ function renderSurface() {
     ? T(sf.total_from_hr ? "surface.meta_hr" : "surface.meta", { dry: sf.n?.dry ?? 0, wet: sf.n?.wet ?? 0 }) : "";
 }
 bindSeg("tripkind", "k", "trip"); bindSeg("hrband", "b", "hrband");
-document.querySelectorAll("#heat-accl button").forEach((b) => b.onclick = () => {
-  S.heatAccl = { mode: b.dataset.h, s: b.dataset.h === "custom" ? (num("heat-s") ?? 50) / 100 : null };
-  if (b.dataset.h === "custom" && $("heat-s").value === "") $("heat-s").value = 50;
-  syncForm(); schedule(); });
-$("heat-s").addEventListener("input", () => { S.heatAccl = { mode: "custom", s: (num("heat-s") ?? 0) / 100 }; schedule(); });
 ["tripdays", "packdays", "heatz"].forEach((id) => $(id).addEventListener("input", schedule));
+["tripdays", "days"].forEach((id) => $(id).addEventListener("input", renderDayStarts));     // SP-580
 $("date").addEventListener("change", () => { loadHeat(); autoWeather(); });
 $("latlon").addEventListener("change", () => autoWeather());
 
@@ -2748,11 +3241,13 @@ $("peak").addEventListener("change", () => { const l = getLoc(); if (l?.elevatio
 $("wx").onclick = () => { ["t-t", "t-rh"].forEach((id) => $(id).classList.remove("ovr")); getWeather(); };
 $("env-edit").onclick = () => { const d = $("env-adv"); d.open = !d.open; if (d.open) d.scrollIntoView({ block: "nearest" }); };
 $("gpxfile").addEventListener("change", (e) => uploadGpx(e.target.files[0]));
+$("cairn-go").addEventListener("click", importCairn);
+$("cairn-url").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); importCairn(); } });
 const drop = $("drop");
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); uploadGpx(e.dataTransfer.files[0]); });
-$("clearsplits").onclick = () => { SPLITS = []; saveEventSplits(); schedule(); };
+$("splitpreview").onclick = () => openSplitPreview();
 $("unlock").onclick = () => { LOCKS = {}; schedule(); };
 $("gm-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderGM(); });
 $("cad-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderCad(); });
@@ -2770,7 +3265,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   if (!loadForm()) { $("dist").value = 21.0975; $("gain").value = 0; }
   // SP-485: 提示多寡 (one request; offline / failed → 標準); a result already drawn is drawn again with it
   if (window.Hints) Hints.state().then((st) => { HL = st; if (PLAN) { try { renderAll(); } catch (err) { console.warn(err); } } });
-  const [ps, gb] = await Promise.all([j("/api/v1/wko5/primary-sport").catch(() => null), j(`${API}/goal-basis`).catch(() => null)]);
+  const [ps, gb] = await Promise.all([j("/api/v1/app/primary-sport").catch(() => null), j(`${API}/goal-basis`).catch(() => null)]);
   BASIS = gb;
   SPORT = ps?.sport || "trail";
   if (SPORT === "road" && type !== "road") { type = "road"; $("gain").value = 0; }

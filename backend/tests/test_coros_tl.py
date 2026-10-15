@@ -542,7 +542,7 @@ def test_sync_stores_and_backfills_training_load(tmp_path, _fit_root_in_tmp):
 
 @pytest.mark.parametrize("rel", ["static/racepower.html", "static/i18n/zh-TW/racepower.json", "api/racepower.py",
                                  "engine/racepower/watch_export.py", "engine/workout_templates.py",
-                                 "engine/workout_steps.py", "static/workout_editor.js", "demo/static_shim.js"])
+                                 "engine/workout_steps.py", "static/workout_editor.js"])
 def test_lap_wording_renamed(rel):
     txt = (ROOT / rel).read_text(encoding="utf-8")
     assert "按圈" not in txt.replace("直到按下計圈", "").replace("按下計圈", "")

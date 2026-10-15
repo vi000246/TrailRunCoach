@@ -66,7 +66,8 @@ def test_b_race_week_rules():
     assert out[0]["kind"] == "easy" and out[1]["kind"] == "long"
 
 
-@pytest.mark.parametrize("kw, days, a_like", [(SHORT, 3, False), (MEDIUM, 5, False), (MARA, 7, True)])
+# SP-525: 中 = one easy day per 3 km of EP (21 km + 800 m → EP 29 → 10), at most the A race's 7
+@pytest.mark.parametrize("kw, days, a_like", [(SHORT, 3, False), (MEDIUM, 7, False), (MARA, 7, True)])
 def test_b_recovery_by_size(kw, days, a_like):
     b = ev("b", "2026-10-10", **kw)                              # Sat; the next week holds its recovery
     w = PR.b_windows([b], MON)
@@ -259,7 +260,7 @@ def test_week_plan_and_projection_show_the_taper_hint():
 def test_b_windows_markers_by_size():
     w = P.b_event_windows([ev("b", "2026-10-17", **MEDIUM)])
     rec = next(x for x in w if x["kind"] == "mini_recovery")
-    assert rec["end"] == "2026-10-22" and "恢復 5 天" in rec["text"]
+    assert rec["end"] == "2026-10-24" and "恢復 7 天" in rec["text"]          # SP-525: EP 29 ÷ 3 → ≤ 7
 
 
 def test_week_plan_and_projection_with_a_b_race():

@@ -61,12 +61,12 @@ def test_default_source_is_still_the_wko5_folder(isolated, monkeypatch):
 def test_viewer_has_the_sport_chip_and_settings_switches_the_source():
     """SP-381: the viewer's top right switches 專項 (主要訓練項目), not the data source; the source
     is chosen in 設定 › 資料同步 (s-chart), which says it is live."""
-    html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
+    html = (STATIC / "charts.html").read_text(encoding="utf-8")
     assert '<span id="sport-chip"></span>' in html and "/api/v1/static/sportchip.js" in html
     assert "sourcechip.js" not in html
     js = (STATIC / "sportchip.js").read_text(encoding="utf-8")
     assert 'const SPORTS = ["auto", "trail", "road"];' in js
-    assert "/api/v1/wko5/primary-sport" in js and "primary_sport: sel.value" in js and "location.reload()" in js
+    assert "/api/v1/app/primary-sport" in js and "primary_sport: sel.value" in js and "location.reload()" in js
     import json
     for loc in ("zh-TW", "en"):
         cat = json.loads((STATIC / "i18n" / loc / "common.json").read_text(encoding="utf-8"))
@@ -77,7 +77,7 @@ def test_viewer_has_the_sport_chip_and_settings_switches_the_source():
 
 
 def test_viewer_tooltip_units_follow_the_echarts_series():
-    html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
+    html = (STATIC / "charts.html").read_text(encoding="utf-8")
     # units / stack total from the source of out[i], not series[i] (vlines are skipped on category axes)
     assert "srcOf[p.seriesIndex]" in html and "srcOf[g[0].seriesIndex]" in html
     assert "series[p.seriesIndex]" not in html and "series[g[0].seriesIndex]" not in html

@@ -227,7 +227,7 @@ def test_only_the_comparison_panel_imports_itself():
 # ---- the pages -----------------------------------------------------------------------
 
 def test_viewer_and_editor_wiring_and_i18n():
-    viewer = (ROOT / "static" / "wko5_viewer.html").read_text(encoding="utf-8")
+    viewer = (ROOT / "static" / "charts.html").read_text(encoding="utf-8")
     assert "pole_compare.js" in viewer and '"polecompare"].includes(c.kind)' in viewer
     assert "(!c.needs || c.needs_met)" in viewer and "drawPoleCompare(box, res)" in viewer
     js = (ROOT / "static" / "pole_compare.js").read_text(encoding="utf-8")

@@ -94,6 +94,34 @@ def active_tenants(days: int = 7) -> list[tenancy.Tenant]:
     return [t for _last, t in sorted(out, key=lambda x: -x[0])]
 
 
+def last_visits() -> dict[str, float]:
+    """tenant id -> when (epoch s) someone last used it: its newest sign-in or session in use
+    (store.last_seen slides at most once an hour). Syncs do not count — the background sync
+    (sync/background.py, SP-499) picks its interval from this, and its own runs must not keep an
+    account "in use". Users only (the owner is always in use); {} in single-user mode or when
+    accounts.db is unreadable."""
+    import datetime as dt
+    if not accounts.enabled():
+        return {}
+
+    def epoch(iso) -> float:
+        try:
+            t = dt.datetime.fromisoformat(iso)
+        except (TypeError, ValueError):
+            return 0.0
+        return (t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)).timestamp()
+    out: dict[str, float] = {}
+    try:
+        seen = store.last_seen()
+        for u in store.users():
+            if not u.is_owner:
+                out[tenant_of(u).id] = max(epoch(u.last_login_at), epoch(seen.get(u.id)))
+    except Exception as e:                       # noqa: BLE001
+        log.warning("accounts.db unreadable, no visit times: %s", type(e).__name__)
+        return {}
+    return out
+
+
 def sync_tenants() -> list[tenancy.Tenant]:
     """Every tenant whose daily sync the scheduler checks: the owner, plus in multi-user mode
     every enabled user (each reads its own sync.schedule.daily_time; a user without one is

@@ -1,6 +1,6 @@
 """workout_files rows: the user's trail / road override (activity.html), and the
 activity tags' store (save_activity_tag: the wko5views activity routes, PATCH
-/api/v1/wko5/workouts/{i}/activity and /api/v1/wko5/activities, are its callers).
+/api/v1/app/workouts/{i}/activity and /api/v1/app/activities, are its callers).
 The React SPA's GET list / detail / mmp / timeseries / zones / trail routes were
 removed with it (2026-10-04); its PATCH /{id}/activity, which no page called,
 on 2026-10-12 (SP-48)."""

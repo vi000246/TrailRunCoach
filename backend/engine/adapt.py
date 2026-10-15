@@ -27,10 +27,12 @@ Rules (thresholds: source or 推估):
      come from the real data).
        偏強 — label only, overhard(): avg power > 80 % CP (zones z2 upper bound, Palladino 1C)
          or TSS > planned + 20 % (TrainingPeaks compliance green band, engine/compliance.py;
-         the plan's easy rate is the easy-only one since SP-302). The old AeT+3 heart-rate
-         condition is gone (summer heat put easy runs over it on HR alone); a run without power
-         reads avg HR > 94 % LTHR instead of the power line (above Friel run Zone 3; lenient,
-         推估; the user 2026-10-06) — with power, HR is not used at all. The done session gets
+         the plan's easy rate is the easy-only one since SP-302). A run without power reads its
+         average HR instead of the power line: above the easy-run cap + 3 bpm (SP-565, owner
+         2026-10-14: one 「輕鬆」 — hr_profile.easy_cap_for / over_easy, the 課表's cap = the Z2
+         top of the zones in effect, a measured AeT when there is one, + HR's day-to-day spread;
+         the activity review's 「輕鬆」 is the same line). It was avg HR > 94 % LTHR from
+         2026-10-06 (SP-301) and AeT + 3 before. With power, HR is not used at all. The done session gets
          「輕鬆跑偏強（…）：只標示，課表不變」; no session changes (no move, no step-down, no
          trimmed easy runs).
        太強 — schedule change, too_hard(): the session classifier (workout_review.classify,
@@ -70,7 +72,7 @@ Rules (thresholds: source or 推估):
      OVERHARD_STREAK (2) both too hard -> the quality steps down to the recovery fartlek and easy
      minutes × 0.8 (no session is cancelled: that stays for TSB / ramp, which win when they
      fire too — one change per session). Too hard = rule D's 太強 (the classifier's hard class)
-     or 偏強 (power > 80 % CP, TSS > planned + 20 %, HR > 94 % LTHR without power) on an easy
+     or 偏強 (power > 80 % CP, TSS > planned + 20 %, HR > the easy cap + 3 without power) on an easy
      run, or a self-rating ≥ Hard (rpe_hard, when `rpe_rule` is on) on an easy or long run.
      With low optical-HR quality (done_by.hr_quality "low", SP-402's — as compliance's `uncertain`) a 偏強
      read from HR alone does not count. Hard sessions, strength and skipped sessions in
@@ -93,6 +95,7 @@ import datetime as dt
 from typing import Optional
 
 from backend.engine import load_guard as LG
+from backend.engine import hr_profile as HP
 from backend.engine.hr_profile import easy_cap_label
 from backend.i18n import N_, _, fmt
 
@@ -102,8 +105,6 @@ SIDE = ("strength", "heat_passive", "notice")
 # D. easy run done too hard (SP-301): 偏強 = power or TSS, either alone (label only); 太強 = the
 # session classifier's hard class (moves / steps down the next hard session). Two tiers: 推估
 EASY_POWER_CAP = 0.80      # zones.py z2 upper bound (Palladino 1C: 75–80 % CP)
-EASY_HR_LTHR = 0.94        # no power only (the user 2026-10-06): above Friel run Zone 3 (90–94 % LTHR,
-                           # zones.FRIEL_HR) = into Zone 4; lenient on purpose (heat); 推估
 OVER_TSS = 0.20            # compliance.COMPLIANCE["green"] (TrainingPeaks ±20 %)
 TOO_HARD_TYPES = ("quality", "hard_long", "test_cp")    # = workout_review.HARD_TYPES (Zone 3 / Zone 5 …)
 TOO_HARD_LABEL = {"z3": N_("閾值課"), "z5": N_("VO2max 課"), "hard_long": N_("高強度長跑"), "test_cp": N_("CP 測試")}
@@ -117,7 +118,8 @@ OVERHARD_STREAK = 2        # 推估 (SP-404): the last two done easy / long runs
 SRC_SEILER = "Seiler：easy days easy；不補課屬推估"
 SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練（5 區一週最多 2 次、間隔至少 2 天）"
 SRC_OVER = N_("平均功率 > 80% CP（z2 上限，Palladino）或訓練負荷（Training load）> 計畫 +20%（TrainingPeaks 達成度綠燈帶），"
-              "任一項；沒有功率時改看平均心率 > LTHR 的 94%（超過 Friel 跑步 Zone 3，推估）；"
+              "任一項；沒有功率時改看平均心率 > 輕鬆跑上限 +3（跟課表、活動判讀同一個上限：課表心率區間的 Z2 上緣，"
+              "有實測 AeT 時用實測值；+3 是心率每天自然的落差）；"
               "只標示、不動課表屬推估（使用者決定 2026-10-06）")
 SRC_TOO_HARD = N_("課別分類（Zone 3 閾值或更強）跑成強度課，就當成一堂強度課：Seiler「easy days easy」；"
                   "用課別分類當「太強」的界線屬推估")
@@ -148,9 +150,10 @@ def _gap(a: str, b: str) -> int:
 
 def overhard(planned_tss: Optional[float], r: Optional[dict], hr: bool = True) -> Optional[str]:
     """Why a done easy run was 偏強 (rule D's label-only tier), or None. `r`: {avg_power, cp,
-    avg_hr, lthr, tss}. SP-301: avg power > 80 % CP or TSS > planned + 20 %, either one; a run
-    without power (no avg power or no CP) reads avg HR > 94 % LTHR instead of the power line
-    (the user 2026-10-06; no time-share condition). With power, HR is not used at all.
+    avg_hr, easy_cap, tss} (api/plan_sessions._adapt_ctx: workout_review.measure's row). SP-301: avg
+    power > 80 % CP or TSS > planned + 20 %, either one; a run without power (no avg power or no CP)
+    reads avg HR > the easy-run cap + 3 instead of the power line (SP-565: hr_profile.over_easy, the
+    課表's and the review's 「輕鬆」; no time-share condition). With power, HR is not used at all.
     `hr` False: the HR line is not read (rule E's streak on a run with low HR quality, SP-404)."""
     if not r:
         return None
@@ -160,14 +163,19 @@ def overhard(planned_tss: Optional[float], r: Optional[dict], hr: bool = True) -
             return _("平均功率 {p:.0f} W > {pct:.0f}% CP（{w:.0f} W）", p=p, pct=EASY_POWER_CAP * 100,
                      w=EASY_POWER_CAP * cp)
     elif hr:
-        ahr, lthr = r.get("avg_hr"), r.get("lthr")
-        if ahr and lthr and ahr > EASY_HR_LTHR * lthr:
-            return _("平均心率 {hr:.0f} > LTHR 的 {pct:.0f}%（{bpm:.0f} bpm；沒有功率才看心率）", hr=ahr,
-                     pct=EASY_HR_LTHR * 100, bpm=EASY_HR_LTHR * lthr)
+        ahr, cap = r.get("avg_hr"), _cap_bpm(r.get("easy_cap"))
+        if HP.over_easy(ahr, cap):
+            return _("平均心率 {hr:.0f} > 輕鬆跑上限 {cap:.0f}+3（沒有功率才看心率）", hr=ahr, cap=cap)
     t = r.get("tss")
     if t and planned_tss and t > planned_tss * (1 + OVER_TSS):
         return _("負荷 {t:.0f} > 計畫 {plan:.0f} 的 +{pct:.0f}%", t=t, plan=planned_tss, pct=OVER_TSS * 100)
     return None
+
+
+def _cap_bpm(cap) -> Optional[float]:
+    """The easy cap in bpm: workout_review's easy_cap dict (hr_profile.easy_cap) or a number."""
+    v = cap.get("value") if isinstance(cap, dict) else cap
+    return float(v) if v else None
 
 
 def too_hard(r: Optional[dict]) -> Optional[str]:

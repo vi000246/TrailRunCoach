@@ -34,9 +34,9 @@ PAGES = {
     "compliance": "/api/v1/overview/plan/compliance/page",
     "plan": "/api/v1/plan/page",
     "racepower": "/api/v1/racepower/page",
-    "settings": "/api/v1/wko5/settings",
-    "activity": "/api/v1/wko5/activities/page",
-    "viewer": "/api/v1/wko5/viewer",
+    "settings": "/api/v1/app/settings",
+    "activity": "/api/v1/app/activities/page",
+    "viewer": "/api/v1/app/viewer",
     "routes": "/api/v1/routes/page",
 }
 

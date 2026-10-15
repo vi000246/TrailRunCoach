@@ -6,8 +6,11 @@ filling in old history.
 
 Each file, in the order sent (one bad file never fails the others):
 
-  1. the name says FIT (.fit / .fit.gz) — anything else is `skipped` (the page lists it)
-  2. at most MAX_FILE_BYTES (also after gunzip), not empty, a FIT header (".FIT" at byte 8)
+  1. the name says FIT (.fit / .fit.gz) or a track file (.tcx / .gpx, also gzipped: SP-349, what
+     Garmin's and TrainingPeaks' exports hold besides FIT) — anything else is `skipped` (the page
+     lists it)
+  2. at most MAX_FILE_BYTES (a track file MAX_TRACK_BYTES; also after gunzip), not empty; a track
+     file is turned into a FIT here (files/track_fit.py); a FIT header (".FIT" at byte 8)
   3. the same content already an activity (its sha256 names the object, SP-308) -> `duplicate`
      (same_file); nothing parsed, nothing stored: uploading the same folder again is cheap
   4. parsed once (fit_reader.parse_fit_bytes); an activity file (file_id type activity or
@@ -52,10 +55,14 @@ from backend.files import fitstore
 log = logging.getLogger(__name__)
 
 SOURCE = "upload"                       # workout_files.source of an imported file
-EXTS = (".fit", ".fit.gz")
+FIT_EXTS = (".fit", ".fit.gz")
+TRACK_EXTS = (".tcx", ".tcx.gz", ".gpx", ".gpx.gz")     # turned into FIT (SP-349, files/track_fit.py)
+EXTS = FIT_EXTS + TRACK_EXTS
 # FIT files are small: the owner's median is 93 KB, 3 years 118 MB in 641 files (SP-319 §1); a
 # multi-day trip recorded every second is the big case (a few MB). 推估 with a wide margin.
 MAX_FILE_BYTES = 20 * 1024 * 1024       # one file (and its FIT after gunzip)
+# a TCX / GPX holds ~5–10× the bytes of the same FIT (XML per point): a 30-hour race at 1 s ≈ 45 MB
+MAX_TRACK_BYTES = 64 * 1024 * 1024
 MAX_FILES = 20                          # files per request
 MAX_REQUEST_BYTES = 100 * 1024 * 1024   # one request's body (refused above it)
 MAX_SELECT = 3000                       # files per pick in the page (≈ 10 years of a heavy user)
@@ -83,13 +90,25 @@ class UploadBusy(RuntimeError):
 
 def limits() -> dict:
     """The caps the page batches by (GET /sync/upload/fit)."""
-    return {"max_file_bytes": MAX_FILE_BYTES, "max_files": MAX_FILES, "max_request_bytes": MAX_REQUEST_BYTES,
-            "batch_bytes": BATCH_BYTES, "max_select": MAX_SELECT, "exts": list(EXTS)}
+    return {"max_file_bytes": MAX_FILE_BYTES, "max_track_bytes": MAX_TRACK_BYTES, "max_files": MAX_FILES,
+            "max_request_bytes": MAX_REQUEST_BYTES, "batch_bytes": BATCH_BYTES, "max_select": MAX_SELECT,
+            "exts": list(EXTS)}
 
 
 def is_fit_name(name: str) -> bool:
+    """A name this import takes: FIT, or a TCX / GPX track file (gzipped too)."""
     n = (name or "").strip().lower()
     return any(n.endswith(e) for e in EXTS)
+
+
+def is_track_name(name: str) -> bool:
+    n = (name or "").strip().lower()
+    return any(n.endswith(e) for e in TRACK_EXTS)
+
+
+def max_bytes(name: str) -> int:
+    """The size cap of one file of this name (and of its content after gunzip)."""
+    return MAX_TRACK_BYTES if is_track_name(name) else MAX_FILE_BYTES
 
 
 _BUSY: set[str] = set()
@@ -115,23 +134,42 @@ class _Bad(Exception):
         self.reason = reason
 
 
+def _gunzip(blob: bytes, cap: int) -> bytes:
+    """`blob` with gzip unpacked, never inflated past `cap` (a gzip bomb); _Bad otherwise."""
+    if blob[:2] != fitstore.GZIP_MAGIC:
+        return blob
+    d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    try:
+        raw = d.decompress(blob, cap + 1)
+    except zlib.error:
+        raise _Bad(NOT_FIT)
+    if len(raw) > cap or d.unconsumed_tail:
+        raise _Bad(TOO_LARGE)
+    if not d.eof:
+        raise _Bad(NOT_FIT)                       # a cut / broken gzip
+    if not raw:
+        raise _Bad(EMPTY)
+    return raw
+
+
+def _track_fit(blob: bytes, name: str) -> bytes:
+    """A TCX / GPX file (gzip unpacked, at most MAX_TRACK_BYTES) as FIT bytes; _Bad otherwise
+    (CPU: run in a thread)."""
+    from backend.files import track_fit
+    if not blob:
+        raise _Bad(EMPTY)
+    raw = _gunzip(blob, MAX_TRACK_BYTES)
+    try:
+        return track_fit.to_fit(raw, track_fit.kind_of(name))
+    except track_fit.TrackError as e:
+        raise _Bad(e.reason)
+
+
 def _fit_bytes(blob: bytes) -> bytes:
     """The FIT bytes of an uploaded file (gzip unpacked, at most MAX_FILE_BYTES); _Bad otherwise."""
     if not blob:
         raise _Bad(EMPTY)
-    if blob[:2] == fitstore.GZIP_MAGIC:
-        d = zlib.decompressobj(16 + zlib.MAX_WBITS)
-        try:
-            raw = d.decompress(blob, MAX_FILE_BYTES + 1)
-        except zlib.error:
-            raise _Bad(NOT_FIT)
-        if len(raw) > MAX_FILE_BYTES or d.unconsumed_tail:
-            raise _Bad(TOO_LARGE)                 # never inflated past the cap (a gzip bomb)
-        if not d.eof:
-            raise _Bad(NOT_FIT)                   # a cut / broken gzip
-        blob = raw
-        if not blob:
-            raise _Bad(EMPTY)
+    blob = _gunzip(blob, MAX_FILE_BYTES)
     if len(blob) < 12 or blob[0] not in (12, 14) or blob[8:12] != b".FIT":
         raise _Bad(NOT_FIT)
     return blob
@@ -221,10 +259,14 @@ async def import_one(db: AsyncSession, athlete_id: int, f: Incoming, folder: str
     out = {"name": f.name, "status": FAILED, "reason": None, "date": None, "sport": None, "of": None}
     if not is_fit_name(f.name):
         return {**out, "status": SKIPPED, "reason": NOT_FIT}
-    if f.data is None or f.size > MAX_FILE_BYTES or len(f.data) > MAX_FILE_BYTES:
+    cap = max_bytes(f.name)
+    if f.data is None or f.size > cap or len(f.data) > cap:
         return {**out, "reason": TOO_LARGE}
     try:
-        raw = _fit_bytes(f.data)
+        if is_track_name(f.name):
+            raw = _fit_bytes(await asyncio.to_thread(_track_fit, f.data, f.name))
+        else:
+            raw = _fit_bytes(f.data)
     except _Bad as e:
         return {**out, "reason": e.reason}
     sha = fitstore.sha256_hex(raw)
@@ -272,8 +314,9 @@ async def _incoming(u) -> Incoming:
     size = int(getattr(u, "size", None) or 0)
     if not is_fit_name(name):
         return Incoming(name, b"", size)
-    data = await u.read(MAX_FILE_BYTES + 1)
-    return Incoming(name, data if len(data) <= MAX_FILE_BYTES else None, max(size, len(data)))
+    cap = max_bytes(name)
+    data = await u.read(cap + 1)
+    return Incoming(name, data if len(data) <= cap else None, max(size, len(data)))
 
 
 async def import_files(db: AsyncSession, athlete_id: int, files: Iterable) -> dict:

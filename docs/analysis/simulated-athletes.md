@@ -74,14 +74,14 @@
 
 ### 2.1 多租戶
 
-- **用什麼分辨是誰的資料**：只有 cookie。owner 模式（自架的正常 app）每個請求都是同一位 owner，middleware 不做事（`backend/tenancy_mw.py:215-217`）。demo 模式（`WKO5COACH_MODE=demo`）看 `trc_demo` cookie 找訪客的 sandbox，沒有 cookie 就讀共用的 demo base（`tenancy_mw.py:247-248`）。
+- **用什麼分辨是誰的資料**：只有 cookie。owner 模式（自架的正常 app）每個請求都是同一位 owner，middleware 不做事（`backend/tenancy_mw.py:215-217`）。demo 模式（`TRC_MODE=demo`）看 `trc_demo` cookie 找訪客的 sandbox，沒有 cookie 就讀共用的 demo base（`tenancy_mw.py:247-248`）。
 - **資料放在哪**：`Tenant(id, kind, root, shared, caps, wko5_dir)`（`backend/tenancy.py:53-67`）。
   - `root` 放可寫的：`wko5coach.db`、`plan.json`。
   - `shared` 放大的、幾乎唯讀的：`fit/coros/<年>/*.fit`、FIT 解析快取 `cache/fit`、圖表快取 `cache/render`。
-  - owner 的 `root == shared == $WKO5COACH_HOME`（預設 `~/.wko5coach`）。
+  - owner 的 `root == shared == $TRC_HOME`（預設 `~/.trailruncoach`）。
 - **種類**：`owner`、`demo_base`、`demo_sandbox`、`user`。`user` 只是常數，標「later」，**沒有任何地方建立它**（`tenancy.py:13-20`）。
 - **沒有租戶清單**。只有 sandbox 能建立和列出（`backend/demo/sandbox.py:136-167`、`:207-211`）。
-- **一個安裝只有一位運動員**：`athlete_id` 從環境變數 `WKO5COACH_ATHLETE_ID` 讀，預設 1（`backend/db/current.py:21`）。
+- **一個安裝只有一位運動員**：`athlete_id` 從環境變數 `TRC_ATHLETE_ID` 讀，預設 1（`backend/db/current.py:21`）。
 - **沒有角色**：只有能力集合 `ALL_CAPS` 和 `DEMO_CAPS = {plan.write, upload.gpx}`（`tenancy.py:42-47`）。帳號系統（`accounts.db`、`users.role owner|user`）只在 `docs/plans/auth-and-demo.plan.md:427-433` 規劃，沒有 coach 角色。
 
 ### 2.2 demo 示範跑者怎麼產生
@@ -166,12 +166,12 @@
 2. Dataset 只能留 2 個。在本人那台切學員，會把本人的 Dataset 擠掉，回到自己的 dashboard 要重建。
 3. NAS 容器已經頂到 3 GB 過（commit `b4a15cb`）。
 
-建議做法（推估）：新增一個模式，例如 `WKO5COACH_MODE=lab`，結構照抄 demo：
+建議做法（推估）：新增一個模式，例如 `TRC_MODE=lab`，結構照抄 demo：
 
 ```
 <lab-root>/
   athletes/
-    sim-50k-m35/        ← 一位學員 = 一個資料夾，結構和 owner 的 ~/.wko5coach 一樣
+    sim-50k-m35/        ← 一位學員 = 一個資料夾，結構和 owner 的 ~/.trailruncoach 一樣
       wko5coach.db
       plan.json
       fit/coros/<年>/*.fit
@@ -276,7 +276,7 @@
 
 | 項目 | 合成學員（照 demo） | GC 學員（一年） |
 |---|---|---|
-| FIT | 60–100 MB（約 300 次，含 GPS 和 Stryd 欄位；`auth-and-demo.plan.md:236`、`deploy/static/README.md:66`） | 10–30 MB（一年約 100–250 次、中位 61 分鐘；沒有 GPS，每秒約 20–26 bytes，一小時約 70–95 KB） |
+| FIT | 60–100 MB（約 300 次，含 GPS 和 Stryd 欄位；`auth-and-demo.plan.md:236`） | 10–30 MB（一年約 100–250 次、中位 61 分鐘；沒有 GPS，每秒約 20–26 bytes，一小時約 70–95 KB） |
 | FIT 解析快取（npz） | 約 FIT 的 1/3 | 同左 |
 | 圖表快取 | 預熱後數十 MB，上限 300 MB | 同左 |
 | DB＋`plan.json` | < 5 MB | < 5 MB |

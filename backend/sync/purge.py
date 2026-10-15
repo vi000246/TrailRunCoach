@@ -120,6 +120,8 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
                 st.coros_last_sync_at = None
             elif source == "garmin":
                 st.garmin_last_sync_at = None
+            elif source == "intervals":
+                st.intervals_last_sync_at = None
             else:
                 st.last_sync_cursor = None
                 st.last_sync_at = None
@@ -159,7 +161,7 @@ async def source_stats(db: AsyncSession, source: str, athlete_id: int = 1) -> di
         func.count(WorkoutFile.id), func.min(WorkoutFile.workout_date), func.max(WorkoutFile.workout_date))
         .where(WorkoutFile.athlete_id == athlete_id, WorkoutFile.source == db_source))).one()
     fs = storage.folder_stats(source)
-    return {"folder": f"~/.wko5coach/fit/{source}", "files": fs["files"], "bytes": fs["bytes"],
+    return {"folder": f"fit/{source}", "files": fs["files"], "bytes": fs["bytes"],
             "size": storage.human_size(fs["bytes"]), "rows": n,
             "date_from": d0.isoformat() if d0 else None, "date_to": d1.isoformat() if d1 else None}
 

@@ -4,10 +4,11 @@
 
 1. Long days. The target is the race's single-day target (a single-day race's own
    constant, a multi-day trip's per-day average). Each week's long day aims at a share
-   of it (FRAC, 推估: rising from ~50 % to 85 % at week 6 and 90 % at week 4 — the
-   80–100 % band twice in weeks 6–3; 江晏慶「抓比賽距離爬升的七成」 about 1.5 months
-   out, Koop: longest run 20–80 % of the race distance, CTS's biggest block 4–6 weeks
-   out — back-to-back-and-long-day.md §2.2). The existing guardrails still cap it:
+   of it (FRAC, 推估: rising from ~50 % to 75 % at week 6 and 80 % at week 4 — SP-523 lowered the
+   peaks from 85 / 90 % to coaches' ≤ 50k median ~70 % and Koop's 80 % ceiling; 江晏慶「抓比賽距離爬升的
+   七成」 about 1.5 months out, Koop: longest run 20–80 % of the race distance, CTS's biggest block 4–6
+   weeks out — back-to-back-and-long-day.md §2.2, coach-consensus-sp518/C-long-specific-b2b.md §3).
+   The existing guardrails still cap it:
    ≤ +10 % over the longest of the last 30 days (load_guard.LONG_CAP, Frandsen 2025, SP-66; was
    +15 % over 4 weeks, and the 90-min floor no longer lifts it over that), the week's volume, re-entry.
    The recovery weeks are 賽前第 5、3 週 (EASY_WEEKS, FRAC's low points; SP-97): a shorter long day
@@ -24,13 +25,14 @@
    running down at the race's descent grade; the long day asks for the race's per-km
    climb and descent.
 3. The race simulation (Koop / Uphill Athlete: rehearse kit, fuelling and pacing on
-   race-like terrain) 4–3 weeks before: a SUGGESTION in the floating box (like B2B) —
+   race-like terrain) 6 and 4 weeks before (SP-523; 路跑 4 and 3): a SUGGESTION in the floating box (like B2B) —
    one long day at the target (still ≤ +10 %) with the race's fuelling (racepower
    fuel.py), kit and pacing notes; a multi-day trip gets two days.
 
 主要訓練項目 = 路跑 (engine/primary_sport.py; info["sport"] = "road"): no コース定數 — the long
 day follows the race DISTANCE (ROAD_FRAC of the race km, ≤ ROAD_LONG_MAX_KM, Pfitzinger's longest
-runs; ≤ ROAD_LONG_MAX_MIN) at long-run pace (race pace × ROAD_EASY_SLOW, 推估); no 長爬坡反覆 /
+runs; ≤ ROAD_LONG_MAX_MIN) at long-run pace (race pace × ROAD_EASY_SLOW, 推估) — for a race ≤ ROAD_SHORT_KM
+never below the base phase's long run (SP-523: a 10K's share was ~8 km); no 長爬坡反覆 /
 descent session; the race simulation is a long run in race kit, fuelling and pacing on the flat.
 
 Planner hooks (overview.week_plan, projection.project_weeks): plan_context() /
@@ -49,13 +51,21 @@ from backend.i18n import N_, _
 WEEKS = (3, 10)                     # 專項期 weeks before the race (planning: 8-week specific + 14-day taper)
 # 推估. The low points (賽前第 5、3 週) are the 專項期's recovery weeks (EASY_WEEKS, SP-97): there the
 # long day is overview.recovery_long_minutes (65 % of the usual, ≤ this share); the share stays for
-# a week 5 / 3 that isn't one (the week right after another recovery-like week)
-FRAC = {10: 0.50, 9: 0.55, 8: 0.60, 7: 0.70, 6: 0.85, 5: 0.70, 4: 0.90, 3: 0.70}
+# a week 5 / 3 that isn't one (the week right after another recovery-like week).
+# SP-523 (owner 2026-10-14; coach-consensus-sp518/C-long-specific-b2b.md §3.3, §3.8): the peaks lowered from
+# 85 / 90 % (weeks 6 / 4) to 75 / 80 % and 70 → 65 % around them — coaches' longest run for a ≤ 50k trail race
+# is 55–90 %, median ~70 % (江晏慶 七成, Koop ≤ 80 %, Torrence 50k 3–4 h ≈ 55–65 % of the race time); the rise /
+# step-back shape kept. A race day past TRAIL_LONG_MAX_MIN / share (≈ 9.2 h) keeps the 6-h cap every week.
+FRAC = {10: 0.50, 9: 0.55, 8: 0.60, 7: 0.65, 6: 0.75, 5: 0.65, 4: 0.80, 3: 0.65}
 # SP-97: the 專項期's recovery weeks are counted back from the race, on FRAC's low points, so a
 # recovery week never takes the biggest long days (weeks 6 and 4); the history-triggered 3:1 is the
 # base phase's only (periodization-cross-sport.md §4.3, §6.1 SP-97)
 EASY_WEEKS = (5, 3)
-SIM_WEEKS = (4, 3)                  # the race simulation (推估 inside Koop's 「not the last 2–3 weeks」)
+# the race simulation's weeks (推估). 越野 6 and 4 (SP-523): CTS / Koop put the camp 4–6 weeks out, vert.run no
+# big day in the last 3 weeks (b2b.LAST_BEFORE_DAYS = 21 too); week 5 is a recovery week, so FRAC's two peaks.
+# 路跑 4 and 3: Higdon's 20 mi 22 days out, Norris 2–3 weeks (C-long-specific-b2b.md §3.5)
+SIM_WEEKS = (6, 4)
+ROAD_SIM_WEEKS = (4, 3)
 STEP = LONG_CAP                     # ≤ +10 % over the longest of the last 30 days (Frandsen 2025, SP-66)
 FLOOR_MIN = 90.0                    # the 專項期 long day's old floor (never over STEP, SP-66)
 TSB_MIN = -20.0                     # week_plan's 維持量 line
@@ -71,6 +81,12 @@ FUEL_MIN_H = 4.0                    # Koop: a fuelling long run is ≥ 4 h (b2b.
 # step-back shape as FRAC), Pfitzinger's longest runs (20–22 mi ≈ 32–35 km), a 3-h ceiling (推估)
 # and long-run pace = race pace × 1.15 (推估: easy long runs are 10–20 % slower than race pace)
 ROAD_FRAC = {10: 0.55, 9: 0.60, 8: 0.65, 7: 0.70, 6: 0.75, 5: 0.70, 4: 0.80, 3: 0.65}
+# SP-523 (owner 2026-10-14, C-long-specific-b2b.md §3.8 ③ option ①): a race ≤ 21.1 km — ROAD_FRAC × the
+# distance gave a 10K 8 km at week 4 (coaches: 10K ~13 km, Higdon 129 %; half 76–122 %) — never drops the
+# long run below the base phase's (base_long_minutes: 30 % of the week, ≥ 60 min, ≤ +10 %)
+ROAD_SHORT_KM = 21.1
+BASE_LONG_SHARE = 0.30              # overview.week_plan's base-phase long run: 30 % of the week (推估)
+BASE_LONG_MIN = 60.0                # … ≥ 60 min
 ROAD_LONG_MAX_KM = 35.0
 ROAD_LONG_MAX_MIN = 180.0
 TRAIL_LONG_MAX_MIN = 360.0         # SP-106 推估: iRunFar's 5–6 h for 100 mi, the upper end; past it B2B (race-feasibility.md §1)
@@ -116,9 +132,11 @@ SRC = ("單日目標＝コース定數（山本正嘉）；進度：江晏慶「
 SRC_CLIMB = ("Uphill Athlete／Koop：專項期練比賽的坡（坡度、長度）；下坡用跑的累積下坡耐受（重複負荷效應，"
              "Bontemps 2025）；次數、長度上限為推估")
 SRC_ROAD = ("長跑距離進度：Pfitzinger & Douglas《Advanced Marathoning》（最長約 32–35 km）；"
+            "半馬、10K 不短於基礎期的長跑（Higdon 10K 最長 8 mi、Norris 半馬 10–16 mi）；"
             "每週比例、3 小時上限、長跑配速 ≈ 比賽配速 × 1.15 為推估")
 SRC_SIM = ("Koop《Training Essentials for Ultrarunning》：賽前演練裝備、補給、配速；Uphill Athlete：在像比賽的地形演練；"
-           "賽前 4–3 週、目標定數為推估")
+           "越野賽前第 6、4 週（CTS、Koop 賽前 4–6 週；vert.run 最後 3 週不做大的）、路跑第 4、3 週（Higdon、Norris）、"
+           "目標定數為推估")
 
 
 def _d(x) -> Optional[dt.date]:
@@ -312,7 +330,7 @@ def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict],
     if kind != "specific" or w < WEEKS[0]:
         info["why"].append("只在專項期（賽前第 10–3 週）")
         return info
-    info.update(active=True, frac=frac(w, info["sport"]), sim_week=w in SIM_WEEKS)
+    info.update(active=True, frac=frac(w, info["sport"]), sim_week=w in sim_week_numbers(info["sport"]))
     if mode == "recovery_week":
         info["recovery"] = True             # SP-97: the long day is the recovery week's shorter one
     if race.get("summit") and not road and w <= SUMMIT_SIM_WEEKS and mode not in ("recovery_week", "reentry"):
@@ -361,10 +379,23 @@ def public(info: Optional[dict]) -> Optional[dict]:
     return {k: info.get(k) for k in PUBLIC if k in info}
 
 
-def long_minutes(info: dict, longest: float) -> Optional[float]:
+def base_long_minutes(total_min: float, longest: float) -> float:
+    """The base phase's long run (overview.week_plan): BASE_LONG_SHARE of the week, ≥ BASE_LONG_MIN, ≤ +10 %
+    over `longest` (the floor wins here; week_plan's load_guard.cap_long and long_share_cap follow)."""
+    return max(BASE_LONG_MIN, min(BASE_LONG_SHARE * float(total_min or 0.0), max(float(longest or 0.0), 60.0) * STEP))
+
+
+def short_road(race: Optional[dict]) -> bool:
+    """A road race ≤ ROAD_SHORT_KM a day (10K, half marathon; SP-523)."""
+    km = ((race or {}).get("day") or {}).get("km")
+    return bool(km) and float(km) <= ROAD_SHORT_KM
+
+
+def long_minutes(info: dict, longest: float, week_min: Optional[float] = None) -> Optional[float]:
     """This week's long day: frac × the race day's time, ≤ +10 % over `longest` (the
     longest of the last 30 days); not below min(90 min, the aim) unless the +10 % says so (SP-66:
-    the floor used to lift the day over the cap)."""
+    the floor used to lift the day over the cap). 路跑 ≤ 21.1 km with the week's minutes `week_min`:
+    not below the base phase's long run (base_long_minutes, SP-523)."""
     if not info or not info.get("active"):
         return None
     want = trail_aim(info)[0]
@@ -376,6 +407,8 @@ def long_minutes(info: dict, longest: float) -> Optional[float]:
         if not p:
             return None
         want = min(min(info["frac"] * info["race"]["day"]["km"], ROAD_LONG_MAX_KM) * p, ROAD_LONG_MAX_MIN)
+        if week_min is not None and short_road(info["race"]):
+            want = max(want, base_long_minutes(week_min, longest))     # SP-523: a 10K's share was ~8 km
     cap = max(float(longest or 0.0), 60.0) * STEP
     return min(max(min(FLOOR_MIN, want), min(want, cap)), cap)
 
@@ -428,9 +461,11 @@ def decorate(ss: list[dict], info: Optional[dict]) -> None:
         km = road_km(race, m)
         want = long_minutes(info, 1e9) or m
         pct = km / race["day"]["km"] * 100 if race["day"].get("km") else 0
-        s["detail"] = "；".join([f"這次約 {km:.0f} km（賽事距離的 {pct:.0f}%）"
-                                + ("；受「每次最多 +10%」限制" if want > m + 5 and not info.get("recovery") else "")]
-                               + [p for p in (s.get("detail") or "").split("；") if p])
+        head = (f"這次約 {km:.0f} km（賽事距離的 {pct:.0f}%）"
+                + ("；受「每次最多 +10%」限制" if want > m + 5 and not info.get("recovery") else ""))
+        if short_road(race) and m > want + 5 and not info.get("recovery"):
+            head += _("；比賽距離短：專項期的長跑不短於基礎期的長跑")      # SP-523
+        s["detail"] = "；".join([head] + [p for p in (s.get("detail") or "").split("；") if p])
         s["distance_km"] = round(km, 1)
         s["source"] = ((s.get("source") or "") + "；" + SRC_ROAD).lstrip("；")
         info["long"] = {"minutes": int(m), "pct": round(pct), "km": round(km, 1)}
@@ -751,10 +786,24 @@ def apply_climb(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = 
 # the race simulation (a suggestion)
 # ---------------------------------------------------------------------------
 
-def sim_weeks(start: dt.date) -> list[dt.date]:
-    """The Mondays of 賽前第 4 and 3 週."""
+def sim_week_numbers(sport: str = "trail") -> tuple[int, ...]:
+    """賽前第 n 週 of the race simulation: 越野 SIM_WEEKS (6, 4), 路跑 ROAD_SIM_WEEKS (4, 3) — SP-523."""
+    return ROAD_SIM_WEEKS if sport == "road" else SIM_WEEKS
+
+
+def sim_weeks(start: dt.date, sport: str = "trail") -> list[dt.date]:
+    """The Mondays of the simulation's weeks (越野 賽前第 6、4 週, 路跑 第 4、3 週)."""
     rm = start - dt.timedelta(days=start.weekday())
-    return sorted(m for m in (rm - dt.timedelta(weeks=k) for k in range(8)) if weeks_out(start, m) in SIM_WEEKS)
+    nums = sim_week_numbers(sport)
+    return sorted(m for m in (rm - dt.timedelta(weeks=k) for k in range(max(nums) + 2)) if weeks_out(start, m) in nums)
+
+
+def sim_window_text(sport: str, weeks: list[dt.date]) -> str:
+    """「賽前第 6、4 週（9/28、10/12 那兩週）」 in the request's language."""
+    from backend.i18n import fmt as F
+    a, b = sim_week_numbers(sport)
+    return _("賽前第 {a}、{b} 週（{days} 那兩週）", a=a, b=b,
+             days=_("、").join(F.date(w, "md") for w in weeks))
 
 
 def fuel_text(race: dict) -> str:
@@ -846,21 +895,22 @@ def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: O
     if not race or not info.get("active"):
         return None
     start = _d(race["start"])
-    weeks = sim_weeks(start)
+    sport = "road" if is_road(info) else "trail"
+    weeks = sim_weeks(start, sport)
     if not weeks or monday > weeks[-1] or weeks[0] > monday + dt.timedelta(days=7):
         return None
     day_min = race["day"]["hours"] * 60.0
     cap = max(float(longest or 0.0), 60.0) * STEP
     d1 = _r5(min(day_min, cap))
-    ws = "、".join(f"{w.month}/{w.day}" for w in weeks)
+    when = sim_window_text(sport, weeks)
     if is_road(info):
         # 路跑: never the whole race — a long run at the 專項期 ceiling (Pfitzinger's longest)
         d1 = _r5(min(day_min, cap, long_minutes({**info, "frac": ROAD_FRAC[4]}, 1e9) or day_min))
         km = road_km(race, d1)
         return {"id": f"race_sim:{race['id']}", "type": "race_sim", "event_id": race["id"], "event": race["name"],
-                "weeks": [w.isoformat() for w in weeks], "minutes": [d1], "multi": False,
+                "weeks": [w.isoformat() for w in weeks], "minutes": [d1], "multi": False, "until": start.isoformat(),
                 "title": f"建議做一次賽事模擬：{race['name']}，{d1} 分（約 {km:.0f} km）",
-                "reason": f"賽前第 4–3 週（{ws} 那兩週）：穿比賽的鞋和衣服、照比賽吃、照比賽計畫配速跑一次長跑",
+                "reason": _("{when}：穿比賽的鞋和衣服、照比賽吃、照比賽計畫配速跑一次長跑", when=when),
                 "help": ("Koop、Pfitzinger：賽前把比賽日的裝備、早餐、補給和配速演練一次，問題在比賽前就發現；"
                          f"路跑不跑全程，長度是專項期最長的那一次，一樣守「每次最多 +10%」。補給：{fuel_text(race)}。"
                          "選一天按「排入」才會進課表；不排也不影響其他課。時間點與長度為推估。"),
@@ -872,10 +922,10 @@ def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: O
     mins = [d1] + ([max(MIN_DAY2, _r5(DAY2_RATIO * d1))] if multi else [])
     r = route(race, d1)
     return {"id": f"race_sim:{race['id']}", "type": "race_sim", "event_id": race["id"], "event": race["name"],
-            "weeks": [w.isoformat() for w in weeks], "minutes": mins, "multi": multi,
+            "weeks": [w.isoformat() for w in weeks], "minutes": mins, "multi": multi, "until": start.isoformat(),
             "title": (f"建議做一次賽事模擬：{race['name']}，{'連續兩天，' if multi else ''}{d1} 分"
                       f"（定數約 {r['cc']:.0f}＝單日目標的 {r['f'] * 100:.0f}%）"),
-            "reason": f"賽前第 4–3 週（{ws} 那兩週）：用比賽的裝備、補給、配速，在像比賽的地形跑一次",
+            "reason": _("{when}：用比賽的裝備、補給、配速，在像比賽的地形跑一次", when=when),
             "help": ("Koop、Uphill Athlete：賽前在像比賽的地形演練裝備、補給和配速，問題在比賽前就發現。"
                      f"這天換掉那週的長天；長度一樣守「每次最多 +10%」。補給：{fuel_text(race)}。"
                      + ("多日行程做連續兩天，第 2 天約第 1 天的 2/3（CTS 30:20）。" if multi else "")

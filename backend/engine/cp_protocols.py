@@ -68,7 +68,7 @@ def sex_or_default(ds) -> tuple[str, str]:
     s = athlete_sex(ds)
     if s is None:
         return "male", "預設（男，推估）"
-    return s, "設定頁" if prof.get("sex") == s else "WKO5"
+    return s, "設定頁" if prof.get("sex") == s else "對照資料夾"
 
 
 def wprime_prior(sex: Optional[str]) -> tuple[float, float, str]:
@@ -95,11 +95,11 @@ HR_LAG_S = 15                      # HR peaks a few seconds after the bout
 # before SP-468 — kept for those rows' labels); a CP test's own result is always "pd_model"
 METHOD_LABEL = {"2pt": "兩點（12 分＋3 分）", "1pt_prior": "單段＋無氧容量先驗", "tt20": "20 分全力 × 0.95",
                 "race": "比賽換算（Riegel）",
-                "pd_model": N_("算法參考 WKO5：PD 模型擬合（近 90 天 mean-max 上緣，含這次測試）")}
+                "pd_model": N_("PD 模型擬合（近 90 天 mean-max 上緣，含這次測試）")}
 # a CP test without a PD fit (fewer than fitdataset.CP_FIT_MIN_RUNS Stryd runs in 90 days, or no
 # valid fit): no CP — no formula stands in for WKO5's model (SP-468)
 NO_FIT = N_("算不出模型閾值功率（Modelled threshold power）：測試那天以前 90 天的 Stryd 跑步不到 5 次，"
-            "或 PD 模型擬合不成立（算法參考 WKO5，不用公式代替）")
+            "或 PD 模型擬合不成立（不用公式代替）")
 
 TABLE = {
     "quick": dict(

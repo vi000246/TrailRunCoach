@@ -151,6 +151,6 @@ def test_the_wko5_opt_in_keeps_wkos_ftp_setting(tmp_path, env):
     ds.settings_from = "wko5"                               # as with charts.fit_settings_from_wko5
     ds.athlete.settings["runftp"] = [(dt.date(1980, 1, 1), 250.0)]
     w = _by_day(ds)[dt.date(2026, 9, 10)]
-    assert ds.tss_ftp(w) == (250.0, "WKO5 athlete 檔（選用）")
+    assert ds.tss_ftp(w) == (250.0, "對照資料夾的設定檔（選用）")
     w.metrics = ds._metrics(w)
     assert w.metrics["tss"] == pytest.approx(_power_tss(w, 250.0))

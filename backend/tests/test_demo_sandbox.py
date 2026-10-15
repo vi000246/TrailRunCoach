@@ -241,8 +241,8 @@ def test_every_write_route_is_classified(demo):
 
 @pytest.mark.parametrize("path", ["/api/v1/sync/auto", "/api/v1/auth/tp/status",
                                   "/api/v1/backup/list",
-                                  "/api/v1/wko5/injuries/meta", "/api/v1/static/compare.html",
-                                  "/api/v1/static/settings.html", "/api/v1/wko5/settings", "/share/abc"])
+                                  "/api/v1/app/injuries/meta", "/api/v1/static/compare.html",
+                                  "/api/v1/static/settings.html", "/api/v1/app/settings", "/share/abc"])
 def test_owner_only_routes_are_not_mounted(demo, path):
     c, _r, _b = demo
     assert c.get(path).status_code == 404
@@ -349,9 +349,9 @@ def test_owner_home_and_old_spa_bookmarks(monkeypatch):
             return r.status_code, r.headers.get("location")
         assert loc("/") == (307, "/api/v1/overview/page")
         assert loc("/overview") == (307, "/api/v1/overview/page")
-        assert loc("/activities") == (307, "/api/v1/wko5/activities/page")
-        assert loc("/activities/12") == (307, "/api/v1/wko5/activities/page")
+        assert loc("/activities") == (307, "/api/v1/app/activities/page")
+        assert loc("/activities/12") == (307, "/api/v1/app/activities/page")
         assert loc("/achievements") == (307, "/api/v1/achievements/page")
-        assert loc("/sync")[1] == loc("/config")[1] == "/api/v1/wko5/settings"
+        assert loc("/sync")[1] == loc("/config")[1] == "/api/v1/app/settings"
         for gone in ("/running", "/trail", "/ai"):
             assert c.get(gone).status_code == 404

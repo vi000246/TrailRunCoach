@@ -157,7 +157,7 @@ const S = { hint: { level: __LEVEL__, acks: [] } };
 
 
 def _vw(expr, level, **data):
-    return _node("wko5_viewer.html", "analysis hints (SP-487)", "end analysis hints", VW_STUBS, expr, level, **data)
+    return _node("charts.html", "analysis hints (SP-487)", "end analysis hints", VW_STUBS, expr, level, **data)
 
 
 @needs_node
@@ -178,7 +178,7 @@ def test_drift_chips_three_in_standard_and_hr_suspect_in_every_level():
 
 
 def test_viewer_draws_the_put_away_chips_under_details():
-    page = (STATIC / "wko5_viewer.html").read_text("utf-8")
+    page = (STATIC / "charts.html").read_text("utf-8")
     assert "chipSplit(chipsAll)" in page and 'class="rv-more"' in page and 't("viewer.rv_more"' in page
     assert '<script src="/api/v1/static/hints.js"></script>' in page and "S.hint = hint" in page
     for lang, word in (("zh-TW", "詳細（{n}）"), ("en", "Details ({n})")):
@@ -277,7 +277,7 @@ def test_hr_shading_by_level():
 
 
 def test_viewer_legend_keeps_the_question_mark_without_shading():
-    page = (STATIC / "wko5_viewer.html").read_text("utf-8")
+    page = (STATIC / "charts.html").read_text("utf-8")
     assert 'data-hrq="${HV.shaded ? "shaded" : "quiet"}"' in page and "rvQ(HV.tip)" in page
     assert "...(HV && HV.shaded ? { markArea" in page
 

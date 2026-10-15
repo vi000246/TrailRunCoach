@@ -81,7 +81,7 @@
 
 | 頁 | 範圍 | 單 |
 |---|---|---|
-| 總覽 → 本週備註 | 全部週備註走 `Hints.render`：第 1 類一個框、最多 3 則提醒、「還有 N 則提醒」、▷ 和知道了的放「詳細」（`backend/static/overview.html:848` `drawNotes`）；`smart` 由 weekplan API 算（見「總覽（SP-483）」） | SP-482、SP-483 |
+| 總覽 → 本週備註 | 全部週備註走 `Hints.render`：第 1 類一個框（總覽不另加紅框，各則自己的左色條，SP-551）、最多 3 則提醒、「還有 N 則提醒」、▷ 和知道了的放「詳細」（`backend/static/overview.html:848` `drawNotes`）；`smart` 由 weekplan API 算（見「總覽（SP-483）」） | SP-482、SP-483 |
 | 總覽 → 指標、待辦、5 區、B2B、強度分配、PMC、課卡 hover | 見「總覽（SP-483）」（`overview.html:506` `OVH`） | SP-483 |
 | 課表（SP-484） | 週提醒列走 `Hints.render`（`backend/static/schedule.html:1386` `renderNotes`）：第 1 類一個框、最多 3 則、「還有 N 則提醒」、▷／知道了／條件不成立放「詳細」。課卡照 `window.HINT_STATE`（`Hints.state()`，跟日曆一起要一次）：SC4 規則 D 偏強＝環旁一個小點，理由只在完整當說明行、其他在 hover；SC5 太強＝⚠＋一行說明，三段都顯示；SC7 上坡改走：完整整句當說明行、標準「≥ X% 走」短標籤放在說明行前、精簡只在 hover；說明行最多 1 行（太強可換行）。R3：最近 3 堂輕鬆跑 2 堂偏強（或 7 天內 2 次）→ 本週一則 SC4 週提醒（`api/plan_sessions._streak_note`、`adapt.overhard_streak`），條件指紋＝那幾堂的日期 | SP-484 |
 | 賽季計畫 → 賽事評估卡（SP-486） | pill（PL7）、關門／撤退（PL14）三段都在；數字照等級（`backend/static/feasibility.js` `chipOn`）：跨級「分級 a → b」完整一律、標準在跳 ≥ 2 級或藏 × 2 時、精簡只在跳 ≥ 2 級；EP 倍數（PL11，R13）完整一律、標準 ≥ 2 倍才接在分級後、精簡不顯示；Koop 週時數（PL17）只在完整當數字、其他在「詳細」；其他數字（週量、長天、最大週量、B2B、百岳）完整／標準都在，精簡只留有點趕／不足的。卡下的句子是 `race_feasibility.card_hints`（`backend/engine/race_feasibility.py`）的提示物件走 `Hints.render`：第一條建議和第 1 類建議（PL8 只剩 N 天、PL9 報短組／有點趕的配速、PL10 跳太多、PL14 超過關門）、× 2 提醒（PL12，第 1 類）、PL6、PL15、PL19、PL20；其餘建議（里程碑 PL13、第二條有點趕的建議）照舊在「詳細」。條件指紋帶賽事 id | SP-486 |
@@ -95,7 +95,7 @@
 
 | id | 規則 | 條件成立（標準直接顯示） |
 |---|---|---|
-| OV5 | R11 | 4–10 月（`HEAT_MONTHS`），或 30 天內有熱天的 A／B 賽（`heat_plan`，weekplan `heat.active`） |
+| OV5 | R11 | 4–10 月（`HEAT_MONTHS`）；SP-569 起課表不排熱適應課，週提醒不再有熱適應那一則 |
 | OV8f | R7 | 冷啟動的第 1 週（`cold_start.week ≤ 1`） |
 | OV8h | R7 | 目前期別的第一週：開始日在本週，或上週六、日（`PHASE_FIRST_LEAD_D` 2 天，推估） |
 | OV8g | — | 黃色的（watch／bad：少了時數、改排別天）；info 的說明和「剩下每天都排了」（第 3 類）收進「詳細」（推估，依 §1 OV8g） |
@@ -123,7 +123,7 @@
 
 **測試的「不要」跨週（SP-515）**：測試建議（`test:<種類>:<週一>`、`baseline:<種類>:<週一>`）按「不要」照測試種類記（`suggestions.decline_key` = `snooze_key`，基線測試與同種的週測試算同一個），之後每週同種測試都不再出現，`prune` 一直留著；✕、B2B 的「不要」照舊只擋當週。之後的週次那列算在 `GET /suggestions` 的 `declined`，所以 SP-503 的待辦測試列照舊回來。恢復在設定頁「提示多寡」下面的「不再建議的測試」（`GET …/suggestions/declined-tests`、`POST …/suggestions/restore {key}`，沒有就不顯示）；建議框測試列的「不要」滑過會說可以在那裡恢復。「不要」不變。只有建議框藏：課表的「排入測試 ▸」照樣列出那個測試、可以排（R1；`GET /test-options`、`POST /suggestions/accept` 不看稍後提醒，`GET /suggestions` 的 `snoozed_tests` 是那些測試的整列，課表 `sugCount` 經 `AppSuggestions.load(fresh, true)` 一起算）。
 
-`quality_gate.z5_flow` 的 5 區解鎖階段多了 `notes: [{kind: pause | empty | intensity | test, text, tip}]`（`note` 照舊）；`Z5Flow.html(flow, {skip, testNote, testAction})` 依此畫，基礎期面板（`wko5_viewer.html`）不帶這些選項，照舊。
+`quality_gate.z5_flow` 的 5 區解鎖階段多了 `notes: [{kind: pause | empty | intensity | test, text, tip}]`（`note` 照舊）；`Z5Flow.html(flow, {skip, testNote, testAction})` 依此畫，基礎期面板（`charts.html`）不帶這些選項，照舊。
 
 **數量**（`backend/tests/e2e/test_overview_hints_sp483_e2e.py`，demo 跑者、A 賽移到 16 週後讓本週是一般基礎期週）：標準 15、精簡 15、完整 33。計算方式寫在該檔開頭；5 區梯子的階段標籤不算（使用者選擇一直顯示，算它的「下一步」）。
 
@@ -138,8 +138,8 @@
 | AC8 再標有杖 N 次（R9） | 杖比較圖會算的活動（`pole_chart`：越野跑、登山健行）一律顯示 | 同左，而且杖還沒標 | 不顯示 | `poleHintShown`；路跑在三段都沒有（標了也不算） |
 | AC9 下雨標濕路（R2） | 已是 SP-299 的規則：越野跑／登山健行（`rain_kind`）、路況未標 | 同左 | 同左 | `rainHint`，沒改 |
 | AN4 心率可疑 | ● | ● | ● | 飄移卡 chip，`hint` 是第 1 類 |
-| AN5 心率灰底（R6） | 所有旗標都畫 | 只畫突然跳動、跳一階、卡住不動，或跟著步頻走單段 ≥ 60 秒（`key_spans`）；這些加起來 < 整趟有心率時間的 1% 不畫，圖例的 `?` 寫「有 N 秒可能不準」 | 同標準 | `engine/panels/activity_charts.py` `hr_quality_spans`（`HRQ_LOCK_MIN_S`、`HRQ_MIN_SHARE`，推估）；`wko5_viewer.html` `hrqView` |
-| AN6 飄移 chips | 全部 | 只留會改判讀的：溫度 > 25 °C、資料比較雜、AeT+3 以上 > 10%；其餘收進卡片下方「詳細（N）」 | 全部收進「詳細」 | `workout_review.py` 飄移卡的 `chip(smart=)`；`wko5_viewer.html` `chipSplit` |
+| AN5 心率灰底（R6） | 所有旗標都畫 | 只畫突然跳動、跳一階、卡住不動，或跟著步頻走單段 ≥ 60 秒（`key_spans`）；這些加起來 < 整趟有心率時間的 1% 不畫，圖例的 `?` 寫「有 N 秒可能不準」 | 同標準 | `engine/panels/activity_charts.py` `hr_quality_spans`（`HRQ_LOCK_MIN_S`、`HRQ_MIN_SHARE`，推估）；`charts.html` `hrqView` |
+| AN6 飄移 chips | 全部 | 只留會改判讀的：溫度 > 25 °C、資料比較雜、AeT+3 以上 > 10%；其餘收進卡片下方「詳細（N）」 | 全部收進「詳細」 | `workout_review.py` 飄移卡的 `chip(smart=)`；`charts.html` `chipSplit` |
 | AN8 這次不是 CP 測試 | 不是測試課就不出卡（`hide`） | 同左 | 同左 | `workout_review._cp` |
 | AN10 跑姿頁「參考」 | 只留頁名「跑姿與膝蓋負荷（參考）」；圖表標題、「指標」「判讀」列不再寫 | 同左 | 同左 | `views/workout.json`、`views/i18n/en.json`、`workout_review.py` |
 | AN12 重複路段卡 | 每頁最後都加，含「沒有經過重複的路段」 | 只在預設頁（本次重點）；沒有重複路段就不出卡 | 同標準 | `static/segments_card.js` |
@@ -244,6 +244,7 @@
 | SC12 | 課表編輯器：LTHR／最大心率可信度低「⚠」、沒有閾值配速 | 1 | ● | ● | ● | 4 資料 | — |  |
 | SC13 | 推送預覽「⚠ 沒閾值配速」 | 1 | ● | ● | ● | 4 資料 | — |  |
 | SC14 | 對話框副標題「已修改／自訂／暫定」 | 2 | ● | ● | ● | 6 其他 | 可 |  |
+| SC15 | 週統計欄期別「這週為什麼這樣排」：滑過（手機點一下）期別看本週與未來週的原因（`week_rows[].why`，含恢復週「比例是推估」） | 2 | ● | ● | ▷ | 6 其他 | — | 精簡：期別不浮窗，原因收進週提醒列的「詳細」（SP-542） |
 
 #### 活動列表與編輯（activity.html）
 
@@ -262,7 +263,7 @@
 | AC11 | 疼痛元件：「恢復期：跑完記一下有沒有痛」、傷病連結、疼痛監測文字 | 1 | ● | ● | ● | 1 安全 | — |  |
 | AC12 | 欄位說明 `?` ×10、成就頁 `?` ×3 | 2 | ▷ | ▷ | ▷ | 6 其他 | 可 |  |
 
-#### 分析頁（wko5_viewer.html）
+#### 分析頁（charts.html）
 
 | id | 項目 | 類 | 完整 | 標準 | 精簡 | 排序 | 知道了 | 備註 |
 |---|---|---|---|---|---|---|---|---|
@@ -422,3 +423,5 @@
 | 2026-10-14 | feature | SP-507 R1 | 稍後提醒只藏建議框：課表「排入測試 ▸」照樣列出、可以排那個測試（`suggestions.visible(snoozes=False)`、`GET /suggestions` 的 `snoozed_tests`、`AppSuggestions.load(fresh, true)`）。測試：`backend/tests/test_suggestions_snooze_r1_sp507.py`、`backend/tests/e2e/test_suggestions_snooze_r1_sp507_e2e.py` |
 | 2026-10-14 | feature | SP-514 | 稍後提醒期間，總覽測試卡結論與 5 區卡測試註記寫「建議做的測試 <日期> 再提醒你」，不指向建議框；到期回到建議框後照 SP-483（`OVH.testLater`／`z5Later`、`hint.test_later`）。測試：`backend/tests/test_overview_snoozed_test_sp514.py`、`backend/tests/e2e/test_overview_snoozed_test_sp514_e2e.py` |
 | 2026-10-14 | feature | SP-515 | 測試建議按「不要」照測試種類跨週有效（`suggestions.decline_key`／`declined_tests`／`restore`），設定頁「不再建議的測試」可以恢復（`GET …/suggestions/declined-tests`、`POST …/suggestions/restore`）；SP-503 待辦測試列照舊。測試：`backend/tests/test_suggestions_decline_kind_sp515.py`、`backend/tests/e2e/test_suggestions_decline_kind_sp515_e2e.py` |
+| 2026-10-14 | bugfix | SP-551 | 總覽強度提醒（OV8e）：不再寫內部等級名「是 bad」（中英都白話；心率飄移、非基礎期結論同修），列上一句、「展開」是 `warn_detail`（`quality_gate.low_share_detail`：為什麼、AeT 估計值、3 區 5 區照排）；週備註沒有 detail 就是不能展開的一列（`overview.html` `noteHtml`，以前展開是把同一句再抄一次）；`#wk-notes .hint-must` 不畫紅框；點擊不留框、鍵盤用 `:focus-visible`。測試：`backend/tests/test_overview_intensity_note_sp551.py` |
+| 2026-10-15 | feature | SP-542 | 課表週統計欄：期別滑過（手機點一下）顯示那週為什麼這樣排——本週（`week_plan` 的 `why`）和未來週（`projection` 的 `weeks[].why`，含恢復週「比例是推估」），`GET /calendar` 的 `week_rows[].why`；新增 SC15（●●▷）：精簡時收進週提醒列的「詳細」（`week_why_hint`＝`hints.flag("SC15")`，`Hints.where`）。plan inputs 不分語系快取，原因改成 `M_()`（記得 msgid），週列用 `i18n.relocalize` 換成頁面語言。測試：`backend/tests/test_week_why_sp542.py`、`backend/tests/e2e/test_schedule_week_why_sp542_e2e.py` |

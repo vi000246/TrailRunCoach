@@ -140,7 +140,8 @@ def test_the_shell_loads_it_only_where_the_api_exists_and_it_is_kept_offline():
     block = shell[shell.rindex("\n\n", 0, i):shell.index("\n\n", i)]
     assert 'typeof window.showDirectoryPicker === "function"' in block and 'can("upload.fit")' in block
     assert 'dataset.auto = "1"' in block
-    assert shell.index('"/api/v1/static/fitfolder.js"') > shell.index("if (DEMO) return;")     # never in the demo
+    # never in the demo (SP-558 widened the guard to signed-out visitors too)
+    assert shell.index('"/api/v1/static/fitfolder.js"') > shell.index("if (DEMO || PUBLIC) return;")
     core = (STATIC / "offline_core.js").read_text("utf-8")
     app_files = core[core.index("const APP_FILES = ["):core.index("];", core.index("const APP_FILES = ["))]
     assert '"/api/v1/static/fitfolder.js"' in app_files

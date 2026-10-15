@@ -2,15 +2,16 @@
 Race-day and training weather for the environment multiplier
 (docs/research/superpower-calculator.md §3.3).
 
-Provider chain for race day (first success wins; every value stays editable):
+Provider chain for race day (first success wins; every value stays editable).
+SP-552: every tenant starts with CWA (its open data may be used commercially,
+with the source named); Open-Meteo fills only what CWA has not got — past 7
+days, outside Taiwan, the climatology, heights:
   1. CWA 中央氣象署 mountain forecasts (needs a free 授權碼):
        F-B0053-035 登山三天3小時 (hourly day 1, 3-hourly to day 3)
        F-B0053-033 登山一週日夜 (06–18 / 18–06 blocks, 7 days)
      Whole-file downloads (~12 / ~7.5 MB) → compacted and cached on disk,
      refreshed when ≥ 3 h old.
-  2. Open-Meteo forecast (no key, ≤ 16 days).
-  3. CWA 鄉鎮天氣預報 (SP-234; the fallback when Open-Meteo has no data or
-     fails; same 授權碼, same whole-file download + cache):
+  2. CWA 鄉鎮天氣預報 (SP-234; same 授權碼, same whole-file download + cache):
        F-D0047-089 臺灣未來3天 (temperature / dew point / RH hourly on day 1,
                    3-hourly to day 3; 3-hour PoP)
        F-D0047-091 臺灣未來1週 (12-hour blocks; 12-hour PoP)
@@ -21,9 +22,9 @@ Provider chain for race day (first success wins; every value stays editable):
      and (when not given) the race's height come from Open-Meteo's elevation
      API (Copernicus GLO-90, cached for good) and the temperature is moved
      by −0.65 °C / 100 m to the race elevation, RH kept (as SP-210).
-     After Open-Meteo (owner decision 2026-10-06) until a station comparison
-     shows which is closer in Taiwan (SP-234 asks for one; it needs CWA
-     observations, i.e. the key) — see docs/spec/racepower.spec.md.
+     Was after Open-Meteo (owner decision 2026-10-06, until a station
+     comparison); SP-552 puts it first (CWA_TOWN_FIRST, one switch back).
+  3. Open-Meteo forecast (no key, ≤ 16 days).
   4. Open-Meteo archive climatology (SP-210): the month centred on the race
      date (±15 days) in each of the last 10 years, at the target elevation
      (Open-Meteo downscales; −6.5 °C/km from the answer's elevation when it
@@ -34,6 +35,12 @@ Provider chain for race day (first success wins; every value stays editable):
      the single value; a plan run outside 06–18 widens it to its own hours on
      course from the profile (climatology_to, SP-257; no further call).
   5. Manual values.
+
+Shared (SP-552): the CWA files and the town heights are one copy for the whole
+site (site_dir(): the server root, not a tenant folder), fetched with the
+site's 授權碼 (site_key(): env CWA_API_KEY, else the owner's weather.json),
+one download at a time per file (_CWA_LOCKS) and parsed once per process
+(cwa_doc()); a tenant never sees the key itself.
 
 Rain (SP-249): the forecasts' probability of precipitation (CWA 3- / 12-hour
 PoP, Open-Meteo's hourly PoP and amount) go out as `rain` rows; rain_alert()
@@ -74,6 +81,7 @@ import datetime as dt
 import json
 import math
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from statistics import mean
@@ -95,11 +103,27 @@ def home() -> Path:
 
 def key_path() -> Path:
     return Path(KEY_PATH) if KEY_PATH is not None else home() / "weather.json"
+
+
+SITE_DIR = None  # fixed folder (tests); None = the server root (SP-552), else HOME when a test fixed that
+
+
+def site_dir() -> Path:
+    """Where the CWA files and the town heights live (SP-552): one copy for the whole site, in
+    the server root (accounts.server_root(): the owner's folder unless TRC_SERVER_ROOT says
+    otherwise), never in a tenant folder — every tenant reads the same download."""
+    if SITE_DIR is not None:
+        return Path(SITE_DIR)
+    if HOME is not None:
+        return Path(HOME)
+    from backend import accounts
+    return accounts.server_root()
 PEAKS_PATH = Path(__file__).resolve().parents[2] / "data" / "baiyue.json"
 
 CWA_URL = "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/{id}"
 CWA_HOURLY, CWA_WEEKLY = "F-B0053-035", "F-B0053-033"
-CWA_MAX_AGE_H = 3.0
+CWA_MAX_AGE_H = 3.0               # a file this old is downloaded again (SP-552: once for the whole site)
+CWA_TOWN_FIRST = True             # SP-552: 鄉鎮 before the Open-Meteo forecast (False: the 2026-10-06 order)
 CWA_MATCH_KM = 5.0
 CWA_TOWN_HOURLY, CWA_TOWN_WEEKLY = "F-D0047-089", "F-D0047-091"   # 鄉鎮預報 全臺 3 天 / 1 週 (SP-234)
 CWA_TOWN_MATCH_KM = 20.0          # 推估: beyond this the nearest 鄉鎮公所 is another valley / coast;
@@ -122,6 +146,9 @@ LAPSE_C_PER_M = -0.0065
 DAY_HOURS = range(6, 18)          # daytime 06:00–17:59 local
 TZ = dt.timezone(dt.timedelta(hours=8))    # CWA (Taiwan) timestamps; Open-Meteo answers in the location's zone ("auto")
 ATTRIBUTION = "Weather data by Open-Meteo.com (CC BY 4.0)"
+# SP-552: CWA open data (政府資料開放授權條款) may be used commercially when the source is named
+CWA_ATTRIBUTION = N_("天氣資料來源：中央氣象署")
+CWA_TOWN_ATTRIBUTION = N_("天氣資料來源：中央氣象署；海拔：Open-Meteo.com（CC BY 4.0）")
 # climatology (SP-210; the numbers in the module docstring)
 CLIM_YEARS = 10                   # 推估: 10 years halve the year-to-year noise of 5, warming bias ≈ −0.15 °C
 CLIM_HALF_DAYS = 15               # ±15 days = the month centred on the race date, not the calendar month:
@@ -132,10 +159,10 @@ CLIM_WORKERS = 4                  # parallel archive calls (well under Open-Mete
 CLIM_VERSION = 2                  # bump to ignore older cache files
 ARCHIVE_LAG_DAYS = 6              # the archive's newest days are still missing
 
-PROVIDER_LABEL = {"cwa_hourly": "中央氣象署 登山三天預報", "cwa_weekly": "中央氣象署 登山一週預報",
+PROVIDER_LABEL = {"cwa_hourly": N_("中央氣象署 登山三天預報"), "cwa_weekly": N_("中央氣象署 登山一週預報"),
                   "cwa_town_hourly": N_("中央氣象署 鄉鎮三天預報"), "cwa_town_weekly": N_("中央氣象署 鄉鎮一週預報"),
-                  "open_meteo": "Open-Meteo 預報", "climatology": N_("近 10 年同月平均（Open-Meteo 歷史資料）"),
-                  "manual": "手動 / 預設"}
+                  "open_meteo": N_("Open-Meteo 預報"), "climatology": N_("近 10 年同月平均（Open-Meteo 歷史資料）"),
+                  "manual": N_("手動 / 預設")}
 
 
 # ---------------------------------------------------------------------------
@@ -183,10 +210,29 @@ def mask_key(key: Optional[str]) -> Optional[str]:
     return key[:8] + "…" if len(key) > 8 else key[:2] + "…"
 
 
+def site_key() -> Optional[str]:
+    """The key the site fetches the shared CWA files with (SP-552), whoever asked: env
+    CWA_API_KEY (or its _FILE), else the owner's weather.json. Only the downloads use it; a
+    tenant other than the owner still never reads or sets it (load_key, save_key, key_status)."""
+    from backend import tenancy
+    from backend.settings.env_secrets import secret_env
+    env = secret_env("CWA_API_KEY")
+    if env:
+        return env.strip()
+    path = Path(KEY_PATH) if KEY_PATH is not None else tenancy.owner().shared / "weather.json"
+    try:
+        return (json.loads(path.read_text("utf-8")).get("cwa_api_key") or "").strip() or None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def key_status(path: Optional[Path] = None) -> dict:
     k = load_key(path)                   # None for anyone but the owner (SP-384)
+    # `shared`: the site has a key, so this tenant's race weather comes from CWA too (SP-552);
+    # a yes / no only, never the key or its mask
     return {"configured": bool(k), "masked": mask_key(k),
-            "source": "env CWA_API_KEY" if os.getenv("CWA_API_KEY") else ("weather.json" if k else None)}
+            "source": "env CWA_API_KEY" if os.getenv("CWA_API_KEY") else ("weather.json" if k else None),
+            "shared": bool(k) or bool(site_key())}
 
 
 # ---------------------------------------------------------------------------
@@ -751,39 +797,99 @@ def _http_get(url: str, params: dict, timeout: float) -> dict:
     return r.json()
 
 
+_CWA_LOCKS: dict[str, threading.Lock] = {}     # one download at a time per file (SP-552)
+_CWA_LOCKS_GUARD = threading.Lock()
+_CWA_MEMO: dict[str, tuple] = {}               # path -> ((mtime_ns, size), compact doc): parsed once
+
+
+def _cwa_lock(path: Path) -> threading.Lock:
+    with _CWA_LOCKS_GUARD:
+        return _CWA_LOCKS.setdefault(str(path), threading.Lock())
+
+
+def cwa_doc(path: Path) -> Optional[dict]:
+    """The compact CWA file at `path`, parsed once per process while the file is unchanged
+    (SP-552: every tenant and every point of a course read the same object — never mutate it)."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    sig = (st.st_mtime_ns, st.st_size)
+    hit = _CWA_MEMO.get(str(path))
+    if hit is not None and hit[0] == sig:
+        return hit[1]
+    try:
+        doc = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(doc, dict):
+        return None
+    _CWA_MEMO[str(path)] = (sig, doc)
+    return doc
+
+
+def _age_h(doc: Optional[dict], now: dt.datetime) -> Optional[float]:
+    try:
+        return (now - dt.datetime.fromisoformat(doc["fetched_at"])).total_seconds() / 3600
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """tmp + replace: a reader in another thread never sees half a file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(text, "utf-8")
+    os.replace(tmp, path)
+
+
 def fetch_cwa(dataset: str, key: Optional[str], *, cache_dir: Optional[Path] = None,
               max_age_h: float = CWA_MAX_AGE_H, now: Optional[dt.datetime] = None,
               get: Callable = _http_get) -> dict:
     """Compact CWA doc for one dataset, from the disk cache when < max_age_h
-    old, else downloaded (the whole file) and re-compacted."""
+    old, else downloaded (the whole file) and re-compacted. One copy for the whole
+    site (SP-552, site_dir()); while one request downloads a file, the others get the
+    old copy at once (or wait for the new one when there is none)."""
     now = now or dt.datetime.now(TZ)
-    cache_dir = cache_dir or home()
+    cache_dir = cache_dir or site_dir()
     path = cache_dir / f"cwa_{dataset}.json"
-    cached = None
-    try:
-        cached = json.loads(path.read_text("utf-8"))
-        age = (now - dt.datetime.fromisoformat(cached["fetched_at"])).total_seconds() / 3600
-        if age < max_age_h:
-            return {**cached, "cache": "hit"}
-    except (OSError, ValueError, KeyError, TypeError):
+    cached = cwa_doc(path)
+    age = _age_h(cached, now)
+    if cached is not None and age is not None and age < max_age_h:
+        return {**cached, "cache": "hit"}
+    if age is None:
         cached = None
     if not key:
         if cached:
             return {**cached, "cache": "stale"}
         raise RuntimeError("未設定 CWA 授權碼")
+    lock = _cwa_lock(path)
+    if not lock.acquire(blocking=cached is None):
+        return {**cached, "cache": "stale"}            # someone is downloading it right now
     try:
-        raw = get(CWA_URL.format(id=dataset),
-                  {"Authorization": key, "downloadType": "WEB", "format": "JSON"}, 45.0)
-    except Exception:
-        if cached:
-            return {**cached, "cache": "stale"}
-        raise
-    doc = {**parse_cwa(raw), "dataset": dataset, "fetched_at": now.isoformat()}
-    if not doc["locations"]:
-        raise RuntimeError("CWA 回應沒有任何地點")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(doc, ensure_ascii=False), "utf-8")
-    return {**doc, "cache": "miss"}
+        again = cwa_doc(path)                          # downloaded while this one waited
+        a2 = _age_h(again, now)
+        if again is not None and a2 is not None and a2 < max_age_h:
+            return {**again, "cache": "hit"}
+        try:
+            raw = get(CWA_URL.format(id=dataset),
+                      {"Authorization": key, "downloadType": "WEB", "format": "JSON"}, 45.0)
+        except Exception:
+            if cached:
+                return {**cached, "cache": "stale"}
+            raise
+        doc = {**parse_cwa(raw), "dataset": dataset, "fetched_at": now.isoformat()}
+        if not doc["locations"]:
+            raise RuntimeError("CWA 回應沒有任何地點")
+        _write_atomic(path, json.dumps(doc, ensure_ascii=False))
+        try:
+            st = path.stat()
+            _CWA_MEMO[str(path)] = ((st.st_mtime_ns, st.st_size), doc)
+        except OSError:
+            pass
+        return {**doc, "cache": "miss"}
+    finally:
+        lock.release()
 
 
 def _elev_key(lat: float, lon: float) -> str:
@@ -794,8 +900,9 @@ def elevations(points: list[tuple[float, float]], *, cache_dir: Optional[Path] =
                get: Callable = _http_get) -> list[Optional[float]]:
     """Ground height (m) of each (lat, lon) from Open-Meteo's elevation API,
     one call for the points not in the cache file yet (ELEV_CACHE; terrain
-    does not change, so it never expires). A point the API cannot answer → None."""
-    cache_dir = cache_dir or home()
+    does not change, so it never expires). A point the API cannot answer → None.
+    One file for the whole site (SP-552)."""
+    cache_dir = cache_dir or site_dir()
     path = cache_dir / ELEV_CACHE
     try:
         cache = json.loads(path.read_text("utf-8"))
@@ -815,8 +922,7 @@ def elevations(points: list[tuple[float, float]], *, cache_dir: Optional[Path] =
                 cache[_elev_key(*p)] = z
                 added = True
         if added:
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(cache), "utf-8")
+            _write_atomic(path, json.dumps(cache))
     return [cache.get(_elev_key(*p)) for p in points]
 
 
@@ -1020,10 +1126,14 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                     lon: Optional[float] = None, elevation_m: Optional[float] = None,
                     name: Optional[str] = None, today: Optional[dt.date] = None,
                     key: Optional[str] = None, get: Callable = _http_get,
-                    cache_dir: Optional[Path] = None, use_cwa: bool = True) -> dict:
+                    cache_dir: Optional[Path] = None, use_cwa: bool = True, forecast_only: bool = False) -> dict:
     """Run the provider chain. Returns {provider, label, values|None, tried,
-    location, fetched_at}."""
-    cache_dir = cache_dir or home()
+    location, fetched_at}. `cache_dir` (tests) holds every file; else the CWA files and
+    heights are the site's (site_dir(), SP-552) and the climatology the tenant's (home()).
+    `forecast_only` (SP-553, the points along a course): no climatology step — its ten archive
+    calls per point are what the call cap is for; such a point is `manual` (no rows)."""
+    cwa_dir = cache_dir or site_dir()
+    clim_dir = cache_dir or home()
     from backend.engine.localtime import today_local
     today = today or today_local()
     lead = (date - today).days
@@ -1033,13 +1143,13 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
 
     want = _dates(date, days)
 
-    def done(provider, values, extra=None, hourly=None, rain=None, wind=None, sun_js=None, at=None):
+    def done(provider, values, extra=None, hourly=None, rain=None, wind=None, sun_js=None, at=None, fetched=None):
         v = {"altitude_m": values.get("altitude_m", elevation_m), "temp_c": values["temp_c"], "rh_pct": values["rh_pct"],
              "dew_c": values.get("dew_c", dew_point(values["temp_c"], values["rh_pct"])["dew_c"])}
         # hourly rows from an hourly forecast (CWA 3-day, Open-Meteo) or the
         # climatology's 24-hour profile; weekly blocks have none → one heat value
         return {"provider": provider, "label": _(PROVIDER_LABEL[provider]), "values": v, "tried": tried,
-                "location": loc, "fetched_at": now, "detail": extra or {}, "lead_days": lead,
+                "location": loc, "fetched_at": fetched or now, "detail": extra or {}, "lead_days": lead,
                 "hourly": hourly or None, "rain": rain or None,   # rain: SP-249 rows (forecasts only)
                 "wind": wind or None,   # wind: SP-251 rows (CWA mountain 3-day, Open-Meteo forecast)
                 # SP-254: sunrise / sunset of the event days (Open-Meteo's daily, else NOAA's formula)
@@ -1049,8 +1159,12 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
 
     def get_key():
         if not cwa_key:
-            cwa_key.append(key if key is not None else load_key())
+            # SP-552: the site's key for every tenant (the downloads are shared; the key is not shown)
+            cwa_key.append(key if key is not None else site_key())
         return cwa_key[0]
+
+    def have_files(ids) -> bool:
+        return any((cwa_dir / f"cwa_{d}.json").exists() for d in ids)
 
     # 1. CWA
     if not use_cwa:
@@ -1058,8 +1172,8 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
     elif lead < 0 or lead > 6:
         tried.append({"provider": "cwa", "ok": False, "reason": f"日期不在一週預報範圍（還有 {lead} 天）"})
     else:
-        key = get_key()
-        if not key and not any((cache_dir / f"cwa_{d}.json").exists() for d in (CWA_HOURLY, CWA_WEEKLY)):
+        ckey = get_key()
+        if not ckey and not have_files((CWA_HOURLY, CWA_WEEKLY)):
             tried.append({"provider": "cwa", "ok": False, "reason": "未設定 CWA 授權碼"})
         else:
             for ds_id, prov in ((CWA_HOURLY, "cwa_hourly"), (CWA_WEEKLY, "cwa_weekly")):
@@ -1067,7 +1181,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                     tried.append({"provider": prov, "ok": False, "reason": "超出三天預報範圍"})
                     continue
                 try:
-                    doc = fetch_cwa(ds_id, key, cache_dir=cache_dir, get=get)
+                    doc = fetch_cwa(ds_id, ckey, cache_dir=cwa_dir, get=get)
                     m = match_location(doc["locations"], name, lat, lon)
                     if m is None:
                         tried.append({"provider": prov, "ok": False, "reason": f"{CWA_MATCH_KM:g} km 內沒有 CWA 登山預報點"})
@@ -1077,13 +1191,14 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                         tried.append({"provider": prov, "ok": False, "reason": "預報沒有涵蓋這些日期"})
                         continue
                     tried.append({"provider": prov, "ok": True})
-                    now = doc.get("fetched_at", now)
                     return done(prov, c, {"cwa_location": m["name"], "cwa_id": m.get("id"),
                                           "match": m["match"], "distance_km": m["distance_km"],
-                                          "issued": doc.get("issued"), "cache": doc.get("cache")},
+                                          "issued": doc.get("issued"), "cache": doc.get("cache"),
+                                          "attribution": _(CWA_ATTRIBUTION)},
                                 cwa_hourly_rows(m, want) if c.get("product") == "hourly" else None,
                                 cwa_rain_rows(m, want), cwa_wind_rows(m, want),
-                                at=(lat, lon) if lat is not None and lon is not None else (m["lat"], m["lon"]))
+                                at=(lat, lon) if lat is not None and lon is not None else (m["lat"], m["lon"]),
+                                fetched=doc.get("fetched_at"))
                 except Exception as e:          # noqa: BLE001 — fall through to the next provider
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
     if lat is None or lon is None:
@@ -1092,8 +1207,12 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
                 "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None, "sun": None}
     end = date + dt.timedelta(days=max(1, days) - 1)
-    # 2. Open-Meteo forecast
-    if 0 <= lead and (end - today).days < OM_HORIZON_DAYS:
+
+    def open_meteo() -> Optional[dict]:
+        """Open-Meteo forecast: what CWA has not got (8–16 days out, outside Taiwan, CWA down)."""
+        if not (0 <= lead and (end - today).days < OM_HORIZON_DAYS):
+            tried.append({"provider": "open_meteo", "ok": False, "reason": f"超出 {OM_HORIZON_DAYS} 天預報範圍"})
+            return None
         try:
             # one extra day when the horizon allows: the hourly rows for a race
             # that runs past midnight (the daytime mean still uses `want` only)
@@ -1106,7 +1225,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                       "timezone": "auto", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
             if elevation_m is not None:
                 params["elevation"] = elevation_m
-            js = get(OM_FORECAST, params, 10.0)
+            js = om_forecast(params, get)
             c = parse_open_meteo(js, want)
             if c:
                 tried.append({"provider": "open_meteo", "ok": True})
@@ -1116,57 +1235,69 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
             tried.append({"provider": "open_meteo", "ok": False, "reason": "回應沒有這些日期"})
         except Exception as e:               # noqa: BLE001
             tried.append({"provider": "open_meteo", "ok": False, "reason": str(e)[:120]})
-    else:
-        tried.append({"provider": "open_meteo", "ok": False, "reason": f"超出 {OM_HORIZON_DAYS} 天預報範圍"})
-    # 3. CWA 鄉鎮預報 (SP-234), the fallback when Open-Meteo has no data or fails (owner 2026-10-06:
-    #    Open-Meteo first until a station comparison exists): the nearest 鄉鎮公所, temperature lapsed
-    #    to the race elevation
-    if not use_cwa:
-        tried.append({"provider": "cwa_town", "ok": False, "reason": _("未使用")})
-    elif lead < 0 or lead > 6:
-        tried.append({"provider": "cwa_town", "ok": False, "reason": _("日期不在一週預報範圍（還有 {n} 天）", n=lead)})
-    else:
+        return None
+
+    def town() -> Optional[dict]:
+        """CWA 鄉鎮預報 (SP-234): the nearest 鄉鎮公所, temperature lapsed to the race elevation."""
+        if not use_cwa:
+            tried.append({"provider": "cwa_town", "ok": False, "reason": _("未使用")})
+            return None
+        if lead < 0 or lead > 6:
+            tried.append({"provider": "cwa_town", "ok": False, "reason": _("日期不在一週預報範圍（還有 {n} 天）", n=lead)})
+            return None
         tkey = get_key()
-        if not tkey and not any((cache_dir / f"cwa_{d}.json").exists() for d in (CWA_TOWN_HOURLY, CWA_TOWN_WEEKLY)):
+        if not tkey and not have_files((CWA_TOWN_HOURLY, CWA_TOWN_WEEKLY)):
             tried.append({"provider": "cwa_town", "ok": False, "reason": _("未設定 CWA 授權碼")})
-        else:
-            for ds_id, prov in ((CWA_TOWN_HOURLY, "cwa_town_hourly"), (CWA_TOWN_WEEKLY, "cwa_town_weekly")):
-                if ds_id == CWA_TOWN_HOURLY and lead + max(1, days) - 1 > 2:
-                    tried.append({"provider": prov, "ok": False, "reason": _("超出三天預報範圍")})
+            return None
+        for ds_id, prov in ((CWA_TOWN_HOURLY, "cwa_town_hourly"), (CWA_TOWN_WEEKLY, "cwa_town_weekly")):
+            if ds_id == CWA_TOWN_HOURLY and lead + max(1, days) - 1 > 2:
+                tried.append({"provider": prov, "ok": False, "reason": _("超出三天預報範圍")})
+                continue
+            try:
+                doc = fetch_cwa(ds_id, tkey, cache_dir=cwa_dir, get=get)
+                m = match_location(doc["locations"], None, lat, lon, CWA_TOWN_MATCH_KM)
+                if m is None:
+                    tried.append({"provider": prov, "ok": False,
+                                  "reason": _("{km:g} km 內沒有鄉鎮預報點", km=CWA_TOWN_MATCH_KM)})
+                    return None
+                c = cwa_day_conditions(m, date, days)
+                if c is None:
+                    tried.append({"provider": prov, "ok": False, "reason": _("預報沒有涵蓋這些日期")})
                     continue
-                try:
-                    doc = fetch_cwa(ds_id, tkey, cache_dir=cache_dir, get=get)
-                    m = match_location(doc["locations"], None, lat, lon, CWA_TOWN_MATCH_KM)
-                    if m is None:
-                        tried.append({"provider": prov, "ok": False,
-                                      "reason": _("{km:g} km 內沒有鄉鎮預報點", km=CWA_TOWN_MATCH_KM)})
-                        break
-                    c = cwa_day_conditions(m, date, days)
-                    if c is None:
-                        tried.append({"provider": prov, "ok": False, "reason": _("預報沒有涵蓋這些日期")})
-                        continue
-                    pts = [(m["lat"], m["lon"])] + ([(lat, lon)] if elevation_m is None else [])
-                    zs = elevations(pts, cache_dir=cache_dir, get=get)
-                    to_m = elevation_m if elevation_m is not None else zs[1]
-                    if zs[0] is None or to_m is None:
-                        tried.append({"provider": prov, "ok": False, "reason": _("查不到預報點或比賽地點的海拔")})
-                        break
-                    m = {**m, "elevation_m": zs[0]}
-                    rows = cwa_hourly_rows(m, want) if c.get("product") == "hourly" else []
-                    vals, rows = town_lapsed(m, c, rows, to_m)
-                    tried.append({"provider": prov, "ok": True})
-                    now = doc.get("fetched_at", now)
-                    return done(prov, vals, {"cwa_location": m["name"], "cwa_id": m.get("id"), "town": True,
-                                             "match": m["match"], "distance_km": m["distance_km"],
-                                             "town_elevation_m": zs[0], "target_elevation_m": to_m,
-                                             "lapse_m": to_m - zs[0], "offset_c": lapse(0.0, zs[0], to_m),
-                                             "issued": doc.get("issued"), "cache": doc.get("cache"),
-                                             "attribution": ATTRIBUTION}, rows or None, cwa_rain_rows(m, want))
-                except Exception as e:          # noqa: BLE001 — the weekly file, then the next provider
-                    tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
+                pts = [(m["lat"], m["lon"])] + ([(lat, lon)] if elevation_m is None else [])
+                zs = elevations(pts, cache_dir=cwa_dir, get=get)
+                to_m = elevation_m if elevation_m is not None else zs[1]
+                if zs[0] is None or to_m is None:
+                    tried.append({"provider": prov, "ok": False, "reason": _("查不到預報點或比賽地點的海拔")})
+                    return None
+                m = {**m, "elevation_m": zs[0]}
+                rows = cwa_hourly_rows(m, want) if c.get("product") == "hourly" else []
+                vals, rows = town_lapsed(m, c, rows, to_m)
+                tried.append({"provider": prov, "ok": True})
+                return done(prov, vals, {"cwa_location": m["name"], "cwa_id": m.get("id"), "town": True,
+                                         "match": m["match"], "distance_km": m["distance_km"],
+                                         "town_elevation_m": zs[0], "target_elevation_m": to_m,
+                                         "lapse_m": to_m - zs[0], "offset_c": lapse(0.0, zs[0], to_m),
+                                         "issued": doc.get("issued"), "cache": doc.get("cache"),
+                                         "attribution": _(CWA_TOWN_ATTRIBUTION)}, rows or None,
+                            cwa_rain_rows(m, want), fetched=doc.get("fetched_at"))
+            except Exception as e:          # noqa: BLE001 — the weekly file, then the next provider
+                tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
+        return None
+
+    # 2.–3. SP-552: the 鄉鎮 forecast before Open-Meteo (CWA_TOWN_FIRST); the 2026-10-06 order the other way
+    for step in ((town, open_meteo) if CWA_TOWN_FIRST else (open_meteo, town)):
+        r = step()
+        if r is not None:
+            return r
+    if forecast_only:
+        tried.append({"provider": "climatology", "ok": False, "reason": _("沿線的點不查歷史平均")})
+        return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None,
+                "sun": None}
     # 4. climatology: the month around the race date, 10 years, 3 models (fetch_climatology)
     try:
-        c = fetch_climatology(lat, lon, elevation_m, date, days, today=today, get=get, cache_dir=cache_dir)
+        c = fetch_climatology(lat, lon, elevation_m, date, days, today=today, get=get, cache_dir=clim_dir)
     except Exception as e:                   # noqa: BLE001
         tried.append({"provider": "climatology", "ok": False, "reason": str(e)[:120] or "沒有資料"})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
@@ -1178,6 +1309,190 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                                    "window_days": 2 * CLIM_HALF_DAYS + 1, "partial": c["failed"] > 0,
                                    "grid_elevation_m": c["grid_elevation_m"], "lapse_corrected": c["lapse_corrected"],
                                    "cache": c["cache"], "attribution": ATTRIBUTION}, rows)
+
+
+# ---------------------------------------------------------------------------
+# Open-Meteo forecast memo (SP-553): the same point and days within an hour → no new call
+# ---------------------------------------------------------------------------
+
+OM_MEMO_TTL_S = 3600.0            # 推估: Open-Meteo's models update hourly at most
+OM_MEMO_MAX = 256                 # entries (one per point × days; a few kB each)
+_OM_MEMO: dict = {}
+_OM_MEMO_LOCK = threading.Lock()
+
+
+def om_forecast(params: dict, get: Callable = _http_get) -> dict:
+    """The Open-Meteo forecast answer for `params`, from a per-process memo for OM_MEMO_TTL_S when
+    the real client asks (a test's fake `get` always gets the call)."""
+    if get is not _http_get:
+        return get(OM_FORECAST, params, 10.0)
+    key = tuple(sorted((k, str(v)) for k, v in params.items()))
+    now = dt.datetime.now().timestamp()
+    with _OM_MEMO_LOCK:
+        hit = _OM_MEMO.get(key)
+        if hit is not None and now - hit[0] < OM_MEMO_TTL_S:
+            return hit[1]
+    js = get(OM_FORECAST, params, 10.0)
+    with _OM_MEMO_LOCK:
+        _OM_MEMO[key] = (now, js)
+        while len(_OM_MEMO) > OM_MEMO_MAX:
+            _OM_MEMO.pop(next(iter(_OM_MEMO)))
+    return js
+
+
+# ---------------------------------------------------------------------------
+# along the course (SP-553): a long course's weather at several points, each section's
+# rows read at the clock the plan reaches it (planner / calc / cold pick the rows)
+# ---------------------------------------------------------------------------
+
+ROUTE_POINT_KM = 10.0             # 推估: one point per 10 km of course
+ROUTE_MIN_KM = 8.0                # 推估: a shorter course keeps its one point
+ROUTE_MAX_POINTS = 6              # the cap per race: ≤ 6 Open-Meteo forecast calls (memo above), the CWA
+                                  # files shared (SP-552: no call), no climatology (forecast_only)
+FORECAST_PROVIDERS = ("cwa_hourly", "cwa_weekly", "cwa_town_hourly", "cwa_town_weekly", "open_meteo")
+
+
+def route_sections(lat: list, lon: list, ele: list, *, every_km: float = ROUTE_POINT_KM,
+                   max_points: int = ROUTE_MAX_POINTS) -> list[dict]:
+    """[{i, from_km, to_km, km, lat, lon, elevation_m}]: the course cut into n equal sections
+    (n = ⌈length / every_km⌉, at most max_points), each section's weather point the track
+    sample nearest its middle. [] when the course is shorter than ROUTE_MIN_KM or has no points
+    (the race keeps its one weather point)."""
+    n_pts = min(len(lat or []), len(lon or []))
+    if n_pts < 2:
+        return []
+    cum = [0.0]
+    for k in range(1, n_pts):
+        cum.append(cum[-1] + haversine_km(lat[k - 1], lon[k - 1], lat[k], lon[k]))
+    total = cum[-1]
+    if total < ROUTE_MIN_KM:
+        return []
+    n = max(1, min(int(max_points), math.ceil(total / every_km)))
+    if n < 2:
+        return []
+    out, j = [], 0
+    for i in range(n):
+        a, b = total * i / n, total * (i + 1) / n
+        m = (a + b) / 2
+        while j + 1 < n_pts and cum[j + 1] <= m:
+            j += 1
+        k = j + 1 if j + 1 < n_pts and abs(cum[j + 1] - m) < abs(cum[j] - m) else j
+        z = ele[k] if ele and k < len(ele) else None
+        out.append({"i": i, "from_km": round(a, 3), "to_km": round(b, 3), "km": round(cum[k], 3),
+                    "lat": float(lat[k]), "lon": float(lon[k]), "elevation_m": None if z is None else float(z)})
+    return out
+
+
+def route_conditions(sections: list[dict], *, date: dt.date, days: int = 1, today: Optional[dt.date] = None,
+                     key: Optional[str] = None, get: Callable = _http_get, cache_dir: Optional[Path] = None,
+                     use_cwa: bool = True) -> list[dict]:
+    """Each section's forecast (race_conditions at its point, no name match: each point is matched by
+    its own coordinates; forecast_only). [{i, from_km, to_km, km, lat, lon, elevation_m, provider,
+    label, detail, hourly, rain, wind}] — `elevation_m` is the height the rows refer to (z_ref)."""
+    out = []
+    for s in sections[:ROUTE_MAX_POINTS]:
+        r = race_conditions(date=date, days=days, lat=s["lat"], lon=s["lon"], elevation_m=s.get("elevation_m"),
+                            name=None, today=today, key=key, get=get, cache_dir=cache_dir, use_cwa=use_cwa,
+                            forecast_only=True)
+        d = r.get("detail") or {}
+        z = (r.get("values") or {}).get("altitude_m")
+        out.append({**{k: s.get(k) for k in ("i", "from_km", "to_km", "km", "lat", "lon")},
+                    "elevation_m": z if z is not None else s.get("elevation_m"),
+                    "provider": r["provider"], "label": r["label"],
+                    "detail": {k: d.get(k) for k in ("cwa_location", "distance_km", "town", "attribution", "cache")
+                               if d.get(k) is not None},
+                    "hourly": r.get("hourly"), "rain": r.get("rain"), "wind": r.get("wind")})
+    return out
+
+
+def section_for(secs: Optional[list[dict]], start_km: Optional[float], end_km: Optional[float]) -> Optional[dict]:
+    """The weather section a stretch of course belongs to: the one holding its middle, else the
+    nearest (a course re-cut by the planner can run a few metres past the last section)."""
+    if not secs or start_km is None:
+        return None
+    m = (float(start_km) + float(end_km if end_km is not None else start_km)) / 2
+    for s in secs:
+        if float(s.get("from_km") or 0.0) <= m <= float(s.get("to_km") or 0.0):
+            return s
+    return min(secs, key=lambda s: min(abs(m - float(s.get("from_km") or 0.0)), abs(m - float(s.get("to_km") or 0.0))))
+
+
+def section_rain_rows(secs: list[dict], pts: list[dict], rows: Optional[list[dict]] = None) -> list[dict]:
+    """The rain rows the plan actually runs through: each section's own rows (else `rows`, the race's
+    one point) over the clock spans of the segments in that section (cold.points). A row is kept
+    once per section that runs in it."""
+    spans: dict[int, list] = {}
+    for p in pts:
+        s = section_for(secs, p.get("start_km"), p.get("end_km"))
+        if s is not None:
+            spans.setdefault(id(s), []).append((p["begin"], p["end"]))
+    out = []
+    for s in secs:
+        sp = spans.get(id(s))
+        if not sp:
+            continue
+        for r in (s.get("rain") or rows or []):
+            try:
+                a, b = dt.datetime.fromisoformat(r["start"]), dt.datetime.fromisoformat(r["end"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if any(a < e and b > x for x, e in sp):
+                out.append(r)
+    return out
+
+
+def local_rows(secs: list[dict], wind: Optional[list[dict]], hourly: Optional[list[dict]],
+               z_ref: Optional[float]) -> Callable[[dict], dict]:
+    """For cold.py: a segment point → {wind, hourly, z} of its section (its own rows and the height
+    they refer to), else the race's one point (`wind`, `hourly`, `z_ref`)."""
+    def hrs(rows):
+        return sorted((x for x in (_hour_row(r.get("t"), r.get("temp_c"), r.get("rh_pct"), r.get("dew_c"))
+                                   for r in rows or []) if x), key=lambda r: r["t"])
+    glob = {"wind": wind or None, "hourly": hrs(hourly), "z": z_ref}
+    own = {id(s): {"wind": s.get("wind") or None, "hourly": hrs(s.get("hourly")), "z": s.get("elevation_m")}
+           for s in secs}
+
+    def at(p: dict) -> dict:
+        s = section_for(secs, p.get("start_km"), p.get("end_km"))
+        if s is None:
+            return glob
+        o = own[id(s)]
+        if not o["wind"] and not o["hourly"]:
+            return glob
+        return o
+    return at
+
+
+# ---------------------------------------------------------------------------
+# 疊石 Cairn (SP-553, SP-531 Q2: links both ways, no integration)
+# ---------------------------------------------------------------------------
+
+CAIRN_ORIGIN = "https://map.yichlin.com"          # Cairn's only production host (inReachLiveTrack CLAUDE.md)
+_CAIRN_RX = None
+
+
+def cairn_url(text: Optional[str]) -> Optional[str]:
+    """The Cairn route link in a plan event's note: Cairn opens a route with `/?gpx=<id>` (its route
+    pick, v2/app/src/lib/route-pick.ts) and a shared one with `&share=<token>` (entry-view.ts). Rebuilt
+    on CAIRN_ORIGIN from the two ids only — None without one (nothing is shown)."""
+    global _CAIRN_RX
+    if not text:
+        return None
+    import re
+    from urllib.parse import parse_qs, urlparse
+    if _CAIRN_RX is None:
+        _CAIRN_RX = re.compile(r"https?://map\.yichlin\.com/[^\s，。；、）)]*", re.I)
+    for m in _CAIRN_RX.finditer(text):
+        q = parse_qs(urlparse(m.group(0)).query)
+        gid = (q.get("gpx") or [""])[0]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", gid):
+            continue
+        tok = (q.get("share") or [""])[0]
+        url = f"{CAIRN_ORIGIN}/?gpx={gid}"
+        if re.fullmatch(r"[A-Za-z0-9_-]{8,128}", tok):
+            url += f"&share={tok}"
+        return url
+    return None
 
 
 def activities_conditions(js: dict, windows: list[tuple[dt.datetime, dt.datetime]]) -> Optional[dict]:

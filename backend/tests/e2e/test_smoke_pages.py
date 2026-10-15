@@ -39,7 +39,7 @@ def _viewer_loaded(page, timeout: float = 90_000) -> None:
 
 
 def _workouts(page) -> list[dict]:
-    w = _json(page, "/api/v1/wko5/workouts")
+    w = _json(page, "/api/v1/app/workouts")
     rows = w if isinstance(w, list) else w.get("workouts") or []
     assert rows, "the e2e athlete has no activities"
     return rows
@@ -236,7 +236,7 @@ def test_schedule_swap_locks_both_sessions_until_done(app):
 
 def test_strength_session_opens_the_move_picker(app):
     """SP-191 R1: a strength session's editor lists the moves in use and 「選肌力動作」 opens
-    課表偏好 at 肌力動作, unfolded, with a select per movement type."""
+    課表偏好 at 肌力動作 (SP-540: the 肌力 tab), with a select per movement type."""
     page, _ = app
     open_page(page, _server.PAGES["schedule"])
     _calendar_ready(page)
@@ -250,7 +250,8 @@ def test_strength_session_opens_the_move_picker(app):
     expect(page.locator("#sd-sm-txt")).to_contain_text("目前：", timeout=20_000)
     page.click("#sd-sm-go")
     expect(page.locator("#pf")).to_have_attribute("open", "")
-    expect(page.locator("#pf-sm")).to_have_attribute("open", "")
+    expect(page.locator("#pf-tab-strength")).to_have_attribute("aria-selected", "true")
+    expect(page.locator("#pf-sm")).to_be_visible()
     assert page.locator("#pf-mv select[data-mv]").count() >= 5
     expect(page.locator("#sd")).not_to_have_attribute("open", "")
     # a run's editor has no such box
@@ -296,7 +297,7 @@ def test_viewer_sport_chip_switches_the_main_sport(app):
     with page.expect_navigation():
         sel.select_option("road")
     expect(page.locator("#sport-sel")).to_have_value("road", timeout=60_000)
-    assert _json(page, "/api/v1/wko5/primary-sport")["setting"] == "road"
+    assert _json(page, "/api/v1/app/primary-sport")["setting"] == "road"
     with page.expect_navigation():
         page.locator("#sport-sel").select_option("auto")
     expect(page.locator("#sport-sel")).to_have_value("auto", timeout=60_000)
@@ -328,7 +329,7 @@ def test_schedule_pull_button_logged_out(app):
     expect(page.locator("#pull-btn")).to_be_hidden()
     links = page.locator("#pull-login:visible, #login-link:visible")
     expect(links.first).to_be_visible()
-    expect(links.first).to_have_attribute("href", "/api/v1/wko5/settings#sync")
+    expect(links.first).to_have_attribute("href", "/api/v1/app/settings#sync")
 
 
 def test_schedule_pull_button_runs(app):

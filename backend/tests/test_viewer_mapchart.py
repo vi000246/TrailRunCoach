@@ -1,5 +1,5 @@
 """
-單次活動 map + chart (SP-80; wko5_viewer.html): the route map gets a time-axis chart of
+單次活動 map + chart (SP-80; charts.html): the route map gets a time-axis chart of
 elevation, HR, power, pace and grade beside it (stacked panels, picked by buttons, map on
 top or on the left), and the activity charts join the synced hover. The page's map-chart
 block runs under node; synthetic samples only.
@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
-PAGE = STATIC / "wko5_viewer.html"
+PAGE = STATIC / "charts.html"
 NODE = shutil.which("node")
 
 

@@ -20,7 +20,7 @@
 (() => {
   const LEVELS = ["full", "standard", "lean"];
   const CAP = 3;
-  const SETTINGS_HREF = "/api/v1/wko5/settings#hint-level";
+  const SETTINGS_HREF = "/api/v1/app/settings#hint-level";
   const API = "/api/v1/plan/profile/hint-level";
   const ACK_API = "/api/v1/plan/profile/hint-ack";
   const t = (k, p) => (window.I18N && I18N.t ? I18N.t(k, p) : k);

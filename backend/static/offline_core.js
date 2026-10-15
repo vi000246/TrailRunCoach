@@ -10,6 +10,10 @@
  *        weeks / months, the period totals, the PMC of the last 7 / 42 / 90 days, the settings
  *   p1   the activity list (every activity's summary) and the achievements
  *   p2   nothing yet: the FIT files and the 1-year chart data need an API first (SP-325)
+ * The manual (SP-558, api/manual.py: /manual, its chapters, search index and pictures) is the program's
+ * too — public, no one's data: kept in the shared program cache, signed in or not, network first; the
+ * whole of it (every chapter and picture of /manual/index.json) is fetched at install and when a manual
+ * page asks (message {type: "manual"}), so its pages and its search work offline.
  * Only GET, only the paths listed here. Writes are never cached and never queued.
  *
  * Whose copy: the person signed in (GET /api/v1/session -> userKeyOf). The p0–p2 caches are
@@ -52,17 +56,22 @@
     "/api/v1/static/z5flow.js",
     "/api/v1/static/plan_mark.js", "/api/v1/static/autoplan.js", "/api/v1/static/session_banner.js",
     "/api/v1/static/workout_editor.js", "/api/v1/static/syncrun.js", "/api/v1/static/fitimport.js",
-    "/api/v1/static/painpicker.js", "/api/v1/static/sportchip.js", "/api/v1/static/fitfolder.js",
+    "/api/v1/static/painpicker.js", "/api/v1/static/sportchip.js", "/api/v1/static/fitfolder.js", "/api/v1/static/exportimport.js",
     "/api/v1/static/eptest.js", "/api/v1/static/weight_hint.js", "/api/v1/static/hints.js",
-    "/api/v1/static/racehints.js",
+    "/api/v1/static/racehints.js", "/api/v1/static/pmc_chart.js", "/api/v1/static/manual_search.js",
+    "/api/v1/static/manual.js", "/api/v1/static/manual_charts.js",
   ];
+  // 操作手冊 (SP-558): public; /manual/index.json names its chapters and pictures (warmManual)
+  const MANUAL = "/manual";
+  const MANUAL_INDEX = "/manual/index.json";
+  const isManual = (p) => p === MANUAL || p.startsWith(MANUAL + "/");
   // the chart library of 總覽 (fetched with CORS, never as an opaque answer)
   const CDN = ["https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"];
   const PAGES = {
     "/api/v1/overview/page": "p0",
     "/api/v1/overview/plan/schedule/page": "p0",
     [OFFLINE_PAGE]: "p0",
-    "/api/v1/wko5/activities/page": "p1",
+    "/api/v1/app/activities/page": "p1",
   };
   const API = {
     "/api/v1/overview/status": "p0",
@@ -78,8 +87,8 @@
     "/api/v1/sync/settings": "p0",
     "/api/v1/region": "p0",
     "/api/v1/plan/profile/hint-level": "p0",     // 提示多寡 (static/hints.js, SP-482)
-    "/api/v1/wko5/activities": "p1",
-    "/api/v1/wko5/activities/stats": "p1",
+    "/api/v1/app/activities": "p1",
+    "/api/v1/app/activities/stats": "p1",
     "/api/v1/achievements": "p1",
   };
   // a calendar for other days than asked would show an empty week: only a range that covers it
@@ -99,7 +108,7 @@
       "/api/v1/overview/plan/equivalence",
       ...SUMMARY.map(([u, n]) => `/api/v1/overview/summary?unit=${u}&n=${n}`),
     ],
-    p1: ["/api/v1/wko5/activities/page", "/api/v1/wko5/activities", "/api/v1/wko5/activities/stats",
+    p1: ["/api/v1/app/activities/page", "/api/v1/app/activities", "/api/v1/app/activities/stats",
       "/api/v1/achievements?include_hidden=true"],
     p2: [],                       // FIT and the 1-year chart data: no API yet (SP-325)
   };
@@ -127,6 +136,7 @@
     if (u.origin !== origin) return CDN.includes(u.href) ? { kind: "app", tier: "p0" } : null;
     const p = u.pathname;
     if (Object.prototype.hasOwnProperty.call(PAGES, p)) return { kind: "page", tier: PAGES[p] };
+    if (isManual(p)) return { kind: "app", tier: "p0", manual: true };
     if (navigate) return null;
     // the static files are the program; a page opened by file name carries its reader's session
     if (p.startsWith("/api/v1/static/")) return p.endsWith(".html") ? null : { kind: "app", tier: "p0" };
@@ -499,6 +509,35 @@
       return { ok: true, user: key, done };
     }
 
+    /** The whole manual into the program cache: the index, then every chapter page and picture it
+     * names (the ones kept already are refreshed). Offline: whatever is kept stays. */
+    async function warmManual() {
+      const cache = await caches.open(APP);
+      const st = await load();
+      const keep = async (u) => {
+        try {
+          const r = await net(u, { credentials: "same-origin", cache: "no-cache" });
+          if (!keepable(r)) return null;
+          const buf = await r.arrayBuffer();
+          await cache.put(u, storedCopy(buf, r));
+          st.entries[entryKey(APP, u)] = { cache: APP, url: u, tier: "p0", kind: "app", bytes: buf.byteLength, at: now() };
+          return buf;
+        } catch (_) { return null; }
+      };
+      const buf = await keep(origin + MANUAL_INDEX);
+      let idx = null;
+      try { idx = buf ? JSON.parse(new TextDecoder().decode(buf)) : null; } catch (_) { idx = null; }
+      const urls = [MANUAL];
+      for (const c of (idx && idx.chapters) || []) {
+        if (typeof c.url === "string" && isManual(c.url)) urls.push(c.url);
+        for (const im of c.images || []) if (typeof im === "string" && isManual(im)) urls.push(im);
+      }
+      let n = buf ? 1 : 0;
+      for (const u of [...new Set(urls)]) if (await keep(origin + u)) n++;
+      await save();
+      return { kept: n };
+    }
+
     async function install() {
       const cache = await caches.open(APP);
       const st = await load();
@@ -513,6 +552,7 @@
         } catch (_) { /* offline or blocked: kept when a page loads it */ }
       }
       await save();
+      await warmManual().catch(() => {});
     }
 
     /** A new version: the older programs go (the people's copies stay). */
@@ -539,12 +579,12 @@
       return { user: st.user, version, budget, bytes: by, total: by.app + by.p0 + by.p1 + by.p2, tiers: st.tiers, present };
     }
 
-    return { handleFetch, sync, setUser, setSession, clearUser, install, activate, status, enforce, bytesOf,
+    return { handleFetch, sync, setUser, setSession, clearUser, install, activate, status, enforce, bytesOf, warmManual,
       _state: () => state, _gen: () => gen };
   }
 
   return {
-    BUDGET, TIERS, REFRESH_MS, TIMEOUT_MS, APP_FILES, CDN, PAGES, API, WARM, OFFLINE_PAGE, HDR, NO_NAV,
+    BUDGET, TIERS, REFRESH_MS, TIMEOUT_MS, APP_FILES, CDN, PAGES, API, WARM, OFFLINE_PAGE, HDR, NO_NAV, MANUAL, MANUAL_INDEX,
     USER_PREFIX, META_CACHE, STRICT_RANGE,
     classify, userKeyOf, userCache, appCache, warmDerived, pickFallback, planEviction, markOfflineHtml,
     monthGrid, mondayOf, addDays, createEngine,

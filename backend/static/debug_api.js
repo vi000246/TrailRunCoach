@@ -1,6 +1,7 @@
-// 設定 › 進階 › Debug API (SP-371, api/debug.py admin_router, docs/debug-api.md): the switch, the
-// token list (make one after the server PIN — shown once —, revoke one / all) and the last 100 calls.
-// Every text goes through t("settings.debug.*") (static/i18n/<locale>/settings.json).
+// 設定 › 進階 › Debug API (SP-371, SP-373, api/debug.py admin_router, docs/debug-api.md): the switch,
+// the personal tokens (made by the owner, no PIN — shown once —, revoke one / all) and the last 100
+// calls; and 從正式站同步 (#upstream, engine/upstream.py) when this machine names a production server.
+// Every text goes through t("settings.debug.*") / t("settings.upstream.*") (static/i18n/<locale>/settings.json).
 (() => {
   const URL_ = "/api/v1/settings/debug-api";
   const el = (id) => document.getElementById(id);
@@ -33,7 +34,7 @@
     const btn = k.active ? `<button data-dbg-revoke="${k.id}" data-name="${esc(k.name)}">${esc(t("settings.debug.revoke"))}</button>` : esc(status);
     return `<tr><td>${esc(k.name)} <span class="meta">${esc(k.prefix)}…</span></td>
       <td class="meta">${k.scopes.map((s) => `<span title="${esc(scopeTitle(s))}">${esc(s)}</span>`).join(" ")}</td>
-      <td class="meta">${esc(new Date(k.expires_at).toLocaleDateString())}</td>
+      <td class="meta">${k.never_expires ? esc(t("settings.debug.no_expiry")) : esc(new Date(k.expires_at).toLocaleDateString())}</td>
       <td class="meta">${esc(when(k.last_used_at))}${k.last_ip ? " · " + esc(k.last_ip) : ""}${nip}</td><td>${btn}</td></tr>`;
   }
 
@@ -46,9 +47,7 @@
 
   function show(s) {
     state = s;
-    el("dbg-nopin").hidden = !!s.pin_configured;
     el("dbg-on").checked = !!s.enabled;
-    el("dbg-on").disabled = !s.pin_configured && !s.enabled;
     el("dbg-body").hidden = !s.enabled;
     const head = `<tr><th>${esc(t("settings.debug.col_name"))}</th><th>${esc(t("settings.debug.col_scopes"))}</th>
       <th>${esc(t("settings.debug.col_expires"))}</th><th>${esc(t("settings.debug.col_used"))}</th><th></th></tr>`;
@@ -60,11 +59,8 @@
     el("dbg-audit").innerHTML = s.audit.length ? ah + s.audit.map(auditRow).join("")
       : `<tr><td class="meta">${esc(t("settings.debug.audit_empty"))}</td></tr>`;
     el("dbg-revoke-all").disabled = !s.tokens.some((k) => k.active);
-    const d = s.dropped || {}, p = s.pin || {};
-    el("dbg-stats").textContent = [
-      t("settings.debug.pin_stats", { n: p.wrong_total || 0, streak: p.wrong_in_a_row || 0, locks: p.locks || 0 }),
-      t("settings.debug.dropped", { rate: d.RATE_LIMITED || 0, blocked: d.BLOCKED || 0, busy: d.BUSY || 0 }),
-    ].join(" · ");
+    const d = s.dropped || {};
+    el("dbg-stats").textContent = t("settings.debug.dropped", { rate: d.RATE_LIMITED || 0, blocked: d.BLOCKED || 0, busy: d.BUSY || 0 });
     const fh = `<tr><th>${esc(t("settings.debug.col_time"))}</th><th>IP</th><th>${esc(t("settings.debug.col_code"))}</th>
       <th>${esc(t("settings.debug.col_count"))}</th></tr>`;
     el("dbg-fails").innerHTML = (s.failures || []).length
@@ -74,7 +70,11 @@
   }
 
   async function load() {
-    try { show(await api("")); } catch (e) { say(t("settings.debug.failed", { msg: e.message.slice(0, 80) })); }
+    try { show(await api("")); } catch (e) {
+      // sign-in mode, not the owner (SP-373 / SP-406): the debug API is the owner's only — no block at all
+      if (e.status === 403) { el("debugapi").hidden = true; return; }
+      say(t("settings.debug.failed", { msg: e.message.slice(0, 80) }));
+    }
   }
 
   el("dbg-on").onchange = async (ev) => {
@@ -84,30 +84,25 @@
 
   el("dbg-new").onclick = () => {
     const s = state || {};
-    el("dbg-days").innerHTML = (s.days || [1, 7, 30, 90]).map((n) =>
-      `<option value="${n}"${n === s.default_days ? " selected" : ""}>${esc(t("settings.debug.days_n", { n }))}</option>`).join("");
+    el("dbg-days").innerHTML = (s.days || [7, 30, 90, 365, 0]).map((n) =>
+      `<option value="${n}"${n === s.default_days ? " selected" : ""}>${esc(n ? t("settings.debug.days_n", { n }) : t("settings.debug.no_expiry"))}</option>`).join("");
     el("dbg-scopes").innerHTML = (s.scopes || []).map((sc) =>
       `<label title="${esc(scopeTitle(sc))}"><input type="checkbox" name="dbg-scope" value="${esc(sc)}"${(s.default_scopes || []).includes(sc) ? " checked" : ""}> ${esc(sc)}</label>`).join(" ");
-    el("dbg-pin").value = ""; el("dbg-msg").textContent = "";
-    el("dbg-dlg").showModal(); el("dbg-pin").focus();
+    el("dbg-msg").textContent = "";
+    el("dbg-dlg").showModal(); el("dbg-name").focus();
   };
   el("dbg-cancel").onclick = () => el("dbg-dlg").close();
   el("dbg-create").onclick = async () => {
     const scopes = [...document.querySelectorAll('input[name="dbg-scope"]:checked')].map((x) => x.value);
     if (!scopes.length) { el("dbg-msg").textContent = t("settings.debug.need_scope"); return; }
     try {
-      const r = await api("/tokens", json("POST", { pin: el("dbg-pin").value, name: el("dbg-name").value,
-                                                    scopes, days: Number(el("dbg-days").value) }));
-      el("dbg-pin").value = "";
+      const r = await api("/tokens", json("POST", { name: el("dbg-name").value, scopes, days: Number(el("dbg-days").value) }));
       el("dbg-dlg").close();
       el("dbg-token").value = r.token; el("dbg-made").hidden = false; el("dbg-token").select();
       say(t("settings.debug.made"));
       await load();
     } catch (e) {
-      el("dbg-pin").value = "";
-      el("dbg-msg").textContent = e.detail && e.detail.code === "PIN_LOCKED"
-        ? t("settings.debug.locked", { m: Math.max(1, Math.ceil((e.detail.retry_s || 60) / 60)) })
-        : t("settings.debug.failed", { msg: e.message.slice(0, 80) });
+      el("dbg-msg").textContent = t("settings.debug.failed", { msg: e.message.slice(0, 80) });
     }
   };
   el("dbg-copy").onclick = async () => {
@@ -128,4 +123,59 @@
     catch (e) { say(t("settings.debug.failed", { msg: e.message.slice(0, 80) })); }
   };
   load();
+
+  // ---- 從正式站同步 (SP-373): preview first, then apply what was previewed
+  const up = el("upstream");
+  function parts() { return [["config", "up-config"], ["plan", "up-plan"]].filter(([, id]) => el(id).checked).map(([p]) => p); }
+  function lastText(lp) {
+    return lp && lp.at ? t("settings.upstream.last", { when: when(lp.at) }) : t("settings.upstream.never");
+  }
+  function lines(r) {
+    const out = [];
+    if (r.config) {
+      const c = r.config, pj = c.plan_json || {};
+      out.push(t("settings.upstream.r_settings", { n: c.settings.changed.length, skipped: c.settings.skipped.length }));
+      const diff = ["thresholds", "weights", "events", "phases"].filter((k) => pj[k] && !pj[k].same)
+        .map((k) => t(`settings.upstream.k_${k}`) + ` ${pj[k].here} → ${pj[k].production}`);
+      if (pj.profile && !pj.profile.same) diff.push(t("settings.upstream.k_profile"));
+      out.push(diff.length ? t("settings.upstream.r_plan_json", { list: diff.join("、") }) : t("settings.upstream.r_plan_json_same"));
+      out.push(t("settings.upstream.r_injuries", { here: c.injuries.here, prod: c.injuries.production }));
+      out.push(t("settings.upstream.r_tags", { here: c.activity_tags.here, prod: c.activity_tags.production }));
+      if (c.terrain.production) out.push(t("settings.upstream.r_terrain", { n: c.terrain.changed, missing: c.terrain.missing_here }));
+    }
+    if (r.plan) out.push(t("settings.upstream.r_plan", { add: r.plan.added, del: r.plan.removed, chg: r.plan.changed, prod: r.plan.production }));
+    if (r.apply && r.push_off) out.push(t("settings.upstream.r_push_off"));
+    return out;
+  }
+  async function upLoad() {
+    let s;
+    try { s = await api("/upstream"); } catch { return; }
+    if (!s.configured) return;
+    up.hidden = false;
+    el("up-host").textContent = t("settings.upstream.host", { host: s.host || "?" }) + " · " + lastText(s.last_pull);
+  }
+  async function upRun(apply) {
+    const what = parts();
+    if (!what.length) { el("up-msg").textContent = t("settings.upstream.need_part"); return; }
+    if (apply && !confirm(t("settings.upstream.confirm"))) return;
+    el("up-msg").textContent = t("settings.upstream.working");
+    el("up-preview").disabled = el("up-apply").disabled = true;
+    try {
+      const r = await api("/upstream/pull", json("POST", { what, apply }));
+      el("up-result").innerHTML = lines(r).map((x) => `<li>${esc(x)}</li>`).join("");
+      el("up-msg").textContent = apply ? t("settings.upstream.done") : t("settings.upstream.previewed");
+      el("up-apply").disabled = apply;
+      if (apply) await upLoad();
+    } catch (e) {
+      el("up-msg").textContent = t("settings.debug.failed", { msg: e.message.slice(0, 160) });
+    } finally {
+      el("up-preview").disabled = false;
+    }
+  }
+  if (up) {
+    el("up-preview").onclick = () => upRun(false);
+    el("up-apply").onclick = () => upRun(true);
+    [el("up-config"), el("up-plan")].forEach((x) => { x.onchange = () => { el("up-apply").disabled = true; el("up-result").innerHTML = ""; }; });
+    upLoad();
+  }
 })();

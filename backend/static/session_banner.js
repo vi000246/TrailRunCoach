@@ -9,11 +9,14 @@
  *              「重新登入」 link to 設定 → 資料同步.
  *   expired  — the other logins in use (課表推送) that have expired (the server
  *              checks the stored token, cached a few minutes: sync/session_check.py).
+ *   intervals_dormancy — intervals.icu is the 資料來源 and the account has not been seen
+ *              there for ≥ 83 days (SP-346): free accounts go dormant at 90 and stop
+ *              receiving activities; a line asks to open intervals.icu once.
  * Nothing is shown when every login is fine or the request fails.
  *
  * SP-88: the check used to run once, at page load, before the auto-sync
  * (autosync.js) found the dead token, and nothing read it again. Now the
- * banner is re-read when the auto-sync ends (WKO5SessionBanner.refresh) and
+ * banner is re-read when the auto-sync ends (TRCSessionBanner.refresh) and
  * when the tab becomes visible again (a page left open overnight).
  */
 (function () {
@@ -86,12 +89,13 @@
     const old = document.getElementById("session-banner");
     if (old) old.remove();
     if (!r) return;
-    const url = r.settings_url || "/api/v1/wko5/settings#sync";
+    const url = r.settings_url || "/api/v1/app/settings#sync";
     const expired = r.expired || [];
     const s = r.sync && r.sync.problem ? r.sync : null;
     // the 資料來源's line is the card; the rest (課表推送) a short line each
     const others = expired.filter((a) => !s || a.source !== s.source);
-    if (!s && !others.length) return;
+    const dz = r.intervals_dormancy || null;
+    if (!s && !others.length && !dz) return;
     const host = document.querySelector("main") || document.body;
     const box = document.createElement("div");
     box.id = "session-banner";
@@ -108,10 +112,19 @@
       line.appendChild(link(url, T("session.relogin"), true));
       box.appendChild(line);
     }
+    if (dz) {
+      const line = document.createElement("div");
+      line.textContent = (dz.dormant ? T("session.icu_dormant", { days: dz.days })
+        : T("session.icu_dormant_soon", { days: dz.days, left: dz.days_left })) + " ";
+      const a = link(dz.url || "https://intervals.icu", T("session.icu_open"), true);
+      a.target = "_blank"; a.rel = "noopener";
+      line.appendChild(a);
+      box.appendChild(line);
+    }
     host.insertBefore(box, host.firstChild);
   }
 
-  window.WKO5SessionBanner = { refresh: run };
+  window.TRCSessionBanner = { refresh: run };
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && Date.now() - lastRun > MIN_GAP_MS) run();
   });

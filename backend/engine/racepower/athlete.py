@@ -504,8 +504,8 @@ def thresholds_as_of(ds, day: dt.date) -> dict:
         v = ds.athlete.setting_on("runthr", day)
         hist = ds.athlete.settings.get("runthr") or []
         default = bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist)
-        out.update(lthr=v, lthr_source="WKO5 預設值（未設定）" if default
-                   else ds.setting_label("runthr", "WKO5 設定") if v is not None else "未設定")
+        out.update(lthr=v, lthr_source="出廠預設值（未設定）" if default
+                   else ds.setting_label("runthr", "對照資料夾設定") if v is not None else "未設定")
     ae = _plan_last(ds, "aethr", day)
     if ae:
         out.update(aet=float(ae[1]), aet_source=(threshold_row(ds.plan, "aethr", day) or {}).get("label")
@@ -1038,7 +1038,7 @@ def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bo
     # and stores (1895 vs the snapshot's 1897 s on WKO5's data alone)
     return {"mftp": float(f["FTP"]), "tte": float(f["tte"]), "frc": float(f["FRC"]), "pmax": float(f["Pmax"]),
             "d": float(f["D"]), "fit_files": [c["path"] for c in extra], "n_points": len(pts),
-            "source": "wko5_pdmodel（WKO5 5.0.587 PD 模型的移植，已對 WKO5 快照驗證）"}
+            "source": "PD 模型（擬合近 90 天 mean-max 上緣；已和對照資料夾存的快照比對過）"}
 
 
 CP_FIT_MIN_RUNS = 5              # = fitdataset.CP_FIT_MIN_RUNS (a Dataset without stryd_cp_fit)
@@ -1115,15 +1115,15 @@ def body_profile(ds, today: dt.date) -> dict:
         if out["height_cm"] is None and ath is not None:
             h = (ath.settings.get("height") or [(None, None)])[-1][1]
             if h:
-                out["height_cm"], out["height_cm_src"] = round(float(h) * 100.0), "WKO5"
+                out["height_cm"], out["height_cm_src"] = round(float(h) * 100.0), "對照資料夾"
         if root is not None:
             if out["sex"] is None and root.get(3017) in ("male", "female"):
-                out["sex"], out["sex_src"] = root.get(3017), "WKO5"
+                out["sex"], out["sex_src"] = root.get(3017), "對照資料夾"
             b = root.get(3033)
             if out["age"] is None and isinstance(b, str) and len(b) >= 10:
                 bd = dt.date.fromisoformat(b[:10])
                 out["age"] = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
-                out["age_src"] = "WKO5 生日"
+                out["age_src"] = "對照資料夾的生日"
     except (AttributeError, TypeError, ValueError, IndexError):
         pass
     return out
@@ -1142,7 +1142,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     today = today or dt.date.today()
     tday = date_to_day(today)
     weight = ds.setting("weight", tday)
-    weight_src = "賽季計畫體重" if ds.plan.weight_on(today) is not None else ds.setting_label("weight", "WKO5 設定")
+    weight_src = "賽季計畫體重" if ds.plan.weight_on(today) is not None else ds.setting_label("weight", "對照資料夾設定")
     prof = ds.plan.profile or {}
     exclude = exclude or set()
     runs_365 = [w for w in ds.workouts if w.sport == "run" and tday - RIEGEL_WINDOW_DAYS < w.day <= tday + 1
@@ -1182,8 +1182,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                 "dates_ok": all(c["ok"] for c in checks if c["id"] == "dates"),
                 "errors_ok": all(c["ok"] for c in checks if c["level"] == "error")}
     tte = pd.get(("tte", "Run"))
-    tte_src = "WKO5 模型 TTE" if tte else (
-        "回測：預設 50 分鐘（不用今天的 WKO5 TTE，沒有當時的 TTE 測試）" if strict_as_of else "預設 50 分鐘（試算表預設）")
+    tte_src = "對照資料夾的模型 TTE" if tte else (
+        "回測：預設 50 分鐘（不用對照資料夾今天的 TTE，沒有當時的 TTE 測試）" if strict_as_of else "預設 50 分鐘（試算表預設）")
     tte_v = tte or DEFAULT_TTE_S
 
     # ---- Riegel -------------------------------------------------------------
@@ -1274,7 +1274,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                         "cp": e["cp"], "w_prime": e["w_prime"], "cp_range": e.get("cp_range"),
                         "date": test["date"], "fresh": test["fresh"]})
     if pd.get(("mftp", "Run")):
-        sources.append({"id": "wko5", "label": "WKO5 模型 mFTP（WKO5 存的快照）", "cp": pd[("mftp", "Run")],
+        sources.append({"id": "wko5", "label": "對照資料夾的 mFTP（資料夾存的快照）", "cp": pd[("mftp", "Run")],
                         "tte": pd.get(("tte", "Run")), "frc": pd.get(("frc", "Run")), "w_prime": pd.get(("frc", "Run"))})
     if acts:
         sources.append({"id": "activities", "label": f"近 {CP_WINDOW_DAYS} 天活動（3–20 分鐘最佳功率擬合）",
@@ -1315,7 +1315,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     dsrc = next((s for s in sources if s["id"] == default_cp), None)
     if dsrc and dsrc.get("tte"):
         tte_v = dsrc["tte"]
-        tte_src = "PD 模型重算的 TTE" if dsrc.get("fit") or dsrc.get("base") == "pdmodel" else "WKO5 模型 TTE"
+        tte_src = "PD 模型重算的 TTE" if dsrc.get("fit") or dsrc.get("base") == "pdmodel" else "對照資料夾的模型 TTE"
     lb = (dsrc or {}).get("lower_bound") or lb
     # thin the envelope for charts: log-spaced points only
     chart_env = [{"t": x, "p": y, "idx": i} for x, y, i in zip(env365["xs"], env365["ys"], env365["who"])

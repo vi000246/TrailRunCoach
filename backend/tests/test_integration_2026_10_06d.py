@@ -209,14 +209,14 @@ def _access(path_q: str) -> str:
 
 ORDINARY = [
     # the viewer's chart endpoint (SP-243's 有杖 vs 沒杖 is one of these charts), uvicorn quotes the path
-    quote("/api/v1/wko5/views/我的訓練/dashboards/3/charts/9")
+    quote("/api/v1/app/views/我的訓練/dashboards/3/charts/9")
     + "?begin=2025-10-07&end=2026-10-06&sports=&parity=false&period=week&window=90&basis=pace",
-    quote("/api/v1/wko5/views/我的訓練/dashboards/3/charts/9")
+    quote("/api/v1/app/views/我的訓練/dashboards/3/charts/9")
     + "?begin=2025-10-07&end=2026-10-06&sports=Run%2CTrail%20Run%2CHiking&parity=true",
-    "/api/v1/wko5/views?parity=false",
-    "/api/v1/wko5/activities",
-    "/api/v1/wko5/workouts/1234/activity",
-    "/api/v1/wko5/viewer?view=%E6%88%91%E7%9A%84%E8%A8%93%E7%B7%B4&dash=3&chart=9",
+    "/api/v1/app/views?parity=false",
+    "/api/v1/app/activities",
+    "/api/v1/app/workouts/1234/activity",
+    "/api/v1/app/viewer?view=%E6%88%91%E7%9A%84%E8%A8%93%E7%B7%B4&dash=3&chart=9",
     "/static/pole_compare.js",
     "/static/i18n/en/activity.json",
 ]

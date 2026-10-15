@@ -71,8 +71,6 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.interval_target": "interval_target",
     "plan.prefs.target_basis": "target_basis",
     "plan.prefs.cp_test_protocol": "cp_test_protocol",
-    "plan.prefs.heat": "heat",
-    "plan.prefs.heat_method": "heat_method",
     "plan.prefs.quality_gate": "quality_gate",
     "plan.prefs.quality_gate_weeks": "quality_gate_weeks",
     "plan.prefs.aet_test_days": "aet_test_days",
@@ -105,7 +103,7 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # taper_days: the 減量期 length of a road marathon / an ultra (planning.taper_days, SP-96) — a phase too
 # strength_moves / strength_no_gear: which move each strength type uses (engine/strength_moves.py,
 # SP-191) — the strength texts only, read by strength_plan / balance_plan whether or not `active`
-NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol",
+NOT_SHAPING = ("cp_test_protocol", "aet_test_days", "aet_test_protocol",
                "warmup_commute_min", "cooldown_min", "warmup_on", "warmup_min", "b2b", "transition_weeks", "taper_days",
                "strength_moves", "strength_no_gear") + GATE_FIELDS
 WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -154,10 +152,6 @@ class Prefs:
     # CP 測試方式 (engine/cp_protocols.py). Not part of `active`: choosing a
     # protocol only changes the test session, not the shaping of the week.
     cp_test_protocol: str = "quick"
-    # 熱適應課 (engine/heat_plan.py, heat-acclimation.md §5.4): auto adds heat
-    # sessions only before a hot A/B race; off never. Not part of `active`.
-    heat: str = "auto"
-    heat_method: str = "run"
     # 間歇門檻 (engine/quality_gate.py): not part of `active` either (GATE_FIELDS)
     quality_gate: str = "auto"
     quality_gate_weeks: int = 8
@@ -270,11 +264,16 @@ def from_settings(values: dict, lenient: bool = True) -> Prefs:
     return Prefs(**kw)
 
 
+# preferences that are gone: a page still open from before sends them, they are ignored
+# (SP-569: 熱適應課 / 熱適應方式 — no heat sessions are scheduled any more)
+RETIRED = frozenset({"heat", "heat_method"})
+
+
 def from_body(body: dict) -> Prefs:
     """Prefs from the API body (field names); unknown fields are rejected
     (and an unknown 間歇門檻 too, by check())."""
     names = {f.name for f in fields(Prefs)}
-    bad = set(body) - names
+    bad = set(body) - names - RETIRED
     if bad:
         raise ValueError(f"unknown preference(s): {sorted(bad)}")
     return from_settings({k: body.get(f) for k, f in KEY_FIELDS.items()}, lenient=False)
@@ -562,7 +561,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
     if p.quality == 2 and c.allow_quality and len(q) == 1 and c.mode != "recovery_week" and (c.quality_cap or 2) >= 2:
         # only one track open (SP-31: with both, the caller already planned one Zone 3 + one Zone 5):
         # the second session repeats the first — unless the two together go over the week's interval
-        # total (quality_gate.QUALITY_SHARE_MAX of the running time, 推估 — Seiler's 80/20 counts sessions)
+        # total (quality_gate.QUALITY_SHARE_MAX of the running time, the coaches' median — sources there)
         from backend.engine.overview import session_tiz_min
         from backend.engine.quality_gate import QUALITY_SHARE_MAX
         if 2 * session_tiz_min(q[0]) <= QUALITY_SHARE_MAX * total_min + 1e-6:
@@ -570,7 +569,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
         else:
             c.notes.append({"level": "info", "src": "quality_share",
                             "text": f"偏好每週 2 堂品質課，但兩堂「{q[0]['title']}」會超過一週間歇總量上限"
-                                    f"（跑步時間 {QUALITY_SHARE_MAX:.0%}；推估，Seiler 的 80/20 是堂數，不是時間）：本週排 1 堂"})
+                                    f"（跑步時間 {QUALITY_SHARE_MAX:.0%}；教練中位數：80/20 Endurance 約 20%、Campos 2022 ≤ 30%、UA 和 Koop 約 10%）：本週排 1 堂"})
     elif len(q) > 1 and (p.quality == 1 or (c.quality_cap or 2) < 2):
         hard = [s for s in hard if s["kind"] != "quality" or s is q[0]]
     for s in hard:
@@ -669,7 +668,12 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 QUALITY_ORDER = (1, 2, 3, 0, 4, 5, 6)          # Tue, Wed, Thu, Mon, Fri, Sat, Sun
-SRC_GAP = "台灣教練：5 區一週最多 2 次、間隔至少 2 天；強度課與長跑隔 ≥ 48 小時"
+# SP-528 (coach-consensus-sp518 B §4): the 48 h between hard days is the coaches' mode and the shared floor of
+# UA (「minimum 48 hours … 72 is preferable」), Friel (48–72 h), Bompa & Buzzichelli 2015 p.167–168 and Stanley,
+# Peake & Buchheit 2013 (parasympathetic recovery ≥ 48 h after high intensity) — not Seiler 2007, whose HRV
+# recovery is minutes to hours. 台灣教練: Zone 5 at most twice a week.
+SRC_GAP = ("UA（至少 48 小時，72 更好）、Friel（48–72 小時）、Bompa p.167–168、Stanley 2013（高強度後副交感恢復 ≥ 48 小時）："
+           "強度課與長跑隔 ≥ 48 小時；台灣教練：5 區一週最多 2 次、間隔至少 2 天")
 LONG_MIN_TYPICAL = 90                            # 推估: an LSD rarely fits under 90 min
 
 
@@ -816,7 +820,7 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             avail.remove(r["day"])
             continue
         elif s["kind"] in ("quality", "test"):
-            # ≥ 2 days between hard days: 台灣教練 — Zone 5 at most twice a week, ≥ 2 days apart
+            # ≥ 2 days between hard days (SRC_GAP: UA, Friel, Bompa, Stanley 2013; 台灣教練 — Zone 5 at most twice a week)
             hard_days = [dt.date.fromisoformat(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
             hard_days += list(hard_done or [])   # done hard days this week (workout_review.HARD_TYPES)
             ok = lambda d:(long_day is None or abs((d - long_day).days) >= 2) and \

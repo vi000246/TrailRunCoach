@@ -19,7 +19,7 @@ re 推薦 blocks|區間時數 charts|season-plan event edit
 # hides the UI label 測試 (activity_tags, plan_store, planning, status, overview.html) — drop it
 # once those go through _() / t()
 re ^測試$
-# a view's name used as its id (wko5_viewer ?view=<name>)
+# a view's name used as its id (charts.html ?view=<name>)
 re ^單次活動判讀$
 # activity_auto's effort_reason cache value (activity_tags' other effort reasons aren't translated yet either)
 re ^無法計算$

@@ -178,7 +178,7 @@ LIBRARY: dict[str, tuple[Variant, ...]] = {
     ),
     "z3c": (
         _v("t3a", "z3c", "Z3sub", 2, 720, 120, "jog", 0.90, 0.95, canonical=True,
-           src="WKO 研討會（閾值以下先延長時間）；CTS TempoRun 每趟 8–20 分", src_kind="coach"),
+           src="教練研討會（閾值以下先延長時間）；CTS TempoRun 每趟 8–20 分", src_kind="coach"),
         _v("t3b", "z3c", "Z3sub", 1, 1440, 0, "none", 0.88, 0.92, src="Daniels 節奏跑", src_kind="coach"),
         _v("t3c", "z3c", "Z3sub", 2, 720, 180, "jog_down", 0.90, 0.95, "hill", grade="長坡 4–6%",
            src="Koop／CTS：長上坡穩定爬升（越野專項）", src_kind="coach"),
@@ -730,7 +730,15 @@ def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False,
     use_hr = bool(lthr) and not lthr_default
     band = f"{v.lo * 100:.0f}–{v.hi * 100:.0f}% CP"
     parts = [f"功率 {v.lo * cp:.0f}–{v.hi * cp:.0f} W（{band}）"] if cp else [f"RPE 8（{band}）"]
-    if use_hr and v.cls == "Z3sub" and aet:
+    # SP-493: under the 儲備心率 / 最大心率 課表心率區間 the HR is the class's zone of that model (what the
+    # push gives a library step, hr_profile.work_band) — not × LTHR; the LTHR model keeps HR_LTHR
+    from backend.engine.hr_profile import class_hr
+    zb = class_hr(th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None, v.cls)
+    if zb and use_hr and (v.cls != "Z5" or min(v.works) >= 180):
+        parts.append(f"心率 {zb[0]}–{zb[1]} bpm" + ("（最後 1 分鐘）" if v.cls == "Z5" else ""))
+    elif zb:
+        pass                                        # a short Z5 rep: no HR, as under the LTHR model
+    elif use_hr and v.cls == "Z3sub" and aet:
         parts.append(f"心率 {aet:.0f}–{lthr:.0f} bpm")
     elif use_hr and v.cls in HR_LTHR and (v.cls != "Z5" or min(v.works) >= 180):
         a, b = HR_LTHR[v.cls]

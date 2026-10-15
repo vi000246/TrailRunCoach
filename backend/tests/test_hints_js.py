@@ -137,7 +137,7 @@ def test_the_html_box_cap_line_link_and_got_it_buttons():
     r = _run("(() => { const r = Hints.render(DATA.h, {level: 'standard', acks: []}); return r; })()", h=hs)
     html = r["html"]
     assert html.count('class="hint-must"') == 1 and html.index("B 賽太近") < html.index("提醒0")
-    assert "還有 2 則提醒 ▸" in html and "提示太多？" in html and "/api/v1/wko5/settings#hint-level" in html
+    assert "還有 2 則提醒 ▸" in html and "提示太多？" in html and "/api/v1/app/settings#hint-level" in html
     assert html.count('data-hint-ack="OV8b"') == 1 and 'data-hint-ack="OV8a"' not in html   # only ackable ones
     assert html.count("知道了") == 1 + 5                                     # OV8b + every reminder
     assert r["counts"] == {"must": 2, "shown": 3, "more": 2, "detail": 0, "hidden": 0}

@@ -180,7 +180,8 @@ DRIFT_WATCH = 0.10
 STREAK_NEED = 3               # legacy only: the old unsourced 「連續 3 次」 rule (gate: engine/quality_gate.py)
 STOP_KMH = 1.6                # WKO5's moving threshold (1 mph)
 MAX_STOPPED_SHARE = 0.05
-AET_MARGIN = 3.0              # "easy" = avg HR ≤ AeT + 3
+AET_MARGIN = 3.0              # "easy" = avg HR ≤ AeT + 3: the +3 is HR's natural day-to-day spread (Lamberts & Lambert
+                              # 2009: 3 ± 1 bpm), not a margin the coaches allow — their ceiling is the AeT itself (SP-528)
 OVER_AET_SHARE = 0.10
 LONG_MIN_S = 75 * 60
 TEST_AET_MIN_S = 55 * 60
@@ -235,7 +236,7 @@ SUGGESTED = {"easy": 1, "long": 1, "hard_long": 1, "test_aet": 1, "quality": 2, 
 # the session classifier's labels (docs/research/vo2max-session-detection.md §3.5; owner 2026-10-02)
 STIM_LABEL = {"z5": N_("Z5 間歇"), "z3": N_("Z3 閾值")}
 HARD_LONG_HIKE = N_("高強度長天")
-MODERATE_LABEL = N_("中強度跑")           # informational: avg HR > AeT+3 without a Zone 3 / Zone 5 stimulus
+MODERATE_LABEL = N_("中強度跑")           # informational: avg HR > the easy cap + 3 (SP-565) without a Zone 3 / Zone 5 stimulus
 HARD_TYPES = ("quality", "hard_long", "test_cp")   # hard days (48 h apart; plan_prefs.place)
 
 
@@ -1802,6 +1803,50 @@ def _thresholds(ds, w) -> tuple[Optional[float], Optional[float], Optional[float
     return aet, lthr, cp
 
 
+def _hr_hist(h: np.ndarray, d: np.ndarray) -> dict:
+    """{"<bpm>": seconds} of the moving HR time per whole bpm, ceil'd (SP-565: over_cap_s)."""
+    u, inv = np.unique(np.ceil(np.asarray(h, float)).astype(int), return_inverse=True)
+    secs = np.bincount(inv, weights=np.asarray(d, float))
+    return {str(int(k)): round(float(s), 1) for k, s in zip(u, secs)}
+
+
+def easy_cap_of(ds, w, m: Optional[dict]) -> Optional[dict]:
+    """The easy-run HR cap for this activity (hr_profile.easy_cap_for: the zones in effect, a measured
+    AeT; the review's AeT without zones) — measure() puts it on `m` on read; a hand-made `m` (tests,
+    callers that pass their own) gets it here. SP-565: the review's 「輕鬆」 is the 課表's."""
+    m = m or {}
+    if "easy_cap" in m:
+        return m.get("easy_cap")
+    try:
+        from backend.engine import hr_profile as HP
+        return HP.easy_cap_for(ds, _wdate(w), m.get("lthr"), m.get("aet"))
+    except Exception:                       # noqa: BLE001 — a dataset without dates / plan (tests)
+        a = m.get("aet")
+        return {"value": float(a), "source": "AeT", "measured": False, "model": None} if a else None
+
+
+def over_cap_s(m: dict, cap: Optional[dict]) -> Optional[float]:
+    """Seconds of moving HR above the easy cap + EASY_TOL_BPM (hr_hist), None without either."""
+    hist, v = m.get("hr_hist"), (cap or {}).get("value")
+    if not isinstance(hist, dict) or not v:
+        return None
+    from backend.engine import hr_profile as HP
+    lim = float(v) + HP.EASY_TOL_BPM
+    return float(sum(s for k, s in hist.items() if int(k) > lim))
+
+
+def _with_easy(ds, w, m: Optional[dict]) -> Optional[dict]:
+    """measure()'s read-time SP-565 fields: `easy_cap` (easy_cap_of) and `over_cap_s`."""
+    if not m:
+        return m
+    cap = easy_cap_of(ds, w, {k: v for k, v in m.items() if k != "easy_cap"})
+    return {**m, "easy_cap": cap, "over_cap_s": over_cap_s(m, cap)}
+
+
+def _cap_v(m: dict) -> Optional[float]:
+    return (m.get("easy_cap") or {}).get("value")
+
+
 def _title(w) -> str:
     e = w.entry
     t = getattr(e, "title", None)
@@ -1921,6 +1966,9 @@ def _measure(ds, w) -> Optional[dict]:
     hm = mov & np.isfinite(h) & (h > 0)
     out["hr_s"] = float(d[hm].sum())
     out["over_aet_s"] = float(d[hm & (h > (aet or 1e9) + AET_MARGIN)].sum()) if aet else None
+    # SP-565: the moving HR time per whole bpm, so the time over the easy cap (over_cap_s) is read on
+    # read — the cap follows the zones in effect, a setting this per-file cache doesn't key on
+    out["hr_hist"] = _hr_hist(h[hm], d[hm]) if hm.any() else None
     out["zones"] = None if not (aet and lthr) else {
         "low": float(d[hm & (h < aet)].sum()), "mid": float(d[hm & (h >= aet) & (h < lthr)].sum()),
         "high": float(d[hm & (h >= lthr)].sum())}
@@ -2160,7 +2208,8 @@ def measure(ds, w) -> Optional[dict]:
         ct = cp_test_for_sex(m["cp_test"], CPP.athlete_sex(ds))
         if ct is not m["cp_test"]:
             m = {**m, "cp_test": ct}
-    return m
+    # SP-565: the easy cap of the zones in effect and the time above it, on read (never cached per file)
+    return _with_easy(ds, w, m)
 
 
 def _flush(ds) -> None:
@@ -2327,9 +2376,12 @@ def _planned_quality(ds, w) -> bool:
 def _stimulus(ds, w, m: dict, cat: str) -> dict:
     """session_stimulus.verdict for this run; HRpeak is looked up only when the HR
     path could change the answer (it reads every run's measure once per dataset)."""
+    from backend.engine import hr_profile as HP
     from backend.engine import session_stimulus as SS
     st = m.get("stim")
-    easy_hr = bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN)
+    # SP-565: 「輕鬆」 = avg HR ≤ the 課表's easy cap + 3 (hr_profile.is_easy), not AeT + 3 any more
+    cap = easy_cap_of(ds, w, m)
+    easy_hr = HP.is_easy(m.get("avg_hr"), cap)
     if easy_hr and _planned_quality(ds, w):
         # the 課表's interval session was done by this run: the plan says intervals, so a
         # low whole-run average (long warm-up, cool-down and rests) doesn't make it easy —
@@ -2342,7 +2394,7 @@ def _stimulus(ds, w, m: dict, cat: str) -> dict:
             and any((st.get("hr_path") or {}).get("secs") or []):
         hp, src = hr_peak(ds, w)
     v = SS.verdict(st, cat, hp, easy_hr)
-    return {**v, "hrpeak_source": src, "easy_hr": easy_hr,
+    return {**v, "hrpeak_source": src, "easy_hr": easy_hr, "easy_cap": (cap or {}).get("value"),
             "bouts": (st or {}).get("vo2_bouts") or [], "top_pct_cp": (st or {}).get("top_pct_cp"),
             "power_valid_share": (st or {}).get("power_valid_share")}
 
@@ -2424,7 +2476,7 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
     if typ in ("test_cp", "test_aet"):
         stimulus = None
     terrain = cat if cat in TERRAIN_LABEL else None
-    moderate = typ == "easy" and bool(stim) and not stim.get("easy_hr") and bool(m.get("aet") and m.get("avg_hr"))
+    moderate = typ == "easy" and bool(stim) and not stim.get("easy_hr") and bool(stim.get("easy_cap") and m.get("avg_hr"))
     if typ == "quality":
         label = STIM_LABEL.get(stimulus or "", TYPE_LABEL["quality"])
     elif typ == "hard_long":
@@ -2610,9 +2662,11 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
     interval gate is engine/quality_gate.py (the old drift streak is gone);
     `streak` is accepted and ignored."""
     lines = []
-    over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
+    cap, over = _easy_view(m)
+    tot = m.get("hr_s") or 0
     if over is not None and tot > 0 and over / tot > OVER_AET_SHARE and typ in ("easy", "long"):
-        lines.append(f"心率超過 AeT+3 的時間佔 {over / tot * 100:.0f}%（> 10%）：下次放慢")
+        lines.append(_("心率超過輕鬆跑上限 {cap}+3 的時間佔 {pct:.0f}%（> 10%）：下次放慢",
+                       cap=_num(cap), pct=over / tot * 100))
     dr = m.get("drift") or {}
     # the AeT test's bands suggest a threshold: strict only; other runs show
     # the reference tier too, labelled
@@ -2642,9 +2696,11 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
             lines.append(heat)
         return lines[:3]
     # informational: the interval gate is engine/quality_gate.py, not this drift
-    aet, hr = m.get("aet"), m.get("avg_hr")
-    if d < DRIFT_GOOD and aet and hr and hr > aet + AET_MARGIN:
-        lines.append(_("{name} {plain}，但平均心率 {hr:.0f} > AeT+3，不是輕鬆跑", name=name, plain=drift_plain(d), hr=hr))
+    from backend.engine import hr_profile as HP
+    hr = m.get("avg_hr")
+    if d < DRIFT_GOOD and HP.over_easy(hr, cap):
+        lines.append(_("{name} {plain}，但平均心率 {hr:.0f} > 輕鬆跑上限 {cap}+3，不是輕鬆跑", name=name,
+                       plain=drift_plain(d), hr=hr, cap=_num(cap)))
     elif d < DRIFT_GOOD:
         lines.append(_("{name} {plain}：有氧基礎穩", name=name, plain=drift_plain(d)))
     elif d < DRIFT_WATCH:
@@ -2734,7 +2790,7 @@ def stimulus_lines(c: dict) -> list[str]:
     if c.get("category") == "hike":
         out.append("健行／百岳不自動判 5 區（心率受海拔、負重影響）；要算就標「當作間歇判讀」")
     if st.get("easy_hr") and c.get("stimulus") == "z5":
-        out.append("平均心率 ≤ AeT+3，但功率證據 ≥ 4 分：照功率算")
+        out.append("平均心率 ≤ 輕鬆跑上限+3，但功率證據 ≥ 4 分：照功率算")
     return out
 
 
@@ -2759,7 +2815,7 @@ def cp_headline(ev: dict) -> str:
     if ev.get("cp") is None:
         return _("{eff} → 算不出模型閾值功率（Modelled threshold power）", eff=eff)
     pd = ev.get("pd") or {}
-    return _("{eff} → 這次測試後的模型閾值功率（Modelled threshold power）{cp} W（算法參考 WKO5：{d} 前 90 天 mean-max 上緣的 PD 模型，含這次測試）",
+    return _("{eff} → 這次測試後的模型閾值功率（Modelled threshold power）{cp} W（{d} 前 90 天 mean-max 上緣的 PD 模型，含這次測試）",
              eff=eff, cp=f"{ev['cp']:.0f}", d=pd.get("date") or ev["date"])
 
 
@@ -2785,7 +2841,7 @@ def cp_lines(ev: Optional[dict], has_power: bool = True) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def _row(name: str, text: str, tip: Optional[str] = None) -> dict:
-    """A card row; `tip` = hover text (wko5_viewer shows it as the row's title)."""
+    """A card row; `tip` = hover text (charts.html shows it as the row's title)."""
     data = {"kind": "value", "value": text}
     if tip:
         data["tip"] = tip
@@ -2834,7 +2890,7 @@ def _streak_for(ds, w) -> Optional[int]:
 
 
 # ---------------------------------------------------------------------------
-# dashboard cards (wko5_viewer drawReviewCards; res.cards): the 本次重點 and
+# dashboard cards (charts.html drawReviewCards; res.cards): the 本次重點 and
 # 飄移判讀 cards as small visual tiles. `series` keeps the text rows (tests,
 # the AI context); the viewer shows only the cards, long text behind each
 # card's ? (`tip`). Card kinds:
@@ -2920,8 +2976,27 @@ def drift_card(dr: dict, basis: str, lines: list[str], judged: bool = True, typ_
                  level=drift_level(d) if judged else "info", tip=_drift_tip(dr, basis, lines))
 
 
+def _easy_view(m: dict) -> tuple[Optional[float], Optional[float]]:
+    """(the easy cap in bpm, the seconds above cap + 3) of a measure() row (SP-565: the cap, not
+    AeT); a hand-made row without `easy_cap` (tests) reads its AeT and over_aet_s as before."""
+    if "easy_cap" in m:
+        return _cap_v(m), m.get("over_cap_s")
+    return m.get("aet"), m.get("over_aet_s")
+
+
+def _cap_src(m: dict) -> str:
+    """Where the easy cap comes from (plan_hr_zones' easy_source: 「COROS 儲備心率 Z2（141–154 bpm）」 /
+    「量到的 AeT 150 bpm（…）」), or 「AeT N bpm」 without zones."""
+    s = (m.get("easy_cap") or {}).get("source")
+    if s and s != "AeT":
+        return s
+    v = _easy_view(m)[0]
+    return f"AeT {_num(v)} bpm" if v else "–"
+
+
 def _over_aet(m: dict) -> Optional[float]:
-    over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
+    """The share of the HR time above the easy cap + 3 (SP-565; the name is the old AeT + 3's)."""
+    over, tot = _easy_view(m)[1], m.get("hr_s") or 0
     return over / tot if over is not None and tot > 0 else None
 
 
@@ -3034,9 +3109,9 @@ def _tis_basis_line(b: Optional[dict]) -> Optional[str]:
                   else _("{x} 算不出", x=_("門檻"))))
 
 
-TIS_TIP = N_("怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n"
+TIS_TIP = N_("怎麼看：越高 = 這次對那個能量系統的刺激越大；這個分數沒有官方的分級名稱，只看數字、和自己平常的課比。\n"
              "看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（模型閾值功率的 85%）才會加，輕鬆跑通常是 1。\n"
-             "方法：算法參考 WKO5 的 TIS：以活動當天往前 90 天 PD 模型的模型閾值功率（算有氧）與無氧容量（Anaerobic capacity，算無氧）為基準，"
+             "方法：以活動當天往前 90 天 PD 模型的模型閾值功率（算有氧）與無氧容量（Anaerobic capacity，算無氧）為基準，"
              "把平滑後的功率逐秒加權累加（和「我的訓練」的有氧／無氧訓練效果圖同一個數字）。1–10，跟手錶的 0–5 不同。需要功率。")
 
 
@@ -3054,10 +3129,11 @@ def _tis_card(ds, w) -> Optional[dict]:
                      tip=_("有功率，但活動前 90 天的功率資料不夠擬合 PD 模型，算不出模型閾值功率（Modelled threshold power）和無氧容量（Anaerobic capacity），"
                            "有氧／無氧訓練效果（Aerobic / Anaerobic training effect）也算不出。") + "\n"
                          + _(TIS_TIP))
+    # SP-567 (user 2026-10-14): no 「1–10，跟手錶的 0–5 不同」 line on the tile — the ? says it (tip, TIS_TIP)
     return _card("stat", id="tis", icon="gauge", label=_("有氧／無氧訓練效果"), value=_("{a}／{b}", a=_num(a), b=_num(an)),
-                 sub=_("1–10，跟手錶的 0–5 不同"), power=True, wide=True,
+                 power=True, wide=True,
                  tip="\n".join(x for x in (
-                     _("有氧訓練效果（Aerobic training effect）{a}、無氧訓練效果（Anaerobic training effect）{an}（算法參考 WKO5 的 TIS，1–10，跟手錶的 0–5 不同）。",
+                     _("有氧訓練效果（Aerobic training effect）{a}、無氧訓練效果（Anaerobic training effect）{an}（1–10，跟手錶的 0–5 不同）。",
                        a=_num(a), an=_num(an)),
                      _tis_basis_line(tis_basis(ds, w)), _(TIS_TIP)) if x))
 
@@ -3182,10 +3258,13 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
         if sh is not None:
             high = sh > OVER_AET_SHARE
             cards.append(_card("status", id="intensity", icon="intensity", label=_("強度"),
-                               value=f"{sh * 100:.0f}%", sub=_("太高：下次放慢") if high else _("AeT+3 以下"),
+                               value=f"{sh * 100:.0f}%", sub=_("太高：下次放慢") if high else _("輕鬆跑上限+3 以下"),
                                level="warn" if high else "good",
-                               tip=_("心率超過 AeT+3（{hr} bpm）的時間佔 {pct:.0f}%；輕鬆跑、長跑 ≤ 10% 才算壓在有氧區。",
-                                     hr=_num((m.get('aet') or 0) + AET_MARGIN), pct=sh * 100)))
+                               tip=_("心率超過輕鬆跑上限+3（{hr} bpm）的時間佔 {pct:.0f}%；輕鬆跑、長跑 ≤ 10% 才算壓在有氧區。"
+                                     "輕鬆跑上限跟課表、自動調整用的是同一個：{src}。"
+                                     "+3 是心率每天自然的落差（Lamberts 2009），不是教練允許的餘裕。",
+                                     hr=_num((_easy_view(m)[0] or 0) + AET_MARGIN), pct=sh * 100,
+                                     src=_cap_src(m))))
     if typ in ("quality", "hard_long") and c.get("stim"):
         cards.append(_stimulus_card(c))         # Z5 / Z3: the T@VO2max and Zone 3 numbers behind the label
     if typ == "quality":
@@ -3232,7 +3311,7 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
     cards = [main]
     if refused:
         return cards
-    # AN6 (SP-305 §1.5, SP-487): every chip carries its 提示多寡 mark (hints.flag; wko5_viewer drawReviewCards asks
+    # AN6 (SP-305 §1.5, SP-487): every chip carries its 提示多寡 mark (hints.flag; charts.html drawReviewCards asks
     # Hints.where): 標準 shows only the ones that change the reading (smart = 熱 > 25 °C, 資料比較雜, AeT+3 以上 > 10 %),
     # the rest go into the card's 「詳細」; 精簡 all of them there; 「心率可疑」 is AN4 (class 1: every level)
     chip = lambda smart=False, hid="AN6", **kw: cards.append(_card("chip", hint=H.flag(hid, smart=smart), **kw))  # noqa: E731
@@ -3290,12 +3369,15 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
         chip(id="noisy", icon="noise", text=_("資料比較雜"), level="warn", smart=True,
              tip=_("{note}：看最近幾次的走向比較準。\n方法：這次誤差 {se} > ±{lim:.0f} 個百分點（門檻推估）。",
                    note=_(NOISY_NOTE), se=se_text(se), lim=DRIFT_NOISY_SE * 100))
-    # over AeT+3
+    # over the easy cap + 3 (SP-565: the 課表's cap, not AeT)
     sh = _over_aet(m)
     if sh is not None:
-        chip(id="over", icon="intensity", text=_("AeT+3 以上 {p}%", p=f"{sh * 100:.0f}"), level="warn" if sh > OVER_AET_SHARE and judged else "info",
+        chip(id="over", icon="intensity", text=_("輕鬆跑上限+3 以上 {p}%", p=f"{sh * 100:.0f}"),
+             level="warn" if sh > OVER_AET_SHARE and judged else "info",
              smart=bool(sh > OVER_AET_SHARE and judged),
-             tip=f"心率超過 AeT+3 的時間 {_hms(m.get('over_aet_s'))}（{sh * 100:.0f}%）；輕鬆跑、長跑 ≤ 10%")
+             tip=_("心率超過輕鬆跑上限+3（{hr} bpm）的時間 {t}（{pct:.0f}%）；輕鬆跑、長跑 ≤ 10%。輕鬆跑上限：{src}",
+                   hr=_num((_easy_view(m)[0] or 0) + AET_MARGIN), t=_hms(_easy_view(m)[1]), pct=sh * 100,
+                   src=_cap_src(m)))
     # the same-type baseline
     if judged:
         b = baseline_for(ds, w, lambda pm: basis_drift(pm.get("drift") or {}, basis, ref=True)[0])
@@ -3402,9 +3484,9 @@ def _aerobic(ds, w, m, c, base):
         # the band chip (the viewer's card header): every drift value says its band
         base = {**base, "chip": {"text": band_chip(dr), "tip": _(HEAT_TIP), "heat": bool(dr.get("heat")),
                                  "band": band}}
-    over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
+    over, tot = _easy_view(m)[1], m.get("hr_s") or 0
     if over is not None and tot > 0:
-        rows.append(_row("超過 AeT+3", f"{_hms(over)}（{over / tot * 100:.0f}%）"))
+        rows.append(_row("超過輕鬆跑上限+3", f"{_hms(over)}（{over / tot * 100:.0f}%）", _cap_src(m)))
     if c["type"] in ("easy", "long", "test_aet") and d is not None:
         # compared only within the same temperature band
         def same_band(pm):
@@ -3505,7 +3587,7 @@ def _trail_lines(ds, w, m) -> list[str]:
 
 # ---------------------------------------------------------------------------
 # 爬坡段: elevation profile + per-climb comparison; 坡度分組: one row per grade bin
-# (wko5_viewer drawClimbMap / drawGradeProfile; res.climb_profile / res.grade_profile)
+# (charts.html drawClimbMap / drawGradeProfile; res.climb_profile / res.grade_profile)
 # ---------------------------------------------------------------------------
 
 PROFILE_POINTS = 900          # points on the drawn profile (display only)
@@ -3899,7 +3981,7 @@ def _form(ds, w, m, c, base):
     return {**base, "series": cols + rows + _verdict_rows(lines)}   # AN10: 「參考」 only in the page name
 
 
-# 跑姿分組 (wko5_viewer drawFormProfile; res.form_profile): the form metrics per grade bin
+# 跑姿分組 (charts.html drawFormProfile; res.form_profile): the form metrics per grade bin
 # (form_grades) and per 10 % of the work done (form_work), each against the athlete's usual
 # for that bin — the same pool as 坡度分組 (_pool + pooled: same category, 8 → 12 → 26 weeks
 # until ≥ 5 activities that spent ≥ BIN_MIN_S running in the bin; 推估)
@@ -4210,11 +4292,11 @@ def _not_interval(ds, w) -> bool:
 
 def _offer_action(w) -> dict:
     """「當作間歇判讀」: adds the activity tag interval_eval.FLAG_TAG (PATCH
-    /api/v1/wko5/activities, the 活動編輯 page's key-based edit), then the
+    /api/v1/app/activities, the 活動編輯 page's key-based edit), then the
     viewer reloads the dashboard (`reload`)."""
     from backend.engine import activity_tags as AT
     from backend.engine.interval_eval import FLAG_TAG
-    return {"kind": "flag_interval", "label": _("當作間歇判讀"), "method": "PATCH", "url": "/api/v1/wko5/activities",
+    return {"kind": "flag_interval", "label": _("當作間歇判讀"), "method": "PATCH", "url": "/api/v1/app/activities",
             "body": {"items": [{"key": AT.key_of(w.entry.start), "file": getattr(w.entry, "file", None)}],
                      "add_tags": [FLAG_TAG]},
             "done": _("已標記「{tag}」，重新判讀中…（到活動編輯頁移除這個標籤可以取消）", tag=FLAG_TAG), "reload": True}
@@ -4253,7 +4335,7 @@ def _iv_verdict(ds, w, m, c, base):
         return out
     # the viewer draws `chip_rows` (one compact row per segment / reading: label + number chips + a verdict
     # chip, the long sentence behind the row's ?); `series` keeps the full sentences for the AI / API
-    wtip = e["wprime_src"] + _("；無氧儲備（Anaerobic reserve）算法參考 WKO5，跑步沒驗證（推估）")
+    wtip = e["wprime_src"] + _("；無氧儲備（Anaerobic reserve）跑步沒驗證（推估）")
     wrow = _chip_row(_("無氧容量"), [_("用掉 {kj:.1f} kJ", kj=e['wprime_used_j'] / 1000),
                                    _("{pct}% 無氧容量", pct=f"{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}"),
                             _("無氧儲備最低 {pct:.0f}%", pct=e['dfrc_min_pct'] * 100)],
@@ -4321,15 +4403,15 @@ def _iv_verdict(ds, w, m, c, base):
                        + (_("超過 {ceil:.0f} W（目標上限 × 1.02，推估）算偏高：仍算達標，只是做太重。", ceil=e["ceil"])
                           if e.get("ceil") is not None else ""))]
     if e.get("tiz_ratio") is not None:
-        ok = e["tiz_ratio"] >= e.get("tiz_goal", 0.85)
+        ok = e["tiz_ratio"] >= e.get("tiz_goal", IE.TIZ_GOAL)
         chips.append(_chip_row(_("目標區時間"), [_("{a:.1f} / {b:.0f} 分", a=e['tiz_s'] / 60, b=e['tiz_plan_s'] / 60), f"{e['tiz_ratio'] * 100:.0f}%"],
                                _("夠") if ok else _("不足"), "good" if ok else "warn",
                                _("目標區時間 ÷ 這份課表計畫的時間；≥ {goal:.0%} 算達到，{basis}。",
-                                 goal=e.get("tiz_goal", 0.85), basis=e.get("tiz_basis", ""))
+                                 goal=e.get("tiz_goal", IE.TIZ_GOAL), basis=e.get("tiz_basis", ""))
                                # SP-521: why every rep can be 達標 while the time is short (interval_eval.tiz_seconds)
                                + _("每趟達標看的是整趟平均；目標區時間看每一秒的 10 秒功率有沒有在 {band} 裡，"
                                    "連續 ≥ {s} 秒才算，所以每趟都達標、時間還是可能不夠。",
-                                   band=_tiz_band(e), s=IE.TIZ_RUN_S)))
+                                   band=_tiz_band(e), s=f"{e.get('tiz_run_s') or IE.TIZ_RUN_S:g}")))
     if e.get("outcome_why"):
         lv = {"met": "good", "border": "warn"}.get(e.get("outcome"), "bad")
         from backend.engine import quality_gate as QG
@@ -4480,9 +4562,9 @@ def _iv_power(ds, w, m, c, base):
                f"，灰帶 = 目標 ≥ {e['lo'] * 100:.0f}% CP" if band else "")
             + (f"；淺色底 + 數字 = 第幾{'段' if test else '趟'}" if reps else "")
             + f"。藍線 = 無氧儲備（Anaerobic reserve）：無氧容量剩多少（右軸 %，{b['wprime_j'] / 1000:.1f} kJ = 100%）：高於 CP（{cp:.0f} W）就耗，"
-            "低於 CP 回充；算法參考 WKO5（30% 25 秒＋70% 300 秒回充），跑步沒驗證（推估）。"
+            "低於 CP 回充（30% 25 秒＋70% 300 秒回充），跑步沒驗證（推估）。"
             f"{b['wprime_src']}。下：心率（bpm，5 秒平均，手腕光學有延遲）。滑過任一處兩格一起看同一秒。"
-            + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，參考值，做法參考 WKO5）。" if pdc else ""))
+            + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，參考值）。" if pdc else ""))
     sub = _("無氧儲備最低 {pct:.0f}%（{t}）· 整趟高於 CP 的功 {kj:.1f} kJ（{share:.0f}% 無氧容量，含回充後再用）",
             pct=b['dfrc_min_pct'] * 100, t=_hms(trace['dfrc_min']['t']), kj=b['wprime_used_j'] / 1000,
             share=b['wprime_used_j'] / b['wprime_j'] * 100)
@@ -4515,7 +4597,7 @@ def _iv_battery(ds, w, m, c, base, compact: bool = False):
           "labels": [_("最低 {pct:.0f}%", pct=lo_v * 100)], "data": {"kind": "points", "x": "seconds",
                                                           "points": [[round(lo_t, 1), round(lo_v, 4)]]}}]
     desc = (f"無氧儲備 = 還剩多少無氧容量（{e['wprime_j'] / 1000:.1f} kJ = 100%）。高於 CP（{e['cp']:.0f} W）就消耗，"
-            f"休息或低於 CP 時回充。算法參考 WKO5（30% 25 秒＋70% 300 秒回充），"
+            f"休息或低於 CP 時回充（30% 25 秒＋70% 300 秒回充），"
             f"推估，跑步沒驗證。{e['wprime_src']}")
     sub = _("整趟高於 CP 的功 {kj:.1f} kJ（{share:.0f}% 無氧容量，含回充後再用），無氧儲備最低 {pct:.0f}%（{t}）",
             kj=e['wprime_used_j'] / 1000, share=e['wprime_used_j'] / e['wprime_j'] * 100, pct=lo_v * 100, t=_hms(lo_t))
@@ -4531,6 +4613,7 @@ def _wprime_battery(ds, w, m, c, base):
 
 
 def _iv_tiz(ds, w, m, c, base):
+    from backend.engine import interval_eval as IE
     e, bad = _ie(ds, w, base)
     if bad:
         return bad
@@ -4545,14 +4628,14 @@ def _iv_tiz(ds, w, m, c, base):
           "color": MUTED, "bar_width": 36, "labels": [_("計畫 {m:.0f} 分", m=plan / 60)],
           "data": {"kind": "points", "x": "value", "points": [[1, plan]]}},
          {"name": _("實際"), "type": "bar", "expression": "", "y_axis": "HHMMSS", "unit": du, "x_unit": xu,
-          "color": GOOD if (r or 0) >= e.get("tiz_goal", 0.85) else BAD, "bar_width": 36,
+          "color": GOOD if (r or 0) >= e.get("tiz_goal", IE.TIZ_GOAL) else BAD, "bar_width": 36,
           "labels": [_("實際 {m:.1f} 分（{pct:.0f}%）", m=act / 60, pct=(r or 0) * 100)],
           "data": {"kind": "points", "x": "value", "points": [[2, act]]}}]
     zone = f"≥ {e['lo'] * 100:.0f}% CP" if e["z5"] else f"{e['lo'] * 100:.0f}–{e['hi'] * 105:.0f}% CP"
     return {**base, "axes": [{"id": "HHMMSS", "unit": du, "min": 0}], "series": s,
-            "description": f"目標區 = 10 秒功率 {zone}、連續 ≥ 30 秒才算（推估）。"
-                           + _("≥ {goal:.0%} 算達到，{basis}（預設 85% 是 §C2 的 ±15%，推估）。",
-                               goal=e.get("tiz_goal", 0.85), basis=e.get("tiz_basis", ""))}
+            "description": f"目標區 = 10 秒功率 {zone}、連續 ≥ {e.get('tiz_run_s') or IE.TIZ_RUN_S:g} 秒才算（推估）。"
+                           + _("≥ {goal:.0%} 算達到，{basis}（TrainingPeaks、intervals.icu、TrainerPlan 的「完成」都從 80% 起）。",
+                               goal=e.get("tiz_goal", IE.TIZ_GOAL), basis=e.get("tiz_basis", ""))}
 
 
 def _iv_hr(ds, w, m, c, base):

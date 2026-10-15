@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
@@ -396,6 +396,46 @@ async def garmin_logout(athlete_id: int = 1, db: AsyncSession = Depends(get_db))
     return {"logged_out": True}
 
 
+# ---------------------------------------------------------------------------- intervals.icu (SP-346)
+
+@router.get("/intervals/status")
+async def intervals_auth_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """Not open yet (no OAuth app on this server) / not connected / connected / 請重新連接, the last
+    sync, the dormancy reminder (icu_last_seen ≥ 83 days), the back-fill's progress and the queued
+    webhook activities. No intervals.icu request; never the token or the account's id."""
+    from backend import membership as MS
+    from backend.sync import intervals_client as IC
+    out = await IC.status(db, athlete_id)
+    out["allowed"] = MS.has(MS.SYNC_SOURCE_SCOPE["intervals"])
+    out["site_off"] = MS.SYNC_SOURCE_SCOPE["intervals"] in MS.sources_off()
+    return out
+
+
+@router.post("/intervals/connect")
+async def intervals_connect(request: Request, athlete_id: int = 1):
+    """The intervals.icu authorize URL the page sends the browser to (scope ACTIVITY:READ; a one-time
+    state bound to this account, 10 minutes). 409 INTERVALS_NOT_CONFIGURED before the server has its
+    OAuth app; 403 when this plan / the server has the source off."""
+    from backend import membership as MS
+    from backend.sync import intervals_client as IC
+    if not IC.configured():
+        raise HTTPException(409, {"code": "INTERVALS_NOT_CONFIGURED", "message": _("intervals.icu 同步還沒開放")})
+    if not MS.has(MS.SYNC_SOURCE_SCOPE["intervals"]):
+        raise HTTPException(403, {"code": "INTERVALS_NOT_ALLOWED", "message": _("這個帳號目前不能用 intervals.icu 同步")})
+    origin = f"{request.url.scheme}://{request.url.netloc}"
+    return {"url": IC.authorize_url(athlete_id, origin)}
+
+
+@router.post("/intervals/logout")
+async def intervals_logout(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """中斷連接: DELETE /api/v1/disconnect-app at intervals.icu (stops its webhooks), then the token is
+    deleted whatever it answered; the imported activities stay. {remote: ok | failed | none}."""
+    from backend.sync import intervals_client as IC, runner
+    if runner.is_busy("intervals"):
+        raise HTTPException(409, "SYNC_BUSY")
+    return await IC.disconnect(db, athlete_id)
+
+
 def _session_fields(verdict: str) -> dict:
     """status: logged_in | expired (登入已過期) | logged_out. check: the
     login check's answer (sync/session_check.py); "unknown" = COROS / TP not
@@ -448,7 +488,7 @@ async def session_alerts(athlete_id: int = 1, db: AsyncSession = Depends(get_db)
     use = P.FOLDER[db_name]
     repo = SettingsRepository(db, athlete_id)
     push = await repo.get("plan.push.provider")
-    names = {"coros": "COROS", "garmin": "Garmin", "tp": "TrainingPeaks"}
+    names = {"coros": "COROS", "garmin": "Garmin", "tp": "TrainingPeaks", "intervals": "intervals.icu"}
     out, verdicts = [], {}
     for src in session_check.SOURCES:
         needs = ([_("同步")] if src == use else []) + ([_("推送")] if src == "coros" and push == "coros" else [])
@@ -476,7 +516,15 @@ async def session_alerts(athlete_id: int = 1, db: AsyncSession = Depends(get_db)
                 str(run.get("error") or "").endswith("AUTH_REQUIRED") and login == session_check.OK):
             # an auth failure is over once the login checks ok (logged in again since)
             problem = "failed"
-    return {"expired": out, "settings_url": "/api/v1/wko5/settings#sync",
+    # intervals.icu (SP-346): a free account unseen there for 90 days stops receiving activities;
+    # from day 83 the banner asks the person to open intervals.icu once
+    dormant = None
+    if use == "intervals" and enabled and login == session_check.OK:
+        from backend.sync import intervals_client as IC
+        d = IC.dormancy(await repo.get("sync.intervals.seen"))
+        if d and d["remind"]:
+            dormant = {"days": d["days"], "days_left": d["days_left"], "dormant": d["dormant"], "url": IC.BASE}
+    return {"expired": out, "settings_url": "/api/v1/app/settings#sync", "intervals_dormancy": dormant,
             "sync": {"source": use, "name": names[use], "enabled": enabled, "login": login,
                      "problem": problem,
                      "last_ok_at": last_ok.isoformat() if last_ok else None,

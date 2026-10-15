@@ -1,7 +1,7 @@
 """
 Server secrets from the environment only (SP-387 第 5 條): the server key (WKO5COACH_SECRET_KEY,
-SP-384), the Google OAuth client (SP-58), the payment keys (SP-328), the debug PIN, the TP client
-and the CWA key. Never committed, never in a tenant folder, never in a log line.
+SP-384), the Google OAuth client (SP-58), the payment keys (SP-328), the token a local copy pulls
+from production with (SP-373), the TP client and the CWA key. Never committed, never in a tenant folder, never in a log line.
 
     secret_env("WKO5COACH_SECRET_KEY")
 
@@ -23,7 +23,10 @@ NAMES = (
     "PAYMENT_MERCHANT_ID", "PAYMENT_HASH_KEY", "PAYMENT_HASH_IV",
     "TP_CLIENT_ID", "TP_CLIENT_SECRET",
     "CWA_API_KEY",
-    "TRC_DEBUG_PIN",
+    # intervals.icu's OAuth app and its webhook secret (SP-346, sync/intervals_client.py)
+    "TRC_INTERVALS_CLIENT_ID", "TRC_INTERVALS_CLIENT_SECRET", "TRC_INTERVALS_WEBHOOK_SECRET",
+    "TRC_DEBUG_PIN",                  # no longer read (SP-373); an old .env may still set it
+    "TRC_UPSTREAM_TOKEN", "TRC_PROXY_PASSWORD",   # a local copy pulling from production (SP-373)
 )
 MIN_REDACT_LEN = 6        # shorter values would blank ordinary words
 

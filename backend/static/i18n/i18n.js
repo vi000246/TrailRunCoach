@@ -16,6 +16,25 @@
  * Same function names as backend/i18n/fmt.py. Units stay metric; dist() /
  * elev() are the one place a km/mi preference will change.
  */
+// Browser storage keys renamed by SP-498 (the chart page's "charts.*", the auto-sync's
+// "trc.autosync.last"): moved once from the old names here, the first script of every page,
+// so the page scripts already read the new ones. Remove a release or two after the rename.
+(() => {
+  const MOVES = [["wko5viewer", "charts"], ["wko5coach.autosync.last", "trc.autosync.last"]];
+  try {
+    const ls = window.localStorage, keys = [];
+    for (let i = 0; i < ls.length; i++) keys.push(ls.key(i));
+    for (const k of keys) {
+      for (const [from, to] of MOVES) {
+        if (k !== from && !k.startsWith(from + ".")) continue;
+        const nk = to + k.slice(from.length);
+        if (ls.getItem(nk) == null) ls.setItem(nk, ls.getItem(k));
+        ls.removeItem(k);
+      }
+    }
+  } catch { /* storage off (private mode): nothing to move */ }
+})();
+
 (() => {
   const boot = window.__I18N__ || {};
   const SUPPORTED = ["zh-TW", "en"];

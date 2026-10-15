@@ -271,7 +271,7 @@ def test_redact_keeps_file_paths_in_a_traceback():
     "/api/v1/overview/page",
     "/api/v1/plan/sessions/abc123def456?day=2026-10-01",
     "/api/v1/overview/plan/schedule/page?day=2026-10-01&uid=abc123def456",
-    "/api/v1/wko5/views/training/dashboards/0/charts/3?begin=2026-01-01&end=2026-10-01&variant=x&period=8w",
+    "/api/v1/app/views/training/dashboards/0/charts/3?begin=2026-01-01&end=2026-10-01&variant=x&period=8w",
     "/api/v1/static/shell.js",
     "/api/v1/static/i18n/zh-TW/plan_sessions.json",
     "/api/v1/racepower/share",                                  # making a share: no id in the path
@@ -537,10 +537,10 @@ def test_perf_log_is_its_own_daily_file_kept_31_days(tmp_path, monkeypatch, clea
     hs = [h for h in clean_perf.handlers if getattr(h, "_trc", None) == "perf"]
     assert len(hs) == 1 and hs[0].when == "MIDNIGHT" and hs[0].backupCount == applog.PERF_KEEP_DAYS == 31
     assert Path(hs[0].baseFilename) == tmp_path / "logs" / "perf.log"
-    applog.perf("chart", "GET /api/v1/wko5/charts/{key}", 1.23456, status=200)
+    applog.perf("chart", "GET /api/v1/app/charts/{key}", 1.23456, status=200)
     line = _perf_lines(tmp_path)[-1]
     date, area, secs, what = line.split("\t")
-    assert area == "chart" and secs == "1.235" and what == "GET /api/v1/wko5/charts/{key} status=200"
+    assert area == "chart" and secs == "1.235" and what == "GET /api/v1/app/charts/{key} status=200"
     assert re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d", date)
     # not in app.log (its own file)
     for h in clean_handlers.handlers:
@@ -597,7 +597,7 @@ def test_requests_and_steps_reach_the_perf_log(tmp_path, monkeypatch, clean_hand
 
 def test_perf_area_by_route():
     a = applog.perf_area
-    assert a("/api/v1/wko5/charts/{key}") == "chart" and a("/api/v1/overview/plan/sessions/swap") == "plan"
+    assert a("/api/v1/app/charts/{key}") == "chart" and a("/api/v1/overview/plan/sessions/swap") == "plan"
     assert a("/api/v1/plan/page") == "plan" and a("/api/v1/overview/page") == "overview"
     assert a("/api/v1/racepower/estimate") == "racepower" and a("/api/v1/sync/coros") == "sync"
     assert a("/api/v1/static/…") is None and a("(no route)") is None and a("/api/v1/static/{name}.html") is None

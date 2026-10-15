@@ -31,8 +31,9 @@ from backend.sync.http import as_utc
 
 log = logging.getLogger(__name__)
 
-SOURCES = ("coros", "garmin", "tp")                           # garmin: the SP-91 trial
-SETTING_NAME = {"coros": "coros", "garmin": "garmin", "tp": "trainingpeaks"}      # sync.<name>.* keys
+SOURCES = ("coros", "garmin", "tp", "intervals")              # garmin: the SP-91 trial; intervals.icu: SP-346
+SETTING_NAME = {"coros": "coros", "garmin": "garmin", "tp": "trainingpeaks",
+                "intervals": "intervals"}                     # sync.<name>.* keys
 BLOCKED_ERRORS = ("CorosBlocked", "GarminBlocked")             # refused by the limits: a code, no retry
 OK_STATUSES = ("ok", "partial")                               # a run that synced
 # busy / reserved / yielding, per (tenant, source) (SP-384): one person's sync never makes another
@@ -209,6 +210,9 @@ def _client_stream(db: AsyncSession, source: str, athlete_id: int, since: Option
     if source == "garmin":
         from backend.sync import garmin_client
         return garmin_client.sync_workouts(db, athlete_id, since=since)
+    if source == "intervals":
+        from backend.sync import intervals_client
+        return intervals_client.sync_workouts(db, athlete_id, since=since)
     from backend.sync import tp_client
     return tp_client.sync_workouts(db, athlete_id, since=since)
 
@@ -283,7 +287,8 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
                     # COROS TL stored on already-imported activities (engine/coros_tl.py refit)
                     result["tl_filled"] = int(ev["tl_filled"])
                 if ev.get("more"):
-                    # Garmin (SP-91): the day's request budget ran out; the next day goes on
+                    # Garmin (SP-91): the day's request budget ran out; the next day goes on.
+                    # intervals.icu (SP-346): the back-fill's share of the app's day is used
                     result["more"] = True
                 if ev.get("rpe_filled"):
                     # COROS self-rating stored on already-imported activities (SP-231): the plan's
@@ -341,7 +346,8 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
         await after_import(db, source, result, athlete_id)
         # ④ COROS's self-rating passes (SP-231) as a background job (SP-362 A5): the run
         # above has ended and released the busy flag; the job holds it as a yielding holder
-        if feel_read is not None and result["status"] in OK_STATUSES:
+        # (SP-499) after a background look with nothing new: once per sync/background.FEEL_EVERY_S
+        if feel_read is not None and result["status"] in OK_STATUSES and _feel_due(trigger, result):
             try:
                 start_feel_job(db, athlete_id, feel_read)
             except Exception as e:       # noqa: BLE001
@@ -351,6 +357,11 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
             _log_run(source, trigger, result, clock)
         except Exception:                # noqa: BLE001 — logging never breaks a sync
             pass
+
+
+def _feel_due(trigger: str, result: dict) -> bool:
+    from backend.sync import background
+    return background.feel_due(trigger, result)
 
 
 async def after_import(db: AsyncSession, source: str, result: dict, athlete_id: int = 1) -> None:
@@ -368,11 +379,13 @@ async def after_import(db: AsyncSession, source: str, result: dict, athlete_id: 
             log.warning("time zone detection failed: %s", type(e).__name__)
     # ① new FIT files: rebuild the chart Dataset now (incremental: only the new files
     # are parsed), then the overview status and the plan inputs, not on the next page
-    # load; its thread does the automatic classification last (api/wko5views.warm_up)
+    # load; its thread does the automatic classification last (api/wko5views.warm_up).
+    # A background run's (SP-499, sync/background.py) is queued lower: nobody waits for it
     if int(result.get("downloaded") or 0) > 0:
         try:
             from backend.api import wko5views
-            wko5views.warm_up(f"sync-{source}")
+            bg = result.get("trigger") == "background"
+            wko5views.warm_up(f"sync-bg-{source}" if bg else f"sync-{source}")
         except Exception as e:       # noqa: BLE001
             log.warning("dataset warm-up after sync failed: %s", type(e).__name__)
     # ② 自動調整課表 (engine/plan_auto.py): ≥ 1 new activity -> reconcile, adapt and
@@ -453,7 +466,7 @@ async def run_once(source: str, athlete_id: int = 1, since: Optional[str] = None
 
 
 MERGE_S = 300.0              # automatic runs of one tenant's source within this many seconds: one (SP-338 第 5 條)
-AUTOMATIC = ("open", "auto", "webhook")
+AUTOMATIC = ("open", "auto", "webhook", "background")     # background: sync/background.py (SP-499)
 _LAST_AUTO: dict = {}        # runner._k(source) -> monotonic start of its last automatic run
 
 
@@ -488,6 +501,8 @@ async def logged_in(db: AsyncSession, source: str, athlete_id: int = 1) -> bool:
         return False
     if source == "garmin" and st.garmin_token_expires is not None and not st.garmin_password_sealed:
         return False                     # Garmin refused the token, nothing can renew it: 請重新連接 Garmin
+    if source == "intervals" and st.intervals_token_refused is not None:
+        return False                     # the app was removed on intervals.icu: 請重新連接 intervals.icu
     # a login known to be expired (sync/session_check.py; cache only, no network)
     from backend.sync import session_check
     return not session_check.is_expired(source, athlete_id)
@@ -501,8 +516,8 @@ async def last_sync_at(db: AsyncSession, source: str, athlete_id: int = 1) -> Op
     st = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
     cands = []
     if st is not None:
-        cands.append(as_utc({"coros": st.coros_last_sync_at, "garmin": st.garmin_last_sync_at}.get(
-            source, st.last_sync_at)))
+        cands.append(as_utc({"coros": st.coros_last_sync_at, "garmin": st.garmin_last_sync_at,
+                             "intervals": st.intervals_last_sync_at}.get(source, st.last_sync_at)))
     repo = SettingsRepository(db, athlete_id)
     for key in ("last_result", "last_ok"):
         res = await repo.get(f"sync.{SETTING_NAME[source]}.{key}")
@@ -540,6 +555,8 @@ async def ready_sources(db: AsyncSession, athlete_id: int = 1) -> dict[str, str]
             out[s] = "site_paused"            # the server-wide switch is off (SP-385): data kept
         elif s == "garmin" and _garmin_block():
             out[s] = _garmin_block()          # SP-91: switch off (data kept) / package missing
+        elif s == "intervals" and not _intervals_configured():
+            out[s] = "not_configured"         # SP-346: the server has no intervals.icu app yet
         elif not _source_allowed(s):
             out[s] = _source_block(s)          # SP-330: not in this plan / role, or off for the server
         elif is_busy(s):
@@ -562,6 +579,11 @@ def _source_block(source: str) -> str:
 def _coros_site_on() -> bool:
     from backend.sync import coros_limits as CL
     return CL.enabled()
+
+
+def _intervals_configured() -> bool:
+    from backend.sync import intervals_client
+    return intervals_client.configured()
 
 
 def _garmin_block() -> Optional[str]:

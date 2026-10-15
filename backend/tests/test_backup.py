@@ -334,8 +334,10 @@ def _local_state(db: Path) -> dict:
 
 
 def _cursors(db: Path) -> list:
-    # (TP last_sync_at, TP cursor, COROS cursor, Garmin cursor — SP-91; these tests sync no Garmin)
-    return _rows(db, "SELECT " + ", ".join(R.table("sync_state").cursor_fields) + " FROM sync_state")
+    # (TP last_sync_at, TP cursor, COROS cursor, Garmin cursor — SP-91; these tests sync no Garmin.
+    # The intervals.icu cursor (SP-346) is a cursor field too; these tests sync none: left out)
+    cols = [c for c in R.table("sync_state").cursor_fields if c != "intervals_last_sync_at"]
+    return _rows(db, "SELECT " + ", ".join(cols) + " FROM sync_state")
 
 
 def _user_files() -> dict:

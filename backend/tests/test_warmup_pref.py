@@ -154,8 +154,9 @@ def test_easy_kinds_warm_up_in_the_steps_and_the_coros_push(sess):
     legacy = CW.session_steps(dict(sess), th)
     secs = _secs
     assert secs(pushed) == secs(legacy) == sess["minutes"] * 60
-    # the warm-up lap is easy: the easy-run HR cap (as the heat run's own warm-up and the hike)
-    assert pushed[0].intensity == CW.easy_hr(th)
+    # the warm-up lap has no target (SP-479: the easy band's floor is above a HR still coming up; the heat
+    # run's own warm-up and the hike's the same)
+    assert pushed[0].intensity is None
     key = lambda ss: [(x.kind, x.intensity, x.name) if isinstance(x, CW.Step) else (x.sets, x.name)
                       for x in ss if not (isinstance(x, CW.Step) and x.kind == CW.EX_WARMUP)]
     assert key(pushed) == key(legacy)
@@ -523,27 +524,32 @@ def test_aet_analysis_cuts_the_scheduled_longer_warm_up(monkeypatch):
 def test_schedule_test_with_the_preference_on(monkeypatch):
     from backend.api import plan_sessions
     from backend.tests.test_plan_store import Env, run
+    import datetime as dt
+    d1 = (dt.date.today() + dt.timedelta(days=7)).isoformat()      # a future day: past days are refused
+    d2 = (dt.date.today() + dt.timedelta(days=8)).isoformat()
     with Env(monkeypatch) as e:
         monkeypatch.setattr(PP, "load", lambda *a, **k: ON)
-        sg = {"days": [{"day": "2026-10-14"}], "session": CPP.session_for("quick")}
-        out = run(plan_sessions._schedule_test(e.db, e.inp, sg, "2026-10-14"))
+        sg = {"days": [{"day": d1}], "session": CPP.session_for("quick")}
+        out = run(plan_sessions._schedule_test(e.db, e.inp, sg, d1))
         assert out["minutes"] == 45 and "暖身 20 分" in out["detail"]
         monkeypatch.setattr(PP, "load", lambda *a, **k: PP.Prefs())
-        out = run(plan_sessions._schedule_test(e.db, e.inp, {**sg, "days": [{"day": "2026-10-15"}]}, "2026-10-15"))
+        out = run(plan_sessions._schedule_test(e.db, e.inp, {**sg, "days": [{"day": d2}]}, d2))
         assert out["minutes"] == 37 and "暖身 12 分" in out["detail"]
 
 
 def test_a_drawer_swap_keeps_the_state_machine_tweak(monkeypatch):
     """Review #3: only the warm-up floor follows the swap; rest_add / power stay on the row."""
+    import datetime as dt
     import json
 
     from sqlalchemy import select
 
     from backend.db.models import PlanSession
     from backend.tests.test_plan_store import API, Env, run
+    day = (dt.date.today() + dt.timedelta(days=7)).isoformat()      # a future day: past days are refused
     with Env(monkeypatch) as e:
         monkeypatch.setattr(PP, "load", lambda *a, **k: ON)
-        r = e.c.post(f"{API}/sessions", json={"day": "2026-10-14", "variant_key": "t2a"})
+        r = e.c.post(f"{API}/sessions", json={"day": day, "variant_key": "t2a"})
         assert r.status_code == 200, r.text
         uid = r.json()["uid"]
         row = run(e.db.execute(select(PlanSession).where(PlanSession.uid == uid))).scalars().one()

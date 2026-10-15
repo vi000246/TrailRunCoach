@@ -83,6 +83,13 @@ engine config / parity mode is the same everywhere.
   automatic plan run asking for the same key wait for that one result. An exception reaches every
   waiter and is not cached (the next call computes again); a same-thread re-entry runs inline.
   The callers are sync functions in the thread pool or the warm-up thread (never the event loop).
+- **A kept Status holds no Dataset** (SP-394 第 6 條, 2026-10-14): `_status`
+  (`backend/api/overview.py:95`) keeps the Status `detach()`ed (`backend/engine/status.py:155`):
+  its 400-day evaluator dropped (made again on use) and the Dataset held by a weak proxy. Holding
+  it kept one Dataset per tenant alive after the Dataset cache's memory budget had dropped it
+  (wko5-engine.spec.md 「Memory of many tenants」). A cache hit's key carries the Dataset's
+  generation, so its caller holds that Dataset; `status_peek`'s readers use only the plan /
+  phases / goals, never the Dataset.
 - **Warm-up order** (`warm_up`, `backend/api/wko5views.py:293`; at start-up and after a sync with
   new files): Dataset → Status → plan inputs; that thread then ends (so a warm-up asked for
   meanwhile is not dropped) and a low-priority thread (`_low_priority`,
@@ -373,7 +380,7 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    else 1.5 h, 3 easy runs, no long run, with a week note (`src: cold_start`, also on the 課表 page);
    「還不能連續跑 30 分鐘」 → the same default and 「app 的自動排課要等你能連續跑 30 分鐘之後才準」
    (no run-walk sessions). The 4 weeks from the data's start (the ramp) take max(start level, actual)
-   as the base and step by the volume cap itself (+10 %, at least +0.5 h, 3:1), ≥ 3 runs a day apart
+   as the base and step by the volume cap itself (+10 %, at least +0.5 h but ≤ +20 % — `volume_cap`, SP-527 —, 3:1), ≥ 3 runs a day apart
    (more when the questionnaire reported more), no intervals; a long run only when longer than the
    other runs. No CP-test suggestion in those 4 weeks (week plan, its testing note, the 基線測試 and
    zone-retest box rows; owner 2026-10-06) — the base phase's hill strides stay, the AeT test keeps
@@ -567,7 +574,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   `mhr` / `rhr` but sends them back unchanged, and 移除 on a row that also holds them clears only its
   LTHR / AeT / CP; a 心率 save reloads the table so a stale copy never overwrites it. The 賽事周期
   page (`backend/static/plan.html:190`) shows a read-only line — what is in effect, the latest test
-  date and count — with 「到設定修改」 (`/api/v1/wko5/settings#thresholds`); the status action for a
+  date and count — with 「到設定修改」 (`/api/v1/app/settings#thresholds`); the status action for a
   default LTHR points to 設定 too (`backend/engine/status.py:1071`). No data-model change.
 - **門檻變更紀錄** (2026-10-13, SP-467; SP-449 Q2 ③ B): a collapsed 「門檻變更紀錄：哪個門檻在哪天變了」 under
   the power-zone table (`backend/static/settings.html:299`, read when opened or via `#thr-hist`) lists, newest
@@ -613,12 +620,19 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   row (the 專項 chip, `backend/static/sportchip.js`, `backend/static/schedule.html:578`, SP-450; the same chip
   as 圖表分析): it saves the setting and reloads, and the new stamp re-plans (路跑: no 爬升 week row).
 - **專項期** (`engine/specific_phase.py`): the LSD follows the next A race's コース定數 (the race
-  calculator's single-day target; a 推估 share per week from week 10 to 3 before the race, still
-  ≤ +15 % over the 4-week longest); the race GPX's longest climb becomes one 長爬坡反覆 easy run,
+  calculator's single-day target; a 推估 share per week from week 10 to 3 before the race — `FRAC`
+  50 / 55 / 60 / 65 / 75 / 65 / 80 / 65 % for weeks 10 … 3 since SP-523 (peaks were 85 / 90 %; coaches'
+  ≤ 50k median ~70 %, Koop ≤ 80 %), ≤ 6 h (`TRAIL_LONG_MAX_MIN`), still ≤ +10 % over the 30-day longest);
+  路跑 a share of the race distance (`ROAD_FRAC`) at long-run pace, and for a race ≤ 21.1 km
+  (`ROAD_SHORT_KM`, SP-523) never below the base phase's long run (`base_long_minutes`: 30 % of the week,
+  ≥ 60 min, ≤ +10 %; `long_minutes(…, week_min)` from week_plan and the projection), its detail saying
+  「比賽距離短：專項期的長跑不短於基礎期的長跑」; the race GPX's longest climb becomes one 長爬坡反覆 easy run,
   which says how the race climbs it (SP-227, `race_gait`: runwalk.gait on the climb's grade × the
   race day's climbing speed, 「比賽時這段每小時約 N m、G%：用快走／走跑皆可／用跑的」; the old
-  「用比賽的走／跑方式」 without a race time); a race simulation 4–3 weeks out is a suggestion
-  (`race_sim_suggestion`). Its structure (editor and COROS push, SP-409; `workout_steps._climb_items`, read
+  「用比賽的走／跑方式」 without a race time); a race simulation is a suggestion
+  (`race_sim_suggestion`) — 越野 賽前第 6、4 週 (`SIM_WEEKS`, SP-523: CTS / Koop 4–6 weeks out, nothing big in
+  the last 3 weeks; week 5 is a recovery week), 路跑 第 4、3 週 (`ROAD_SIM_WEEKS`); it is hidden while a
+  「賽事模擬」 session is in the plan from the window's first week up to the race (`until`). Its structure (editor and COROS push, SP-409; `workout_steps._climb_items`, read
   from the title 「長爬坡反覆 N×M 分」): 暖身 15 → N ×（上坡 M′＋下坡 M × 0.6′, a COROS group）→ 緩和 (the rest of
   the session, ≥ 5′; else the old one block). No HR / power target on the watch (target_policy `climb: none`
   unchanged, owner 2026-10-13): the uphill's name is 「上坡 · <the session's HR suggestion> · RPE 4」, the descent
@@ -638,13 +652,13 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   (`_walk_hint`).
 - **B2B 連續長天** (`engine/b2b.py`): a due B2B weekend is only a suggestion (課表偏好 `b2b`
   off = never); an accepted one is stored as the user's two sessions (`plan.b2b.accepted`) and
-  the rest of the week is planned around it (day 2 out of the easy minutes, 4 easy days after).
+  the rest of the week is planned around it (day 2 out of the easy minutes, `POST_EASY_DAYS` = 3 easy days after — SP-527, was 4).
 - **陡坡健走（模擬負重）** (`engine/steep_hill.py`): before a 百岳 / multi-day trip, one weekday
   easy run of a 專項期 week becomes a 40–50 min steep walk at the Pandolf grade that costs what
   the pack would (no pack in training). Structure (editor and COROS push, SP-409; `workout_steps._steep_items`):
   平路暖身 10′ → the steep part (the rest, at the walk cap, 「上坡心率 ≤ 爬坡上限或 RPE ≤ 13；下坡看感覺」) →
   平路緩和 5′, as its detail says (one block, as before, under 25′).
-- **熱適應課** (`engine/heat_plan.py`): below.
+- **熱適應課**: none since SP-569 (below).
 - **下坡課**: none since SP-442 (owner 2026-10-13: 「下坡課跟上坡課合併吧，既然有爬升就有下降」). The
   downhill lives in the climbing sessions: the 基礎期's 長爬坡有氧 runs down (below), the 專項期's
   長爬坡反覆 runs down at race grade (SP-409). No `downhill` key in week_plan / the projected weeks; a
@@ -818,7 +832,10 @@ tickets is in plan-auto.spec.md):
   a share of the first race's pre-taper level (`inter_cap`, `backend/engine/overview.py:544`, used at
   `backend/engine/overview.py:1505`; projection `backend/engine/projection.py:623`); a base / 專項期
   week holding a B race is scaled by `B_WEEK_SHARE` (`post_race.b_week_factor`,
-  `backend/engine/post_race.py:204`, `backend/engine/overview.py:1509`).
+  `backend/engine/post_race.py:204`, `backend/engine/overview.py:1509`). After a B race only easy runs
+  (`post_race.b_windows`, both week_plan and the projection): 短 3 days; 中 one day per 3 km of the race —
+  a trail race's EP — at least 3, at most the A race's 7 (`planning.b_medium_days`, SP-525, Daniels);
+  馬拉松級 and up an A race's recovery days.
 - **B race notes** (SP-280): too many B races, a long one just before an A race, or a B race inside
   (or longer than) the next A race's 減量期 get a week note; a 百岳 B race is left out
   (`post_race.b_hints`, `backend/engine/post_race.py:383`, `backend/engine/overview.py:2164`).
@@ -923,6 +940,20 @@ tickets is in plan-auto.spec.md):
   rows are blank (decision 2026-10-13: they are the only numbers it has; `backend/static/plan.html:456`);
   a new multi-day trip, a trip with its per-day numbers, and an old trip once a row is filled keep them
   read-only — the sums of the days, which `upsert_event` also enforces.
+- **Multi-day 百岳's 賽事評估** (SP-114, SP-545): no 來得及／來不及 verdict — the card says how hard the
+  summit day will feel with today's ability on the race calculator's effort words (輕鬆 < 80 %, 穩定 80–90 %,
+  吃力 90–97 %, 極限 97–100 %, 超出 > 100 %; `effort` `backend/engine/baiyue_multiday.py:309`): the summit
+  day's climb ÷ the biggest single day of the last 24 months (`long_best` `:183`, a multi-day activity day by
+  day from the achievements cache, `foot_days` `:133`), its hours ÷ the longest day, and — only with a
+  撤退時間 — the climb rate it needs ÷ 走得辛苦; the hardest item wins (推估 mapping). 輕鬆／穩定 green, the
+  rest yellow; red only for the turnaround missed and 時間不夠 (`LEVEL_FROM`). The 攻頂日模擬 is a suggestion
+  (`_sim_check` `:426`, never red, does not set the level): with the 24-month best ≥ the summit day every
+  non-recovery weekend in [trip − 8 weeks, trip − 10 days] counts (`projected` `:278`), else +10 % a week
+  from that best; a day climbing enough counts with a pack ≥ 80 % of the trip's or without one at an uphill
+  average grade ≥ 20 % (`uphill_grade` `:199`, `STEEP_GRADE`; research §7). 跨級 over is a yellow detail
+  for a 百岳. The climb-rate line names 走得順 and 走得辛苦 and says it compares 走得順
+  (`vam_check` `backend/engine/race_feasibility.py:250`); the card's row reads 「以現在的能力」 with
+  「預估：吃力」 and 「最吃力：…%」 (`backend/static/feasibility.js:135`).
 - **Walking sessions' uphill cap** (SP-115): 75 % HRmax, never below the easy-run cap
   (`hr_profile.walk_cap_for`, `backend/engine/overview.py:1614`); 攻頂日模擬 and ME climb at it
   (`backend/engine/overview.py:1894`). The ME session's structure (editor and COROS push, SP-443;
@@ -993,13 +1024,12 @@ defaults reproduce today's plan exactly.
 | 每堂課前加熱身 | `plan.prefs.warmup_on`, `plan.prefs.warmup_min` | `false` / 5–30 min (`false` / 10; `backend/settings/repository.py:174`, `backend/engine/plan_prefs.py:177`). **Not part of `active`** (`NOT_SHAPING`): on = every generated run session and every inserted template starts with ≥ N minutes of warm-up (SP-364, below). Panel: switch `#pf-wax` + minutes `#pf-wam` in 課表內容／目標, the minutes row only when on (`backend/static/schedule.html:778`, `backend/static/schedule.html:2324`) |
 | 建議 B2B | `plan.prefs.b2b` | `true` / `false` (`true`): whether a due B2B weekend is suggested at all. **Not part of `active`** |
 | A 賽事後轉換期 | `plan.prefs.transition_weeks` | 0–4 weeks, 0 = off (3; `backend/settings/repository.py:167`). **Not part of `active`** (`NOT_SHAPING`, `backend/engine/plan_prefs.py:105`): it changes the season's phases (`planning.auto_phases`, `backend/engine/planning.py:799`: after each A race's recovery; Friel 3–4 weeks, Canova 4 — 3 is the low end, 推估), read by `planning.phases` (`transition_weeks_setting`, `backend/engine/planning.py:993`) so status, the week plan, the projection, the phase labels and the automatic run agree. Manual phases win (nothing is added). The next A race's backward-planned 專項期 wins: the 轉換期 ends the day before it with a phase `note` 「轉換期縮短為 N 天…」, or is skipped (< 7 days, `TRANSITION_MIN_DAYS`, 推估) with the note on the recovery phase; the note is a week note. Panel: select `#pf-trw` (`backend/static/schedule.html:823`) |
-| 熱適應 | `plan.prefs.heat`, `plan.prefs.heat_method` | `auto` / `off` (`auto`); `run` / `overdress` / `bath` / `sauna` / `mixed` (`run`). **Not part of `active`** (`NOT_SHAPING`): they only add heat sessions before a hot A/B race (`engine/heat_plan.py`). Panel: switch + select with the current S and the rules (`#pf-heat`) |
 
 **Panel** (⚙ 課表偏好, redesigned 2026-10-02, `backend/static/schedule.html:711`): sections 每週時間
 (可練日, runs, weekly hours, caps, 超過上限時) / 偏好的星期 (one row per type: type + weekday chips +
 delete, ＋ 新增; a weekday given to another row is disabled) / 課表內容／目標 / 自動調整 (the
 `plan.auto.*` settings, saved with the dialog — plan-auto.spec.md) / 進階 (collapsed: 間歇門檻,
-warm-up / cool-down, CP / AeT test, B2B, 熱適應). One control per line, explanations behind `?`.
+warm-up / cool-down, CP / AeT test, B2B). One control per line, explanations behind `?`.
 
 **每堂課前加熱身** (SP-364, `engine/warmup.py`; owner: 「勾選了可以填要多久的熱身，預設 10 分鐘…如果範本已有熱身時間，
 就用範本的熱身時間，時間不夠就補滿」). Off by default; `floor_min` (`backend/engine/warmup.py:65`) = the minutes when on.
@@ -1059,23 +1089,18 @@ warm-up / cool-down, CP / AeT test, B2B, 熱適應). One control per line, expla
   sessions, user-edited / custom sessions (reconcile rule 3 keeps them). Known gap: plan_auto's automatic
   downgrades (`engine/adapt.py`) keep their protocol text.
 
-**熱適應課** (`engine/heat_plan.py`, heat-acclimation.md §5.4, 推估 from §3.4; applied after
-placement in `week_plan` and per projected week in `project_weeks(events, heat_acts)`, which
-carries the planned heat days into the next week's S): only when `heat` ≠ off, an A/B event within
-30 days is hot (`Event.heat` hot, or auto → `heat_data.event_is_hot`: 百岳 cool, else the median
-Hadley of the athlete's activities ±15 days in earlier years > 150), and the projected race-day S
-(centre) < 0.75; never within 2 days of the race or in a recovery week. Induction race − 21 → − 8:
-every placed easy run and the long run (a hot long run is the exposure; cap rule 1); maintenance
-race − 7 → − 3 every 4 days. An easy heat run becomes 「熱適應輕鬆跑」 ≥ 60 min, HR ≤ AeT, TSS scaled;
-over the weekday cap it is exempt with `NOTE_HEAT` (like the CP test); with `cap_mode` hard (cap <
-60) or method bath / sauna it stays ≤ 40 min and a `kind="heat_passive"` session (TSS 0, same day)
-is added. Fewer than 5 induction days in the week → `NOTE_SHORT`. `week_plan.heat` = {active,
-event, s_now, s_race_before / after / band, days, sessions}. heat_passive: never a main day
-(`blackouts.move_to`, `reconcile.SIDE_KINDS`), never matched to an activity (the user ticks it;
-a ticked one is a full dose), never pushed (`coros_workouts.session_steps` → 「被動熱適應不推」),
-rate 0 TSS/h. COROS: an easy heat run (flag or 熱適應 in the title) is warm-up 10 / main / walk
-cool-down 5 min, HR ≤ AeT, with the safety text in the description. 課表 page: a 熱 tag on heat
-chips, `heat_passive` in the legend, no push button for it.
+**熱適應課**: none since SP-569 (user 2026-10-14: 「不想要手動打勾…能自動化就自動化，不要自己維護每次上課的
+data」). `engine/heat_plan.py`, the `plan.prefs.heat` / `heat_method` preferences and the `week_plan.heat` /
+projected-week `heat` blocks are gone; `project_weeks` has no `heat_acts`. A heat session stored before
+(an auto 「熱適應輕鬆跑」 / 「…（熱適應）」 long run, a `heat_passive` hot bath / sauna) follows reconcile's own
+rules on the next replan: unedited auto rows from today on become the regenerated plain session (rule 2:
+changed; the bath, no longer generated, removed), edited / custom / done rows stay (rule 3). What stays for
+those old rows: heat_passive is never a main day (`blackouts.move_to`, `reconcile.SIDE_KINDS`), never
+matched to an activity, never pushed (「被動熱適應不推」), rate 0 TSS/h; an old heat run pushes warm-up 10 /
+main / walk cool-down 5 min; done heat_passive rows still count as a heat dose
+(`heat_data.completed_passive_dates`). The heat itself stays where it is weather, not training: the
+race-day heat in the calculator (S projected automatically, no choice since SP-569) and the 熱適應 card
+(`i_heat`, `heat_data.hot_race`).
 
 **Application order** (`shape()`, `backend/engine/plan_prefs.py:504`, then `place()`,
 `backend/engine/plan_prefs.py:715`), in `week_plan` and every projected week:
@@ -1279,10 +1304,12 @@ from this week's `week_plan()` output and rolls the same rules forward week by w
 more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:43`):
 
 - Hours per week (`week_hours`, `backend/engine/projection.py:100`): base / specific use the CTL
-  ramp goal capped at +10 % (≥ +0.5 h) of max(4-week mean, last week) over normal weeks (`cap_ref`:
+  ramp goal capped at +10 % (≥ +0.5 h but ≤ +20 %, `overview.volume_cap`, SP-527) of max(4-week mean, last week) over normal weeks (`cap_ref`:
   `target.ref_weeks`, this week and each projected week outside a 減量期 / race / 恢復期 / 轉換期,
   `_skip_week`; SP-73), with a recovery week at `overview.RECOVERY_WEEK_SHARE` (70 %, SP-512)
-  after 3 build weeks; taper 40–50 % of the 6-week mean; event 30 %; recovery 50 %;
+  after 3 build weeks; taper 75 % (15–21 days out, a 17 / 21-day taper only) / 50 % / 40 % (race week) of the
+  6 weeks before the first taper week — the same base for every taper week (`overview.TAPER_SHARES`,
+  `taper_base`, SP-524); event 30 %; recovery 50 %;
   transition 50 % of the pre-race level, the same number as week_plan (`O.transition_ref` over
   the history, this week and the projected weeks by Monday, `backend/engine/projection.py:609`;
   week_plan's `transition_ref` when its weeks are past), easy runs ≤ 60 min. A weekly-hours preference caps it
@@ -1533,7 +1560,7 @@ logging in (`build`, `backend/engine/calendar_feed.py:189`; served by `feed`,
   Deleted sessions (one, 「刪除所有過期未完成」, reconcile removals, auto-plan replacements)
   disappear from the feed.
 - **Read-only and cheap**: the feed never reconciles; it shows the weeks the app has stored so
-  far. Links use `WKO5COACH_PUBLIC_URL`, else the stored origin, else the request's address
+  far. Links use `TRC_PUBLIC_URL`, else the stored origin, else the request's address
   (X-Forwarded-Proto / -Host only from a trusted proxy; `public_base`,
   `backend/api/calendar_feed.py:70`).
 - **Demo**: neither router is mounted in the demo instance (`owner_only`, `backend/main.py:151`):
@@ -1575,7 +1602,11 @@ which one. The response keeps the `coros` field names.
   `workout_steps.resolve`, `backend/engine/workout_steps.py:1210`): the walk band's floor (the easy
   band's floor, `hr_profile.walk_band`) sat above a warming-up / coming-down HR and the watch kept
   alerting; their TSS takes the no-target IF 0.65 (`NONE_IF["warm"]` / `["cool"]`), the uphill / steep
-  part keeps the walk band, a running session's warm-up and cool-down keep the easy band;
+  part keeps the walk band. SP-479 (the owner 2026-10-14): every other auto-easy warm-up — a running
+  session's (the text push's `coros_workouts.WARM_INT` too: 間歇, CP / AeT tests without a start HR, the
+  library's 輕鬆跑暖身, 熱適應) and a walking session's without a walk cap — has no target either, its TSS
+  and chart height staying the easy band's (`Resolved.frac`); a running session's cool-down keeps the
+  easy band; a target set by hand or by a template (插入範本) is the user's;
   other quality and test sessions get
   their own step builders — an HR basis gives HR work steps (`_work_hr`,
   `backend/sync/coros_workouts.py:202`). Strength, rest, heat_passive and a race without steps
@@ -1772,21 +1803,17 @@ which one. The response keeps the `coros` field names.
     `backend/tests/test_carb_hints.py::test_no_session_description_says_eat_before`);
   - a done run's post-run self-rating 「自評：Hard（COROS）」 (SP-231, worded by the server:
     `self_rating`, `backend/api/plan_sessions.py:222`; `backend/static/schedule.html:1008`);
-  - 記錄睡在高處 on today or a past day, shown as a small mark on the day (SP-259, `high_nights`,
-    `backend/api/plan_sessions.py:2729`; `backend/static/schedule.html:2720`), and the 高度適應提醒
-    for events ≥ 3,000 m (their GPX) 1–28 days away (SP-100 / SP-258,
-    `backend/api/plan_sessions.py:974`). 15–28 days out it is 「安排適應週末」 (`_plan_row`,
-    `backend/engine/altitude.py:349`): the weekends of the 14 days before the start, the weekend
-    whose Sunday is the departure day included (`weekends`, `backend/engine/altitude.py:322`); no
-    place named (owner 2026-10-07: 松雪樓 dropped too) and 行前一晚 2,500 m only in its ? help; its
-    id is `altitude_plan:<event>:<start>` (`backend/engine/suggestions.py:295`), so ✕ closes it for
-    that trip for good — `prune` keeps the close until the trip starts, even on a day the row is
-    not computed (`backend/engine/suggestions.py:367`); a close stored under the first version's
-    `altitude:<event>:<start>:<m>:plan…` id is moved to it (`_plan_alt_ids`,
-    `backend/engine/suggestions.py:345`). The 1–14 day check is another row; its ? also says only
-    「行前一晚住 2,500 m 左右」, no place (owner 2026-10-08, `backend/engine/altitude.py:430`); the
-    research lines cite only the source (「（Shen 2024）」, 「（CDC）」), no study site or example place
-    (owner 2026-10-08, `backend/engine/altitude.py:410`).
+  - the 高山症預防提醒 in the suggestion box (SP-546, owner 2026-10-14; replaces SP-100 / SP-258 /
+    SP-259): a 百岳 trip (kind baiyue, with or without a GPX) or an event whose GPX tops out at
+    ≥ 3,000 m, 1–7 days away (`altitude.NOTICE_DAYS`), unless the activities reached 3,000 m in the
+    last 3 months (Shen 2024, `exposure()["recent"]`); short prevention points, the GPX's first
+    night / night-to-night rise and 「行前一晚住 2,500 m 左右」 in its ? (`altitude.reminder`,
+    `backend/engine/altitude.py`). One id per trip, `altitude:<event>:<start>`; `prune` keeps its
+    close until the trip starts (`suggestions._trip_ahead`); its 稍後提醒 holds it until the day before
+    the trip, not 7 days (SP-546 R1, `suggestions.record`). The English box text is the act line only
+    (the Shen 2024 risk line is first in the ?; `altitude._reason`). Nothing to fill in: the calendar's
+    「記錄睡在高處」 menu, its ⛺ mark, the `high_nights` payload and `/high-nights` API are gone; the
+    stored `altitude.nights` setting stays in the database, read by nothing.
 - **課表統計** page (`backend/static/compliance.html`, a tab of 課表; `GET /plan/compliance` →
   `compliance.dashboard`, `backend/engine/compliance.py`). First 本週 (SP-400, docs/research/positive-compliance.md
   §5 方案 B; always this week, whatever the period): four tiles that only add up — 完成 n 堂, 時間 h, 爬升 m,
@@ -1988,7 +2015,7 @@ which one. The response keeps the `coros` field names.
   (`load_records`, `backend/engine/workout_steps.py:1127`) for the closed-loop correction.
   `workout_templates.session_role` (`backend/engine/workout_templates.py:707`) gives the same
   answer for a stored session. The editor's target menu adds 「RPE＋爬升」 with RPE / 爬升 / 下降
-  fields (`tgHtml`, `backend/static/workout_editor.js:522`); the static demo's JS port follows.
+  fields (`tgHtml`, `backend/static/workout_editor.js:522`).
   The 推薦 block: 基礎期 favours the low-RPE technical session, 專項期 the race-like one
   (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:49`). Not done: week_plan does not generate
   技術地形 sessions itself, and a user's own quality-kind session is not counted into the
@@ -2037,7 +2064,7 @@ which one. The response keeps the `coros` field names.
   `/steps/derive` context `rpe_load.levels` lists {id, cr10, tss_h, fitted, adjusted, n} per level
   (`_rpe_load_ctx`, `backend/api/plan_sessions.py:1599`). **Planning only** (the user, 2026-10-04):
   the PMC, the overview and every guardrail keep the watch's recorded load — RPE never corrects an
-  activity's TSS. The static demo's JS port follows (each level's default TSS/h).
+  activity's TSS.
   (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:49`). week_plan generates 技術地形 sessions
   itself (SP-74) and counts the user's own RPE ≥ 7 ones into the 20 % budget (above); a user's own
   interval (kind quality) is still not counted.
@@ -2059,8 +2086,8 @@ which one. The response keeps the `coros` field names.
   a warm-up carved from an easy step (`_easy_target`, by the range's harder end, `:586`), the
   template family (`workout_templates._level`, `backend/engine/workout_templates.py:543`); the 填法
   switch to % keeps the whole span (`zoneSpan`, `backend/static/workout_editor.js:249`), the switch
-  back picks one zone. The static demo's JS port follows (`zoneOf`, `backend/demo/static_shim.js:559`).
-  Tests: `backend/tests/test_zone_range_sp383.py`, `backend/tests/test_static_steps.py` (`zone_ranges`).
+  back picks one zone.
+  Tests: `backend/tests/test_zone_range_sp383.py`.
 - **範本 page and 我的範本** (2026-10-04, SP-36, the user's answers). 課表's third mode card
   **範本** (`backend/static/templates.html`, `GET /plan/templates/page`,
   `backend/api/plan_sessions.py:2791`; also on 課表統計) lists the user's own templates and the
@@ -2152,8 +2179,7 @@ which one. The response keeps the `coros` field names.
   `backend/static/workout_editor.js:892`). The choice is kept per viewer in localStorage
   (`templates.target_type`, shared by both, try/catch; `backend/static/templates.html:197`,
   `backend/static/workout_editor.js:258`); a kept type the current category doesn't use shows 全部.
-  Demo: the routes are sandbox writes (`backend/tenancy_mw.py:51`), each visitor's own; the static
-  demo shows the page read-only (the write controls locked, `backend/demo/export_static.py:108`).
+  Demo: the routes are sandbox writes (`backend/tenancy_mw.py:51`), each visitor's own.
   i18n: page namespace `templates`, editor strings `common.workout.*`, server messages via `_()`,
   zh-TW + en.
 
@@ -2217,8 +2243,8 @@ which one. The response keeps the `coros` field names.
   (`heat_data.exposures`, route_weather `activity_weather.json`) plus ticked heat_passive sessions
   (`heat_data.completed_passive_dates`). Text 「72 %（部分）」; level acclimatised ≥ 0.75 good,
   partial ≥ 0.35 watch, else info; bad only when a hot A/B race is within 30 days
-  (`heat_plan.hot_race`) and its projected S < 0.75, with the action to start the heat block at
-  race − 21 days. `spark` = S over 120 days; `extra` = s_race, doses (bars), HRC trend
+  (`heat_data.hot_race`) and its projected S < 0.75, with a race-day action (SP-569: slow down and drink
+  more, the calculator has the heat in it — no heat sessions are scheduled). `spark` = S over 120 days; `extra` = s_race, doses (bars), HRC trend
   (`heat.hr_cost` on steady flat stretches, 「觀測不支持模型」 when S rises and HRC does not fall),
   a, badge 推估. Without exposure data the verdict asks for a weather-enabled routes build.
 - **`i_gate`** 「間歇門檻」 (`backend/engine/status.py:658`): `quality_gate.evaluate` +
@@ -2392,8 +2418,8 @@ field reference and curl examples are **`docs/debug-api.md`**; this section is t
 
 **Auth** (`backend/debug_auth.py`): a yield dependency `gate` (`backend/debug_auth.py:384`) on every
 `/api/v1/debug/*` route —
-1. 404 (FastAPI's own `{"detail": "Not Found"}`) in the demo, without `TRC_DEBUG_PIN` (≥ 6
-   characters) or with `debug.api.enabled` off (`backend/settings/repository.py:238`);
+1. 404 (FastAPI's own `{"detail": "Not Found"}`) in the demo or with `debug.api.enabled` off
+   (`backend/settings/repository.py`; no server PIN since SP-373);
 2. the token from `X-TRC-Debug-Token` (so `Authorization` stays free for the owner's password
    proxy, the chosen deployment) or `Authorization: Bearer` (`_token`, `backend/debug_auth.py:351`) —
    cookies are never read; its SHA-256 is looked up in `debug_tokens` (`backend/db/models.py:429`) of
@@ -2409,11 +2435,17 @@ field reference and curl examples are **`docs/debug-api.md`**; this section is t
 4. `need(*scopes)` / `need_any` (`backend/debug_auth.py:435`) → 403 `SCOPE`.
 Every authenticated call writes a `debug_audit` row (`backend/db/models.py:449`, `audit`
 `backend/debug_auth.py:260`; the query masked by `applog.mask_url`; newest 1000 kept); a token's
-first use from an IP is flagged (`new_ip`). Tokens are made by `create_token`
-(`backend/debug_auth.py:197`) after `check_pin` (`backend/debug_auth.py:121`: SHA-256 both sides +
-`hmac.compare_digest`; 5 wrong in a row lock the PIN for 15 minutes, server-wide, in memory; wrong
-PINs and locks are logged, never the PIN); scopes `read:activity`, `read:plan`, `read:sync`
-(default), `read:gps`, `export:config`; 1 / 7 / 30 / 90 days (default 30); at most 20 active.
+first use from an IP is flagged (`new_ip`). Tokens are personal API tokens (SP-373) made by
+`create_token` (`backend/debug_auth.py`) for the owner only (`owner_only`, `backend/api/debug.py`:
+403 `OWNER_ONLY` for anyone else) — no PIN; scopes `read:activity`, `read:plan`, `read:sync`
+(default), `read:gps`, `export:config`, `export:plan`; 7 / 30 / 90 / 365 days or never (`days` 0,
+stored as `NEVER` 9999-12-31; default 90); at most 20 active. In sign-in mode (SP-406) the token's
+hash is also registered in accounts.db `api_tokens` (client `debug`, scope `debug:*`) and the login
+gate (`TenancyMiddleware._debug_token`, `backend/tenancy_mw.py`) lets a GET / HEAD under
+`/api/v1/debug/` through on the owner's token with no session; nothing else opens with it.
+`GET /api/v1/debug/export/plan` (`export:plan`) returns every `plan_sessions` row; a local copy
+pulls `export/config` + `export/plan` one way (`backend/engine/upstream.py`, `TRC_UPSTREAM_URL` /
+`TRC_UPSTREAM_TOKEN`; preview, then apply; its `plan.auto.push` goes off).
 
 **Read-only**: the plan views never call `sessions()` (writer lock, reconcile, week snapshots).
 `plan_view` (`backend/api/debug.py:203`) loads the stored rows, applies `plan_store.match_only` in
@@ -2460,7 +2492,7 @@ Data registry: `debug_tokens` SECRET (`token_hash`), `debug_audit` and `debug_au
 
 - Tests run on synthetic data only; the comparisons on the athlete's own data (golden
   `week_plan`, the equivalence backtest, blackouts and preferences on real weeks) moved to the
-  opt-in `backend/tests/realdata/` suite (`WKO5COACH_REALDATA=1`).
+  opt-in `backend/tests/realdata/` suite (`TRC_REALDATA=1`).
 - `backend/tests/test_overview.py`: category mapping, period arithmetic and labels, the
   projection matching the `tl()` recurrence and TSB = yesterday's CTL − ATL, and the ramp
   formula reaching exactly +3 CTL in 7 days.
@@ -2530,8 +2562,7 @@ Data registry: `debug_tokens` SECRET (`token_hash`), `debug_audit` and `debug_au
   `test_post_race.py` (SP-98 恢復期 / 回量期), `test_baiyue_multiday.py` (SP-114),
   `test_illness.py` (SP-117), `test_injuries.py`, `test_injury_walkrun.py` (SP-272),
   `test_strength_plan.py` (SP-119), `test_strength_moves.py` (SP-191), `test_balance_plan.py`
-  (SP-120), `test_carb_hints.py` (SP-285 – SP-287); the 課表 page's `test_altitude_nights.py`
-  (SP-259) and `test_plan_history.py` (SP-71 每週存檔).
+  (SP-120), `test_carb_hints.py` (SP-285 – SP-287); the 課表 page's `test_plan_history.py` (SP-71 每週存檔).
 
 ## Domain Model
 
@@ -2780,3 +2811,15 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-14 | feature | SP-483 | 總覽的提示依提示多寡（docs/spec/ui-hints.spec.md「總覽（SP-483）」）：`GET /weekplan` 的週備註帶算好的 `smart`（R7／R11／R15，`hints.week_smart`），沒有 src 的週備註補上 src（`full_week`、`test_day`、`indicator`）；`overview.html` 的 `OVH`（`:506`）：指標卡標準只展開注意／要處理（已有待辦列的不另外展開，收成「其他 N 項正常」／「（M 項見待辦）」）、精簡只展開要處理、可信度低（R5）三段都展開；待辦拿掉測試列（R15）、本週有 OV8e 時拿掉低強度列（R16）、期別重點標準收進「詳細」精簡不顯示；測試卡與 5 區卡的測試改連到建議框（`suggestions.js` `AppSuggestions.open`），5 區卡三段都顯示整條梯子、不顯示低強度那行（`quality_gate.z5_flow` 階段多 `notes` 分類，`z5flow.js` `skip`／`testNote`／`testAction`）；B2B 卡不顯示建議框有的「本週建議」行；強度分配目標、PMC 的 LTHR 先驗標記依等級；課卡 hover 加規則 D 的 ⚠。demo 基礎期週標準 15 個提示（完整 33）。Tests: `backend/tests/test_overview_hints_sp483.py`, `backend/tests/e2e/test_overview_hints_sp483_e2e.py` |
 | 2026-10-14 | maintenance | SP-512 | Recovery-week volume source corrected, numbers kept (owner 2026-10-14, option C): `RECOVERY_WEEK_SHARE` 0.65 / `RECOVERY_WEEK_TSB_SHARE` 0.60 named in `backend/engine/overview.py` with the sources checked (runners' / Norwegian coaches −20–35 %, Uphill Athlete ≈ −50 %, its forum −40…−60 % unverified; no study); `SRC_31` no longer reads as if Uphill Athlete backed −20–35 %; a recovery week's `why` (the week target's ?) ends with the 推估 note (zh / en). Personalising waits for ≥ 4 recovery weeks (Open Questions). Tests: `backend/tests/test_recovery_week_share_sp512.py`; `test_recovery_week.py` reads the reason at `why[-2]` |
 | 2026-10-14 | maintenance | SP-512 R1 | Recovery-week share 0.65 → 0.70 (owner 2026-10-14: use the number most coaches use): 11 verified coaches / approaches (Howard, Gaudette, Norris, Hillrunner, Heins, Roche, Nichols, Burgess / USA Triathlon, the Norwegian coaches, Uphill Athlete, Roadman) — mode and median cut 30 %, range 10–60 %; unverified UA-forum / RMI numbers listed apart; no percentage from Daniels, Pfitzinger, Higdon, McMillan, Fitzgerald, Hudson, Magness, Koop, Carmichael, Friel. `RECOVERY_WEEK_TSB_SHARE` stays 0.60. `projection.week_hours` and `race_feasibility.koop_run` read `RECOVERY_WEEK_SHARE` (they repeated 0.65); the recovery-week reasons format the share; `SRC_31` and the 推估 note (zh / en) say 30 % / 70 %. Tests: `test_recovery_week_share_sp512.py` (0.65 → 0.70), `test_structure_truth_sp437.py`, `test_plan_store.py::test_projection_ramp_31_and_cap` (0.65 → 0.70) |
+| 2026-10-14 | fix | SP-523 | 專項期 long day (coach-consensus-sp518/C-long-specific-b2b.md §3.8, owner 2026-10-14): (1) bug — 路跑 ≤ 21.1 km took ROAD_FRAC × the race distance with a 90-min floor that `min(FLOOR_MIN, want)` never lifted, so a 10K's 賽前第 4 週 was ~8 km / 45 min, shorter than the base phase's 105 min in the same week; `specific_phase.long_minutes(info, longest, week_min)` now keeps it ≥ `base_long_minutes` (`backend/engine/specific_phase.py`; week_plan `backend/engine/overview.py:1872`, projection `backend/engine/projection.py:710`), a ≤ 3-h 越野賽 unchanged; (2) 越野 `FRAC` peaks 0.85 / 0.90 → 0.75 / 0.80, 0.70 → 0.65 at weeks 7 / 5 / 3 (推估, shape kept); a race day ≥ ~9.2 h keeps the 6-h cap every week, 6.7–9.2 h races get a shorter long day in some weeks; (3) 越野 race simulation weeks (4, 3) → (6, 4), 路跑 (4, 3) kept (`ROAD_SIM_WEEKS`), its reason 「賽前第 6、4 週（… 那兩週）」 translated; a 賽事模擬 already planned up to the race hides the suggestion (`suggestions.race_sim_rows`, `until`). Stored edited / custom sessions and accepted simulations untouched (reconcile rule 3). zh-TW + en. Tests: `backend/tests/test_specific_long_sp523.py` |
+| 2026-10-14 | perf | SP-394 第 6 條 | The Status kept per tenant (`_status_cache`) is `Status.detach()`ed: no evaluator, the Dataset by a weak proxy — it kept every tenant's Dataset alive past the Dataset cache's memory budget (10 tenants at once: 20 Datasets alive with 6 kept, 3.16 GB peak; see wko5-engine.spec.md). Same values (`to_dict`, `week_plan`). Tests: `backend/tests/test_memory_sp394.py` |
+| 2026-10-14 | feature | SP-545 | Multi-day 百岳 feasibility (owner 2026-10-14): 「你一次能爬多少」 = the biggest single day of the last 24 months (= 跨級's window; a multi-day activity day by day); once it reaches the summit day every non-recovery weekend in the window is a possible 攻頂日模擬 (this week's too while its Saturday is ahead), below it +10 % a week from it; a day without a pack counts at an uphill average grade ≥ 20 % (UA's 「steep」, Pandolf cross-check, 推估) in feasibility and readiness; the verdict is how hard the summit day feels on the race calculator's effort words (climb / hours / turnaround climb rate ÷ your own, the hardest wins) — 「預估：吃力」, yellow at most; too few simulations is a yellow suggestion (「建議行程前做 3 次…，目前排得下 N 次」, no 來不及, PL9 class 2); red only for the turnaround and 時間不夠; 跨級 over → yellow for a 百岳 (PL10 class 2); the climb-rate line and chip show 走得順 and 走得辛苦 and say 走得順 is compared. Tests: `backend/tests/test_baiyue_feasibility_sp545.py`, `test_baiyue_multiday.py` (4 expectations changed) |
+| 2026-10-14 | feature | SP-373, SP-406 | Debug API redesign: personal API tokens made by the owner with no PIN (`TRC_DEBUG_PIN` no longer read), 7 / 30 / 90 / 365 days or never (`backend/debug_auth.py`); owner-only settings endpoints (`owner_only`, `backend/api/debug.py`); `GET /api/v1/debug/export/plan` (scope `export:plan`); a local copy pulls production's settings and 課表 one way (`backend/engine/upstream.py`, 設定 › 進階 › 從正式站同步, `TRC_UPSTREAM_URL` / `TRC_UPSTREAM_TOKEN`); sign-in mode lets a GET under `/api/v1/debug/` through on the owner's debug token (`TenancyMiddleware._debug_token`, accounts.db `api_tokens` client `debug`) |
+| 2026-10-14 | feature | SP-546 | 高山症預防提醒 without inputs (owner 2026-10-14): the box row only 1–7 days before a 百岳 / ≥ 3,000 m trip and only when the activities show nothing ≥ 3,000 m in the last 3 months; 15–28 day 「安排適應週末」 and the 8–14 day check dropped; one id per trip (`altitude:<event>:<start>`), kept until the trip starts. The 課表 calendar's 「記錄睡在高處」 (SP-259: menu, mark, dialog, `high_nights`, `/high-nights`) removed; `altitude.nights` stays stored, unread. `test_altitude.py`, `test_altitude_inputs_removed_sp546.py`. |
+| 2026-10-14 | fix | SP-546 R1 | Owner 2026-10-14 (Q1): the altitude reminder's 稍後提醒 brings it back the day before the trip (`suggestions.record`: `until` = start − 1 day, at least tomorrow; tip `sugg.snooze_tip_altitude`; the ? says so); the English box text drops the Shen 2024 half (it was cut at the 3-line limit; still first in the ?). `test_altitude.py::test_snooze_brings_it_back_the_day_before_the_trip`, `::test_english`. |
+| 2026-10-14 | feature | SP-479 | Warm-ups without a target (owner 2026-10-14, B): an auto-easy `warm` step resolves 「不設目標」 for every session (`workout_steps.resolve` → `_auto_easy`; the text push's warm-ups `coros_workouts.WARM_INT = None`), keeping the easy band's ≈ % CP for the TSS / chart (SP-474's walk-cap warm-up and cool-down keep NONE_IF); cool-downs keep the easy band; the UA AeT test's start-HR window and template / hand-set targets unchanged. Pushed sessions with a warm-up change fingerprint and show 要更新 once. Editor tip 目標依據 says so (zh-TW, en). `backend/tests/test_run_warmup_no_target_sp479.py`; expectations changed in test_coros_workouts, test_intervals_probe, test_quality_gate, test_walk_warmup_hr_floor_sp474, test_warmup_pref, test_xu90_intensity. |
+| 2026-10-14 | feature | SP-524 | 減量期 volume (owner 2026-10-14, SP-518 Q1-3 B): 15–21 days before the A race (a 17 / 21-day taper only) 75 % of the pre-taper level (Pfitzinger 75–80 %, Higdon 74 %, Gaudette 85–90 %, Karp 70 %; median ≈ 74 %; was 50 %); 8–14 days 50 % and the race week 40 % unchanged. Every taper week's base is the mean of the 6 weeks before the first taper week (`overview.taper_base`): the rolling 6-week mean let the 1st week's cut lower the 2nd's (≈ 37 % instead of 40 %). week_plan and projection.week_hours share `taper_share` and count the days from the week's Monday (week_plan used today's: the target could change on the week's last day). `backend/tests/test_taper_shares_sp524.py`. |
+| 2026-10-14 | feature | SP-525 | B race recovery (owner 2026-10-14, SP-518 Q1-4 B): a 中 B race's easy-only days = one per 3 km of the race (Daniels 「1 E day for every 3K」), a trail race's km its EP (km + climb ÷ the EP divisor, as event_size), ≥ 3 (短's), ≤ 7 (an A race of the same size); no distance → the old 5; 短 3 days and 馬拉松級+ unchanged (`planning.b_medium_days`, `b_rec_km`). The week note says the rule (zh-TW, en). `backend/tests/test_b_race_recovery_sp525.py`; expectations changed in test_bc_races, test_post_race, test_race_mark_sp504r2. |
+| 2026-10-14 | feature | SP-527 | Coach consensus (owner 2026-10-14, SP-518 A / C): the weekly-hours cap's +0.5 h floor at most +20 % — `volume_cap(ref) = max(1.10 × ref, min(ref + 0.5, 1.20 × ref))` (no reference volume: 0.5 h, as before), in week_plan, the cold-start ramp (資料等級 1) and projection.week_hours; under 2.5 h a week the old floor went past +20 % and the next week `load_guard.STEP_BLOCK` blocked the intervals (2 h → 2.4 h, was 2.5 h; ≥ 2.5 h unchanged); the cap lines say 「至少 +0.5 h、最多 +20%」 (zh-TW, en). `b2b.POST_EASY_DAYS` 4 → 3 (Gaudette 48–72 h, Johnston 3–4: median 3; the 48-h hard-day gap still holds). `backend/tests/test_volume_cap_b2b_sp527.py`; expectations changed in test_load_guard, test_b2b. |
+| 2026-10-14 | bugfix | SP-569 | 熱適應 automatic only (user 2026-10-14: nothing to tick or keep up by hand): no 熱適應課 / hot bath / sauna in `week_plan` or `project_weeks` (`engine/heat_plan.py` removed; `hot_race` moved to `heat_data`), no 熱適應 preferences (`plan.prefs.heat*` gone; an old page's `heat` / `heat_method` are ignored by `plan_prefs.from_body`, `RETIRED`), stored heat rows replanned by reconcile's rules (auto unedited → plain / removed; edited, custom, done kept). `i_heat` keeps the hot-race flag with a race-day action. Tests: `backend/tests/test_heat_auto_sp569.py`, `test_heat_events.py` |
+| 2026-10-14 | bugfix | SP-569 ②–⑤ | 設定 › 心率 ? says the max-HR order the code uses (yours → watch → 365-day runs → age formula); the settings' 資料同步 rows and source boxes, the 課表 toolbar (push ▾, ⋯, status line) and the replan preview read the catalog (English: "Sync now", "Tue 10/27" — `wdl()` = the short weekday, was 「週」 + the narrow letter, 「週T」); the push ▾ items carry `data-range` (they had `data-scope`, which shell.js locked as plan scopes: disabled for everyone since SP-330); a free user's locked TrainingPeaks login says it is the site's own (`scope.site_only`), 「訂閱後可用」 only for `membership.upgrade_scopes`. Tests: `backend/tests/test_sp569_texts.py` |

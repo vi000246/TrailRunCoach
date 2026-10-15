@@ -117,11 +117,11 @@ def estimate(test: dict, weight: float, sex: str = "male", wind: bool = False, p
         mftp = float(fit["mftp"])
         return {"method": "pd_model", "cp": mftp, "w_prime": fit.get("frc"), "cp_range": [mftp, mftp], "pd": fit,
                 "note": "",
-                "label": _("算法參考 WKO5：這次測試後的模型閾值功率（Modelled threshold power；{d} 前 90 天 mean-max 上緣的 PD 模型，"
+                "label": _("這次測試後的模型閾值功率（Modelled threshold power；{d} 前 90 天 mean-max 上緣的 PD 模型，"
                            "含這次測試）",
                            d=fit.get("date") or test.get("date") or "")}
     return {"method": "pd_model", "cp": None, "w_prime": None, "cp_range": None, "pd": None,
-            "note": _(CPP.NO_FIT), "label": _("算法參考 WKO5：算不出模型閾值功率（Modelled threshold power）")}
+            "note": _(CPP.NO_FIT), "label": _("算不出模型閾值功率（Modelled threshold power）")}
 
 
 # ---------------------------------------------------------------------------

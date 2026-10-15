@@ -147,7 +147,8 @@ def test_new_rows_are_built_like_the_due_tests_and_an_existing_one_gets_the_reas
     tests = [{"kind": "cp", "title": "CP 測試", "minutes": 37, "reason": "門檻過期", "session": dict(CP_S)}]
     O.easy_power_suggestions(tests, ep, lambda: CP_S, lambda: AET_S, "ua40")
     cp, aet = tests
-    assert cp["reason"] == "門檻過期 · W2" and cp["easy_power"] == {"summary": "S", "why": "W2", "lthr_doubt": False}
+    assert cp["reason"] == "門檻過期 · W2" and cp["easy_power"] == {"summary": "S", "why": "W2", "lthr_doubt": False,
+                                                                        "mhr_doubt": False}
     assert aet["kind"] == "aet" and aet["src"] == "easy_power" and aet["reason"] == "W1"
     assert aet["session"]["title"] == "AeT 測試 40 分" and aet["replaces_long"] is False and aet["protocol"] == "ua40"
     # the doubtful LTHR: the 30-min LTHR test's 安排課表 link rides along

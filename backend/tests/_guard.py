@@ -1,7 +1,7 @@
 """The real-data guard (installed by conftest.py before any backend import).
 
 The default run (`pytest backend/tests`) never touches the athlete's WKO5
-folder (~/WKO5) or the app's data folder (~/.wko5coach):
+folder (~/WKO5) or the app's data folder (~/.trailruncoach, before SP-498 ~/.wko5coach):
 
   * home (USERPROFILE / HOME) points at an empty temp folder, so every
     `Path.home() / ...` constant (DB, caches, plan.json, routes, FIT root ...)
@@ -33,6 +33,7 @@ REALDATA = os.environ.get("WKO5COACH_REALDATA") == "1"
 REAL_HOME = Path(os.environ.get("WKO5COACH_TEST_TRUE_HOME") or Path.home())
 REAL_WKO5 = REAL_HOME / "WKO5"
 REAL_APPDATA = REAL_HOME / ".wko5coach"
+REAL_APPDATA_NEW = REAL_HOME / ".trailruncoach"     # the data folder's name since SP-498
 FAKE_HOME: Path | None = None
 violations: list[str] = []
 
@@ -49,7 +50,8 @@ def _norm(p) -> str:
     return os.path.normcase(os.path.abspath(os.fsdecode(p)))
 
 
-_GUARDED = [(_norm(REAL_WKO5), "~/WKO5"), (_norm(REAL_APPDATA), "~/.wko5coach")]
+_GUARDED = [(_norm(REAL_WKO5), "~/WKO5"), (_norm(REAL_APPDATA), "~/.wko5coach"),
+            (_norm(REAL_APPDATA_NEW), "~/.trailruncoach")]
 
 
 def guarded(p) -> str | None:

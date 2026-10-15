@@ -61,7 +61,7 @@ def test_session_spikes_window_hikes_and_same_day():
 def test_specific_floor_no_longer_lifts_the_long_day_over_the_cap():
     from backend.tests.test_specific_phase import MON, _race
     a = SP.week_context(kind="specific", mode="specific", monday=MON, race=_race())
-    assert SP.long_minutes(a, 400) == pytest.approx(0.85 * 300)
+    assert SP.long_minutes(a, 400) == pytest.approx(0.75 * 300)                  # SP-523: FRAC[6] 0.85 → 0.75
     # longest 70 → cap 77: the old 90-min floor gave 90 (+29 %)
     assert SP.long_minutes(a, 70) == pytest.approx(77)
     assert SP.long_minutes(a, 100) == pytest.approx(110)

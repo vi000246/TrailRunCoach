@@ -37,10 +37,12 @@ def _root() -> Path:
     return tenancy.private_path("event_gpx")
 TABLE = "event_gpx"
 COLS = ("event_id", "filename", "sha1", "bytes_raw", "bytes_gz", "km", "gain_m", "loss_m", "z_min", "z_max",
-        "day_splits_json", "camp_km_json", "uploaded_at")
+        "day_splits_json", "camp_km_json", "uploaded_at", "source_json")
 DDL = (f"CREATE TABLE IF NOT EXISTS {TABLE} (id INTEGER PRIMARY KEY, event_id VARCHAR(64) NOT NULL UNIQUE, "
        "filename VARCHAR(200), sha1 VARCHAR(40), bytes_raw INTEGER, bytes_gz INTEGER, km FLOAT, gain_m FLOAT, "
-       "loss_m FLOAT, z_min FLOAT, z_max FLOAT, day_splits_json TEXT, camp_km_json TEXT, uploaded_at DATETIME)")
+       "loss_m FLOAT, z_min FLOAT, z_max FLOAT, day_splits_json TEXT, camp_km_json TEXT, uploaded_at DATETIME, "
+       "source_json TEXT)")
+ADDED = (("source_json", "TEXT"),)     # columns newer than the table (SP-537); db/database.py adds them too
 _ID = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 
 
@@ -71,9 +73,9 @@ def file_path(eid: str, root: Optional[Path] = None) -> Path:
     return Path(root or _root()) / f"{_check_id(eid)}.gz"
 
 
-def _row(r: sqlite3.Row) -> dict:
-    d = dict(zip(COLS, r))
-    for k in ("day_splits_json", "camp_km_json"):
+def _row(r: dict) -> dict:
+    d = {c: r.get(c) for c in COLS}
+    for k in ("day_splits_json", "camp_km_json", "source_json"):
         try:
             d[k[:-5]] = json.loads(d.pop(k) or "null")
         except (TypeError, ValueError):
@@ -88,13 +90,14 @@ def get(eid: str, db_path=None) -> Optional[dict]:
         return None
     try:
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
-        try:
-            r = con.execute(f"SELECT {', '.join(COLS)} FROM {TABLE} WHERE event_id=?", (eid,)).fetchone()
+        con.row_factory = sqlite3.Row
+        try:                                # SELECT *: a table older than a column (ADDED) still reads
+            r = con.execute(f"SELECT * FROM {TABLE} WHERE event_id=?", (eid,)).fetchone()
         finally:
             con.close()
     except sqlite3.Error:                   # no table yet
         return None
-    return _row(r) if r else None
+    return _row(dict(r)) if r else None
 
 
 def all_rows(db_path=None) -> dict[str, dict]:
@@ -103,13 +106,14 @@ def all_rows(db_path=None) -> dict[str, dict]:
         return {}
     try:
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
         try:
-            rows = con.execute(f"SELECT {', '.join(COLS)} FROM {TABLE}").fetchall()
+            rows = con.execute(f"SELECT * FROM {TABLE}").fetchall()
         finally:
             con.close()
     except sqlite3.Error:
         return {}
-    return {r["event_id"]: r for r in map(_row, rows)}
+    return {r["event_id"]: r for r in (_row(dict(x)) for x in rows)}
 
 
 def _write_row(p: Path, row: dict) -> None:
@@ -117,6 +121,10 @@ def _write_row(p: Path, row: dict) -> None:
     con = sqlite3.connect(str(p))
     try:
         con.execute(DDL)
+        have = {r[1] for r in con.execute(f"PRAGMA table_info({TABLE})")}
+        for c, typ in ADDED:
+            if c not in have:
+                con.execute(f"ALTER TABLE {TABLE} ADD COLUMN {c} {typ}")
         cols = list(row)
         con.execute(f"INSERT INTO {TABLE} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))}) "
                     f"ON CONFLICT(event_id) DO UPDATE SET " + ", ".join(f"{c}=excluded.{c}" for c in cols if c != "event_id"),
@@ -143,10 +151,12 @@ def _course(track, split: str = "none") -> dict:
 
 
 def save(eid: str, data: bytes, filename: str = "", *, db_path=None, root: Optional[Path] = None,
-         day_splits_km: Optional[Sequence[float]] = None) -> dict:
+         day_splits_km: Optional[Sequence[float]] = None, source: Optional[dict] = None) -> dict:
     """Parse (rejects a broken file before anything is written), gzip to the app
     data dir and upsert the row. Replaces any earlier GPX of the event; the day
-    splits are reset unless given (a new course = new km positions)."""
+    splits are reset unless given (a new course = new km positions). source: where the file
+    came from when not an upload (SP-537: {"kind": "cairn", "gpx_id", "url", "name"} — never a
+    token); a new upload clears it."""
     _check_id(eid)
     p = _db(db_path)
     if p is None:
@@ -160,17 +170,65 @@ def save(eid: str, data: bytes, filename: str = "", *, db_path=None, root: Optio
     tmp = f.with_suffix(".tmp")
     tmp.write_bytes(gz)
     os.replace(tmp, f)
-    camps = [round(w["km"], 2) for w in c.get("wpts") or [] if w.get("camp")]
+    camps = [round(w["km"], 2) for w in c.get("wpts") or [] if w.get("camp")]   # candidates, every pass
     row = {"event_id": eid, "filename": (filename or track.name or "course.gpx")[:200],
            "sha1": hashlib.sha1(data).hexdigest(), "bytes_raw": len(data), "bytes_gz": len(gz),
            "km": float(t["km"]), "gain_m": float(t["gain_m"]), "loss_m": float(t["loss_m"]),
            "z_min": float(t["z_min"]), "z_max": float(t["z_max"]),
            "day_splits_json": json.dumps(clean_splits(day_splits_km, t["km"])) if day_splits_km else None,
            "camp_km_json": json.dumps(camps),
-           "uploaded_at": dt.datetime.now().replace(microsecond=0).isoformat(sep=" ")}
+           "uploaded_at": dt.datetime.now().replace(microsecond=0).isoformat(sep=" "),
+           "source_json": json.dumps(clean_source(source)) if source else None}
     _write_row(p, row)
     _memo.clear()
     return get(eid, p)
+
+
+def clean_source(src: Optional[dict]) -> Optional[dict]:
+    """Only the known, token-free keys of a source (SP-537)."""
+    if not isinstance(src, dict) or src.get("kind") != "cairn":
+        return None
+    out = {k: str(src[k])[:200] for k in ("kind", "gpx_id", "url", "name") if src.get(k)}
+    # SP-535: the nights marked in Cairn (km on our track), so the day-split preview can offer them back
+    # as candidates after the day ends were changed
+    nights = []
+    for x in src.get("nights") or []:
+        try:
+            nights.append({"night": int(x["night"]), "km": round(float(x["km"]), 3), "name": str(x.get("name") or "")[:60]})
+        except (KeyError, TypeError, ValueError):
+            continue
+    if nights:
+        out["nights"] = nights[:20]
+    # SP-577: the timetable read with it and the answer to 「這是團的時刻表」 (read only, never sent back)
+    from backend.engine import cairn as CA
+    sc = CA.clean_schedule(src.get("schedule"))
+    if sc:
+        out["schedule"] = sc
+    return out if out.get("gpx_id") else None
+
+
+def set_group(eid: str, group: bool, db_path=None) -> dict:
+    """SP-577: the answer to 「這是團的時刻表」 for the Cairn timetable stored with the event."""
+    r = get(eid, db_path)
+    src = (r or {}).get("source") or {}
+    if r is None or not isinstance(src.get("schedule"), dict):
+        raise EventGpxError("這場賽事沒有 Cairn 時刻表")
+    src = {**src, "schedule": {**src["schedule"], "group": bool(group)}}
+    p = _db(db_path)
+    con = sqlite3.connect(str(p))
+    try:
+        con.execute(f"UPDATE {TABLE} SET source_json=? WHERE event_id=?", (json.dumps(clean_source(src)), eid))
+        con.commit()
+    finally:
+        con.close()
+    _memo.clear()
+    return get(eid, p)
+
+
+def cairn_url(row: Optional[dict]) -> Optional[str]:
+    """The Cairn route the event's GPX was imported from (SP-537), None otherwise."""
+    src = (row or {}).get("source") or {}
+    return src.get("url") if src.get("kind") == "cairn" else None
 
 
 def clean_splits(splits, km: float) -> list[float]:
@@ -246,16 +304,16 @@ def track(eid: str, row: Optional[dict] = None, *, db_path=None, root: Optional[
 
 
 def splits_for(row: dict, days: int) -> list[float]:
-    """The day split km of an n-day trip: the stored ones (when they make n days),
-    else the GPX's camp waypoints (when they do), else equal km per day."""
-    n = max(1, int(days or 1))
-    if n == 1:
-        return []
-    for s in (row.get("day_splits"), row.get("camp_km")):
-        s = clean_splits(s or [], row["km"])
-        if len(s) == n - 1:
-            return s
-    return [row["km"] * i / n for i in range(1, n)]
+    """The day split km of an n-day trip: the stored ones (the user's, when they make n days),
+    else equal km per day (推估). SP-533: the GPX's camp / hut waypoints are only candidates
+    (camp_km, every pass) — never cut by themselves, even when their count fits."""
+    return split_source(row, days)[0]
+
+
+def split_source(row: dict, days: int) -> tuple[list[float], str]:
+    """(splits_for, "stored" | "equal" | "single") — course.day_cuts on the stored points."""
+    from backend.engine.racepower import course as CO
+    return CO.day_cuts(clean_splits(row.get("day_splits") or [], row["km"]), row["km"], days)
 
 
 def day_stats(eid: str, days: int = 1, *, db_path=None, root: Optional[Path] = None) -> Optional[dict]:
@@ -269,7 +327,7 @@ def day_stats(eid: str, days: int = 1, *, db_path=None, root: Optional[Path] = N
     key = ("days", eid, row["sha1"], tuple(cuts))
     if key not in _memo:
         from backend.engine.racepower import course as CO
-        c = _course(tr, "km")               # 1 km pieces: a day end inside one is prorated over ≤ 1 km
+        c = _km_course(eid, tr, row)
         pieces = CO.cut_at(c["segments"], cuts)
         ds = []
         for n in range(1, len(cuts) + 2):
@@ -278,10 +336,67 @@ def day_stats(eid: str, days: int = 1, *, db_path=None, root: Optional[Path] = N
                        "gain_m": sum(p["gain_m"] for p in ps), "loss_m": sum(p["loss_m"] for p in ps)})
         t = c["totals"]
         _memo[key] = {"totals": {"km": t["km"], "gain_m": t["gain_m"], "loss_m": t["loss_m"]}, "days": ds}
-    src = ("stored" if clean_splits(row.get("day_splits") or [], row["km"]) == cuts and cuts
-           else "camp" if cuts and clean_splits(row.get("camp_km") or [], row["km"]) == cuts
-           else "equal" if cuts else "single")
-    return {**_memo[key], "splits_km": cuts, "split_source": src, "filename": row.get("filename")}
+    src = split_source(row, days)[1]
+    return {**_memo[key], "splits_km": cuts, "split_source": src, "filename": row.get("filename"),
+            "candidates_km": clean_splits(row.get("camp_km") or [], row["km"])}
+
+
+def _km_course(eid: str, tr, row: dict) -> dict:
+    """The stored track's course in 1 km pieces (a day end inside one is prorated over ≤ 1 km),
+    memoised on the sha1: day_stats and the day-split preview share it."""
+    key = ("km_course", eid, row["sha1"])
+    if key not in _memo:
+        _memo[key] = _course(tr, "km")
+    return _memo[key]
+
+
+def preview(eid: str, days: int = 1, *, db_path=None, root: Optional[Path] = None) -> Optional[dict]:
+    """What the day-split preview (static/daysplit.js, SP-535) needs to show each day as the day ends
+    move, without asking the server again: the 1 km pieces [start km, end km, climb m, descent m]
+    (the day sums are day_stats' own: course.cut_at), the profile, the candidates (the camp / hut
+    waypoints, every pass — SP-533; the OpenStreetMap huts — SP-536, kind "hut", with osm_attr),
+    the stored day ends (SP-537: a Cairn import's nights, `source`) and the recorded nights
+    (SP-534, a proposal). None = no GPX."""
+    got = track(eid, db_path=db_path, root=root)
+    if got is None:
+        return None
+    tr, row = got
+    c = _km_course(eid, tr, row)
+    km = float(c["totals"]["km"])
+    cands = []
+    for w in c.get("wpts") or []:
+        if not (w.get("camp") and 0.05 < w["km"] < km - 0.05):
+            continue
+        x = {"km": round(w["km"], 3), "kind": "camp", "name": w["name"], "pass": w["pass"], "passes": w["passes"]}
+        if w.get("src") == "osm":           # SP-536: a hut / camp from the built-in OpenStreetMap list
+            x.update(kind="hut", src="osm", osm_kind=w.get("kind"), **({"name_en": w["name_en"]} if w.get("name_en") else {}))
+        cands.append(x)
+    cuts, src = split_source(row, days)
+    return {"total_km": km,
+            "pieces": [[round(s["start_km"], 4), round(s["end_km"], 4), round(s["gain_m"], 1), round(s["loss_m"], 1)]
+                       for s in c["segments"]],
+            "profile": {"km": c["profile"]["km"], "z": c["profile"]["z"]},
+            "candidates": cands, "stored_km": clean_splits(row.get("day_splits") or [], km),
+            "splits_km": cuts, "split_source": src, "filename": row.get("filename"),
+            "osm_attr": c.get("osm"), "source": row.get("source"),     # SP-536 credit; SP-537 Cairn
+            "overnights": overnights(eid, db_path=db_path, root=root)}
+
+
+def overnights(eid: str, *, db_path=None, root: Optional[Path] = None) -> Optional[dict]:
+    """The stored track's overnight stops (racepower.overnight.find, SP-534), memoised on the sha1;
+    None = no GPX, no time stamps or a broken file."""
+    got = track(eid, db_path=db_path, root=root)
+    if got is None:
+        return None
+    tr, row = got
+    key = ("nights", eid, row["sha1"])
+    if key not in _memo:
+        from backend.engine.racepower import overnight as OV
+        try:
+            _memo[key] = OV.find(tr)
+        except Exception:                   # noqa: BLE001 — a proposal only: nothing to propose
+            _memo[key] = None
+    return _memo[key]
 
 
 def meta(row: Optional[dict]) -> Optional[dict]:
@@ -289,4 +404,4 @@ def meta(row: Optional[dict]) -> Optional[dict]:
     if row is None:
         return None
     return {k: row.get(k) for k in ("event_id", "filename", "bytes_raw", "bytes_gz", "km", "gain_m", "loss_m",
-                                     "z_min", "z_max", "day_splits", "camp_km", "uploaded_at", "sha1")}
+                                     "z_min", "z_max", "day_splits", "camp_km", "uploaded_at", "sha1", "source")}

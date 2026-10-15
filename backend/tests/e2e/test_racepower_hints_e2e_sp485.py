@@ -4,7 +4,9 @@ GPX trail race (demo-50k, or 貓空 17K when present).
 - 標準, nothing opened: ≤ 12 hints visible (RaceHints.count: the class-1 box rows, the reminders and the
   「還有 N 則提醒」 line, every element marked data-rh — 「推估」 badges, the heat block, the effort line, the pole
   line, the rain line…; nothing inside a closed <details> or a hover tip)
-- 沒填補給站, 脫水 > 2 %, 目標太快 first in the box on top of the result in 完整／標準／精簡
+- 目標太快 first in the box on top of the result in 完整／標準／精簡; SP-547: 沒填補給站, 脫水 > 2 %, 賽前超補 in the
+  same kind of box on top of the 補給 card, not on the result; SP-547 R1: the box's 賽前超補 line has no grams
+  (they are only on the 「賽前超補」 tile below)
 - rain 60 % but 1 mm: nothing on top, one line on the 環境 card
 - 會用杖: one line on the segments card; per segment only in 完整 (the compact table)
 What the demo has no data for (the fuel warnings, a goal, rain, poles) is patched into the real /plan answer;
@@ -80,6 +82,8 @@ def _fuel_and_goal(body):
     fw[:0] = [H.make("RC22", "熱量交叉檢查：功率法和 Fletcher 差超過 15 %"),
               H.make("RC21", "沒有輸入補給站：越野賽請在「補給站」加上 km，才能算每段要帶多少水"),
               H.make("RC20", "預估脫水約 3.1 % 體重：> 2 % 表現會掉")]
+    body["fuel"].setdefault("loading", {}).update(g_day=[665, 798], label="前一天 10–12 g/kg",
+                                                        carb_load=True)
     t = body["summary"]["time_s"]
     body["goal"] = {"goal_time_s": t * 0.88, "model_time_s": t, "model_pace_s_per_km": 400, "faster": 0.12,
                     "level": "too_fast", "message": "比模型預測快 12%，很可能撐不住", "badge": "推估"}
@@ -95,13 +99,24 @@ def test_no_stops_dehydration_and_too_fast_are_on_top_in_every_level(app, level)
     rows = page.locator("#rh-box .hint-row")
     expect(rows.first).to_be_visible()
     texts = rows.all_inner_texts()
-    top3 = " ".join(texts[:3])
-    assert "沒有輸入補給站" in top3 and "預估脫水" in top3 and "很可能撐不住" in top3, texts
+    assert "很可能撐不住" in texts[0], texts
     # the box is the first thing under the result's title
     assert page.evaluate("() => document.querySelector('#results h2').nextElementSibling.id") == "rh-box"
-    # the 補給 card's cross-check (RC22, a method line) is in 「這次怎麼算的」, not shown
-    expect(page.locator("#rh-how")).to_contain_text("熱量交叉檢查")
-    expect(page.locator("#rh-how .hint-detail")).to_be_hidden()
+    # SP-547: the 補給 hints are on the 補給 card — its own box right under its title — and not on the result
+    result = page.locator("#results").inner_text()
+    for t in ("沒有輸入補給站", "預估脫水約", "要超補", "665", "熱量交叉檢查"):
+        assert t not in result, t
+    assert page.evaluate("() => document.querySelector('#fuel h2').nextElementSibling.id") == "fh-box"
+    fuel = " ".join(page.locator("#fh-box .hint-row").all_inner_texts())
+    assert "沒有輸入補給站" in fuel and "預估脫水" in fuel and "要超補" in fuel, fuel
+    # SP-547 R1: no grams in the box — the amount is only on the 「賽前超補」 tile
+    assert "665" not in fuel and "g/kg" not in fuel, fuel
+    expect(page.locator("#fuel .tile", has_text="賽前超補")).to_contain_text("665")
+    # the 補給 card's cross-check (RC22, a method line) is in the card's 「這次怎麼算的」, not shown
+    expect(page.locator("#fh-how")).to_contain_text("熱量交叉檢查")
+    expect(page.locator("#fh-how .hint-detail")).to_be_hidden()
+    # the hints the reader sees still counts the 補給 card's
+    assert page.evaluate("() => RaceHints.list().filter((s) => s.startsWith('RC21')).length") == 1
 
 
 def test_light_rain_is_a_line_on_the_weather_card_not_on_top(app):

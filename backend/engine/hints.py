@@ -26,8 +26,7 @@ only the runner chooses it; a runner with history, a race in the last year and a
 last 12 weeks is asked once (`suggest_lean`; 「不要」 is the ack LEAN_ASK). `ui.hint_ack`: the
 「知道了」 list [{id, fp, at}].
 
-Module level: stdlib + backend.i18n only — engine/racepower/calc.py imports it, and calc.py runs in the
-static demo's browser (demo/static_racepower.py bundles it).
+Module level: stdlib + backend.i18n only — engine/racepower/calc.py imports it.
 """
 from __future__ import annotations
 
@@ -70,7 +69,7 @@ class Entry:
 # Added (not in the audit): RC (an untagged / old calculator warning: shown as before), RC3w / RC3h (SP-251
 # 冷風, SP-253 失溫 — implemented after the audit, registered as cls 1), RC13a (高山症, the 百岳 AMS line),
 # PL19 (SP-114 連續賽以哪一段來比) and PL20 (SP-292 資料少: the data source line, 「偏樂觀」) — the feasibility
-# card's lines the audit did not list (SP-486).
+# card's lines the audit did not list (SP-486); SC15 (SP-542: the 課表 week column's 「這週為什麼這樣排」).
 _ROWS = """
 GL1 1 ●●● 4
 GL2 2 ●●● 6
@@ -120,6 +119,7 @@ SC11 3 ●▷▷ 6
 SC12 1 ●●● 4
 SC13 1 ●●● 4
 SC14 2 ●●● 6
+SC15 2 ●●▷ 6
 AC1 1 ●●● 4
 AC2 2 ●●● 6
 AC3 1 ●●● 1
@@ -457,7 +457,7 @@ def first_week(start: Any, monday: dt.date) -> bool:
 def week_context(today: dt.date, monday: dt.date, phase_start: Any = None, cold_week: Optional[int] = None,
                  hot_race: bool = False) -> dict:
     """The overview week's facts the §5 conditions read: R11 heat (a hot month or a hot A / B race
-    ahead — heat_plan's), R7 the current phase's first week and the cold start's week (1 = first)."""
+    ahead — heat_data.hot_race; SP-569: the week plan has no heat notes any more), R7 the current phase's first week and the cold start's week (1 = first)."""
     return {"heat": today.month in HEAT_MONTHS or bool(hot_race),
             "phase_first": first_week(phase_start, monday),
             "cold_first": cold_week is None or int(cold_week) <= 1}

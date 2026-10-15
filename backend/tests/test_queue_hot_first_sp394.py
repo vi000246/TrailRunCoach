@@ -589,7 +589,7 @@ def test_the_back_fill_progress_is_on_the_dataset_status_and_the_page_shows_it(f
         F.WV._dataset()
     monkeypatch.setattr(F.backfill, "_tid", lambda: "u2")
     with TestClient(build_app(demo=False)) as c:
-        bf = c.get("/api/v1/wko5/dataset/status").json()["backfill"]
+        bf = c.get("/api/v1/app/dataset/status").json()["backfill"]
     assert bf["state"] == "running" and (bf["n_done"], bf["n_total"]) == (0, len(OLD_AGES))
     gate.set()
     assert _wait(lambda: F.warmed, 10)
@@ -859,7 +859,7 @@ def test_the_plan_summary_projection_waits_and_the_pages_show_the_message(monkey
     static = Path(__file__).resolve().parents[1] / "static"
     ov = (static / "overview.html").read_text("utf-8")
     assert "res.pending" in ov and "R.pending" in ov and "history_pending" in ov and "location.reload()" in ov
-    assert "res.pending" in (static / "wko5_viewer.html").read_text("utf-8")
+    assert "res.pending" in (static / "charts.html").read_text("utf-8")
     assert "r.pending" in (static / "plan.html").read_text("utf-8")
 
 

@@ -127,12 +127,20 @@ TABLES: tuple = (
     Table("race_calc", USER, "the race calculator's saved inputs + last result per event",
           deidentify=("saved_at", "updated_at")),
     Table("event_gpx", USER, "metadata of an event's uploaded course (the file is event_gpx/<id>.gz)",
-          deidentify=("filename", "uploaded_at")),
+          deidentify=("filename", "uploaded_at", "source_json")),
+    Table("course_surface", USER, "a course file's surface (OSM lookup, refetchable) and the user's marks / "
+          "typed-in split (SP-543, engine/course_surface.py), keyed by the file's sha1",
+          deidentify=("updated_at",)),
+    Table("changes", USER, "the change-log sync trial (SP-312, db/changelog.py; off unless TRC_CHANGE_SYNC): one "
+          "row per change of a synced user_settings key / activity_tags column, from a device or the app itself, "
+          "numbered by the server (seq); kept in a backup with the DB, so a restore brings back the log of the "
+          "rows it restores and a device whose cursor is newer is sent everything again (reset)",
+          deidentify=("ts", "received_at", "row_id", "item", "value_json", "device_id")),
     Table("workout_files", IMPORTED, "one row per synced / imported activity file; rpe / feel / coros_feel "
           "are the athlete's own rating but entered on the watch / in COROS and imported, not edited here",
           user_fields=("trail_classification", "classification_overridden"),
           deidentify=("file_path", "workout_date", "start_time_utc", "coros_activity_id", "tp_workout_id",
-                      "garmin_activity_id", "imported_at")),
+                      "garmin_activity_id", "intervals_activity_id", "device_name", "imported_at")),
     Table("fit_objects", IMPORTED, "one row per stored FIT original, named by its sha256 (SP-308, "
           "files/fitstore.py): size, first source, COROS id, start; `deleted` marks an object whose "
           "activity was deleted (the file is removed later, sync/purge.cleanup_objects)",
@@ -144,20 +152,23 @@ TABLES: tuple = (
           "retried by id; the cursor has moved past them, so a deleted row is an activity no sync asks for "
           "again (not recomputable); server-side bookkeeping like coros_plan_push",
           deidentify=("provider_id", "workout_date", "last_error", "first_at", "last_at")),
-    Table("sync_state", SECRET, "COROS / TP / Garmin (SP-91) tokens, the sealed 「記住密碼」 passwords "
-          "(settings/secrets.py), the accounts' ids and the sync cursors",
+    Table("sync_state", SECRET, "COROS / TP / Garmin (SP-91) / intervals.icu (SP-346) tokens, the sealed "
+          "「記住密碼」 passwords (settings/secrets.py), the accounts' ids and the sync cursors",
           secret_fields=("tp_access_token", "tp_refresh_token", "tp_web_cookie", "coros_access_token",
                          "coros_password_sealed", "tp_password_sealed", "garmin_token_sealed",
-                         "garmin_password_sealed"),
-          deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url", "garmin_email"),
+                         "garmin_password_sealed", "intervals_token_sealed"),
+          deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url", "garmin_email",
+                      "intervals_athlete_id"),
           # the login (credentials, their expiry, the account identity) stays on this machine; the
           # cursors travel with the activities they describe (SP-355)
           local_fields=("tp_access_token", "tp_refresh_token", "tp_token_expires", "tp_web_cookie",
                         "coros_access_token", "coros_token_expires", "coros_password_sealed",
                         "tp_password_sealed", "coros_email", "coros_user_id", "coros_base_url",
                         "tp_username", "garmin_token_sealed", "garmin_token_expires", "garmin_email",
-                        "garmin_password_sealed"),
-          cursor_fields=("last_sync_at", "last_sync_cursor", "coros_last_sync_at", "garmin_last_sync_at")),
+                        "garmin_password_sealed", "intervals_token_sealed", "intervals_athlete_id",
+                        "intervals_token_refused"),
+          cursor_fields=("last_sync_at", "last_sync_cursor", "coros_last_sync_at", "garmin_last_sync_at",
+                         "intervals_last_sync_at")),
     Table("weight_measurements", USER, "body-weight measurements sent in through the weight API (SP-472, "
           "api/weight.py: the iOS Shortcut / Health Auto Export reading Apple Health), every one kept with its "
           "source; the nightly apply copies some into plan.json's weights",
@@ -200,8 +211,9 @@ LEGACY_TABLES: tuple = (
 
 DB = File("wko5coach.db", PER_TABLE, ROOT, "the app DB (db/database.py); its tables: TABLES", backup=ALWAYS)
 FIT = File("fit/**", IMPORTED, SHARED, "synced FIT originals: gzip objects named by content "
-           "fit/{coros,garmin,tp}/objects/<aa>/<sha256>.fit.gz (SP-308, files/fitstore.py; garmin = the .fit "
-           "taken out of Garmin's original ZIP, SP-91); before the migration fit/{coros,tp}/<year>/<file>.fit "
+           "fit/{coros,garmin,tp,intervals}/objects/<aa>/<sha256>.fit.gz (SP-308, files/fitstore.py; garmin = "
+           "the .fit taken out of Garmin's original ZIP, SP-91; intervals = the original file intervals.icu "
+           "hands out, gunzipped, SP-346); before the migration fit/{coros,tp}/<year>/<file>.fit "
            "(sync/storage.py)", backup=OPT_IN,
            deidentify=("GPS track (start / end)", "timestamps", "device serial / user profile in the file",
                        "legacy file name: COROS labelId, Garmin activityId or TP workout id + date"))
@@ -232,6 +244,12 @@ FILES: tuple = (
          deidentify=("activity files", "dates"),
          invalidated_by="never recomputed: a log of the last runs; safe to delete (the next window runs the "
                         "archive again, which is idempotent)"),
+    File("imports/**", DERIVED, ROOT, "匯入匯出檔 (SP-349, sync/archive.py): an uploaded platform export "
+         "imports/<id>/archive.zip while it is imported (its nested ZIPs nested/<k>.zip), then only the results "
+         "(state.json, manifest.json: the entry names; items.jsonl: per file the result) of the tenant's last "
+         "import", deidentify=("file names (may hold an e-mail address or activity ids)", "dates"),
+         invalidated_by="temporary: the archive goes when its import ends, the results with the next import or "
+                        "「清除」; the activities themselves are fit/** and workout_files"),
     File("backups/**", SECRET, ROOT, "pre-restore copies (made like a backup: no SECRET rows) and restore "
          "work files (api/backup.py _local_dir); they stay on the server"),
     # -- read from the base by a demo sandbox (tenancy.base_path) ----------
@@ -318,8 +336,9 @@ FILES: tuple = (
          "(racepower/athlete.py)", invalidated_by="its stamp; refetched"),
     File("racepower_backtest.json", DERIVED, SHARED, "the last race-power back-test (racepower/backtest.py)",
          invalidated_by="rerun"),
-    File("cwa_*.json", DERIVED, SHARED, "CWA forecasts / town elevations (racepower/weather.py)",
-         invalidated_by="age (CWA_MAX_AGE_H); refetched"),
+    File("cwa_*.json", DERIVED, ROOT, "CWA forecasts / town elevations (racepower/weather.py): one copy for the "
+         "whole site in the server root (SP-552, weather.site_dir()), every tenant reads it",
+         scope=INSTANCE, invalidated_by="age (CWA_MAX_AGE_H); refetched"),
     File("climatology/**", DERIVED, SHARED, "Open-Meteo climatology (racepower/weather.py)",
          invalidated_by="CLIM_VERSION"),
     File("weather.json", SECRET, SHARED, "the CWA API key (racepower/weather.py save_key)"),
@@ -341,7 +360,9 @@ FILES: tuple = (
     File("accounts.db-*", SECRET, ROOT, "accounts.db's WAL / shared memory", scope=INSTANCE),
     File("site.json", USER, ROOT, "server-wide settings and state (backend/site_settings.py): the COROS "
          "switch, breaker, limits and paused accounts (SP-385); the Garmin trial's switch, breaker, paused "
-         "accounts and per-account daily counts (SP-91, sync/garmin_limits.py); tenants by id only",
+         "accounts and per-account daily counts (SP-91, sync/garmin_limits.py); intervals.icu's app-wide "
+         "request counts and the webhook map sha256(intervals.icu athlete id) -> tenant id (SP-346, "
+         "sync/intervals_limits.py); tenants by id only",
          scope=INSTANCE),
     File("users/**", USER, ROOT, "multi-user mode: each users/<id>/ is a signed-in user's tenant folder "
          "(classified on its own, like the owner's)", scope=INSTANCE),
@@ -434,8 +455,9 @@ def export_entries() -> tuple[list[Table], list[File]]:
 
 
 # user_settings keys (SQL LIKE) that stay on this machine: this machine's backup folder / state,
-# the debug API switch, the 課表訂閱 ICS link token (SP-355); compare debug_view.EXPORT_EXCLUDE
-LOCAL_SETTINGS: tuple = ("backup.%", "debug.%", "plan.calendar")
+# the debug API switch, the 課表訂閱 ICS link token (SP-355), the last pull from production (SP-373);
+# compare debug_view.EXPORT_EXCLUDE
+LOCAL_SETTINGS: tuple = ("backup.%", "debug.%", "plan.calendar", "upstream.%")
 
 
 def local_tables() -> list[str]:

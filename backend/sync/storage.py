@@ -4,6 +4,7 @@ Where synced FIT files live — one folder per source:
     ~/.wko5coach/fit/coros/objects/<aa>/<sha256>.fit.gz   (SP-308, files/fitstore.py)
     ~/.wko5coach/fit/garmin/objects/<aa>/<sha256>.fit.gz  (the Garmin trial, SP-91)
     ~/.wko5coach/fit/tp/objects/<aa>/<sha256>.fit.gz
+    ~/.wko5coach/fit/intervals/objects/<aa>/<sha256>.fit.gz  (intervals.icu, SP-346)
     ~/.wko5coach/fit/{coros,tp}/<year>/...                (before the fit_objects migration)
 
 Everything that deletes files goes through `confined()`, which resolves the
@@ -19,7 +20,8 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 FIT_ROOT = None      # fixed folder (tests); None = the tenant's shared fit/
-SOURCES = {"coros": "coros", "garmin": "garmin", "tp": "trainingpeaks"}   # folder / API name -> DB source
+# folder / API name -> DB source (intervals: intervals.icu, SP-346)
+SOURCES = {"coros": "coros", "garmin": "garmin", "tp": "trainingpeaks", "intervals": "intervals"}
 DB_TO_FOLDER = {v: k for k, v in SOURCES.items()}
 
 

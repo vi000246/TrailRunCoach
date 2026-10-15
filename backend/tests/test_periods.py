@@ -13,7 +13,7 @@ from backend.engine.wko5expr.render import result_to_json
 from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
 
 TODAY = dt.date(2026, 9, 30)
-VIEWER = Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html"
+VIEWER = Path(__file__).resolve().parents[1] / "static" / "charts.html"
 
 
 def _chart(title, *exprs, **kw):
@@ -111,4 +111,4 @@ def test_viewer_draws_categories_and_toggle():
     html = VIEWER.read_text(encoding="utf-8")
     assert 'type: "category", data: cats.map((b) => bucketLabel(b, cat))' in html
     assert "function bucketLabel(" in html and "Q${" in html
-    assert "res.period_toggle" in html and "&period=${period}" in html and "wko5viewer.period" in html
+    assert "res.period_toggle" in html and "&period=${period}" in html and "charts.period" in html

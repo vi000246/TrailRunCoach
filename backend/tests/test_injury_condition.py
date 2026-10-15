@@ -95,34 +95,34 @@ def test_english_texts():
 # ---------------------------------------------------------------------------
 
 def test_api_condition(api):  # noqa: F811
-    m = api.get("/api/v1/wko5/injuries/meta").json()
+    m = api.get("/api/v1/app/injuries/meta").json()
     assert list(m["conditions"]) == ["achilles", "plantar_fascia", "itb", "pfp", "other"]
     assert PFP_TEXT in m["condition_monitor"]["pfp"] and GENERAL in m["monitor"]
     assert m["condition_area"]["itb"] == "knee" and "先給醫師看" in m["shin_note"]
     assert "這不是醫療診斷" in m["disclaimer"]
     # mismatch → an error code
-    r = api.post("/api/v1/wko5/injuries", json={"area": "ankle", "condition": "pfp", "onset_date": "2026-09-20"})
+    r = api.post("/api/v1/app/injuries", json={"area": "ankle", "condition": "pfp", "onset_date": "2026-09-20"})
     assert r.status_code == 400 and r.json()["detail"] == "CONDITION_AREA_MISMATCH"
-    r = api.post("/api/v1/wko5/injuries", json={"area": "knee", "condition": "x", "onset_date": "2026-09-20"})
+    r = api.post("/api/v1/app/injuries", json={"area": "knee", "condition": "x", "onset_date": "2026-09-20"})
     assert r.status_code == 400 and r.json()["detail"] == "INVALID_CONDITION"
     # an unknown area takes the condition's own
-    e = api.post("/api/v1/wko5/injuries", json={"condition": "pfp", "side": "right", "onset_date": "2026-09-20"}).json()
+    e = api.post("/api/v1/app/injuries", json={"condition": "pfp", "side": "right", "onset_date": "2026-09-20"}).json()
     assert e["area"] == "knee" and e["condition"] == "pfp" and e["condition_label"] == "膝前痛"
     assert PFP_TEXT in e["monitor"] and "Esculier 2016" in e["monitor"]
     # moving the area away from the condition is refused; clearing both works
-    r = api.patch(f"/api/v1/wko5/injuries/{e['id']}", json={"area": "ankle"})
+    r = api.patch(f"/api/v1/app/injuries/{e['id']}", json={"area": "ankle"})
     assert r.status_code == 400 and r.json()["detail"] == "CONDITION_AREA_MISMATCH"
-    p = api.patch(f"/api/v1/wko5/injuries/{e['id']}", json={"area": "ankle", "condition": None}).json()
+    p = api.patch(f"/api/v1/app/injuries/{e['id']}", json={"area": "ankle", "condition": None}).json()
     assert p["area"] == "ankle" and p["condition"] is None and GENERAL in p["monitor"]
     # 跟腱 keeps the Silbernagel text; an illness never carries a condition
-    a = api.post("/api/v1/wko5/injuries", json={"area": "achilles", "condition": "achilles",
+    a = api.post("/api/v1/app/injuries", json={"area": "achilles", "condition": "achilles",
                                                 "onset_date": "2026-09-21"}).json()
     assert a["monitor"] == INJ.SILBERNAGEL["text"]
-    i = api.post("/api/v1/wko5/injuries", json={"category": "illness", "illness": "cold", "condition": "pfp",
+    i = api.post("/api/v1/app/injuries", json={"category": "illness", "illness": "cold", "condition": "pfp",
                                                 "onset_date": "2026-09-22"}).json()
     assert i["condition"] is None and i["monitor"] is None
     # an old event (no condition) lists with the general text
-    o = api.post("/api/v1/wko5/injuries", json={"area": "hip", "onset_date": "2026-09-23"}).json()
+    o = api.post("/api/v1/app/injuries", json={"area": "hip", "onset_date": "2026-09-23"}).json()
     assert o["condition"] is None and GENERAL in o["monitor"]
 
 

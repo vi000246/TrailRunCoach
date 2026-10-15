@@ -237,6 +237,10 @@ def easy_name(s: dict, th: Thresholds, it: Optional[tuple]) -> str:
     return "功率區間" if it else "照感覺"
 
 
+# SP-479 (the owner 2026-10-14): a warm-up the app writes has no target — the easy band's floor (0.75 × LTHR,
+# the plan zones' Z2 bottom…) is above a HR still coming up and the watch kept alerting; COROS takes an HR
+# target only as lo–hi, so no cap alone. The cool-down keeps the easy band. = workout_steps.resolve's warm.
+WARM_INT = None
 WARM_NAME = {"city": "輕鬆跑暖身", "river": "輕鬆跑→漸進", "drills": "動態伸展／drill"}
 REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
 
@@ -263,8 +267,8 @@ def _variant_steps(s: dict, th: Thresholds) -> Optional[list[StepLike]]:
             out.append(Repeat(n, [Step(EX_TRAIN, 20, None, "快步跑 20 秒"), Step(EX_REST, 40, None, "慢跑")],
                               f"快步跑 {n}×20 秒"))
         elif k == "warm":
-            out.append(Step(EX_WARMUP, st["s"], None if st["code"] == "drills" else easy_hr(th),
-                            WARM_NAME.get(st["code"], "暖身")))
+            # SP-479: no target on a warm-up (the easy band's floor is above a HR still coming up)
+            out.append(Step(EX_WARMUP, st["s"], WARM_INT, WARM_NAME.get(st["code"], "暖身")))
         elif k == "work":
             out.append(Step(EX_TRAIN, st["s"], work_int, st["text"]))
         elif k == "rest":
@@ -300,7 +304,7 @@ def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
         work_int = _work_hr(s, th, None) or work_int
     elif s.get("basis") == "none":
         work_int = None
-    return [Step(EX_WARMUP, warm * 60, easy_hr(th)),
+    return [Step(EX_WARMUP, warm * 60, WARM_INT),
             Repeat(reps, [Step(EX_TRAIN, work * 60, work_int, f"{work} 分"),
                           Step(EX_REST, rest * 60, None)], f"{reps}×{work} 分"),
             Step(EX_COOLDOWN, cool * 60, easy_hr(th))]
@@ -310,7 +314,7 @@ def _test_steps(s: dict, th: Thresholds) -> list[StepLike]:
     """CP test by protocol (engine/cp_protocols.py; legacy rows from the title).
     The all-out bouts have an open target (no power range: a range reads as
     the goal, and the old 12′ range topped out below the athlete's real
-    12′ power); warm-up / rest / cool-down are HR ≤ AeT, lengths from detail."""
+    12′ power); rest / cool-down are HR ≤ AeT, the warm-up has no target (SP-479); lengths from detail."""
     from backend.engine import cp_protocols as CPP
     proto = CPP.protocol_of(s) or "standard"
     if proto == "race":
@@ -321,14 +325,14 @@ def _test_steps(s: dict, th: Thresholds) -> list[StepLike]:
     cool = _num(r"緩和\s*(\d+)\s*分", detail, t["cool"])
     if proto == "quick":
         work = _num(r"(\d+)\s*分全力", title, 20)
-        return [Step(EX_WARMUP, warm * 60, easy_hr(th)),
+        return [Step(EX_WARMUP, warm * 60, WARM_INT),
                 Step(EX_TRAIN, work * 60, None, f"{work} 分全力"),
                 Step(EX_COOLDOWN, cool * 60, easy_hr(th))]
     # "CP 測試 12 分 + 3 分" (long first); a legacy "3 分 + 12 分" keeps its order
     a = _num(r"(\d+)\s*分\s*\+", title, 12)
     b = _num(r"\+\s*(\d+)\s*分", title, 3)
     gap = _num(r"休\s*(\d+)\s*分", s.get("target", "") + detail, t["rest"])
-    return [Step(EX_WARMUP, warm * 60, easy_hr(th)),
+    return [Step(EX_WARMUP, warm * 60, WARM_INT),
             Step(EX_TRAIN, a * 60, None, f"{a} 分全力"),
             Step(EX_REST, gap * 60, easy_hr(th), "恢復"),
             Step(EX_TRAIN, b * 60, None, f"{b} 分全力"),
@@ -355,7 +359,7 @@ def _aet_test_steps(s: dict, th: Thresholds) -> list[StepLike]:
             main_step = Step(EX_TRAIN, main * 60, tg, xu_main_name(s.get("target", "")))
         else:
             main_step = Step(EX_TRAIN, main * 60, easy_hr(th), "AeT 心率附近穩定跑")
-        steps = [Step(EX_WARMUP, warm * 60, easy_hr(th)), main_step]
+        steps = [Step(EX_WARMUP, warm * 60, WARM_INT), main_step]
         cool = _num(r"緩和\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", text, 0)
         if cool:
             steps.append(Step(EX_COOLDOWN, cool * 60, easy_hr(th)))
@@ -363,9 +367,10 @@ def _aet_test_steps(s: dict, th: Thresholds) -> list[StepLike]:
     cool = _num(r"緩和\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", text, 0)
     p = _num(r"固定功率\s*(\d+)\s*W", text) or (round(0.75 * th.cp) if th.cp else None)
     hr0 = _num(r"心率從\s*(\d+)", text)
-    warm_int = easy_hr(th)
-    if hr0 and warm_int:
-        warm_int = ("hr", min(warm_int[1], hr0 - 10), hr0)
+    # the protocol's 「暖身到開始流汗（心率不超過起始心率）」 window stays (the test's own target, as
+    # workout_steps._aet_test); without a start HR the warm-up has no target (SP-479)
+    e = easy_hr(th)
+    warm_int = ("hr", min(e[1], hr0 - 10), hr0) if hr0 and e else WARM_INT
     main_int = ("power", round(p * 0.97), round(p * 1.03)) if p else None
     steps = [Step(EX_WARMUP, warm * 60, warm_int),
              Step(EX_TRAIN, main * 60, main_int, "固定功率，不要調")]
@@ -506,7 +511,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
         return [Step(EX_TRAIN, secs, it, easy_name(s, th, it))]
     if kind == "easy" and (s.get("heat") or "熱適應" in (s.get("title") or "")) and secs >= 20 * 60:
         # heat-acclimation.md §5.4: warm-up 10 / main / cool-down 5 (walk), HR ≤ AeT
-        return [Step(EX_WARMUP, 10 * 60, easy_hr(th), "熱適應：慢慢進入"),
+        return [Step(EX_WARMUP, 10 * 60, WARM_INT, "熱適應：慢慢進入"),
                 Step(EX_TRAIN, secs - 15 * 60, easy_hr(th), "熱適應：照心率、配速放慢"),
                 Step(EX_COOLDOWN, 5 * 60, None, "走路降溫")]
     if kind == "easy":

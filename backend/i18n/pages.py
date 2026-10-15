@@ -35,7 +35,7 @@ STATIC = Path(__file__).resolve().parents[1] / "static"
 CATALOG_DIR = STATIC / "i18n"
 ALWAYS_NS = ("common", "shell")
 # page file stem -> its catalog namespaces (default: the stem itself)
-PAGE_NS = {"wko5_viewer": ("viewer",), "share": ("share", "racepower")}
+PAGE_NS = {"charts": ("viewer",), "share": ("share", "racepower")}
 I18N_JS = "/api/v1/static/i18n/i18n.js"
 
 

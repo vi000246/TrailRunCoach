@@ -258,6 +258,7 @@ def test_training_targets_follow_the_setting_and_hint_the_drift_hr(monkeypatch):
     ds.settings_from = "app"
     ds.setting_label = lambda name, default="": "設定"
     end = int(date_to_day(TODAY))
+    monkeypatch.setattr(HP, "plan_model", lambda user_id=1: "lthr")      # SP-493: locked (the default is 自動)
     tt = training_targets(ds, end, aet_below=162)
     assert "飄移 < 5%" in tt["aet_source"] and "162" in tt["aet_source"]
     assert tt["hr_model"]["model"] == "lthr" and tt["easy_cap"]["value"] == 144

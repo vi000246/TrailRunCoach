@@ -4,7 +4,7 @@
  * Every browser picks files (<input type=file multiple>); a whole folder needs `webkitdirectory`
  * (desktop browsers, iPhone from iOS 18.4, Android Chrome from 132: docs/research/fit-on-device.md
  * §4.1) and its button is hidden where the browser has none. Names that are not FIT (.fit /
- * .fit.gz) are skipped and listed, never sent; a file over the size cap fails here. The rest go to
+ * .fit.gz, or TCX / GPX: SP-349) are skipped and listed, never sent; a file over the size cap fails here. The rest go to
  * POST /api/v1/sync/upload/fit (backend/sync/upload.py) in batches below the server's caps (read
  * from GET of the same URL), one after the other: a failed batch fails its own files only. The
  * last batch carries last=1 and what the earlier ones added, so the server rebuilds the charts,
@@ -23,14 +23,20 @@
   // the server's caps (backend/sync/upload.py limits()); GET answers the real ones. batch_bytes:
   // what one request carries (its parsing must end well inside a proxy's response time limit)
   const DEF = { max_file_bytes: 20 * 1048576, max_files: 20, max_request_bytes: 100 * 1048576, batch_bytes: 2 * 1048576,
-    max_select: 3000, exts: [".fit", ".fit.gz"] };
-  const ACCEPT = ".fit,.fit.gz";
+    max_select: 3000, exts: [".fit", ".fit.gz", ".tcx", ".tcx.gz", ".gpx", ".gpx.gz"], max_track_bytes: 64 * 1048576 };
+  // TCX / GPX too (SP-349: what Garmin's and TrainingPeaks' exports hold besides FIT; the server
+  // turns them into FIT). The inputs carry data-cap themselves: shell.js's demo lock finds FIT
+  // inputs by an accept without .gpx (the course GPX inputs stay open there)
+  const ACCEPT = ".fit,.fit.gz,.tcx,.tcx.gz,.gpx,.gpx.gz";
+  const TRACK = [".tcx", ".tcx.gz", ".gpx", ".gpx.gz"];
   const LIST_MAX = 200;                 // names shown per list (the rest as 「還有 N 個」)
   const SRC = { coros: "COROS", garmin: "Garmin", trainingpeaks: "TrainingPeaks", tp: "TrainingPeaks" };
 
   // a folder pick names a file by its path inside the folder
   const nameOf = (f) => (f && (f.webkitRelativePath || f.name)) || "";
   const isFit = (name, exts) => { const n = name.toLowerCase(); return exts.some((e) => n.endsWith(e)); };
+  // a TCX / GPX holds several times the bytes of the same FIT: its own cap
+  const capOf = (name, lim) => (isFit(name, TRACK) ? (lim.max_track_bytes || lim.max_file_bytes) : lim.max_file_bytes);
 
   function plan(files, limits) {
     const lim = { ...DEF, ...(limits || {}) };
@@ -38,7 +44,7 @@
     for (const f of files) {
       const name = nameOf(f);
       if (!isFit(name, lim.exts)) skipped.push(name);
-      else if (f.size > lim.max_file_bytes) tooBig.push(name);
+      else if (f.size > capOf(name, lim)) tooBig.push(name);
       else ok.push(f);
     }
     // ≤ max_files per request and ≤ batch_bytes (≤ 90 % of the body cap: room for the multipart
@@ -139,7 +145,7 @@
     if (res.stopped) html += `<p class="fi-err">${esc(T("stopped." + res.stopped, { max: opt.limits.max_select }))}</p>`;
     if (res.added) {
       html += `<p class="fi-meta">${esc(T("updating"))}` +
-        (opt.listLink ? ` <a href="/api/v1/wko5/activities/page">${esc(T("to_list"))}</a>` : "") + "</p>";
+        (opt.listLink ? ` <a href="/api/v1/app/activities/page">${esc(T("to_list"))}</a>` : "") + "</p>";
     }
     for (const st of ["failed", "duplicate", "skipped"]) {
       const rows = res.items.filter((i) => i.status === st);
@@ -163,8 +169,8 @@
       <div class="fi-row">
         <button type="button" data-fi="pick" data-cap="upload.fit">${esc(T("pick_files"))}</button>
         <button type="button" data-fi="pickdir" data-cap="upload.fit"${folderOk ? "" : " hidden"}>${esc(T("pick_folder"))}</button>
-        <input type="file" accept="${ACCEPT}" multiple hidden data-fi="files">
-        <input type="file" accept="${ACCEPT}" multiple webkitdirectory hidden data-fi="dir">
+        <input type="file" accept="${ACCEPT}" multiple hidden data-fi="files" data-cap="upload.fit">
+        <input type="file" accept="${ACCEPT}" multiple webkitdirectory hidden data-fi="dir" data-cap="upload.fit">
         <progress hidden data-fi="prog"></progress>
         <span class="fi-meta" role="status" aria-live="polite" data-fi="status"></span>
       </div>

@@ -24,6 +24,7 @@ from types import SimpleNamespace
 from typing import Optional
 
 from backend.engine.localtime import today_local
+from backend.i18n import N_
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -75,7 +76,7 @@ def views_dir() -> Optional[Path]:
             v = None
     return Path(v).expanduser() if v else None
 
-router = APIRouter(prefix="/api/v1/wko5", tags=["wko5-views"])
+router = APIRouter(prefix="/api/v1/app", tags=["app"])
 
 
 _LIVE: "weakref.WeakSet[Dataset]" = weakref.WeakSet()
@@ -313,6 +314,22 @@ def _dataset_in_tenant(parity: Optional[bool], source: Optional[str]) -> Dataset
     return jobs.call(build, cls="build", priority="user", label="dataset build (request)", key=("dataset", *key))
 
 
+def key_of(ds) -> Optional[tuple]:
+    """The cache key `ds` is kept under (None: not a kept Dataset — a test's, a dropped one)."""
+    with _dataset_cfg._lock:
+        return next((k for k, d in _dataset_cfg._d.items() if d is ds), None)
+
+
+def worker_dataset(key: tuple) -> Dataset:
+    """In a worker process (backend/workproc.py, SP-394 第 5 條): the Dataset of `key` (in the
+    worker's tenant) built there from the disk caches the server's build left — the FIT index,
+    the estimates — whole (never hot first) and starting nothing: no back-fill, no warm-up, no
+    build progress. For the worker's one job; the worker exits after it."""
+    from backend.engine.wko5expr.fitdataset import hot_first_builds
+    with hot_first_builds(False):
+        return dataset_for_source(key[1], for_tenant(ATHLETE_DIR), config=EngineConfig.from_dict(json.loads(key[0])))
+
+
 # the warm-up's threads, one set for each tenant (SP-374 第 3 條): tenant id -> {"thread", "low",
 # "low_again"}. With one slot for the server, B's warm-up after a sync was dropped while A's ran,
 # and B's low-priority part re-ran in A's context. An entry goes when its threads are done.
@@ -422,10 +439,18 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
             # cold-data sweep is queued (SP-340)
             job = AA.job_for(ds, priority=_hot_priority(reason))
             _sweep_when_done(job, ds)
+            ds = None                            # the job holds it weakly; not while warm_charts waits
             RP.warm_charts(job)                  # then the race calculator's charts (SP-366; owner only)
+            if reason.startswith("sync"):
+                # SP-499: the charts drawn lately, redrawn on the new data (api/prerender.py)
+                from backend.api import prerender
+                prerender.after_sync(job)
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("warm-up low-priority part (%s) failed: %s", reason,
                                                 type(e).__name__, exc_info=True)
+        # not across the next round's wait in the queue (SP-394 第 6 條: every tenant's thread
+        # waiting again kept its previous Dataset alive past the Dataset cache's budget)
+        ds = job = None
         w = slot if slot is not None else _warm_slot()
         with _LOW_LOCK:
             if not w.get("low_again"):
@@ -436,7 +461,10 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
 
 def _priority(reason: str) -> str:
     """The warm-up job's priority: after a sync `sync_hot`, after a deploy `deploy_hot`, after the
-    back-fill of a hot-first build (api/backfill.py) `warm`, else someone changed something: `user`."""
+    back-fill of a hot-first build (api/backfill.py) `warm`, else someone changed something: `user`.
+    After a background sync (`sync-bg-…`, SP-499: nobody is on a page) `warm` as well."""
+    if reason.startswith("sync-bg"):
+        return "warm"
     if reason.startswith("sync"):
         return "sync_hot"
     return "deploy_hot" if reason in ("startup", "deploy") else "warm" if reason == "backfill" else "user"
@@ -456,11 +484,23 @@ def _sweep_when_done(job, ds) -> None:
     cold-data sweep is queued at `cold` on this Dataset (coldstore.schedule_sweep: the summaries of
     the activities older than a year, their channels dropped, the series rows of files gone) — at
     once when the classification had nothing to compute; never on a hot-first Dataset whose older
-    activities are still being back-filled (coldstore.sweep skips it)."""
+    activities are still being back-filled (coldstore.sweep skips it). The callback holds the
+    Dataset weakly (SP-394 第 6 條): it sat in the classification job, the value of a
+    WeakKeyDictionary keyed on this Dataset, and kept every tenant's Dataset alive after the
+    Dataset cache had dropped it; a Dataset gone by then is not swept (the next warm-up's is)."""
+    import weakref
+    try:
+        ref = weakref.ref(ds)
+    except TypeError:                    # not weak-referenceable (a test double)
+        ref = lambda ds=ds: ds           # noqa: E731
+
     def cold() -> None:
+        d = ref()
+        if d is None:
+            return
         try:
             from backend.engine.wko5expr import coldstore
-            coldstore.schedule_sweep("warm-up", ds)
+            coldstore.schedule_sweep("warm-up", d)
         except Exception:                # noqa: BLE001 — a queued sweep never fails anything
             pass
     when = getattr(job, "when_done", None)
@@ -836,8 +876,9 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         tests = [[s["uid"], s["state"], (s.get("done_by") or {}).get("index"), s.get("protocol")]
                  for s in test_sessions()]
         params = {**params, "_prefs": PP.load().stamp(), "_tests": json.dumps(tests, default=str)}
-    if ch.get("kind") in ("zones", "targets", "activity", "periodzones"):
-        # HR zones / targets read the COROS account and the 課表心率區間 setting (engine/hr_profile.py)
+    if ch.get("kind") in ("zones", "targets", "activity", "periodzones", "review"):
+        # HR zones / targets read the COROS account and the 課表心率區間 setting (engine/hr_profile.py);
+        # the review's 「輕鬆」 reads the easy cap of those zones (SP-565)
         from backend.engine import hr_profile as HP
         params = {**params, "_hr": HP.stamp()}
     if ch.get("race_refs") == "course_constant":
@@ -949,8 +990,24 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     # a demo visitor never gets (nor leaves) a previous drawing; the export / scripts don't ask
     demo = tenancy.current().is_demo
     res, stale = RENDER_CACHE.serve(key, compute, slot=None if demo else _slot(view, ch, req, asked, ds),
-                                    stale_ok=request.query_params.get("stale") == "1" and not demo)
+                                    stale_ok=request.query_params.get("stale") == "1" and not demo,
+                                    replay=None if demo or needs_workout else _replay(view, d, c, request, asked, ds))
     return {**res, "stale": stale} if stale else res
+
+
+def _replay(view: str, d: int, c: int, request: Request, asked: tuple, ds) -> Optional[dict]:
+    """How to ask for this chart again on newer data (SP-499, api/prerender.py), kept with its
+    slot: a range that ends today or later (「the N days to today」) as days before / after
+    today, the other query parameters, the locale. None for a range that ended in the past
+    (new data never changes it)."""
+    import math
+    from backend.i18n import current_locale
+    b, e = asked
+    today = math.floor(ds.today)
+    if e < today:
+        return None
+    q = {k: v for k, v in request.query_params.items() if k not in ("begin", "end", "stale")}
+    return {"view": view, "d": d, "c": c, "q": q, "back": today - b, "ahead": e - today, "locale": current_locale()}
 
 
 def _scope_pending(ds, scope) -> Optional[dict]:
@@ -1101,11 +1158,14 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
         end_day = int(math.floor(e))
         base = {"title": ch.get("title"), "description": ch.get("description"), "kind": ch["kind"]}
         if ch["kind"] == "zones":
-            # an HR table can be switched in the card (?zsys=, remembered by the viewer)
-            from backend.engine.zones import HR_SYSTEMS, SYSTEMS
+            # an HR table can be switched in the card (?zsys=, remembered by the viewer); a power
+            # table between Palladino and Stryd (SP-363)
+            from backend.engine.zones import HR_SYSTEMS, POWER_SYSTEMS, SYSTEMS
             system = ch["system"]
             want = (params or {}).get("zsys")
             if want in HR_SYSTEMS and SYSTEMS[system]["unit"] == "bpm":
+                system = want
+            elif want in POWER_SYSTEMS and system in POWER_SYSTEMS:
                 system = want
             if system != ch["system"]:
                 # the card's title names the model: a switched table shows its own title, not the
@@ -1156,6 +1216,8 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
             "climbing": m.get("climbing"), "tss": m.get("tss"), "if": m.get("if"),
             "hrtss": m.get("hrtss"), "np": m.get("np"),
             "plan": plan.get(w.idx),        # {kind, label, icon, title, day} or None
+            # “Garmin [device model]” / 不是原始檔 of an intervals.icu activity (SP-346), else None
+            "device_mark": _device_mark(ds, w),
             # stryd / watch / none (engine/power_source.py); watch power is
             # 「手錶推估功率（未採用）」 unless power.accept_watch_power
             "power_source": ds.power_source(w) if hasattr(ds, "power_source") else None,
@@ -1269,6 +1331,9 @@ def _activity_json(ds, w) -> dict:
             "title_original": title or A.label(w), "title_from": "activity" if title else "label",
             "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
             "origin": _origin(ds, w),
+            # intervals.icu (SP-346): “Garmin [device model]” beside the title and the AI sentence
+            # (sync/garmin_attribution.py), or 不是原始檔 (Huawei); None for every other activity
+            "device_mark": _device_mark(ds, w),
             "types": AT.TYPES, "efforts": AT.EFFORTS, **t,
             # 登山杖: the user's choice, else 有杖 「依賽事設定」 (SP-300)
             **AT.pole_state(t.get("tags"), AT.race_poles(ds).get(w.idx)),
@@ -1430,7 +1495,19 @@ def _set_pack(w, kg) -> None:
 # values, the auto values in a second (slower) call, key-based and bulk edits
 # ---------------------------------------------------------------------------
 
-ORIGIN_LABELS = {"coros": "COROS", "garmin": "Garmin", "tp": "TrainingPeaks", "wko5": "WKO5"}
+ORIGIN_LABELS = {"coros": "COROS", "garmin": "Garmin", "tp": "TrainingPeaks", "intervals": "intervals.icu",
+                 "wko5": N_("對照資料夾")}
+
+
+def _device_mark(ds, w=None, file: Optional[str] = None) -> Optional[dict]:
+    """garmin_attribution.mark of the activity's file (intervals.icu rows only, SP-346)."""
+    fn = getattr(ds, "file_mark", None)
+    if fn is None:
+        return None
+    try:
+        return fn(w, file=file)
+    except Exception:                       # noqa: BLE001 — a mark never breaks the page
+        return None
 
 
 def _origin(ds, w=None, file: Optional[str] = None) -> Optional[str]:
@@ -1458,7 +1535,7 @@ def _terrain(ds, file: Optional[str], trail: bool) -> dict:
             r = cand[0] if len(cand) == 1 else None
     if r is None:
         return {"value": "trail" if trail else "road", "editable": False, "overridden": False,
-                "workout_file_id": None, "why": "WKO5 來源：地形依 WKO5 的活動類型" if not rows else "找不到這個檔案的資料庫紀錄"}
+                "workout_file_id": None, "why": "對照資料夾來源：地形依原始檔的活動類型" if not rows else "找不到這個檔案的資料庫紀錄"}
     eff = FD.classification_for(Path(d) / file, rows)
     return {"value": eff or ("trail" if trail else "road"), "editable": True,
             "overridden": bool(r["classification_overridden"]), "workout_file_id": r["id"],
@@ -1523,7 +1600,8 @@ def activities_list():
                     "tss": m.get("tss"), "trail": A.is_trail(w),
                     "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
                     "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
-                    "origin": _origin(ds, w), "excluded": None, **rpe_part(w.entry.start, w.entry.file),
+                    "origin": _origin(ds, w), "device_mark": _device_mark(ds, w), "excluded": None,
+                    **rpe_part(w.entry.start, w.entry.file),
                     # its 有杖 / 沒杖 mark counts toward the comparison (trail runs and hikes, SP-243)
                     "pole_chart": PC.used(w), "rain_mm": rain_mm(w.entry.start, w.entry.file),
                     # the rain hint is for 越野跑 / 登山健行 only (SP-299, owner 2026-10-07)
@@ -1543,6 +1621,7 @@ def activities_list():
                     "trail": x["sport_type"] == "trail running",
                     "terrain": terr,
                     "power_label": None, "origin": _origin(ds, file=x["file"]),
+                    "device_mark": _device_mark(ds, file=x["file"]),
                     "excluded": _exclusion_json(x), **rpe_part(start, x["file"]), "pole_chart": False,
                     "rain_mm": rain_mm(start, x["file"]), "rain_kind_auto": kind_auto,
                     "rain_kind": AT.rain_kind_excluded(x["sport_type"], u, terr["value"] == "trail"),
@@ -1567,7 +1646,7 @@ def activities_list():
                     "archived": True, "rpe": None, "feel": None, "self_rating": None, "pole_chart": False,
                     "rain_mm": None, "rain_kind": False, **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
-    return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
+    return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": {**ORIGIN_LABELS, "wko5": _("對照資料夾")},
             "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES, "pole_none_tag": AT.POLE_NONE_TAG,
             "surface_tags": AT.SURFACES,
             # 「再標 N 次就能比較」 beside the 登山杖 choice (SP-243): only the trail runs and
@@ -1895,7 +1974,7 @@ def workout_samples(idx: int, parity: Optional[bool] = None):
 
 @router.get("/viewer", include_in_schema=False)
 def viewer():
-    return render_page("wko5_viewer")
+    return render_page("charts")
 
 
 @router.get("/settings", include_in_schema=False)

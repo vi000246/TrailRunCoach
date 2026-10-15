@@ -116,18 +116,19 @@ TILE = r"""() => {
 @pytest.mark.parametrize("lang,width", [("en", 1400), ("en", 390), ("zh-TW", 1400), ("zh-TW", 390)])
 def test_tis_tile_is_wide_and_whole(app, lang, width):
     page, _ = app
-    rows = page.request.get("/api/v1/wko5/workouts").json()
+    rows = page.request.get("/api/v1/app/workouts").json()
     rows = rows if isinstance(rows, list) else rows.get("workouts") or []
     w = next(a for a in rows if a.get("power_source"))
-    # the demo athlete's PD model can't be fitted (the tile says 算不出): its real line, the longer one, from the answer
-    sub = "1–10, not the watch's 0–5" if lang == "en" else "1–10，跟手錶的 0–5 不同"
+    # the demo athlete's PD model can't be fitted (the tile says 算不出): its real answer has a value and,
+    # since SP-567, no line under it (the 1–10 scale is in the ?)
 
     def patch(route):
         r = route.fetch()
         j = r.json()
         for c in j.get("cards") or []:
             if c.get("id") == "tis":
-                c.update(value="4／2", sub=sub)
+                c.update(value="4／2")
+                c.pop("sub", None)
         route.fulfill(response=r, json=j)
 
     page.route("**/dashboards/0/charts/0?*", patch)
@@ -137,7 +138,7 @@ def test_tis_tile_is_wide_and_whole(app, lang, width):
     t = page.evaluate(TILE)
     assert t, "no wide tile"
     assert t["label"] == ("Aerobic / Anaerobic training effect" if lang == "en" else "有氧／無氧訓練效果")
-    assert t["sub"] == sub
+    assert t["sub"] == ""
     assert not t["labelCut"] and not t["subCut"] and t["clear"], t
     if width > 600:
         assert t["w"] > 1.8 * t["one"], t                 # two columns

@@ -10,7 +10,7 @@
  * --accent, --err, --warn, --muted, --text), so dark mode follows the page.
  */
 (() => {
-  const API = "/api/v1/wko5/injuries";
+  const API = "/api/v1/app/injuries";
   const PAGE = `${API}/page`;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const LEVELS = [[0, "沒痛"], [1, "痠"], [2, "痛"], [3, "中斷"]];

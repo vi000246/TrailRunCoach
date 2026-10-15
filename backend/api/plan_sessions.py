@@ -234,13 +234,8 @@ def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool
     phases = [{"kind": p.kind, "start": p.start, "end": p.end, "note": p.note}
               for p in planning.phases(st.plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))]
     horizon = horizon_of(monday, today, phase_end, phases)
-    try:
-        from backend.engine import heat_data as HD
-        heat_acts = HD.exposures()[0]
-    except Exception:                       # noqa: BLE001
-        heat_acts = []
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
-                            blackouts=bos, events=st.plan.events, heat_acts=heat_acts, b2b_accepted=acc,
+                            blackouts=bos, events=st.plan.events, b2b_accepted=acc,
                             weight=st.plan.weight_on(today))
     since = monday - dt.timedelta(weeks=4)
     acts = activity_rows(ds, since, today + dt.timedelta(days=1), recorded)
@@ -400,7 +395,7 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
                     if O.category(w) != "hike":
                         m = WR.measure(ds, w) or {}
                         sess = O.session_of(ds, w)
-                        reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "cp")}
+                        reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "cp", "easy_cap")}
                         reviews[w.idx].update(tss=O._n(w.metrics.get("tss")), session_type=sess.get("type"),
                                               stimulus=sess.get("stimulus"))
                     continue
@@ -415,8 +410,8 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
                 if rec:
                     rated[w.idx] = rec
                 m = WR.measure(ds, w) or {}
-                # rule D (SP-301): 偏強 reads power (else HR ÷ LTHR) and TSS; 太強 the session class
-                reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "cp")}
+                # rule D (SP-301): 偏強 reads power (else HR vs the easy cap, SP-565) and TSS; 太強 the session class
+                reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "cp", "easy_cap")}
                 reviews[w.idx]["tss"] = O._n(w.metrics.get("tss"))
                 reviews[w.idx]["session_type"] = sess.get("type")
                 reviews[w.idx]["stimulus"] = sess.get("stimulus")
@@ -581,7 +576,8 @@ def _view(s: dict, inp: dict, rows: dict, today: str, prov=None, walk: Optional[
     v["quality_family"] = WTPL.session_family(s, inp["thresholds"], derived=got)
     v["steps_family"] = got
     if s["state"] == "active":
-        v["coros"] = prov.status_of(PS.push_dict(s, prefs), inp["thresholds"], rows.get(s["uid"]), today)
+        v["coros"] = prov.status_of(PS.push_dict(s, prefs, inp["thresholds"]), inp["thresholds"], rows.get(s["uid"]),
+                                    today)
         note = pace_note(s, inp["thresholds"])
         if note:
             v["coros"] = {**v["coros"], "pace_note": note, "tpace_link": tpace_link()}
@@ -649,6 +645,7 @@ async def _reconciled(db: AsyncSession, inp: dict, t: float) -> tuple[list[dict]
         except Exception as e:              # noqa: BLE001 — never fail the page over it
             import logging
             logging.getLogger(__name__).warning("plan: CP check failed (%s)", type(e).__name__)
+        await PA.check_hr_model(db, inp)    # SP-493: the 自動 課表心率區間 switched (never raises)
     return every, _took("reconcile", t)
 
 
@@ -1263,6 +1260,13 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
             t["replaces_long"] = t["key"] == "aet" and aet_p == "xu90"
     rows += await run_in_threadpool(_injury_suggestions, inp, today, set(bl), stored)
     rows += await run_in_threadpool(_altitude_suggestions, today)
+    # SP-493: the 自動 課表心率區間 switched by itself — told once
+    from backend.engine import plan_auto as PA
+    from backend.settings.repository import SettingsRepository
+    try:
+        rows += SG.hr_switch_rows(await SettingsRepository(db).get(PA.HR_ZONE_KEY), today)
+    except Exception:                       # noqa: BLE001 — the box must still load
+        pass
     return rows
 
 
@@ -1306,7 +1310,7 @@ async def _baseline_rows(inp: dict, stored: list[dict], today: str, tpl: dict, a
 
 
 def _altitude_suggestions(today: str) -> list[dict]:
-    """高度適應提醒 (engine/altitude.py, SP-100 / SP-258): events ≥ 3,000 m (their GPX), 1–28 days away."""
+    """高山症預防提醒 (engine/altitude.py, SP-546): 百岳 / ≥ 3,000 m trips (their GPX), 1–7 days away."""
     from backend.engine import altitude as AL
     from backend.engine import suggestions as SG
     from backend.engine.planning import Plan
@@ -1314,8 +1318,7 @@ def _altitude_suggestions(today: str) -> list[dict]:
         def alts():
             from backend.api.overview import _dataset
             return AL.day_altitudes(_dataset(), dt.date.fromisoformat(today))
-        return SG.altitude_rows(Plan.load().events, today, lambda e: AL.event_altitude(e.id, e.days), alts,
-                                AL.load_nights)
+        return SG.altitude_rows(Plan.load().events, today, lambda e: AL.event_altitude(e.id, e.days), alts)
     except Exception:                       # noqa: BLE001 — the box must still load
         return []
 
@@ -1399,8 +1402,10 @@ async def _visible(db: AsyncSession, inp: dict, rows: list[dict], dis: Optional[
 
 @router.get("/suggestions")
 async def suggestions(db: AsyncSession = Depends(get_db)):
+    from backend.engine import plan_auto as PA
     from backend.engine import suggestions as SG
     inp = await _inputs(db)
+    await PA.check_hr_model(db, inp)          # SP-493: a switch 自動 made is recorded (and told) on any page
     rows = await _all_suggestions(db, inp)
     kept = await _edit_dismissed(db, lambda dis: SG.prune(dis, rows, _today(inp)))
     vis = await _visible(db, inp, rows, kept)
@@ -1793,7 +1798,7 @@ def tpace_link() -> Optional[str]:
         for di, d in enumerate(v.get("dashboards") or []):
             for ci, c in enumerate(d.get("charts") or []):
                 if c.get("id") == TPACE_CHART:
-                    return "/api/v1/static/wko5_viewer.html?" + urlencode({"view": v["name"], "dash": di, "chart": ci})
+                    return "/api/v1/static/charts.html?" + urlencode({"view": v["name"], "dash": di, "chart": ci})
     except (OSError, ValueError, KeyError):
         pass
     return None
@@ -2561,7 +2566,7 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
         missed = [s["uid"] for s in new if PS.off_watch(s) and s["uid"] in rows]
         try:
             todo = _with_copies(_in_range(new, a, b, bl), new, rows, a, b, today, bl)
-            res = await prov.push_sessions(db, [PS.push_dict(s) for s in todo], inp["thresholds"],
+            res = await prov.push_sessions(db, [PS.push_dict(s, th=inp["thresholds"]) for s in todo], inp["thresholds"],
                                            today, stale_keys=stale, missed_keys=missed)
         except WT.SyncAuthError as e:
             raise _auth(e, prov)
@@ -2959,7 +2964,9 @@ def _range_extras(start: str, end: str) -> dict:
     acts = activity_rows(ds, a, b + dt.timedelta(days=1))
     st = _status_for(ds, today)
     lo, hi = min(a, today) - dt.timedelta(days=400), max(b, today) + dt.timedelta(days=400)
-    every = [{"kind": p.kind, "label": p.label, "start": p.start, "end": p.end} for p in planning.phases(st.plan, lo, hi)]
+    # (an A 百岳 trip's phase is 行程, not 賽事: planning.phase_label, SP-504 R2)
+    every = [{"kind": p.kind, "label": planning.phase_label(p, st.plan.events), "start": p.start, "end": p.end}
+             for p in planning.phases(st.plan, lo, hi)]
     phases = [p for p in every if p["end"] >= start and p["start"] <= end]
     # the plan's phases from a year back on: 課表統計's period filter offers each one (an auto
     # phase's start depends on the window, so a long one is cut at a year back: a stable id)
@@ -3172,15 +3179,21 @@ def _climb_row(target: Optional[dict], ss: list[dict], aa: list[dict]) -> Option
 
 def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], phases: list[dict],
                proj: list[dict], rates: dict, today: Optional[str] = None,
-               climb: Optional[dict] = None, races: Optional[list] = None) -> list[dict]:
+               climb: Optional[dict] = None, races: Optional[list] = None,
+               cur: Optional[dict] = None) -> list[dict]:
     """Per Monday in range: planned (active + done + missed, strength time excluded
     like week_plan()) vs done (the activities), the phase of the week, and the
     week's 完成度 over the days up to today (engine/compliance.py). `climb` (SP-87): the weekly
     climb targets ({monday: vert_target.plan info}; None = no 爬升 row, e.g. 主要訓練項目 路跑) →
     each row's `climb` (_climb_row). `races` (race_rows, SP-504): the B / C races' predicted load,
-    counted in 計畫 like a session."""
+    counted in 計畫 like a session. `cur` (SP-542, the calendar): this week's week_plan() — its mode,
+    and with it each planned week's `why` (this week's and the projected weeks' reasons for the
+    volume, in the request's language: the inputs are shared by every language, i18n.relocalize)."""
     from backend.engine import compliance as C
+    from backend.i18n import relocalize
     by_start = {w["start"]: w for w in proj}
+    if cur and (cur.get("week") or {}).get("start"):
+        by_start[cur["week"]["start"]] = cur
     out = []
     d = dt.date.fromisoformat(R.monday_of(start))
     last = dt.date.fromisoformat(end)
@@ -3211,7 +3224,8 @@ def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], pha
                     "done_hours": sum(float(x.get("moving_s") or 0) for x in aa) / 3600.0,
                     "done_tss": sum(float(x.get("tss") or 0) for x in aa),
                     "phase": ph["kind"] if ph else w.get("phase"), "phase_label": ph["label"] if ph else None,
-                    "mode_label": w.get("mode_label"), "provisional": bool(w.get("provisional")),
+                    "mode_label": relocalize(w.get("mode_label")), "provisional": bool(w.get("provisional")),
+                    **({"why": [relocalize(x) for x in w["why"]]} if cur is not None and w.get("why") else {}),
                     **({"climb": _climb_row(climb.get(a), cl, aa)} if climb is not None else {})})
         d += dt.timedelta(days=7)
     return out
@@ -3393,6 +3407,7 @@ async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float)
     tph = float(((inp["cur"].get("target") or {}).get("tss_per_hour")) or 50.0)
     rates = plan_rates(inp, every, extras.get("tph"))
     from backend.engine import compliance as C
+    from backend.engine import hints as H
     ss = _decorate(every, extras["activities"], rates, start, end)
     _link_options(ss, every, extras["activities"], body["today"])
     tt = P.target_texts(inp["thresholds"] or {})
@@ -3403,8 +3418,11 @@ async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float)
     return {**{k: v for k, v in body.items() if k != "sessions"}, "start": start, "end": end,
             "sessions": ss, "activities": extras["activities"], "phases": extras["phases"], "races": marks,
             "week_rows": _week_rows(start, end, ss, extras["activities"], extras["phases"], inp["weeks"], rates,
-                                    body["today"], climb=_climb_targets(inp), races=race_rows(inp, every)),
+                                    body["today"], climb=_climb_targets(inp), races=race_rows(inp, every),
+                                    cur=inp.get("cur")),
             "compliance_levels": C.COMPLIANCE,
+            # SC15 (SP-542): the week column's reasons through 提示多寡 (static/hints.js Hints.where)
+            "week_why_hint": H.flag("SC15"),
             "thresholds": inp["thresholds"], "tss_per_hour": tph, "tss_rates": rates,
             "targets": {k: tt.get(v, "") for k, v in KIND_TARGET.items()},
             "kinds": PS.KINDS, "default_titles": PS.DEFAULT_TITLES, "family_titles": PS.FAMILY_TITLES,
@@ -3412,8 +3430,6 @@ async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float)
             "plan_notes": _plan_notes(inp, start, end, _streak_note(every, inp)),
             "test_suggestions": sug,
             "test_templates": _test_templates(inp["thresholds"] or {}, None),
-            # 睡在高處的紀錄 (SP-259, api/altitude_nights.py) of the range: a small mark on the day
-            "high_nights": await _high_nights(db, start, end),
             # 刪除所有過期未完成: how many past sessions were never done (whole plan, not just the range)
             "expired_open": sum(1 for s in every if PS.is_expired_open(s, body["today"])),
             "coros": await _coros_state(db, every)}
@@ -3425,15 +3441,6 @@ def _climb_targets(inp: dict) -> Optional[dict]:
     if ((inp.get("cur") or {}).get("primary_sport") or "trail") == "road":
         return None
     return inp.get("climb_targets") or {}
-
-
-async def _high_nights(db: AsyncSession, start: str, end: str) -> list[dict]:
-    from backend.engine import altitude as AL
-    from backend.settings.repository import SettingsRepository
-    try:
-        return [e for e in (await SettingsRepository(db).get(AL.NIGHTS_KEY) or []) if start <= e["day"] <= end]
-    except Exception:                       # noqa: BLE001 — the calendar must still load
-        return []
 
 
 @router.get("/schedule/page", include_in_schema=False)

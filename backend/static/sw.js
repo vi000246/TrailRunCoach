@@ -7,6 +7,7 @@
  *   {type: "session", session}  who the page is for; another person than before: the copy goes
  *   {type: "sync", force?}      refill p0 → p1 → p2 when due (force: p0 now, e.g. back online)
  *   {type: "logout"}            forget every person's copy (shell.js deletes the caches too)
+ *   {type: "manual"}            keep the whole manual for offline (its pages, search index, pictures)
  *   {type: "status"}            answered on the message port: whose copy, bytes per tier, which
  *                               tiers' caches are still there (設定 › 這台裝置的離線資料, SP-322)
  */
@@ -42,5 +43,6 @@ self.addEventListener("message", (event) => {
   else if (d.type === "sync") p = engine.sync({ force: !!d.force });
   else if (d.type === "logout") p = engine.clearUser();
   else if (d.type === "status") p = engine.status();
+  else if (d.type === "manual") p = engine.warmManual();          // a manual page: keep all of it (SP-558)
   if (p) event.waitUntil(p.then(reply, (e) => reply({ error: String(e) })));
 });

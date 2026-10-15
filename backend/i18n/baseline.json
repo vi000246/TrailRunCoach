@@ -5,7 +5,8 @@
     "shell",
     "compliance",
     "schedule",
-    "templates"
+    "templates",
+    "about"
   ],
   "files": {
     "backend/api/achievements.py": 16,
@@ -38,7 +39,6 @@
     "backend/engine/heat.py": 6,
     "backend/engine/heat_calib.py": 13,
     "backend/engine/heat_data.py": 10,
-    "backend/engine/heat_plan.py": 24,
     "backend/engine/hr_profile.py": 5,
     "backend/engine/injuries.py": 35,
     "backend/engine/injury_exposure.py": 62,
@@ -117,6 +117,7 @@
     "backend/settings/repository.py": 1,
     "backend/static/autoplan.js": 32,
     "backend/static/autosync.js": 3,
+    "backend/static/charts.html": 64,
     "backend/static/climb_vam.js": 39,
     "backend/static/injuries.html": 158,
     "backend/static/overview.html": 114,
@@ -129,7 +130,6 @@
     "backend/static/setup_wizard.js": 4,
     "backend/static/share.html": 55,
     "backend/static/sourcechip.js": 4,
-    "backend/static/wko5_viewer.html": 64,
     "backend/static/workout_editor.js": 79,
     "backend/sync/coros_client.py": 1,
     "backend/sync/coros_workouts.py": 99

@@ -66,9 +66,10 @@ def test_terrain_time_type_and_phase(tpl):
     # 長跑日: ≥ 90 min first
     long = TR.recommend(tpl, kind="long", minutes=120, phase="base")
     assert TR.row_minutes(rows[keys(long, "easy")[0]]) >= TR.LONG_MIN
-    # 減量期: no downhill eccentric block; 專項期: trail-specific climbs first
+    # 減量期: no short hard climbing (SP-539: the downhill eccentric template is gone); 專項期: trail-specific
+    # climbs first
     taper = TR.recommend(tpl, kind="hike", minutes=50, phase="taper", terrain="trail")
-    assert "lib:downhill_ecc" not in keys(taper, "trail")
+    assert not TR.TAPER_NO_CLIMB & set(keys(taper, "trail"))
     spec = TR.recommend(tpl, kind="hike", minutes=100, phase="specific", terrain="trail")
     assert keys(spec, "trail")[0] in TR.TRAIL_SPECIFIC
     # near-duplicates (the three 陡坡健走) at most once
@@ -170,12 +171,12 @@ def test_my_templates_score_by_the_same_rules(mine_tpl):
     # the ladder's rung family: the same 同一類 bonus as a library row
     sc = TR._score(r, "quality", g["sub"], _s(rung="z3b"))
     assert any("同一類（有氧間歇）" in w for _p, w in sc.plus)
-    # trail phase rules by the row's kind: downhill / hard technical are race-specific, a downhill
-    # one is out in the taper; a climb one is base work
+    # trail phase rules by the row's kind: hard technical is race-specific; a climb one is base work.
+    # A descent-only RPE one is 技術地形 since SP-539 dropped the 下坡 kind (easy RPE: base work)
     _g, d = _row(mine_tpl, "user:2")
-    assert d["trail_sub"] == "downhill"
-    assert any("練賽道的爬升／下坡" in w for _p, w in TR._score(d, "trail", "downhill", _s(kind="hike", phase="specific")).plus)
-    assert TR._score(d, "trail", "downhill", _s(kind="hike", phase="taper")).v <= TR.DROP_BELOW
+    assert d["trail_sub"] == "technical" and d["role"] != "quality"
+    assert any("技術地形" in w for _p, w in TR._score(d, "trail", "technical", _s(kind="hike", phase="base")).plus)
+    assert d["descent_only"] and TR._score(d, "trail", "technical", _s(kind="hike", phase="taper")).v <= TR.DROP_BELOW
     _g, t = _row(mine_tpl, "user:3")
     assert t["trail_sub"] == "technical" and t["role"] == "quality"
     # (SP-87: the plan has no 強化期 — the 專項期 is where the race-terrain bonus goes)

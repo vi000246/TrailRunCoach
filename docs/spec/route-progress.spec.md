@@ -19,15 +19,15 @@ User request: 「同一條路線的進步追蹤能自動產出嗎，例如判斷
 |---|---|---|
 | Geometry | `backend/engine/algorithms/route_match.py` | resampling, point-to-path distance, overlap ratio, discrete Fréchet, common stretches, effort search, in-order projection |
 | Engine | `backend/engine/routes.py` | compact tracks, detection, effort metrics, names, on-disk store, background builder |
-| API | `backend/api/routes.py` | `/api/v1/routes…`, `/api/v1/wko5/workouts/{idx}/segments` |
+| API | `backend/api/routes.py` | `/api/v1/routes…`, `/api/v1/app/workouts/{idx}/segments` |
 | Page | `backend/static/routes.html` | 路線 page: list, detail (map, trend, comparison, effort table) |
-| Card | `backend/static/segments_card.js` | single-activity card in the viewer (one `<script>` tag in `wko5_viewer.html`) |
+| Card | `backend/static/segments_card.js` | single-activity card in the viewer (one `<script>` tag in `charts.html`) |
 | Map layers | `backend/static/basemaps.js` | basemaps / overlays + the settings default, the tile-error hint and the route drawing (halo, line, start / finish), shared by the viewer, this page and the race calculator; layer names and hints come from the i18n `common.map.*` keys (`backend/static/basemaps.js:14-15`, SP-78) |
 
 The existing `algorithms/routes.py` (100 m cell Jaccard, used by the
 achievements page) is unchanged.
 
-### Storage (root: `RouteStore(root)`, else `routes.HOME` when set (tests), else the `WKO5COACH_ROUTES_DIR` environment variable, else the current tenant's shared `routes/` folder — `tenancy.shared_path("routes")`, resolved per call by `routes.home()`)
+### Storage (root: `RouteStore(root)`, else `routes.HOME` when set (tests), else the `TRC_ROUTES_DIR` environment variable, else the current tenant's shared `routes/` folder — `tenancy.shared_path("routes")`, resolved per call by `routes.home()`)
 
 | File | Content |
 |---|---|
@@ -45,7 +45,7 @@ therefore segment ids are unchanged by it. The index has its own
 the index from the cached tracks without parsing any file, ids carried over.
 
 A second server on the same machine (e.g. a worktree) must set
-`WKO5COACH_ROUTES_DIR`: two builds of different versions sharing one index
+`TRC_ROUTES_DIR`: two builds of different versions sharing one index
 would each find the other's version and rebuild it.
 
 ### Names
@@ -325,7 +325,7 @@ without changing them.
   cache_hits, failed, skipped, empty, recent, efforts, with_weather, errors,
   attribution}; the page shows the counts under the table.
 - `Builder(store, weather_get=None)` has no weather (tests); the API passes the
-  archive client unless `WKO5COACH_ROUTES_WEATHER=0`.
+  archive client unless `TRC_ROUTES_WEATHER=0`.
 - **Per-activity heat exposure** (`activity_weather=True`, the app's builder):
   after the effort weather (skipped when that pass had failures),
   `route_weather.fill_activities` asks for one point per GPS activity (its mean
@@ -378,8 +378,8 @@ without changing them.
   (`backend/settings/repository.py:75`); a failed / cut-short run is retried 6 h later and given
   up after 5 attempts (`next_state`, `backend/api/rain_backfill.py:62`); no
   `activity_weather.json` yet = waiting.
-  Never in tests (`WKO5COACH_NO_RAIN_BACKFILL`, conftest), the demo, or with
-  `WKO5COACH_ROUTES_WEATHER=0`.
+  Never in tests (`TRC_NO_RAIN_BACKFILL`, conftest), the demo, or with
+  `TRC_ROUTES_WEATHER=0`.
 
 ## Comparison (`GET /{id}/compare?a=&b=`)
 
@@ -405,7 +405,7 @@ reference backwards) and start within 200 m of the reference's start; else
 | PATCH | `/api/v1/routes/{id}` | `{"name": ""}` clears the rename |
 | GET | `/api/v1/routes/{id}/compare?a=&b=` | effort ids from the detail |
 | GET | `/api/v1/routes/page` | the page (`render_page("routes")`, localized) |
-| GET | `/api/v1/wko5/workouts/{idx}/segments` | segments / routes this activity matched, rank, Δ best; the activity's file in the route index is found by start when the current source names it otherwise |
+| GET | `/api/v1/app/workouts/{idx}/segments` | segments / routes this activity matched, rank, Δ best; the activity's file in the route index is found by start when the current source names it otherwise |
 
 No request waits for a build: the first request (and any request a minute
 after the last check, when files changed) starts one in a daemon thread; every
@@ -492,7 +492,7 @@ effort's own path (≈ 720 efforts) showed no effort off the reference path; for
 matched (0 missed).
 
 Real-data verification of weather and peaks (2026-09-30, v3, built into a
-separate `WKO5COACH_ROUTES_DIR`): the first build asked for 512 (day, cell)
+separate `TRC_ROUTES_DIR`): the first build asked for 512 (day, cell)
 groups (1,141 effort points) in 512 archive calls (0 failed, ~6 min with the
 track parse) and gave weather to 1,654 / 1,654 efforts; a full rebuild after
 that made 0 calls (512 / 512 from the cache). For
