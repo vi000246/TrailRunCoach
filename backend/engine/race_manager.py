@@ -3,7 +3,7 @@
 predicted against what happened.
 
 The list = the season plan's events (賽事周期 — the same events, added / edited / deleted from either
-page; a 百岳 trip is not a race, as race_activities.NOT_RACE_KINDS) + the race activities no plan
+page; 百岳 trips are listed too, owner 2026-10-16) + the race activities no plan
 event claims (the user's own 比賽 mark, a race word in the title — engine/race_activities.py). One row:
 
   {id: "e:<event id>" | "a:<workout idx>", event: the event (planning.event_json) | None, name, date,
@@ -79,7 +79,7 @@ def rows(ds, today: dt.date, tags: Optional[list] = None, calcs: Optional[dict] 
     from backend.engine import race_activities as RA
     tags = AT.load() if tags is None else tags
     plan = plan if plan is not None else getattr(ds, "plan", None)
-    events = [e for e in getattr(plan, "events", None) or [] if e.kind not in RA.NOT_RACE_KINDS]
+    events = list(getattr(plan, "events", None) or [])      # 百岳 trips too (owner 2026-10-16)
     res = RA.results(ds, today, tags=tags, plan=SimpleEvents(events))
     out = []
     claimed: set[int] = set()

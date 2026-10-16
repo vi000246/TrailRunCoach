@@ -139,6 +139,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
         <option value="" data-i18n="races.f.kind_all">所有類型</option>
         <option value="race" data-i18n="races.kind.race">越野賽</option>
         <option value="road" data-i18n="races.kind.road">路跑賽</option>
+        <option value="baiyue" data-i18n="races.kind.baiyue">百岳</option>
         <option value="other" data-i18n="races.kind.other">其他</option>
       </select>
       <select id="sort" data-i18n-attr="aria-label:races.sort.label" aria-label="">
@@ -163,7 +164,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
     <label for="ed-name" data-i18n="races.ed.name">名稱</label><input id="ed-name" maxlength="120">
     <label for="ed-date" data-i18n="races.ed.date">日期</label><input id="ed-date" type="date">
     <label for="ed-kind" data-i18n="races.ed.kind">類型</label>
-    <select id="ed-kind"><option value="race" data-i18n="races.kind.race">越野賽</option><option value="road" data-i18n="races.kind.road">路跑賽</option><option value="other" data-i18n="races.kind.other">其他</option></select>
+    <select id="ed-kind"><option value="race" data-i18n="races.kind.race">越野賽</option><option value="road" data-i18n="races.kind.road">路跑賽</option><option value="baiyue" data-i18n="races.kind.baiyue">百岳</option><option value="other" data-i18n="races.kind.other">其他</option></select>
     <label for="ed-prio" data-i18n="races.ed.prio">優先級</label>
     <select id="ed-prio"><option>A</option><option>B</option><option>C</option></select>
     <label for="ed-km" data-i18n="races.ed.km">距離（km）</label><input id="ed-km" type="number" min="0" step="0.1" inputmode="decimal">
@@ -486,7 +487,7 @@ function openEditor(row, fromAct) {
   const v = ev || {};
   $("ed-name").value = v.name || fromAct?.name || "";
   $("ed-date").value = (v.date || fromAct?.date || "").slice(0, 10);
-  $("ed-kind").value = ["race", "road", "other"].includes(v.kind) ? v.kind : "race";
+  $("ed-kind").value = ["race", "road", "baiyue", "other"].includes(v.kind) ? v.kind : "race";
   $("ed-prio").value = v.priority || "B";
   $("ed-km").value = v.distance_km ?? (fromAct?.distance_km != null ? (+fromAct.distance_km).toFixed(1) : "");
   $("ed-gain").value = v.climbing_m ?? (fromAct?.climbing_m != null ? Math.round(fromAct.climbing_m) : "");

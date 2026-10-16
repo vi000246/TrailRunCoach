@@ -60,7 +60,7 @@ def _world():
 def test_list_has_past_and_future_races_with_result_and_matched_activity():
     rows = RM.rows(_world(), TODAY, tags=[], calcs={})
     by = {r["id"]: r for r in rows}
-    assert set(by) == {"e:past", "e:next", "a:1"}            # the 百岳 trip is not a race; idx 2 is training
+    assert set(by) == {"e:past", "e:next", "e:trip", "a:1"}  # 百岳 trips are listed (owner 2026-10-16); idx 2 is training
     past, nxt, title = by["e:past"], by["e:next"], by["a:1"]
     assert past["past"] and not nxt["past"]
     assert past["priority"] == "B" and past["distance_km"] == 30 and past["climbing_m"] == 1800
@@ -89,8 +89,8 @@ def test_api_list_and_the_page_has_filter_and_sort(monkeypatch):
     monkeypatch.setattr(API, "_calcs", lambda ids: {})
     monkeypatch.setattr(API, "today_local", lambda: TODAY)
     r = API.races()
-    assert r["today"] == TODAY.isoformat() and {x["id"] for x in r["rows"]} == {"e:past", "e:next", "a:1"}
-    assert set(r["kinds"]) >= {"race", "road", "other"} and "baiyue" not in r["kinds"]
+    assert r["today"] == TODAY.isoformat() and {x["id"] for x in r["rows"]} == {"e:past", "e:next", "e:trip", "a:1"}
+    assert set(r["kinds"]) >= {"race", "road", "other", "baiyue"}
     html = (STATIC / "races.html").read_text("utf-8")
     for el in ('id="f-when"', 'id="f-prio"', 'id="f-kind"', 'id="sort"', 'id="list"'):
         assert el in html, el

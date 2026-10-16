@@ -63,12 +63,11 @@ def page():
 def races():
     from backend.engine import planning as P
     from backend.engine import race_manager as RM
-    from backend.engine.race_activities import NOT_RACE_KINDS
     ds = _dataset()
     today = today_local()
     rows = RM.rows(ds, today, tags=_tags(), calcs=_calcs(_event_ids(ds)))
     return {"today": today.isoformat(), "rows": rows,
-            "kinds": {k: v for k, v in P.KINDS.items() if k not in NOT_RACE_KINDS},
+            "kinds": dict(P.KINDS),                     # 百岳 trips are listed too (owner 2026-10-16)
             "priorities": list(P.PRIORITIES)}
 
 
