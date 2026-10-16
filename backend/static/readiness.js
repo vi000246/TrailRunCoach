@@ -6,6 +6,10 @@
 // actual; a locked stage is faded) → one line of what is looked at every week.
 // Narrow (a phone, container < 640 px): the gates stack and the calendar becomes a row of week buttons
 // (a colour bar: red = something missed, blue = something due, green = all done); a button lists that week.
+// SP-672: a cell shows the board's `show` as is (a later / taper cell: its target, set by race_readiness).
+// Every non-count item has 「看圖」: an existing chart (it.chart.href: that page, card and weeks) or the
+// card's own small chart under the calendar (it.chart.own: "repeat" = each session's best of the last 6 weeks
+// with the best and the pass line, the top 5 marked; "long_climb" = each week's longest continuous climb).
 //   Readiness.draw(box, res)
 (function () {
   const L = window.I18N || { t: (k) => k };
@@ -98,6 +102,18 @@
 .rd-mlist .mr { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
 .rd-mlist .mr small { color: var(--muted); }
 .rd-mlist .empty { color: var(--muted); padding: 4px 0; }
+.rd-gr { font: inherit; font-size: 11px; color: var(--accent); background: none; border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 999px; padding: 0 7px; margin-left: 6px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.rd-gr.on { background: var(--accent); color: #fff; }
+.rd-fig { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--panel); }
+.rd-fig .fh { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 4px; }
+.rd-fig .fh b { font-size: 13px; } .rd-fig .note { color: var(--muted); font-size: 12px; }
+.rd-fig .keys { display: inline-flex; gap: 4px; margin-left: auto; }
+.rd-fig .keys button { font: inherit; font-size: 11.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  border-radius: 6px; padding: 0 8px; cursor: pointer; }
+.rd-fig .keys button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.rd-fig svg { width: 100%; height: auto; display: block; }
+.rd-fig svg text { font-size: 10px; fill: var(--muted); }
 .rd-foot { padding-top: 8px; border-top: 1px dashed var(--line); display: flex; gap: 6px 16px; flex-wrap: wrap; }
 .rd-foot .k { color: var(--muted); }
 .rd-foot .watch { color: var(--rd-warn); } .rd-foot .bad { color: var(--rd-bad); }
@@ -110,16 +126,51 @@
   }
 
   const pct = (x) => `${Math.round(x * 100)}%`;
-  // a later week's cell says its target (the board's `show` of a taper check is the share so far)
-  function shown(c, w, cur) {
-    if (c.state === "tap" && w < cur) {
-      const t = c.target;
-      if (Array.isArray(t)) return t[0] > 0 && t[0] < 1 && t[1] <= 1 ? `${Math.round(t[0] * 100)}–${pct(t[1])}` : `${t[0] >= 0 ? "+" : ""}${Math.round(t[0] * 100)}–${Math.round(t[1] * 100)}%`;
-      if (typeof t === "number" && t > 0 && t < 1) return `≤${pct(t)}`;
-      return "·";
-    }
+  // the board sets what a cell shows (a later / taper cell: its target)
+  function shown(c) {
     if (c.state === "done" && !c.show) return "✓";
     return c.show || "·";
+  }
+
+  // ---- the card's own small charts (SP-672) ----
+  // the width follows the card (a phone: ~340) so the 10-px labels stay readable
+  let W = 640;
+  const H = 210, PL = 44, PR = 12, PT = 12, PB = 26;
+  function axisY(lo, hi, y) {
+    const st = [lo, (lo + hi) / 2, hi];
+    return st.map((v) => `<line x1="${PL}" x2="${W - PR}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="0.6"/><text x="${PL - 4}" y="${y(v) + 3}" text-anchor="end">${Math.round(v)}</text>`).join("");
+  }
+  function repeatFig(it, key) {
+    const pts = (it.points || {})[key] || [];
+    if (pts.length < 1) return `<p class="note">${esc(T("fig_none"))}</p>`;
+    const best = Math.max(...pts.map((p) => p.v)), ok = it.ok || 0.95, n = it.top_n || 5;
+    const top = [...pts].sort((a, b) => b.v - a.v).slice(0, n), topSet = new Set(top);
+    const mean = top.length >= n ? top.reduce((a, p) => a + p.v, 0) / n / best : null;
+    const t0 = new Date(pts[0].date).getTime(), t1 = Math.max(new Date(pts[pts.length - 1].date).getTime(), t0 + 864e5);
+    const vs = pts.map((p) => p.v), lo = Math.min(...vs, best * ok) * 0.97, hi = best * 1.02;
+    const x = (d) => PL + ((new Date(d).getTime() - t0) / (t1 - t0)) * (W - PL - PR), y = (v) => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB);
+    let g = axisY(lo, hi, y);
+    g += `<line x1="${PL}" x2="${W - PR}" y1="${y(best)}" y2="${y(best)}" stroke="var(--text)" stroke-width="1.2"/><text x="${W - PR}" y="${y(best) - 3}" text-anchor="end">${esc(T("fig_best"))}</text>`;
+    g += `<line x1="${PL}" x2="${W - PR}" y1="${y(best * ok)}" y2="${y(best * ok)}" stroke="var(--rd-good)" stroke-width="1.2" stroke-dasharray="5 4"/><text x="${W - PR}" y="${y(best * ok) + 11}" text-anchor="end">${esc(T("fig_ok", { p: pct(ok) }))}</text>`;
+    g += pts.map((p) => `<circle cx="${x(p.date)}" cy="${y(p.v)}" r="${topSet.has(p) ? 5 : 3.5}" fill="${topSet.has(p) ? "var(--accent)" : "var(--muted)"}" opacity="${topSet.has(p) ? 1 : 0.55}"><title>${esc(md(p.date))} · ${Math.round(p.v)}</title></circle>`).join("");
+    g += `<text x="${PL}" y="${H - 8}">${esc(md(pts[0].date))}</text><text x="${W - PR}" y="${H - 8}" text-anchor="end">${esc(md(pts[pts.length - 1].date))}</text>`;
+    const note = mean != null ? T("fig_mean", { n, p: pct(mean) }) : T("fig_few", { n });
+    return `<p class="note">${esc(note)}</p><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(it.name)}">${g}</svg>`;
+  }
+  function climbFig(it) {
+    const se = (it.series || []).slice().sort((a, b) => b.week - a.week), race = it.race_climb_m || 0, ms = it.milestones || {};
+    if (!se.length) return `<p class="note">${esc(T("fig_none"))}</p>`;
+    const hi = Math.max(race, ...se.map((s) => s.m || 0)) * 1.08 || 100;
+    const bw = (W - PL - PR) / se.length, y = (v) => PT + (1 - v / hi) * (H - PT - PB);
+    let g = axisY(0, hi, y);
+    se.forEach((s, i) => {
+      const x0 = PL + i * bw + bw * 0.2, bwi = bw * 0.6, m = s.m || 0;
+      g += `<rect x="${x0}" y="${y(m)}" width="${bwi}" height="${Math.max(0, y(0) - y(m))}" rx="2" fill="var(--accent)"><title>${esc(T("week_n", { n: s.week, from: md(s.monday) }))} · ${Math.round(m)} m</title></rect>`;
+      if (ms[String(s.week)] != null) g += `<line x1="${x0 - 3}" x2="${x0 + bwi + 3}" y1="${y(ms[String(s.week)])}" y2="${y(ms[String(s.week)])}" stroke="var(--rd-warn)" stroke-width="2.5"><title>${esc(T("fig_target"))} ${ms[String(s.week)]} m</title></line>`;
+      g += `<text x="${x0 + bwi / 2}" y="${H - 8}" text-anchor="middle">${s.week}</text>`;
+    });
+    if (race) g += `<line x1="${PL}" x2="${W - PR}" y1="${y(race)}" y2="${y(race)}" stroke="var(--text)" stroke-width="1.2" stroke-dasharray="5 4"/><text x="${W - PR}" y="${y(race) - 3}" text-anchor="end">${esc(T("fig_race_climb", { m: Math.round(race) }))}</text>`;
+    return `<p class="note">${esc(T("fig_climb_note"))}</p><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(it.name)}">${g}</svg>`;
   }
 
   function draw(box, res) {
@@ -131,7 +182,7 @@
     if (!R.race) { root.innerHTML = `<p class="meta">${esc(R.text || "")}</p>`; return; }
     const weeks = R.weeks || [], cur = R.weeks_out;
     const mon = Object.fromEntries(weeks.map((w) => [w.week, w.monday]));
-    const S = { sel: null, wsel: weeks.some((w) => w.week === cur) ? cur : (weeks[0] || {}).week, cell: null };
+    const S = { sel: null, wsel: weeks.some((w) => w.week === cur) ? cur : (weeks[0] || {}).week, cell: null, fig: null, rkey: null };
     const cellOf = (it, w) => (it.cells || {})[String(w)];
     const stages = R.stages || [];
 
@@ -167,10 +218,10 @@
         h += `<tr class="grp${dim}" data-stage="${esc(s.id)}"><td colspan="${weeks.length + 1}">${lock ? "🔒" : NUM[si] || ""} ${esc(s.name)}<span>${esc(s.span)}</span></td></tr>`;
         s.items.forEach((it, ii) => {
           const sub = [it.crit, it.met == null && it.reason ? it.reason : ""].filter(Boolean).map(esc).join(" · ");
-          h += `<tr class="${lock ? "locked" : ""}${dim}" data-stage="${esc(s.id)}"><td class="lab">${it.met ? '<span class="rd-ok">✓</span> ' : ""}${esc(it.name)}${sub ? `<small>${sub}</small>` : ""}</td>`;
+          h += `<tr class="${lock ? "locked" : ""}${dim}" data-stage="${esc(s.id)}"><td class="lab">${it.met ? '<span class="rd-ok">✓</span> ' : ""}${esc(it.name)}${gr(it, si, ii)}${sub ? `<small>${sub}</small>` : ""}</td>`;
           weeks.forEach((w) => {
             const c = cellOf(it, w.week);
-            h += `<td class="${w.current ? "cw" : ""}">${c ? `<button type="button" class="rd-c s-${esc(c.state)}" data-s="${si}" data-i="${ii}" data-w="${w.week}">${esc(shown(c, w.week, cur))}</button>` : ""}</td>`;
+            h += `<td class="${w.current ? "cw" : ""}">${c ? `<button type="button" class="rd-c s-${esc(c.state)}" data-s="${si}" data-i="${ii}" data-w="${w.week}">${esc(shown(c))}</button>` : ""}</td>`;
           });
           h += "</tr>";
         });
@@ -179,6 +230,29 @@
       const lg = [["done", "✓", "lg_done"], ["due", "1", "lg_due"], ["miss", "1", "lg_miss"], ["fut", "1", "lg_fut"], ["tap", "✓", "lg_tap"], ["unk", "·", "lg_unk"]]
         .map(([s, x, k]) => `<span><span class="rd-c s-${s}">${x}</span> ${esc(T(k))}</span>`).join("");
       return `${h}<div class="rd-legend">${lg}<span>· ${esc(T("lg_hint"))}</span></div><div class="rd-detail">${detail()}</div>`;
+    }
+    // 「看圖」: a link to the item's chart, or a toggle of the card's own small chart
+    function gr(it, si, ii) {
+      const ch = it.chart;
+      if (!ch) return "";
+      if (ch.href) return `<a class="rd-gr" href="${esc(ch.href)}">${esc(T("chart"))} ›</a>`;
+      if (!ch.own) return "";
+      const on = S.fig && S.fig.si === si && S.fig.ii === ii;
+      return `<button type="button" class="rd-gr${on ? " on" : ""}" data-fs="${si}" data-fi="${ii}" aria-expanded="${on}">${esc(T("chart"))}</button>`;
+    }
+    function fig() {
+      if (!S.fig) return "";
+      const it = ((stages[S.fig.si] || {}).items || [])[S.fig.ii];
+      if (!it || !it.chart) return "";
+      let head = `<b>${esc(it.name)}</b>`, body;
+      if (it.chart.own === "repeat") {
+        const power = it.mode !== "climb" && !(it.points || {}).vam;
+        const key = power ? (S.rkey || it.key || "1200") : "vam";
+        if (power) head += `<span class="note">${esc(T("fig_power", { n: Math.round(+key / 60) }))}</span><span class="keys">${["300", "1200", "3600"].map((k) => `<button type="button" data-rk="${k}" class="${k === key ? "on" : ""}">${esc(T("fig_min", { n: +k / 60 }))}</button>`).join("")}</span>`;
+        else head += `<span class="note">${esc(T("fig_vam"))}</span>`;
+        body = repeatFig(it, key);
+      } else body = climbFig(it);
+      return `<div class="rd-fig"><div class="fh">${head}</div>${body}</div>`;
     }
     function detail() {
       if (!S.cell) return `<span class="dk">${esc(T("detail_hint"))}</span>`;
@@ -200,7 +274,7 @@
         h += `<div class="mg">${s.state === "lock" ? "🔒" : NUM[si] || ""} ${esc(s.name)}</div>`;
         rs.forEach((it) => {
           const c = cellOf(it, S.wsel);
-          h += `<div class="mr"><span class="rd-c s-${esc(c.state)}">${esc(shown(c, S.wsel, cur))}</span><span>${esc(it.name)}<br><small>${esc(c.detail || it.crit || T("st_" + c.state))}</small></span></div>`;
+          h += `<div class="mr"><span class="rd-c s-${esc(c.state)}">${esc(shown(c))}</span><span>${esc(it.name)}${gr(it, si, s.items.indexOf(it))}<br><small>${esc(c.detail || it.crit || T("st_" + c.state))}</small></span></div>`;
         });
       });
       return `<div class="rd-weeks">${btns}</div><div class="rd-mlist">${h || `<div class="empty">${esc(T("week_empty"))}</div>`}</div>`;
@@ -217,11 +291,17 @@
       return rows.length ? `<div class="rd-foot"><span class="k">${esc(T("every_week"))}</span>${rows.join("")}</div>` : "";
     }
     function render() {
-      root.innerHTML = head() + here() + rail() + `<div class="rd-desk">${cal()}</div><div class="rd-mob">${mob()}</div>` + foot();
+      W = Math.max(320, Math.min(900, Math.round(root.clientWidth || 640) - 24));
+      root.innerHTML = head() + here() + rail() + `<div class="rd-desk">${cal()}</div><div class="rd-mob">${mob()}</div>` + fig() + foot();
     }
     root.addEventListener("click", (ev) => {
       const g = ev.target.closest(".rd-gate"), c = ev.target.closest(".rd-cal .rd-c"), b = ev.target.closest(".rd-wkb");
-      if (g) S.sel = S.sel === g.dataset.stage ? null : g.dataset.stage;
+      const f = ev.target.closest("button.rd-gr"), rk = ev.target.closest("[data-rk]");
+      if (f) {
+        const si = +f.dataset.fs, ii = +f.dataset.fi;
+        S.fig = S.fig && S.fig.si === si && S.fig.ii === ii ? null : { si, ii };
+      } else if (rk) S.rkey = rk.dataset.rk;
+      else if (g) S.sel = S.sel === g.dataset.stage ? null : g.dataset.stage;
       else if (c) S.cell = { si: +c.dataset.s, ii: +c.dataset.i, w: +c.dataset.w };
       else if (b) S.wsel = +b.dataset.wk;
       else return;

@@ -10455,7 +10455,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:486"
   },
-  "量減到平常的 40–60 %": {
+  "量減到平常的 {b}": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:478"
   },
@@ -10531,7 +10531,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:397"
   },
-  "近 4 週 {k} 次坡度相近（每公里爬升 {m} m 左右）的課": {
+  "近 4 週 {k} 次每公里爬升 {lo}–{hi} m 的爬坡課": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:385"
   },
@@ -10651,7 +10651,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:449"
   },
-  "前 5 次平均 ≥ 最高的 97 %": {
+  "前 5 次平均 ≥ 最高的 {p}": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:429"
   },
@@ -10663,11 +10663,31 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:484"
   },
-  "在自己近 365 天的前 {p}": {
+  "在自己近 365 天的{p}": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:436"
   },
-  "目標 {t}，做到 {b}": {
+  "{v} km": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "{v} 小時": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "資料不足：資料從 {d} 開始": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "資料不足：這週沒有任何活動紀錄": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "最高": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "目標 {t}（{a}），做到 {b}": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:337"
   },

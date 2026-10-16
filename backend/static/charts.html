@@ -725,6 +725,9 @@ async function init() {
     // &chart=<index>: open that chart enlarged once it has loaded (and load it first)
     const qc = qp.get("chart");
     if (/^\d+$/.test(qc ?? "")) { S.zoomAfter = +qc; S.focusChart = +qc; }
+    // &begin=&end= (SP-672: the 賽前完備程度 card opens an item's chart on its weeks): that range, typed in
+    const qb = qp.get("begin"), qe = qp.get("end"), isoRe = /^\d{4}-\d\d-\d\d$/;
+    if (isoRe.test(qb ?? "") && isoRe.test(qe ?? "") && qb <= qe) { S.range = "custom"; $("begin").value = qb; $("end").value = qe; }
     history.replaceState(null, "", location.pathname);
   }
   // deep link from the 課表 page: ?workout=<activity index>&label=<shown name> opens that activity

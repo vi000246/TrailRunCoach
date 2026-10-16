@@ -467,5 +467,17 @@
   "readiness.st_miss": "該做沒做到",
   "readiness.st_fut": "之後要做",
   "readiness.st_tap": "減量期檢查",
-  "readiness.st_unk": "資料不足"
+  "readiness.st_unk": "資料不足",
+  "readiness.chart": "看圖",
+  "readiness.fig_none": "最近 6 週沒有可以畫的紀錄",
+  "readiness.fig_best": "最高",
+  "readiness.fig_ok": "最高的 {p}",
+  "readiness.fig_mean": "前 {n} 次平均＝最高的 {p}",
+  "readiness.fig_few": "不到 {n} 次，還算不出來",
+  "readiness.fig_power": "最近 6 週每次跑步的 {n} 分鐘最佳功率（W）",
+  "readiness.fig_min": "{n} 分",
+  "readiness.fig_vam": "最近 6 週每次爬坡的上坡腳程（每小時爬升 m）",
+  "readiness.fig_target": "目標",
+  "readiness.fig_race_climb": "比賽最長一段 {m} m",
+  "readiness.fig_climb_note": "每週最長一段連續爬升（m）；橫槓是那週的目標，虛線是比賽最長一段"
 }

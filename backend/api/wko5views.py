@@ -22,6 +22,7 @@ from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
+from urllib.parse import urlencode
 
 from backend.engine.localtime import today_local
 from backend.i18n import N_
@@ -1158,8 +1159,25 @@ def readiness_panel(ch: dict, ds: Dataset, b: float, e: float) -> dict:
         from backend.engine.planning import Plan
         plan = Plan.load()
     mon = today - dt.timedelta(days=today.weekday())
+    bd = RD.compute(plan, ds, today)
+    for s in bd.get("stages") or ():
+        for it in s.get("items") or ():
+            if it.get("chart"):
+                it["chart"]["href"] = readiness_chart_href(it["chart"])
     return {"title": ch.get("title"), "description": ch.get("description"), "kind": "readiness",
-            "readiness": RD.compute(plan, ds, today), "schedule": f"{SCHEDULE_PAGE}?day={mon.isoformat()}"}
+            "readiness": bd, "schedule": f"{SCHEDULE_PAGE}?day={mon.isoformat()}"}
+
+
+def readiness_chart_href(ch: dict) -> Optional[str]:
+    """SP-672: the viewer deep link (page, card, date range) of a readiness item's chart id; None for the
+    card's own small charts ({"own": …}) and for an id no view has."""
+    if not ch.get("id"):
+        return None
+    from backend.api.overview import _chart_href_by_id
+    href = _chart_href_by_id(ch["id"])
+    if "?" not in href:
+        return None
+    return href + "&" + urlencode({k: ch[k] for k in ("begin", "end") if ch.get(k)})
 
 
 def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,

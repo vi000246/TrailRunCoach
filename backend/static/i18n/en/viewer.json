@@ -485,5 +485,17 @@
   "readiness.st_miss": "missed",
   "readiness.st_fut": "later",
   "readiness.st_tap": "taper check",
-  "readiness.st_unk": "not enough data"
+  "readiness.st_unk": "not enough data",
+  "readiness.chart": "Chart",
+  "readiness.fig_none": "Nothing to draw in the last 6 weeks",
+  "readiness.fig_best": "best",
+  "readiness.fig_ok": "{p} of the best",
+  "readiness.fig_mean": "Top {n} average = {p} of the best",
+  "readiness.fig_few": "Fewer than {n} sessions: not yet",
+  "readiness.fig_power": "Each run's best {n}-min power, last 6 weeks (W)",
+  "readiness.fig_min": "{n} min",
+  "readiness.fig_vam": "Each climb's uphill speed, last 6 weeks (m gained per hour)",
+  "readiness.fig_target": "target",
+  "readiness.fig_race_climb": "race's longest climb {m} m",
+  "readiness.fig_climb_note": "Each week's longest continuous climb (m); a bar mark is that week's target, the dashed line the race's longest climb"
 }

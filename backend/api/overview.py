@@ -481,7 +481,20 @@ def feasibility(event_id: Optional[str] = None):
            "levels": {k: _(v) for k, v in RF.LEVEL_LABEL.items()}, "chart_href": _specific_chart_href()}
     if not event_id:                   # SP-652: the season plan's 完備程度 row (not the race calculator's)
         out["ready_line"] = _ready_line(plan, ds, today)
+        out["races"] = drop_old_readiness(out["races"], out["ready_line"])
     return out
+
+
+def drop_old_readiness(races: list, line: Optional[dict]) -> list:
+    """SP-672 (SP-652 Q1): on the season plan only the next A race has a 完備程度 row (the board's line); the
+    other races' cards (a B race) keep only 可行性 — their old readiness pill and checks go. Without a line
+    (the board failed) every card keeps its old row."""
+    if not line or not line.get("race_id"):
+        return races
+    def drop(r: dict) -> dict:
+        hints = [h for h in r.get("hints") or () if h.get("id") != "PL15"]     # PL15: the old row's note
+        return {**r, "readiness": None, **({"hints": hints} if "hints" in r else {})}
+    return [r if r.get("event_id") == line["race_id"] else drop(r) for r in races]
 
 
 READY_CARD = {"build": "race-readiness", "taper": "race-readiness-taper"}   # views/periodization.json

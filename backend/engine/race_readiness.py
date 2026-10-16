@@ -61,14 +61,19 @@ LONG_MET = 0.70                      # the long day / longest climb at 70 % of t
 WEEKLY_LONG_SHARE = 0.65             # the plan's recovery-week long day (overview.recovery_long_minutes: 65 %)
 WEEKLY_LONG_WEEKS = 4
 CLIMB_MILESTONES = {9: 0.50, 7: 0.70, 6: 0.80, 4: 0.90}   # 推估
-TERRAIN_TOL = 0.25                   # 推估: the race's m/km ± 25 %
+# SP-672: the race's m/km from 2/3 up to 2.5× (was ± 25 %): a steeper session trains the race's climbs at
+# least as specifically, and a session a third flatter is still a hilly one (the demo's hill days sat at
+# −27…−34 % and +38…+139 % of its race and were all judged 「not like the race」)
+TERRAIN_LO = 2.0 / 3.0
+TERRAIN_HI = 2.5
 TERRAIN_N = 3                        # 推估: 3 in the last 4 weeks
 SIM_PACE_TOL = 0.15                  # 推估
 HISTORY_DAYS = 90
 REPEAT_DAYS = 42                     # 推估: the last 6 weeks
 REPEAT_N = 5
-REPEAT_OK = 0.97
+REPEAT_OK = 0.95                     # SP-672: was 0.97 — inside one ordinary day-to-day spread (~5 %) of the best
 REPEAT_KEYS = ("300", "1200", "3600")
+REPEAT_MAIN = ("1200", "3600", "300")   # SP-672: the 20-min best decides (was the worst of the three)
 CTL_TOP = 0.20
 CTL_DOWN_MAX = 7
 RPE_RISE = 2                         # 推估
@@ -78,6 +83,13 @@ LEVEL_LABEL = {"unknown": N_("資料不足"), "on_track": N_("照進度"), "behi
 NO_DATA = N_("還沒有任何跑步或健行紀錄")
 NO_GPX = N_("比賽沒有 GPX：上傳 GPX 才算得出最長一段連續爬升")
 SHORT_HISTORY = N_("資料不到 90 天，先不算")
+BEFORE_DATA = N_("資料不足：資料從 {d} 開始")
+EMPTY_WEEK = N_("資料不足：這週沒有任何活動紀錄")
+# SP-672: the chart each non-count item opens (views/*.json chart ids; the card links them with a range);
+# the count items (weekly_long, terrain, b2b, race_sim, high_test) have none, long_climb / repeat draw their own
+CHART = {"long": "route-difficulty-specific", "long_road": "long-run-km-specific", "ctl_top": "pmc-all",
+         "uphill": "uphill-vam", "taper_volume": "weekly-hours-vs-taper", "climb_early": "weekly-volume",
+         "ctl_down_days": "pmc-all", "race_tsb": "form-pct"}
 
 
 def _d(x) -> Optional[dt.date]:
@@ -122,12 +134,23 @@ def long_share(a: dict, race: dict, road: bool = False) -> Optional[float]:
     return v / aim
 
 
+def plan_share(a: dict, race: dict, road: bool = False) -> Optional[float]:
+    """The share of the week's long day in the plan's own unit (SP-672): road km of the ≤ 35-km aim; trail
+    hours of the hardest day's hours capped at 6 h (specific_phase.trail_aim sets the trail long day in
+    minutes: a flat run of that length is that week's long day although its course constant is lower)."""
+    if road:
+        return long_share(a, race, True)
+    h = F.hardest_day(race)["hours"]
+    aim = min(h, F.LONG_CAP_H) if h else None
+    return a["hours"] / aim if aim else None
+
+
 def is_race_sim(a: dict, race: dict, target: float, road: bool = False) -> bool:
     """A race simulation: a foot session reaching LONG_TOL of the week's long-day `target` share at the
     race's own pace ± SIM_PACE_TOL (trail: hours per effort-km; road: hours per km)."""
     if not a.get("foot") or not a.get("hours"):
         return False
-    r = long_share(a, race, road)
+    r = plan_share(a, race, road)
     if r is None or r < target * LONG_TOL:
         return False
     day = race.get("day") or race
@@ -207,9 +230,9 @@ def level_of(due: int, done: int) -> str:
 
 
 def repeat_ratio(perf: dict, day: dt.date) -> Optional[tuple[str, float]]:
-    """(mode, ratio) of the best performances of the REPEAT_DAYS up to `day`: top REPEAT_N mean ÷ best,
-    with power the worst of the 5 / 20 / 60-min bests that have REPEAT_N sessions, else climbing speed.
-    None without REPEAT_N sessions."""
+    """(mode, ratio, key) of the best performances of the REPEAT_DAYS up to `day`: top REPEAT_N mean ÷ best,
+    with power the first of REPEAT_MAIN (20 → 60 → 5 min) that has REPEAT_N sessions, else climbing speed
+    (key "vam"). None without REPEAT_N sessions."""
     lo = day - dt.timedelta(days=REPEAT_DAYS)
 
     def ratio(vals: list[float]) -> Optional[float]:
@@ -218,11 +241,23 @@ def repeat_ratio(perf: dict, day: dt.date) -> Optional[tuple[str, float]]:
             return None
         return sum(vals[:REPEAT_N]) / REPEAT_N / vals[0]
     pw = [r for r in (perf or {}).get("power") or () if lo < _d(r["date"]) <= day]
-    rs = [x for x in (ratio([r.get(k) for r in pw]) for k in REPEAT_KEYS) if x is not None]
-    if rs:
-        return "power", min(rs)
+    for k in REPEAT_MAIN:
+        x = ratio([r.get(k) for r in pw])
+        if x is not None:
+            return "power", x, k
     v = ratio([r["vam"] for r in (perf or {}).get("vam") or () if lo < _d(r["date"]) <= day])
-    return ("climb", v) if v is not None else None
+    return ("climb", v, "vam") if v is not None else None
+
+
+def repeat_points(perf: dict, day: dt.date) -> dict:
+    """The repeat chart's points (SP-672): every session of the REPEAT_DAYS up to `day`, {key: [{date, v}]}
+    for the 5 / 20 / 60-min power bests, or {"vam": [...]} without power."""
+    lo = day - dt.timedelta(days=REPEAT_DAYS)
+    pw = sorted((r for r in (perf or {}).get("power") or () if lo < _d(r["date"]) <= day), key=lambda r: _d(r["date"]))
+    if any(r.get(k) for r in pw for k in REPEAT_KEYS):
+        return {k: [{"date": _d(r["date"]).isoformat(), "v": round(r[k], 1)} for r in pw if r.get(k)] for k in REPEAT_KEYS}
+    vm = sorted((r for r in (perf or {}).get("vam") or () if lo < _d(r["date"]) <= day), key=lambda r: _d(r["date"]))
+    return {"vam": [{"date": _d(r["date"]).isoformat(), "v": round(r["vam"])} for r in vm if r.get("vam")]}
 
 
 def ctl_rank(ctl: list, day: dt.date) -> Optional[float]:
@@ -300,25 +335,43 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     def wk(w: int) -> list[dict]:
         return [a for a in foot if mons[w] <= _d(a["date"]) <= sun[w]]
 
-    def judge(w: int, ok: bool, unknown: Optional[str] = None, lock: bool = False) -> tuple[str, bool]:
+    def no_data(w: int) -> Optional[str]:
+        """SP-672: a past week before the first activity on record, or without any activity (any sport)."""
+        if w <= cur or not has_data:
+            return None
+        if first_day is not None and sun[w] < first_day:
+            return _(BEFORE_DATA, d=f"{first_day.month}/{first_day.day}")
+        if not any(mons[w] <= _d(a["date"]) <= sun[w] for a in acts):
+            return _(EMPTY_WEEK)
+        return None
+
+    def judge(w: int, ok: bool, unknown: Optional[str] = None, lock: bool = False) -> tuple[str, bool, Optional[str]]:
         if preview or w < cur:
-            return ("tap" if lock else "fut"), False
+            return ("tap" if lock else "fut"), False, None
         if lock:
-            return "tap", False
+            return "tap", False, None
         if ok:
-            return "done", True
-        if unknown or not has_data:
-            return "unk", False
+            return "done", True, None
+        nd = no_data(w)
+        if unknown or not has_data or nd:
+            return "unk", False, nd
         if w == cur:
-            return "due", False
-        return "miss", True
+            return "due", False, None
+        return "miss", True, None
 
     def mk(w: int, ok: bool, show: str, detail: str, target=None, actual=None, unknown: Optional[str] = None,
-           lock: bool = False, **kw) -> dict:
-        st, counts = judge(w, ok, unknown, lock)
+           lock: bool = False, aim: Optional[str] = None, **kw) -> dict:
+        """A cell; `aim`: what a later / locked cell shows (its target, SP-672: the card no longer works it out)."""
+        st, counts, nd = judge(w, ok, unknown, lock)
         if st == "unk":
-            detail = unknown or _(NO_DATA)
+            detail = nd or unknown or _(NO_DATA)
+        if st in ("fut", "tap") and aim is not None:
+            show = aim
         return {"state": st, "show": show, "detail": detail, "target": target, "actual": actual, "counts": counts, **kw}
+
+    def span(begin: dt.date, end: dt.date) -> dict:
+        return {"begin": begin.isoformat(), "end": max(begin, end).isoformat()}
+    board_span = span(mons[BOARD_WEEKS], min(today, start) if not preview else mons[BOARD_WEEKS] + dt.timedelta(days=6))
 
     def item(iid: str, name: str, crit: str, cells: dict, met: Optional[bool], reason: Optional[str] = None,
              **kw) -> dict:
@@ -329,19 +382,29 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     # ---- ① volume ----------------------------------------------------------------------------
     vol = []
     spec = [w for w in sorted(mons, reverse=True) if w in fr]
-    shares = {w: max((long_share(a, race, road) or 0.0 for a in wk(w)), default=None) for w in spec}
+    # SP-672: the week's cell in the plan's own unit (plan_share: trail hours, road km); the item's met stays
+    # the difficulty (course constant ≥ 70 % of the hardest day, owner's SP-304 Q3-3)
+    shares = {w: max((plan_share(a, race, road) or 0.0 for a in wk(w)), default=None) for w in spec}
+    aim_h = min(hd["hours"], F.LONG_CAP_H) if hd["hours"] else 0.0
+    aim_km = min(hd["km"], F.ROAD_LONG_KM)
+
+    def amount(x: Optional[float]) -> str:
+        if x is None:
+            return "—"
+        return _("{v} km", v=f"{x * aim_km:.0f}") if road else _("{v} 小時", v=f"{x * aim_h:.1f}")
     cells = {}
     for w in spec:
         t, b = fr[w], shares[w]
         cells[w] = mk(w, bool(b and b >= t * LONG_TOL), _pct(t),
-                      _("目標 {t}，做到 {b}", t=_pct(t), b=_pct(b) if b is not None else "—"), t,
+                      _("目標 {t}（{a}），做到 {b}", t=_pct(t), a=amount(t), b=amount(b)), t,
                       None if b is None else round(b, 3))
-    best = max((b for b in shares.values() if b is not None), default=0.0)
-    vol.append(item("long", _("長天"), _("最硬一次 ≥ 比賽最難那天的 70 %"), cells, best >= LONG_MET, best=round(best, 3)))
+    best = max((long_share(a, race, road) or 0.0 for w in spec for a in wk(w)), default=0.0)
+    vol.append(item("long", _("長天"), _("最硬一次 ≥ 比賽最難那天的 70 %"), cells, best >= LONG_MET, best=round(best, 3),
+                    chart={"id": CHART["long_road" if road else "long"], **board_span}))
 
     cells, hits = {}, {}
     for w in spec:
-        hits[w] = any((long_share(a, race, road) or 0.0) >= fr[w] * WEEKLY_LONG_SHARE for a in wk(w))
+        hits[w] = any((plan_share(a, race, road) or 0.0) >= fr[w] * WEEKLY_LONG_SHARE for a in wk(w))
         cells[w] = mk(w, hits[w], "1", _("這週一次長距離"), 1, int(hits[w]))
     past = [w for w in spec if w >= cur][-WEEKLY_LONG_WEEKS:] if not preview else []
     done_past = [w for w in past if w > cur or hits[w]]
@@ -364,26 +427,34 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
                           _("目標 {t} m，做到 {m} m", t=round(t * race_dz), m=round(m) if m is not None else "—"),
                           t, None if m is None else round(m / race_dz, 3), actual_m=m, target_m=round(t * race_dz))
         allm = max((a["climb_dz"] for a in foot if a.get("climb_dz") is not None), default=0.0)
+        # SP-672: its own chart — every week's longest continuous climb against the race's and the milestones
+        series = [{"week": w, "monday": mons[w].isoformat(),
+                   "m": max((a["climb_dz"] for a in wk(w) if a.get("climb_dz") is not None), default=None)}
+                  for w in sorted(mons, reverse=True) if not preview and w >= cur]
+        own = {"own": "long_climb"}
         if race_dz:
             vol.append(item("long_climb", _("長爬坡（最長一段）"),
                             _("到比賽最長一段 {m} m 的 70 %", m=round(race_dz)), cells, allm / race_dz >= LONG_MET,
-                            race_climb_m=round(race_dz), best_m=round(allm)))
+                            race_climb_m=round(race_dz), best_m=round(allm), series=series, chart=own,
+                            milestones={str(w): round(t * race_dz) for w, t in CLIMB_MILESTONES.items()}))
         else:
             vol.append({"id": "long_climb", "name": _("長爬坡（最長一段）"), "crit": _("到比賽最長一段的 70 %"),
-                        "met": None, "reason": _(NO_GPX), "cells": cells})
+                        "met": None, "reason": _(NO_GPX), "cells": cells, "series": series, "chart": own})
 
     if not road and hd["km"]:
         mpk = hd["climb_m"] / hd["km"]
 
         def similar(a: dict) -> bool:
-            return bool(a["km"]) and a["climb_m"] >= SP.CLIMB_MIN_GAIN and abs(a["climb_m"] / a["km"] / mpk - 1) <= TERRAIN_TOL
+            return (bool(a["km"]) and a["climb_m"] >= SP.CLIMB_MIN_GAIN
+                    and TERRAIN_LO - 1e-9 <= a["climb_m"] / a["km"] / mpk <= TERRAIN_HI + 1e-9)
         cells = {}
         for w in spec:
             n = sum(1 for a in wk(w) if similar(a))
             cells[w] = mk(w, n >= 1, "1", _("坡度相近的爬坡課 {n} 次", n=n), 1, n)
         n4 = sum(1 for a in foot if similar(a) and _d(a["date"]) > today - dt.timedelta(days=28))
-        vol.append(item("terrain", _("像比賽的地形"), _("近 4 週 {k} 次坡度相近（每公里爬升 {m} m 左右）的課",
-                                                    k=TERRAIN_N, m=round(mpk)), cells, n4 >= TERRAIN_N))
+        vol.append(item("terrain", _("像比賽的地形"), _("近 4 週 {k} 次每公里爬升 {lo}–{hi} m 的爬坡課",
+                                                    k=TERRAIN_N, lo=round(mpk * TERRAIN_LO), hi=round(mpk * TERRAIN_HI)),
+                        cells, n4 >= TERRAIN_N))
 
     if b2b and not road:
         from backend.engine import b2b as B2B
@@ -424,30 +495,39 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
         cells[w] = mk(w, bool(r and r[1] >= REPEAT_OK), _pct(r[1]) if r else "",
                       _("前 5 次平均是最高的 {p}", p=_pct(r[1])) if r else (short or _("最近 6 週不到 5 次可比的表現")),
                       REPEAT_OK, None if not r else round(r[1], 3),
-                      unknown=None if r else (short or _("最近 6 週不到 5 次可比的表現")))
+                      unknown=None if r else (short or _("最近 6 週不到 5 次可比的表現")), aim="≥" + _pct(REPEAT_OK))
     r = repeat_ratio(perf or {}, today) if not short else None
-    val.append(item("repeat", _("最佳表現重複得出來"), _("前 5 次平均 ≥ 最高的 97 %"), cells,
+    val.append(item("repeat", _("最佳表現重複得出來"), _("前 5 次平均 ≥ 最高的 {p}", p=_pct(REPEAT_OK)), cells,
                     None if r is None else r[1] >= REPEAT_OK,
-                    None if r else (short or _("最近 6 週不到 5 次可比的表現")), mode=r[0] if r else None))
+                    None if r else (short or _("最近 6 週不到 5 次可比的表現")), mode=r[0] if r else None,
+                    key=r[2] if r else None, ratio=round(r[1], 3) if r else None, ok=REPEAT_OK, top_n=REPEAT_N,
+                    points=repeat_points(perf or {}, today), chart={"own": "repeat"}))
     cells = {}
+
+    def top(k: float) -> str:
+        return _("最高") if 1 - k < 0.005 else _("前 {p}", p=_pct(1 - k))
     for w in vw:
         k = ctl_rank(ctl, asof(w)) if not short else None
-        cells[w] = mk(w, bool(k is not None and k >= 1 - CTL_TOP), "" if k is None else _("前 {p}", p=_pct(1 - k)),
-                      "" if k is None else _("在自己近 365 天的前 {p}", p=_pct(1 - k)), 1 - CTL_TOP,
-                      None if k is None else round(k, 3), unknown=None if k is not None else (short or _(SHORT_HISTORY)))
+        cells[w] = mk(w, bool(k is not None and k >= 1 - CTL_TOP), "" if k is None else top(k),
+                      "" if k is None else _("在自己近 365 天的{p}", p=top(k)), 1 - CTL_TOP,
+                      None if k is None else round(k, 3), unknown=None if k is not None else (short or _(SHORT_HISTORY)),
+                      aim=_("前 {p}", p=_pct(CTL_TOP)))
     k = ctl_rank(ctl, today) if not short else None
     val.append(item("ctl_top", _("長期負荷到自己的高區"), _("近 365 天的前 20 %"), cells,
-                    None if k is None else k >= 1 - CTL_TOP, None if k is not None else (short or _(SHORT_HISTORY))))
+                    None if k is None else k >= 1 - CTL_TOP, None if k is not None else (short or _(SHORT_HISTORY)),
+                    chart={"id": CHART["ctl_top"], **span(today - dt.timedelta(days=364), today)}))
     cells, vam = {}, (perf or {}).get("vam")
     for w in vw:
         ch = uphill_change(vam, asof(w)) if not short else None
         cells[w] = mk(w, bool(ch is not None and ch >= VAM_TREND), "" if ch is None else f"{ch * 100:+.0f}%",
                       "" if ch is None else _("每小時爬升比 8 週前 {p}", p=f"{ch * 100:+.0f}%"), VAM_TREND,
                       None if ch is None else round(ch, 3),
-                      unknown=None if ch is not None else (short or _("8 週內或 8 週前的爬坡紀錄不到 2 次")))
+                      unknown=None if ch is not None else (short or _("8 週內或 8 週前的爬坡紀錄不到 2 次")),
+                      aim=f"≥+{VAM_TREND * 100:.0f}%")
     ch = uphill_change(vam, today) if not short else None
     val.append(item("uphill", _("上坡腳程變快"), _("比 8 週前快"), cells, None if ch is None else ch >= VAM_TREND,
-                    None if ch is not None else (short or _("8 週內或 8 週前的爬坡紀錄不到 2 次"))))
+                    None if ch is not None else (short or _("8 週內或 8 週前的爬坡紀錄不到 2 次")),
+                    chart={"id": CHART["uphill"], **span(today - dt.timedelta(days=111), today)}))
     tds = sorted(_d(t) for t in tests or ())
     cells = {}
     for w in vw:
@@ -465,6 +545,8 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     usual_c = [x for x in (sum(a["climb_m"] for a in wk(w)) for w in spec) if x > 0]
     nh = median(usual_h) if usual_h else None
     nc = median(usual_c) if usual_c else None
+    band_t = f"{TAPER_BAND[0] * 100:.0f}–{TAPER_BAND[1] * 100:.0f}%"
+    taper_span = span(mons[BOARD_WEEKS], start)
     rs = []
     cells, oks = {}, []
     for w in (2, 1):
@@ -473,25 +555,28 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
         sh = sum(a["hours"] for a in wk(w)) / nh if nh else None
         ok = sh is not None and TAPER_BAND[0] <= sh <= TAPER_BAND[1] and w > cur
         cells[w] = mk(w, ok, _pct(sh), _("平常的 {p}", p=_pct(sh)) if sh is not None else "", list(TAPER_BAND),
-                      None if sh is None else round(sh, 3), unknown=None if nh else _(NO_DATA), lock=lock)
+                      None if sh is None else round(sh, 3), unknown=None if nh else _(NO_DATA), lock=lock, aim=band_t)
         oks.append(ok)
-    rs.append(item("taper_volume", _("量減到平常的 40–60 %"), _("強度保留"), cells,
-                   None if lock else all(oks)))
+    rs.append(item("taper_volume", _("量減到平常的 {b}", b=band_t), _("強度保留"), cells,
+                   None if lock else all(oks), chart={"id": CHART["taper_volume"], **taper_span}))
     cells = {}
     shc = sum(a["climb_m"] for a in wk(2)) / nc if nc and 2 in mons else None
     okc = shc is not None and shc <= TAPER_BAND[1] and (2 > cur)
     if 2 in mons:
         cells[2] = mk(2, okc, _pct(shc), _("爬升是平常的 {p}", p=_pct(shc)) if shc is not None else "",
-                      TAPER_BAND[1], None if shc is None else round(shc, 3), unknown=None if nc else _(NO_DATA), lock=lock)
-    rs.append(item("climb_early", _("爬升量提早減"), _("賽前 2 週開始"), cells, None if lock else okc))
+                      TAPER_BAND[1], None if shc is None else round(shc, 3), unknown=None if nc else _(NO_DATA), lock=lock,
+                      aim="≤" + _pct(TAPER_BAND[1]))
+    rs.append(item("climb_early", _("爬升量提早減"), _("賽前 2 週開始"), cells, None if lock else okc,
+                   chart={"id": CHART["climb_early"], **taper_span}))
     cells = {}
     dd = ctl_down_days(ctl, min(today, start - dt.timedelta(days=1)))
     okd = dd is not None and dd <= CTL_DOWN_MAX and today >= start - dt.timedelta(days=1)
     if 1 in mons:
         cells[1] = mk(1, okd, "" if dd is None else _("{n} 天", n=dd),
                       "" if dd is None else _("長期負荷已經連續下降 {n} 天", n=dd), CTL_DOWN_MAX, dd,
-                      unknown=None if dd is not None else _("還沒有長期負荷資料"), lock=lock)
-    rs.append(item("ctl_down_days", _("長期負荷往下不超過 7 天"), "", cells, None if lock else okd))
+                      unknown=None if dd is not None else _("還沒有長期負荷資料"), lock=lock, aim=f"≤{CTL_DOWN_MAX}")
+    rs.append(item("ctl_down_days", _("長期負荷往下不超過 7 天"), "", cells, None if lock else okd,
+                   chart={"id": CHART["ctl_down_days"], **span(taper_from - dt.timedelta(days=28), start)}))
     band = LG.TSB_RACE["A"]
     cells = {}
     share = (race_tsb or {}).get("share")
@@ -502,9 +587,9 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
                       "" if share is None else f"{share * 100:+.0f}%",
                       _("賽前 3 天看實際值") if share is None else _("{s}：長期負荷的 {p}", s=src_txt, p=f"{share * 100:+.0f}%"),
                       list(band), share, unknown=None if share is not None else _("課表還沒排到比賽日，推算不出來"),
-                      lock=lock)
+                      lock=lock, aim=f"{band[0] * 100:+.0f}–{band[1] * 100:+.0f}%")
     rs.append(item("race_tsb", _("比賽日負荷平衡"), _("長期負荷的 +10～+35 %"), cells, None if lock else okt,
-                   source=(race_tsb or {}).get("source")))
+                   source=(race_tsb or {}).get("source"), chart={"id": CHART["race_tsb"], **span(taper_from - dt.timedelta(days=28), start)}))
 
     # ---- stages --------------------------------------------------------------------------------
     def stage(sid: str, name: str, span: str, items: list[dict], unlocked: bool, unlock: dt.date) -> dict:
