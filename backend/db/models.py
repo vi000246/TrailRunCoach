@@ -394,6 +394,9 @@ class ActivityTag(Base):
     # with the mark). Added by database._migrate_schema.
     pain_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     injury_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    # SP-674: the season-plan event this race was (Event.id; engine/race_activities.py), set on the
+    # activity page; NULL = not linked (the plan's automatic match applies). Setting it marks a race.
+    race_event: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

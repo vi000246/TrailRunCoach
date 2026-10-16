@@ -433,11 +433,22 @@ def test_decode_file_takes_gzip_zip_or_a_bare_fit_and_refuses_the_rest():
 
 @pytest.fixture
 def client(tmp_path, monkeypatch, icu):
+    """The app on its own DB under tmp_path: these tests set 資料來源 = intervals and sync rows into
+    it; on the shared app DB under the faked home that leaked into later tests on the same worker
+    (test_new_user_smoke then read the intervals folder instead of COROS)."""
+    import asyncio
+    import backend.db.database as db_mod
     monkeypatch.setenv("WKO5COACH_NO_SCHEDULER", "1")
+    path = tmp_path / "app.db"
+    monkeypatch.setattr(db_mod, "DB_PATH", path)
+    monkeypatch.setattr(db_mod, "engine", None)
     from fastapi.testclient import TestClient
     from backend.main import build_app
-    with TestClient(build_app(demo=False), raise_server_exceptions=False) as c:
-        yield c
+    try:
+        with TestClient(build_app(demo=False), raise_server_exceptions=False) as c:
+            yield c
+    finally:
+        asyncio.run(db_mod.dispose(path))
 
 
 def _hook(client, acts, secret=SECRET, typ="ACTIVITY_UPLOADED", athlete=ICU_ID):

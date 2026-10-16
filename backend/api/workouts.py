@@ -80,12 +80,14 @@ class ActivityUpdate(BaseModel):
     poles: Optional[str] = None
     # 路況 (SP-250): "dry" 乾 / "wet" 濕 / null 未標 — stored as one free-form tag
     surface: Optional[str] = None
+    # SP-674: the plan event this race was (Event.id; null = unlinked) — sets the type 比賽
+    race_event: Optional[str] = None
 
 
 TAG_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "pain_side",
-              "poles", "surface", "pain_score")
+              "poles", "surface", "pain_score", "race_event")
 STORED_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "poles",
-                 "surface", "pain_score")
+                 "surface", "pain_score", "race_event")
 
 
 async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_local: str, athlete_id: int = 1,
@@ -102,7 +104,8 @@ async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_loc
                       body.pain_area if "pain_area" in sent else None,
                       body.poles if "poles" in sent else None,
                       body.surface if "surface" in sent else None,
-                      body.pain_score if "pain_score" in sent else None)
+                      body.pain_score if "pain_score" in sent else None,
+                      body.race_event if "race_event" in sent else None)
     painish = bool({"pain", "pain_area", "pain_side", "pain_score"} & sent)
     if painish:
         from backend.engine import injuries as INJ

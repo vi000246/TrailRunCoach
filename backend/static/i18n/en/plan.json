@@ -61,5 +61,12 @@
   "guide.maintain_easy": "Easy running ≥ 80%",
   "guide.maintain_rest": "A recovery week at least every 6 weeks",
   "guide.now_as": " (now: {label})",
-  "tl.specific_src": "Why {n} weeks of Build: Uphill Athlete's 20-week intro-to-ultra template has 8 running-specific weeks + a 2-week taper, the same as here; Pfitzinger's marathon about 8 weeks, Canova 6–8 weeks, Daniels' last phase 6 weeks, Yen-Ching Chiang's specific peak about 1.5 months before a race of 4 hours or more (coaches' advice). 2 of those weeks are recovery weeks."
+  "tl.specific_src": "Why {n} weeks of Build: Uphill Athlete's 20-week intro-to-ultra template has 8 running-specific weeks + a 2-week taper, the same as here; Pfitzinger's marathon about 8 weeks, Canova 6–8 weeks, Daniels' last phase 6 weeks, Yen-Ching Chiang's specific peak about 1.5 months before a race of 4 hours or more (coaches' advice). 2 of those weeks are recovery weeks.",
+  "ev.past_show": "Show finished ({n})",
+  "ev.past_hide": "Hide finished",
+  "ev.res_matched": "Finished, matched to",
+  "ev.res_partial": "Finished, some days matched",
+  "ev.res_unmatched": "Finished, no activity matched",
+  "ev.res_manual": "set by you on the activity page",
+  "ev.res_fix": "To set it, open the activity on the Activities page and pick this race under “Plan race”."
 }

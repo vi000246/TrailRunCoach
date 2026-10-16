@@ -1396,6 +1396,7 @@ def _activity_json(ds, w) -> dict:
     u = AT.user_of(w)
     return {"workout": w.idx, "key": AT.key_of(w.entry.start), "file": w.entry.file, "label": A.label(w),
             "tag_uid": (u or {}).get("uid"),          # the stored mark's stable id (SP-310), None = none
+            "race_event": (u or {}).get("race_event"),     # SP-674: the plan event the user linked
             "title_original": title or A.label(w), "title_from": "activity" if title else "label",
             "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
             "origin": _origin(ds, w),
@@ -1647,6 +1648,7 @@ def activities_list():
                 "note": (u or {}).get("note"),
                 "user_type": AT.user_type(u), "user_effort": AT.user_effort(u),
                 "user_exclusion": AT.user_exclusion(u), **_pain_part(u),
+                "race_event": (u or {}).get("race_event"),
                 # the stored mark's stable id (SP-310); None = nothing stored for it
                 "tag_uid": (u or {}).get("uid")}
 
@@ -1657,11 +1659,15 @@ def activities_list():
         # + 「自評：Hard（COROS）」 when the RPE is COROS's post-run rating (SP-231)
         return {"rpe": r.get("rpe"), "feel": r.get("feel"), "self_rating": CR.self_rating(r) if r else None}
 
+    # SP-674: the plan event matched to each activity (engine/race_activities.py) and the events the
+    # editor's 「對到哪場賽事」 offers
+    race_auto, race_events = _race_part(ds, tags)
+
     for w in ds.workouts:
         u = AT.find(tags, w.entry.start, w.entry.file)
         m = w.metrics
         title = getattr(w.entry, "title", "") or ""
-        out.append({"index": w.idx, "key": AT.key_of(w.entry.start), "start": w.entry.start.isoformat(),
+        out.append({"index": w.idx, "race_event_auto": race_auto.get(w.idx), "key": AT.key_of(w.entry.start), "start": w.entry.start.isoformat(),
                     "file": w.entry.file, "sport": w.sport, "sport_type": w.sport_type,
                     "title_original": title or A.label(w), "label": A.label(w),
                     "duration": m.get("duration"), "distance": m.get("distance"), "climbing": m.get("climbing"),
@@ -1721,7 +1727,45 @@ def activities_list():
             # hikes the chart uses count
             "pole_compare": PC.counts(ds, tags, today_local()),
             "rain_hint_mm": AT.RAIN_HINT_MM if rain else None,
-            "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
+            "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "events": race_events,
+            "activities": out}
+
+
+def _race_part(ds, tags) -> tuple[dict, list]:
+    """({idx: {id, name, how}} of the plan events matched to activities, [the plan's events that
+    have started, newest first]) — SP-674; a failure leaves both empty (the list still loads)."""
+    from backend.engine import race_activities as RA
+    today = today_local()
+    try:
+        res = RA.results(ds, today, tags=tags)
+    except Exception:                       # noqa: BLE001
+        logging.getLogger(__name__).exception("race_activities.results failed")
+        return {}, []
+    evs = {e.id: e for e in getattr(getattr(ds, "plan", None), "events", None) or []}
+    auto = {a["idx"]: {"id": eid, "name": evs[eid].name, "how": a["how"]}
+            for eid, r in res.items() for a in r["activities"] if eid in evs}
+    events = [{"id": e.id, "name": e.name, "date": e.start.isoformat(), "end": e.end.isoformat(),
+               "kind": e.kind, "priority": e.priority} for e in evs.values() if e.start <= today]
+    return auto, sorted(events, key=lambda e: e["date"], reverse=True)
+
+
+@router.get("/race-activities")
+def race_activities_api(since: Optional[str] = None, until: Optional[str] = None):
+    """SP-674: every plan event's match ({event id: status matched | partial | unmatched | upcoming,
+    activities, why}) and the race activities between since and until (default: the last 365 days)
+    — engine/race_activities.py."""
+    from backend.engine import race_activities as RA
+    today = today_local()
+    try:
+        lo = dt.date.fromisoformat(since) if since else today - dt.timedelta(days=365)
+        hi = dt.date.fromisoformat(until) if until else today
+    except ValueError:
+        raise HTTPException(400, "since / until: YYYY-MM-DD")
+    ds = _dataset()
+    from backend.engine import activity_tags as AT
+    tags = AT.load()
+    return {"results": RA.results(ds, today, tags=tags),
+            "activities": RA.race_activities(ds, lo, hi, tags=tags, today=today)}
 
 
 @router.get("/activities/auto")
@@ -1803,6 +1847,8 @@ class BulkBody(BaseModel):
     poles: Optional[str] = None
     # 路況 (SP-250): "dry" / "wet" / null 未標 (engine/activity_tags.SURFACES)
     surface: Optional[str] = None
+    # SP-674: the plan event this race was (null = unlinked; engine/race_activities.py)
+    race_event: Optional[str] = None
 
 
 BULK_MAX = 500
@@ -1822,7 +1868,8 @@ async def patch_activities(body: BulkBody):
         raise HTTPException(400, "TOO_MANY_ITEMS")
     sent = body.model_fields_set
     base = {k: getattr(body, k) for k in ("activity_type", "effort", "note", "exclusion", "name", "tags",
-                                          "pain", "pain_area", "pain_side", "pain_score", "poles", "surface")
+                                          "pain", "pain_area", "pain_side", "pain_score", "poles", "surface",
+                                          "race_event")
             if k in sent}
     for k in ("add_tags", "remove_tags"):
         v = getattr(body, k)

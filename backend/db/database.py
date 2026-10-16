@@ -185,6 +185,7 @@ async def _migrate_schema():
         ("activity_tags", "pain_area", "TEXT"),
         ("activity_tags", "injury_id", "INTEGER"),
         ("activity_tags", "pain_score", "INTEGER"),    # 0–10 跑的時候最痛幾分 (SP-271)
+        ("activity_tags", "race_event", "VARCHAR(40)"),  # SP-674: the plan event this race was
         ("injury_events", "category", "TEXT DEFAULT 'injury'"),   # 生病 in the 傷病紀錄 (SP-117)
         ("injury_events", "condition", "TEXT"),                   # 傷別 (SP-269); NULL = not chosen
         ("injury_events", "walkrun_from", "TEXT"),                # 「可以開始走跑」 (SP-272)

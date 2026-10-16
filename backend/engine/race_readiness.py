@@ -21,13 +21,15 @@ also has one cell per week (賽前第 10 → 1 週: target / actual / state) wit
                   race_feasibility's B2B_OK by the last week ending ≥ 21 days out.
      race_sim     specific_phase.SIM_WEEKS: one long day at race pace (is_race_sim) in the window.
   ② validation (表現驗證, weeks 6 → 3; open from week 6 or once ① passes). Needs ≥ HISTORY_DAYS of data,
-     else gray (high_test excepted):
+     else gray (high_test with a B / C race or a test excepted):
      repeat       best performances repeat: with power the 5 / 20 / 60-min bests of the last REPEAT_DAYS,
                   the top REPEAT_N's mean ÷ the best ≥ REPEAT_OK on each; without power the same on the
                   climbing speed (VAM) of the mountain sessions.
      ctl_top      chronic load in the top CTL_TOP of the athlete's own last 365 days.
      uphill       climbing speed (UPHILL_EXPR, the 上坡腳程 chart's) of the last 8 weeks vs the 8 before (status.VAM_TREND).
-     high_test    one hard check (a B / C race or a test day) in the window.
+     high_test    one hard check in the window (SP-672, owner 2026-10-16): a B / C race or a test day, or a
+                  session whose ≥ 20-min best (power; without power the 20-min uphill speed, UPHILL20_EXPR)
+                  matches or beats the athlete's own best of the 90 days before it (best_check).
   ③ race state (比賽狀態): unlocks when the taper starts (`taper_days` before the race: planning.taper_days):
      taper_volume the taper weeks' hours at status.TAPER_BAND of the usual (the median of weeks 10 → 3).
      climb_early  賽前第 2 週's climb ≤ the band's top of the usual.
@@ -90,6 +92,10 @@ EMPTY_WEEK = N_("資料不足：這週沒有任何活動紀錄")
 _UP = "rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate))"
 UPHILL_EXPR = (f"if(sum(if({_UP}, deltatime)) >= 600, sum(if({_UP}, delta(_elevation))) / "
                f"sum(if({_UP}, deltatime)) * 3600)")
+UPHILL20_EXPR = UPHILL_EXPR.replace(">= 600,", ">= 1200,")      # high_test: ≥ 20 min of climbing
+BEST_DAYS = 90                       # high_test: the own best of the 90 days before a session
+PERF_DAYS = 160                      # the performances read: 賽前第 6 週 − BEST_DAYS fits (was 120)
+HIGH_TEST_TIP = N_("安排一次測驗驗證一下（例如 20 分鐘全力或一段長爬坡計時）")
 # SP-672: the chart each non-count item opens (views/*.json chart ids; the card links them with a range);
 # the count items (weekly_long, terrain, b2b, race_sim, high_test) have none, long_climb / repeat draw their own
 CHART = {"long": "route-difficulty-specific", "long_road": "long-run-km-specific", "ctl_top": "pmc-all",
@@ -267,6 +273,32 @@ def repeat_points(perf: dict, day: dt.date) -> dict:
         return {k: [{"date": _d(r["date"]).isoformat(), "v": round(r[k], 1)} for r in pw if r.get(k)] for k in REPEAT_KEYS}
     vm = sorted((r for r in (perf or {}).get("vam") or () if lo < _d(r["date"]) <= day), key=lambda r: _d(r["date"]))
     return {"vam": [{"date": _d(r["date"]).isoformat(), "v": round(r["vam"])} for r in vm if r.get("vam")]}
+
+
+def best_check(perf: dict, lo: dt.date, hi: dt.date) -> Optional[dict]:
+    """high_test's own-best check (SP-672): the sessions of [lo, hi] against each one's best of the BEST_DAYS
+    before it — the 20-min power best, without power the 20-min uphill speed ("vam20"). {"mode": power |
+    climb, "hit": the first session matching / beating its prior best (or None), "best": the prior best of
+    the window's best session, "top": that session's value}; None without a window session that has a prior."""
+    pw = [(_d(r["date"]), r.get("1200")) for r in (perf or {}).get("power") or () if r.get("1200")]
+    mode, rows = ("power", pw) if pw else \
+        ("climb", [(_d(r["date"]), r.get("vam20")) for r in (perf or {}).get("vam") or () if r.get("vam20")])
+    rows.sort(key=lambda x: x[0])
+    seen, hit, top = False, None, None
+    for d, v in rows:
+        if not lo <= d <= hi:
+            continue
+        prior = [x for d0, x in rows if d - dt.timedelta(days=BEST_DAYS) <= d0 < d]
+        if not prior:
+            continue
+        seen, pb = True, max(prior)
+        if top is None or v > top[1]:
+            top = (d, v, pb)
+        if hit is None and v >= pb - 1e-9:
+            hit = (d, v, pb)
+    if not seen:
+        return None
+    return {"mode": mode, "hit": hit[0].isoformat() if hit else None, "top": round(top[1]), "best": round(top[2])}
 
 
 def ctl_rank(ctl: list, day: dt.date) -> Optional[float]:
@@ -540,15 +572,33 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
                     None if ch is not None else (short or _("8 週內或 8 週前的爬坡紀錄不到 2 次")),
                     chart={"id": CHART["uphill"], **span(today - dt.timedelta(days=111), today)}))
     tds = sorted(_d(t) for t in tests or ())
+    w0 = mons.get(VALIDATION_FROM, today)
+
+    def high(day: dt.date) -> tuple[bool, str, Optional[dict]]:
+        """(done, the cell's text, best_check) as of `day`, inside 賽前第 6 → 3 週."""
+        day = min(day, sun.get(3, day))
+        t = next((x for x in tds if w0 <= x <= day), None)
+        if t is not None:
+            return True, _("{d} 模擬賽或測驗", d=f"{t.month}/{t.day}"), None
+        bc = None if short else best_check(perf or {}, w0, day)
+        unit = "W" if (bc or {}).get("mode") == "power" else "m/h"
+        if bc and bc["hit"]:
+            h = _d(bc["hit"])
+            return True, _("{d} 追平或打破近 90 天最佳", d=f"{h.month}/{h.day}"), bc
+        if bc:
+            return False, _("{tip}：近 90 天最佳 {b} {u}，這段期間最好 {t} {u}", tip=_(HIGH_TEST_TIP), b=bc["best"],
+                            t=bc["top"], u=unit), bc
+        return False, _(HIGH_TEST_TIP), None
     cells = {}
     for w in vw:
-        got = any(mons[VALIDATION_FROM] <= t <= asof(w) for t in tds) if VALIDATION_FROM in mons else False
-        c = mk(w, got, "1", _("模擬賽或測驗一次"), 1, int(got))
+        got, txt, _bc = high(asof(w)) if VALIDATION_FROM in mons else (False, _(HIGH_TEST_TIP), None)
+        c = mk(w, got, "1", txt, 1, int(got), unknown=short if short and not got else None)
         if w != vw[-1]:
             c["counts"] = False
         cells[w] = c
-    val.append(item("high_test", _("高區做一次驗證"), _("模擬賽或測驗"), cells,
-                    any(mons.get(VALIDATION_FROM, today) <= t <= today for t in tds)))
+    got, _txt, _bc = high(today)
+    val.append(item("high_test", _("實力測驗"), _("做一次測驗或 B／C 賽，或練習時追平近 90 天最佳，看練出來的成果"), cells,
+                    True if got else (None if short else False), short if short and not got else None))
 
     # ---- ③ race state --------------------------------------------------------------------------
     lock = today < taper_from
@@ -695,7 +745,7 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
         if iid == "uphill":
             return _("上坡腳程要比 8 週前快 {p}", p=_pct(VAM_TREND))
         if iid == "high_test":
-            return _("排一次模擬賽或測驗")
+            return _(HIGH_TEST_TIP)
         if iid == "taper_volume" and nh:
             return _("這週總時數控制在 {lo}–{hi} 小時", lo=f"{nh * TAPER_BAND[0]:.1f}", hi=f"{nh * TAPER_BAND[1]:.1f}")
         if iid == "climb_early" and nc:
@@ -801,14 +851,15 @@ def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = 
     ctl_s, atl_s, _st = st.ev.pmc()
     days = range(int(date_to_day(today - dt.timedelta(days=400))), int(date_to_day(today)) + 1)
     out["ctl"] = [(day_to_date(d), v) for d in days for v in (ctl_s.at(d),) if v is not None and v == v]
-    perf_lo = today - dt.timedelta(days=120)
+    perf_lo = today - dt.timedelta(days=PERF_DAYS)
     vam, power = [], []
-    for w in st.between(120, 0):
+    for w in st.between(PERF_DAYS, 0):
         day = day_to_date(math.floor(w.day))
         if st.mountain(w) and (st.m(w, "climbing") or 0) > 200:
             v = _safe(lambda w=w: st.ev.evaluate(UPHILL_EXPR, w), None)
             if v is not None and v == v and v > 0:
-                vam.append({"date": day, "vam": float(v)})
+                v20 = _safe(lambda w=w: st.ev.evaluate(UPHILL20_EXPR, w), None)
+                vam.append({"date": day, "vam": float(v), "vam20": float(v20) if v20 and v20 == v20 else None})
         if O.category(w) in O.FOOT and day >= perf_lo:
             cur = _safe(lambda w=w: ds.workout_curve(w.idx, "power"), None)
             if cur and cur[0]:

@@ -365,18 +365,45 @@ function renderEvents() {
   const past = S.events.filter(done);
   const shown = S.showPast ? S.events : S.events.filter((e) => !done(e));
   const toggle = past.length ? `<tr><td colspan="13" class="meta"><button class="link" id="togglepast">${S.showPast
-    ? "隱藏已完賽" : `顯示已完賽（${past.length} 場）`}</button></td></tr>` : "";
+    ? esc(t("plan.ev.past_hide")) : esc(t("plan.ev.past_show", { n: past.length }))}</button></td></tr>` : "";
+  if (S.showPast && past.length && RACE_RES === null) loadRaceResults();
   $("#events").innerHTML = (shown.map((e) => `<tr style="${done(e) ? "opacity:.55" : ""}">
     <td><span class="pri ${e.priority}">${e.priority}</span></td><td>${e.date}${e.days > 1 ? "～" + e.end.slice(5) : ""}</td>
-    <td>${esc(e.name)}${evHints(e)}</td><td>${esc(e.kind_label)}</td><td class="num">${e.days}</td>
+    <td>${esc(e.name)}${evHints(e)}${done(e) ? raceResult(e) : ""}</td><td>${esc(e.kind_label)}</td><td class="num">${e.days}</td>
     <td class="num">${fmt(e.distance_km, 1)}</td><td class="num">${fmt(e.climbing_m)}</td><td class="num">${fmt(e.climb_per_km)}</td>
     <td class="num">${fmt(e.est_hours, 1)}</td><td class="num">${e.days_to >= 0 ? e.days_to + " 天" : "已過"}</td>
     <td class="meta">${esc(e.note)}</td>
     <td>${gpxCell(e)}</td>
     <td><button class="link" data-edit="${e.id}">編輯</button><button class="link" data-del="${e.id}">刪除</button></td></tr>`).join("")
     || `<tr><td colspan="13" class="meta">${past.length ? "沒有接下來的賽事。" : "還沒有賽事。"}在下面填一場。</td></tr>`) + toggle;
-  const t = $("#togglepast");
-  if (t) t.onclick = () => { S.showPast = !S.showPast; renderEvents(); };
+  const tg = $("#togglepast");
+  if (tg) tg.onclick = () => { S.showPast = !S.showPast; renderEvents(); };
+}
+// SP-674: a finished race stays in the plan (已完賽) and shows the activity it was matched to
+// (engine/race_activities.py: same day, distance or climbing close; a link set on the activity page
+// wins) or why none was — GET /api/v1/app/race-activities, loaded when the finished rows are shown
+let RACE_RES = null;
+async function loadRaceResults() {
+  RACE_RES = {};
+  try {
+    const r = await fetch("/api/v1/app/race-activities", { credentials: "same-origin" });
+    if (r.ok) RACE_RES = (await r.json()).results || {};
+  } catch {}
+  renderEvents();
+}
+function raceResult(e) {
+  const r = RACE_RES && RACE_RES[e.id];
+  if (!r) return "";
+  const link = (a) => `<a href="/api/v1/app/activities/page?key=${encodeURIComponent(a.key)}">${esc(a.date)} ${esc(a.title || "")}` +
+    `${a.km != null ? " " + fmt(a.km, 1) + " km" : ""}${a.gain_m != null ? " ↑" + fmt(a.gain_m) + " m" : ""}</a>`;
+  const acts = (r.activities || []).map(link).join("、");
+  const head = r.status === "matched" ? t("plan.ev.res_matched") : r.status === "partial" ? t("plan.ev.res_partial")
+    : r.status === "unmatched" ? t("plan.ev.res_unmatched") : "";
+  if (!head) return "";
+  const how = (r.activities || []).some((a) => a.how === "manual") ? t("plan.ev.res_manual") : "";
+  return `<div class="meta raceres ${r.status}">${r.status === "matched" ? "✓" : "⚠"} ${esc(head)}${acts ? "：" + acts : ""}` +
+    `${how ? `（${esc(how)}）` : ""}${r.status !== "matched" || !how ? `<br>${esc(r.why || "")}` : ""}` +
+    `${r.status !== "matched" ? `<br>${esc(t("plan.ev.res_fix"))}` : ""}</div>`;
 }
 // SP-114: an old multi-day event without its per-day numbers (not blocked, only hinted). SP-486 (PL6): an
 // upcoming A / B race has them on its 賽事評估 card — only a C race (no card) keeps them here

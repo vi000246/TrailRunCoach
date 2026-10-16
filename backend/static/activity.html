@@ -548,6 +548,25 @@ function cmpBar() {
   $("cmp-cancel").onclick = () => { S.cmpA = null; render(); cmpBar(); };
 }
 
+// 對到哪場賽事 (SP-674): the plan event this activity was. 自動 = the plan's own match (date + distance
+// or climbing, engine/race_activities.py); picking one links it and marks the activity 比賽; the
+// plan's 已完賽 rows show the match. Runs and hikes only (the activities a race can be).
+function raceEventFld(a) {
+  if (a.index == null || !(a.sport === "run" || a.sport === "hike" || /hik|mountain/i.test(a.sport_type || ""))) return "";
+  const evs = S.raceEvents || [];
+  if (!evs.length && !a.race_event) return "";
+  const day = (a.start || "").slice(0, 10), dist = (e) => Math.abs(Date.parse(e.date) - Date.parse(day));
+  const opts = [...evs].sort((x, y) => dist(x) - dist(y)).slice(0, 12);
+  const auto = a.race_event_auto && a.race_event_auto.how === "auto" ? a.race_event_auto.name : null;
+  const lab = (e) => `${e.date}${e.end && e.end !== e.date ? "～" + e.end.slice(5) : ""} ${e.name} · ${e.priority}`;
+  return `<div class="fld"><span class="lab">${esc(T("f_race_event"))}${qt(T("help.race_event"))}</span>
+    <div class="ctl"><select data-race-ev aria-label="${esc(T("f_race_event"))}">
+      <option value="" ${a.race_event ? "" : "selected"}>${esc(T("auto_opt", { v: auto || T("race_ev.none") }))}</option>
+      ${opts.map((e) => `<option value="${esc(e.id)}" ${a.race_event === e.id ? "selected" : ""}>${esc(lab(e))}</option>`).join("")}
+    </select>${badge(!!a.race_event)}</div>
+    <div class="why">${esc(a.race_event ? T("race_ev.linked") : auto ? T("race_ev.auto_why") : T("race_ev.none_why"))}</div></div>`;
+}
+
 // 這是比賽 (SP-71): the user marks a past race by hand — the race-time prediction is checked
 // against the races marked here (racepower backtest: activity type 比賽). Nothing is guessed:
 // the button sets / clears only the user's own mark (PATCH /activities, activity_type race | null).
@@ -581,7 +600,7 @@ function alertRow(btn, msg) {
 
 async function loadList() {
   const r = await j(`${API}/activities`);
-  S.acts = r.activities; S.types = r.types; S.efforts = r.efforts;
+  S.acts = r.activities; S.types = r.types; S.efforts = r.efforts; S.raceEvents = r.events || [];
   S.poleTags = r.pole_tags || {};
   S.poleNoneTag = r.pole_none_tag || null;
   S.poleCompare = r.pole_compare || null;
@@ -801,6 +820,7 @@ function renderEditor() {
     <div class="fld"><span class="lab">${esc(T("f_activity_type"))}</span>
       <div class="ctl">${sel("activity_type", S.types, a.user_type, tAuto)}${badge(!!a.user_type, tWhy)}</div>
       <div class="why">${a.user_type ? esc(T("auto_was", { v: S.types[tAuto] || "—", why: tWhy || "" })) : esc(tWhy || (pending ? T("computing") : ""))}</div></div>
+    ${raceEventFld(a)}
     <div class="fld"><span class="lab">${esc(T("f_effort"))}${qt(T("help.effort"))}</span>
       <div class="ctl">${sel("effort", S.efforts, a.user_effort, eAuto)}${badge(!!a.user_effort, eWhy)}</div>
       <div class="why">${a.user_effort ? esc(T("auto_was", { v: S.efforts[eAuto] || "—", why: eWhy || "" })) : esc(eWhy || (pending ? T("computing") : ""))}${recTxt ? `<br>${esc(recTxt)}` : ""}</div></div>
@@ -872,6 +892,7 @@ function painState(a) {
 }
 function patchLocal(a, r) {
   // r: the single-activity JSON (PATCH /workouts/{i}/activity)
+  if ("race_event" in r) a.race_event = r.race_event;
   if ("activity_type_overridden" in r) a.user_type = r.activity_type_overridden ? r.activity_type : null;
   if ("effort_overridden" in r) a.user_effort = r.effort_overridden ? r.effort : null;
   if ("rain_kind" in r) a.rain_kind = r.rain_kind;          // a type change (爬山) moves the rain hint
@@ -897,6 +918,8 @@ async function saveFields(a, patch) {
         a.rain_kind = MOUNTAIN_TYPES.includes(patch.activity_type) || !!a.rain_kind_auto;
       }
       if ("effort" in patch) a.user_effort = patch.effort;
+      if ("race_event" in patch) { a.race_event = patch.race_event; if (patch.race_event) a.user_type = "race"; }
+      if ("activity_type" in patch && patch.activity_type !== "race") a.race_event = null;
       for (const k of ["note", "name", "tags"]) if (k in patch) a[k] = k === "name" ? (patch.name || "").trim() || null : patch[k];
       if ("poles" in patch) a.tags = withPoles(a.tags, patch.poles);
       if ("surface" in patch) a.tags = withSurface(a.tags, patch.surface);
@@ -927,6 +950,7 @@ function wireEditor(a) {
     }
   });
   ed.querySelectorAll("select[data-f]").forEach((el) => el.addEventListener("change", () => saveFields(a, { [el.dataset.f]: el.value || null })));
+  ed.querySelector("select[data-race-ev]")?.addEventListener("change", (ev) => saveFields(a, { race_event: ev.target.value || null }));
   // a click is the user's own choice (未標 too: "none"), so a race default never overrides it later;
   // clicking the 有杖 a race set makes it the user's (it then stays when the race is unticked)
   ed.querySelectorAll("button[data-poles]").forEach((b) => b.addEventListener("click", () => {

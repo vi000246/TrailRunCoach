@@ -10467,7 +10467,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:445"
   },
-  "高區做一次驗證": {
+  "實力測驗": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:459"
   },
@@ -10607,7 +10607,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:439"
   },
-  "模擬賽或測驗一次": {
+  "{d} 模擬賽或測驗": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:455"
   },
@@ -10623,7 +10623,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:348"
   },
-  "模擬賽或測驗": {
+  "做一次測驗或 B／C 賽，或練習時追平近 90 天最佳，看練出來的成果": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:455"
   },
@@ -10727,7 +10727,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py"
   },
-  "排一次模擬賽或測驗": {
+  "安排一次測驗驗證一下（例如 20 分鐘全力或一段長爬坡計時）": {
     "draft": true,
     "src": "backend/engine/race_readiness.py"
   },
@@ -10744,6 +10744,14 @@
     "src": "backend/engine/race_readiness.py"
   },
   "比賽日負荷平衡落在長期負荷的 +10～+35 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "{d} 追平或打破近 90 天最佳": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "{tip}：近 90 天最佳 {b} {u}，這段期間最好 {t} {u}": {
     "draft": true,
     "src": "backend/engine/race_readiness.py"
   },

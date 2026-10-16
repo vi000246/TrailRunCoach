@@ -223,5 +223,11 @@
   "cmp.picked": "Compare A:",
   "cmp.next": "press another activity's compare button, or",
   "cmp.page": "pick B on the comparison page",
-  "cmp.cancel": "Cancel"
+  "cmp.cancel": "Cancel",
+  "f_race_event": "Plan race",
+  "help.race_event": "Which race in your plan this activity was. Auto: a finished race is matched to the activity on its day with a close distance or climbing; pick one here when the match is wrong or missing. Picking a race also marks the activity as a race; changing the type to something else removes it.",
+  "race_ev.none": "none",
+  "race_ev.linked": "Set by you: this race's finished row in the plan shows this activity.",
+  "race_ev.auto_why": "A race in your plan was matched to this activity (same day, close distance or climbing).",
+  "race_ev.none_why": "No race in your plan matches this activity. If it was a race, pick which one here."
 }

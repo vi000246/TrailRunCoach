@@ -61,5 +61,12 @@
   "guide.maintain_easy": "輕鬆跑佔 ≥ 80%",
   "guide.maintain_rest": "最多 6 週排一次恢復週",
   "guide.now_as": "（現在：{label}）",
-  "tl.specific_src": "專項期 {n} 週的依據：Uphill Athlete 越野超馬 20 週模板是 8 週專項＋2 週減量，和這裡一樣；Pfitzinger 馬拉松約 8 週、Canova 6–8 週、Daniels 最後一期 6 週、江晏慶 4 小時以上的賽事專項巔峰約賽前 1.5 個月（教練建議）。其中 2 週是恢復週。"
+  "tl.specific_src": "專項期 {n} 週的依據：Uphill Athlete 越野超馬 20 週模板是 8 週專項＋2 週減量，和這裡一樣；Pfitzinger 馬拉松約 8 週、Canova 6–8 週、Daniels 最後一期 6 週、江晏慶 4 小時以上的賽事專項巔峰約賽前 1.5 個月（教練建議）。其中 2 週是恢復週。",
+  "ev.past_show": "顯示已完賽（{n} 場）",
+  "ev.past_hide": "隱藏已完賽",
+  "ev.res_matched": "已完賽，對上活動",
+  "ev.res_partial": "已完賽，只對上部分天數",
+  "ev.res_unmatched": "已完賽，沒對上活動",
+  "ev.res_manual": "你在活動頁指定的",
+  "ev.res_fix": "要指定就到活動頁打開那次活動，在「對到哪場賽事」選這場。"
 }

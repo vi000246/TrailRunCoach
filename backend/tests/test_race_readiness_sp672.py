@@ -269,3 +269,72 @@ def test_weekly_long_has_the_long_days_tolerance():
     assert cell(b, "weekly_long", 7)["state"] == "done"
     b = board([act(monday(7) + dt.timedelta(days=5), need * 0.85, 10, 50)], rc, first_day=date(2025, 1, 1))
     assert cell(b, "weekly_long", 7)["state"] == "miss"
+
+
+# ---- 第 3 輪 (owner 2026-10-16): high_test = matching the own 90-day best for ≥ 20 min in the window ----
+
+def _pw(day, w20):
+    return {"date": day, "300": None, "1200": w20, "3600": None}
+
+
+def test_high_test_done_when_a_window_session_matches_the_90_day_best_power():
+    win = monday(5) + dt.timedelta(days=2)
+    prior = [_pw(monday(5) - dt.timedelta(days=d), 300 - d % 7) for d in (20, 40, 60)]   # best 299 (d=20 → 300-6)
+    best = max(p["1200"] for p in prior)
+    b = board([act(monday(9), 1, 8, 200)], perf={"power": prior + [_pw(win, best)]}, first_day=date(2025, 1, 1))
+    assert cell(b, "high_test", 5)["state"] == "done" and item(b, "high_test")["met"] is True
+    every = [act(monday(w) + dt.timedelta(days=1), 1, 8, 200) for w in range(10, 2, -1)]
+    b = board(every, perf={"power": prior + [_pw(win, best - 1)]}, first_day=date(2025, 1, 1))
+    c = cell(b, "high_test", 4)
+    assert c["state"] == "miss" and item(b, "high_test")["met"] is False
+    assert "安排一次測驗驗證一下" in c["detail"] and f"{best} W" in c["detail"] and f"{best - 1} W" in c["detail"], c
+    assert "安排一次測驗驗證一下" in next(t["detail"] for t in b["this_week"] if t["item"] == "high_test")
+
+
+def test_high_test_only_counts_the_90_days_before_the_session():
+    win = monday(5) + dt.timedelta(days=2)
+    old = _pw(win - dt.timedelta(days=100), 330)                      # outside the 90 days
+    prior = _pw(win - dt.timedelta(days=30), 290)
+    b = board([act(monday(9), 1, 8, 200)], perf={"power": [old, prior, _pw(win, 295)]}, first_day=date(2025, 1, 1))
+    assert cell(b, "high_test", 5)["state"] == "done"
+
+
+def test_high_test_without_power_takes_the_20_minute_uphill_speed():
+    win = monday(4) + dt.timedelta(days=1)
+    vam = [{"date": win - dt.timedelta(days=d), "vam": 700, "vam20": 650} for d in (50, 70)]
+    b = board([act(monday(9), 1, 8, 200)], perf={"vam": vam + [{"date": win, "vam": 690, "vam20": 650}]},
+              first_day=date(2025, 1, 1))
+    assert cell(b, "high_test", 4)["state"] == "done"
+    b = board([act(monday(9), 1, 8, 200)], perf={"vam": vam + [{"date": win, "vam": 720, "vam20": 600}]},
+              first_day=date(2025, 1, 1))
+    assert item(b, "high_test")["met"] is False and "650 m/h" in cell(b, "high_test", 3)["detail"]
+
+
+def test_high_test_still_counts_a_b_race_and_is_gray_under_90_days():
+    b = board([act(monday(9), 1, 8, 200)], tests=[monday(5) + dt.timedelta(days=5)], first_day=date(2025, 1, 1))
+    assert item(b, "high_test")["met"] is True
+    b = board([act(monday(9), 1, 8, 200)], first_day=TODAY - dt.timedelta(days=60))
+    assert cell(b, "high_test", 4)["state"] == "unk" and item(b, "high_test")["met"] is None
+    b = board([act(monday(9), 1, 8, 200)], tests=[monday(5)], first_day=TODAY - dt.timedelta(days=60))
+    assert item(b, "high_test")["met"] is True
+
+
+def test_high_test_is_named_fitness_check_and_the_old_name_is_gone():
+    b = board([act(monday(9), 1, 8, 200)], first_day=date(2025, 1, 1))
+    it = item(b, "high_test")
+    assert it["name"] == "實力測驗" and "追平近 90 天最佳" in it["crit"]
+    assert item(b, "race_sim")["name"] == "賽事模擬"
+    en = json.loads((ROOT / "i18n" / "locales" / "en.json").read_text("utf-8"))
+    assert en["實力測驗"] == "Fitness check"
+    import subprocess
+    hits = subprocess.run(["git", "grep", "-n", "高區做一次驗證\\|One check at high intensity", "--", ":!docs",
+                           ":!backend/tests"], cwd=ROOT.parent, capture_output=True, text=True).stdout
+    assert hits == "", hits
+
+
+def test_high_test_window_ends_with_week_3():
+    late = monday(2) + dt.timedelta(days=1)                       # a taper-week best does not count
+    prior = [_pw(late - dt.timedelta(days=d), 280) for d in (30, 60)]
+    b = board([act(monday(9), 1, 8, 200)], today=monday(1) + dt.timedelta(days=2),
+              perf={"power": prior + [_pw(late, 300)]}, first_day=date(2025, 1, 1))
+    assert item(b, "high_test")["met"] is False
