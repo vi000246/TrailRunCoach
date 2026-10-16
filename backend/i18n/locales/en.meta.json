@@ -10575,7 +10575,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:439"
   },
-  "長期負荷往下不超過 7 天": {
+  "長期負荷往下不超過減量的 {n} 天": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:494"
   },
@@ -10635,7 +10635,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:521"
   },
-  "賽前 10 → 0 天": {
+  "賽前 {n} → 0 天": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:523"
   },
@@ -10680,6 +10680,70 @@
     "src": "backend/engine/race_readiness.py"
   },
   "資料不足：這週沒有任何活動紀錄": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "{a}（還差 {d}）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "排一次 {a} 以上的長距離": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "一段連續爬升 {m} m（還差 {d} m）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "一段連續爬升 {m} m": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "排一次每公里爬升 {lo}–{hi} m 的爬坡課": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "排一次爬坡課": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "排一次背對背長天": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "排一次照比賽配速的長天（{a}）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "多跑幾次接近自己最佳的表現（前 5 次平均到最高的 {p}）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "長期負荷拉到自己近 365 天的前 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "上坡腳程要比 8 週前快 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "排一次模擬賽或測驗": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "這週總時數控制在 {lo}–{hi} 小時": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "這週爬升控制在 {m} m 以內": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "長期負荷連續往下別超過 {n} 天": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py"
+  },
+  "比賽日負荷平衡落在長期負荷的 +10～+35 %": {
     "draft": true,
     "src": "backend/engine/race_readiness.py"
   },

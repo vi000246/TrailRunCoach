@@ -12,7 +12,7 @@ from pathlib import Path
 
 from backend.engine import race_readiness as RD
 from backend.engine import specific_phase as SP
-from backend.tests.test_race_readiness_sp650 import TODAY, act, board, cell, ctl_series, item, monday, race
+from backend.tests.test_race_readiness_sp650 import START, TODAY, act, board, cell, ctl_series, item, monday, race
 
 ROOT = Path(__file__).resolve().parents[1]
 COUNT_ITEMS = {"weekly_long", "terrain", "b2b", "race_sim", "high_test"}
@@ -54,7 +54,7 @@ def test_taper_and_later_cells_show_their_target():
     assert cell(b, "taper_volume", 2)["state"] == "tap"
     assert cell(b, "taper_volume", 2)["show"] == "40–59%"
     assert cell(b, "climb_early", 2)["show"] == "≤59%"
-    assert cell(b, "ctl_down_days", 1)["show"] == "≤7"
+    assert cell(b, "ctl_down_days", 1)["show"] == "≤10"
     assert cell(b, "race_tsb", 1)["show"] == "+10–+35%"
     b = board([act(monday(9), 1.0, 8, 200)], today=monday(8) + dt.timedelta(days=2), first_day=date(2025, 1, 1))
     assert cell(b, "long", 6)["state"] == "fut" and cell(b, "long", 6)["show"] == "75%"
@@ -175,3 +175,97 @@ def test_season_plan_b_race_card_loses_the_old_readiness_row():
         h = _render([out[1]])[0]
         assert "不足" not in h and "最長 3 h" not in h and "Koop" not in h
         assert "完備程度" not in h and "來得及" in h                  # only the 可行性 row
+
+
+# ---- owner check (SP-672 follow-up): a race known by its GPX alone; the race decides trail vs road ---------
+
+def test_an_a_race_with_only_a_gpx_gets_a_board(monkeypatch):
+    from backend.engine.planning import Event, Plan
+    monkeypatch.setattr(SP, "gpx_features", lambda eid, hpe: None)
+    gpx = {"totals": {"km": 18.7, "gain_m": 1488.0, "loss_m": 1489.0},
+           "days": [{"day": 1, "km": 18.7, "gain_m": 1488.0, "loss_m": 1489.0}], "split_source": "single", "filename": "x.gpx"}
+    e = Event("g1", "北插天山", START.isoformat(), kind="race", priority="A")          # no km typed in the plan
+    rc = SP.race_day(Plan(events=[e]), TODAY, lambda ev, c: [2.86], gpx=lambda ev: gpx)
+    assert rc is not None and rc["id"] == "g1" and rc["km"] == 18.7
+    # neither km nor a GPX: the next A race that can be measured
+    later = Event("e2", "後面那場", (START + dt.timedelta(days=30)).isoformat(), kind="race", priority="A",
+                  distance_km=20, climbing_m=1000, est_hours=3.0)
+    rc = SP.race_day(Plan(events=[e, later]), TODAY, None, gpx=lambda ev: None)
+    assert rc is not None and rc["id"] == "e2"
+
+
+def test_a_mountain_race_is_trail_whatever_the_main_sport():
+    rc = race()                                       # 50 km ↑3000
+    b = RD.board(rc, TODAY, [act(monday(9), 1.0, 8, 200)], sport="road", first_day=date(2025, 1, 1))
+    assert b["race"]["sport"] == "trail"
+    assert "terrain" in [i["id"] for s in b["stages"] for i in s["items"]]
+    flat = race(kind="race", climb_m=100.0, descent_m=100.0,
+                day={"hours": 2.0, "km": 21.0, "climb_m": 100.0, "descent_m": 100.0}, km=21.0, hours=2.0, features=None)
+    assert RD.board(flat, TODAY, [], sport="trail")["race"]["sport"] == "road"     # < 200 m: judged on km
+
+
+# ---- owner answers (2026-10-16): the taper length, 本週要做 says what to do, a deep link's range once -------
+
+def test_chronic_load_may_fall_as_long_as_the_taper():
+    falling = ctl_series(400, lambda i: 60.0 if i < 391 else 60.0 - (i - 390) * 0.5, end=START - dt.timedelta(days=1))
+    today = START - dt.timedelta(days=1)
+    b = board([act(monday(1), 1.0, 8, 50)], today=today, ctl=falling, first_day=date(2025, 1, 1))
+    it = item(b, "ctl_down_days")
+    assert it["name"] == "長期負荷往下不超過減量的 10 天" and it["met"] is True        # 9 days < 10 (was ≤ 7)
+    b = board([act(monday(1), 1.0, 8, 50)], today=today, ctl=falling, first_day=date(2025, 1, 1), taper_days=14)
+    rs = next(s for s in b["stages"] if s["id"] == "race_state")
+    assert rs["unlock_date"] == (START - dt.timedelta(days=14)).isoformat() and "14" in rs["span"]
+    assert "14" in item(b, "ctl_down_days")["name"]
+
+
+def test_compute_takes_the_taper_length_from_the_plan_prefs(monkeypatch):
+    from backend.engine import planning as P
+    seen = {}
+    monkeypatch.setattr(P, "taper_days", lambda e, pref=None: 13)
+    monkeypatch.setattr(P, "taper_days_setting", lambda *a, **k: 13)
+    orig = RD.board
+    monkeypatch.setattr(RD, "board", lambda *a, **k: seen.update(k) or orig(*a, **k))
+    from backend.tests.test_race_readiness_sp650 import test_compute_reads_the_next_a_race_from_the_plan as t
+    t(monkeypatch)
+    assert seen.get("taper_days") == 13
+
+
+def test_this_week_says_what_to_do_not_what_was_reached():
+    rc = race()
+    acts = [act(monday(3) + dt.timedelta(days=1), 2.0, 10, 100, climb_dz=50)]
+    b = board(acts, rc, first_day=date(2025, 1, 1))
+    tw = {t["item"]: t["detail"] for t in b["this_week"]}
+    assert tw["long"] == "3.9 小時（還差 1.9 小時）", tw                     # 65 % of 6 h, 2 h done
+    assert tw["terrain"].startswith("排一次每公里爬升 40–150 m"), tw
+    for iid, txt in tw.items():
+        assert "做到" not in txt and " 0 次" not in txt, (iid, txt)
+
+
+def test_a_deep_links_range_is_used_once():
+    viewer = (ROOT / "static" / "charts.html").read_text("utf-8")
+    save = viewer[viewer.index("function save()"):viewer.index("function restore()")]
+    assert "S.keepRange" in save and "kr.range" in save and "kr.begin" in save
+    deep = viewer[viewer.index('qp.get("begin")'):viewer.index('qp.get("begin")') + 400]
+    assert "S.keepRange = {" in deep
+    pre = viewer[viewer.index("function preset(d)"):viewer.index("function preset(d)") + 120]
+    assert "S.keepRange = null" in pre
+    assert '$("begin").onchange = $("end").onchange = () => { S.keepRange = null;' in viewer
+
+
+def test_uphill_speed_is_the_uphill_charts_measure():
+    """The card judged the whole session's VAM (flats and descents in the hour), which drops on every long
+    mountain day; it now uses the 上坡腳程 chart's uphill-only climbing speed."""
+    views = json.loads((ROOT.parent / "views" / "periodization.json").read_text("utf-8"))
+    ch = next(c for d in views["dashboards"] for c in d["charts"] if c.get("id") == "uphill-vam")
+    assert all(RD.UPHILL_EXPR[3:] in s["expression"] for s in ch["series"]), RD.UPHILL_EXPR
+    src = (ROOT / "engine" / "race_readiness.py").read_text("utf-8")
+    assert 'st.ev.evaluate(UPHILL_EXPR' in src and 'st.m(w, "vam")' not in src
+
+
+def test_weekly_long_has_the_long_days_tolerance():
+    rc = race()                                       # 6-h aim
+    need = 6.0 * SP.FRAC[7] * RD.WEEKLY_LONG_SHARE
+    b = board([act(monday(7) + dt.timedelta(days=5), need * 0.92, 10, 50)], rc, first_day=date(2025, 1, 1))
+    assert cell(b, "weekly_long", 7)["state"] == "done"
+    b = board([act(monday(7) + dt.timedelta(days=5), need * 0.85, 10, 50)], rc, first_day=date(2025, 1, 1))
+    assert cell(b, "weekly_long", 7)["state"] == "miss"

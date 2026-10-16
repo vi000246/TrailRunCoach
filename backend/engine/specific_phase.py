@@ -279,14 +279,22 @@ def race_day(plan, today: dt.date, predict: Optional[Callable] = None, gpx: Opti
     `predict` is given, else the plan's 預估移動時間), the single-day target, one
     average race day (hours, km, climb, descent) and the GPX features."""
     from backend.engine.panels import race_refs as RR
+    # SP-672: every A race ahead, not only those with a typed distance (RR.upcoming): a race known by its
+    # GPX alone (北插天山: no km in the plan) used to give no board at all
     try:
-        evs = [e for e in RR.upcoming(plan, today) if e.priority == "A" and e.start > today]
+        evs = sorted((e for e in plan.events if e.priority == "A" and e.start > today), key=lambda e: e.start)
     except Exception:                       # noqa: BLE001
         return None
-    if not evs:
+
+    def course(e) -> Optional[dict]:
+        try:
+            c = RR.course_of(e, gpx or RR.stored_course)
+        except Exception:                   # noqa: BLE001 — no km and no GPX: nothing to measure against
+            return None
+        return c if (c.get("totals") or {}).get("km") else None
+    e, c = next(((x, cx) for x in evs for cx in (course(x),) if cx), (None, None))
+    if e is None:
         return None
-    e = evs[0]
-    c = RR.course_of(e, gpx or RR.stored_course)
     hs = None
     if predict is not None:
         try:

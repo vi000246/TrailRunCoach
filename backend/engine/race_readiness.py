@@ -26,12 +26,12 @@ also has one cell per week (賽前第 10 → 1 週: target / actual / state) wit
                   the top REPEAT_N's mean ÷ the best ≥ REPEAT_OK on each; without power the same on the
                   climbing speed (VAM) of the mountain sessions.
      ctl_top      chronic load in the top CTL_TOP of the athlete's own last 365 days.
-     uphill       climbing speed of the last 8 weeks vs the 8 before (status.VAM_TREND).
+     uphill       climbing speed (UPHILL_EXPR, the 上坡腳程 chart's) of the last 8 weeks vs the 8 before (status.VAM_TREND).
      high_test    one hard check (a B / C race or a test day) in the window.
-  ③ race state (比賽狀態): unlocks when the taper starts (planning.TAPER_DAYS before the race):
+  ③ race state (比賽狀態): unlocks when the taper starts (`taper_days` before the race: planning.taper_days):
      taper_volume the taper weeks' hours at status.TAPER_BAND of the usual (the median of weeks 10 → 3).
      climb_early  賽前第 2 週's climb ≤ the band's top of the usual.
-     ctl_down_days chronic load falling ≤ CTL_DOWN_MAX days in a row before the race.
+     ctl_down_days chronic load falling no more days in a row than the taper is long (SP-672; was 7).
      race_tsb     race-day load balance in load_guard.TSB_RACE["A"]: projected from the plan before the
                   last 3 days, the actual one in them.
 Watched every week (no HRV / sleep): the chronic-load ramp (load_guard.ramp_level), injuries (the injury
@@ -75,7 +75,6 @@ REPEAT_OK = 0.95                     # SP-672: was 0.97 — inside one ordinary 
 REPEAT_KEYS = ("300", "1200", "3600")
 REPEAT_MAIN = ("1200", "3600", "300")   # SP-672: the 20-min best decides (was the worst of the three)
 CTL_TOP = 0.20
-CTL_DOWN_MAX = 7
 RPE_RISE = 2                         # 推估
 VALIDATION_FROM = 6
 
@@ -85,6 +84,12 @@ NO_GPX = N_("比賽沒有 GPX：上傳 GPX 才算得出最長一段連續爬升"
 SHORT_HISTORY = N_("資料不到 90 天，先不算")
 BEFORE_DATA = N_("資料不足：資料從 {d} 開始")
 EMPTY_WEEK = N_("資料不足：這週沒有任何活動紀錄")
+# SP-672: the climbing speed of a session = the 上坡腳程 chart's (views uphill-vam): metres gained per hour on
+# grades ≥ 5 %, moving, heart rate < LTHR, ≥ 10 min of it. The whole session's VAM (climbing ÷ all the time,
+# flats and descents included) fell on every long mountain day and made the build look slower (owner: −8…−22 %)
+_UP = "rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate))"
+UPHILL_EXPR = (f"if(sum(if({_UP}, deltatime)) >= 600, sum(if({_UP}, delta(_elevation))) / "
+               f"sum(if({_UP}, deltatime)) * 3600)")
 # SP-672: the chart each non-count item opens (views/*.json chart ids; the card links them with a range);
 # the count items (weekly_long, terrain, b2b, race_sim, high_test) have none, long_climb / repeat draw their own
 CHART = {"long": "route-difficulty-specific", "long_road": "long-run-km-specific", "ctl_top": "pmc-all",
@@ -114,7 +119,11 @@ def longest_climb(km: list, z: list) -> Optional[float]:
 
 
 def _road(race: dict, sport: str) -> bool:
-    return sport == "road" or race.get("kind") == "road"
+    """A road race: the event says so, or its hardest day climbs < race_feasibility.CLIMB_MIN_M (judged on km,
+    as race_feasibility.readiness does). SP-672: the athlete's main sport no longer decides — a road runner's
+    mountain race (1429 m on 14 km) was judged as a road race on km."""
+    del sport
+    return race.get("kind") == "road" or F.hardest_day(race)["climb_m"] < F.CLIMB_MIN_M
 
 
 def _aim(race: dict, road: bool) -> Optional[float]:
@@ -303,7 +312,7 @@ def _pct(x: Optional[float]) -> str:
 def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str = "trail", b2b: bool = False,
           accepted_b2b: Iterable = (), perf: Optional[dict] = None, ctl: Optional[list] = None,
           tests: Iterable = (), race_tsb: Optional[dict] = None, injuries: Iterable = (), rpe: Iterable = (),
-          first_day: Optional[dt.date] = None) -> dict:
+          first_day: Optional[dt.date] = None, taper_days: Optional[int] = None) -> dict:
     """The board of `race` (specific_phase.race_day's dict; None = no next A race). `acts`: activity_rows
     (+ climb_dz) from 賽前第 10 週 on; `perf`: {"power": [{date, "300", "1200", "3600"}], "vam": [{date, vam}]}
     (the last ~4 months); `ctl`: [(date, chronic load)] daily, ≥ a year when there is one; `tests`: dates of
@@ -327,7 +336,8 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     long_hist = first_day is not None and (today - first_day).days >= HISTORY_DAYS
     fr = SP.ROAD_FRAC if road else SP.FRAC
     hd = F.hardest_day(race)
-    taper_from = start - dt.timedelta(days=P.TAPER_DAYS)
+    td = int(taper_days or P.TAPER_DAYS)              # the 減量期 length (planning.taper_days; 課表偏好)
+    taper_from = start - dt.timedelta(days=td)
 
     def asof(w: int) -> dt.date:
         return min(sun[w], today)
@@ -404,7 +414,8 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
 
     cells, hits = {}, {}
     for w in spec:
-        hits[w] = any((plan_share(a, race, road) or 0.0) >= fr[w] * WEEKLY_LONG_SHARE for a in wk(w))
+        # SP-672: the long day's tolerance (LONG_TOL) here too — the owner's 1.1 h against 1.2 h was a miss
+        hits[w] = any((plan_share(a, race, road) or 0.0) >= fr[w] * WEEKLY_LONG_SHARE * LONG_TOL for a in wk(w))
         cells[w] = mk(w, hits[w], "1", _("這週一次長距離"), 1, int(hits[w]))
     past = [w for w in spec if w >= cur][-WEEKLY_LONG_WEEKS:] if not preview else []
     done_past = [w for w in past if w > cur or hits[w]]
@@ -441,8 +452,8 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
             vol.append({"id": "long_climb", "name": _("長爬坡（最長一段）"), "crit": _("到比賽最長一段的 70 %"),
                         "met": None, "reason": _(NO_GPX), "cells": cells, "series": series, "chart": own})
 
+    mpk = hd["climb_m"] / hd["km"] if hd["km"] else None
     if not road and hd["km"]:
-        mpk = hd["climb_m"] / hd["km"]
 
         def similar(a: dict) -> bool:
             return (bool(a["km"]) and a["climb_m"] >= SP.CLIMB_MIN_GAIN
@@ -570,12 +581,12 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
                    chart={"id": CHART["climb_early"], **taper_span}))
     cells = {}
     dd = ctl_down_days(ctl, min(today, start - dt.timedelta(days=1)))
-    okd = dd is not None and dd <= CTL_DOWN_MAX and today >= start - dt.timedelta(days=1)
+    okd = dd is not None and dd <= td and today >= start - dt.timedelta(days=1)
     if 1 in mons:
         cells[1] = mk(1, okd, "" if dd is None else _("{n} 天", n=dd),
-                      "" if dd is None else _("長期負荷已經連續下降 {n} 天", n=dd), CTL_DOWN_MAX, dd,
-                      unknown=None if dd is not None else _("還沒有長期負荷資料"), lock=lock, aim=f"≤{CTL_DOWN_MAX}")
-    rs.append(item("ctl_down_days", _("長期負荷往下不超過 7 天"), "", cells, None if lock else okd,
+                      "" if dd is None else _("長期負荷已經連續下降 {n} 天", n=dd), td, dd,
+                      unknown=None if dd is not None else _("還沒有長期負荷資料"), lock=lock, aim=f"≤{td}")
+    rs.append(item("ctl_down_days", _("長期負荷往下不超過減量的 {n} 天", n=td), "", cells, None if lock else okd,
                    chart={"id": CHART["ctl_down_days"], **span(taper_from - dt.timedelta(days=28), start)}))
     band = LG.TSB_RACE["A"]
     cells = {}
@@ -605,7 +616,7 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     s1 = stage("volume", _("專項量"), _("賽前 10 → 3 週"), vol, not preview, mons[BOARD_WEEKS])
     s2 = stage("validation", _("表現驗證"), _("賽前 6 → 3 週"), val,
                not preview and (cur <= VALIDATION_FROM or s1["passed"]), mons.get(VALIDATION_FROM, today))
-    s3 = stage("race_state", _("比賽狀態"), _("賽前 10 → 0 天"), rs, not lock, taper_from)
+    s3 = stage("race_state", _("比賽狀態"), _("賽前 {n} → 0 天", n=td), rs, not lock, taper_from)
     stages = [s1, s2, s3]
 
     # ---- every week --------------------------------------------------------------------------
@@ -657,8 +668,45 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     due = sum(1 for c in allc if c["counts"])
     done = sum(1 for c in allc if c["counts"] and c["state"] == "done")
     lv = "unknown" if preview else level_of(due, done)
+    def todo(iid: str, c: dict) -> str:
+        """SP-672: 本週要做 says what to do this week (not what was reached)."""
+        t, a = c.get("target"), c.get("actual")
+        if iid == "long":
+            if a:
+                return _("{a}（還差 {d}）", a=amount(t), d=amount(max(0.0, t - a)))
+            return amount(t)
+        if iid == "weekly_long":
+            return _("排一次 {a} 以上的長距離", a=amount(fr.get(cur, 0.0) * WEEKLY_LONG_SHARE))
+        if iid == "long_climb":
+            m, want = c.get("actual_m") or 0.0, c.get("target_m") or 0
+            return _("一段連續爬升 {m} m（還差 {d} m）", m=want, d=round(max(0.0, want - m))) if m else \
+                _("一段連續爬升 {m} m", m=want)
+        if iid == "terrain":
+            return _("排一次每公里爬升 {lo}–{hi} m 的爬坡課", lo=round(mpk * TERRAIN_LO), hi=round(mpk * TERRAIN_HI)) \
+                if mpk else _("排一次爬坡課")
+        if iid == "b2b":
+            return _("排一次背對背長天")
+        if iid == "race_sim":
+            return _("排一次照比賽配速的長天（{a}）", a=amount(fr.get(cur, 0.0)))
+        if iid == "repeat":
+            return _("多跑幾次接近自己最佳的表現（前 5 次平均到最高的 {p}）", p=_pct(REPEAT_OK))
+        if iid == "ctl_top":
+            return _("長期負荷拉到自己近 365 天的前 {p}", p=_pct(CTL_TOP))
+        if iid == "uphill":
+            return _("上坡腳程要比 8 週前快 {p}", p=_pct(VAM_TREND))
+        if iid == "high_test":
+            return _("排一次模擬賽或測驗")
+        if iid == "taper_volume" and nh:
+            return _("這週總時數控制在 {lo}–{hi} 小時", lo=f"{nh * TAPER_BAND[0]:.1f}", hi=f"{nh * TAPER_BAND[1]:.1f}")
+        if iid == "climb_early" and nc:
+            return _("這週爬升控制在 {m} m 以內", m=round(nc * TAPER_BAND[1]))
+        if iid == "ctl_down_days":
+            return _("長期負荷連續往下別超過 {n} 天", n=td)
+        if iid == "race_tsb":
+            return _("比賽日負荷平衡落在長期負荷的 +10～+35 %")
+        return c.get("detail") or ""
     this_week = [] if preview else [
-        {"stage": s["id"], "item": i["id"], "name": i["name"], "detail": i["cells"][cur]["detail"],
+        {"stage": s["id"], "item": i["id"], "name": i["name"], "detail": todo(i["id"], i["cells"][cur]),
          "target": i["cells"][cur]["target"]}
         for s in stages for i in s["items"] if (i["cells"].get(cur) or {}).get("state") == "due"]
     weeks = [{"week": w, "monday": mons[w].isoformat(), "phase": "taper" if w <= TAPER_FROM else "specific",
@@ -757,8 +805,10 @@ def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = 
     vam, power = [], []
     for w in st.between(120, 0):
         day = day_to_date(math.floor(w.day))
-        if st.mountain(w) and (st.m(w, "climbing") or 0) > 200 and st.m(w, "vam"):
-            vam.append({"date": day, "vam": st.m(w, "vam")})
+        if st.mountain(w) and (st.m(w, "climbing") or 0) > 200:
+            v = _safe(lambda w=w: st.ev.evaluate(UPHILL_EXPR, w), None)
+            if v is not None and v == v and v > 0:
+                vam.append({"date": day, "vam": float(v)})
         if O.category(w) in O.FOOT and day >= perf_lo:
             cur = _safe(lambda w=w: ds.workout_curve(w.idx, "power"), None)
             if cur and cur[0]:
@@ -815,5 +865,7 @@ def compute(plan, ds, today: dt.date, predict=None) -> dict:
     mons = week_mondays(start)
     since = min(min(mons.values()), today)
     data = inputs(ds, plan, today, since, start)
-    return board(rc, today, data.pop("acts", []), sport=PSP.effective(ds, plan.events, today),
+    from backend.engine import planning as P
+    td = _safe(lambda: P.taper_days(e, P.taper_days_setting()), P.TAPER_DAYS) if e else P.TAPER_DAYS
+    return board(rc, today, data.pop("acts", []), sport=PSP.effective(ds, plan.events, today), taper_days=td,
                  b2b=bool(e and B2B.qualifies(e) and e.kind != "road"), accepted_b2b=B2B.load_accepted(), **data)

@@ -610,8 +610,9 @@ async function j(url, retry = 1) {
   }
   return r.json();
 }
-function save() { try { localStorage.setItem("charts", JSON.stringify({ mode: S.mode, dash: S.dash, view: S.view,
-  range: S.range, begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel, workoutPlan: S.workoutPlan || null })); } catch {} }
+// S.keepRange: a deep link's range is used once (SP-672) — what is saved stays the user's own range until they pick one
+function save() { const kr = S.keepRange; try { localStorage.setItem("charts", JSON.stringify({ mode: S.mode, dash: S.dash, view: S.view,
+  range: kr ? kr.range : S.range, begin: kr ? kr.begin : $("begin").value, end: kr ? kr.end : $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel, workoutPlan: S.workoutPlan || null })); } catch {} }
 function restore() { try { return JSON.parse(localStorage.getItem("charts") || "{}"); } catch { return {}; } }
 
 function viewKind(v) {
@@ -727,7 +728,10 @@ async function init() {
     if (/^\d+$/.test(qc ?? "")) { S.zoomAfter = +qc; S.focusChart = +qc; }
     // &begin=&end= (SP-672: the 賽前完備程度 card opens an item's chart on its weeks): that range, typed in
     const qb = qp.get("begin"), qe = qp.get("end"), isoRe = /^\d{4}-\d\d-\d\d$/;
-    if (isoRe.test(qb ?? "") && isoRe.test(qe ?? "") && qb <= qe) { S.range = "custom"; $("begin").value = qb; $("end").value = qe; }
+    if (isoRe.test(qb ?? "") && isoRe.test(qe ?? "") && qb <= qe) {
+      S.keepRange = { range: S.range, begin: $("begin").value, end: $("end").value };   // only this visit
+      S.range = "custom"; $("begin").value = qb; $("end").value = qe;
+    }
     history.replaceState(null, "", location.pathname);
   }
   // deep link from the 課表 page: ?workout=<activity index>&label=<shown name> opens that activity
@@ -738,7 +742,7 @@ async function init() {
   }
   $("m-season").onclick = () => setMode("season");
   $("m-workout").onclick = () => setMode("workout");
-  $("begin").onchange = $("end").onchange = () => { S.range = "custom"; onFilter(); };
+  $("begin").onchange = $("end").onchange = () => { S.keepRange = null; S.range = "custom"; onFilter(); };
   $("sports").onchange = onFilter;
   initChrome();
   filterSummary();
@@ -787,6 +791,7 @@ function setRangeDates(d) {
   $("begin").value = iso(begin);
 }
 function preset(d) {
+  S.keepRange = null;
   S.range = d;
   setRangeDates(d);
   onFilter();
