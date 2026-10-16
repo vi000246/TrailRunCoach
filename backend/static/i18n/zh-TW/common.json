@@ -246,6 +246,8 @@
   "feas.feas": "來不來得及練",
   "feas.feas_effort": "以現在的能力",
   "feas.ready": "現在練得夠不夠",
+  "feas.ready_go_build": "→ 看專項期",
+  "feas.ready_go_taper": "→ 看減量期",
   "feas.detail": "詳細",
   "feas.src": "依據",
   "feas.k_week": "一週練量：比賽的 {p}%",

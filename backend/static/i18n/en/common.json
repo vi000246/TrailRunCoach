@@ -246,6 +246,8 @@
   "feas.feas": "Time to get ready?",
   "feas.feas_effort": "With today's fitness",
   "feas.ready": "Ready now?",
+  "feas.ready_go_build": "→ See the build phase",
+  "feas.ready_go_taper": "→ See the taper",
   "feas.detail": "Details",
   "feas.src": "Based on",
   "feas.k_week": "Weekly training: {p}% of the race",

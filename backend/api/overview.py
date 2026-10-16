@@ -477,8 +477,42 @@ def feasibility(event_id: Optional[str] = None):
     if p is not None:                  # SP-394: CTL and the long-run history: after the back-fill
         return {"today": today.isoformat(), "races": [], "pending": p,
                 "levels": {k: _(v) for k, v in RF.LEVEL_LABEL.items()}, "chart_href": _specific_chart_href()}
-    return {"today": today.isoformat(), "races": RF.races(plan, ds, today, event_id=event_id),
-            "levels": {k: _(v) for k, v in RF.LEVEL_LABEL.items()}, "chart_href": _specific_chart_href()}
+    out = {"today": today.isoformat(), "races": RF.races(plan, ds, today, event_id=event_id),
+           "levels": {k: _(v) for k, v in RF.LEVEL_LABEL.items()}, "chart_href": _specific_chart_href()}
+    if not event_id:                   # SP-652: the season plan's 完備程度 row (not the race calculator's)
+        out["ready_line"] = _ready_line(plan, ds, today)
+    return out
+
+
+READY_CARD = {"build": "race-readiness", "taper": "race-readiness-taper"}   # views/periodization.json
+
+
+def _ready_line(plan, ds, today) -> Optional[dict]:
+    """「賽前準備：第 n 段〈…〉x/y（…）」 of the next A race's 賽前完備程度 board (race_readiness.line) and the
+    link to that card on the 專項期 page (減量期 page once the taper started); None when the board fails."""
+    from backend.engine import race_readiness as RD
+    try:
+        ln = RD.line(RD.compute(plan, ds, today))
+    except Exception:                          # noqa: BLE001 — no line: the card keeps its old row
+        logging.getLogger(__name__).exception("race readiness line")
+        return None
+    ln["href"] = _chart_href_by_id(READY_CARD[ln["phase"]])
+    return ln
+
+
+def _chart_href_by_id(cid: str) -> str:
+    """The viewer deep link of the custom-view chart with id `cid`; the plain viewer when there is none."""
+    from urllib.parse import urlencode
+    from backend.engine.wko5expr.customviews import load_custom_views
+    try:
+        for name, v in load_custom_views().items():
+            for di, d in enumerate(v.get("dashboards") or []):
+                for ci, c in enumerate(d.get("charts") or []):
+                    if c.get("id") == cid:
+                        return "/api/v1/app/viewer?" + urlencode({"view": name, "dash": di, "chart": ci})
+    except Exception:                          # noqa: BLE001 — a broken view file: plain viewer link
+        pass
+    return "/api/v1/app/viewer"
 
 
 def _specific_chart_href() -> str:

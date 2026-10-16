@@ -840,7 +840,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
     if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate", "periodzones",
-                                                    "climbvam", "polecompare", "pdtrend"):
+                                                    "climbvam", "polecompare", "pdtrend", "readiness"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     if needs_workout and begin is None and end is None and not CS.reads_range(ch):
         # SP-336 review #2: a single-activity chart asked with only ?workout= is about that activity:
@@ -876,6 +876,10 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         tests = [[s["uid"], s["state"], (s.get("done_by") or {}).get("index"), s.get("protocol")]
                  for s in test_sessions()]
         params = {**params, "_prefs": PP.load().stamp(), "_tests": json.dumps(tests, default=str)}
+    if ch.get("kind") == "readiness":
+        # SP-651: the board reads today, the plan's projection to the race (its load balance), the
+        # injuries, the self-ratings and the accepted 背對背 weekends — none of them in the data fingerprint
+        params = {**params, "_readiness": readiness_stamp()}
     if ch.get("kind") in ("zones", "targets", "activity", "periodzones", "review"):
         # HR zones / targets read the COROS account and the 課表心率區間 setting (engine/hr_profile.py);
         # the review's 「輕鬆」 reads the easy cap of those zones (SP-565)
@@ -1121,6 +1125,43 @@ def z5gate_panel(ch: dict, ds: Dataset, b: float, e: float, prefs=None) -> dict:
             "range_note": f"重播 {begin.isoformat()} 起（最多 1 年）" if begin > day_to_date(int(math.floor(b))) else None}
 
 
+def readiness_stamp() -> str:
+    """The inputs of the 賽前完備程度 board outside the data fingerprint (the cache key's part)."""
+    from backend.engine import activity_tags as AT
+    from backend.engine import b2b as B2B
+    from backend.engine import injuries as INJ
+
+    def safe(f):
+        try:
+            return f()
+        except Exception:                      # noqa: BLE001 — a missing store = no rows
+            return None
+
+    def plan_days():
+        from backend.engine.panels import plan_projection as PJ
+        t = today_local()
+        return PJ.inputs(t, t + dt.timedelta(days=80))
+    rpe = safe(AT.load_recorded) or []
+    return json.dumps([today_local().isoformat(), safe(INJ.load_events), safe(B2B.load_accepted),
+                       [[r.get("start"), r.get("file"), r.get("rpe")] for r in rpe if isinstance(r, dict)],
+                       safe(plan_days)], default=str, sort_keys=True)
+
+
+def readiness_panel(ch: dict, ds: Dataset, b: float, e: float) -> dict:
+    """The 賽前完備程度 card (SP-651): race_readiness.compute for the next A race, as of today (the
+    range does not change it), and the 課表 page on this week's Monday for 「安排課表」."""
+    from backend.engine import race_readiness as RD
+    from backend.engine.quality_gate import SCHEDULE_PAGE
+    today = today_local()
+    plan = getattr(ds, "plan", None)
+    if plan is None:
+        from backend.engine.planning import Plan
+        plan = Plan.load()
+    mon = today - dt.timedelta(days=today.weekday())
+    return {"title": ch.get("title"), "description": ch.get("description"), "kind": "readiness",
+            "readiness": RD.compute(plan, ds, today), "schedule": f"{SCHEDULE_PAGE}?day={mon.isoformat()}"}
+
+
 def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
             params: Optional[dict] = None) -> dict:
     if ch.get("kind") == "periodzones":
@@ -1154,6 +1195,8 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
         return render_map(ch, ds, w)
     if ch.get("kind") == "z5gate":
         return z5gate_panel(ch, ds, b, e)
+    if ch.get("kind") == "readiness":
+        return readiness_panel(ch, ds, b, e)
     if ch.get("kind") in ("zones", "targets"):
         import math
         from backend.engine.zones import training_targets, zone_table

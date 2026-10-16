@@ -10390,5 +10390,305 @@
   "這週 {day} 已有強度課，減量期的日子不再排第二堂": {
     "draft": true,
     "src": "backend/engine/overview.py"
+  },
+  "傷病": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:36"
+  },
+  "到上週為止該達成 {n} 個、做到 {m} 個": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:353"
+  },
+  "專項期從 {d} 開始": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:351"
+  },
+  "比賽沒有 GPX：上傳 GPX 才算得出最長一段連續爬升": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:73"
+  },
+  "沒有進行中的傷病": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:395"
+  },
+  "賽前準備：第 {n} 段〈{name}〉{d}/{t}（{label}）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:610"
+  },
+  "照進度": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:34"
+  },
+  "落後": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:34"
+  },
+  "賽事模擬": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:63"
+  },
+  "進行中：{x}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:393"
+  },
+  "還沒有任何跑步或健行紀錄": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:72"
+  },
+  "還沒有到期的目標": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:355"
+  },
+  "長天": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:62"
+  },
+  "長期負荷週增量": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:36"
+  },
+  "長期負荷已經連續下降 {n} 天": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:492"
+  },
+  "爬升量提早減": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:486"
+  },
+  "量減到平常的 40–60 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:478"
+  },
+  "8 週內或 8 週前的爬坡紀錄不到 2 次": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:447"
+  },
+  "每小時爬升比 8 週前 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:445"
+  },
+  "高區做一次驗證": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:459"
+  },
+  "賽前第 {w} 週還可以做": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:412"
+  },
+  "到比賽最長一段 {m} m 的 70 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:369"
+  },
+  "賽前 3 週以前做到 {n} 次": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:400"
+  },
+  "比賽日負荷平衡": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:506"
+  },
+  "賽前 10 → 3 週": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:520"
+  },
+  "還差 {n} 項": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:516"
+  },
+  "前 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:435"
+  },
+  "{d} 解鎖": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:515"
+  },
+  "賽前 3 天看實際值": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:503"
+  },
+  "長爬坡（最長一段）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:368"
+  },
+  "每週一次長距離": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:348"
+  },
+  "比賽狀態": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:31"
+  },
+  "資料不到 90 天，先不算": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:80"
+  },
+  "自評 RPE": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:568"
+  },
+  "做到 {n} 次": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:397"
+  },
+  "近 4 週 {k} 次坡度相近（每公里爬升 {m} m 左右）的課": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:385"
+  },
+  "到比賽最長一段的 70 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:372"
+  },
+  "賽前 2 週開始": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:486"
+  },
+  "前 5 次平均是最高的 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:425"
+  },
+  "表現驗證": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:23"
+  },
+  "上坡腳程變快": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:449"
+  },
+  "第 {a} 或 {b} 週一次照比賽配速的長天": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:414"
+  },
+  "目標 {t} m，做到 {m} m": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:364"
+  },
+  "背對背長天（B2B）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:399"
+  },
+  "長期負荷的 +10～+35 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:506"
+  },
+  "長期負荷到自己的高區": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:439"
+  },
+  "長期負荷往下不超過 7 天": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:494"
+  },
+  "還沒有長期負荷資料": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:493"
+  },
+  "課表還沒排到比賽日，推算不出來": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:504"
+  },
+  "長期負荷一週 {r}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:540"
+  },
+  "像比賽的地形": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:385"
+  },
+  "最近 6 週不到 5 次可比的表現": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:425"
+  },
+  "這週一次長距離": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:345"
+  },
+  "近 365 天的前 20 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:439"
+  },
+  "模擬賽或測驗一次": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:455"
+  },
+  "強度保留": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:478"
+  },
+  "{s}：長期負荷的 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:503"
+  },
+  "近 4 週每週 1 次": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:348"
+  },
+  "模擬賽或測驗": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:455"
+  },
+  "同一種課的自評比上次 {d}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:567"
+  },
+  "賽前 6 → 3 週": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:521"
+  },
+  "賽前 10 → 0 天": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:523"
+  },
+  "坡度相近的爬坡課 {n} 次": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:383"
+  },
+  "這場比賽課表沒有排 B2B": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:402"
+  },
+  "比 8 週前快": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:449"
+  },
+  "前 5 次平均 ≥ 最高的 97 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:429"
+  },
+  "照比賽配速的長天": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:408"
+  },
+  "爬升是平常的 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:484"
+  },
+  "在自己近 365 天的前 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:436"
+  },
+  "目標 {t}，做到 {b}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:337"
+  },
+  "最佳表現重複得出來": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:429"
+  },
+  "課表推算": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:500"
+  },
+  "專項量": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:8"
+  },
+  "最硬一次 ≥ 比賽最難那天的 70 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:340"
+  },
+  "平常的 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:475"
   }
 }

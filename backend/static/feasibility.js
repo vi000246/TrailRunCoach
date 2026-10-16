@@ -128,7 +128,9 @@
       .filter(Boolean).join(" · ");
     const out = [`<div class="feas" data-event="${esc(r.event_id || "")}"><div class="feas-h"><b>${esc(r.name)}</b><span class="feas-m">${esc(meta)}</span></div>`];
     if (r.skipped) { out.push(`<div class="feas-m">${esc(r.skipped)}</div></div>`); return out.join(""); }
-    const sg = r.suggestions || [], rd = r.readiness, multi = (r.days || 1) > 1;
+    // SP-652: on the season plan, 完備程度 is one sentence of the 賽前完備程度 board (r.ready_line, from
+    // GET …/feasibility's ready_line) and a link to that card; its old checks and sources are gone
+    const rl = r.ready_line, rd = rl ? null : r.readiness, sg = r.suggestions || [], multi = (r.days || 1) > 1;
     // SP-292: 資料等級 0 / 1 — the data the verdict stands on (「依你填的資料」／「資料還少」, translated by the
     // engine); its sentence is a line (PL20) below
     const src = r.data_source;
@@ -137,7 +139,10 @@
     const ef = r.effort, feasQ = ef !== undefined ? T("feas_effort") : T("feas");
     const efPill = ef && ef.title !== r.label ? pill(ef.level, ef.title) : "";
     out.push(`<div class="feas-r"><span class="q">${esc(feasQ)}</span><span class="feas-k">${pill(r.level, r.label)}${efPill}${src ? pill("unknown", src.label) : ""}${nums(r.checks, multi, lv)}</span>`);
-    if (rd) out.push(`<span class="q">${esc(T("ready"))}</span><span class="feas-k">${pill(rd.level, rd.label)}${nums(rd.checks, multi, lv)}</span>`);
+    if (rl) out.push(`<span class="q">${esc(T("ready"))}</span><span class="feas-k"><span data-fi>${esc(rl.text)}</span>`
+      + (rl.href ? ` <a class="feas-go" href="${esc(rl.href)}">${esc(T(rl.phase === "taper" ? "ready_go_taper" : "ready_go_build"))}</a>` : "")
+      + `</span>`);
+    else if (rd) out.push(`<span class="q">${esc(T("ready"))}</span><span class="feas-k">${pill(rd.level, rd.label)}${nums(rd.checks, multi, lv)}</span>`);
     out.push(`</div>`);
     const ln = lines(r, opts, lv);
     if (ln.html) out.push(`<div class="feas-hints">${ln.html}</div>`);

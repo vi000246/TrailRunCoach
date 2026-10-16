@@ -629,7 +629,9 @@ async function loadFeas() {
       return;
     }
     sec.hidden = !(r.races || []).length;
-    feasRaces = r.races || [];
+    // SP-652: the 完備程度 row of the next A race's card = r.ready_line (no next A race: on every card)
+    const rl = r.ready_line;
+    feasRaces = (r.races || []).map((x) => (rl && (!rl.race_id || rl.race_id === x.event_id) ? { ...x, ready_line: rl } : x));
     drawFeas();
     if (window.Hints) Hints.bind(box, (st) => { feasHint = st; drawFeas(); });
   } catch (x) {
