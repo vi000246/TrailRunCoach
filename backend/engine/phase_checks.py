@@ -41,7 +41,7 @@ HIGH_BAND = (0.10, 0.15)
 MID_RISE = 3                     # 推估: the middle share up 3 weeks in a row (4 weeks) → say how to change it
 RAMP_BAND = (0.02, 0.05)         # SP-678 (owner 2026-10-16): chronic load +2–5 % a week, the range runners hold for
                                  # weeks to months (the 2 % floor 推估); the goal GOAL["base"] (4 %); over
-                                 # load_guard.WATCH_PCT (10 %) 注意
+                                 # load_guard.watch_line (max(WATCH_MIN points, WATCH_PCT × chronic load)) 注意
 RECOVERY_EVERY = 3               # overview's 3:1 (SRC_31): after 3 build weeks a recovery week
 
 CHART = {"rest": "weekly-hours", "easy_only": "intensity-distribution", "volume": "weekly-hours",
@@ -277,21 +277,26 @@ def base(today: dt.date, weeks: list[dict], ctl: list, *, phase: Optional[dict] 
             return None
         return (b - a) / a, a
     lo_b, hi_b = RAMP_BAND
-    top = LG.WATCH_PCT
 
-    def zone(pct: float) -> str:
-        return "low" if pct < lo_b - 1e-9 else "ok" if pct <= hi_b + 1e-9 else "fast" if pct < top - 1e-9 else "high"
+    def watch_pct(a: float) -> float:
+        # SP-678: load_guard's 注意 line, max(WATCH_MIN points, WATCH_PCT × chronic load), as a % of chronic load
+        return LG.watch_line(a) / a
+
+    def zone(pct: float, a: float) -> str:
+        top_a = watch_pct(a)
+        return "low" if pct < lo_b - 1e-9 else "ok" if pct <= hi_b + 1e-9 else "fast" if pct < top_a - 1e-9 else "high"
     rows = []
     for w, r in zip(weeks, rec):
         d = min(today, w["monday"] + dt.timedelta(days=6))
         x = ramp_on(d)
         pct = round(x[0], 4) if x else None
         rows.append({"monday": w["monday"].isoformat(), "pct": pct, "pts": round(x[0] * x[1], 1) if x else None,
-                     "recovery": bool(r), "zone": None if r or pct is None else zone(pct),
+                     "recovery": bool(r), "zone": None if r or pct is None else zone(x[0], x[1]),
                      "now": w["monday"] == mon})
     now = ramp_on(today)
     v = now[0] if now else None
-    z = zone(v) if v is not None else None
+    z = zone(v, now[1]) if v is not None else None
+    top = round(watch_pct(now[1]), 4) if now else LG.WATCH_PCT
     if v is None:
         st, lab, todo = "wait", None, None
     elif rec[-1]:

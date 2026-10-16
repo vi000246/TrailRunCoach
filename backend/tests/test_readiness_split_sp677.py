@@ -104,6 +104,13 @@ def test_ctl_down_days_and_race_tsb_states():
     assert rt["state"] == "ok"
 
 
+def test_race_tsb_not_projectable_shows_a_dash_not_the_target():
+    # the plan doesn't reach race day: the big number is 「—」; the target stays in the text and the band
+    rt = chk(taper(usual_weeks(), race_tsb=None), "race_tsb")
+    assert rt["value"] is None and rt["show"] == "—", rt
+    assert "+10～+35 %" in rt["target"] and rt["band"], rt
+
+
 def test_taper_before_it_starts_is_locked_with_its_targets():
     t = taper(usual_weeks(), today=TAPER_FROM - dt.timedelta(days=3))
     assert t["pre"] is True and "12/2" in t["text"]

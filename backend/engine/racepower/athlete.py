@@ -1195,7 +1195,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     exclude = exclude or set()
     runs_365 = [w for w in ds.workouts if w.sport == "run" and tday - RIEGEL_WINDOW_DAYS < w.day <= tday + 1
                 and w.idx not in exclude]
-    runs_90 = [w for w in runs_365 if w.day > tday - CP_WINDOW_DAYS]
+    runs_90 = [w for w in runs_365 if in_cp_window(w.day, tday)]     # SP-667: 90 calendar days, like the CP fit
     metrics = run_metrics(ds, runs_365, weight)
     by_idx = {w.idx: w for w in ds.workouts}
 

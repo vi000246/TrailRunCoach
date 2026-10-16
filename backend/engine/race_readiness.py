@@ -813,9 +813,11 @@ def taper(race: Optional[dict], today: dt.date, acts: list[dict], *, ctl: Option
         todo = _("比賽日還太累：剩下幾天再少練一點")
     elif share is not None and share > band[1]:
         todo = _("比賽日太放鬆：保留一兩次短的強度課")
-    sh = f"{share * 100:+.0f} %" if share is not None else f"{band[0] * 100:+.0f}～{band[1] * 100:+.0f} %"
+    # SP-677: not projectable yet → 「—」 (the target stays in the text and the band); locked → the target
+    sh = f"{share * 100:+.0f} %" if share is not None else \
+        f"{band[0] * 100:+.0f}～{band[1] * 100:+.0f} %" if pre else "—"
     tgt = (_("照課表推算；目標長期負荷的 +10～+35 %") if src == "plan" else _("實際；目標長期負荷的 +10～+35 %")
-           if src == "actual" else _("課表還沒排到比賽日，推算不出來"))
+           if src == "actual" else _("課表還沒排到比賽日，推算不出來；目標長期負荷的 +10～+35 %"))
     check("race_tsb", _("比賽日負荷平衡"), share, sh, tgt, band, (-0.2, 0.5), st, todo, span=load_span,
           label=_("偏低") if st == "warn" and share < band[0] else _("偏高") if st == "warn" else None)
 

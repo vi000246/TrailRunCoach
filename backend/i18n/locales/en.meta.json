@@ -10583,7 +10583,7 @@
     "draft": true,
     "src": "backend/engine/race_readiness.py:493"
   },
-  "課表還沒排到比賽日，推算不出來": {
+  "課表還沒排到比賽日，推算不出來；目標長期負荷的 +10～+35 %": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:504"
   },

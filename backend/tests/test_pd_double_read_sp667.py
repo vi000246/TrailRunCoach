@@ -254,3 +254,23 @@ def test_the_pd_memo_and_the_synced_curve_cache_are_refitted():
     from backend.engine.wko5expr import fitdataset as FD
     assert FD.ESTIMATE_CODE_V >= 2
     assert T._KEY_VERSION >= 3
+
+
+def test_derive_race_power_reads_the_same_90_calendar_days(tmp_path, monkeypatch):
+    """derive()'s runs_90 (the race-power PD model, envelope, training conditions) is in_cp_window too:
+    the run at noon of the 91st day back is out (`w.day > tday - 90` let it in)."""
+    monkeypatch.setattr(WX, "HOME", str(tmp_path))
+    end = D(2026, 10, 8)
+    days = [(end - dt.timedelta(days=90), 12), (end - dt.timedelta(days=89), 6)] + \
+        [(end - dt.timedelta(days=3 * i), 6) for i in range(6)]
+    got = {}
+    real = A.pd_model
+
+    def spy(ds_, day, runs, ref, *a, **kw):
+        got["pd"] = sorted(w.entry.start.date() for w in runs)
+        return real(ds_, day, runs, ref, *a, **kw)
+    monkeypatch.setattr(A, "pd_model", spy)
+    ds = _fit_ds(tmp_path, days)
+    out = A.derive(ds, end, fetch_weather=False)
+    assert got["pd"][0] == end - dt.timedelta(days=89) and len(got["pd"]) == 7, got
+    assert out["counts"]["runs_90"] == 7

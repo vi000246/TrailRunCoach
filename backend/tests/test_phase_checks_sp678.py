@@ -308,3 +308,15 @@ def test_api_draws_the_three_cards_on_the_demo(demo):
     j = _get(demo, "base", "z5-gate")
     assert j["kind"] == "z5gate" and j["unlock"]["kind"] == "unlock", j
     assert [t["zone"] for t in j["unlock"]["tiles"]] == [3, 5]
+
+
+def test_base_watch_line_follows_load_guard_with_its_floor_in_points():
+    # SP-678: 注意 = max(WATCH_MIN 點, WATCH_PCT × 長期負荷) as a %, like load_guard; at chronic load ~20 the
+    # 3-point floor is ~15 %, so +12 % a week is 偏快, not 注意
+    from backend.engine import load_guard as LG
+    ctl = ctl_rising(0.12, start=20.0 / 1.12 ** 10)
+    c = chk(PC.base(TODAY, weeks(), ctl), "ramp")
+    prev = dict(ctl)[TODAY - dt.timedelta(days=7)]
+    assert c["watch"] == pytest.approx(LG.watch_line(prev) / prev, abs=1e-3) and c["watch"] > 0.13, c["watch"]
+    assert (c["weeks"][-1]["zone"], c["state"], c["label"]) == ("fast", "warn", "偏快"), c
+    assert "10 %" not in c["target"]

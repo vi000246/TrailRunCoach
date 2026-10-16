@@ -2803,7 +2803,7 @@
   "長期負荷到自己的高區": "Chronic load at your own high",
   "長期負荷往下不超過減量的 {n} 天": "Chronic load falls no longer than the {n}-day taper",
   "還沒有長期負荷資料": "No chronic load data yet",
-  "課表還沒排到比賽日，推算不出來": "The plan doesn't reach race day yet, so it can't be projected",
+  "課表還沒排到比賽日，推算不出來；目標長期負荷的 +10～+35 %": "The plan doesn't reach race day yet, so it can't be projected; target +10 to +35 % of chronic load",
   "長期負荷一週 {r}": "Chronic load {r} this week",
   "像比賽的地形": "Race-like terrain",
   "最近 6 週不到 5 次可比的表現": "Fewer than 5 comparable efforts in the last 6 weeks",
