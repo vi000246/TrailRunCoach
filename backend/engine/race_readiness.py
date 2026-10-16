@@ -869,6 +869,11 @@ def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = 
     out["perf"] = {"power": power, "vam": vam}
     lo = since
     ev_days = {e.start for e in plan.events if e.priority in ("B", "C") and lo <= e.start <= today}
+    # SP-674 (owner 2026-10-16): a B / C race matched to its run, and any run marked a race by hand
+    # (linked to an event or not), counts; a title that only says 賽 does not, nor the A race itself
+    from backend.engine import race_activities as RA
+    ev_days |= {_d(a["date"]) for a in _safe(lambda: RA.race_activities(ds, lo, today, plan=plan, today=today), [])
+                if a["priority"] != "A" and (a["source"] == "manual" or a["priority"] in ("B", "C"))}
     out["tests"] = [O.wdate(w) for w in O.workouts_between(ds, lo, today + dt.timedelta(days=1))
                     if O.wdate(w) in ev_days or (O.session_of(ds, w).get("type") or "").endswith("test")]
     out["injuries"] = _safe(INJ.load_events, [])

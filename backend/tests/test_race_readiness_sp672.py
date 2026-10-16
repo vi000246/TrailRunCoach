@@ -338,3 +338,22 @@ def test_high_test_window_ends_with_week_3():
     b = board([act(monday(9), 1, 8, 200)], today=monday(1) + dt.timedelta(days=2),
               perf={"power": prior + [_pw(late, 300)]}, first_day=date(2025, 1, 1))
     assert item(b, "high_test")["met"] is False
+
+
+def test_fitness_check_counts_a_run_marked_a_race_by_hand(tmp_path, monkeypatch):
+    # SP-674 (owner 2026-10-16): any run marked a race by hand counts, linked to an event or not;
+    # a run that only has 賽 in its title does not, nor the A race
+    from backend.engine import planning, race_activities as RA
+    from backend.tests.test_activity_edit import _fit_ds, T0
+    ds = _fit_ds(tmp_path)
+    day = T0.date()
+    plan = planning.Plan(events=[])
+
+    def races(kind, prio=None):
+        return lambda *a, **k: [{"date": day.isoformat(), "source": kind, "priority": prio}]
+
+    for kind, prio, counts in (("manual", None, True), ("manual", "C", True), ("plan", "B", True),
+                               ("title", None, False), ("plan", "A", False)):
+        monkeypatch.setattr(RA, "race_activities", races(kind, prio))
+        got = RD.inputs(ds, plan, day + dt.timedelta(days=1), day - dt.timedelta(days=7))["tests"]
+        assert (day in got) is counts, (kind, prio, got)
