@@ -1083,47 +1083,35 @@ def _apply_period(ch: dict, b: float, e: float, asked: Optional[str], custom: bo
                    "buckets": PD.buckets(b, e, chosen), "range_note": note}
 
 
-Z5GATE_MAX_DAYS = 365       # the replay is day by day: at most a year back from the range's end
-
-
-def z5_progress(ds: Dataset) -> Optional[dict]:
-    """Today's 3-step tracker and the 「還缺什麼」 line: quality_gate.z5_card on the
-    status gate — the very object the 總覽 card (GET /overview/z5) shows, so the
-    chart and the card agree. None when the status can't be computed."""
-    import math
-    from backend.api.overview import _status
-    from backend.engine import quality_gate as QG
-    from backend.engine.overview import day_to_date
-    try:
-        today = day_to_date(int(math.floor(ds.today)))
-        st = _status(ds, today)
-        gate = next((i.extra for i in st.indicators if i.id == "gate"), None) or {}
-        c = QG.z5_card(gate, today)
-    except Exception:                          # noqa: BLE001 — the history still draws
-        return None
-    return {"today": today.isoformat(), **{k: c.get(k) for k in (
-        "state", "label", "headline", "steps", "next", "base", "z3", "keep", "reentry", "open", "flow")}}
-
-
 def z5gate_panel(ch: dict, ds: Dataset, b: float, e: float, prefs=None) -> dict:
-    """The 5 區開放流程 panel: quality_gate.z5_history over the selected range
-    (capped at a year), with the 間歇門檻 preference the planner uses."""
+    """The 強度課表解鎖條件 card (SP-678; replaced the 5 區開放流程 flow and its day-by-day replay): the 3 區 /
+    5 區 tiles of phase_checks.unlock on today's status gate (the object the planner and the 總覽 card
+    read), the range does not change it. The 課表 page on this week's Monday for 「安排課表」."""
     import math
-    from backend.engine import quality_gate as QG
+    from backend.engine import phase_checks as PC
     from backend.engine.overview import day_to_date
-    if prefs is None:
-        from backend.engine import plan_prefs as PP
-        prefs = PP.load()
-    end = min(day_to_date(int(math.floor(e))), day_to_date(int(math.floor(ds.today))))
-    begin = max(day_to_date(int(math.floor(b))), end - dt.timedelta(days=Z5GATE_MAX_DAYS))
+    from backend.engine.quality_gate import SCHEDULE_PAGE
+    today = day_to_date(int(math.floor(ds.today)))
     plan = getattr(ds, "plan", None)
     if plan is None:
         from backend.engine.planning import Plan
         plan = Plan.load()
-    h = QG.z5_history(ds, plan, begin, end, prefs)
-    h["progress"] = z5_progress(ds)
-    return {"title": ch.get("title"), "description": ch.get("description"), "kind": "z5gate", "z5": h,
-            "range_note": f"重播 {begin.isoformat()} 起（最多 1 年）" if begin > day_to_date(int(math.floor(b))) else None}
+    mon = today - dt.timedelta(days=today.weekday())
+    try:
+        u = PC.compute_unlock(ds, plan, today)
+    except Exception:                          # noqa: BLE001 — the card says it can't tell yet
+        import logging
+        logging.getLogger(__name__).exception("zone unlock card")
+        u = None
+    return {"title": ch.get("title"), "description": ch.get("description"), "kind": "z5gate",
+            "unlock": u, "schedule": f"{SCHEDULE_PAGE}?day={mon.isoformat()}",
+            "charts": {k: _chart_href(k) for k in ("ef-easy-road", "intensity-distribution", "long-easy-drift")}}
+
+
+def _chart_href(cid: str) -> Optional[str]:
+    from backend.api.overview import _chart_href_by_id
+    h = _chart_href_by_id(cid)
+    return h if "?" in h else None
 
 
 def readiness_stamp() -> str:
@@ -1164,6 +1152,15 @@ def readiness_panel(ch: dict, ds: Dataset, b: float, e: float) -> dict:
     mon = today - dt.timedelta(days=today.weekday())
     out = {"title": ch.get("title"), "description": ch.get("description"), "kind": "readiness",
            "schedule": f"{SCHEDULE_PAGE}?day={mon.isoformat()}"}
+    if ch.get("phase") in ("transition", "base"):
+        # SP-678: the 轉換期 恢復檢查 / 基礎期 基礎檢查 cards
+        from backend.engine import phase_checks as PC
+        bd = (PC.compute_transition(plan, ds, today) if ch["phase"] == "transition" else PC.compute_base(plan, ds, today))
+        for c in bd.get("checks") or ():
+            if c.get("chart"):
+                c["chart"]["href"] = readiness_chart_href(c["chart"])
+        nxt = READY_CARD["build"] if ch["phase"] == "base" else "base-check"
+        return {**out, "phase": ch["phase"], "readiness": bd, "other": _chart_href_by_id(nxt)}
     if ch.get("phase") == "taper":
         bd = RD.compute_taper(plan, ds, today, build=readiness_build_summary(plan, ds, today))
         for c in bd.get("checks") or ():

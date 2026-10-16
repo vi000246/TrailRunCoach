@@ -37,7 +37,7 @@ COUNT_JS = r"""() => {
     todo: all("#actions > details.al"),
     notes: all("#wk-notes .hint-row, #wk-notes .hint-more > summary"),
     done: all("#wk-cp > span"),
-    z5: all("#z5 .zf-here, #z5 .zf-note, #z5 .zf-unl .to-box"),
+    z5: all("#z5 .rd-here, #z5 .rd-chk .todo"),
     b2b: all("#b2bcard .now-l"),
     box: all(".sugbox .sg-item"),
     banners: all("#autoplan > *, #eptest:not([hidden]), #weighthint:not([hidden]), .sess-banner"),
@@ -46,8 +46,8 @@ COUNT_JS = r"""() => {
   for (const [k, v] of Object.entries(parts)) { out.parts[k] = txt(v); out.total += v.length; }
   // everything on the page a person can read (not in a closed 詳細, not a ? tip)
   out.text = document.body.innerText;
-  out.stages = document.querySelectorAll("#z5 .zf-st").length;
-  out.stageAll = (() => { let n = 0; for (const t of ((window.__z5 || {}).tracks || [])) n += (t.stages || []).length; return n; })();
+  out.tiles = document.querySelectorAll("#z5 .ru-tile").length;
+  out.testLinks = document.querySelectorAll('#z5 a[href*="test="]').length;
   out.ids = [...document.querySelectorAll("[data-hint-id]")].map((e) => e.dataset.hintId);
   return out;
 }"""
@@ -81,15 +81,14 @@ def _open(browser, srv, level: str, viewport=(1400, 900)):
 
     page.goto("/api/v1/overview/page")
     page.wait_for_selector("#wk-days .dc")
-    page.wait_for_selector("#z5 .zf")
+    page.wait_for_selector("#z5 .ru-tile")
+    page.locator('#z5 .ru-tile[data-z="5"]').click()          # SP-678: the AeT test is on the 5 區 tile
     page.wait_for_selector("#ind .ic, #ind details.ind-more")
     try:
         page.wait_for_selector(".sugbox .sg-item", timeout=15_000)
     except Exception:                    # noqa: BLE001 — no suggestion this week is fine
         pass
     page.wait_for_load_state("networkidle")
-    # the ladder as the server has it, for the 「every stage drawn」 check
-    page.evaluate("() => fetch('/api/v1/overview/z5').then((r) => r.json()).then((c) => { window.__z5 = c.flow; })")
     out = page.evaluate(COUNT_JS)
     out["errors"] = errors
     ctx.close()
@@ -123,7 +122,7 @@ def test_a_test_is_suggested_in_one_place_only(pages):
         assert offers == [], lv
         assert "排一次 AeT 測試" not in p["text"], lv              # OV8k / the card's action
         assert "建議做一次測試" not in p["text"], lv               # the 5 區 note is a link now
-        assert "安排課表" not in "".join(p["parts"]["z5"]), lv     # its test links go to the box
+        assert p["testLinks"] == 0, lv                            # its test links go to the box
         assert any("建議框" in x for x in p["parts"]["z5"] + p["parts"]["cards"]), lv
 
 
@@ -142,6 +141,6 @@ def test_lean_has_no_ov8d_ov8f_ov8h_ov8i_or_ov14(pages):
     assert "OV8d" in pages["full"]["ids"]
 
 
-def test_the_whole_z5_ladder_in_every_level(pages):
+def test_the_zone_tiles_in_every_level(pages):
     for lv, p in pages.items():
-        assert p["stageAll"] >= 4 and p["stages"] == p["stageAll"], lv
+        assert p["tiles"] == 2, lv                                # SP-678: 3 區 and 5 區, the same in every level

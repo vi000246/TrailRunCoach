@@ -39,7 +39,8 @@ def base_server(tmp_path_factory):
 
 def _open(page, q=""):
     page.goto("/api/v1/overview/page" + q)
-    page.wait_for_selector("#z5 .zf-st")
+    page.wait_for_selector("#z5 .ru-tile")
+    page.locator('#z5 .ru-tile[data-z="5"]').click()          # SP-678: the AeT test is on the 5 區 tile
     page.wait_for_selector('#ind .ic[data-ind="testing"]')
     page.wait_for_load_state("networkidle")
 

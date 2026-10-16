@@ -1,7 +1,7 @@
 """總覽提示精簡 (SP-483; docs/research/ui-hint-audit.md §7 T2, docs/spec/ui-hints.spec.md): the week notes' §5
 conditions computed on the overview (engine/hints.week_smart: R7 first week, R11 heat, R15, OV8g), the B-race
 warning (no 百岳; 「知道了」 puts it into 「詳細」 until its races change), and overview.html's SP-483 layout block
-(OVH) and the 5 區 card's options run under node with the real hints.js / z5flow.js: one place for a test, the
+(OVH) and the 5 區 card's options run under node with the real hints.js / readiness.js (SP-678): one place for a test, the
 low-intensity words, the phase focus and a B2B; the 精簡 page without OV8d / OV8f / OV8h / OV8i / OV14; the
 whole 5 區 ladder in every level; rule D's ⚠ in the week card's hover. Synthetic data only; the node parts are
 skipped without node. The page count on the demo athlete is the browser test
@@ -118,7 +118,7 @@ def test_b_race_ctl_warning_has_a_fingerprint_of_its_races():
     assert two and two[0]["fp"] == one[0]["fp"] and two[0]["text"] != one[0]["text"]
 
 
-# ---- node: hints.js + overview.html's SP-483 block + z5flow.js ------------------------------------
+# ---- node: hints.js + overview.html's SP-483 block + readiness.js ------------------------------------
 
 def _block() -> str:
     m = re.search(r"// ---- SP-483 hint layout.*?// ---- end SP-483 hint layout ----", PAGE.read_text("utf-8"), re.S)
@@ -138,7 +138,7 @@ ctx.document = { getElementById: () => ({}), createElement: () => ({}), head: { 
 ctx.I18N = { t: (k, p) => { let v = cat[k]; if (v && typeof v === "object") v = p && p.n === 1 ? v.one : v.other;
   return String(v ?? k).replace(/\{(\w+)\}/g, (m, n) => (p && p[n] != null ? p[n] : m)); } };
 vm.createContext(ctx);
-for (const f of ["hints.js", "z5flow.js"]) vm.runInContext(fs.readFileSync(`${dir}/${f}`, "utf8"), ctx);
+for (const f of ["hints.js", "readiness.js"]) vm.runInContext(fs.readFileSync(`${dir}/${f}`, "utf8"), ctx);
 vm.runInContext(`const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const tO = (k, p) => I18N.t("overview." + k, p);
 const toBox = (txt) => '<button type="button" class="to-box" data-open-sugg>' + esc(txt) + ' →</button>';
@@ -215,36 +215,30 @@ def test_lean_hides_ov8d_ov8f_ov8h_ov8i_and_ov14():
 
 
 def _flow():
-    item = lambda text, ok, action=None: {"text": text, "ok": ok, "value": "", "todo": "" if ok else "做 " + text,
-                                          "tip": "", "action": action}
-    test_act = {"type": "test", "key": "aet", "href": "/api/v1/overview/plan/schedule/page?test=aet"}
-    rung_act = {"type": "add", "href": "/api/v1/overview/plan/schedule/page?add=z3_a1"}
-    st = lambda key, status, items, **kw: {"key": key, "title": key, "sub": "", "status": status, "items": items,
-                                           "any": [], "any_label": "", "note": "", "note_tip": "", "unlocks": "u",
-                                           "tip": "", **kw}
-    low, tst = "本週低強度占比 < 75%（實測 AeT）：5 區先不排", "建議做一次測試"
-    return {"tracks": [
-        {"key": "z3", "title": "3 區", "open": False, "here": {"title": "3 區解鎖", "next": "做 AeT 測試", "action": test_act},
-         "stages": [st("z3_gate", "current", [item("AeT 測試", None, test_act)]),
-                    st("z3", "locked", [item("A1", False, rung_act), item("A2", False)])]},
-        {"key": "z5", "title": "5 區", "open": False, "here": {"title": "5 區解鎖", "next": "繼續打底"},
-         "stages": [st("z5_gate", "current", [item("近 6 週 ≥ 2 堂 3 區", False, rung_act)], note=low + "\n" + tst,
-                       note_tip="CP 過期", notes=[{"kind": "intensity", "text": low}, {"kind": "test", "text": tst, "tip": "CP 過期"}]),
-                    st("z5", "locked", [item("V1", False), item("V2", False)])]}], "full": ""}
+    """SP-678: the 強度課表解鎖條件 data (phase_checks.unlock): zone 3 open, zone 5 missing its AeT test, the easy
+    share under the floor (its card and line are what R16 drops)."""
+    import datetime as dt
+    from backend.engine import phase_checks as PC
+    gate = {"z3": {"open": True, "path_label": "x", "since": "2026-10-01", "weeks": 4,
+                   "tests": [{"key": "weeks", "ok": True}]}, "z5": {"aet_tested": None},
+            "lthr": {"value": 165, "measured": True}, "rebase": None}
+    card = {"state": "unconfirmed", "z5_gate": {"open": False, "aet_ok": False, "z3_ok": True},
+            "z3": {"done": 2, "need": 2}, "base": {"tests": []}}
+    return PC.unlock(card, gate, dt.date(2026, 10, 16), low_share=0.70, last_run=dt.date(2026, 10, 15))
 
 
 @needs_node
 def test_the_whole_5_zone_ladder_in_every_level_with_r15_and_r16():
-    flow = _flow()
-    plain = _run("Z5Flow.html(DATA.f, {q: 'q'})", f=flow)                       # the 基礎期 panel: as before
-    assert "本週低強度占比" in plain and "建議做一次測試" in plain and plain.count("安排課表") == 3
-    page = _run("(() => { const o = OVH.z5Opt(); return Z5Flow.html(DATA.f, {q: 'q', skip: o.skip, "
-                "testNote: () => toBox('建議做的測試在建議框'), testAction: () => toBox('在建議框排入')}); })()", f=flow)
-    assert page.count('class="zf-st ') == 4                                      # every stage of both tracks
-    assert "本週低強度占比" not in page                                           # R16: OV8e says it
-    assert "建議做一次測試" not in page and "建議做的測試在建議框" in page             # R15: a link to the box
-    assert page.count("安排課表") == 1 and page.count("在建議框排入") == 2          # the rung's link stays
-    # the 總覽's options do not depend on the level: the same ladder in 完整／標準／精簡
+    u = _flow()
+    plain = _run("Readiness.unlockHtml(DATA.u, {sel: 5, schedule: '/s'})", u=u)       # the 基礎期 card: as before
+    assert "輕鬆跑壓在 AeT 以下" in plain and "排一次：平路 AeT 附近跑 60 分鐘" in plain and plain.count("安排課表") == 2
+    page = _run("(() => { const o = OVH.z5Opt(); return Readiness.unlockHtml(DATA.u, {sel: 5, schedule: '/s', skip: o.skip, "
+                "testNote: () => toBox('建議做的測試在建議框'), testAction: () => toBox('在建議框排入')}); })()", u=u)
+    assert page.count('class="ru-tile ') == 2                                     # both tiles
+    assert "輕鬆跑壓在 AeT 以下" not in page                                       # R16: OV8e says it
+    assert "排一次：平路" not in page and "建議做的測試在建議框" in page              # R15: a link to the box
+    assert page.count("安排課表") == 1 and page.count("在建議框排入") == 1          # the zone's own link stays
+    # the 總覽's options do not depend on the level: the same card in 完整／標準／精簡
     assert _run("JSON.stringify(OVH.z5Opt())") == json.dumps({"skip": ["intensity"], "testNote": True, "testAction": True},
                                                              separators=(",", ":"))
     assert "OVH.z5Opt()" in PAGE.read_text("utf-8") and "level" not in re.search(r"z5Opt: \(\) => .*", _block()).group(0)

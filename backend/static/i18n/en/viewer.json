@@ -504,5 +504,20 @@
   "readiness.build_line": "Build result: {x}",
   "readiness.go_build": "See ③ Build →",
   "readiness.go_taper": "Fresh for race day? See ④ Taper →",
-  "readiness.mob_hint": "The full calendar is on a wide screen; a phone lists this week only (Chart opens a chart)"
+  "readiness.mob_hint": "The full calendar is on a wide screen; a phone lists this week only (Chart opens a chart)",
+  "readiness.recovery_of": "Recovery check: after {name}",
+  "readiness.race_on": "Race {d}",
+  "readiness.base_on": "base phase from {d}",
+  "readiness.post_week": "Week {i} of {n} after the race",
+  "readiness.back_to_base": "To start the base phase:",
+  "readiness.go_base": "Then see the ② Base page →",
+  "readiness.this_week_do": "This week",
+  "readiness.go_build_from": "The build starts {d} → see the ③ Build page then",
+  "readiness.bars_head": "Last {n} weeks (one bar a week, three colours = that week's time shares)",
+  "readiness.bars_note": "Number below = easy %; faded = recovery week",
+  "readiness.rec_short": "Recovery",
+  "readiness.ramp_goal": "goal {p} %",
+  "readiness.ramp_band": "green band {a}–{b} %",
+  "readiness.ramp_watch": "watch {p} %",
+  "readiness.pts": "{p} pts"
 }

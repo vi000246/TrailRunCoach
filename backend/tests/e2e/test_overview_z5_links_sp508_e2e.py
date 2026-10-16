@@ -19,7 +19,7 @@ TEST_TYPES = ("test", "baseline", "zone_test")
 Z5_JS = r"""() => {
   const z = document.querySelector("#z5");
   return { toBox: z.querySelectorAll("[data-open-sugg]").length,
-           tests: [...z.querySelectorAll("a.zf-act")].filter((a) => /[?&]test=/.test(a.getAttribute("href"))).length,
+           tests: [...z.querySelectorAll("a.rd-gr, a.rd-sched")].filter((a) => /[?&]test=/.test(a.getAttribute("href"))).length,
            text: z.textContent.replace(/\s+/g, " ") };
 }"""
 
@@ -36,7 +36,8 @@ def base_server(tmp_path_factory):
 
 def _open(page):
     page.goto("/api/v1/overview/page")
-    page.wait_for_selector("#z5 .zf-st")
+    page.wait_for_selector("#z5 .ru-tile")
+    page.locator('#z5 .ru-tile[data-z="5"]').click()          # SP-678: the AeT test is on the 5 區 tile
     page.wait_for_selector(".sugbox .sg-item", timeout=30_000)
     page.wait_for_load_state("networkidle")
 
@@ -72,7 +73,8 @@ def test_declined_tests_give_the_5_zone_card_its_own_links(e2e_browser, base_ser
 
         # 3. stored on the server: the same after a reload
         page.reload()
-        page.wait_for_selector("#z5 .zf-st")
+        page.wait_for_selector("#z5 .ru-tile")
+        page.locator('#z5 .ru-tile[data-z="5"]').click()
         page.wait_for_load_state("networkidle")
         page.wait_for_function("() => document.querySelectorAll('#z5 [data-open-sugg]').length === 0")
         again = page.evaluate(Z5_JS)

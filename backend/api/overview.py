@@ -429,7 +429,18 @@ def z5_card():
         return {"today": today.isoformat(), "pending": p, "history_href": _z5_chart_href()}
     st = _status(ds, today)
     gate = next((i.extra for i in st.indicators if i.id == "gate"), None) or {}
-    return {"today": today.isoformat(), **QG.z5_card(gate, today), "history_href": _z5_chart_href()}
+    # SP-678: the card draws the 強度課表解鎖條件 tiles (phase_checks.unlock, the 基礎期 page's card)
+    from backend.engine import phase_checks as PC
+    try:
+        unlock = PC.compute_unlock(ds, st.plan, today, st=st)
+    except Exception:                          # noqa: BLE001 — the card says it can't tell yet
+        logging.getLogger(__name__).exception("zone unlock card")
+        unlock = None
+    mon = today - dt.timedelta(days=today.weekday())
+    return {"today": today.isoformat(), **QG.z5_card(gate, today), "history_href": _z5_chart_href(),
+            "unlock": unlock, "schedule": f"{QG.SCHEDULE_PAGE}?day={mon.isoformat()}",
+            "charts": {k: (h if "?" in h else None) for k in ("ef-easy-road", "intensity-distribution", "long-easy-drift")
+                       for h in (_chart_href_by_id(k),)}}
 
 
 @router.get("/b2b")

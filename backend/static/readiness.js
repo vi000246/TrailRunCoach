@@ -9,6 +9,11 @@
 // phase "taper" (race_readiness.taper, drawTaper): 「賽前 N 天」 and the taper's day, a countdown strip,
 // 這幾天要做, four check cards (one number, a target band bar, the state, what to change when it is off,
 // 看圖), and one line of the 專項期 result with its card's link. No calendar.
+// SP-678: phase "transition" (phase_checks.transition, drawTransition): 「賽後第 N 天」, the post-race weeks to the
+// 基礎期, 這幾天要做, four check cards, the conditions to start the 基礎期. phase "base" (drawBase): 本週要做 and three
+// check cards (強度分配 with a donut and one stacked 100 % bar a week, 每週增量, 恢復週節奏).
+//   Readiness.unlock(box, res): the 強度課表解鎖條件 card (kind z5gate, phase_checks.unlock) — two tiles, 3 區 / 5 區;
+//   the selected one's checks and 「什麼時候會重新上鎖」 folded (a click opens it).
 // SP-672: a cell shows the board's `show` as is (a later / taper cell: its target, set by race_readiness).
 // Every non-count item has 「看圖」: an existing chart (it.chart.href: that page, card and weeks) or the
 // card's own small chart under the calendar (it.chart.own: "repeat" = each session's best of the last 6 weeks
@@ -215,9 +220,204 @@
       `<div class="rd-foot">${bl}${inj}${go}</div>`;
   }
 
+  // ---- SP-678: 轉換期 恢復檢查, 基礎期 基礎檢查 and 強度課表解鎖條件 -------------------------------------------
+  function style678() {
+    if (document.getElementById("rd-style-678")) return;
+    const st = document.createElement("style");
+    st.id = "rd-style-678";
+    st.textContent = `
+.rd-count .big.g { color: var(--rd-good); }
+.rd-days.g span { background: color-mix(in srgb, var(--rd-good) 14%, var(--panel)); color: var(--rd-good); }
+.rd-days.g span.past { background: var(--rd-good); color: #fff; }
+.rd-days.g span.today { outline-color: var(--rd-good); background: var(--panel); }
+.rd-days.g span.base { background: var(--accent-soft); color: var(--accent); flex: 1.6; }
+.rd-chk .paths { margin-top: 6px; display: grid; gap: 2px; font-size: 12.5px; }
+.rd-chk .paths .ok { color: var(--rd-good); }
+.rd-chk .note { font-size: 13px; margin-top: 4px; }
+.rd-chk .wk { color: var(--muted); font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
+.rd-dn { display: flex; gap: 14px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+.rd-dn .ring { width: 84px; height: 84px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; }
+.rd-dn .hole { width: 52px; height: 52px; border-radius: 50%; background: var(--panel); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; line-height: 1.1; }
+.rd-dn .hole b { font-size: 16px; } .rd-dn .hole span { font-size: 10px; color: var(--muted); }
+.rd-dn .lg { font-size: 13px; line-height: 1.7; }
+.rd-dn .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+.rd-sb { display: flex; gap: 4px; align-items: flex-end; height: 64px; margin-top: 2px; }
+.rd-sb > div { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; border-radius: 2px; overflow: hidden; }
+.rd-sb > div.rec { opacity: .45; } .rd-sb > div.now { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rd-sb > div.none { background: color-mix(in srgb, var(--line) 40%, transparent); }
+.rd-rf { width: 100%; height: auto; display: block; margin-top: 6px; } .rd-rf text { font-size: 9px; fill: var(--muted); }
+.rd-sbn { display: flex; gap: 4px; font-size: 10px; color: var(--muted); text-align: center; }
+.rd-sbn span { flex: 1; min-width: 0; } .rd-sbn span.cur { color: var(--accent); font-weight: 700; }
+.rd-cond { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.ru-sub { color: var(--muted); font-size: 12px; }
+.ru-tiles { display: flex; gap: 8px; }
+.ru-tile { flex: 1; min-width: 0; text-align: left; border-radius: 10px; padding: 8px 10px; background: var(--panel);
+  border: 1.5px solid var(--line); font: inherit; color: inherit; cursor: pointer; }
+.ru-tile.open { background: color-mix(in srgb, var(--rd-good) 9%, var(--panel)); border-color: color-mix(in srgb, var(--rd-good) 55%, var(--line)); }
+.ru-tile.sel { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.ru-tile .z { font-weight: 800; font-size: 15px; } .ru-tile.open .z { color: var(--rd-good); }
+.ru-tile .s { font-size: 12px; color: var(--muted); }
+.rd-here.open { border-left-color: var(--rd-good); background: color-mix(in srgb, var(--rd-good) 9%, var(--panel)); }
+.rd-here.open .k { color: var(--rd-good); }
+details.ru-re { border: 1px solid color-mix(in srgb, var(--rd-warn) 45%, var(--line)); border-radius: 10px; padding: 8px 12px;
+  background: color-mix(in srgb, var(--rd-warn) 7%, var(--panel)); }
+details.ru-re summary { cursor: pointer; font-weight: 700; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; list-style: none; }
+details.ru-re summary::-webkit-details-marker { display: none; }
+details.ru-re summary::after { content: "▸"; color: var(--muted); } details.ru-re[open] summary::after { content: "▾"; }
+details.ru-re summary .tag { margin-left: auto; font-size: 11px; padding: 0 8px; border-radius: 999px; font-weight: 600;
+  background: color-mix(in srgb, var(--line) 50%, transparent); color: var(--muted); white-space: nowrap; }
+details.ru-re summary .tag.ok { background: color-mix(in srgb, var(--rd-good) 15%, transparent); color: var(--rd-good); }
+details.ru-re summary .tag.warn { background: color-mix(in srgb, var(--rd-warn) 16%, transparent); color: var(--rd-warn); }
+.ru-re .it { margin-top: 6px; font-size: 13px; line-height: 1.6; }
+.ru-re .it .now { color: var(--muted); font-size: 12px; }
+.ru-re .rd-bar .band { background: color-mix(in srgb, var(--rd-warn) 25%, transparent); }`;
+    document.head.appendChild(st);
+  }
+  const ZC = ["#16a34a", "#f59e0b", "#dc2626"];
+  const pos = (x, sc) => Math.max(0, Math.min(100, ((x - sc[0]) / (sc[1] - sc[0])) * 100));
+  const sp = (x) => `${Math.round(x * 100)}`;
+  function donutFig(k) {
+    if (!k.donut) return "";
+    const [a, b] = k.donut;
+    const ring = `conic-gradient(${ZC[0]} 0 ${a * 100}%, ${ZC[1]} ${a * 100}% ${(a + b) * 100}%, ${ZC[2]} ${(a + b) * 100}% 100%)`;
+    const lg = (k.targets || []).map((t, i) => `<div><span class="sw" style="background:${ZC[i]}"></span>${esc(t.name)} <b>${sp(k.donut[i])} %</b> <span class="tg">${esc(t.target)}</span></div>`).join("");
+    const bars = (k.bars || []).map((w) => w.shares
+      ? `<div class="${w.recovery ? "rec" : ""} ${w.now ? "now" : ""}" title="${esc(md(w.monday))}"><div style="height:${w.shares[2] * 100}%;background:${ZC[2]}"></div><div style="height:${w.shares[1] * 100}%;background:${ZC[1]}"></div><div style="flex:1;background:${ZC[0]}"></div></div>`
+      : `<div class="none ${w.now ? "now" : ""}"></div>`).join("");
+    const nums = (k.bars || []).map((w) => `<span class="${w.now ? "cur" : ""}">${w.shares ? sp(w.shares[0]) : "–"}</span>`).join("");
+    return `<div class="rd-dn"><div class="ring" style="background:${ring}"><div class="hole"><b>${sp(a)}%</b><span>${esc(k.targets?.[0]?.name || "")}</span></div></div><div class="lg">${lg}</div></div>
+      <div class="tg" style="margin-top:8px">${esc(T("bars_head", { n: (k.bars || []).length }))}</div><div class="rd-sb">${bars}</div><div class="rd-sbn">${nums}</div>
+      <div class="tg" style="text-align:right">${esc(T("bars_note"))}</div>`;
+  }
+  // 每週增量 (SP-678): a line of the last 8 weeks' chronic-load rise (% of it): the green band (2–5 %), the goal
+  // (blue dashed) and the 注意 line (red dashed); a point green in the band, yellow 5–10 %, red over the 注意 line,
+  // grey-blue under the band; recovery weeks grey (not judged); each week's % and points under the chart
+  const RZ = { ok: "#16a34a", fast: "#f59e0b", high: "#dc2626", low: "#64748b" };
+  function rampFig(k) {
+    const W = 320, H = 136, x0 = 30, x1 = 298, yt = 8, yb = 108, lo = -0.10, hi = 0.15;
+    const ws = k.weeks || [];
+    const y = (v) => yb - ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (yb - yt);
+    const x = (i) => ws.length > 1 ? x0 + (i * (x1 - x0)) / (ws.length - 1) : (x0 + x1) / 2;
+    const [b0, b1] = k.band || [0.02, 0.05];
+    const hl = (v, c, txt, dash, anchor, dy, axis = true) => `<line x1="${x0}" x2="${x1}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="${dash ? 1 : 1.5}"${dash ? ` stroke-dasharray="${dash}"` : ""}/>${axis ? `<text x="${x0 - 3}" y="${y(v) + 3}" text-anchor="end" style="fill:${c}">${sp(v)}</text>` : ""}${txt ? `<text x="${anchor === "end" ? x1 - 2 : x0 + 4}" y="${y(v) + dy}" text-anchor="${anchor}" style="fill:${c}">${esc(txt)}</text>` : ""}`;
+    const rec = ws.map((w, i) => w.recovery ? `<rect x="${x(i) - 10}" y="${yt}" width="20" height="${yb - yt}" style="fill:color-mix(in srgb, var(--line) 45%, transparent)"/>` : "").join("");
+    const pts = ws.map((w, i) => w.pct == null ? null : [x(i), y(w.pct)]);
+    const path = pts.filter(Boolean).map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+    const sg = (v, d) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(d)}`;
+    const dots = ws.map((w, i) => w.pct == null ? "" : `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="${w.now ? 4.5 : 3.5}" fill="${w.recovery ? "#9ca3af" : RZ[w.zone] || "#9ca3af"}" stroke="#fff" stroke-width="1.5"/>`).join("");
+    const nums = ws.map((w, i) => {
+      const st = w.now ? ' style="fill:var(--accent);font-weight:700"' : "";
+      if (w.recovery || w.pct == null) return `<text x="${x(i)}" y="${yb + 14}" text-anchor="middle">${w.recovery ? esc(T("rec_short")) : "–"}</text>`;
+      return `<text x="${x(i)}" y="${yb + 14}" text-anchor="middle"${st}>${sg(w.pct * 100, 1)}</text>` +
+        (w.pts != null ? `<text x="${x(i)}" y="${yb + 25}" text-anchor="middle"${st}>${esc(T("pts", { p: sg(w.pts, 1) }))}</text>` : "");
+    }).join("");
+    return `<svg class="rd-rf" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(k.name)}"><rect x="${x0}" y="${y(b1)}" width="${x1 - x0}" height="${y(b0) - y(b1)}" fill="#16a34a" fill-opacity=".14"/>
+      ${hl(b1, "#16a34a", "", "", "end", 0, false)}${hl(b0, "#16a34a", T("ramp_band", { a: sp(b0), b: sp(b1) }), "", "start", 10, false)}${k.goal != null ? hl(k.goal, "#2563eb", T("ramp_goal", { p: sp(k.goal) }), "4 3", "end", -3) : ""}${k.watch != null ? hl(k.watch, "#dc2626", T("ramp_watch", { p: sp(k.watch) }), "4 3", "end", -3) : ""}${hl(0, "#9ca3af", "", "2 2")}
+      ${rec}<path d="${path}" fill="none" stroke="#2563eb" stroke-width="2"/>${dots}${nums}</svg>`;
+  }
+  const TU = (k, p) => L.t("common.unlock." + k, p);     // the unlock card is on the 總覽 too: common strings
+  function chkCard(k, tr = T, todoHtml = null) {
+    const sc = k.scale || [0, 1];
+    const bar = k.band && !k.donut && !k.line ? `<div class="rd-bar"><div class="band" style="left:${pos(k.band[0], sc)}%;width:${pos(k.band[1], sc) - pos(k.band[0], sc)}%"></div>${k.value != null ? `<div class="pt ${k.state === "warn" ? "warn" : ""}" style="left:${pos(k.value, sc)}%"></div>` : ""}</div>` : "";
+    const chart = k.chart && k.chart.href ? `<a class="rd-gr" href="${esc(k.chart.href)}">${esc(tr("chart"))} ›</a>` : "";
+    const paths = k.paths ? `<div class="paths">${k.paths.map((p) => `<div class="${p.ok ? "ok" : ""}">${p.ok ? "☑" : "☐"} ${esc(p.text)}${p.now ? ` <span class="tg">（${esc(p.now)}）</span>` : ""}</div>`).join("")}</div>` : "";
+    const wk = k.line ? rampFig(k) : "";
+    const big = k.donut ? "" : `<div class="now">${esc(k.show)}</div>`;
+    return `<div class="rd-chk" data-id="${esc(k.id)}"><div class="h">${esc(k.name)}${chart}<span class="tag ${esc(k.state)}">${esc(k.label)}</span></div>
+      ${big}<div class="tg">${esc(k.target)}</div>${donutFig(k)}${bar}${paths}${wk}${k.note ? `<div class="note">${esc(k.note)}</div>` : ""}${todoHtml === "" ? "" : todoHtml != null ? `<div class="todo">${todoHtml}</div>` : k.todo ? `<div class="todo">${esc(k.todo)}</div>` : ""}</div>`;
+  }
+  const hereBox = (key, items, sched, open, tr = T) => (items || []).length || sched
+    ? `<div class="rd-here ${open ? "open" : ""}"><div class="k">${esc(key)}</div>${(items || []).map((x) => `<span class="rd-chip">${esc(x)}</span>`).join("")}${sched ? `<a class="rd-sched" href="${esc(sched)}">${esc(tr("schedule"))} ›</a>` : ""}</div>` : "";
+  const injLine = (R) => R.injury ? `<span class="${R.injury_on ? "watch" : ""}">${R.injury_on ? "◐" : '<span class="rd-ok">✓</span>'} ${esc(R.injury)}</span>` : "";
+
+  function drawTransition(box, res) {
+    const R = res.readiness || {};
+    const root = document.createElement("div");
+    root.className = "rd";
+    box.appendChild(root);
+    if (!R.race || R.done) { root.innerHTML = `<p class="meta">${esc(R.text || "")}</p>`; return; }
+    const head = `<div class="rd-head"><b>${esc(T("recovery_of", { name: R.race.name }))}</b><span class="meta">${esc(T("race_on", { d: md(R.race.end) }))}${R.base_from ? " · " + esc(T("base_on", { d: md(R.base_from) })) : ""}</span></div>`;
+    const count = `<div class="rd-count"><span class="big g">${esc(R.text)}</span><span class="meta">${esc(T("post_week", { i: R.week, n: R.weeks }))}</span></div>`;
+    const strip = `<div class="rd-days g" aria-hidden="true">${(R.strip || []).map((d) => `<span class="${esc(d.state)}">${esc(d.label)}</span>`).join("")}</div>`;
+    const conds = (R.conds || []).map((c) => `<span class="${c.ok ? "rd-ok" : "watch"}">${c.ok ? "✓" : "◯"} ${esc(c.text)}</span>`).join("");
+    root.innerHTML = head + count + strip + hereBox(T("these_days"), R.this_week, res.schedule) +
+      `<div class="rd-checks">${(R.checks || []).map((c) => chkCard(c)).join("")}</div>` +
+      `<div class="rd-foot"><span class="k">${esc(T("back_to_base"))}</span><span class="rd-cond">${conds}</span>${res.other ? `<a class="rd-go" href="${esc(res.other)}">${esc(T("go_base"))}</a>` : ""}</div>`;
+  }
+
+  function drawBase(box, res) {
+    const R = res.readiness || {};
+    const root = document.createElement("div");
+    root.className = "rd";
+    box.appendChild(root);
+    const head = `<div class="rd-head"><b>${esc(R.text || "")}</b>${R.next ? `<span class="meta">${esc(R.next)}</span>` : ""}</div>`;
+    const go = res.other && R.next_from ? `<a class="rd-go" href="${esc(res.other)}">${esc(T("go_build_from", { d: md(R.next_from) }))}</a>` : "";
+    root.innerHTML = head + hereBox(T("this_week_do"), R.this_week, res.schedule) +
+      `<div class="rd-checks">${(R.checks || []).map((c) => chkCard(c)).join("")}</div><div class="rd-foot">${injLine(R)}${go}</div>`;
+  }
+
+  function relockBox(items, tag, warn, title) {
+    const it = (items || []).map((r) => {
+      const bar = r.days_left != null ? `<div class="rd-bar"><div class="band" style="left:0;width:100%"></div><div class="pt warn" style="left:${100 - pos(r.days_left, [0, r.of || 21])}%"></div></div>` : "";
+      return `<div class="it"><b>${esc(r.title)}</b>${r.now ? `<div class="now">${esc(r.now)}</div>` : ""}${bar}</div>`;
+    }).join("");
+    return `<details class="ru-re"><summary>${esc(title)}<span class="tag ${tag ? (warn ? "warn" : "ok") : ""}">${esc(tag || TU("open_to_see"))}</span></summary>${it}</details>`;
+  }
+
+  // the 強度課表解鎖條件 card as HTML (phase_checks.unlock): `o` = {sel: 3 | 5, schedule, charts: {chart id: href},
+  // skip: ["intensity"] (drops the easy-under-AeT card and line: the 總覽 says it elsewhere), compact (the 總覽: a
+  // card's 「what to do」 only in 本週要做, not again on the card), testNote() / testAction()
+  // → HTML in place of the AeT test's own 「what to do」 / its 安排課表 link (the 總覽's suggestion-box links)}
+  function unlockHtml(U, o = {}) {
+    if (!U) return `<p class="meta">${esc(TU("no_gate"))}</p>`;
+    const sel = o.sel || U.selected || 5;
+    const skipLow = (o.skip || []).includes("intensity");
+    const href = (c) => { const h = (o.charts || {})[c.chart && c.chart.id]; return h ? { ...c, chart: { ...c.chart, href: h } } : c; };
+    const card = (c) => {
+      if (c.id !== "aet_test" || c.state !== "warn") return chkCard(href(c), TU, o.compact ? "" : null);
+      const note = o.testNote ? o.testNote() : "";
+      const act = o.testAction ? o.testAction() : c.action ? `<a class="rd-gr" href="${esc(c.action)}">${esc(TU("schedule"))} ›</a>` : "";
+      return chkCard(href(c), TU, `${note || esc(c.todo || "")} ${act}`);
+    };
+    const Z = sel === 3 ? U.z3 : U.z5;
+    const aetTodo = ((Z.checks || []).find((c) => c.id === "aet_test" && c.state === "warn") || {}).todo;   // R15: in the box
+    const checks = (Z.checks || []).filter((c) => !(skipLow && (c.id === "low_share" || c.id === "keep")));
+    const relock = (Z.relock || []).filter((r) => !(skipLow && r.key === "low_share"));
+    const re = sel === 3 ? relock.length ? relockBox(relock, Z.relock_tag, Z.relock_warn, TU("relock3")) : ""
+      : relockBox(relock, "", false, TU("relock5"));
+    const tiles = (U.tiles || []).map((t) => `<button type="button" class="ru-tile ${t.open ? "open" : ""} ${sel === t.zone ? "sel" : ""}" data-z="${t.zone}" aria-pressed="${sel === t.zone}">
+        <div class="z">${esc(TU("zone_n", { n: t.zone }))} ${t.open ? "✓" : "🔒"}</div><div class="s">${esc(t.name)} · ${esc(t.sub)}</div></button>`).join("");
+    return `<div class="ru-sub">${esc(TU("unlock_sub"))}</div><div class="ru-tiles">${tiles}</div>` +
+      hereBox(Z.head, [Z.body, ...(Z.chips || []).filter((x) => !(o.testNote && x === aetTodo))].filter(Boolean),
+        Z.open ? "" : o.schedule, Z.open, TU) +
+      `<div class="rd-checks">${checks.map(card).join("")}</div>${re}<div class="rd-foot"><span class="k">${esc(TU("unlock_hint"))}</span></div>`;
+  }
+
+  // draws the card into `box` (its own root, a click on a tile switches the zone); `o` as unlockHtml
+  function unlock(box, res, o = {}) {
+    style();
+    style678();
+    const root = document.createElement("div");
+    root.className = "rd ru";
+    box.appendChild(root);
+    // the tile picked stays when the page draws the card again (the 總覽 redraws it on suggestion changes)
+    const S = { sel: +box.dataset.ruSel || (res.unlock || {}).selected || 5 };
+    const render = () => { root.innerHTML = unlockHtml(res.unlock, { schedule: res.schedule, charts: res.charts, ...o, sel: S.sel }); };
+    root.addEventListener("click", (ev) => {
+      const t = ev.target.closest(".ru-tile");
+      if (!t) return;
+      S.sel = +t.dataset.z;
+      box.dataset.ruSel = S.sel;
+      render();
+    });
+    render();
+  }
+
   function draw(box, res) {
     style();
     if (res.phase === "taper") { drawTaper(box, res); return; }
+    if (res.phase === "transition" || res.phase === "base") { style678(); (res.phase === "base" ? drawBase : drawTransition)(box, res); return; }
     const R = res.readiness || {};
     const root = document.createElement("div");
     root.className = "rd";
@@ -349,5 +549,5 @@
     render();
   }
 
-  window.Readiness = { draw };
+  window.Readiness = { draw, unlock, unlockHtml };
 })();

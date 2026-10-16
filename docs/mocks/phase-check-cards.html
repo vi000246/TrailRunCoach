@@ -75,6 +75,7 @@ table.cal{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
 .chk .todo{font-size:13px;margin-top:4px}
 .note{max-width:1100px;margin:10px auto;background:#fffbea;border:1px dashed #e0b84d;border-radius:10px;padding:10px 14px;font-size:13px}
 .hidden{display:none}
+details.chk summary{list-style:none}details.chk summary::after{content:"▸";margin-left:6px;color:var(--mute)}details.chk[open] summary::after{content:"▾"}
 </style>
 </head>
 <body>
@@ -145,9 +146,9 @@ table.cal{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
         <div class="tg" style="text-align:right">底下數字＝輕鬆 %；淡的是恢復週</div>
         <div class="todo half">中間區（黃）連 4 週變多：輕鬆跑放慢，強度課照排</div></div>
       <div class="chk"><div class="h">每週增量 <span class="link">看圖</span><span class="tag t-ok">照計畫</span></div>
-        <div class="now">+3.6 %</div><div class="tg">長期負荷每週增加；基礎期目標 4 %（至少 +2 點），超過 8 % 會提醒</div>
-        <div class="bar2"><div class="band" style="left:20%;width:20%;background:#bbf7d0"></div><div class="pt" style="left:36%;background:var(--green)"></div></div>
-        <div class="tg">近 8 週：+4.1、+3.8、+4.4、−6.0（恢復週）、+3.9、+4.2、+3.6</div></div>
+        <div class="now">+3.6 % <span style="font-size:14px;font-weight:600;color:var(--mute)">（+2.4 點／週）</span></div><div class="tg">長期負荷每週增加多少（占長期負荷的 %）。綠色帶 2–5 % 可以長期維持；目標 4 %（藍虛線）；超過 10 %（紅虛線）要注意</div>
+        <svg viewBox="0 0 320 130" style="width:100%;height:auto;display:block;margin-top:6px"><rect x="30" y="43.7" width="282" height="15.3" fill="#dcfce7"/><line x1="30" x2="312" y1="18.2" y2="18.2" stroke="#dc2626" stroke-width="1.2" stroke-dasharray="5 3"/><text x="27" y="21.2" font-size="9" text-anchor="end" fill="#dc2626">10</text><line x1="30" x2="312" y1="43.7" y2="43.7" stroke="#16a34a" stroke-width="1.5"/><text x="27" y="46.7" font-size="9" text-anchor="end" fill="#16a34a">5</text><line x1="30" x2="312" y1="59.0" y2="59.0" stroke="#16a34a" stroke-width="1.5"/><text x="27" y="62.0" font-size="9" text-anchor="end" fill="#16a34a">2</text><line x1="30" x2="312" y1="48.8" y2="48.8" stroke="#2563eb" stroke-width="1" stroke-dasharray="4 3"/><text x="27" y="51.8" font-size="9" text-anchor="end" fill="#2563eb">4</text><line x1="30" x2="312" y1="69.2" y2="69.2" stroke="#9ca3af" stroke-width="1" stroke-dasharray="2 2"/><text x="27" y="72.2" font-size="9" text-anchor="end" fill="#9ca3af">0</text><text x="310" y="15.2" font-size="9" text-anchor="end" fill="#dc2626">注意 10 %</text><text x="310" y="40.7" font-size="9" text-anchor="end" fill="#16a34a">5 %</text><text x="34" y="70.0" font-size="9" fill="#16a34a">2 %</text><text x="34" y="45.8" font-size="9" fill="#2563eb">目標 4 %</text><rect x="140.9" y="8" width="20" height="102" fill="#f3f4f6"/><text x="150.9" y="122" font-size="9" text-anchor="middle" fill="#6b7280">恢復週</text><path d="M30.0,48.3 L70.3,49.8 L110.6,46.8 L150.9,99.8 L191.1,49.3 L231.4,47.8 L271.7,42.7 L312.0,50.8" fill="none" stroke="#2563eb" stroke-width="2"/><circle cx="30.0" cy="48.3" r="3.5" fill="#16a34a" stroke="#fff" stroke-width="1.5"/><text x="30.0" y="122" font-size="9" text-anchor="middle" fill="#6b7280">+4.1</text><circle cx="70.3" cy="49.8" r="3.5" fill="#16a34a" stroke="#fff" stroke-width="1.5"/><text x="70.3" y="122" font-size="9" text-anchor="middle" fill="#6b7280">+3.8</text><circle cx="110.6" cy="46.8" r="3.5" fill="#16a34a" stroke="#fff" stroke-width="1.5"/><text x="110.6" y="122" font-size="9" text-anchor="middle" fill="#6b7280">+4.4</text><circle cx="150.9" cy="99.8" r="3.5" fill="#9ca3af" stroke="#fff" stroke-width="1.5"/><circle cx="191.1" cy="49.3" r="3.5" fill="#16a34a" stroke="#fff" stroke-width="1.5"/><text x="191.1" y="122" font-size="9" text-anchor="middle" fill="#6b7280">+3.9</text><circle cx="231.4" cy="47.8" r="3.5" fill="#16a34a" stroke="#fff" stroke-width="1.5"/><text x="231.4" y="122" font-size="9" text-anchor="middle" fill="#6b7280">+4.2</text><circle cx="271.7" cy="42.7" r="3.5" fill="#f59e0b" stroke="#fff" stroke-width="1.5"/><text x="271.7" y="122" font-size="9" text-anchor="middle" fill="#6b7280">+5.2</text><circle cx="312.0" cy="50.8" r="4.5" fill="#16a34a" stroke="#fff" stroke-width="1.5"/><text x="312.0" y="122" font-size="9" text-anchor="middle" fill="#2563eb">+3.6</text></svg>
+        <div class="tg">點：綠 = 2–5 %、黃 = 5–10 % 偏快、紅 = 超過 10 %；恢復週（灰）不算</div></div>
       <div class="chk"><div class="h">恢復週節奏 <span class="tag t-ok">照計畫</span></div>
         <div class="now">第 4 週</div><div class="tg">每練 3 週排 1 週恢復週（量 70 %）；上次 12/27</div>
         <div class="todo">下一次恢復週：1/24 那週</div></div>
@@ -155,8 +156,8 @@ table.cal{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
     <div class="foot"><span class="ok">✓ 沒有傷病</span><span style="color:var(--mute)">專項期從 2/8 開始 → 那時看 ③ 專項期頁</span></div>
   </div>
 
-  <div class="card" style="margin-top:14px"><span class="new">新版：強度解鎖</span>
-    <div class="ttl">強度解鎖<small>基礎期先把有氧打穩；3 區、5 區的課各自要先解鎖（其他區一開始就能排）</small></div>
+  <div class="card" style="margin-top:14px"><span class="new">新版：強度課表解鎖條件</span>
+    <div class="ttl">強度課表解鎖條件<small>基礎期先把有氧打穩；3 區、5 區的課各自要先解鎖（其他區一開始就能排）</small></div>
     <div style="display:flex;gap:8px;margin:10px 0" id="zsel">
       <button data-z="3" style="flex:1;text-align:left;border-radius:10px;padding:8px 10px;background:#f0fdf4;border:1.5px solid #86efac;font:inherit;cursor:pointer">
         <div style="font-weight:800;font-size:15px;color:#15803d">3 區 ✓</div><div style="font-size:12px;color:var(--mute)">節奏跑 · 12/20 解鎖</div></button>
@@ -170,9 +171,15 @@ table.cal{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
         <div class="chk"><div class="h">有氧打穩 <span class="link">看圖</span><span class="tag t-ok">做到</span></div>
           <div class="now">持平 3 週</div><div class="tg">EF（同樣心率跑多快）不再上升 → 有氧基礎夠了；也可以用飄移測試或基礎期週數判定</div>
           <div class="tg" style="margin-top:6px">近 8 週 EF：1.42 → 1.48 → 1.51 → 1.53 → <b>1.54 → 1.54 → 1.53</b></div></div>
-        <div class="chk"><div class="h">之後怎麼保持 <span class="tag t-wait">提醒</span></div>
-          <div class="now">輕鬆跑 ≥ 90 %</div><div class="tg">輕鬆跑跑到 AeT 以上太多時，那週 5 區先不排、3 區照排</div></div>
       </div>
+      <details class="chk" style="margin-top:10px;border-color:#fcd34d;background:#fffbeb"><summary class="h" style="cursor:pointer">什麼時候會重新上鎖 <span class="tag t-ok">目前安全 · 還有 20 天</span></summary>
+        <div style="font-size:13px;margin-top:6px;line-height:1.7">
+          <div>⏱ <b>連續 21 天沒跑步</b> → 3 區重新上鎖（中斷 6–20 天要先跑一段回復期）</div>
+          <div style="margin-left:22px" class="tg">最後一次跑步 10/15 · <b style="color:var(--ink)">11/5 前要再跑</b>，還有 20 天</div>
+          <div class="bar2" style="margin-left:22px"><div class="band" style="left:0;width:100%;background:#fef3c7"></div><div class="pt" style="left:5%;background:var(--amber)"></div></div>
+          <div style="margin-top:6px">🏁 <b>A 賽之後</b> → 3 區、5 區都要用賽後的 E 配速、CP、LTHR 重新確認一次</div>
+          <div style="margin-left:22px" class="tg">下一場 A 賽 11/14 · 賽後重新確認前，只排輕鬆跑、長跑和加速跑</div>
+        </div></details>
     </div>
     <div id="z5">
       <div class="here"><div class="k">解鎖 5 區：還差 1 項</div>
@@ -187,6 +194,13 @@ table.cal{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
           <div class="now">—</div><div class="tg">實測 AeT 與 LTHR 差 ≤ 10 %（或 60 分鐘飄移 &lt; 5 %）</div>
           <div class="todo half">排一次：平路 AeT 附近跑 60 分鐘</div></div>
       </div>
+      <details class="chk" style="margin-top:10px;border-color:#fcd34d;background:#fffbeb"><summary class="h" style="cursor:pointer">解鎖之後，什麼時候會重新上鎖 <span class="tag t-wait">點開看</span></summary>
+        <div style="font-size:13px;margin-top:6px;line-height:1.7">
+          <div>📉 <b>輕鬆跑跑太快</b>：近 4 週 AeT 以下 &lt; 90 % → 那週 5 區先不排（壓回來就恢復）<span class="tg">　現在 92 %，只差 2 %</span></div>
+          <div>🧪 <b>測驗失效</b>：LTHR 重測或失效、AeT 跟著變 → 要重做一次 AeT 測試</div>
+          <div>⏱ <b>3 區重新上鎖</b>（連續 21 天沒跑）→ 5 區也跟著鎖</div>
+          <div>🏁 <b>A 賽之後</b> → 要用賽後的數字重新確認</div>
+        </div></details>
     </div>
     <div class="foot"><span style="color:var(--mute)">點上面兩格切換看 3 區或 5 區的條件</span></div>
 <script>
@@ -269,7 +283,7 @@ document.querySelector('#zsel button[data-z="5"]').style.boxShadow='0 0 0 3px #b
 </div>
 
 <div class="note hidden" id="n-r"><b>轉換期頁</b>：賽後恢復。上面「賽後第幾天」＋三週進度條，4 張檢查卡（先休息、只跑輕鬆、量慢慢回來、痠痛與傷病），卡底寫「回到基礎期的條件」。</div>
-<div class="note hidden" id="n-s"><b>基礎期頁</b>：強度分配用圓餅圖看這段期間的比例，近 8 週每週一條堆疊的 100 % 長條（綠＝輕鬆、黃＝中間、紅＝高強度，底下數字是輕鬆 %），每週增量、恢復週節奏各一張。下面是新版「強度解鎖」卡（取代原本的 5 區開放流程）：只有 3 區、5 區兩格，點哪一格就看那一區的解鎖條件與下一步。</div>
+<div class="note hidden" id="n-s"><b>基礎期頁</b>：強度分配用圓餅圖看這段期間的比例，近 8 週每週一條堆疊的 100 % 長條（綠＝輕鬆、黃＝中間、紅＝高強度，底下數字是輕鬆 %），每週增量、恢復週節奏各一張。下面是新版「強度課表解鎖條件」卡（取代原本的 5 區開放流程）：只有 3 區、5 區兩格，點哪一格就看那一區的解鎖條件與下一步。</div>
 <div class="note" id="n-b"><b>專項期頁</b>：只算 ① 專項量、② 表現驗證，週曆只到賽前第 3 週（不含減量期欄）。比賽狀態整段搬到減量期頁，專項期卡底一行連過去。手機只列本週各項，完整週曆在桌機看。</div>
 <div class="note hidden" id="n-t"><b>減量期頁</b>：不做日曆，改成「倒數 + 4 張檢查卡」。每張卡一個數字、目標範圍條、狀態，偏離時直接寫要怎麼調；上面一條 10 天倒數。只算減量那 4 項，不算專項期的週曆，所以比較快。專項期的成績只在卡底一句帶過。</div>
 

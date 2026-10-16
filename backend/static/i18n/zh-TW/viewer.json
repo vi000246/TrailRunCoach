@@ -486,5 +486,20 @@
   "readiness.build_line": "專項期成績：{x}",
   "readiness.go_build": "看 ③ 專項期頁 →",
   "readiness.go_taper": "比賽狀態在 ④ 減量期頁看 →",
-  "readiness.mob_hint": "桌機看完整週曆；手機只列本週（點「看圖」看圖）"
+  "readiness.mob_hint": "桌機看完整週曆；手機只列本週（點「看圖」看圖）",
+  "readiness.recovery_of": "恢復檢查：{name} 之後",
+  "readiness.race_on": "比賽 {d}",
+  "readiness.base_on": "基礎期 {d} 開始",
+  "readiness.post_week": "賽後第 {i} 週 / {n} 週",
+  "readiness.back_to_base": "回到基礎期的條件：",
+  "readiness.go_base": "之後看 ② 基礎期頁 →",
+  "readiness.this_week_do": "本週要做",
+  "readiness.go_build_from": "專項期從 {d} 開始 → 那時看 ③ 專項期頁",
+  "readiness.bars_head": "近 {n} 週（每週一條，三色＝這週的時間比例）",
+  "readiness.bars_note": "底下數字＝輕鬆 %；淡的是恢復週",
+  "readiness.rec_short": "恢復週",
+  "readiness.ramp_goal": "目標 {p} %",
+  "readiness.ramp_band": "綠色帶 {a}–{b} %",
+  "readiness.ramp_watch": "注意 {p} %",
+  "readiness.pts": "{p} 點"
 }

@@ -6,7 +6,7 @@
 <title>訓練總覽</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
-<script src="/api/v1/static/z5flow.js"></script>
+<script src="/api/v1/static/readiness.js"></script>
 <script src="/api/v1/static/plan_mark.js"></script>
 <script src="/api/v1/static/sesschip.js"></script>
 <script src="/api/v1/static/hints.js"></script>
@@ -326,9 +326,9 @@ details.ind-more > .ind { margin-top: 8px; }
   </section>
 
   <div class="cards" data-sec id="s-todo">
-    <!-- the Zone 3 / Zone 5 unlock tracks (quality_gate.z5_card, SP-39); the season history is the 基礎期 chart -->
+    <!-- 強度課表解鎖條件 (SP-678: phase_checks.unlock, the same card as the 基礎期 page; readiness.js) -->
     <section id="z5card" aria-labelledby="z5-h" style="grid-column:1 / -1">
-      <h2 id="z5-h"><span data-i18n="overview.z5.title">3 區／5 區解鎖流程</span> <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/app/viewer" data-i18n="overview.z5.history">歷程 →</a></h2>
+      <h2 id="z5-h"><span data-i18n="overview.z5.title">強度課表解鎖條件</span> <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/app/viewer" data-i18n="overview.z5.history">基礎期頁 →</a></h2>
       <div id="z5"><div class="loading">…</div></div>
     </section>
     <!-- 待辦與警示 at the bottom, left of B2B (full width while B2B is hidden) -->
@@ -754,8 +754,8 @@ function thrCheck(i, inBox) {
   return `<div class="act">${rows.join("")}${dg}${cool}${links}</div>`;
 }
 
-// ---------------- 5 區 opening (GET /z5 = quality_gate.z5_card) ----------------
-// the stage flow (static/z5flow.js): 「你現在在這裡，下一步：…」 + one checklist card per stage
+// ---------------- 強度課表解鎖條件 (GET /z5: quality_gate.z5_card + phase_checks.unlock) ----------------
+// SP-678: the 3 區 / 5 區 tiles of the 基礎期 page's card (static/readiness.js), 「什麼時候會重新上鎖」 folded
 const Z5_ICON = { confirmed: "good", open: "good", paused: "watch", reentry: "bad", unconfirmed: "na" };
 async function loadZ5() {
   const c = await j(`${API}/z5`);
@@ -766,22 +766,20 @@ async function loadZ5() {
   const sub = zg.text || (c.state === "confirmed" ? `${c.since || ""} · ${c.path_label || ""}` : (c.reason || ""));
   const st = c.open ? "confirmed" : c.state;
   $("z5-st").innerHTML = `<span class="z5st ${esc(st)}" title="${esc(sub)}">${I(Z5_ICON[st] || "na")}${esc(tD("overview.z5.pill", { s: c.open ? tD("overview.z5.unlocked") : c.aet_ok ? tD("overview.z5.aet_ok") : c.label }))}</span>`;
-  // the quest-style stage flow (static/z5flow.js, shared with the 基礎期 panel)
-  Z5Flow.bind();
   Z5C = c;
   renderZ5();
 }
 function renderZ5() {
   const c = Z5C;
-  // SP-483: the whole ladder in every level (OV10); R16 drops its low-intensity line (OV8e says it), R15
-  // turns its test suggestion and 安排課表 test links into links to the suggestion box — SP-508: not once
-  // the box's tests were all 「不要」 / ✕ (OVH.testOut): the card's own note and 安排課表 again
-  // SP-514: held by 稍後提醒 (OVH.testLater) — the test note says the day it is back, 安排課表 is the card's own
+  // SP-483: R16 drops its low-intensity card (OV8e says it), R15 turns its test note and the test's 安排課表 into
+  // links to the suggestion box — SP-508: not once the box's tests were all 「不要」 / ✕ (OVH.testOut): the card's
+  // own note and 安排課表 again; SP-514: held by 稍後提醒 (OVH.testLater) — the note says the day it is back
   const later = OVH.testLater(SUGG);
   const o = later ? OVH.z5Later() : OVH.z5For(OVH.testOut(SUGG));
-  const linked = ((c.flow || {}).tracks || []).some((t) => t.here && t.here.action && t.here.action.type === "test");
-  $("z5").innerHTML = Z5Flow.html(c.flow, { q: "q", skip: o.skip,
-    testNote: o.testNote ? () => (later ? atDay(later) : linked ? "" : toBox(tO("hint.test_in_box"))) : undefined,
+  const box = $("z5");
+  box.innerHTML = "";
+  Readiness.unlock(box, { unlock: c.unlock, schedule: c.schedule, charts: c.charts }, { skip: o.skip, compact: true,
+    testNote: o.testNote ? () => (later ? atDay(later) : toBox(tO("hint.test_in_box"))) : undefined,
     testAction: o.testAction ? () => toBox(tO("hint.schedule_in_box")) : undefined });
 }
 

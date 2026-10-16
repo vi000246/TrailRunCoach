@@ -551,7 +551,7 @@ def test_every_action_points_at_a_template_or_a_test_protocol_the_page_knows():
     page = (static / "schedule.html").read_text(encoding="utf-8")
     assert 'qp.get("add")' in page and 'qp.get("test")' in page and "openPreset(" in page
     assert "WE.applyKey(" in page and "async applyKey(" in (static / "workout_editor.js").read_text(encoding="utf-8")
-    assert "zf-act" in (static / "z5flow.js").read_text(encoding="utf-8")
+    assert "c.action" in (static / "readiness.js").read_text(encoding="utf-8")      # SP-678: the AeT test's 安排課表
 
 
 def test_a_variant_action_saves_with_its_rung():
