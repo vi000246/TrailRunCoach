@@ -23,6 +23,7 @@ from backend.api import plan_auto as plan_auto_api
 from backend.api import routes as routes_api
 from backend.api import route_library as route_library_api
 from backend.api import activity_compare as activity_compare_api
+from backend.api import race_manager as race_manager_api
 from backend.api import injuries as injuries_api
 from backend.api import archive as archive_api
 from backend.api import backup as backup_api
@@ -222,6 +223,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
         routes_api.router, routes_api.workout_router,
         route_library_api.router,        # 課表 › 路線: uploaded routes + 我的路段, picked per day (SP-640)
         activity_compare_api.router,     # 任選兩次活動比較 (SP-625)
+        race_manager_api.router,         # 賽事管理: every race, one race's day, two overlaid (SP-675)
         injuries_api.router,             # 傷病紀錄 (hidden in the demo)
         backup_api.router,               # 備份 (settings page)
         archive_api.router,              # 運動紀錄保留期限、下載全部 FIT (settings page, SP-317)

@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="races.title">賽事管理</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
+  --accent: #2563eb; --soft: #e8efff; --a: #2563eb; --b: #d9480f; --ok: #15803d; --bad: #b91c1c; --warn: #b45309;
+  --elev: #94a3b8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+    --accent: #60a5fa; --soft: #1c2a40; --a: #60a5fa; --b: #fb923c; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
+    --elev: #64748b;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+  --accent: #60a5fa; --soft: #1c2a40; --a: #60a5fa; --b: #fb923c; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
+  --elev: #64748b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; max-width: 1200px; margin: 0 auto; padding: 12px 16px 0; }
+header h1 { font-size: 17px; margin: 0; }
+header .links { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+header .grow { flex: 1; }
+main { max-width: 1200px; margin: 0 auto; padding: 12px 16px 28px; display: grid; gap: 12px; }
+h2 { font-size: 14px; margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+h2 .meta { font-weight: 400; }
+.meta, .note { color: var(--muted); font-size: 12px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+a { color: var(--accent); }
+button, select, input, textarea { font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; max-width: 100%; }
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--bad); }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.bar select { min-width: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 3px 9px; font-size: 13px; background: transparent; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--soft); color: var(--accent); font-weight: 600; }
+/* the list: one card per race (no wide table: a phone never scrolls sideways) */
+.race { display: grid; grid-template-columns: 28px 92px minmax(0, 1fr) auto; gap: 2px 10px; align-items: start;
+  padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.race:last-child { border-bottom: 0; }
+.race.sel { background: var(--soft); border-radius: 6px; }
+.race .ck { padding-top: 2px; }
+.race .when { font-variant-numeric: tabular-nums; }
+.race .name { font-weight: 600; background: none; border: 0; padding: 0; color: var(--accent); text-align: left; cursor: pointer; }
+.race .facts { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 13px; }
+.race .right { text-align: right; font-variant-numeric: tabular-nums; }
+.race .right b { display: block; font-size: 15px; }
+.pr { display: inline-block; min-width: 20px; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 700; text-align: center;
+  border: 1px solid var(--line); }
+.pr.A { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+.pr.B { background: #d97706; color: #fff; border-color: #d97706; }
+.pr.C { background: #64748b; color: #fff; border-color: #64748b; }
+.st { font-size: 12px; }
+.st.matched, .st.done { color: var(--ok); }
+.st.partial { color: var(--warn); }
+.st.unmatched { color: var(--bad); }
+.st.upcoming { color: var(--accent); }
+.empty { color: var(--muted); padding: 20px 6px; text-align: center; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 6px 0; }
+.stats div { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+.stats b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+th:first-child, td:first-child { text-align: left; }
+td.better { color: var(--ok); font-weight: 600; }
+td.worse { color: var(--bad); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.dot.a { background: var(--a); } .dot.b { background: var(--b); }
+.chart { height: 280px; width: 100%; }
+.chart.short { height: 200px; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.who { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.who > div { min-width: 0; }
+.who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text);
+  width: min(560px, calc(100vw - 24px)); padding: 14px; }
+dialog::backdrop { background: rgba(0, 0, 0, .35); }
+.form { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; align-items: center; }
+.form input, .form select, .form textarea { width: 100%; }
+.form .full { grid-column: 1 / -1; }
+.ok { color: var(--ok); } .err { color: var(--bad); }
+.hidden { display: none !important; }
+@media (max-width: 699px) {
+  header { padding: 10px 10px 0; }
+  main { padding: 10px 10px 24px; }
+  .race { grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .race .when { grid-column: 2 / 3; grid-row: 1; font-size: 12px; color: var(--muted); }
+  .race .body { grid-column: 2 / 4; }
+  .race .right { grid-column: 3; grid-row: 1; }
+  .who { grid-template-columns: 1fr; }
+  .chart { height: 230px; }
+  th, td { padding: 5px 5px; }
+  .form { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="races"></script>
+<header>
+  <h1 data-i18n="races.title">賽事管理</h1>
+  <span class="links">
+    <a href="/api/v1/plan/page" data-i18n="races.to_plan">賽事周期 →</a>
+    <a href="/api/v1/racepower/page" data-i18n="races.to_calc">賽事計算機 →</a>
+  </span>
+  <span class="grow"></span>
+  <button class="primary" id="add" data-i18n="races.add">＋ 新增賽事</button>
+</header>
+<main>
+  <section class="panel">
+    <div class="bar">
+      <select id="f-when" data-i18n-attr="aria-label:races.f.when" aria-label="">
+        <option value="all" data-i18n="races.f.all">全部</option>
+        <option value="past" data-i18n="races.f.past">比完的</option>
+        <option value="next" data-i18n="races.f.next">還沒比的</option>
+      </select>
+      <select id="f-prio" data-i18n-attr="aria-label:races.f.prio" aria-label="">
+        <option value="" data-i18n="races.f.prio_all">所有優先級</option>
+        <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+        <option value="-" data-i18n="races.f.prio_none">不在計畫裡</option>
+      </select>
+      <select id="f-kind" data-i18n-attr="aria-label:races.f.kind" aria-label="">
+        <option value="" data-i18n="races.f.kind_all">所有類型</option>
+        <option value="race" data-i18n="races.kind.race">越野賽</option>
+        <option value="road" data-i18n="races.kind.road">路跑賽</option>
+        <option value="other" data-i18n="races.kind.other">其他</option>
+      </select>
+      <select id="sort" data-i18n-attr="aria-label:races.sort.label" aria-label="">
+        <option value="date_desc" data-i18n="races.sort.date_desc">日期：新到舊</option>
+        <option value="date_asc" data-i18n="races.sort.date_asc">日期：舊到新</option>
+        <option value="km" data-i18n="races.sort.km">距離：長到短</option>
+        <option value="gain" data-i18n="races.sort.gain">爬升：多到少</option>
+        <option value="time" data-i18n="races.sort.time">完賽時間：長到短</option>
+      </select>
+      <button id="cmp-go" disabled data-i18n="races.cmp.go">比較兩場</button>
+      <span class="meta" id="cmp-hint" data-i18n="races.cmp.hint">勾選兩場比完的比賽，疊在一起比</span>
+    </div>
+  </section>
+  <section class="panel"><div id="list"><div class="empty" data-i18n="races.loading">讀取中…</div></div></section>
+  <section class="panel hidden" id="detail"></section>
+  <section class="panel hidden" id="cmp"></section>
+</main>
+
+<dialog id="ed">
+  <h2 id="ed-h"></h2>
+  <div class="form">
+    <label for="ed-name" data-i18n="races.ed.name">名稱</label><input id="ed-name" maxlength="120">
+    <label for="ed-date" data-i18n="races.ed.date">日期</label><input id="ed-date" type="date">
+    <label for="ed-kind" data-i18n="races.ed.kind">類型</label>
+    <select id="ed-kind"><option value="race" data-i18n="races.kind.race">越野賽</option><option value="road" data-i18n="races.kind.road">路跑賽</option><option value="other" data-i18n="races.kind.other">其他</option></select>
+    <label for="ed-prio" data-i18n="races.ed.prio">優先級</label>
+    <select id="ed-prio"><option>A</option><option>B</option><option>C</option></select>
+    <label for="ed-km" data-i18n="races.ed.km">距離（km）</label><input id="ed-km" type="number" min="0" step="0.1" inputmode="decimal">
+    <label for="ed-gain" data-i18n="races.ed.gain">爬升（m）</label><input id="ed-gain" type="number" min="0" step="10" inputmode="numeric">
+    <label for="ed-est" data-i18n="races.ed.est">預估時間（小時）</label><input id="ed-est" type="number" min="0" step="0.1" inputmode="decimal">
+    <label for="ed-result" data-i18n="races.ed.result">名次或成績</label><input id="ed-result" maxlength="200" data-i18n-attr="placeholder:races.ed.result_ph" placeholder="">
+    <label for="ed-note" data-i18n="races.ed.note">備註</label><textarea id="ed-note" rows="2"></textarea>
+    <div class="full meta" data-i18n="races.ed.more">多日行程的每天距離、GPX、關門時間、背包等，在賽事周期頁編輯。</div>
+  </div>
+  <div class="actions" style="margin-top:10px">
+    <button class="primary" id="ed-save" data-i18n="races.ed.save">儲存</button>
+    <button id="ed-cancel" data-i18n="races.ed.cancel">取消</button>
+    <span class="meta" id="ed-msg"></span>
+  </div>
+</dialog>
+
+<dialog id="cairn-dlg">
+  <h2 data-i18n="races.cairn.h">疊石 Cairn</h2>
+  <h3 class="meta" data-i18n="races.cairn.import_h">匯入 GPX</h3>
+  <div class="note" data-i18n="races.cairn.import_how">貼上 Cairn 行程的分享連結，路線和每天的終點會存成這場賽事的 GPX（原本的會被換掉）。</div>
+  <div class="bar" style="margin:6px 0">
+    <input id="ci-url" type="url" style="flex:1;min-width:0" data-i18n-attr="placeholder:races.cairn.url_ph" placeholder="">
+    <button id="ci-go" data-i18n="races.cairn.import_go">匯入</button>
+  </div>
+  <div class="note" id="ci-pick-na" data-i18n="races.cairn.import_pick_na">從已連結的 Cairn 帳號直接挑行程：Cairn 還沒提供這個功能，先用分享連結。</div>
+  <div class="meta" id="ci-msg"></div>
+  <h3 class="meta" data-i18n="races.cairn.push_h">推到 Cairn</h3>
+  <div id="cp-body" class="note"></div>
+  <label class="note hidden" id="cp-consent-row"><input type="checkbox" id="cp-consent"> <span id="cp-consent-text"></span></label>
+  <div class="actions">
+    <button class="primary" id="cp-go" data-i18n="races.cairn.push_go">推到 Cairn</button>
+    <button id="cairn-close" data-i18n="races.close">關閉</button>
+    <span class="meta" id="cp-msg"></span>
+  </div>
+</dialog>
+
+<script>
+const API = "/api/v1/app/races";
+const PLAN = "/api/v1/plan";
+const CPUSH = "/api/v1/account/links/cairn/events/";
+const T = (k, p) => I18N.t("races." + k, p);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const S = { rows: [], today: "", pick: [], cur: null, det: null, act: 0, dmode: "pace", cmp: null, omode: "pace", xmode: "pct", charts: [], cmpCharts: [], edit: null, cp: null };
+
+function hms(s) {
+  if (s == null) return "—";
+  s = Math.round(Math.abs(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
+}
+const signed = (d) => (d == null ? "—" : (d > 0 ? "+" : d < 0 ? "−" : "") + hms(d));
+function pace(v) { if (v == null || !isFinite(v)) return "—"; const a = Math.abs(v), m = Math.floor(a), s = Math.round((a - m) * 60); return `${m}:${String(s === 60 ? 59 : s).padStart(2, "0")}`; }
+const num = (v, d = 0) => (v == null ? "—" : (+v).toFixed(d));
+async function j(url, opt) {
+  const r = await fetch(url, { credentials: "same-origin", ...(opt || {}) });
+  let body = null;
+  try { body = await r.json(); } catch {}
+  if (!r.ok) {
+    const d = body && body.detail;
+    const e = new Error((typeof d === "string" ? d : d?.message || d?.errors?.[0]) || body?.message || `HTTP ${r.status}`);
+    e.status = r.status; throw e;
+  }
+  return body;
+}
+const send = (url, method, data) => j(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+function axis() {
+  return { axisLine: { lineStyle: { color: css("--line") } }, axisLabel: { color: css("--muted") },
+    splitLine: { lineStyle: { color: css("--line") } }, nameTextStyle: { color: css("--muted") } };
+}
+const kindName = (k) => (k ? T("kind." + k) : T("kind.none"));
+const statusText = (r) => (r.status === "done" ? T("source." + r.source) : T("status." + r.status));
+const actUrl = (a) => `/api/v1/app/activities/page?key=${encodeURIComponent(a.key || "")}`;
+
+// ---------------- the list ----------------
+async function load() {
+  try {
+    const r = await j(API);
+    S.rows = r.rows; S.today = r.today;
+  } catch (e) { $("list").innerHTML = `<div class="empty err">${esc(T("load_failed", { msg: e.message }))}</div>`; return; }
+  S.pick = S.pick.filter((id) => S.rows.some((r) => r.id === id && r.compare_idx != null));
+  renderList();
+}
+function shown() {
+  const w = $("f-when").value, p = $("f-prio").value, k = $("f-kind").value, s = $("sort").value;
+  let rows = S.rows.filter((r) => (w === "all" || (w === "past" ? r.past : !r.past))
+    && (!p || (p === "-" ? !r.priority : r.priority === p)) && (!k || r.kind === k));
+  const by = { date_desc: (a, b) => b.date.localeCompare(a.date), date_asc: (a, b) => a.date.localeCompare(b.date),
+    km: (a, b) => (b.distance_km || 0) - (a.distance_km || 0), gain: (a, b) => (b.climbing_m || 0) - (a.climbing_m || 0),
+    time: (a, b) => (b.finish_s || 0) - (a.finish_s || 0) }[s];
+  return rows.slice().sort(by);
+}
+function renderList() {
+  const rows = shown();
+  if (!S.rows.length) { $("list").innerHTML = `<div class="empty">${esc(T("none"))}</div>`; return; }
+  if (!rows.length) { $("list").innerHTML = `<div class="empty">${esc(T("none_filtered"))}</div>`; return; }
+  $("list").innerHTML = rows.map((r) => {
+    const acts = r.activities.map((a) => `<a href="${esc(actUrl(a))}">${esc(a.title || a.date)}</a>`).join(", ");
+    const facts = [r.distance_km != null ? `${num(r.distance_km, 1)} km` : "", r.climbing_m ? `↑${num(r.climbing_m)} m` : "",
+      esc(kindName(r.kind)), r.calc.saved ? `<span title="${esc(T("calc.saved_tip"))}">🧮 ${esc(T("calc.short"))}</span>` : ""].filter(Boolean);
+    const ck = r.compare_idx != null
+      ? `<input type="checkbox" data-pick="${esc(r.id)}" ${S.pick.includes(r.id) ? "checked" : ""} aria-label="${esc(T("cmp.pick"))}">` : "";
+    return `<div class="race ${S.cur === r.id ? "sel" : ""}">
+      <span class="ck">${ck}</span>
+      <span class="when">${esc(r.date)}${r.end !== r.date ? `<span class="meta"> – ${esc(r.end.slice(5))}</span>` : ""}</span>
+      <div class="body">
+        <div>${r.priority ? `<span class="pr ${r.priority}">${r.priority}</span> ` : ""}<button class="name" data-open="${esc(r.id)}">${esc(r.name || T("unnamed"))}</button></div>
+        <div class="facts meta">${facts.join("<span>·</span>")}</div>
+        <div class="st ${r.status}">${esc(statusText(r))}${acts ? ` · ${acts}` : r.past && r.why ? ` · <span class="meta">${esc(r.why)}</span>` : ""}</div>
+      </div>
+      <div class="right">${r.finish_s ? `<b>${hms(r.finish_s)}</b>` : r.past ? "" : `<span class="meta">${esc(T("days_to", { n: daysTo(r.date) }))}</span>`}
+        ${r.result ? `<span class="meta">${esc(r.result)}</span>` : ""}</div>
+    </div>`;
+  }).join("");
+  $("cmp-go").disabled = S.pick.length !== 2;
+}
+function daysTo(d) { return Math.round((Date.parse(d) - Date.parse(S.today)) / 86400000); }
+$("list").addEventListener("click", (e) => {
+  const id = e.target.dataset.open;
+  if (id) openRace(id);
+});
+$("list").addEventListener("change", (e) => {
+  const id = e.target.dataset.pick;
+  if (!id) return;
+  S.pick = S.pick.filter((x) => x !== id);
+  if (e.target.checked) { S.pick.push(id); if (S.pick.length > 2) S.pick.shift(); }
+  renderList();
+});
+for (const id of ["f-when", "f-prio", "f-kind", "sort"]) $(id).onchange = renderList;
+
+// ---------------- one race ----------------
+function dispose(list) { list.splice(0).forEach((c) => c.dispose()); }
+function writeUrl() {
+  const q = new URLSearchParams();
+  if (S.cur) q.set("race", S.cur);
+  if (S.cmp) q.set("cmp", S.pick.join(","));
+  history.replaceState(null, "", `${location.pathname}${q.toString() ? "?" + q : ""}`);
+}
+async function openRace(id) {
+  S.cur = id; S.act = 0; writeUrl(); renderList();
+  const el = $("detail");
+  el.classList.remove("hidden");
+  dispose(S.charts);
+  el.innerHTML = `<div class="empty">${esc(T("loading"))}</div>`;
+  const q = id.startsWith("e:") ? `event=${encodeURIComponent(id.slice(2))}` : `idx=${encodeURIComponent(id.slice(2))}`;
+  try { S.det = await j(`${API}/detail?${q}`); }
+  catch (e) { el.innerHTML = `<div class="empty err">${esc(T("load_failed", { msg: e.message }))}</div>`; return; }
+  if (S.cur !== id) return;
+  renderDetail();
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (S.det.row.event && S.det.row.past && S.det.row.priority === "A") loadReadiness(S.det.row.event_id);
+}
+function renderDetail() {
+  dispose(S.charts);
+  const d = S.det, r = d.row, ev = r.event;
+  const a = d.activities[S.act] || null, s = a?.summary || {};
+  const calc = r.calc.saved ? T("calc.open_saved") : T("calc.open_new");
+  const acts = d.activities.length > 1
+    ? `<select id="d-act">${d.activities.map((x, i) => `<option value="${i}" ${i === S.act ? "selected" : ""}>${esc(x.date)} ${esc(x.title)}</option>`).join("")}</select>` : "";
+  const stats = a ? [["time", hms(s.duration_s)], ["dist", `${num(s.distance_km, 2)} km`], ["pace", `${pace(s.pace_min_km)} /km`],
+    ["hr", s.avg_hr != null ? `${num(s.avg_hr)} bpm` : "—"], ["power", s.avg_power != null ? `${num(s.avg_power)} W` : "—"],
+    ["climb", s.climbing_m != null ? `${num(s.climbing_m)} m` : "—"]].map(([k, v]) => `<div><span class="meta">${esc(T("sum." + k))}</span><b>${esc(v)}</b></div>`).join("") : "";
+  const est = d.estimates.length ? `<h2>${esc(T("est.h"))} <span class="meta">${esc(T("est.sub"))}</span></h2>
+    <div class="tablewrap"><table><thead><tr><th></th><th>${esc(T("est.pred"))}</th><th>${esc(T("est.actual"))}</th><th>${esc(T("est.diff"))}</th></tr></thead><tbody>
+    ${d.estimates.map((e) => `<tr><td>${esc(T("est." + e.key))}${e.saved_at ? `<div class="meta">${esc(T("est.saved_at", { at: e.saved_at.slice(0, 16) }))}</div>` : ""}</td>
+      <td>${hms(e.predicted_s)}</td><td>${hms(e.actual_s)}</td><td class="${e.diff_s < 0 ? "better" : e.diff_s > 0 ? "worse" : ""}">${signed(e.diff_s)}</td></tr>`).join("")}</tbody></table></div>`
+    : r.past ? `<div class="note">${esc(T(r.finish_s ? "est.none_pred" : "est.none_actual"))}</div>` : "";
+  const hasPw = a && a.overlay && (a.overlay.power || []).some((v) => v != null);
+  $("detail").innerHTML = `
+    <h2>${r.priority ? `<span class="pr ${r.priority}">${r.priority}</span>` : ""}${esc(r.name || T("unnamed"))}
+      <span class="meta">${esc(r.date)}${r.end !== r.date ? " – " + esc(r.end) : ""} · ${esc(kindName(r.kind))}${r.distance_km != null ? ` · ${num(r.distance_km, 1)} km` : ""}${r.climbing_m ? ` · ↑${num(r.climbing_m)} m` : ""}</span></h2>
+    <div class="st ${r.status}">${esc(statusText(r))}${r.why ? ` <span class="meta">${esc(T("why_paren", { why: r.why }))}</span>` : ""}</div>
+    ${r.result ? `<div>${esc(T("result_line", { v: "\u0000" })).replace("\u0000", `<b>${esc(r.result)}</b>`)}</div>` : ""}
+    <div class="actions">
+      ${ev ? `<button id="d-edit">${esc(T("edit"))}</button><button class="danger" id="d-del">${esc(T("delete"))}</button>
+        <a class="calc" href="${esc(d.calc_url)}"><button>🧮 ${esc(calc)}</button></a>
+        <button id="d-cairn">${esc(T("cairn.btn"))}</button>`
+      : `<button id="d-addplan">${esc(T("add_to_plan"))}</button>`}
+      ${a ? `<a href="${esc(actUrl(a))}"><button>${esc(T("open_activity"))}</button></a>` : ""}
+    </div>
+    <div id="d-ready"></div>
+    ${a ? `<h2>${esc(T("day.h"))} ${acts}</h2><div class="stats">${stats}</div>` : r.past ? "" : `<div class="note">${esc(T("day.upcoming"))}</div>`}
+    ${est}
+    ${a && a.overlay ? `<h2>${esc(T("prof.h"))}
+      <span class="seg" id="dmode"><button data-v="pace" class="${S.dmode === "pace" ? "on" : ""}">${esc(T("m.pace"))}</button><button data-v="hr" class="${S.dmode === "hr" ? "on" : ""}">${esc(T("m.hr"))}</button>${hasPw ? `<button data-v="power" class="${S.dmode === "power" ? "on" : ""}">${esc(T("m.power"))}</button>` : ""}</span></h2>
+      <div class="chart" id="d-prof"></div>
+      <h2>${esc(T("splits.h"))} <span class="meta">${esc(T("splits.sub"))}</span></h2><div class="chart short" id="d-splits"></div>` : ""}`;
+  if (a && a.overlay) {
+    drawProfile(a); drawSplits(a);
+    $("dmode").querySelectorAll("button").forEach((b) => b.onclick = () => { S.dmode = b.dataset.v; renderDetail(); });
+  }
+  if ($("d-act")) $("d-act").onchange = () => { S.act = +$("d-act").value; renderDetail(); };
+  if ($("d-edit")) $("d-edit").onclick = () => openEditor(r);
+  if ($("d-del")) $("d-del").onclick = () => delRace(r);
+  if ($("d-cairn")) $("d-cairn").onclick = () => openCairn(r);
+  if ($("d-addplan")) $("d-addplan").onclick = () => openEditor(null, r);
+  if (S.ready && S.ready.id === r.event_id) drawReadiness();
+}
+async function loadReadiness(eid) {
+  try { S.ready = { id: eid, ...(await j(`${API}/readiness/${encodeURIComponent(eid)}`)) }; } catch { S.ready = null; return; }
+  if (S.det?.row?.event_id === eid) drawReadiness();
+}
+function drawReadiness() {
+  const r = S.ready, el = $("d-ready");
+  if (!el || !r) return;
+  if (!r.available) { el.innerHTML = r.why ? `<div class="note">${esc(T("ready.why", { why: r.why }))}</div>` : ""; return; }
+  el.innerHTML = `<h2>${esc(T("ready.h"))} <span class="meta">${esc(T("ready.sub"))}</span></h2>
+    <div>${esc(r.text)}</div><div class="facts meta">${r.stages.map((s, i) => `<span>${i + 1}. ${esc(s.name)} ${s.unlocked ? `${s.done}/${s.total}${s.passed ? " ✓" : ""}` : "—"}</span>`).join(" · ")}</div>`;
+}
+function drawProfile(a) {
+  const o = a.overlay, key = { pace: "pace_min_km", hr: "hr", power: "power" }[S.dmode];
+  const x = o.dist_km;
+  const fmtY = S.dmode === "pace" ? pace : (v) => Math.round(v);
+  const ax = axis();
+  const c = echarts.init($("d-prof")); S.charts.push(c);
+  c.setOption({
+    animation: false, legend: { top: 0, textStyle: { color: css("--muted") } },
+    grid: { left: 46, right: 54, top: 28, bottom: 30 },
+    tooltip: { trigger: "axis", formatter: (ps) => `${num(ps[0].value[0], 2)} km<br>` + ps.map((p) => `${p.marker}${p.seriesName} ${p.value[1] == null ? "—" : p.seriesIndex === 0 ? Math.round(p.value[1]) + " m" : fmtY(p.value[1])}`).join("<br>") },
+    xAxis: { type: "value", min: 0, max: "dataMax", name: "km", ...ax, axisLabel: { color: css("--muted"), formatter: (v) => (+v).toFixed(0) } },
+    // units in the labels (an axis name sits badly on the inverted pace axis and on a phone)
+    yAxis: [{ type: "value", scale: true, position: "right", ...ax, splitLine: { show: false }, axisLabel: { color: css("--muted"), formatter: (v) => `${Math.round(v)} m` } },
+      { type: "value", scale: true, inverse: S.dmode === "pace", position: "left", ...ax,
+        axisLabel: { color: css("--muted"), formatter: (v) => fmtY(v) + (S.dmode === "pace" ? "" : { hr: "", power: " W" }[S.dmode]) } }],
+    series: [{ type: "line", name: T("m.elev"), yAxisIndex: 0, showSymbol: false, data: x.map((v, i) => [v, o.elev[i]]),
+      lineStyle: { width: 1, color: css("--elev") }, areaStyle: { color: css("--elev"), opacity: .25 }, itemStyle: { color: css("--elev") } },
+      { type: "line", name: T("m." + S.dmode), yAxisIndex: 1, showSymbol: false, connectNulls: false, data: x.map((v, i) => [v, (o[key] || [])[i]]),
+        lineStyle: { width: 1.6, color: css("--a") }, itemStyle: { color: css("--a") } }],
+  });
+}
+function drawSplits(a) {
+  const sp = a.splits;
+  if (!sp.length) { $("d-splits").outerHTML = `<div class="empty">${esc(T("no_dist"))}</div>`; return; }
+  const ax = axis();
+  const c = echarts.init($("d-splits")); S.charts.push(c);
+  c.setOption({
+    animation: false, grid: { left: 46, right: 12, top: 12, bottom: 34 },
+    tooltip: { trigger: "axis", formatter: (ps) => `${esc(T("splits.km", { k: ps[0].axisValue }))}<br>${pace(ps[0].data.value)} /km · ${hms(ps[0].data.r.time_s)}${ps[0].data.r.avg_hr != null ? ` · ${num(ps[0].data.r.avg_hr)} bpm` : ""}` },
+    xAxis: { type: "category", data: sp.map((x) => String(x.km)), name: "km", nameLocation: "middle", nameGap: 22, ...ax, splitLine: { show: false } },
+    yAxis: { type: "value", min: 0, name: "min/km", ...ax, axisLabel: { color: css("--muted"), formatter: pace } },
+    dataZoom: sp.length > 40 ? [{ type: "inside" }] : undefined,
+    series: [{ type: "bar", data: sp.map((x) => ({ value: x.pace_min_km, r: x })), itemStyle: { color: css("--a"), borderRadius: [2, 2, 0, 0] } }],
+  });
+}
+
+// ---------------- two races (the activity comparison, SP-625) ----------------
+$("cmp-go").onclick = runCompare;
+async function runCompare() {
+  const [ra, rb] = S.pick.map((id) => S.rows.find((r) => r.id === id));
+  if (!ra || !rb) return;
+  const el = $("cmp");
+  el.classList.remove("hidden");
+  dispose(S.cmpCharts);
+  el.innerHTML = `<div class="empty">${esc(T("loading"))}</div>`;
+  try { S.cmp = { a: ra, b: rb, res: await j(`/api/v1/app/activity-compare?a=${ra.compare_idx}&b=${rb.compare_idx}`) }; }
+  catch (e) { el.innerHTML = `<div class="empty err">${esc(T("load_failed", { msg: e.message }))}</div>`; return; }
+  writeUrl();
+  renderCompare();
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function renderCompare() {
+  dispose(S.cmpCharts);
+  const { a: ra, b: rb, res } = S.cmp, s = res.summary;
+  const who = (r, side) => `<div><span><i class="dot ${side}"></i> ${side.toUpperCase()}</span> <b>${esc(r.name || T("unnamed"))}</b>
+    <span class="meta">${esc(r.date)}${r.result ? " · " + esc(r.result) : ""}</span></div>`;
+  const rows = [["time", "duration_s", hms, true], ["dist", "distance_km", (v) => num(v, 2) + " km"], ["pace", "pace_min_km", pace, true],
+    ["hr", "avg_hr", (v) => num(v) + " bpm"], ["power", "avg_power", (v) => num(v) + " W"], ["climb", "climbing_m", (v) => num(v) + " m"]]
+    .filter(([, k]) => s.a[k] != null || s.b[k] != null);
+  const sign = (d, f) => (d == null ? "—" : d === 0 ? f(0) : (d > 0 ? "+" : "−") + f(Math.abs(d)).replace(/^-/, ""));
+  const hasPw = (s.a.avg_power ?? s.b.avg_power) != null;
+  const full = `/api/v1/app/activity-compare/page?a=${ra.compare_idx}&b=${rb.compare_idx}`;
+  $("cmp").innerHTML = `<h2>${esc(T("cmp.h"))} <span class="meta">${esc(T("cmp.sub"))}</span></h2>
+    <div class="who">${who(ra, "a")}${who(rb, "b")}</div>
+    ${res.aligned ? `<div class="note">${esc(T("cmp.same_course", { name: res.aligned.name }))}</div>` : ""}
+    <div class="tablewrap"><table><thead><tr><th></th><th><i class="dot a"></i> A</th><th><i class="dot b"></i> B</th><th>B − A</th></tr></thead><tbody>
+    ${rows.map(([k, key, f, low]) => { const d = s.diff[key]; return `<tr><td>${esc(T("sum." + k))}</td><td>${s.a[key] == null ? "—" : f(s.a[key])}</td><td>${s.b[key] == null ? "—" : f(s.b[key])}</td>
+      <td class="${low && d ? (d < 0 ? "better" : "worse") : ""}">${sign(d, f)}</td></tr>`; }).join("")}</tbody></table></div>
+    <h2 style="margin-top:8px">${esc(T("cmp.ov"))}
+      <span class="seg" id="omode"><button data-v="pace">${esc(T("m.pace"))}</button><button data-v="hr">${esc(T("m.hr"))}</button>${hasPw ? `<button data-v="power">${esc(T("m.power"))}</button>` : ""}</span>
+      <span class="seg" id="xmode"><button data-v="pct">${esc(T("x.pct"))}</button><button data-v="dist">${esc(T("x.dist"))}</button><button data-v="time">${esc(T("x.time"))}</button></span></h2>
+    <div class="chart" id="c-ov"></div>
+    <div class="note">${esc(T("cmp.note"))} <a href="${esc(full)}">${esc(T("cmp.full"))}</a></div>`;
+  for (const [id, key] of [["omode", "omode"], ["xmode", "xmode"]]) {
+    $(id).querySelectorAll("button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.v === S[key]);
+      b.onclick = () => { S[key] = b.dataset.v; renderCompare(); };
+    });
+  }
+  drawOverlay();
+}
+function drawOverlay() {
+  const o = S.cmp.res.overlay, m = S.omode, x = S.xmode;
+  const key = { pace: "pace_min_km", hr: "hr", power: "power" }[m];
+  const xs = (side) => (x === "pct" ? o[side].pct : x === "dist" ? o[side].dist_km : o[side].t_s.map((v) => (v == null ? null : v / 60)));
+  const ser = (side) => ({ type: "line", name: side.toUpperCase(), showSymbol: false, connectNulls: false,
+    lineStyle: { width: 1.6, color: css("--" + side) }, itemStyle: { color: css("--" + side) },
+    data: (o[side][key] || []).map((v, i) => [xs(side)[i], v]) });
+  const fmtY = m === "pace" ? pace : (v) => Math.round(v);
+  const fmtX = x === "pct" ? (v) => `${Math.round(v)}%` : x === "dist" ? (v) => (+v).toFixed(1) : (v) => hms(v * 60);
+  const ax = axis();
+  const c = echarts.init($("c-ov")); S.cmpCharts.push(c);
+  c.setOption({
+    animation: false, legend: { top: 0, textStyle: { color: css("--muted") } },
+    grid: { left: 52, right: 16, top: 28, bottom: 30 },
+    tooltip: { trigger: "axis", formatter: (ps) => `${fmtX(ps[0].value[0])}<br>` + ps.map((p) => `${p.marker}${p.seriesName} ${p.value[1] == null ? "—" : fmtY(p.value[1])}`).join("<br>") },
+    xAxis: { type: "value", min: 0, max: x === "pct" ? 100 : "dataMax", name: { pct: "%", dist: "km", time: T("x.time_unit") }[x], ...ax,
+      axisLabel: { color: css("--muted"), formatter: fmtX } },
+    yAxis: { type: "value", scale: true, inverse: m === "pace", name: { pace: "min/km", hr: "bpm", power: "W" }[m], ...ax,
+      axisLabel: { color: css("--muted"), formatter: fmtY } },
+    series: [ser("a"), ser("b")],
+  });
+}
+
+// ---------------- add / edit / delete (the season plan's events: PUT / DELETE /api/v1/plan/events) ----------------
+function openEditor(row, fromAct) {
+  const ev = row?.event || null;
+  S.edit = ev;
+  $("ed-h").textContent = T(ev ? "ed.h_edit" : "ed.h_add");
+  const v = ev || {};
+  $("ed-name").value = v.name || fromAct?.name || "";
+  $("ed-date").value = (v.date || fromAct?.date || "").slice(0, 10);
+  $("ed-kind").value = ["race", "road", "other"].includes(v.kind) ? v.kind : "race";
+  $("ed-prio").value = v.priority || "B";
+  $("ed-km").value = v.distance_km ?? (fromAct?.distance_km != null ? (+fromAct.distance_km).toFixed(1) : "");
+  $("ed-gain").value = v.climbing_m ?? (fromAct?.climbing_m != null ? Math.round(fromAct.climbing_m) : "");
+  $("ed-est").value = v.est_hours ?? "";
+  $("ed-result").value = v.result || "";
+  $("ed-note").value = v.note || "";
+  $("ed-msg").textContent = "";
+  $("ed").showModal();
+}
+const numOr = (id) => ($(id).value === "" ? null : Number($(id).value));
+$("ed-cancel").onclick = () => $("ed").close();
+$("ed-save").onclick = async () => {
+  const body = { ...(S.edit || {}), name: $("ed-name").value.trim(), date: $("ed-date").value, kind: $("ed-kind").value,
+    priority: $("ed-prio").value, distance_km: numOr("ed-km"), climbing_m: numOr("ed-gain"), est_hours: numOr("ed-est"),
+    result: $("ed-result").value.trim(), note: $("ed-note").value };
+  if (!body.name || !body.date) { $("ed-msg").innerHTML = `<span class="err">${esc(T("ed.need"))}</span>`; return; }
+  $("ed-save").disabled = true; $("ed-msg").textContent = T("saving");
+  try {
+    const r = await send(`${PLAN}/events`, "PUT", body);
+    $("ed").close();
+    await load();
+    openRace("e:" + r.event.id);
+  } catch (e) { $("ed-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  $("ed-save").disabled = false;
+};
+$("add").onclick = () => openEditor(null);
+async function delRace(r) {
+  if (!confirm(T("del_confirm", { name: r.name }))) return;
+  try { await j(`${PLAN}/events/${encodeURIComponent(r.event_id)}`, { method: "DELETE" }); }
+  catch (e) { alert(e.message); return; }
+  S.cur = null; S.det = null; $("detail").classList.add("hidden"); dispose(S.charts);
+  writeUrl(); load();
+}
+
+// ---------------- Cairn: import a share link's GPX (SP-537), push the course (SP-655) ----------------
+let CAIRN_ROW = null;
+async function openCairn(r) {
+  CAIRN_ROW = r;
+  $("ci-url").value = ""; $("ci-msg").textContent = ""; $("cp-msg").textContent = "";
+  $("cp-body").textContent = T("loading");
+  $("cairn-dlg").showModal();
+  await cairnStatus(); cpRender();
+}
+async function cairnStatus() {
+  try { S.cp = await j(CPUSH + encodeURIComponent(CAIRN_ROW.event_id)); }
+  catch (e) { S.cp = { unavailable: true, status: e.status }; }
+}
+function cpRender() {
+  const st = S.cp, go = $("cp-go");
+  $("cp-consent-row").classList.add("hidden"); $("cp-consent").checked = false;
+  go.hidden = false; go.disabled = true;
+  if (!st || st.unavailable || !st.available) {     // sign-in off / Cairn not set up on this site
+    $("cp-body").innerHTML = esc(T("cairn.unavailable")); go.hidden = true; return;
+  }
+  if (!st.linked) {
+    $("cp-body").innerHTML = `${esc(T("cairn.link_first"))} <a href="${esc(st.link_url)}">${esc(T("cairn.link_go"))}</a>`;
+    go.hidden = true; return;
+  }
+  if (!st.plan_ok) { $("cp-body").innerHTML = esc(T("cairn.plan")); go.hidden = true; return; }
+  let h = esc(T("cairn.what"));
+  if (st.pushed) h += `<br>${esc(T("cairn.pushed", { at: String(st.pushed.at || "").slice(0, 16) }))} <a href="${esc(st.pushed.url)}" target="_blank" rel="noopener noreferrer">${esc(T("cairn.open"))}</a>`;
+  if (!st.ready) h += `<br><span class="err">${esc(st.why || T("cairn.not_ready"))}</span>`;
+  $("cp-body").innerHTML = h;
+  if (!st.allowed) { $("cp-consent-text").textContent = T("cairn.consent", { text: st.consent_text }); $("cp-consent-row").classList.remove("hidden"); }
+  go.disabled = !st.ready || !st.allowed;
+}
+$("cp-consent").onchange = () => { $("cp-go").disabled = !(S.cp?.ready && $("cp-consent").checked); };
+$("cp-go").onclick = async () => {
+  $("cp-go").disabled = true; $("cp-msg").textContent = T("sending");
+  try {
+    const r = await send(CPUSH + encodeURIComponent(CAIRN_ROW.event_id) + "/push", "POST", { consent: !S.cp?.allowed && $("cp-consent").checked });
+    await cairnStatus(); cpRender();
+    $("cp-msg").innerHTML = `<span class="ok">${esc(T(r.action === "updated" ? "cairn.done_updated" : "cairn.done_created"))} ✓</span> <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(T("cairn.open"))}</a>`;
+  } catch (e) { $("cp-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; await cairnStatus(); cpRender(); }
+};
+$("ci-go").onclick = async () => {
+  const url = $("ci-url").value.trim();
+  if (!url) { $("ci-msg").innerHTML = `<span class="err">${esc(T("cairn.need_url"))}</span>`; return; }
+  $("ci-go").disabled = true; $("ci-msg").textContent = T("sending");
+  try {
+    const r = await send(`${PLAN}/events/${encodeURIComponent(CAIRN_ROW.event_id)}/gpx/cairn`, "POST", { url });
+    $("ci-msg").innerHTML = `<span class="ok">${esc(T("cairn.imported", { name: r.cairn?.name || "", km: num(r.gpx?.km, 1) }))} ✓</span>`
+      + (r.cairn?.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join("");
+    await cairnStatus(); cpRender();
+    await load(); if (S.cur) openRace(S.cur);
+  } catch (e) { $("ci-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  $("ci-go").disabled = false;
+};
+$("cairn-close").onclick = () => $("cairn-dlg").close();
+
+// ---------------- init ----------------
+window.addEventListener("resize", () => [...S.charts, ...S.cmpCharts].forEach((c) => c.resize()));
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const ev = q.get("event");
+  await load();
+  const want = q.get("race") || (ev ? "e:" + ev : null);
+  const cmp = (q.get("cmp") || "").split(",").filter((id) => S.rows.some((r) => r.id === id && r.compare_idx != null));
+  if (cmp.length === 2) { S.pick = cmp; renderList(); runCompare(); }
+  if (want && S.rows.some((r) => r.id === want)) openRace(want);
+})();
+</script>
+</body>
+</html>

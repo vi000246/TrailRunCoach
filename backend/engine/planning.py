@@ -175,6 +175,7 @@ CUTOFF_MAX_H = 240.0                       # Event.cutoff_hours: 10 days, past t
 # (sleep points in the race calculator, not days). 百岳 is always split by day; 路跑 is never asked.
 RACE_FORMATS = ("stage", "continuous")
 FORMAT_KINDS = ("race", "other")
+RESULT_MAX = 200                           # Event.result (SP-675): characters kept
 ULTRA_GPX_KM = 50.0                        # SP-114: 超馬 (越野 ≥ 50 km) without a GPX → a reminder to upload one
 
 
@@ -223,6 +224,9 @@ class Event:
     # SP-87 土徑比 %: the share of the course on dirt / trail (not asphalt / concrete), 0–100; None = not
     # set. engine/technical.py: ≥ TRAIL_PCT_MIN → the 專項期 technical session, below → none
     trail_pct: Optional[float] = None
+    # SP-675 名次或成績 of a finished race, the user's own words (「總排 35／分組第 5」); "" = none. The
+    # finish time itself comes from the matched activity (engine/race_activities.py)
+    result: str = ""
 
     @property
     def continuous(self) -> bool:
@@ -878,6 +882,12 @@ class Plan:
         save — SP-533): its per-day numbers come from the GPX, so blank day rows are let through
         (rows filled in part are still checked)."""
         data = {k: v for k, v in data.items() if k in Event.__dataclass_fields__}
+        # SP-675: a save without the result (賽事周期's editor has no such field) keeps the stored one
+        if data.get("result") is None:
+            prev = next((e for e in self.events if data.get("id") and e.id == data["id"]), None)
+            data["result"] = prev.result if prev is not None else ""
+        else:
+            data["result"] = str(data["result"]).strip()[:RESULT_MAX]
         if data.get("priority") not in PRIORITIES:
             data["priority"] = "A"
         if data.get("kind") not in KINDS:

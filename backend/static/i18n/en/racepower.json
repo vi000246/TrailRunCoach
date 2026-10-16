@@ -434,5 +434,6 @@
   "cpush.sending": "Pushing…",
   "cpush.done_created": "Trip created in Cairn",
   "cpush.done_updated": "Trip updated in Cairn",
-  "cpush.fail": "Couldn't read the push status. Try again later."
+  "cpush.fail": "Couldn't read the push status. Try again later.",
+  "to_races": "Race manager →"
 }

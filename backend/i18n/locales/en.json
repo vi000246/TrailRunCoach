@@ -2863,5 +2863,8 @@
   "每天都對上了": "Every day matched",
   "你在活動頁標成比賽": "Marked as a race by you on the activity page",
   "標題有比賽的字": "The title says it was a race",
-  "{when}：{why}": "{when}: {why}"
+  "{when}：{why}": "{when}: {why}",
+  "賽前完備程度只追蹤 A 賽事": "Race readiness follows A races only",
+  "比賽還沒到：現在的完備程度在圖表分析的專項期／減量期卡片": "The race hasn't come yet: today's readiness is on the Build / taper card of the charts",
+  "比賽前一天的下一場 A 賽事不是這場": "The day before, the next A race was another one"
 }

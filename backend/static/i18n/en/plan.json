@@ -68,5 +68,6 @@
   "ev.res_partial": "Finished, some days matched",
   "ev.res_unmatched": "Finished, no activity matched",
   "ev.res_manual": "set by you on the activity page",
-  "ev.res_fix": "To set it, open the activity on the Activities page and pick this race under “Plan race”."
+  "ev.res_fix": "To set it, open the activity on the Activities page and pick this race under “Plan race”.",
+  "to_races": "Race manager →"
 }

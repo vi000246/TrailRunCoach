@@ -336,6 +336,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
 <header>
   <h1 data-i18n="racepower.title">賽事計算機</h1>
   <span class="meta" id="asof"></span>
+  <!-- SP-675: back to the race manager (on the chosen event: ?event=<id>) -->
+  <a id="to-races" href="/api/v1/app/races/page" data-i18n="racepower.to_races">賽事管理 →</a>
   <div class="seg tabs" id="tabs"><button data-tab="calc" class="on">計算</button><button data-tab="acc">準確度</button></div>
   <!-- SP-450: 專項 (主要訓練項目, static/sportchip.js) — road hides the 越野／百岳 types and presets
        (applySport); changing it saves the setting and reloads, and init() reads it again -->
@@ -3164,6 +3166,7 @@ function applyEventDefaults(e) {
 // a first visit takes the event's distance / date / place and its stored GPX
 async function chooseEvent(eid) {
   ls.set("event", eid || "");
+  $("to-races").href = "/api/v1/app/races/page" + (eid ? "?event=" + encodeURIComponent(eid) : "");
   $("saved-line").textContent = "";
   cpushRefresh();                           // SP-655: 推到 Cairn for this event (or hidden)
   const e = (INP.events || []).find((x) => x.id === eid);
@@ -3188,6 +3191,16 @@ async function chooseEvent(eid) {
     COURSE = null; ls.set("course", null); S.csrc = "manual"; saveUI(); syncForm();
   }
   courseLine(); loadHeat(); autoWeather(); schedule();
+}
+// SP-675: the race manager opens a finished race's saved calculation (?event=<id>): the select lists
+// only the coming events, so a past one is added from the season plan for this visit
+async function addPastEvent(eid) {
+  if (!eid || (INP.events || []).some((e) => e.id === eid)) return;
+  let ev = null;
+  try { ev = ((await j("/api/v1/plan")).events || []).find((e) => e.id === eid) || null; } catch { ev = null; }
+  if (!ev) return;
+  INP.events = [...(INP.events || []), { ...ev, date: String(ev.date).slice(0, 10), past: true }];
+  renderEvents();
 }
 function renderEvents() {
   const ev = INP.events;
@@ -3350,6 +3363,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   renderEvents(); renderHike(); renderRE(); renderEnvChips();
   loadHikeMeta();
   const ev0 = new URLSearchParams(location.search).get("event") || ls.get("event", "");   // ?event=<id>: a link to one event's plan
+  if (new URLSearchParams(location.search).get("event")) await addPastEvent(ev0);
   if (ev0 && (INP.events || []).some((e) => e.id === ev0)) { $("event").value = ev0; await chooseEvent(ev0); }
   else { loadHeat(); autoWeather(); await run(); }
 })();

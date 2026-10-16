@@ -34,6 +34,7 @@ PAGES = {
     "compliance": "/api/v1/overview/plan/compliance/page",
     "plan": "/api/v1/plan/page",
     "racepower": "/api/v1/racepower/page",
+    "races": "/api/v1/app/races/page",          # 賽事管理 (SP-675)
     "settings": "/api/v1/app/settings",
     "activity": "/api/v1/app/activities/page",
     "viewer": "/api/v1/app/viewer",

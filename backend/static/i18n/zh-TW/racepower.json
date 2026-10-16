@@ -434,5 +434,6 @@
   "cpush.sending": "推送中…",
   "cpush.done_created": "已在 Cairn 建立行程",
   "cpush.done_updated": "已更新 Cairn 上的行程",
-  "cpush.fail": "讀不到推送狀態，稍後再試。"
+  "cpush.fail": "讀不到推送狀態，稍後再試。",
+  "to_races": "賽事管理 →"
 }

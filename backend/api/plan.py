@@ -209,6 +209,7 @@ class EventIn(BaseModel):
     race_format: Optional[str] = None       # SP-114 賽制 stage | continuous (≥ 2 day 越野賽／其他)
     poles: bool = False                     # SP-244 會用登山杖: calculator hints only
     trail_pct: Optional[float] = None       # SP-87 土徑比 % (0–100): ≥ 50 → the 專項期 技術地形 session
+    result: Optional[str] = Field(None, max_length=200)   # SP-675 名次或成績; None = keep the stored one
     # SP-533: the page uploads a GPX right after this save (or the user will later): a multi-day trip
     # may then be saved without typing each day (the days come from the GPX; equal km until its day ends)
     gpx_pending: bool = False

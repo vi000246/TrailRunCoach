@@ -24,6 +24,8 @@
     { id: "routes", href: "/api/v1/routes/page", icon: I('<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/>') },
     // 賽事計算機 (the page id stays "racepower": its URL and storage keys)
     { id: "racepower", href: "/api/v1/racepower/page", icon: I('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15h.01M8.5 18h.01M12 18h3.5"/>') },
+    // 賽事管理 (SP-675, api/race_manager.py): every race, one race's day, two compared — under 更多
+    { id: "races", href: "/api/v1/app/races/page", icon: I('<path d="M6 21V4"/><path d="M6 4.5h11l-2.2 3.5L17 11.5H6"/>') },
     // 傷病紀錄 (engine/injuries.py): hidden when its API answers 404 (the demo mode)
     { id: "injuries", href: "/api/v1/app/injuries/page", feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
     // 操作手冊 (SP-558, api/manual.py): public, the one page a signed-out visitor's bar has
@@ -60,7 +62,7 @@
   // 成就 is the 成就 tab of 活動列表 (2026-10-02); /api/v1/achievements/page redirects there
   // 操作手冊 sits right above 設定 (SP-505: 「選單放在設定頁的上面」)
   // 關於 (SP-495) last, under 設定
-  const MORE = new Set(["activity", "routes", "injuries", "manual", "settings", "admin", "about"]);
+  const MORE = new Set(["activity", "routes", "races", "injuries", "manual", "settings", "admin", "about"]);
   for (const p of PAGES) p.more = !PUBLIC && MORE.has(p.id);
   // SP-480: 設定's purpose names 計算模式 only for whoever may switch it (SP-464: in sign-in mode an
   // admin; the owner's app and the demo have no `login`)

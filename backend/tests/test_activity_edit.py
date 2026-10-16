@@ -389,8 +389,8 @@ def test_nav_order_and_activity_list_name():
     shell = (STATIC / "shell.js").read_text(encoding="utf-8")
     import re
     ids = re.findall(r'\{ id: "(\w+)"', shell)
-    assert ids == ["home", "schedule", "charts", "plan", "activity", "routes", "racepower",
-                   "injuries", "manual", "settings", "admin", "about"]      # 成就 is a tab of 活動列表; 操作手冊 (SP-558), 管理 (SP-351), 關於 (SP-495) last
+    assert ids == ["home", "schedule", "charts", "plan", "activity", "routes", "racepower", "races",
+                   "injuries", "manual", "settings", "admin", "about"]      # 成就 is a tab of 活動列表; 賽事管理 after 賽事計算機 (SP-675); 操作手冊 (SP-558), 管理 (SP-351), 關於 (SP-495) last
     assert _catalog("zh-TW", "shell")["page.activity.name"] == "活動列表"
     assert not any(k.startswith("page.achievements.") for k in _catalog("zh-TW", "shell"))
 
