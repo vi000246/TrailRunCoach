@@ -70,11 +70,11 @@ def board(acts, rc=None, today=TODAY, **kw):
 
 def test_three_stages_with_their_items():
     b = board([act(monday(10), 1.0, 8, 300)])
-    assert [s["id"] for s in b["stages"]] == ["volume", "validation", "race_state"]
+    assert [s["id"] for s in b["stages"]] == ["volume", "validation"]          # SP-677: race state is taper()'s
     assert [i["id"] for i in stage(b, "volume")["items"]] == \
         ["long", "weekly_long", "long_climb", "terrain", "b2b", "race_sim"]
     assert [i["id"] for i in stage(b, "validation")["items"]] == ["repeat", "ctl_top", "uphill", "high_test"]
-    assert [i["id"] for i in stage(b, "race_state")["items"]] == \
+    assert [c["id"] for c in RD.taper(race(), TODAY, [])["checks"]] == \
         ["taper_volume", "climb_early", "ctl_down_days", "race_tsb"]
     assert [i["id"] for i in b["weekly"]] == ["ramp", "injury"]          # RPE only once something is rated
     assert "biggest_week" not in str(b)
@@ -90,14 +90,12 @@ def test_two_thirds_passes_a_stage():
 
 
 def test_race_state_unlocks_when_the_taper_starts():
-    b = board([act(monday(9), 1.0, 8, 200)])
-    rs = stage(b, "race_state")
-    assert rs["unlocked"] is False and rs["state"] == "lock"
-    assert rs["unlock_date"] == (START - dt.timedelta(days=10)).isoformat()      # planning.TAPER_DAYS
-    assert all(c["state"] == "tap" for i in rs["items"] for c in i["cells"].values())
-    assert rs["total"] == 0 or not any(c["counts"] for i in rs["items"] for c in i["cells"].values())
+    t = RD.taper(race(), TODAY, [act(monday(9), 1.0, 8, 200)])
+    assert t["pre"] is True and t["taper_from"] == (START - dt.timedelta(days=10)).isoformat()   # TAPER_DAYS
+    assert all(c["state"] == "lock" for c in t["checks"])
+    t = RD.taper(race(), START - dt.timedelta(days=5), [act(monday(9), 1.0, 8, 200)])
+    assert t["pre"] is False and not any(c["state"] == "lock" for c in t["checks"])
     b = board([act(monday(9), 1.0, 8, 200)], today=START - dt.timedelta(days=5))
-    assert stage(b, "race_state")["unlocked"] is True and stage(b, "race_state")["state"] != "lock"
     # 表現驗證 opens at 賽前第 6 週
     assert stage(board([act(monday(10), 1.0, 8, 200)], today=monday(8)), "validation")["unlocked"] is False
     assert stage(b, "validation")["unlocked"] is True
@@ -107,8 +105,8 @@ def test_race_state_unlocks_when_the_taper_starts():
 
 def test_weekly_cells_and_targets_from_the_plan_engine():
     b = board([act(monday(10), 1.0, 8, 300)])
-    assert [w["week"] for w in b["weeks"]] == list(range(10, 0, -1))
-    assert [w["phase"] for w in b["weeks"]] == ["specific"] * 8 + ["taper"] * 2
+    assert [w["week"] for w in b["weeks"]] == list(range(10, 2, -1))            # SP-677: to week 3
+    assert [w["phase"] for w in b["weeks"]] == ["specific"] * 8
     assert next(w for w in b["weeks"] if w["current"])["week"] == 3
     long = item(b, "long")["cells"]
     assert sorted(long) == list(range(3, 11))
@@ -298,5 +296,5 @@ def test_compute_reads_the_next_a_race_from_the_plan(monkeypatch):
     plan = Plan(events=[Event("e1", "測試越野", START.isoformat(), kind="race", priority="A", distance_km=50,
                               climbing_m=3000, est_hours=8.0)])
     b = RD.compute(plan, None, TODAY)
-    assert b["race"]["id"] == "e1" and b["weeks_out"] == 3 and len(b["stages"]) == 3
+    assert b["race"]["id"] == "e1" and b["weeks_out"] == 3 and len(b["stages"]) == 2
     assert RD.compute(Plan(events=[]), None, TODAY)["race"] is None

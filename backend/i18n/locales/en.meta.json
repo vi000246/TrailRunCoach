@@ -10782,5 +10782,113 @@
   "平常的 {p}": {
     "draft": true,
     "src": "backend/engine/race_readiness.py:475"
+  },
+  "不超過減量天數（{n} 天）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:802"
+  },
+  "今天比賽": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:849"
+  },
+  "偏低": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:819"
+  },
+  "偏多": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:718"
+  },
+  "偏少": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:718"
+  },
+  "偏高": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:819"
+  },
+  "剩下幾天的爬坡課改平路或縮短": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:797"
+  },
+  "剩下幾天的課縮短一點，強度課保留、只減組數": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:790"
+  },
+  "太久": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:804"
+  },
+  "實際；目標長期負荷的 +10～+35 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:816"
+  },
+  "強度課保留，只減組數": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:833"
+  },
+  "比賽日太放鬆：保留一兩次短的強度課": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:814"
+  },
+  "比賽日還太累：剩下幾天再少練一點": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:812"
+  },
+  "減量期從 {d} 開始（賽前 {n} 天）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:848"
+  },
+  "減量期：{t}，{n} 項檢查 {k} 項 OK": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:870"
+  },
+  "減量開始到今天（平常 {h} 小時／週）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:789"
+  },
+  "減量開始後看": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:719"
+  },
+  "照計畫": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:718"
+  },
+  "照課表推算；目標長期負荷的 +10～+35 %": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:816"
+  },
+  "照課表的量跑就好，不用再減": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:790"
+  },
+  "賽": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:826"
+  },
+  "賽前 2 週起 ≤ 平常的 {p}": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:796"
+  },
+  "賽前 3 天看實際": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:718"
+  },
+  "賽前 {n} 天": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:849"
+  },
+  "這週總時數控制在 {lo}–{hi} 小時（已 {x}）": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:831"
+  },
+  "長期負荷往下天數": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:801"
+  },
+  "長期負荷降太久了：強度課照排，量不要再往下減": {
+    "draft": true,
+    "src": "backend/engine/race_readiness.py:803"
   }
 }

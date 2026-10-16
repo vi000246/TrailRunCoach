@@ -479,5 +479,12 @@
   "readiness.fig_vam": "最近 6 週每次爬坡的上坡腳程（每小時爬升 m）",
   "readiness.fig_target": "目標",
   "readiness.fig_race_climb": "比賽最長一段 {m} m",
-  "readiness.fig_climb_note": "每週最長一段連續爬升（m）；橫槓是那週的目標，虛線是比賽最長一段"
+  "readiness.fig_climb_note": "每週最長一段連續爬升（m）；橫槓是那週的目標，虛線是比賽最長一段",
+  "readiness.these_days": "這幾天要做",
+  "readiness.taper_len": "減量 {n} 天（{d} 開始）",
+  "readiness.taper_day": "減量第 {d} 天 / {n} 天",
+  "readiness.build_line": "專項期成績：{x}",
+  "readiness.go_build": "看 ③ 專項期頁 →",
+  "readiness.go_taper": "比賽狀態在 ④ 減量期頁看 →",
+  "readiness.mob_hint": "桌機看完整週曆；手機只列本週（點「看圖」看圖）"
 }

@@ -16,7 +16,7 @@ from backend.tests.test_race_readiness_sp650 import START, TODAY, act, board, ce
 
 ROOT = Path(__file__).resolve().parents[1]
 COUNT_ITEMS = {"weekly_long", "terrain", "b2b", "race_sim", "high_test"}
-LINKED = {"long", "ctl_top", "uphill", "taper_volume", "climb_early", "ctl_down_days", "race_tsb"}
+LINKED = {"long", "ctl_top", "uphill"}
 OWN = {"long_climb", "repeat"}
 
 
@@ -50,12 +50,12 @@ def test_a_past_week_without_any_activity_is_gray_but_a_bike_week_is_judged():
 # ---- 2. targets of later / taper cells from the board --------------------------------------------
 
 def test_taper_and_later_cells_show_their_target():
-    b = board([act(monday(9), 1.0, 8, 200)], first_day=date(2025, 1, 1))
-    assert cell(b, "taper_volume", 2)["state"] == "tap"
-    assert cell(b, "taper_volume", 2)["show"] == "40–59%"
-    assert cell(b, "climb_early", 2)["show"] == "≤59%"
-    assert cell(b, "ctl_down_days", 1)["show"] == "≤10"
-    assert cell(b, "race_tsb", 1)["show"] == "+10–+35%"
+    # SP-677: the taper's checks are the 減量期 card's (taper()); locked before it, showing their targets
+    t = {c["id"]: c for c in RD.taper(race(), TODAY, [act(monday(9), 1.0, 8, 200)])["checks"]}
+    assert t["taper_volume"]["state"] == "lock" and t["taper_volume"]["show"] == "40–59 %"
+    assert t["climb_early"]["show"] == "≤59%"
+    assert t["ctl_down_days"]["show"] == "≤ 10"
+    assert t["race_tsb"]["show"] == "+10～+35 %"
     b = board([act(monday(9), 1.0, 8, 200)], today=monday(8) + dt.timedelta(days=2), first_day=date(2025, 1, 1))
     assert cell(b, "long", 6)["state"] == "fut" and cell(b, "long", 6)["show"] == "75%"
     assert cell(b, "repeat", 5)["show"] == "≥95%" and cell(b, "ctl_top", 5)["show"] == "前 20%"
@@ -209,13 +209,13 @@ def test_a_mountain_race_is_trail_whatever_the_main_sport():
 def test_chronic_load_may_fall_as_long_as_the_taper():
     falling = ctl_series(400, lambda i: 60.0 if i < 391 else 60.0 - (i - 390) * 0.5, end=START - dt.timedelta(days=1))
     today = START - dt.timedelta(days=1)
-    b = board([act(monday(1), 1.0, 8, 50)], today=today, ctl=falling, first_day=date(2025, 1, 1))
-    it = item(b, "ctl_down_days")
-    assert it["name"] == "長期負荷往下不超過減量的 10 天" and it["met"] is True        # 9 days < 10 (was ≤ 7)
-    b = board([act(monday(1), 1.0, 8, 50)], today=today, ctl=falling, first_day=date(2025, 1, 1), taper_days=14)
-    rs = next(s for s in b["stages"] if s["id"] == "race_state")
-    assert rs["unlock_date"] == (START - dt.timedelta(days=14)).isoformat() and "14" in rs["span"]
-    assert "14" in item(b, "ctl_down_days")["name"]
+    def down(**kw):
+        t = RD.taper(race(), today, [act(monday(1), 1.0, 8, 50)], ctl=falling, **kw)
+        return t, next(c for c in t["checks"] if c["id"] == "ctl_down_days")
+    t, c = down()
+    assert c["value"] == 9 and c["state"] == "ok" and "10" in c["target"]       # 9 days < 10 (was ≤ 7)
+    t, c = down(taper_days=14)
+    assert t["taper_from"] == (START - dt.timedelta(days=14)).isoformat() and "14" in c["target"]
 
 
 def test_compute_takes_the_taper_length_from_the_plan_prefs(monkeypatch):
@@ -223,11 +223,14 @@ def test_compute_takes_the_taper_length_from_the_plan_prefs(monkeypatch):
     seen = {}
     monkeypatch.setattr(P, "taper_days", lambda e, pref=None: 13)
     monkeypatch.setattr(P, "taper_days_setting", lambda *a, **k: 13)
-    orig = RD.board
-    monkeypatch.setattr(RD, "board", lambda *a, **k: seen.update(k) or orig(*a, **k))
+    orig = RD.taper
+    monkeypatch.setattr(RD, "taper", lambda *a, **k: seen.update(k) or orig(*a, **k))
     from backend.tests.test_race_readiness_sp650 import test_compute_reads_the_next_a_race_from_the_plan as t
-    t(monkeypatch)
-    assert seen.get("taper_days") == 13
+    t(monkeypatch)                                       # the patches stay: compute_taper on the same plan
+    from backend.engine.planning import Event, Plan
+    plan = Plan(events=[Event("e1", "測試越野", START.isoformat(), kind="race", priority="A", distance_km=50,
+                              climbing_m=3000, est_hours=8.0)])
+    assert RD.compute_taper(plan, None, TODAY)["taper_days"] == 13 and seen.get("taper_days") == 13
 
 
 def test_this_week_says_what_to_do_not_what_was_reached():

@@ -1,11 +1,14 @@
-// 賽前完備程度 (kind "readiness", SP-651): the wide card on top of the 專項期 and 減量期 pages. The data is
-// race_readiness.board (SP-650) as the chart API sends it ({readiness, schedule}). Top to bottom, each
-// thing once: 本週要做 (+ 安排課表) → the three gates (counts only, a 2/3 tick, a locked one says when it
-// unlocks; a click shows only that stage in the calendar) → the week calendar (10 → 1 weeks to race, one row
-// per item grouped by stage, the criterion next to its name; a click on a cell says that week's target and
-// actual; a locked stage is faded) → one line of what is looked at every week.
-// Narrow (a phone, container < 640 px): the gates stack and the calendar becomes a row of week buttons
-// (a colour bar: red = something missed, blue = something due, green = all done); a button lists that week.
+// 賽前準備 / 減量檢查 (kind "readiness", SP-651, split by SP-677): the wide card on top of the 專項期 and 減量期
+// pages ({readiness, schedule, phase, other} from the chart API; `other` = the other card's link).
+// phase "build" (race_readiness.board): 本週要做 (+ 安排課表) → the two gates (專項量, 表現驗證: counts only,
+// a 2/3 tick; a click shows only that stage in the calendar) → the week calendar (10 → 3 weeks to race, one
+// row per item grouped by stage, the criterion next to its name; a click on a cell says that week's target
+// and actual) → what is looked at every week, and a line to the 減量期 card.
+// Narrow (a phone, container < 640 px): the gates stack and only this week's items are listed (with 看圖);
+// the whole calendar is on a wide screen.
+// phase "taper" (race_readiness.taper, drawTaper): 「賽前 N 天」 and the taper's day, a countdown strip,
+// 這幾天要做, four check cards (one number, a target band bar, the state, what to change when it is off,
+// 看圖), and one line of the 專項期 result with its card's link. No calendar.
 // SP-672: a cell shows the board's `show` as is (a later / taper cell: its target, set by race_readiness).
 // Every non-count item has 「看圖」: an existing chart (it.chart.href: that page, card and weeks) or the
 // card's own small chart under the calendar (it.chart.own: "repeat" = each session's best of the last 6 weeks
@@ -37,8 +40,7 @@
   padding: 1px 10px; font-size: 12.5px; }
 .rd-sched { margin-left: auto; color: #fff; background: var(--accent); border-radius: 6px; padding: 3px 10px;
   text-decoration: none; font-weight: 650; font-size: 12.5px; white-space: nowrap; }
-.rd-rail { display: flex; align-items: stretch; }
-.rd-arrow { display: flex; align-items: center; color: var(--muted); padding: 0 6px; font-size: 18px; }
+.rd-rail { display: flex; align-items: stretch; gap: 8px; }
 .rd-gate { flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit; border: 1px solid var(--line);
   border-radius: 10px; padding: 8px 12px; background: var(--panel); cursor: pointer; }
 .rd-gate.open { border: 2px solid var(--accent); }
@@ -61,9 +63,6 @@
 .rd-cal { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
 .rd-cal th, .rd-cal td { padding: 4px 3px; text-align: center; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
 .rd-cal thead th { color: var(--muted); font-weight: 500; font-size: 11.5px; line-height: 1.3; }
-.rd-cal thead tr.ph th { font-size: 11px; border-bottom: 0; padding-bottom: 0; }
-.rd-cal .phs { color: var(--accent); border-top: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); }
-.rd-cal .pht { color: var(--rd-tap); border-top: 3px solid color-mix(in srgb, var(--rd-tap) 35%, transparent); }
 .rd-cal th.lab, .rd-cal td.lab { text-align: left; padding-left: 6px; }
 .rd-cal td.lab { min-width: 150px; max-width: 240px; }
 .rd-cal td.lab small { display: block; color: var(--muted); font-size: 11px; }
@@ -89,15 +88,6 @@
   border-radius: 8px; padding: 6px 12px; min-height: 34px; }
 .rd-detail .dk { color: var(--muted); font-size: 12px; }
 .rd-mob { display: none; }
-.rd-weeks { display: flex; flex-wrap: wrap; gap: 4px; }
-.rd-wkb { flex: 1 0 calc(20% - 4px); min-width: 0; font: inherit; border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
-  text-align: center; padding: 3px 0; font-size: 11px; color: var(--muted); cursor: pointer; }
-.rd-wkb b { display: block; font-size: 14px; color: var(--text); }
-.rd-wkb.t { border-color: color-mix(in srgb, var(--rd-tap) 40%, var(--line)); }
-.rd-wkb.cur { border: 2px solid var(--accent); }
-.rd-wkb.sel { background: var(--accent); color: #fff; } .rd-wkb.sel b { color: #fff; }
-.rd-wkb i { display: block; height: 4px; margin: 2px 8px 0; border-radius: 2px; background: var(--line); }
-.rd-wkb i.r { background: var(--rd-bad); } .rd-wkb i.b { background: var(--accent); } .rd-wkb i.g { background: var(--rd-good); }
 .rd-mlist .mg { font-weight: 700; font-size: 12.5px; margin: 8px 0 2px; }
 .rd-mlist .mr { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
 .rd-mlist .mr small { color: var(--muted); }
@@ -119,9 +109,35 @@
 .rd-foot .watch { color: var(--rd-warn); } .rd-foot .bad { color: var(--rd-bad); }
 @container (max-width: 640px) {
   .rd-desk { display: none; } .rd-mob { display: block; }
-  .rd-rail { flex-direction: column; gap: 6px; } .rd-arrow { display: none; }
+  .rd-rail { flex-direction: column; gap: 6px; }
   .rd-sched { margin-left: 0; }
-}`;
+  .rd .rd-checks { grid-template-columns: 1fr; }
+}
+.rd-mhint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+.rd-go { color: var(--accent); text-decoration: none; margin-left: auto; }
+.rd-count { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
+.rd-count .big { font-size: 30px; font-weight: 800; color: var(--rd-tap); line-height: 1.2; }
+.rd-count .meta { color: var(--muted); }
+.rd-days { display: flex; gap: 3px; min-width: 0; }
+.rd-days span { flex: 1; min-width: 0; height: 26px; border-radius: 5px; background: color-mix(in srgb, var(--rd-tap) 13%, var(--panel));
+  color: var(--rd-tap); font-size: 11px; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; }
+.rd-days span.past { background: var(--rd-tap); color: #fff; }
+.rd-days span.today { outline: 2px solid var(--rd-tap); outline-offset: -2px; background: var(--panel); font-weight: 700; }
+.rd-days span.race { background: var(--warn, #b45309); color: #fff; font-weight: 700; }
+.rd-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rd-chk { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel); min-width: 0; }
+.rd-chk .h { display: flex; align-items: center; gap: 6px; font-weight: 700; flex-wrap: wrap; }
+.rd-chk .tag { margin-left: auto; font-size: 11px; padding: 0 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+.rd-chk .tag.ok { background: color-mix(in srgb, var(--rd-good) 15%, transparent); color: var(--rd-good); }
+.rd-chk .tag.warn { background: color-mix(in srgb, var(--rd-warn) 16%, transparent); color: var(--rd-warn); }
+.rd-chk .tag.wait, .rd-chk .tag.lock { background: color-mix(in srgb, var(--line) 50%, transparent); color: var(--muted); }
+.rd-chk .now { font-size: 22px; font-weight: 800; margin-top: 4px; }
+.rd-chk .tg { color: var(--muted); font-size: 12px; }
+.rd-chk .todo { font-size: 13px; margin-top: 4px; color: var(--rd-warn); }
+.rd-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--line) 45%, transparent); position: relative; margin: 8px 0 4px; }
+.rd-bar .band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--rd-tap) 30%, transparent); border-radius: 4px; }
+.rd-bar .pt { position: absolute; top: -4px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: var(--rd-tap); }
+.rd-bar .pt.warn { background: var(--rd-warn); }`;
     document.head.appendChild(st);
   }
 
@@ -173,8 +189,35 @@
     return `<p class="note">${esc(T("fig_climb_note"))}</p><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(it.name)}">${g}</svg>`;
   }
 
+  function drawTaper(box, res) {
+    const R = res.readiness || {};
+    const root = document.createElement("div");
+    root.className = "rd";
+    box.appendChild(root);
+    if (!R.race) { root.innerHTML = `<p class="meta">${esc(R.text || "")}</p>`; return; }
+    const head = `<div class="rd-head"><b>${esc(R.race.name)}</b><span class="meta">${esc(md(R.race.start))} · ${esc(T("taper_len", { n: R.taper_days, d: md(R.taper_from) }))}</span></div>`;
+    const count = `<div class="rd-count"><span class="big">${esc(R.text)}</span>${R.taper_day ? `<span class="meta">${esc(T("taper_day", { d: R.taper_day, n: R.taper_days }))}</span>` : ""}</div>`;
+    const strip = `<div class="rd-days" aria-hidden="true">${(R.countdown || []).map((d) => `<span class="${esc(d.state)}">${esc(d.label)}</span>`).join("")}</div>`;
+    const here = (R.this_week || []).length ? `<div class="rd-here"><div class="k">${esc(T("these_days"))}</div>${R.this_week.map((x) => `<span class="rd-chip">${esc(x)}</span>`).join("")}
+      <a class="rd-sched" href="${esc(res.schedule || "")}">${esc(T("schedule"))} ›</a></div>` : "";
+    const pos = (x, sc) => Math.max(0, Math.min(100, ((x - sc[0]) / (sc[1] - sc[0])) * 100));
+    const card = (k) => {
+      const sc = k.scale || [0, 1];
+      const bar = k.band ? `<div class="rd-bar"><div class="band" style="left:${pos(k.band[0], sc)}%;width:${pos(k.band[1], sc) - pos(k.band[0], sc)}%"></div>${k.value != null ? `<div class="pt ${k.state === "warn" ? "warn" : ""}" style="left:${pos(k.value, sc)}%"></div>` : ""}</div>` : "";
+      const chart = k.chart && k.chart.href ? `<a class="rd-gr" href="${esc(k.chart.href)}">${esc(T("chart"))} ›</a>` : "";
+      return `<div class="rd-chk" data-id="${esc(k.id)}"><div class="h">${esc(k.name)}${chart}<span class="tag ${esc(k.state)}">${esc(k.label)}</span></div>
+        <div class="now">${esc(k.show)}</div><div class="tg">${esc(k.target)}</div>${bar}${k.todo ? `<div class="todo">${esc(k.todo)}</div>` : ""}</div>`;
+    };
+    const go = res.other ? ` <a class="rd-go" href="${esc(res.other)}">${esc(T("go_build"))}</a>` : "";
+    const bl = R.build_line ? `<span>${esc(T("build_line", { x: R.build_line }))}</span>` : "";
+    const inj = R.injury ? `<span class="${R.injury_on ? "watch" : ""}">${R.injury_on ? "◐" : '<span class="rd-ok">✓</span>'} ${esc(R.injury)}</span>` : "";
+    root.innerHTML = head + count + strip + here + `<div class="rd-checks">${(R.checks || []).map(card).join("")}</div>` +
+      `<div class="rd-foot">${bl}${inj}${go}</div>`;
+  }
+
   function draw(box, res) {
     style();
+    if (res.phase === "taper") { drawTaper(box, res); return; }
     const R = res.readiness || {};
     const root = document.createElement("div");
     root.className = "rd";
@@ -182,7 +225,7 @@
     if (!R.race) { root.innerHTML = `<p class="meta">${esc(R.text || "")}</p>`; return; }
     const weeks = R.weeks || [], cur = R.weeks_out;
     const mon = Object.fromEntries(weeks.map((w) => [w.week, w.monday]));
-    const S = { sel: null, wsel: weeks.some((w) => w.week === cur) ? cur : (weeks[0] || {}).week, cell: null, fig: null, rkey: null };
+    const S = { sel: null, cell: null, fig: null, rkey: null };
     const cellOf = (it, w) => (it.cells || {})[String(w)];
     const stages = R.stages || [];
 
@@ -203,15 +246,13 @@
         const lock = s.state === "lock";
         const g2 = lock ? esc(s.span) : `${esc(s.span)} · ${esc(T("done_of", { d: s.done, t: s.total }))}`;
         const w = s.total ? Math.round((s.done / s.total) * 100) : 0;
-        return `${i ? '<div class="rd-arrow" aria-hidden="true">›</div>' : ""}<button type="button" class="rd-gate ${esc(s.state)}${S.sel === s.id ? " sel" : ""}" data-stage="${esc(s.id)}" aria-pressed="${S.sel === s.id}">
+        return `<button type="button" class="rd-gate ${esc(s.state)}${S.sel === s.id ? " sel" : ""}" data-stage="${esc(s.id)}" aria-pressed="${S.sel === s.id}">
           <div class="g1"><span class="num">${lock ? "🔒" : s.passed ? "✓" : i + 1}</span><span class="nm">${esc(s.name)}</span><span class="st">${esc(s.label)}</span></div>
           <div class="g2">${g2}</div><div class="rd-pbar"><i style="width:${w}%"></i><b></b></div></button>`;
       }).join("")}</div>`;
     }
     function cal() {
-      const sp = weeks.filter((w) => w.phase !== "taper").length, tp = weeks.length - sp;
-      let h = `<table class="rd-cal"><thead><tr class="ph"><th></th>${sp ? `<th colspan="${sp}" class="phs">${esc(T("phase_specific"))}</th>` : ""}${tp ? `<th colspan="${tp}" class="pht">${esc(T("phase_taper"))}</th>` : ""}</tr>
-        <tr class="rd-wk"><th class="lab">${esc(T("weeks_to_race"))}</th>${weeks.map((w) => `<th class="w${w.current ? " cw" : ""}">${w.current ? esc(T("this_week_short")) + "<br>" : ""}${w.week}<br><span style="font-weight:400">${esc(md(w.monday))}</span></th>`).join("")}</tr></thead><tbody>`;
+      let h = `<table class="rd-cal"><thead><tr class="rd-wk"><th class="lab">${esc(T("weeks_to_race"))}</th>${weeks.map((w) => `<th class="w${w.current ? " cw" : ""}">${w.current ? esc(T("this_week_short")) + "<br>" : ""}${w.week}<br><span style="font-weight:400">${esc(md(w.monday))}</span></th>`).join("")}</tr></thead><tbody>`;
       stages.forEach((s, si) => {
         const dim = S.sel && S.sel !== s.id ? " dim" : "";
         const lock = s.state === "lock";
@@ -227,7 +268,7 @@
         });
       });
       h += "</tbody></table>";
-      const lg = [["done", "✓", "lg_done"], ["due", "1", "lg_due"], ["miss", "1", "lg_miss"], ["fut", "1", "lg_fut"], ["tap", "✓", "lg_tap"], ["unk", "·", "lg_unk"]]
+      const lg = [["done", "✓", "lg_done"], ["due", "1", "lg_due"], ["miss", "1", "lg_miss"], ["fut", "1", "lg_fut"], ["unk", "·", "lg_unk"]]
         .map(([s, x, k]) => `<span><span class="rd-c s-${s}">${x}</span> ${esc(T(k))}</span>`).join("");
       return `${h}<div class="rd-legend">${lg}<span>· ${esc(T("lg_hint"))}</span></div><div class="rd-detail">${detail()}</div>`;
     }
@@ -261,23 +302,21 @@
       return `<b>${esc(it.name)}</b> · ${esc(T("week_n", { n: w, from: md(mon[w]) }))}<br>${esc(txt)}`;
     }
     function mob() {
-      const btns = weeks.map((w) => {
-        const st = stages.flatMap((s) => s.items.map((it) => cellOf(it, w.week)).filter(Boolean).map((c) => c.state));
-        const bar = st.includes("miss") ? "r" : st.includes("due") ? "b" : st.length && st.every((x) => x === "done" || x === "tap") && st.includes("done") ? "g" : "";
-        return `<button type="button" class="rd-wkb${w.phase === "taper" ? " t" : ""}${w.current ? " cur" : ""}${S.wsel === w.week ? " sel" : ""}" data-wk="${w.week}">${esc(w.current ? T("this_week_short") : T("wk"))}<b>${w.week}</b>${esc(md(w.monday))}<i class="${bar}"></i></button>`;
-      }).join("");
+      // SP-677: a phone lists only this week's items (the last build week once the taper started)
+      const ws = weeks.map((w) => w.week), wk = ws.includes(cur) ? cur : cur < Math.min(...ws) ? Math.min(...ws) : null;
+      if (wk == null) return `<div class="empty">${esc(T("week_empty"))}</div>`;
       let h = "";
       stages.forEach((s, si) => {
         if (S.sel && S.sel !== s.id) return;
-        const rs = s.items.filter((it) => cellOf(it, S.wsel));
+        const rs = s.items.filter((it) => cellOf(it, wk));
         if (!rs.length) return;
-        h += `<div class="mg">${s.state === "lock" ? "🔒" : NUM[si] || ""} ${esc(s.name)}</div>`;
+        h += `<div class="mg">${NUM[si] || ""} ${esc(s.name)} · ${esc(wk === cur ? T("this_week_short") : T("week_n", { n: wk, from: md(mon[wk]) }))}</div>`;
         rs.forEach((it) => {
-          const c = cellOf(it, S.wsel);
+          const c = cellOf(it, wk);
           h += `<div class="mr"><span class="rd-c s-${esc(c.state)}">${esc(shown(c))}</span><span>${esc(it.name)}${gr(it, si, s.items.indexOf(it))}<br><small>${esc(c.detail || it.crit || T("st_" + c.state))}</small></span></div>`;
         });
       });
-      return `<div class="rd-weeks">${btns}</div><div class="rd-mlist">${h || `<div class="empty">${esc(T("week_empty"))}</div>`}</div>`;
+      return `<div class="rd-mlist">${h || `<div class="empty">${esc(T("week_empty"))}</div>`}</div><p class="rd-mhint">${esc(T("mob_hint"))}</p>`;
     }
     function foot() {
       const rows = (R.weekly || []).map((x) => {
@@ -288,14 +327,15 @@
         const ic = c.state === "ok" ? '<span class="rd-ok">✓</span>' : c.state === "bad" ? '<span class="bad">✕</span>' : '<span class="watch">◐</span>';
         return `<span>${ic} ${esc(c.detail || x.name)}</span>`;
       }).filter(Boolean);
-      return rows.length ? `<div class="rd-foot"><span class="k">${esc(T("every_week"))}</span>${rows.join("")}</div>` : "";
+      const go = res.other ? `<a class="rd-go" href="${esc(res.other)}">${esc(T("go_taper"))}</a>` : "";
+      return rows.length || go ? `<div class="rd-foot">${rows.length ? `<span class="k">${esc(T("every_week"))}</span>${rows.join("")}` : ""}${go}</div>` : "";
     }
     function render() {
       W = Math.max(320, Math.min(900, Math.round(root.clientWidth || 640) - 24));
       root.innerHTML = head() + here() + rail() + `<div class="rd-desk">${cal()}</div><div class="rd-mob">${mob()}</div>` + fig() + foot();
     }
     root.addEventListener("click", (ev) => {
-      const g = ev.target.closest(".rd-gate"), c = ev.target.closest(".rd-cal .rd-c"), b = ev.target.closest(".rd-wkb");
+      const g = ev.target.closest(".rd-gate"), c = ev.target.closest(".rd-cal .rd-c");
       const f = ev.target.closest("button.rd-gr"), rk = ev.target.closest("[data-rk]");
       if (f) {
         const si = +f.dataset.fs, ii = +f.dataset.fi;
@@ -303,7 +343,6 @@
       } else if (rk) S.rkey = rk.dataset.rk;
       else if (g) S.sel = S.sel === g.dataset.stage ? null : g.dataset.stage;
       else if (c) S.cell = { si: +c.dataset.s, ii: +c.dataset.i, w: +c.dataset.w };
-      else if (b) S.wsel = +b.dataset.wk;
       else return;
       render();
     });

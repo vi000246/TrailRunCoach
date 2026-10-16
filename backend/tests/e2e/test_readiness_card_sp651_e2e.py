@@ -1,7 +1,8 @@
 """SP-651 in a real browser on the demo athlete (its 50K's 專項期): the 賽前完備程度 card on top of the
 專項期 and 減量期 pages — 本週要做 with its 安排課表 link, three gates, the week calendar; a gate filters the
 calendar to its stage, a cell shows its week; at 390 px the calendar becomes week buttons and the page
-does not scroll sideways; English.
+does not scroll sideways; English. SP-677: two gates and weeks 10 → 3 on the 專項期 card, a phone lists this
+week only; the 減量期 page has the countdown and four check cards instead.
 
 The API side: backend/tests/test_readiness_card_sp651.py. Run: ./e2e.sh -k sp651 (see conftest.py)."""
 from __future__ import annotations
@@ -40,8 +41,8 @@ def test_card_gates_filter_and_cell_detail(app):
     # the card is the first chart of the page
     first = page.locator(".card").first
     expect(first.locator(".rd")).to_have_count(1)
-    expect(card.locator(".rd-gate")).to_have_count(3)
-    expect(card.locator("table.rd-cal thead tr.rd-wk th.w")).to_have_count(10)
+    expect(card.locator(".rd-gate")).to_have_count(2)
+    expect(card.locator("table.rd-cal thead tr.rd-wk th.w")).to_have_count(8)
     here = card.locator(".rd-here")
     if here.count():
         assert "schedule/page?day=" in here.locator("a.rd-sched").get_attribute("href")
@@ -58,21 +59,28 @@ def test_card_gates_filter_and_cell_detail(app):
     text = card.inner_text()
     for w in ("Koop", "Uphill", "研討會"):
         assert w not in text
-    # the 減量期 page has the same card on top
-    _open(page, TAPER)
-    expect(page.locator(".card").first.locator(".rd")).to_have_count(1)
+    assert "dash=3" in card.locator(".rd-foot a.rd-go").get_attribute("href")       # → the 減量期 card
+    # the 減量期 page: the countdown and four check cards on top, no calendar
+    page.goto(TAPER)
+    page.wait_for_selector(".rd .rd-chk")
+    first = page.locator(".card").first
+    expect(first.locator(".rd-chk")).to_have_count(4)
+    expect(first.locator(".rd-days span")).to_have_count(11)
+    expect(first.locator("table.rd-cal")).to_have_count(0)
 
 
-def test_phone_week_buttons_without_sideways_scroll(e2e_browser, e2e_server):
+def test_phone_this_week_only_without_sideways_scroll(e2e_browser, e2e_server):
     ctx = _ctx(e2e_browser, e2e_server, width=390)
     page = ctx.new_page()
     try:
         card = _open(page)
         expect(card.locator("table.rd-cal")).to_be_hidden()
-        expect(card.locator(".rd-weeks .rd-wkb")).to_have_count(10)
-        card.locator(".rd-weeks .rd-wkb").nth(0).click()
-        expect(card.locator(".rd-weeks .rd-wkb.sel")).to_have_count(1)
         expect(card.locator(".rd-mlist")).to_be_visible()
+        assert card.locator(".rd-mlist .mr").count() > 0
+        wide = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
+        assert wide <= 1, wide
+        page.goto(TAPER)
+        page.wait_for_selector(".rd .rd-chk")
         wide = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
         assert wide <= 1, wide
     finally:

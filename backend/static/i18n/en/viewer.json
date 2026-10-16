@@ -497,5 +497,12 @@
   "readiness.fig_vam": "Each climb's uphill speed, last 6 weeks (m gained per hour)",
   "readiness.fig_target": "target",
   "readiness.fig_race_climb": "race's longest climb {m} m",
-  "readiness.fig_climb_note": "Each week's longest continuous climb (m); a bar mark is that week's target, the dashed line the race's longest climb"
+  "readiness.fig_climb_note": "Each week's longest continuous climb (m); a bar mark is that week's target, the dashed line the race's longest climb",
+  "readiness.these_days": "These days",
+  "readiness.taper_len": "{n}-day taper (from {d})",
+  "readiness.taper_day": "Taper day {d} of {n}",
+  "readiness.build_line": "Build result: {x}",
+  "readiness.go_build": "See ③ Build →",
+  "readiness.go_taper": "Fresh for race day? See ④ Taper →",
+  "readiness.mob_hint": "The full calendar is on a wide screen; a phone lists this week only (Chart opens a chart)"
 }

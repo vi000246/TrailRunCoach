@@ -1149,8 +1149,11 @@ def readiness_stamp() -> str:
 
 
 def readiness_panel(ch: dict, ds: Dataset, b: float, e: float) -> dict:
-    """The 賽前完備程度 card (SP-651): race_readiness.compute for the next A race, as of today (the
-    range does not change it), and the 課表 page on this week's Monday for 「安排課表」."""
+    """The 賽前完備程度 cards, as of today (the range does not change them). SP-677: phase "build" (專項期
+    page) = race_readiness.compute (① and ②, weeks 10 → 3) with the 減量期 card's link; phase "taper" (減量期
+    page) = race_readiness.compute_taper (the countdown and four checks) with the 專項期 result's line and
+    the 專項期 card's link. The 課表 page on this week's Monday for 「安排課表」."""
+    from backend.api.overview import READY_CARD, _chart_href_by_id
     from backend.engine import race_readiness as RD
     from backend.engine.quality_gate import SCHEDULE_PAGE
     today = today_local()
@@ -1159,13 +1162,50 @@ def readiness_panel(ch: dict, ds: Dataset, b: float, e: float) -> dict:
         from backend.engine.planning import Plan
         plan = Plan.load()
     mon = today - dt.timedelta(days=today.weekday())
+    out = {"title": ch.get("title"), "description": ch.get("description"), "kind": "readiness",
+           "schedule": f"{SCHEDULE_PAGE}?day={mon.isoformat()}"}
+    if ch.get("phase") == "taper":
+        bd = RD.compute_taper(plan, ds, today, build=readiness_build_summary(plan, ds, today))
+        for c in bd.get("checks") or ():
+            c["chart"]["href"] = readiness_chart_href(c["chart"])
+        return {**out, "phase": "taper", "readiness": bd, "other": _chart_href_by_id(READY_CARD["build"])}
     bd = RD.compute(plan, ds, today)
     for s in bd.get("stages") or ():
         for it in s.get("items") or ():
             if it.get("chart"):
                 it["chart"]["href"] = readiness_chart_href(it["chart"])
-    return {"title": ch.get("title"), "description": ch.get("description"), "kind": "readiness",
-            "readiness": bd, "schedule": f"{SCHEDULE_PAGE}?day={mon.isoformat()}"}
+    return {**out, "phase": "build", "readiness": bd, "other": _chart_href_by_id(READY_CARD["taper"])}
+
+
+def readiness_build_summary(plan, ds: Dataset, today: dt.date) -> Optional[dict]:
+    """race_readiness.build_summary for the 減量期 card's last line, memoised in the render cache on the data up
+    to its day (the end of 賽前第 3 週: fixed through the taper), so the 減量期 card computes only its own
+    checks once it has been read (SP-677)."""
+    from backend.engine import b2b as B2B
+    from backend.engine import race_readiness as RD
+    try:
+        day = RD.build_day(plan, today)
+        if day is None:
+            return None
+        scope = CS.Scope(None, int(date_to_day(day)), marks=True, history=True)
+        try:
+            acc = B2B.load_accepted()
+        except Exception:                      # noqa: BLE001 — no store = none accepted
+            acc = None
+        key = chart_key({"kind": "readiness-build-summary"}, {"day": day.isoformat(), "b2b": acc},
+                        CS.fingerprint(ds, scope),
+                        CS.code_signature({"kind": "readiness"}, ds, glue=(readiness_build_summary,)))
+        hit = RENDER_CACHE.get(key)
+        if hit is not None:
+            return hit
+        res = RD.build_summary(plan, ds, today)
+        if res is not None:
+            RENDER_CACHE.put(key, res)
+        return res
+    except Exception:                          # noqa: BLE001 — no line at the bottom, the checks still draw
+        import logging
+        logging.getLogger(__name__).exception("readiness build summary")
+        return None
 
 
 def readiness_chart_href(ch: dict) -> Optional[str]:

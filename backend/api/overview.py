@@ -502,10 +502,12 @@ READY_CARD = {"build": "race-readiness", "taper": "race-readiness-taper"}   # vi
 
 def _ready_line(plan, ds, today) -> Optional[dict]:
     """「賽前準備：第 n 段〈…〉x/y（…）」 of the next A race's 賽前完備程度 board (race_readiness.line) and the
-    link to that card on the 專項期 page (減量期 page once the taper started); None when the board fails."""
+    link to that card on the 專項期 page; once the taper started (SP-677) the 減量期 card's sentence
+    (「減量期：賽前 N 天，4 項檢查 k 項 OK」, compute_taper: only its checks) and its link. None when it fails."""
     from backend.engine import race_readiness as RD
     try:
-        ln = RD.line(RD.compute(plan, ds, today))
+        taper = RD.phase(plan, today) == "taper"
+        ln = RD.line(RD.compute_taper(plan, ds, today) if taper else RD.compute(plan, ds, today))
     except Exception:                          # noqa: BLE001 — no line: the card keeps its old row
         logging.getLogger(__name__).exception("race readiness line")
         return None

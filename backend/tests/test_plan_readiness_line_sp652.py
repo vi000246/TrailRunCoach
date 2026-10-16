@@ -53,10 +53,11 @@ def test_line_on_track_and_all_passed_keeps_the_last_unlocked_stage():
 
 
 def test_line_in_the_taper_links_the_taper_page():
-    b = _board([_stage("volume", "專項量", 4, 4), _stage("validation", "表現驗證", 2, 2),
-                _stage("race_state", "比賽狀態", 1, 3)], today="2026-11-22")
-    ln = RD.line(b)
-    assert ln["phase"] == "taper" and ln["text"].startswith("賽前準備：第 3 段〈比賽狀態〉1/3"), ln
+    # SP-677: in the taper the sentence is the 減量期 card's (race_readiness.taper)
+    t = {"kind": "taper", "race": {"id": "r1"}, "pre": False, "text": "賽前 6 天", "ok": 3,
+         "checks": [{}, {}, {}, {}]}
+    ln = RD.line(t)
+    assert ln["phase"] == "taper" and ln["text"] == "減量期：賽前 6 天，4 項檢查 3 項 OK", ln
 
 
 def test_preview_and_no_a_race_take_the_engines_text():

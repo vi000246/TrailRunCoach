@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>賽前準備 拆開版</title>
+<style>
+:root{--ink:#1f2328;--mute:#6b7280;--line:#e5e7eb;--blue:#2563eb;--blue-bg:#eff4ff;--green:#16a34a;--green-bg:#dcfce7;--amber:#d97706;--amber-bg:#fef3c7;--red:#dc2626;--red-bg:#fee2e2;--gray:#9ca3af;--orange:#f59e0b;--purple:#7c3aed;--purple-bg:#ede9fe}
+*{box-sizing:border-box}
+body{margin:0;background:#eef0f3;color:var(--ink);font:14px/1.5 -apple-system,"PingFang TC","Noto Sans TC",sans-serif}
+.top{position:sticky;top:0;z-index:5;background:#111827;color:#fff;padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;background:#374151;border-radius:8px;padding:3px}
+.seg button{border:0;background:transparent;color:#d1d5db;padding:6px 10px;border-radius:6px;font:inherit;cursor:pointer}
+.seg button.on{background:#fff;color:#111827;font-weight:600}
+.wrap{max-width:1100px;margin:12px auto;padding:0 12px}
+.hdr{background:#fff;border:1px solid var(--line);border-bottom:0;border-radius:12px 12px 0 0;padding:10px 14px}
+.hdr b{font-size:15px}.hdr span{color:var(--mute);font-size:13px;margin-left:6px}
+.tabs{display:flex;gap:6px;padding:8px 14px;background:#fff;border:1px solid var(--line);border-top:0;overflow-x:auto}
+.tabs a{white-space:nowrap;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--mute);font-size:13px}
+.tabs a.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.page{background:#f8f9fb;border:1px solid var(--line);border-top:0;border-radius:0 0 12px 12px;padding:12px}
+.card{background:#fff;border:2px solid var(--orange);border-radius:12px;padding:14px;position:relative}
+.card .new{position:absolute;top:-11px;right:14px;background:var(--orange);color:#fff;font-size:11px;padding:1px 8px;border-radius:999px}
+.ttl{font-weight:700;font-size:15px}.ttl small{font-weight:400;color:var(--mute);margin-left:6px;display:inline-block}
+.here{background:var(--blue-bg);border-left:4px solid var(--blue);border-radius:8px;padding:8px 12px;margin:10px 0 12px}
+.here .k{color:var(--blue);font-size:12px;font-weight:600}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.chip{border:1.5px solid var(--blue);color:var(--blue);background:#fff;border-radius:999px;padding:1px 10px;font-size:13px}
+.btn{display:inline-block;color:#fff;background:var(--blue);border-radius:6px;padding:3px 10px;font-weight:600;font-size:13px;margin-top:6px}
+.rail{display:flex;gap:8px;margin-bottom:12px}
+.gate{flex:1;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:#fff;min-width:0}
+.gate.cur{border:2px solid var(--blue)}
+.gate.next{background:#f3f4f6;color:var(--mute)}
+.g1{display:flex;align-items:center;gap:8px}
+.num{width:22px;height:22px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:1.5px solid var(--gray);color:var(--mute)}
+.cur .num{background:var(--blue);border-color:var(--blue);color:#fff}
+.nm{font-weight:700}.st{margin-left:auto;font-size:11px;padding:0 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.cur .st{color:var(--blue)}.g2{font-size:12px;color:var(--mute);margin-top:2px}
+.pbar{height:5px;background:#e5e7eb;border-radius:3px;margin-top:6px;position:relative}
+.pbar i{display:block;height:100%;border-radius:3px;background:var(--blue)}
+.pbar b{position:absolute;top:-3px;left:66.6%;width:2px;height:11px;background:#111}
+.calwrap{overflow-x:auto}
+table.cal{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
+.cal th,.cal td{padding:5px 3px;text-align:center;border-bottom:1px solid #f0f1f3}
+.cal th{color:var(--mute);font-weight:500;font-size:11.5px}
+.cal td.lab{text-align:left;white-space:nowrap}.cal td.lab small{display:block;color:var(--mute);font-size:11px;white-space:normal}
+.cal .cw{background:#eef3ff}
+.cal tr.grp td{background:#fafafa;text-align:left;font-weight:700;font-size:12.5px}
+.c{display:inline-flex;min-width:26px;height:24px;padding:0 4px;border-radius:12px;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.s-done{background:var(--green);color:#fff}.s-due{border:2px solid var(--blue);color:var(--blue)}.s-miss{background:var(--red-bg);color:var(--red)}.s-fut{border:1.5px dashed #d1d5db;color:#9ca3af;font-weight:500}
+.link{color:var(--blue);font-size:12px;border:1px solid #bfdbfe;border-radius:999px;padding:0 6px;margin-left:4px}
+.foot{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);font-size:13px;display:flex;gap:14px;flex-wrap:wrap}
+.ok{color:var(--green)}.half{color:var(--amber)}.bad{color:var(--red)}
+.mob{display:none}
+.phone .desk{display:none}.phone .mob{display:block}
+.phone .wrap{max-width:none;padding:0 6px}.seg button{padding:5px 7px}.phone .page{padding:8px}.phone .card{padding:10px;min-width:0}.phone .page,.phone .wrap,.phone .rail,.phone .gate{min-width:0}.ttl small{display:block;margin:0}.mob div{overflow-wrap:anywhere}.days span{min-width:0;overflow:hidden;white-space:nowrap}.ttl small{white-space:normal}.phone .note{max-width:378px;margin:10px 6px}
+.phone .rail{flex-direction:column}
+/* 減量期 */
+.count{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.count .big{font-size:34px;font-weight:800;color:var(--purple)}
+.days{display:flex;gap:3px;margin:8px 0 12px}
+.days span{flex:1;height:26px;border-radius:5px;background:var(--purple-bg);color:var(--purple);font-size:11px;display:flex;align-items:center;justify-content:center}
+.days span.past{background:var(--purple);color:#fff}.days span.today{outline:2px solid var(--purple);background:#fff;font-weight:700}
+.days span.race{background:var(--orange);color:#fff;font-weight:700}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.phone .checks{grid-template-columns:1fr}
+.chk{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.chk .h{display:flex;align-items:center;gap:8px;font-weight:700}
+.chk .h .tag{margin-left:auto;font-size:11px;padding:0 8px;border-radius:999px}
+.t-ok{background:var(--green-bg);color:var(--green)}.t-warn{background:var(--amber-bg);color:var(--amber)}.t-wait{background:#f3f4f6;color:var(--mute)}
+.chk .now{font-size:22px;font-weight:800;margin:4px 0 0}.chk .tg{color:var(--mute);font-size:12px}
+.bar2{height:8px;border-radius:4px;background:#f3f4f6;position:relative;margin:8px 0 4px}
+.bar2 .band{position:absolute;top:0;bottom:0;background:#ddd6fe;border-radius:4px}
+.bar2 .pt{position:absolute;top:-4px;width:4px;height:16px;border-radius:2px;background:var(--purple)}
+.chk .todo{font-size:13px;margin-top:4px}
+.note{max-width:1100px;margin:10px auto;background:#fffbea;border:1px dashed #e0b84d;border-radius:10px;padding:10px 14px;font-size:13px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="seg" id="pg"><button data-p="r">① 轉換</button><button data-p="s">② 基礎</button><button data-p="b" class="on">③ 專項</button><button data-p="t">④ 減量</button></div>
+  <div class="seg" id="dev"><button data-d="phone" class="on">手機</button><button data-d="desk">桌機</button></div>
+</div>
+
+<div class="wrap" id="frame">
+  <div class="hdr"><b>圖表分析</b><span id="crumb">周期化訓練 › ③ 專項期</span></div>
+  <div class="tabs"><a id="t1">① 轉換期</a><a id="t2">② 基礎期</a><a class="on" id="t3">③ 專項期</a><a id="t4">④ 減量期</a></div>
+  <div class="page">
+
+  <!-- 轉換期 -->
+  <section id="p-r" class="hidden">
+  <div class="card"><span class="new">新：恢復檢查</span>
+    <div class="ttl">恢復檢查：示意 山徑 50K 之後<small>比賽 11/14 · 轉換期 3 週（到 12/5）</small></div>
+    <div class="count"><span class="big" style="color:var(--green)">賽後第 9 天</span><span style="color:var(--mute)">轉換期第 2 週 / 3 週</span></div>
+    <div class="days"><span class="past" style="background:var(--green)">第1週</span><span class="today" style="outline-color:var(--green)">第2週</span><span style="background:var(--green-bg);color:var(--green)">第3週</span><span style="background:#e0e7ff;color:var(--blue)">→ 基礎期 12/6</span></div>
+    <div class="here"><div class="k">這幾天要做</div>
+      <div class="chips"><span class="chip">只跑輕鬆，這週最多 4 小時</span><span class="chip">左膝還有一點痠 → 再休 1 天再跑</span></div></div>
+    <div class="checks">
+      <div class="chk"><div class="h">先休息 <span class="tag t-ok">做到</span></div>
+        <div class="now">3 天</div><div class="tg">賽後完全休息或只走路；比賽越長休越久（50K：至少 3 天）</div></div>
+      <div class="chk"><div class="h">只跑輕鬆 <span class="link">看圖</span><span class="tag t-ok">做到</span></div>
+        <div class="now">100 %</div><div class="tg">轉換期的時間都在輕鬆區（不做強度課）</div>
+        <div class="bar2"><div class="band" style="left:90%;width:10%;background:#bbf7d0"></div><div class="pt" style="left:99%;background:var(--green)"></div></div></div>
+      <div class="chk"><div class="h">量慢慢回來 <span class="link">看圖</span><span class="tag t-warn">偏多</span></div>
+        <div class="now">78 %</div><div class="tg">這週是賽前平常量的 78 %；第 2 週建議 ≤ 60 %</div>
+        <div class="bar2"><div class="band" style="left:0;width:60%;background:#bbf7d0"></div><div class="pt" style="left:78%;background:var(--amber)"></div></div>
+        <div class="todo half">這週剩下的課縮短一點</div></div>
+      <div class="chk"><div class="h">痠痛與傷病 <span class="tag t-warn">留意</span></div>
+        <div class="now">左膝</div><div class="tg">傷病紀錄：輕微痠痛，第 5 天</div>
+        <div class="todo half">沒好之前不要回到基礎期的強度</div></div>
+    </div>
+    <div class="foot"><span>回到基礎期的條件：休息做到 ✓、只跑輕鬆 ✓、量回到 60 % 以內、沒有痠痛 → 才開始基礎期</span></div>
+  </div>
+  </section>
+
+  <!-- 基礎期 -->
+  <section id="p-s" class="hidden">
+  <div class="card"><span class="new">新：基礎檢查</span>
+    <div class="ttl">基礎檢查：示意 山徑 50K（A）<small>基礎期第 5 週 / 12 週 · 專項期 2027-02-08 開始</small></div>
+    <div class="here"><div class="k">本週要做</div>
+      <div class="chips"><span class="chip">輕鬆區時間再多一點（目標 ≥ 80 %）</span><span class="chip">這週量 6.2 小時（比上週 +4 %）</span></div>
+      <span class="btn">安排課表 ›</span></div>
+    <div class="checks">
+      <div class="chk"><div class="h">強度分配 <span class="link">看圖</span><span class="tag t-warn">中間偏多</span></div>
+        <div style="display:flex;gap:14px;align-items:center;margin-top:6px">
+          <div style="width:84px;height:84px;border-radius:50%;flex:none;background:conic-gradient(#22c55e 0 72%,#f59e0b 72% 90%,#ef4444 90% 100%);display:flex;align-items:center;justify-content:center"><div style="width:52px;height:52px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1"><b style="font-size:16px">72%</b><span style="font-size:10px;color:var(--mute)">輕鬆</span></div></div>
+          <div style="font-size:13px;line-height:1.7">
+            <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#22c55e"></span> 輕鬆 <b>72 %</b> <span class="tg">目標 ≥ 80</span></div>
+            <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f59e0b"></span> 中間 <b>18 %</b> <span class="tg">目標 5–10</span></div>
+            <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#ef4444"></span> 高強度 <b>10 %</b> <span class="tg">目標 10–15</span></div>
+          </div></div>
+        <div class="tg" style="margin-top:8px">近 8 週（每週一條，三色＝這週的時間比例）</div>
+        <div style="display:flex;gap:4px;align-items:flex-end;height:64px;margin-top:2px">
+          <div style="flex:1;display:flex;flex-direction:column;height:100%"><div style="height:8%;background:#ef4444"></div><div style="height:7%;background:#f59e0b"></div><div style="flex:1;background:#22c55e"></div></div>
+          <div style="flex:1;display:flex;flex-direction:column;height:100%"><div style="height:10%;background:#ef4444"></div><div style="height:8%;background:#f59e0b"></div><div style="flex:1;background:#22c55e"></div></div>
+          <div style="flex:1;display:flex;flex-direction:column;height:100%"><div style="height:10%;background:#ef4444"></div><div style="height:10%;background:#f59e0b"></div><div style="flex:1;background:#22c55e"></div></div>
+          <div style="flex:1;display:flex;flex-direction:column;height:100%;opacity:.5"><div style="height:4%;background:#ef4444"></div><div style="height:4%;background:#f59e0b"></div><div style="flex:1;background:#22c55e"></div></div>
+          <div style="flex:1;display:flex;flex-direction:column;height:100%"><div style="height:10%;background:#ef4444"></div><div style="height:13%;background:#f59e0b"></div><div style="flex:1;background:#22c55e"></div></div>
+          <div style="flex:1;display:flex;flex-direction:column;height:100%"><div style="height:11%;background:#ef4444"></div><div style="height:15%;background:#f59e0b"></div><div style="flex:1;background:#22c55e"></div></div>
+          <div style="flex:1;display:flex;flex-direction:column;height:100%"><div style="height:10%;background:#ef4444"></div><div style="height:17%;background:#f59e0b"></div><div style="flex:1;background:#22c55e"></div></div>
+          <div style="flex:1;display:flex;flex-direction:column;height:100%;outline:2px solid var(--blue)"><div style="height:10%;background:#ef4444"></div><div style="height:18%;background:#f59e0b"></div><div style="flex:1;background:#22c55e"></div></div>
+        </div>
+        <div style="display:flex;gap:4px;font-size:10px;color:var(--mute);text-align:center"><span style="flex:1">85</span><span style="flex:1">82</span><span style="flex:1">80</span><span style="flex:1">恢復</span><span style="flex:1">77</span><span style="flex:1">74</span><span style="flex:1">73</span><span style="flex:1;color:var(--blue);font-weight:700">72</span></div>
+        <div class="tg" style="text-align:right">底下數字＝輕鬆 %；淡的是恢復週</div>
+        <div class="todo half">中間區（黃）連 4 週變多：輕鬆跑放慢，強度課照排</div></div>
+      <div class="chk"><div class="h">每週增量 <span class="link">看圖</span><span class="tag t-ok">照計畫</span></div>
+        <div class="now">+3.6 %</div><div class="tg">長期負荷每週增加；基礎期目標 4 %（至少 +2 點），超過 8 % 會提醒</div>
+        <div class="bar2"><div class="band" style="left:20%;width:20%;background:#bbf7d0"></div><div class="pt" style="left:36%;background:var(--green)"></div></div>
+        <div class="tg">近 8 週：+4.1、+3.8、+4.4、−6.0（恢復週）、+3.9、+4.2、+3.6</div></div>
+      <div class="chk"><div class="h">恢復週節奏 <span class="tag t-ok">照計畫</span></div>
+        <div class="now">第 4 週</div><div class="tg">每練 3 週排 1 週恢復週（量 70 %）；上次 12/27</div>
+        <div class="todo">下一次恢復週：1/24 那週</div></div>
+    </div>
+    <div class="foot"><span class="ok">✓ 沒有傷病</span><span style="color:var(--mute)">專項期從 2/8 開始 → 那時看 ③ 專項期頁</span></div>
+  </div>
+
+  <div class="card" style="margin-top:14px"><span class="new">新版：強度解鎖</span>
+    <div class="ttl">強度解鎖<small>基礎期先把有氧打穩；3 區、5 區的課各自要先解鎖（其他區一開始就能排）</small></div>
+    <div style="display:flex;gap:8px;margin:10px 0" id="zsel">
+      <button data-z="3" style="flex:1;text-align:left;border-radius:10px;padding:8px 10px;background:#f0fdf4;border:1.5px solid #86efac;font:inherit;cursor:pointer">
+        <div style="font-weight:800;font-size:15px;color:#15803d">3 區 ✓</div><div style="font-size:12px;color:var(--mute)">節奏跑 · 12/20 解鎖</div></button>
+      <button data-z="5" style="flex:1;text-align:left;border-radius:10px;padding:8px 10px;background:#fff;border:1.5px solid var(--line);font:inherit;cursor:pointer">
+        <div style="font-weight:800;font-size:15px;color:var(--ink)">5 區 🔒</div><div style="font-size:12px;color:var(--mute)">高強度間歇 · 還差 1 項</div></button>
+    </div>
+    <div id="z3" class="hidden">
+      <div class="here" style="border-left-color:var(--green);background:#f0fdf4"><div class="k" style="color:#15803d">3 區已解鎖（12/20）</div>
+        <div style="font-size:13px">節奏跑可以排了；基礎期每週最多 1 堂。</div></div>
+      <div class="checks">
+        <div class="chk"><div class="h">有氧打穩 <span class="link">看圖</span><span class="tag t-ok">做到</span></div>
+          <div class="now">持平 3 週</div><div class="tg">EF（同樣心率跑多快）不再上升 → 有氧基礎夠了；也可以用飄移測試或基礎期週數判定</div>
+          <div class="tg" style="margin-top:6px">近 8 週 EF：1.42 → 1.48 → 1.51 → 1.53 → <b>1.54 → 1.54 → 1.53</b></div></div>
+        <div class="chk"><div class="h">之後怎麼保持 <span class="tag t-wait">提醒</span></div>
+          <div class="now">輕鬆跑 ≥ 90 %</div><div class="tg">輕鬆跑跑到 AeT 以上太多時，那週 5 區先不排、3 區照排</div></div>
+      </div>
+    </div>
+    <div id="z5">
+      <div class="here"><div class="k">解鎖 5 區：還差 1 項</div>
+        <div class="chips"><span class="chip">做一次 AeT 測試</span></div><span class="btn">安排課表 ›</span></div>
+      <div class="checks">
+        <div class="chk"><div class="h">3 區已解鎖 <span class="tag t-ok">做到</span></div>
+          <div class="now">✓ 12/20</div><div class="tg">先開 3 區，才輪到 5 區</div></div>
+        <div class="chk"><div class="h">輕鬆跑壓在 AeT 以下 <span class="link">看圖</span><span class="tag t-ok">做到</span></div>
+          <div class="now">92 %</div><div class="tg">近 4 週輕鬆跑在 AeT 以下的時間；要 ≥ 90 %</div>
+          <div class="bar2"><div class="band" style="left:90%;width:10%;background:#bbf7d0"></div><div class="pt" style="left:92%;background:var(--green)"></div></div></div>
+        <div class="chk"><div class="h">AeT 測試 <span class="tag t-warn">還沒做</span></div>
+          <div class="now">—</div><div class="tg">實測 AeT 與 LTHR 差 ≤ 10 %（或 60 分鐘飄移 &lt; 5 %）</div>
+          <div class="todo half">排一次：平路 AeT 附近跑 60 分鐘</div></div>
+      </div>
+    </div>
+    <div class="foot"><span style="color:var(--mute)">點上面兩格切換看 3 區或 5 區的條件</span></div>
+<script>
+document.querySelectorAll('#zsel button').forEach(b=>b.onclick=()=>{
+  const z=b.dataset.z;
+  document.getElementById('z3').classList.toggle('hidden',z!=='3');
+  document.getElementById('z5').classList.toggle('hidden',z!=='5');
+  document.querySelectorAll('#zsel button').forEach(x=>x.style.boxShadow=x===b?'0 0 0 3px #bfdbfe':'none');
+});
+document.querySelector('#zsel button[data-z="5"]').style.boxShadow='0 0 0 3px #bfdbfe';
+</script>
+  </div>
+  </section>
+
+  <!-- 專項期 -->
+  <section id="p-b">
+  <div class="card"><span class="new">新：賽前準備</span>
+    <div class="ttl">賽前準備：示意 山徑 50K（A）<small>11/14 · 賽前 6 週 · 減量 11/4 開始</small></div>
+    <div class="here"><div class="k">本週要做（賽前第 6 週）</div>
+      <div class="chips"><span class="chip">長天 3.9 小時（還差 1.9 小時）</span><span class="chip">排一次每公里爬升 40–150 m 的爬坡課</span><span class="chip">安排一次測驗驗證一下</span></div>
+      <span class="btn">安排課表 ›</span></div>
+    <div class="rail">
+      <div class="gate cur"><div class="g1"><span class="num">1</span><span class="nm">專項量</span><span class="st">還差 1 項</span></div><div class="g2">賽前 10 → 3 週 · 3/5 做到</div><div class="pbar"><i style="width:60%"></i><b></b></div></div>
+      <div class="gate cur"><div class="g1"><span class="num">2</span><span class="nm">表現驗證</span><span class="st">照進度</span></div><div class="g2">賽前 6 → 3 週 · 3/4 做到</div><div class="pbar"><i style="width:75%"></i><b></b></div></div>
+    </div>
+    <div class="desk calwrap">
+      <table class="cal">
+        <tr><th style="text-align:left">賽前第幾週</th><th>10</th><th>9</th><th>8</th><th>7</th><th class="cw">本週<br>6</th><th>5</th><th>4</th><th>3</th></tr>
+        <tr class="grp"><td colspan="9">① 專項量</td></tr>
+        <tr><td class="lab">長天 <span class="link">看圖</span><small>最硬一次 ≥ 比賽最難那天 70 %</small></td><td><span class="c s-done">50%</span></td><td><span class="c s-miss">55%</span></td><td><span class="c s-done">60%</span></td><td><span class="c s-done">65%</span></td><td class="cw"><span class="c s-due">75%</span></td><td><span class="c s-fut">65%</span></td><td><span class="c s-fut">80%</span></td><td><span class="c s-fut">65%</span></td></tr>
+        <tr><td class="lab">每週一次長距離<small>近 4 週每週 1 次</small></td><td><span class="c s-done">1</span></td><td><span class="c s-done">1</span></td><td><span class="c s-miss">1</span></td><td><span class="c s-done">1</span></td><td class="cw"><span class="c s-done">1</span></td><td><span class="c s-fut">1</span></td><td><span class="c s-fut">1</span></td><td><span class="c s-fut">1</span></td></tr>
+        <tr><td class="lab">長爬坡（最長一段） <span class="link">看圖</span><small>到比賽最長一段 617 m 的 70 %</small></td><td></td><td><span class="c s-miss">50%</span></td><td></td><td><span class="c s-done">70%</span></td><td class="cw"><span class="c s-done">80%</span></td><td></td><td><span class="c s-fut">90%</span></td><td></td></tr>
+        <tr><td class="lab">像比賽的地形<small>近 4 週 3 次</small></td><td><span class="c s-miss">1</span></td><td><span class="c s-done">1</span></td><td><span class="c s-done">1</span></td><td><span class="c s-done">1</span></td><td class="cw"><span class="c s-due">1</span></td><td><span class="c s-fut">1</span></td><td><span class="c s-fut">1</span></td><td><span class="c s-fut">1</span></td></tr>
+        <tr><td class="lab">賽事模擬<small>第 6 或 4 週一次照比賽配速的長天</small></td><td></td><td></td><td></td><td></td><td class="cw"><span class="c s-due">1</span></td><td></td><td><span class="c s-fut">1</span></td><td></td></tr>
+        <tr class="grp"><td colspan="9">② 表現驗證</td></tr>
+        <tr><td class="lab">最佳表現重複得出來 <span class="link">看圖</span><small>前 5 次平均 ≥ 最高的 95 %</small></td><td></td><td></td><td></td><td></td><td class="cw"><span class="c s-done">97%</span></td><td><span class="c s-fut">≥95%</span></td><td><span class="c s-fut">≥95%</span></td><td><span class="c s-fut">≥95%</span></td></tr>
+        <tr><td class="lab">長期負荷到自己的高區 <span class="link">看圖</span><small>近 365 天的前 20 %</small></td><td></td><td></td><td></td><td></td><td class="cw"><span class="c s-done">前7%</span></td><td><span class="c s-fut">前20%</span></td><td><span class="c s-fut">前20%</span></td><td><span class="c s-fut">前20%</span></td></tr>
+        <tr><td class="lab">上坡腳程變快 <span class="link">看圖</span><small>比 8 週前快</small></td><td></td><td></td><td></td><td></td><td class="cw"><span class="c s-done">+8%</span></td><td><span class="c s-fut">≥+3%</span></td><td><span class="c s-fut">≥+3%</span></td><td><span class="c s-fut">≥+3%</span></td></tr>
+        <tr><td class="lab">實力測驗<small>測驗、B／C 賽，或練習追平近 90 天最佳</small></td><td></td><td></td><td></td><td></td><td class="cw"><span class="c s-due">1</span></td><td><span class="c s-fut">1</span></td><td><span class="c s-fut">1</span></td><td><span class="c s-fut">1</span></td></tr>
+      </table>
+    </div>
+    <div class="mob">
+      <div style="font-weight:700;font-size:13px;margin:4px 0">① 專項量 · 本週</div>
+      <div>✓ 長爬坡 80 %　◯ 長天 3.9 小時　◯ 地形課　◯ 賽事模擬</div>
+      <div style="font-weight:700;font-size:13px;margin:8px 0 4px">② 表現驗證 · 本週</div>
+      <div>✓ 最佳表現 97 %　✓ 長期負荷前 7 %　✓ 上坡 +8 %　◯ 實力測驗</div>
+      <div style="color:var(--mute);font-size:12px;margin-top:6px">桌機看完整週曆；手機只列本週（點項目看圖）</div>
+    </div>
+    <div class="foot"><span class="ok">✓ 長期負荷一週 +1.1</span><span class="ok">✓ 沒有傷病</span><span style="color:var(--mute)">比賽狀態在 ④ 減量期頁看 →</span></div>
+  </div>
+  </section>
+
+  <!-- 減量期 -->
+  <section id="p-t" class="hidden">
+  <div class="card"><span class="new">新：減量檢查</span>
+    <div class="ttl">減量檢查：示意 山徑 50K（A）<small>11/14 · 減量 10 天（11/4 開始）</small></div>
+    <div class="count"><span class="big">賽前 6 天</span><span style="color:var(--mute)">減量第 5 天 / 10 天</span></div>
+    <div class="days"><span class="past">10</span><span class="past">9</span><span class="past">8</span><span class="past">7</span><span class="today">6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span><span class="race">賽</span></div>
+    <div class="here"><div class="k">這幾天要做</div>
+      <div class="chips"><span class="chip">這週總時數控制在 3.1–4.5 小時（已 2.0）</span><span class="chip">強度課保留，只減組數</span></div></div>
+    <div class="checks">
+      <div class="chk"><div class="h">量減到平常的 40–60 % <span class="link">看圖</span><span class="tag t-ok">照計畫</span></div>
+        <div class="now">52 %</div><div class="tg">這週到目前（平常 7.6 小時／週）</div>
+        <div class="bar2"><div class="band" style="left:40%;width:20%"></div><div class="pt" style="left:52%"></div></div></div>
+      <div class="chk"><div class="h">爬升量提早減 <span class="link">看圖</span><span class="tag t-warn">偏多</span></div>
+        <div class="now">72 %</div><div class="tg">賽前 2 週起 ≤ 平常的 59 %</div>
+        <div class="bar2"><div class="band" style="left:0;width:59%"></div><div class="pt" style="left:72%"></div></div>
+        <div class="todo half">剩下幾天爬升課改平路</div></div>
+      <div class="chk"><div class="h">長期負荷往下天數 <span class="link">看圖</span><span class="tag t-ok">OK</span></div>
+        <div class="now">5 天</div><div class="tg">不超過減量天數（10 天）</div></div>
+      <div class="chk"><div class="h">比賽日負荷平衡 <span class="link">看圖</span><span class="tag t-wait">賽前 3 天看實際</span></div>
+        <div class="now">+24 %</div><div class="tg">照課表推算；目標長期負荷的 +10～+35 %</div>
+        <div class="bar2"><div class="band" style="left:10%;width:25%"></div><div class="pt" style="left:24%"></div></div></div>
+    </div>
+    <div class="foot"><span>專項期成績：<span class="ok">專項量 4/5 ✓、表現驗證 3/4 ✓</span>（看 ③ 專項期頁）</span><span class="ok">✓ 沒有傷病</span></div>
+  </div>
+  </section>
+  <div style="margin-top:12px;background:#fff;border:1px solid var(--line);border-radius:10px;height:90px;padding:10px;font-weight:600;color:#374151" id="chartname">每次路線難度（既有圖）</div>
+  </div>
+</div>
+
+<div class="note hidden" id="n-r"><b>轉換期頁</b>：賽後恢復。上面「賽後第幾天」＋三週進度條，4 張檢查卡（先休息、只跑輕鬆、量慢慢回來、痠痛與傷病），卡底寫「回到基礎期的條件」。</div>
+<div class="note hidden" id="n-s"><b>基礎期頁</b>：強度分配用圓餅圖看這段期間的比例，近 8 週每週一條堆疊的 100 % 長條（綠＝輕鬆、黃＝中間、紅＝高強度，底下數字是輕鬆 %），每週增量、恢復週節奏各一張。下面是新版「強度解鎖」卡（取代原本的 5 區開放流程）：只有 3 區、5 區兩格，點哪一格就看那一區的解鎖條件與下一步。</div>
+<div class="note" id="n-b"><b>專項期頁</b>：只算 ① 專項量、② 表現驗證，週曆只到賽前第 3 週（不含減量期欄）。比賽狀態整段搬到減量期頁，專項期卡底一行連過去。手機只列本週各項，完整週曆在桌機看。</div>
+<div class="note hidden" id="n-t"><b>減量期頁</b>：不做日曆，改成「倒數 + 4 張檢查卡」。每張卡一個數字、目標範圍條、狀態，偏離時直接寫要怎麼調；上面一條 10 天倒數。只算減量那 4 項，不算專項期的週曆，所以比較快。專項期的成績只在卡底一句帶過。</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const PG={r:['① 轉換期','每週時數（既有圖）'],s:['② 基礎期','區間時間分配（既有圖）'],b:['③ 專項期','每次路線難度（既有圖）'],t:['④ 減量期','每週時數 vs 減量目標帶（既有圖）']};
+document.querySelectorAll('#pg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#pg button').forEach(x=>x.classList.toggle('on',x===b));
+  const p=b.dataset.p;
+  for(const k of 'rsbt'){const s=$('#p-'+k);if(s)s.classList.toggle('hidden',k!==p);const n=$('#n-'+k);if(n)n.classList.toggle('hidden',k!==p);}
+  ['t1','t2','t3','t4'].forEach((id,i)=>$('#'+id).classList.toggle('on','rsbt'[i]===p));
+  $('#crumb').textContent='周期化訓練 › '+PG[p][0];
+  $('#chartname').textContent=PG[p][1];
+});
+document.querySelectorAll('#dev button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#dev button').forEach(x=>x.classList.toggle('on',x===b));
+  document.body.classList.toggle('phone',b.dataset.d==='phone');
+});
+document.body.classList.add('phone');
+</script>
+</body>
+</html>

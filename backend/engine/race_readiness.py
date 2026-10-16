@@ -1,6 +1,6 @@
 """
 賽前完備程度 (SP-650, the integrated version of SP-304 Q3: three gates + a week calendar) for the next
-A race. 圖表分析's 專項期 / 減量期 card (SP-651) draws it.
+A race. 圖表分析's 專項期 card (SP-651) draws board(); the 減量期 card draws taper() (SP-677).
 
 Three stages, each a set of items; a stage counts as on schedule once 2/3 of its items are met
 (PASS_SHARE; 計畫完成 60–70 % 就算成功 — the coaching rule of thumb in the SP-304 notes), and every item
@@ -30,7 +30,8 @@ also has one cell per week (賽前第 10 → 1 週: target / actual / state) wit
      high_test    one hard check in the window (SP-672, owner 2026-10-16): a B / C race or a test day, or a
                   session whose ≥ 20-min best (power; without power the 20-min uphill speed, UPHILL20_EXPR)
                   matches or beats the athlete's own best of the 90 days before it (best_check).
-  ③ race state (比賽狀態): unlocks when the taper starts (`taper_days` before the race: planning.taper_days):
+  ③ race state (比賽狀態) — SP-677: not on this board; the 減量期 card's four checks (taper(), from
+     `taper_days` before the race: planning.taper_days):
      taper_volume the taper weeks' hours at status.TAPER_BAND of the usual (the median of weeks 10 → 3).
      climb_early  賽前第 2 週's climb ≤ the band's top of the usual.
      ctl_down_days chronic load falling no more days in a row than the taper is long (SP-672; was 7).
@@ -343,23 +344,22 @@ def _pct(x: Optional[float]) -> str:
 
 def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str = "trail", b2b: bool = False,
           accepted_b2b: Iterable = (), perf: Optional[dict] = None, ctl: Optional[list] = None,
-          tests: Iterable = (), race_tsb: Optional[dict] = None, injuries: Iterable = (), rpe: Iterable = (),
-          first_day: Optional[dt.date] = None, taper_days: Optional[int] = None) -> dict:
+          tests: Iterable = (), injuries: Iterable = (), rpe: Iterable = (),
+          first_day: Optional[dt.date] = None) -> dict:
     """The board of `race` (specific_phase.race_day's dict; None = no next A race). `acts`: activity_rows
     (+ climb_dz) from 賽前第 10 週 on; `perf`: {"power": [{date, "300", "1200", "3600"}], "vam": [{date, vam}]}
     (the last ~4 months); `ctl`: [(date, chronic load)] daily, ≥ a year when there is one; `tests`: dates of
-    a hard check (B / C race, test); `race_tsb`: {"share", "source": plan | actual}; `rpe`: [{date, kind,
-    rpe}]; `first_day`: the first activity on record."""
+    a hard check (B / C race, test); `rpe`: [{date, kind, rpe}]; `first_day`: the first activity on record.
+    SP-677: the 專項期 card's — ① and ② only, weeks 10 → 3; the taper's checks are taper()'s."""
     base = {"race": None, "weeks": [], "stages": [], "weekly": [], "due": 0, "done": 0, "level": "unknown",
             "label": _(LEVEL_LABEL["unknown"]), "this_week": [], "preview": False}
     if race is None:
         return {**base, "text": _("沒有下一場 A 賽事")}
     from backend.engine import load_guard as LG
-    from backend.engine import planning as P
-    from backend.engine.status import TAPER_BAND, VAM_TREND
+    from backend.engine.status import VAM_TREND
     start = _d(race["start"])
     road = _road(race, sport)
-    mons = week_mondays(start)
+    mons = {w: m for w, m in week_mondays(start).items() if w > TAPER_FROM}
     sun = {w: m + dt.timedelta(days=6) for w, m in mons.items()}
     cur = SP.weeks_out(start, today - dt.timedelta(days=today.weekday()))
     preview = cur > BOARD_WEEKS
@@ -368,8 +368,6 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     long_hist = first_day is not None and (today - first_day).days >= HISTORY_DAYS
     fr = SP.ROAD_FRAC if road else SP.FRAC
     hd = F.hardest_day(race)
-    td = int(taper_days or P.TAPER_DAYS)              # the 減量期 length (planning.taper_days; 課表偏好)
-    taper_from = start - dt.timedelta(days=td)
 
     def asof(w: int) -> dt.date:
         return min(sun[w], today)
@@ -600,58 +598,6 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     val.append(item("high_test", _("實力測驗"), _("做一次測驗或 B／C 賽，或練習時追平近 90 天最佳，看練出來的成果"), cells,
                     True if got else (None if short else False), short if short and not got else None))
 
-    # ---- ③ race state --------------------------------------------------------------------------
-    lock = today < taper_from
-    usual_h = [x for x in (sum(a["hours"] for a in wk(w)) for w in spec) if x > 0]
-    usual_c = [x for x in (sum(a["climb_m"] for a in wk(w)) for w in spec) if x > 0]
-    nh = median(usual_h) if usual_h else None
-    nc = median(usual_c) if usual_c else None
-    band_t = f"{TAPER_BAND[0] * 100:.0f}–{TAPER_BAND[1] * 100:.0f}%"
-    taper_span = span(mons[BOARD_WEEKS], start)
-    rs = []
-    cells, oks = {}, []
-    for w in (2, 1):
-        if w not in mons:
-            continue
-        sh = sum(a["hours"] for a in wk(w)) / nh if nh else None
-        ok = sh is not None and TAPER_BAND[0] <= sh <= TAPER_BAND[1] and w > cur
-        cells[w] = mk(w, ok, _pct(sh), _("平常的 {p}", p=_pct(sh)) if sh is not None else "", list(TAPER_BAND),
-                      None if sh is None else round(sh, 3), unknown=None if nh else _(NO_DATA), lock=lock, aim=band_t)
-        oks.append(ok)
-    rs.append(item("taper_volume", _("量減到平常的 {b}", b=band_t), _("強度保留"), cells,
-                   None if lock else all(oks), chart={"id": CHART["taper_volume"], **taper_span}))
-    cells = {}
-    shc = sum(a["climb_m"] for a in wk(2)) / nc if nc and 2 in mons else None
-    okc = shc is not None and shc <= TAPER_BAND[1] and (2 > cur)
-    if 2 in mons:
-        cells[2] = mk(2, okc, _pct(shc), _("爬升是平常的 {p}", p=_pct(shc)) if shc is not None else "",
-                      TAPER_BAND[1], None if shc is None else round(shc, 3), unknown=None if nc else _(NO_DATA), lock=lock,
-                      aim="≤" + _pct(TAPER_BAND[1]))
-    rs.append(item("climb_early", _("爬升量提早減"), _("賽前 2 週開始"), cells, None if lock else okc,
-                   chart={"id": CHART["climb_early"], **taper_span}))
-    cells = {}
-    dd = ctl_down_days(ctl, min(today, start - dt.timedelta(days=1)))
-    okd = dd is not None and dd <= td and today >= start - dt.timedelta(days=1)
-    if 1 in mons:
-        cells[1] = mk(1, okd, "" if dd is None else _("{n} 天", n=dd),
-                      "" if dd is None else _("長期負荷已經連續下降 {n} 天", n=dd), td, dd,
-                      unknown=None if dd is not None else _("還沒有長期負荷資料"), lock=lock, aim=f"≤{td}")
-    rs.append(item("ctl_down_days", _("長期負荷往下不超過減量的 {n} 天", n=td), "", cells, None if lock else okd,
-                   chart={"id": CHART["ctl_down_days"], **span(taper_from - dt.timedelta(days=28), start)}))
-    band = LG.TSB_RACE["A"]
-    cells = {}
-    share = (race_tsb or {}).get("share")
-    okt = share is not None and band[0] <= share <= band[1]
-    if 1 in mons:
-        src_txt = _("課表推算") if (race_tsb or {}).get("source") == "plan" else _("實際")
-        cells[1] = mk(1, okt and (race_tsb or {}).get("source") == "actual",
-                      "" if share is None else f"{share * 100:+.0f}%",
-                      _("賽前 3 天看實際值") if share is None else _("{s}：長期負荷的 {p}", s=src_txt, p=f"{share * 100:+.0f}%"),
-                      list(band), share, unknown=None if share is not None else _("課表還沒排到比賽日，推算不出來"),
-                      lock=lock, aim=f"{band[0] * 100:+.0f}–{band[1] * 100:+.0f}%")
-    rs.append(item("race_tsb", _("比賽日負荷平衡"), _("長期負荷的 +10～+35 %"), cells, None if lock else okt,
-                   source=(race_tsb or {}).get("source"), chart={"id": CHART["race_tsb"], **span(taper_from - dt.timedelta(days=28), start)}))
-
     # ---- stages --------------------------------------------------------------------------------
     def stage(sid: str, name: str, span: str, items: list[dict], unlocked: bool, unlock: dt.date) -> dict:
         tot = sum(1 for i in items if i["met"] is not None)
@@ -666,8 +612,7 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     s1 = stage("volume", _("專項量"), _("賽前 10 → 3 週"), vol, not preview, mons[BOARD_WEEKS])
     s2 = stage("validation", _("表現驗證"), _("賽前 6 → 3 週"), val,
                not preview and (cur <= VALIDATION_FROM or s1["passed"]), mons.get(VALIDATION_FROM, today))
-    s3 = stage("race_state", _("比賽狀態"), _("賽前 {n} → 0 天", n=td), rs, not lock, taper_from)
-    stages = [s1, s2, s3]
+    stages = [s1, s2]
 
     # ---- every week --------------------------------------------------------------------------
     weekly = []
@@ -746,25 +691,17 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
             return _("上坡腳程要比 8 週前快 {p}", p=_pct(VAM_TREND))
         if iid == "high_test":
             return _(HIGH_TEST_TIP)
-        if iid == "taper_volume" and nh:
-            return _("這週總時數控制在 {lo}–{hi} 小時", lo=f"{nh * TAPER_BAND[0]:.1f}", hi=f"{nh * TAPER_BAND[1]:.1f}")
-        if iid == "climb_early" and nc:
-            return _("這週爬升控制在 {m} m 以內", m=round(nc * TAPER_BAND[1]))
-        if iid == "ctl_down_days":
-            return _("長期負荷連續往下別超過 {n} 天", n=td)
-        if iid == "race_tsb":
-            return _("比賽日負荷平衡落在長期負荷的 +10～+35 %")
         return c.get("detail") or ""
     this_week = [] if preview else [
         {"stage": s["id"], "item": i["id"], "name": i["name"], "detail": todo(i["id"], i["cells"][cur]),
          "target": i["cells"][cur]["target"]}
         for s in stages for i in s["items"] if (i["cells"].get(cur) or {}).get("state") == "due"]
-    weeks = [{"week": w, "monday": mons[w].isoformat(), "phase": "taper" if w <= TAPER_FROM else "specific",
-              "current": w == cur} for w in sorted(mons, reverse=True)]
+    weeks = [{"week": w, "monday": mons[w].isoformat(), "phase": "specific", "current": w == cur}
+             for w in sorted(mons, reverse=True)]
     out = {**base, "race": {"id": race.get("id"), "name": race.get("name"), "start": start.isoformat(),
                             "kind": race.get("kind"), "sport": "road" if road else "trail"},
            "today": today.isoformat(), "weeks_out": cur, "preview": preview,
-           "specific_from": mons[BOARD_WEEKS].isoformat(), "taper_from": taper_from.isoformat(),
+           "specific_from": mons[BOARD_WEEKS].isoformat(),
            "weeks": weeks, "stages": stages, "weekly": weekly, "due": due, "done": done, "level": lv,
            "label": _(LEVEL_LABEL[lv]), "this_week": this_week}
     if preview:
@@ -776,15 +713,163 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
     return out
 
 
+# ---------------------------------------------------------------------------
+# the 減量期 card (SP-677): a countdown and four checks, no calendar
+# ---------------------------------------------------------------------------
+TAPER_STATE = {"ok": N_("照計畫"), "warn": N_("偏多"), "low": N_("偏少"), "wait": N_("賽前 3 天看實際"),
+               "lock": N_("減量開始後看")}
+TAPER_LOW_DAYS = 4                   # 推估: a taper under the band says 偏少 only from its 4th day
+
+
+def _md(d: dt.date) -> str:
+    return f"{d.month}/{d.day}"
+
+
+def taper(race: Optional[dict], today: dt.date, acts: list[dict], *, ctl: Optional[list] = None,
+          race_tsb: Optional[dict] = None, injuries: Iterable = (), taper_days: Optional[int] = None,
+          build: Optional[dict] = None) -> dict:
+    """The 減量期 card of `race` (specific_phase.race_day's dict; None = no next A race): 「賽前 N 天」, the
+    taper's day and a countdown strip (taper_days … 1, race day), 這幾天要做, and four checks, each
+    {id, name, value, show, target, band, scale, state (ok / warn / wait / lock), label, todo (what to change
+    when it is off, else None), chart}:
+      taper_volume  the hours since the taper started per day ÷ the usual (the median week of 賽前第 10 → 3
+                    週) per day, in status.TAPER_BAND; under it 偏少 only from TAPER_LOW_DAYS on.
+      climb_early   the climb since 賽前第 2 週's Monday (or the taper's start, whichever is first) per day ÷
+                    the usual per day ≤ the band's top.
+      ctl_down_days chronic load falling no more days in a row than the taper is long.
+      race_tsb      race-day load balance in load_guard.TSB_RACE["A"]: from the plan before the last 3 days
+                    (wait), the actual one in them.
+    `acts`: race_feasibility.activity_rows from 賽前第 10 週 (no longest climb needed); `build`: the 專項期
+    board's {"stages": [{name, done, total, passed}]} for the one line at the bottom. Before the taper starts
+    the checks are locked with their targets."""
+    from backend.engine import injuries as INJ
+    from backend.engine import load_guard as LG
+    from backend.engine import planning as P
+    from backend.engine.status import TAPER_BAND
+    base = {"kind": "taper", "race": None, "checks": [], "this_week": [], "countdown": [], "pre": False}
+    if race is None:
+        return {**base, "text": _("沒有下一場 A 賽事")}
+    start = _d(race["start"])
+    td = int(taper_days or P.TAPER_DAYS)
+    tf = start - dt.timedelta(days=td)
+    pre = today < tf
+    days_to = (start - today).days
+    mons = week_mondays(start)
+    foot = [a for a in acts if a.get("foot") and _d(a["date"]) <= today]
+
+    def tot(k: str, lo: dt.date, hi: dt.date) -> float:
+        return sum(a.get(k) or 0.0 for a in foot if lo <= _d(a["date"]) <= hi)
+    wk = {w: (m, m + dt.timedelta(days=6)) for w, m in mons.items() if w > TAPER_FROM}
+    uh = [x for x in (tot("hours", *wk[w]) for w in wk) if x > 0]
+    uc = [x for x in (tot("climb_m", *wk[w]) for w in wk) if x > 0]
+    nh, nc = (median(uh) if uh else None), (median(uc) if uc else None)
+    lo_b, hi_b = TAPER_BAND
+    band_t = f"{lo_b * 100:.0f}–{hi_b * 100:.0f} %"
+    end = min(today, start - dt.timedelta(days=1))
+    n_t = (end - tf).days + 1                             # taper days so far (today included)
+    c_from = min(tf, mons.get(TAPER_FROM, tf))
+    n_c = (end - c_from).days + 1
+    chart_span = {"begin": (mons.get(BOARD_WEEKS) or tf).isoformat(), "end": start.isoformat()}
+    load_span = {"begin": (tf - dt.timedelta(days=28)).isoformat(), "end": start.isoformat()}
+    checks = []
+
+    def check(cid: str, name: str, value, show: str, target: str, band, scale, state: str, todo=None,
+              span=None, label=None) -> None:
+        lab = label or _(TAPER_STATE[state])
+        state = "warn" if state == "low" else state          # 偏少 shows as off, too
+        checks.append({"id": cid, "name": name, "value": value, "show": show, "target": target,
+                       "band": list(band) if band else None, "scale": list(scale), "state": state,
+                       "label": lab, "todo": todo if state == "warn" else None,
+                       "chart": {"id": CHART[cid], **(span or chart_span)}})
+
+    # ① volume
+    v = round(tot("hours", tf, end) / n_t / (nh / 7.0), 2) if nh and not pre and n_t > 0 else None
+    st = "lock" if pre else "wait" if v is None else "warn" if v > hi_b + 1e-9 else \
+        "low" if v < lo_b - 1e-9 and n_t >= TAPER_LOW_DAYS else "ok"
+    check("taper_volume", _("量減到平常的 {b}", b=band_t), v, _pct(v) if v is not None else band_t,
+          _("減量開始到今天（平常 {h} 小時／週）", h=f"{nh:.1f}") if nh else _(NO_DATA), TAPER_BAND, (0, 1.2), st,
+          _("剩下幾天的課縮短一點，強度課保留、只減組數") if st == "warn" else _("照課表的量跑就好，不用再減"),
+          label=_("沒有資料") if v is None and not pre else None)
+    # ② climbing cut early
+    c = round(tot("climb_m", c_from, end) / n_c / (nc / 7.0), 2) if nc and not pre and n_c > 0 else None
+    st = "lock" if pre else "wait" if c is None else "warn" if c > hi_b + 1e-9 else "ok"
+    check("climb_early", _("爬升量提早減"), c, _pct(c) if c is not None else "≤" + _pct(hi_b),
+          _("賽前 2 週起 ≤ 平常的 {p}", p=_pct(hi_b)), (0, hi_b), (0, 1.2), st,
+          _("剩下幾天的爬坡課改平路或縮短"), label=_("沒有資料") if c is None and not pre else None)
+    # ③ chronic load falling days
+    dd = None if pre else ctl_down_days(ctl, end)
+    st = "lock" if pre else "wait" if dd is None else "warn" if dd > td else "ok"
+    check("ctl_down_days", _("長期負荷往下天數"), dd, _("{n} 天", n=dd) if dd is not None else f"≤ {td}",
+          _("不超過減量天數（{n} 天）", n=td), (0, td), (0, max(td * 1.5, (dd or 0) + 1)), st,
+          _("長期負荷降太久了：強度課照排，量不要再往下減"), span=load_span,
+          label=_("太久") if st == "warn" else None)
+    # ④ race-day load balance
+    band = LG.TSB_RACE["A"]
+    share, src = (race_tsb or {}).get("share"), (race_tsb or {}).get("source")
+    inb = share is not None and band[0] <= share <= band[1]
+    st = "lock" if pre else "wait" if share is None or (src != "actual" and inb) else "ok" if inb else "warn"
+    todo = None
+    if share is not None and share < band[0]:
+        todo = _("比賽日還太累：剩下幾天再少練一點")
+    elif share is not None and share > band[1]:
+        todo = _("比賽日太放鬆：保留一兩次短的強度課")
+    sh = f"{share * 100:+.0f} %" if share is not None else f"{band[0] * 100:+.0f}～{band[1] * 100:+.0f} %"
+    tgt = (_("照課表推算；目標長期負荷的 +10～+35 %") if src == "plan" else _("實際；目標長期負荷的 +10～+35 %")
+           if src == "actual" else _("課表還沒排到比賽日，推算不出來"))
+    check("race_tsb", _("比賽日負荷平衡"), share, sh, tgt, band, (-0.2, 0.5), st, todo, span=load_span,
+          label=_("偏低") if st == "warn" and share < band[0] else _("偏高") if st == "warn" else None)
+
+    strip = []
+    for k in range(td, 0, -1):
+        d = start - dt.timedelta(days=k)
+        strip.append({"label": str(k), "date": d.isoformat(),
+                      "state": "past" if d < today else "today" if d == today else "next"})
+    strip.append({"label": _("賽"), "date": start.isoformat(), "state": "today" if today == start else "race"})
+    this_week = []
+    if not pre:
+        mon = today - dt.timedelta(days=today.weekday())
+        if nh:
+            this_week.append(_("這週總時數控制在 {lo}–{hi} 小時（已 {x}）", lo=f"{nh * lo_b:.1f}",
+                               hi=f"{nh * hi_b:.1f}", x=f"{tot('hours', mon, today):.1f}"))
+        this_week.append(_("強度課保留，只減組數"))       # what to change for a check: on its card
+    inj = [e for e in injuries or () if e in INJ.active_on([e], today)]
+    out = {**base, "race": {"id": race.get("id"), "name": race.get("name"), "start": start.isoformat(),
+                            "kind": race.get("kind")},
+           "today": today.isoformat(), "taper_from": tf.isoformat(), "taper_days": td, "days_to": days_to,
+           "taper_day": None if pre else (today - tf).days + 1, "pre": pre, "countdown": strip,
+           "checks": checks, "this_week": this_week,
+           "injury": _("進行中：{x}", x=_("、").join(INJ.full_label(e.get("area"), e.get("side")) for e in inj))
+           if inj else _("沒有進行中的傷病"), "injury_on": bool(inj)}
+    if build and build.get("stages"):
+        out["build_line"] = _("、").join(f"{s['name']} {s['done']}/{s['total']}{' ✓' if s.get('passed') else ''}"
+                                        for s in build["stages"])
+    ok = sum(1 for x in checks if x["state"] == "ok")
+    out["ok"] = ok
+    out["text"] = (_("減量期從 {d} 開始（賽前 {n} 天）", d=_md(tf), n=td) if pre else
+                   _("賽前 {n} 天", n=days_to) if days_to > 0 else _("今天比賽"))
+    return out
+
+
+def phase(plan, today: dt.date, predict=None) -> Optional[str]:
+    """"taper" once the next A race's taper started, else "build"; None without a next A race."""
+    rc, e = _next_race(plan, today, predict)
+    if rc is None:
+        return None
+    return "taper" if today >= _d(rc["start"]) - dt.timedelta(days=_taper_days(e)) else "build"
+
+
 def line(bd: dict) -> dict:
     """The one sentence of the board for the 賽事評估 card on the season-plan page (SP-652): the stage it
     is in (the first unlocked one not passed; all passed: the last unlocked one) with done / total and its
-    label; a preview or no next A race: the board's text. `phase`: which 圖表分析 page has the card
-    (taper once the taper started, else build)."""
+    label; a preview or no next A race: the board's text. SP-677: a taper() card says 「減量期：賽前 N 天，4 項
+    檢查 k 項 OK」. `phase`: which 圖表分析 page has the card (the 減量期 one for a taper card)."""
     rc = bd.get("race")
-    today, tf = bd.get("today"), bd.get("taper_from")
-    phase = "taper" if today and tf and today >= tf else "build"
-    out = {"race_id": (rc or {}).get("id"), "phase": phase, "text": bd.get("text") or ""}
+    if bd.get("kind") == "taper":
+        out = {"race_id": (rc or {}).get("id"), "phase": "taper", "text": bd.get("text") or ""}
+        if rc is not None and not bd.get("pre"):
+            out["text"] = _("減量期：{t}，{n} 項檢查 {k} 項 OK", t=bd["text"], n=len(bd["checks"]), k=bd.get("ok", 0))
+        return out
+    out = {"race_id": (rc or {}).get("id"), "phase": "build", "text": bd.get("text") or ""}
     stages = [s for s in bd.get("stages") or () if s.get("unlocked")]
     if rc is None or bd.get("preview") or not stages:
         return out
@@ -837,35 +922,63 @@ def _safe(f, default):
         return default
 
 
-def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = None) -> dict:
-    """board()'s data inputs from the Dataset: activities (+ longest climb), best power / climbing speed,
-    chronic load, hard checks, race-day load balance, injuries, self-ratings, the first activity."""
+UPHILL_KEY = "readiness_uphill_v1"
+
+
+def _uphill(ds, st, w) -> tuple:
+    """(climbing speed, the ≥ 20-min one) of a mountain session: UPHILL_EXPR / UPHILL20_EXPR, disk-cached per
+    file (SP-677: the two evaluations were most of the 專項期 card's time)."""
+    def calc():
+        v = _safe(lambda: st.ev.evaluate(UPHILL_EXPR, w), None)
+        if v is None or v != v or v <= 0:
+            return [None, None]
+        v20 = _safe(lambda: st.ev.evaluate(UPHILL20_EXPR, w), None)
+        return [float(v), float(v20) if v20 and v20 == v20 else None]
+    f = getattr(ds, "cached_series", None)
+    try:
+        return tuple(f(UPHILL_KEY, w, calc, extra=[UPHILL_EXPR, UPHILL20_EXPR]) if f else calc())
+    except Exception:                       # noqa: BLE001 — a broken file = no climbing speed
+        return (None, None)
+
+
+def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = None, part: str = "build") -> dict:
+    """The data a card reads from the Dataset (SP-677: each card only its own). part "build" (board()):
+    activities (+ longest climb), best power / climbing speed, chronic load, hard checks, injuries,
+    self-ratings, the first activity. part "taper" (taper()): activities (no longest climb), chronic load,
+    race-day load balance (with `start`), injuries."""
     from backend.engine import activity_tags as AT
     from backend.engine import injuries as INJ
-    from backend.engine import load_guard as LG
     from backend.engine import overview as O
     from backend.engine.status import Status
     from backend.engine.wko5expr.dataset import date_to_day, day_to_date
-    out: dict = {"acts": _safe(lambda: activity_rows(ds, since, today), [])}
+    taper_part = part == "taper"
+    out: dict = {"acts": _safe(lambda: F.activity_rows(ds, today, (today - since).days) if taper_part
+                               else activity_rows(ds, since, today), [])}
     st = Status(ds, plan, today)
     ctl_s, atl_s, _st = st.ev.pmc()
-    days = range(int(date_to_day(today - dt.timedelta(days=400))), int(date_to_day(today)) + 1)
+    days = range(int(date_to_day(today - dt.timedelta(days=60 if taper_part else 400))), int(date_to_day(today)) + 1)
     out["ctl"] = [(day_to_date(d), v) for d in days for v in (ctl_s.at(d),) if v is not None and v == v]
+    out["injuries"] = _safe(INJ.load_events, [])
+    if taper_part:
+        if start is not None:
+            out["race_tsb"] = _safe(lambda: _race_tsb(ds, today, start, ctl_s, atl_s), None)
+        return out
     perf_lo = today - dt.timedelta(days=PERF_DAYS)
     vam, power = [], []
     for w in st.between(PERF_DAYS, 0):
         day = day_to_date(math.floor(w.day))
         if st.mountain(w) and (st.m(w, "climbing") or 0) > 200:
-            v = _safe(lambda w=w: st.ev.evaluate(UPHILL_EXPR, w), None)
-            if v is not None and v == v and v > 0:
-                v20 = _safe(lambda w=w: st.ev.evaluate(UPHILL20_EXPR, w), None)
-                vam.append({"date": day, "vam": float(v), "vam20": float(v20) if v20 and v20 == v20 else None})
+            v, v20 = _uphill(ds, st, w)
+            if v is not None:
+                vam.append({"date": day, "vam": v, "vam20": v20})
         if O.category(w) in O.FOOT and day >= perf_lo:
             cur = _safe(lambda w=w: ds.workout_curve(w.idx, "power"), None)
             if cur and cur[0]:
                 xs, ys = cur
                 power.append({"date": day, **{k: next((y for x, y in zip(xs, ys) if x >= int(k)), None)
                                               for k in REPEAT_KEYS}})
+    if hasattr(ds, "flush_series"):
+        _safe(ds.flush_series, None)
     out["perf"] = {"power": power, "vam": vam}
     lo = since
     ev_days = {e.start for e in plan.events if e.priority in ("B", "C") and lo <= e.start <= today}
@@ -876,7 +989,6 @@ def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = 
                 if a["priority"] != "A" and (a["source"] == "manual" or a["priority"] in ("B", "C"))}
     out["tests"] = [O.wdate(w) for w in O.workouts_between(ds, lo, today + dt.timedelta(days=1))
                     if O.wdate(w) in ev_days or (O.session_of(ds, w).get("type") or "").endswith("test")]
-    out["injuries"] = _safe(INJ.load_events, [])
     recorded = _safe(AT.load_recorded, [])
     rpe = []
     for w in O.workouts_between(ds, lo, today + dt.timedelta(days=1)):
@@ -887,41 +999,85 @@ def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = 
             rpe.append({"date": O.wdate(w), "kind": O.session_of(ds, w).get("type") or O.category(w), "rpe": r["rpe"]})
     out["rpe"] = rpe
     out["first_day"] = _safe(lambda: day_to_date(min(w.day for w in ds.workouts)), None)
-    if start is not None:
-        def race_tsb():
-            if (start - today).days <= 3:
-                d = int(date_to_day(today))
-                tsb, c = ctl_s.at(d - 1) - atl_s.at(d - 1), ctl_s.at(d - 1)
-                return {"share": LG.tsb_share(tsb, c), "source": "actual"}
-            from backend.engine.overview import project
-            from backend.engine.panels import plan_projection as PJ
-            pj = PJ.inputs(today, start)
-            if not pj or pj["until"] < start.isoformat():
-                return None
-            d = int(date_to_day(today))
-            rows = project(ctl_s.at(d), atl_s.at(d), [x for _d0, x in pj["days"]],
-                           float(ds.athlete.ctlconstant), float(ds.athlete.atlconstant))
-            i = [x for x, _y in pj["days"]].index(start.isoformat())
-            prev = ctl_s.at(d) if i == 0 else rows[i - 1]["ctl"]
-            return {"share": LG.tsb_share(rows[i]["tsb"], prev), "source": "plan"}
-        out["race_tsb"] = _safe(race_tsb, None)
     return out
 
 
-def compute(plan, ds, today: dt.date, predict=None) -> dict:
-    """The board of the next A race from the Dataset (SP-651's panel calls this)."""
-    from backend.engine import b2b as B2B
-    from backend.engine import primary_sport as PSP
+def _race_tsb(ds, today: dt.date, start: dt.date, ctl_s, atl_s) -> Optional[dict]:
+    """Race-day load balance ÷ chronic load: the actual one in the last 3 days, else projected from the plan."""
+    from backend.engine import load_guard as LG
+    from backend.engine.wko5expr.dataset import date_to_day
+    d = int(date_to_day(today))
+    if (start - today).days <= 3:
+        tsb, c = ctl_s.at(d - 1) - atl_s.at(d - 1), ctl_s.at(d - 1)
+        return {"share": LG.tsb_share(tsb, c), "source": "actual"}
+    from backend.engine.overview import project
+    from backend.engine.panels import plan_projection as PJ
+    pj = PJ.inputs(today, start)
+    if not pj or pj["until"] < start.isoformat():
+        return None
+    rows = project(ctl_s.at(d), atl_s.at(d), [x for _d0, x in pj["days"]],
+                   float(ds.athlete.ctlconstant), float(ds.athlete.atlconstant))
+    i = [x for x, _y in pj["days"]].index(start.isoformat())
+    prev = ctl_s.at(d) if i == 0 else rows[i - 1]["ctl"]
+    return {"share": LG.tsb_share(rows[i]["tsb"], prev), "source": "plan"}
+
+
+def _next_race(plan, today: dt.date, predict=None) -> tuple:
+    """(specific_phase.race_day of the next A race, its plan event) or (None, None)."""
     from backend.engine.panels import race_refs as RR
     rc = SP.race_day(plan, today, predict or RR.calculator_hours)
     if rc is None:
+        return None, None
+    return rc, next((x for x in plan.events if x.id == rc["id"]), None)
+
+
+def _taper_days(e) -> int:
+    from backend.engine import planning as P
+    return _safe(lambda: P.taper_days(e, P.taper_days_setting()), P.TAPER_DAYS) if e else P.TAPER_DAYS
+
+
+def compute(plan, ds, today: dt.date, predict=None) -> dict:
+    """The 專項期 card's board of the next A race from the Dataset (SP-651's panel calls this)."""
+    from backend.engine import b2b as B2B
+    from backend.engine import primary_sport as PSP
+    rc, e = _next_race(plan, today, predict)
+    if rc is None:
         return board(None, today, [])
-    e = next((x for x in plan.events if x.id == rc["id"]), None)
     start = _d(rc["start"])
     mons = week_mondays(start)
     since = min(min(mons.values()), today)
     data = inputs(ds, plan, today, since, start)
-    from backend.engine import planning as P
-    td = _safe(lambda: P.taper_days(e, P.taper_days_setting()), P.TAPER_DAYS) if e else P.TAPER_DAYS
-    return board(rc, today, data.pop("acts", []), sport=PSP.effective(ds, plan.events, today), taper_days=td,
+    return board(rc, today, data.pop("acts", []), sport=PSP.effective(ds, plan.events, today),
                  b2b=bool(e and B2B.qualifies(e) and e.kind != "road"), accepted_b2b=B2B.load_accepted(), **data)
+
+
+def compute_taper(plan, ds, today: dt.date, predict=None, build=None) -> dict:
+    """The 減量期 card of the next A race from the Dataset (SP-677): only its four checks. `build`: the
+    專項期 board's stage summary for the line at the bottom (the caller's, see readiness_panel)."""
+    rc, e = _next_race(plan, today, predict)
+    if rc is None:
+        return taper(None, today, [])
+    start = _d(rc["start"])
+    since = min(min(week_mondays(start).values()), today)
+    data = inputs(ds, plan, today, since, start, part="taper")
+    return taper(rc, today, data.pop("acts", []), taper_days=_taper_days(e), build=build, **data)
+
+
+def build_day(plan, today: dt.date, predict=None) -> Optional[dt.date]:
+    """The day the 專項期 result is read on for the 減量期 card's last line: the end of 賽前第 3 週 once it is
+    over (the result no longer changes then), else today; None without a next A race."""
+    rc, _e = _next_race(plan, today, predict)
+    if rc is None:
+        return None
+    m3 = week_mondays(_d(rc["start"])).get(TAPER_FROM + 1)
+    return min(today, m3 + dt.timedelta(days=6)) if m3 else today
+
+
+def build_summary(plan, ds, today: dt.date, predict=None) -> Optional[dict]:
+    """{"as_of", "stages": [{id, name, done, total, passed}]} of the 專項期 board as of build_day."""
+    day = build_day(plan, today, predict)
+    if day is None:
+        return None
+    bd = compute(plan, ds, day, predict)
+    return {"as_of": day.isoformat(), "stages": [{k: s[k] for k in ("id", "name", "done", "total", "passed")}
+                                                 for s in bd.get("stages") or ()]}

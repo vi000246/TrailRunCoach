@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>賽前準備 整合版</title>
+<style>
+:root{--bg:#eef0f3;--card:#fff;--ink:#1f2328;--mute:#6b7280;--line:#e5e7eb;--blue:#2563eb;--blue-bg:#eff4ff;--green:#16a34a;--green-bg:#dcfce7;--amber:#d97706;--amber-bg:#fef3c7;--red:#dc2626;--red-bg:#fee2e2;--gray:#9ca3af;--orange:#f59e0b;--purple:#7c3aed;--purple-bg:#ede9fe}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,"PingFang TC","Noto Sans TC",sans-serif}
+.top{position:sticky;top:0;z-index:5;background:#111827;color:#fff;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;background:#374151;border-radius:8px;padding:3px}
+.seg button{border:0;background:transparent;color:#d1d5db;padding:6px 12px;border-radius:6px;font:inherit;cursor:pointer}
+.seg button.on{background:#fff;color:#111827;font-weight:600}
+.wrap{max-width:1200px;margin:16px auto;padding:0 16px}
+.frame{background:#f8f9fb;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:0 auto}
+.frame.phone{max-width:390px;border:10px solid #111;border-radius:36px}
+.hdr{padding:12px 16px;border-bottom:1px solid var(--line);background:#fff}
+.hdr h1{font-size:16px;margin:0}.hdr span{color:var(--mute);font-size:13px;margin-left:6px}
+.tabs{display:flex;gap:6px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs a{white-space:nowrap;padding:4px 12px;border:1px solid var(--line);border-radius:999px;color:var(--mute);font-size:13px}
+.tabs a.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.page{padding:14px 16px}
+.card{background:var(--card);border:2px solid var(--orange);border-radius:12px;padding:14px;position:relative}
+.card .new{position:absolute;top:-11px;right:14px;background:var(--orange);color:#fff;font-size:11px;padding:1px 8px;border-radius:999px}
+.ttl{font-weight:700;font-size:15px}.ttl small{font-weight:400;color:var(--mute);margin-left:6px}
+.here{background:var(--blue-bg);border-left:4px solid var(--blue);border-radius:8px;padding:8px 12px;margin:10px 0 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.here .k{color:var(--blue);font-size:12px;font-weight:600;width:100%}
+.here .todo{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1.5px solid var(--blue);color:var(--blue);background:#fff;border-radius:999px;padding:1px 10px;font-size:13px}
+.here a{color:#fff;background:var(--blue);border-radius:6px;padding:3px 10px;text-decoration:none;font-weight:600;font-size:13px;margin-left:auto}
+
+/* 關卡列 */
+.rail{display:flex;align-items:stretch;gap:0;margin-bottom:12px}
+.gate{flex:1;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:#fff;cursor:pointer;min-width:0}
+.gate.cur{border:2px solid var(--blue)}
+.gate.lock{background:#f3f4f6;color:var(--mute)}
+.gate.sel{box-shadow:0 0 0 3px #bfdbfe}
+.gate .g1{display:flex;align-items:center;gap:8px}
+.num{width:22px;height:22px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:1.5px solid var(--gray);color:var(--mute)}
+.gate.cur .num{background:var(--blue);border-color:var(--blue);color:#fff}
+.gate.open .num{border-color:var(--amber);color:var(--amber)}
+.gate .nm{font-weight:700;white-space:nowrap}
+.gate .st{margin-left:auto;font-size:11px;padding:0 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.gate.cur .st{color:var(--blue)}.gate.open .st{color:var(--amber)}.gate.lock .st{color:var(--mute)}
+.gate .g2{font-size:12px;color:var(--mute);margin-top:2px}
+.pbar{height:5px;background:#e5e7eb;border-radius:3px;margin-top:6px;position:relative}
+.pbar i{display:block;height:100%;border-radius:3px;background:var(--blue)}
+.gate.open .pbar i{background:var(--amber)}
+.pbar b{position:absolute;top:-3px;left:66.6%;width:2px;height:11px;background:#111}
+.arrow{display:flex;align-items:center;color:var(--gray);padding:0 6px;font-size:18px}
+
+/* 日曆 */
+.cal{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+.cal th,.cal td{padding:5px 3px;text-align:center;border-bottom:1px solid #f0f1f3}
+.cal thead th{color:var(--mute);font-weight:500;font-size:11.5px;line-height:1.3}
+.cal thead .ph th{font-size:11px;border-bottom:0;padding-bottom:0}
+.cal .phs{color:var(--blue);border-top:3px solid #bfdbfe}.cal .pht{color:var(--purple);border-top:3px solid #ddd6fe}
+.cal td.lab{text-align:left;padding-left:6px;white-space:nowrap;max-width:220px}
+.cal td.lab small{display:block;color:var(--mute);font-size:11px;white-space:normal}
+.cal .cw{background:#eef3ff}
+.cal thead .cw{color:var(--blue);font-weight:700}
+.cal tr.grp td{background:#fafafa;text-align:left;font-weight:700;font-size:12.5px;padding:6px;border-top:1px solid var(--line)}
+.cal tr.grp td span{font-weight:400;color:var(--mute);margin-left:6px}
+.cal tr.locked td:not(.lab){opacity:.45}
+.cal tr.dim{opacity:.35}
+.c{display:inline-flex;min-width:26px;height:24px;padding:0 4px;border-radius:12px;align-items:center;justify-content:center;font-size:11px;font-weight:700;cursor:default}
+.s-done{background:var(--green);color:#fff}
+.s-due{border:2px solid var(--blue);color:var(--blue);background:#fff}
+.s-miss{background:var(--red-bg);color:var(--red)}
+.s-fut{border:1.5px dashed #d1d5db;color:#9ca3af;font-weight:500}
+.s-part{background:var(--amber-bg);color:var(--amber)}
+.s-tap{background:var(--purple-bg);color:var(--purple)}
+.s-unk{background:#f3f4f6;color:#9ca3af}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--mute);margin-top:8px;align-items:center}
+.legend .c{min-width:20px;height:18px;font-size:9px}
+.foot{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);font-size:13px;color:#374151;display:flex;gap:16px;flex-wrap:wrap}
+.foot b{color:var(--mute);font-weight:500}
+.ok{color:var(--green)}.half{color:var(--amber)}
+.detail{margin-top:10px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;min-height:38px;color:#374151}
+.detail .dk{color:var(--mute);font-size:12px}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.chart{background:#fff;border:1px solid var(--line);border-radius:10px;height:110px;padding:10px;font-weight:600;color:#374151}
+.note{margin:14px auto;max-width:1200px;background:#fffbea;border:1px dashed #e0b84d;border-radius:10px;padding:10px 14px;font-size:13px}
+
+/* 手機 */
+.mob{display:none}
+.phone .desk{display:none}.phone .mob{display:block}
+.phone .rail{flex-direction:column;gap:6px}.phone .arrow{display:none}
+.phone .charts{grid-template-columns:1fr}
+.weeks{display:flex;gap:4px;overflow-x:auto;padding:2px 0 8px}
+.wk{flex:none;width:44px;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:center;padding:3px 0;font-size:11px;color:var(--mute);cursor:pointer}
+.wk b{display:block;font-size:14px;color:var(--ink)}
+.wk.t{border-color:#ddd6fe}
+.wk.cur{border:2px solid var(--blue)}
+.wk.sel{background:var(--blue);color:#dbeafe}.wk.sel b{color:#fff}
+.wk i{display:block;height:4px;margin:2px 8px 0;border-radius:2px;background:#e5e7eb}
+.wk i.g{background:var(--green)}.wk i.r{background:var(--red)}.wk i.b{background:var(--blue)}
+.mlist .mg{font-weight:700;font-size:12.5px;margin:8px 0 2px;color:#374151}
+.mlist .mr{display:flex;gap:8px;align-items:center;padding:3px 0;font-size:13px}
+.mlist .mr small{color:var(--mute)}
+.mlist .empty{color:var(--mute);font-size:13px;padding:4px 0}
+</style>
+</head>
+<body>
+<div class="top">
+  <b>賽前準備 · 整合版 mock</b>
+  <div class="seg" id="dev"><button data-d="desk" class="on">桌機</button><button data-d="phone">手機 390</button></div>
+  <span style="color:#9ca3af;font-size:12px">假資料：示意 山徑 50K（A）· 比賽 10/26 · 今天賽前第 6 週</span>
+</div>
+
+<div class="wrap">
+<div class="frame" id="frame">
+  <div class="hdr"><h1>圖表分析<span>周期化訓練 › ③ 專項期</span></h1></div>
+  <div class="tabs"><a>① 轉換期</a><a>② 基礎期</a><a class="on">③ 專項期</a><a>④ 減量期</a><a>區間與課表強度</a></div>
+  <div class="page">
+  <div class="card"><span class="new">新：賽前準備</span>
+    <div class="ttl">賽前準備：示意 山徑 50K（A）<small>10/26 · 賽前 6 週 · 預估完賽 8.2 小時（關門 12）</small></div>
+
+    <div class="here">
+      <div class="k">本週要做（賽前第 6 週 · 9/14–9/20）</div>
+      <div class="todo" id="todo"></div>
+      <a href="#">安排課表 ›</a>
+    </div>
+
+    <div class="rail" id="rail"></div>
+
+    <div class="desk">
+      <table class="cal" id="cal"></table>
+      <div class="legend">
+        <span><span class="c s-done">✓</span> 做到了</span>
+        <span><span class="c s-due">75</span> 本週要做（數字＝目標 % 或次數）</span>
+        <span><span class="c s-miss">65</span> 該做沒做到</span>
+        <span><span class="c s-part">◐</span> 差一點</span>
+        <span><span class="c s-fut">80</span> 之後</span>
+        <span><span class="c s-tap">✓</span> 減量期的檢查</span>
+        <span>· 點格子看細節；點上面的關卡只看那一段</span>
+      </div>
+      <div class="detail" id="detail"><span class="dk">點任一格看那週的目標與實際</span></div>
+    </div>
+
+    <div class="mob">
+      <div class="weeks" id="weeks"></div>
+      <div class="mlist" id="mlist"></div>
+    </div>
+
+    <div class="foot">
+      <span><b>每週都看</b>　<span class="ok">✓</span> 長期負荷每週 +2.4</span>
+      <span><span class="half">◐</span> 最近 3 次爬坡課自評「很累」</span>
+      <span><span class="ok">✓</span> 沒有進行中的傷病</span>
+    </div>
+  </div>
+  <div class="charts"><div class="chart">每次路線難度</div><div class="chart">最長單次訓練</div></div>
+  </div>
+</div>
+</div>
+
+<div class="note"><b>整合版怎麼讀</b>：上面一列是三道關卡（專項量 → 表現驗證 → 比賽狀態），每段做到 2/3 就解鎖下一段，看的是「整體還剩什麼」。下面是週曆，每一列是關卡裡的一個項目、每一欄是一週，看的是「這週要做什麼、哪週漏了」。每個項目只在週曆出現一次，關卡列只放進度數字；本週要做只出現在最上面那一條。減量期關卡沒解鎖前整段變淡。手機把週曆換成一排週次按鈕，點一週看那週要做的事。</div>
+
+<script>
+const W=[10,9,8,7,6,5,4,3,2,1], CUR=6;
+const MON={10:'8/17',9:'8/24',8:'8/31',7:'9/7',6:'9/14',5:'9/21',4:'9/28',3:'10/5',2:'10/12',1:'10/19'};
+const TAPER=w=>w<=2;
+// 三段關卡：每段的項目，項目每週一格 [狀態, 顯示, 細節]
+const STAGES=[
+ {id:1,name:'專項量',span:'賽前 10 → 3 週',state:'cur',label:'進行中',done:4,total:6,
+  rows:[
+   {name:'長天',crit:'最硬一次 ≥ 比賽最難那天 70 %',cells:{10:['done','50','目標 50 %，做到 52 %（4.0 h）'],9:['done','55','目標 55 %，做到 57 %'],8:['done','60','目標 60 %，做到 61 %'],7:['miss','65','目標 65 %，做到 61 %（少 10 分鐘）'],6:['due','75','本週目標 75 %：約 5.8 小時，兼賽事模擬'],5:['fut','65'],4:['fut','80'],3:['fut','65']},met:true},
+   {name:'每週一次長距離',crit:'近 4 週每週 1 次',cells:{10:['done','✓'],9:['done','✓'],8:['done','✓'],7:['done','✓'],6:['due','1','本週還沒做'],5:['fut','1'],4:['fut','1'],3:['fut','1']},met:true},
+   {name:'長爬坡（最長一段）',crit:'到比賽最長一段 1,050 m 的 70 %',cells:{9:['done','50','做到 540 m'],7:['part','70','目標 735 m，做到 620 m（59 %）'],6:['due','80','本週目標 840 m'],4:['fut','90']},met:false},
+   {name:'像比賽的地形',crit:'近 4 週 3 次坡度相近的爬坡課',cells:{9:['done','✓'],8:['done','✓'],7:['done','✓'],6:['due','1']},met:true},
+   {name:'背對背長天（B2B）',crit:'賽前 3 週前做到 2 次',cells:{8:['done','1','9/5–9/6 背對背'],6:['due','2','本週末第 2 次'],4:['fut','3']},met:false},
+   {name:'賽事模擬',crit:'第 6 或 4 週做一次（穿比賽裝備、照比賽吃）',cells:{6:['due','1','併在本週長天'],4:['fut','1','本週沒做的話第 4 週補']},met:false},
+  ]},
+ {id:2,name:'表現驗證',span:'賽前 6 → 3 週',state:'open',label:'可以開始',done:2,total:4,
+  rows:[
+   {name:'最佳表現重複得出來',crit:'近 6 週 20 分鐘最佳，前 5 次平均 ≥ 最高的 97 %',cells:{6:['part','95%','前 5 次平均是最高的 95 %，差一點'],5:['fut',''],4:['fut',''],3:['fut','']},met:false},
+   {name:'長期負荷到自己的高區',crit:'近 365 天前 20 %',cells:{6:['done','✓','前 18 %'],5:['fut',''],4:['fut',''],3:['fut','']},met:true},
+   {name:'上坡腳程變快',crit:'比 8 週前快',cells:{6:['done','+4%','每小時爬升比 8 週前快 4 %']},met:true},
+   {name:'高區做一次驗證',crit:'模擬賽或測驗',cells:{5:['fut','1'],4:['fut','1']},met:false},
+  ]},
+ {id:3,name:'比賽狀態',span:'賽前 10 → 0 天',state:'lock',label:'10/16 解鎖',done:0,total:4,
+  rows:[
+   {name:'量減到平常的 40–60 %',crit:'強度保留',cells:{2:['tap','50%'],1:['tap','40%']}},
+   {name:'爬升量提早減',crit:'賽前 2 週開始',cells:{2:['tap','✓']}},
+   {name:'長期負荷往下不超過 7 天',crit:'',cells:{1:['tap','✓']}},
+   {name:'比賽日負荷平衡',crit:'長期負荷的 +10～+35 %（課表推算 +28 %）',cells:{1:['tap','+28%','賽前 3 天看實際值']}},
+  ]},
+];
+let sel=null, wsel=CUR;
+const cls={done:'s-done',due:'s-due',miss:'s-miss',fut:'s-fut',part:'s-part',tap:'s-tap',unk:'s-unk'};
+function rail(){
+  const r=document.getElementById('rail');r.innerHTML='';
+  STAGES.forEach((s,i)=>{
+    if(i)r.insertAdjacentHTML('beforeend','<div class="arrow">›</div>');
+    const g=document.createElement('div');
+    g.className=`gate ${s.state}${sel===s.id?' sel':''}`;
+    g.innerHTML=`<div class="g1"><span class="num">${s.state==='lock'?'🔒':s.id}</span><span class="nm">${s.name}</span><span class="st">${s.label}</span></div>
+      <div class="g2">${s.span} · ${s.state==='lock'?'減量期才開始':`${s.done}/${s.total} 做到，${s.done/s.total>=2/3?'照進度':'還差 '+(Math.ceil(s.total*2/3)-s.done)+' 項'}`}</div>
+      <div class="pbar"><i style="width:${s.done/s.total*100}%"></i><b></b></div>`;
+    g.onclick=()=>{sel=sel===s.id?null:s.id;draw()};
+    r.appendChild(g);
+  });
+}
+function cal(){
+  let h='<thead><tr class="ph"><th></th><th colspan="8" class="phs">專項期</th><th colspan="2" class="pht">減量期</th></tr><tr><th style="text-align:left;padding-left:6px">賽前第幾週</th>';
+  W.forEach(w=>h+=`<th class="${w===CUR?'cw':''}">${w===CUR?'本週<br>':''}${w}<br><span style="font-weight:400">${MON[w]}</span></th>`);
+  h+='</tr></thead><tbody>';
+  STAGES.forEach(s=>{
+    const dim=sel&&sel!==s.id?' dim':'';
+    h+=`<tr class="grp${dim}"><td colspan="11">${s.state==='lock'?'🔒':'①②③'[s.id-1]} ${s.name}<span>${s.span}</span></td></tr>`;
+    s.rows.forEach((r,ri)=>{
+      h+=`<tr class="${s.state==='lock'?'locked':''}${dim}"><td class="lab">${r.met?'<span class="ok">✓</span> ':''}${r.name}<small>${r.crit}</small></td>`;
+      W.forEach(w=>{const c=r.cells[w];h+=`<td class="${w===CUR?'cw':''}">${c?`<span class="c ${cls[c[0]]}" data-s="${s.id}" data-r="${ri}" data-w="${w}">${c[1]||'·'}</span>`:''}</td>`});
+      h+='</tr>';
+    });
+  });
+  document.getElementById('cal').innerHTML=h+'</tbody>';
+  document.querySelectorAll('#cal .c').forEach(e=>e.onclick=()=>{
+    const s=STAGES[e.dataset.s-1],r=s.rows[e.dataset.r],c=r.cells[e.dataset.w];
+    document.getElementById('detail').innerHTML=`<b>${r.name}</b> · 賽前第 ${e.dataset.w} 週（${MON[e.dataset.w]} 起）<br>${c[2]||({fut:'之後要做',tap:'減量期檢查',done:'做到了'}[c[0]]||'')}`;
+  });
+}
+function todo(){
+  const t=[];STAGES.forEach(s=>s.rows.forEach(r=>{const c=r.cells[CUR];if(c&&c[0]==='due')t.push(`${r.name}${c[2]?'：'+c[2].replace(/^本週(目標)?/,''):''}`)}));
+  document.getElementById('todo').innerHTML=t.map(x=>`<span class="chip">${x}</span>`).join('');
+}
+function weeks(){
+  const el=document.getElementById('weeks');el.innerHTML='';
+  W.forEach(w=>{
+    let st=[];STAGES.forEach(s=>s.rows.forEach(r=>r.cells[w]&&st.push(r.cells[w][0])));
+    const bar=st.includes('miss')?'r':st.includes('due')?'b':st.length&&st.every(x=>x==='done')?'g':'';
+    const b=document.createElement('div');
+    b.className=`wk${TAPER(w)?' t':''}${w===CUR?' cur':''}${w===wsel?' sel':''}`;
+    b.innerHTML=`${w===CUR?'本週':'第'}<b>${w}</b>${MON[w]}<i class="${bar}"></i>`;
+    b.onclick=()=>{wsel=w;draw()};el.appendChild(b);
+  });
+  let h='';
+  STAGES.forEach(s=>{
+    if(sel&&sel!==s.id)return;
+    const rs=s.rows.filter(r=>r.cells[wsel]);
+    if(!rs.length)return;
+    h+=`<div class="mg">${s.state==='lock'?'🔒':'①②③'[s.id-1]} ${s.name}</div>`;
+    rs.forEach(r=>{const c=r.cells[wsel];h+=`<div class="mr"><span class="c ${cls[c[0]]}">${c[1]||'·'}</span><span>${r.name}${c[2]?`<br><small>${c[2]}</small>`:''}</span></div>`});
+  });
+  document.getElementById('mlist').innerHTML=h||'<div class="empty">這週沒有關卡項目</div>';
+}
+function draw(){rail();cal();weeks()}
+todo();draw();
+document.querySelectorAll('#dev button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#dev button').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('frame').classList.toggle('phone',b.dataset.d==='phone');
+});
+</script>
+</body>
+</html>

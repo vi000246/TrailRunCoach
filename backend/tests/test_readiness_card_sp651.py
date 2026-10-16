@@ -108,8 +108,9 @@ def test_api_draws_the_board_of_the_demos_a_race(demo):
     assert j["kind"] == "readiness", j
     R = j["readiness"]
     assert R["race"] and R["race"]["name"], R.get("text")
-    assert [s["id"] for s in R["stages"]] == ["volume", "validation", "race_state"]
-    assert [w["week"] for w in R["weeks"]] == list(range(10, 0, -1))
+    assert [s["id"] for s in R["stages"]] == ["volume", "validation"]          # SP-677: 專項期 only
+    assert [w["week"] for w in R["weeks"]] == list(range(10, 2, -1))
+    assert j["phase"] == "build" and "dash=" in j["other"]                       # → the 減量期 card
     # the activities were read (inputs() on the real Dataset): some cell of the past weeks is judged
     cells = [c for s in R["stages"] for i in s["items"] for c in i["cells"].values()]
     if not R["preview"]:
@@ -118,7 +119,10 @@ def test_api_draws_the_board_of_the_demos_a_race(demo):
     today = dt.date.fromisoformat(R["today"])
     mon = today - dt.timedelta(days=today.weekday())
     assert j["schedule"].endswith(f"?day={mon.isoformat()}"), j["schedule"]
-    assert _get(demo, "taper")["readiness"]["race"]["id"] == R["race"]["id"]
+    t = _get(demo, "taper")
+    assert t["phase"] == "taper" and t["readiness"]["race"]["id"] == R["race"]["id"]
+    assert [c["id"] for c in t["readiness"]["checks"]] == ["taper_volume", "climb_early", "ctl_down_days", "race_tsb"]
+    assert "weeks" not in t["readiness"] and "dash=" in t["other"]
 
 
 def test_api_without_a_next_a_race_says_so(demo, monkeypatch, tmp_path):
