@@ -165,14 +165,19 @@ def test_sex_or_default():
     assert CPP.sex_or_default(mk({})) == ("male", "預設（男，推估）")
 
 
-def test_pack_default_follows_body_weight():
+def test_pack_default_single_4_multi_9_sp738():
+    """SP-738 (owner 2026-10-19): single day 4 kg, multi-day 9 kg, whatever the body weight — replaces
+    generalize-athlete P3's body weight × 13 % (this test's old name: test_pack_default_follows_body_weight)."""
     from backend.engine.racepower import capacity as CAP
     from backend.engine import steep_hill as SH
-    assert CAP.pack_default(68.0) == 9.0                 # 68 kg: the old 9 kg default
-    assert CAP.pack_default(52.0) == 7.0                 # 6.76 -> 7.0
-    assert CAP.pack_default(None, 3) == CAP.PACK_DEFAULT_MULTI
-    assert "13 %" in CAP.pack_default_text(60.0) and "9 kg" in CAP.pack_default_text(None)
-    assert SH.trip_kg({"days": 2}, 52.0) == 7.0 and SH.trip_kg({"pack_kg": 11}, 52.0) == 11.0
+    assert CAP.PACK_DEFAULT_SINGLE == 4.0 and CAP.PACK_DEFAULT_MULTI == 9.0
+    for w in (None, 52.0, 68.0, 90.0):
+        assert CAP.pack_default(w) == 4.0 and CAP.pack_default(w, 1) == 4.0
+        assert CAP.pack_default(w, 2) == 9.0 and CAP.pack_default(w, 3) == 9.0
+    assert CAP.pack_default_text(60.0, 1) == "4 kg（單日）" and CAP.pack_default_text(None, 3) == "9 kg（多日）"
+    assert "單日 4 kg" in CAP.pack_default_text() and "多日 9 kg" in CAP.pack_default_text()
+    assert SH.trip_kg({"days": 2}, 52.0) == 9.0 and SH.trip_kg({"days": 1}, 52.0) == 4.0
+    assert SH.trip_kg({"pack_kg": 11}, 52.0) == 11.0
 
 
 def test_body_profile_age_from_birth_year():

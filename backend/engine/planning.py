@@ -165,7 +165,7 @@ PHASES = {
 }
 # SP-504 R2: an A 百岳 trip's (kind baiyue) days are a 行程, not a 賽事 (phase_label)
 TRIP_PHASE = N_("行程")
-KINDS = {"race": "越野賽", "baiyue": "百岳", "road": "路跑賽", "other": "其他"}
+KINDS = {"race": "越野賽", "baiyue": "登山", "road": "路跑賽", "other": "其他"}   # SP-738: 百岳 → 登山 (the stored kind stays baiyue)
 PRIORITIES = ("A", "B", "C")
 EVENT_HEAT = ("auto", "hot", "cool")      # Event.heat (heat-acclimation.md §5.4)
 PACK_MAX_KG = 40.0                         # Event.pack_kg: as athlete.set_hike_meta's 0–40 kg check
@@ -205,7 +205,7 @@ class Event:
     # (Hadley > 150, heat.race_is_hot); hot / cool = the user says so
     heat: str = "auto"
     # the trip pack (kg, day 1 = the heaviest) — loaded-carry-training.md §5.1;
-    # None = capacity.PACK_DEFAULT_MULTI / _SINGLE (9 kg), see pack()
+    # None = capacity.PACK_DEFAULT_MULTI / _SINGLE (4 kg single day, 9 kg multi-day, SP-738), see pack()
     pack_kg: Optional[float] = None
     # SP-105 (engine/race_feasibility.py): a race's 關門時間 (h); a 百岳's 撤退時間 = hours from the
     # summit day's start with no summit yet → turn back. None = not set
@@ -256,7 +256,7 @@ class Event:
 
     @property
     def pack(self) -> float:
-        """pack_kg, else the 9 kg default (capacity.PACK_DEFAULT_MULTI / _SINGLE)."""
+        """pack_kg, else the default (4 kg single day, 9 kg multi-day, SP-738) (capacity.PACK_DEFAULT_MULTI / _SINGLE)."""
         if self.pack_kg is not None:
             return float(self.pack_kg)
         from backend.engine.racepower.capacity import PACK_DEFAULT_MULTI, PACK_DEFAULT_SINGLE

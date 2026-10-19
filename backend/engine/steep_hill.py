@@ -69,7 +69,7 @@ def qualifies(ev) -> bool:
 
 
 def trip_kg(ev: Optional[dict], weight: Optional[float] = None) -> float:
-    """Event.pack_kg, else capacity.pack_default (body weight × 13 %, 9 kg without one)."""
+    """Event.pack_kg, else capacity.pack_default (single day 4 kg, multi-day 9 kg, SP-738)."""
     from backend.engine.racepower.capacity import pack_default
     if ev and ev.get("pack_kg") is not None:
         return float(ev["pack_kg"])

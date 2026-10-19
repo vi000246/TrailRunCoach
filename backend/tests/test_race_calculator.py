@@ -299,7 +299,7 @@ def test_race_hr_is_the_calculators_own_prediction():
     th = {"lthr": 170.0}
     hr, src = WE.race_hr({"type": "trail", "summary": {"trail_hr": {"x": 0.86, "x_star": 0.88}}}, th)
     assert hr == approx(0.88 * 170) and "越野心率模型" in src
-    assert WE.race_hr({"type": "baiyue", "summary": {"hr_cap": 142.0}}, th) == (142.0, "百岳心率帶 AeT")
+    assert WE.race_hr({"type": "baiyue", "summary": {"hr_cap": 142.0}}, th) == (142.0, "登山心率帶 AeT")
     assert WE.race_hr({"type": "road", "summary": {}}, th) == (None, "")
     assert WE.race_hr({"type": "trail", "summary": {}}, th) == (None, "")          # no trail HR model
 
@@ -412,7 +412,7 @@ def test_baiyue_export_single_day_only(client, monkeypatch):   # noqa: F811
     assert ok.status_code == 200, ok.text
     j = ok.json()
     assert {lg["target"]["type"] for lg in j["legs"]} <= {"hr", "none"}
-    assert j["tss_info"]["open_src"] in ("百岳心率帶 AeT", "") and j["tss"] > 0
+    assert j["tss_info"]["open_src"] in ("登山心率帶 AeT", "") and j["tss"] > 0
     # two days: blocked on the page (export_block) and by the API
     multi = {**body, "day_splits_km": [6]}
     assert "2 天" in client.post("/api/v1/racepower/plan", json=multi).json()["export_block"]

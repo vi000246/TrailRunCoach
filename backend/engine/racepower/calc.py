@@ -484,12 +484,12 @@ def predict_baiyue(ctx: Context, body: PredictIn, d: dict, weight: float, env: d
             # at the v1 reference pack: predict_baiyue then applies its own
             # pack factor (W + hist)/(W + pack) and the altitude M
             eph = CAP.course_eph(cap, body.distance_km, body.gain_m, body.loss_m, body.hist_pack_kg)
-            src = _("推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 百岳心率窗，AeT；{note}）",
-                    note=h.get("note") or _("百岳多為跟團"))
+            src = _("推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 登山心率窗，AeT；{note}）",
+                    note=h.get("note") or _("登山多為跟團"))
             warnings.append(H.tag("RC1", _("整趟時間是推估：{note}；用你的步行能力模型（待回測）", note=h.get("note") or "")))
         else:
             eph = HK.tobler_eph(body.distance_km, body.gain_m, body.loss_m)
-            src = _("推估：Tobler 步行函數在這條路線的 EP/h（{note}）", note=h.get("note") or _("百岳多為跟團"))
+            src = _("推估：Tobler 步行函數在這條路線的 EP/h（{note}）", note=h.get("note") or _("登山多為跟團"))
             if not d["weight"]["value"]:
                 # SP-414: the capacity model needs the settings weight (it is in W/kg)
                 warnings.append(H.tag("RC1", _("整趟時間是推估：{note}；沒有體重，步行能力模型算不出，用 Tobler 步行函數",
@@ -503,7 +503,7 @@ def predict_baiyue(ctx: Context, body: PredictIn, d: dict, weight: float, env: d
     if weight and weight > 0:
         default_pack = _cap.pack_default(weight, days)
         pack = body.pack_kg if body.pack_kg is not None else default_pack
-        used["pack_kg"] = _src(pack, _("手動") if body.pack_kg is not None else _("預設背負 {pack}", pack=_cap.pack_default_text(weight)))
+        used["pack_kg"] = _src(pack, _("手動") if body.pack_kg is not None else _("預設背負 {pack}", pack=_cap.pack_default_text(weight, days)))
     else:
         # SP-414: no body weight — the pack factor (W + 5 kg)/(W + pack) is 1, no default pack, no energy
         pack = body.pack_kg

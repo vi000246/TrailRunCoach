@@ -324,7 +324,7 @@ def race_hr(plan: dict, th: dict) -> tuple[Optional[float], str]:
         if x and lthr:
             return float(x) * float(lthr), _("越野心率模型 {x:.0%} LTHR", x=float(x))
     elif plan.get("type") == "baiyue" and s.get("hr_cap"):
-        return float(s["hr_cap"]), _("百岳心率帶 AeT")
+        return float(s["hr_cap"]), _("登山心率帶 AeT")
     return None, ""
 
 
@@ -374,9 +374,9 @@ def multi_day(plan: dict, start_time: Optional[str] = None, days: Optional[int] 
     s = plan.get("summary") or {}
     n = max(int(days or 1), int(s.get("days") or 1), len(plan.get("days") or []) or 1)
     if n > 1:
-        return _("多日行程（{n} 天）不匯出至課表：課表一天一堂，只有單日（單攻）百岳可以匯出", n=n)
+        return _("多日行程（{n} 天）不匯出至課表：課表一天一堂，只有單日登山可以匯出", n=n)
     clock = float(s.get("clock_s") or s.get("time_s") or 0.0)
     st = _start_s(start_time)
     if (st if st is not None else 0.0) + clock > 24 * 3600.0:
-        return _("行程會跨過午夜（多日）不匯出至課表：只有當天來回的單攻百岳可以匯出")
+        return _("行程會跨過午夜（多日）不匯出至課表：只有當天來回的登山可以匯出")
     return None

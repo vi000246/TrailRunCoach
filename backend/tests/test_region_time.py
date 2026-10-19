@@ -122,9 +122,9 @@ def test_region_api_kinds_and_map_default(monkeypatch, tmp_path):
     monkeypatch.setattr(RG, "region", lambda user_id=1, root=None: ("intl", "預設"))
     r = RAPI.get_region()
     assert r["region"] == "intl" and r["basemap_default"] == "osm"
-    assert PA._kinds()["baiyue"] == "多日登山"
+    assert PA._kinds()["baiyue"] == "登山"            # SP-738: 登山 everywhere (was 多日登山 outside Taiwan)
     monkeypatch.setattr(RG, "region", lambda user_id=1, root=None: ("tw", "設定"))
-    assert PA._kinds()["baiyue"] == "百岳" and RG.default_basemap("tw") == "rudy"
+    assert PA._kinds()["baiyue"] == "登山" and RG.default_basemap("tw") == "rudy"
 
     from backend.api import sync as SY
     from backend.settings.repository import SettingsRepository

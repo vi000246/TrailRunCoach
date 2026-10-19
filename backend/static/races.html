@@ -207,7 +207,7 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
         <option value="" data-i18n="races.f.kind_all">所有類型</option>
         <option value="race" data-i18n="races.kind.race">越野賽</option>
         <option value="road" data-i18n="races.kind.road">路跑賽</option>
-        <option value="baiyue" data-i18n="races.kind.baiyue">百岳</option>
+        <option value="baiyue" data-i18n="races.kind.baiyue">登山</option>
         <option value="other" data-i18n="races.kind.other">其他</option>
       </select>
       <select id="sort" data-i18n-attr="aria-label:races.sort.label" aria-label="">
@@ -241,7 +241,7 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
     <label for="ed-name" data-i18n="races.ed.name">名稱</label><input id="ed-name" name="name" maxlength="120" required>
     <label for="ed-date" data-i18n="races.ed.date">日期</label><input id="ed-date" name="date" type="date" required>
     <label for="ed-kind" data-i18n="races.ed.kind">類型</label>
-    <select id="ed-kind" name="kind"><option value="race" data-i18n="races.kind.race">越野賽</option><option value="road" data-i18n="races.kind.road">路跑賽</option><option value="baiyue" data-i18n="races.kind.baiyue">百岳</option><option value="other" data-i18n="races.kind.other">其他</option></select>
+    <select id="ed-kind" name="kind"><option value="race" data-i18n="races.kind.race">越野賽</option><option value="road" data-i18n="races.kind.road">路跑賽</option><option value="baiyue" data-i18n="races.kind.baiyue">登山</option><option value="other" data-i18n="races.kind.other">其他</option></select>
     <label for="ed-prio" data-i18n="races.ed.prio">優先級</label>
     <select id="ed-prio" name="priority"><option>A</option><option>B</option><option>C</option></select>
     <label for="ed-days" data-i18n="races.ed.days">天數</label><input id="ed-days" name="days" type="number" min="1" value="1" inputmode="numeric">
@@ -283,7 +283,7 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
         <label for="ed-trail" data-i18n="plan.ev.trail_pct">土徑比 %</label>
         <input id="ed-trail" name="trail_pct" type="number" step="any" min="0" max="100" data-i18n-attr="placeholder:plan.ev.optional;title:plan.ev.trail_pct_tip" placeholder="選填" title="路線中土徑、山徑（不是柏油、水泥路）的比例。≥ 50%：專項期每週排一堂接近比賽路況的技術地形課；< 50%：路線多半是柏油或水泥，不排；空白：照原本的規則排（每週一堂）。">
         <label for="ed-pack" data-i18n="races.ed.pack">行程背包 kg</label>
-        <input id="ed-pack" name="pack_kg" type="number" step="any" min="0" max="40" placeholder="9" data-i18n-attr="title:races.ed.pack_tip" title="百岳／多日行程第 1 天的背包重量；空白 = 體重 × 13 %（沒有體重時 9 kg，推估）。百岳預測用它，賽前的陡坡健走也用它算模擬負重的坡度">
+        <input id="ed-pack" name="pack_kg" type="number" step="any" min="0" max="40" placeholder="4／9" data-i18n-attr="title:races.ed.pack_tip" title="登山行程（多日是第 1 天）的背包重量；空白 = 預設背負：單日 4 kg、多日 9 kg（推估）。登山預測用它，賽前的陡坡健走也用它算模擬負重的坡度">
         <!-- SP-244: the race calculator adds a hint on steep climbs / descents; no prediction reads it -->
         <label for="ed-poles" data-i18n="plan.ev.poles">會用登山杖</label>
         <input id="ed-poles" name="poles" type="checkbox" style="width:auto;justify-self:start" data-i18n-attr="title:plan.ev.poles_tip" title="勾了之後，賽事計算器在陡上坡和陡下坡（≤ −15 %）的段多一句用杖提示。預估時間、配速、心率都不變：研究顯示用杖主要是覺得比較輕鬆、膝蓋負擔比較小，速度差不多。比賽當天（多日行程每一天）的活動也會先標成「有杖」，你自己改過的不會被蓋掉。">

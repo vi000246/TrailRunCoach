@@ -344,7 +344,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
 </header>
 <main>
   <!-- SP-414: shown while the settings have no body weight (INP.weight.value null) -->
-  <div id="noweight" class="noweight" role="status" hidden><span data-i18n="racepower.noweight.banner">沒有體重：百岳能力模型、背包預設、熱量／補給、W/kg 算不出（越野／路跑預測改用你的速度／瓦，照樣算），請到 設定 → 個人資料 填寫。</span> <a href="/api/v1/app/settings#personal" data-i18n="racepower.noweight.link">去填體重 →</a></div>
+  <div id="noweight" class="noweight" role="status" hidden><span data-i18n="racepower.noweight.banner">沒有體重：登山能力模型、背包預設、熱量／補給、W/kg 算不出（越野／路跑預測改用你的速度／瓦，照樣算），請到 設定 → 個人資料 填寫。</span> <a href="/api/v1/app/settings#personal" data-i18n="racepower.noweight.link">去填體重 →</a></div>
   <section id="target-sec" class="tab-calc">
     <h2>目標 <span class="meta">從賽季計畫帶入，或自己輸入</span></h2>
     <div class="toolbar">
@@ -352,7 +352,9 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <!-- SP-675 / 699: races are added and changed in the race manager only (on the chosen event: ?event=<id>) -->
       <a id="to-races" href="/api/v1/app/races/page" data-i18n="racepower.to_races" data-i18n-attr="title:racepower.to_races_tip"
         title="新增賽事、換 GPX、從 Cairn 匯入、設定團的時間表，都在賽事管理">管理賽事 →</a>
-      <div class="seg" id="type"><button data-t="road">路跑</button><button data-t="trail">越野</button><button data-t="baiyue" data-intl-text="多日登山">百岳</button></div>
+      <div class="seg" id="type"><button data-t="road">路跑</button><button data-t="trail">越野</button><button data-t="baiyue" data-i18n="racepower.type.hike">登山</button></div>
+      <!-- SP-738: 百岳 → 登山 (郊山、中級山、百岳; the stored type stays baiyue) -->
+      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.type.hike_tip">登山：郊山、中級山、百岳都適用，單日或多日都可以。</span></span>
       <span class="meta">快速：</span>
       <button class="btn" data-preset="10k">10K</button><button class="btn" data-preset="half">半馬</button>
       <button class="btn" data-preset="full">全馬</button><button class="btn" data-preset="trail30">越野 30K</button>
@@ -362,7 +364,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="trip bf" id="trip-box"><span class="lbl"><span data-i18n="racepower.trip.label">行程</span><b class="req">*</b></span>
       <div class="seg big" id="tripkind"><button data-k="group" data-i18n="racepower.trip.group">跟團</button><button data-k="solo" data-i18n="racepower.trip.solo">自己走</button></div>
       <span class="meta" id="trip-hint" data-i18n="racepower.trip.hint">必選：兩種的休息和步調差很多</span>
-      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.trip.tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是你的能力時間（在 AeT 的步行能力：越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗）。</span></span>
+      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.trip.tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是你的能力時間（在 AeT 的步行能力：越野跑裡走路的陡坡窗 + 登山心率 ≥ AeT 的爬升窗）。</span></span>
     </div>
     <div id="sticky">
       <div class="seg big" id="mode"><button data-m="time">⏱ <span class="bf" data-i18n="racepower.goal.time">目標時間</span><span class="rf" data-i18n="racepower.goal.pace">目標配速</span></button><button data-m="power">⚡ <span class="rf" data-i18n="racepower.goal.power">目標功率</span><span class="bf">目標速度</span></button><button data-m="auto">✨ <span class="bf">通通幫我算</span><span class="rf" data-i18n="racepower.goal.model">模型預測</span></button></div>
@@ -419,7 +421,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <div class="grp-note hidden" id="grp-note"></div>
       <div class="form" style="margin-top:8px">
         <label>官方爬升 (m，選填)<input id="ogain" type="number" step="10" min="0" placeholder="用來校正 GPS 海拔"></label>
-        <label class="bf">天數<input id="tripdays" type="number" min="1" max="10" step="1" value="3"></label>
+        <label class="bf">天數<input id="tripdays" type="number" min="1" max="10" step="1" value="1"></label>
       </div>
       <ul class="warn" id="course-warn"></ul>
       <!-- SP-534: the nights found in a recorded track — asked, never applied by themselves -->
@@ -496,7 +498,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <div class="seg" id="hrband"><button data-b="aet">AeT（多日建議）</button><button data-b="cap">能力上限（≤ 3 h）</button></div>
         <label class="meta">每天背負 kg <input id="packdays" placeholder="例 9, 8.3, 7.6" style="width:120px"></label>
         <label class="meta">氣溫所在海拔 m <input id="heatz" type="number" step="10" style="width:76px" placeholder="天氣點"></label>
-        <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，推估）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
+        <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 登山心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，推估）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
       </div>
       <!-- SP-254: night slowdown, only on the dark part of each segment (default 0 %, 推估) -->
       <div class="row"><span class="lbl" data-i18n="racepower.night.label">夜間</span>
@@ -546,7 +548,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="note hidden" id="split-cands"></div>
     <dialog id="coros-dlg" class="dlg">
       <h2><span data-i18n="racepower.coros.title">匯出至課表</span> <span class="meta" id="cx-prov"></span>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">把這場比賽的分段寫成課表上比賽日的一堂課：可以在課表頁編輯每一步，再從課表頁推到手錶。越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「直到按下計圈」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %；陡坡和走路段只看心率上限（不設推估功率，沒有心率上限就是自由）；越野下坡不設目標。百岳只帶心率（不帶功率、配速）；多日百岳不能匯出，只有單日（單攻）可以。預估訓練負荷（Training load）的無目標段用計算機預測的比賽心率 ÷ LTHR，比賽完成後跟實際負荷比對，自動算出個人校正（場數少時接近 1）。一場賽事只有一堂：再匯出會覆蓋上次匯出的課。</span></span></h2>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">把這場比賽的分段寫成課表上比賽日的一堂課：可以在課表頁編輯每一步，再從課表頁推到手錶。越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／登山預設每段用「直到按下計圈」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %；陡坡和走路段只看心率上限（不設推估功率，沒有心率上限就是自由）；越野下坡不設目標。登山只帶心率（不帶功率、配速）；多日登山不能匯出，只有單日（單攻）可以。預估訓練負荷（Training load）的無目標段用計算機預測的比賽心率 ÷ LTHR，比賽完成後跟實際負荷比對，自動算出個人校正（場數少時接近 1）。一場賽事只有一堂：再匯出會覆蓋上次匯出的課。</span></span></h2>
       <div class="toolbar"><span class="meta" data-i18n="racepower.coros.end">每段結束</span>
         <div class="seg" id="cx-mode"><button data-x="lap" data-i18n="racepower.coros.lap">直到按下計圈</button><button data-x="distance" data-i18n="racepower.coros.dist">距離</button></div>
         <span class="meta" id="cx-where"></span></div>
@@ -776,8 +778,9 @@ function setType(t) {
   document.querySelectorAll(".tf").forEach((e) => e.classList.toggle("hidden", t !== "trail"));
   ["re-sec", "cp-sec", "rg-sec", "zone-sec", "gm-sec", "cad-sec"].forEach((id) => $(id).classList.toggle("hidden", hike));
   $("hike-sec").classList.toggle("hidden", !hike);
-  // user decision 2026-09-30: a 百岳 trip defaults to 3 days
-  if (hike && !S.daysInit) { if ((Number($("days").value) || 1) === 1) $("days").value = 3; $("tripdays").value = $("tripdays").value || 3; S.daysInit = true; saveUI(); }
+  // SP-738 (owner 2026-10-19): 登山 is 1 day unless the route says more (routeDays: a Cairn trip's
+  // nights, a GPX already split by day, the event's own days) — no longer 3 days by default
+  if (hike) $("tripdays").value = $("tripdays").value || 1;
   renderDayPlan(); syncForm();
 }
 // SP-260 (百岳): the 海拔 curve follows the nights slept above 2,750 m in the 14 days before the trip
@@ -960,6 +963,14 @@ function applyGroupDefaults() {
   if (!S.trip) { S.trip = "group"; saveUI(); syncForm(); }
   fillDayStarts(sc);                                                  // SP-580
 }
+// SP-738 (owner 2026-10-19): a 登山 trip's days follow the route — the GPX already split by day (its
+// day ends), a Cairn trip's overnight points, the event's own days — else 1 (no longer 3 by default)
+function routeDays(eid) {
+  if (SPLITS.length) return SPLITS.length + 1;
+  if (CAIRN_NIGHTS && CAIRN_NIGHTS.length) return CAIRN_NIGHTS.length + 1;
+  const ev = eid ? (INP?.events || []).find((e) => e.id === eid) : null;
+  return Math.max(1, (ev && ev.days) || 1);
+}
 // ---------------- the plan event's stored GPX (engine/event_gpx.py) ----------------
 async function loadEventGpx(eid, keep = false) {          // keep: the restored locks / terrain / splits stay
   try {
@@ -969,6 +980,7 @@ async function loadEventGpx(eid, keep = false) {          // keep: the restored 
     ls.set("course", COURSE); if (!keep) { LOCKS = {}; LOCK_AT = {}; TERRAIN = {}; SPLITS = c.day_splits_km || []; }
     NIGHTS = c.overnights || null;
     CAIRN_NIGHTS = c.gpx?.source?.kind === "cairn" ? (c.gpx.source.nights || null) : null;   // SP-535 / 537
+    if (!keep) $("tripdays").value = routeDays(eid);                  // SP-738
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
     STOP_SUGG = c.stop_suggestions || [];
     S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); renderNightsAsk();
@@ -1141,6 +1153,7 @@ async function uploadGpx(file) {
     COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null };
     // SP-533: the camp / hut waypoints are candidates (renderSplitCands), never day ends by themselves
     ls.set("course", COURSE); LOCKS = {}; LOCK_AT = {}; SPLITS = []; TERRAIN = {}; NIGHTS = c.overnights || null; CAIRN_NIGHTS = null;
+    $("tripdays").value = routeDays(null);                            // SP-738: a new file is 1 day until split
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
     STOP_SUGG = c.stop_suggestions || [];
     S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); renderNightsAsk(); schedule(); autoWeather();
@@ -1934,7 +1947,7 @@ function renderBaiyue() {
   if (PLAN.capacity) return renderBaiyueCapacity();
   const P = PLAN, s = P.summary, e = P.effort;
   EST.results = [];
-  let h =`<h2>預估結果 <span class="meta">百岳步行模型 · ${{ time: "目標時間", power: "目標速度", auto: "你平常的速度" }[s.mode]}${s.total_method === "v1" ? " · 整趟用 EP/h 模型，分段是推估" : ""}</span>%%EST%%</h2>%%BOX%%<div class="tiles">`;
+  let h =`<h2>預估結果 <span class="meta">登山步行模型 · ${{ time: "目標時間", power: "目標速度", auto: "你平常的速度" }[s.mode]}${s.total_method === "v1" ? " · 整趟用 EP/h 模型，分段是推估" : ""}</span>%%EST%%</h2>%%BOX%%<div class="tiles">`;
   h += tile("總移動時間", hm(s.time_s), `${P.days.length} 天，不含休息`, true);
   h += hikeTotalTile(s);
   h += tile("速度倍率", pct(s.speed_factor), "100% = 你平常的速度", true);
@@ -2025,14 +2038,14 @@ function renderBaiyueCapacity() {
   const P = PLAN, s = P.summary, e = P.effort, c = P.capacity, b = s.band, g = s.group_time_s;
   const grpMain = s.main === "group";
   EST.results = [];
-  let h = `<h2>預估結果 <span class="meta">百岳 · ${s.trip_kind === "group" ? "跟團" : "自己走"} · ${s.hr_band === "cap" ? "能力上限" : "AeT"}</span>${est("results", T("est.w.capacity"), s.badge)}%%EST%%</h2>%%BOX%%<div class="tiles">`;
+  let h = `<h2>預估結果 <span class="meta">登山 · ${s.trip_kind === "group" ? "跟團" : "自己走"} · ${s.hr_band === "cap" ? "能力上限" : "AeT"}</span>${est("results", T("est.w.capacity"), s.badge)}%%EST%%</h2>%%BOX%%<div class="tiles">`;
   const capTile = tile(`能力時間（你的能力，${s.hr_band === "cap" ? "上限" : "AeT"}）${est("results", T("est.w.capacity"), s.badge)}`, hm(s.capacity_time_s),
     `p10–p90 ${hm(b.p10_s)}–${hm(b.p90_s)}${s.rest ? "" : ` · 時鐘 ${hm(s.clock_s)}`}`, !grpMain);
   const grpTile = g ? tile("跟團時間（過去跟團日，不是能力）", hm(g.p50), `p25–p75 ${hm(g.p25)}–${hm(g.p75)} · ${g.n} 天 · EP/h ${g.eph[1].toFixed(2)}`, grpMain)
     : tile("跟團時間", "–", "需要 ≥ 3 天跟團紀錄");
   h += grpMain ? grpTile + capTile : capTile + grpTile;
   if (s.rest) h += hikeTotalTile(s);          // SP-732: moving + each day's stops, with its range
-  h += tile("天數", `${P.days.length} 天`, `背負 ${s.pack_by_day.map((x) => f1(x)).join(" / ")} kg${s.pack_src?.startsWith("預設") ? "（預設）" : ""}`);
+  h += tile("天數", `${P.days.length} 天`, `背負 ${s.pack_by_day.map((x) => f1(x)).join(" / ")} kg${s.pack_src?.startsWith("預設") ? "（預設背負）" : ""}`);
   h += tile("熱量", ok(s.kcal) ? n0(s.kcal) + " kcal" : "–", "Yamamoto");
   h += tile("飲水", waterL(s.water_ml), "0.7–0.8 ml / kcal");
   h += tile("心率上限", ok(s.hr_cap) ? n0(s.hr_cap) + " bpm" : "–", "AeT，爬坡時壓住");
@@ -2046,7 +2059,7 @@ function renderBaiyueCapacity() {
   // data source card + altitude
   const bs = c.basis || {}, al = c.alpha || {}, dg = { current: c.alt_current };
   h += `<div class="two"><div class="note"><b>資料來源</b><br>越野跑走路窗 ${bs.trail_windows} 窗 / ${bs.trail_activities} 次活動（${bs.trail_segments} 段）<br>
-    百岳心率窗 ${bs.hike_windows} 窗 / ${bs.hike_trips} 趟（${bs.hike_segments} 段）<br>
+    登山心率窗 ${bs.hike_windows} 窗 / ${bs.hike_trips} 趟（${bs.hike_segments} 段）<br>
     先驗：平路跑步在 AeT 的速度 ${f2(c.v_run)} m/s（${esc(c.v_run_info?.source || "")}，${c.v_run_info?.n ?? 0} 窗）→ Ė ${f1(c.e_aet_w_per_kg)} W/kg<br>
     個人水準 δ̄ ${spct(Math.exp(c.level ?? 0) - 1)} · 下坡上限 ${f2(c.c_cap)} × Tobler · 模型誤差 σ ${f2(c.sigma_loo)}（${esc(c.sigma_loo_src || "")}）<br>
     ${esc(bs.pack_default_rule || "")}（已填 ${bs.packs_recorded ?? 0} 趟）</div>
@@ -2094,7 +2107,7 @@ function renderFuel() {
   const fx = fuelHints(PLAN);
   let h = `<h2>🍽 補給 <span class="meta">${esc(F.label)} · 建議值，自己準備</span>%%EST%%${help("熱量用預估的分段功率與時間算，碳水、水、鈉照賽事類型、預估時間和各段氣溫給範圍。每個數字旁的 ? 有算法和來源。沒有個人的流汗率和腸胃訓練紀錄，所以水量是一般範圍、碳水不超過 90 g/h。")}</h2>${fx.box}<div class="tiles">`;
   const kTip = hike
-    ? "行動熱量 = Pandolf 公式（體重、當天背負、每段速度和坡度）逐段加總；下坡 Pandolf 不適用，改用 Minetti 走路曲線推估。範圍包含 Yamamoto（app 原本的百岳熱量）：Pandolf 對重背負常低估。"
+    ? "行動熱量 = Pandolf 公式（體重、當天背負、每段速度和坡度）逐段加總；下坡 Pandolf 不適用，改用 Minetti 走路曲線推估。範圍包含 Yamamoto（app 原本的登山熱量）：Pandolf 對重背負常低估。"
     : "功率法：每段 Stryd 功率 × 時間 ÷ (22.1 % × 4.184)，坡度 > 4 % 用 21.6 %。坡度 > 8 %、走路段和下坡改用 1.07 kcal/kg/km × Minetti 坡度比例。Stryd 自己的「kJ ≈ kcal」會少算約 8 %：跑步不能直接把 kJ 當 kcal。範圍 ±10–15 %：個人差異、疲勞、陡坡低估加起來。";
   h += ftile("🔥", hike ? "行動熱量" : "消耗熱量", rng(F.kcal_band, n0, "kcal"),
     `${esc(meth)} · ±${Math.round(F.band_rel * 100)}%${ok(F.kcal_per_h) ? ` · ${n0(F.kcal_per_h)} kcal/h` : ""}`, kTip,
@@ -2795,8 +2808,8 @@ function renderHike() {
   if (!h.days.length) { $("hike-detail").innerHTML = `<div class="meta">沒有登山紀錄。${esc(h.error || "")}</div>`; return; }
   if (HIKEMETA) return renderHikeMeta();
   const e = h.eph;
-  $("hike-detail").innerHTML = `<div class="note"><b>${esc(h.note || "百岳多為跟團，速度不代表個人能力，不列入目標時間推算")}</b>。
-    只有標記為「自己走」的登山日會算 EP/h（目前 ${h.solo_n || 0} 天，跟團 ${h.group_n || 0} 天）；沒有時 百岳 ETA 用 Tobler 步行函數（推估）。</div>
+  $("hike-detail").innerHTML = `<div class="note"><b>${esc(h.note || "登山多為跟團，速度不代表個人能力，不列入目標時間推算")}</b>。
+    只有標記為「自己走」的登山日會算 EP/h（目前 ${h.solo_n || 0} 天，跟團 ${h.group_n || 0} 天）；沒有時 登山 ETA 用 Tobler 步行函數（推估）。</div>
     <div class="kv">${e ? `<span>自己走的 EP/h 中位 <b>${e.median.toFixed(2)}</b>（IQR ${e.q1.toFixed(2)}–${e.q3.toFixed(2)}，${e.n} 天）</span>` : `<span>EP/h <b>推估（Tobler）</b></span>`}
     <span class="faint">爬升 ≥ 600 m 的日子權重 3 倍；多日行程逐日計算；移動 ≥ 1 h 才算</span></div>
     <div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">EP</th><th class="n">移動</th><th class="n">EP/h</th><th class="n">最高點</th><th>計入</th></tr></thead><tbody>${h.days.slice().reverse().map((d) =>
@@ -2806,10 +2819,10 @@ function renderHike() {
 function renderHikeMeta() {
   const H = HIKEMETA, v = H.validation || {};
   const rows = H.days.slice().reverse();
-  let t = `<div class="note">跟團的速度不代表你的能力：百岳時間改用<b>你的步行能力模型</b>（越野跑走路窗 + 百岳心率 ≥ AeT 的爬升窗）。
+  let t = `<div class="note">跟團的速度不代表你的能力：登山時間改用<b>你的步行能力模型</b>（越野跑走路窗 + 登山心率 ≥ AeT 的爬升窗）。
     「看起來是自己走」是自動判斷的<b>建議</b>（推估規則：自己走的段 ≥ 60 %、被限制的段 ≤ 15 %），要你按「確認」才會寫進自己走的清單。
     ${esc(v.rule || "")}：目前手動標記 自己走 ${v.n_solo ?? 0} 天、跟團 ${v.n_group ?? 0} 天${v.agreement != null ? `，符合率 ${pct(v.agreement)}` : ""}，${v.validated ? "已可自動套用" : "還只是建議"}。
-    背負填了才準；沒填用預設（體重 × 13 %，沒有體重時 9 kg；推估）。</div>`;
+    背負填了才準；沒填用預設背負（單日 4 kg、多日 9 kg；推估）。</div>`;
   t += `<div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">移動</th><th class="n">EP/h</th><th>背負 kg</th><th>建議</th><th>目前</th></tr></thead><tbody>` +
     rows.map((d) => { const sg = d.suggest || {};
       const sug = sg.suggest ? `${sg.suggest === "solo" ? "看起來是自己走" : "看起來是跟團"}（${pct(sg.own_share)}）` : '<span class="faint">–</span>';
@@ -2937,7 +2950,7 @@ async function renderBacktest() {
   const st4 = (s) => `<td class="n">${s.n}</td><td class="n">${pct1(s.median_abs)}</td><td class="n">${spct(s.bias)}</td><td class="n faint">${spct(s.p10)}…${spct(s.p90)}</td>`;
   const hd4 = `<th class="n">n</th><th class="n">|誤差| 中位</th><th class="n">偏差（中位）</th><th class="n">10–90 %</th>`;
   const C = R.capacity, T = R.terrain;
-  let h = `<div class="note"><b>百岳多為跟團，速度不代表個人能力，不列入目標時間推算。</b>只有你標記為「自己走」的登山才算（目前 ${R.hike_basis?.solo_hikes ?? 0} 次）。
+  let h = `<div class="note"><b>登山多為跟團，速度不代表個人能力，不列入目標時間推算。</b>只有你標記為「自己走」的登山才算（目前 ${R.hike_basis?.solo_hikes ?? 0} 次）。
     每一場都只用那天以前、不含這一場的資料；強度用每次活動當天的 LTHR / AeT 判定：輕鬆（多數時間 &lt; AeT，Seiler 三區）、穩定（AeT–LTHR）、比賽強度（多數時間 ≥ 0.95 × LTHR，Friel Z4；功率也要夠）。
     這一年：${Object.entries(R.intensity_counts).map(([k, v]) => `${CZ[k]} ${v}`).join("、")} 次。</div>`;
   // 1. capacity
@@ -3008,7 +3021,7 @@ async function renderBacktest() {
   const HH = R.hike_hr;
   if (HH && HH.uses) {
     const u = HH.uses;
-    h += `<h3>百岳的心率陡坡窗</h3><div class="note">跟團的總時間不用，但心率 ≥ AeT、速度 &gt; 1.5 km/h、連續 ≥ 300 m、坡度 ≥ 10 % 的爬升是你自己的努力：${HH.n} 個 100 m 窗（${HH.days} 天）。</div>
+    h += `<h3>登山的心率陡坡窗</h3><div class="note">跟團的總時間不用，但心率 ≥ AeT、速度 &gt; 1.5 km/h、連續 ≥ 300 m、坡度 ≥ 10 % 的爬升是你自己的努力：${HH.n} 個 100 m 窗（${HH.days} 天）。</div>
       <ul class="meta"><li>VAM × 心率帶：n ${u.vam.n}（${esc(u.vam.evidence)}）</li>
       <li>個人海拔係數：${u.altitude.enough ? `${spct(u.altitude.pct_per_km / 100)} / 1000 m（Wehrlin ${u.altitude.wehrlin_pct_per_km} %）` : "資料不足"}，n ${u.altitude.n}（${esc(u.altitude.evidence)}）</li>
       <li>多日疲勞（同 VAM 的心率，第 n 天 − 第 1 天）：${(u.fatigue.days || []).map((d) => `第 ${d.day} 天 ${d.hr_shift_bpm >= 0 ? "+" : ""}${d.hr_shift_bpm.toFixed(1)} bpm（${d.trips} 趟）`).join("、") || "資料不足"}（${esc(u.fatigue.evidence)}）</li>

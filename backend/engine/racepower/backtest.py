@@ -1385,7 +1385,7 @@ def capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: 
         # (skipped and said so, not an error; never a default weight)
         return {"version": 1, "computed_at": dt.datetime.now(WX.TZ).isoformat(timespec="seconds"),
                 "today": today.isoformat(), "skipped": "no_weight", "passed": False,
-                "reason": _("沒有體重：百岳能力模型算不出，這項回測跳過；請到 設定 → 個人資料 填寫體重"),
+                "reason": _("沒有體重：登山能力模型算不出，這項回測跳過；請到 設定 → 個人資料 填寫體重"),
                 "seconds": round(time.time() - t0, 1)}
 
     def fit_without(a):
@@ -1399,7 +1399,7 @@ def capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: 
     groups = sorted({s[0].get("a") for s in trail_segs} | {s[0].get("a") for s in hike_segs}, key=str)
     for i, a in enumerate(groups):
         if progress:
-            progress(i, len(groups), {"label": f"百岳能力回測 {i + 1}/{len(groups)}"})
+            progress(i, len(groups), {"label": f"登山能力回測 {i + 1}/{len(groups)}"})
         cap = fit_without(a)
         ta = [s for s in trail_segs if s[0].get("a") == a]
         hb = [s for s in hike_segs if s[0].get("a") == a]

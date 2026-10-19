@@ -218,7 +218,7 @@ def predict_baiyue(*, day_plan: list[dict], eph: float, weight: Optional[float],
     out = {"kind": "baiyue", "days": rows, "total": tot, "eph_personal": eph, "eph_used": rate,
            "pack_factor": pack_factor, "pack_kg": pack_kg, "hist_pack_kg": hist_pack_kg, "M": m,
            "time_s": tot["moving_h"] * 3600.0,
-           "warnings": [H.tag("RC1", "百岳是步行模型：以你過去登山日的 EP/h（km + 爬升/100 每小時）推估移動時間，"
+           "warnings": [H.tag("RC1", "登山是步行模型：以你過去登山日的 EP/h（km + 爬升/100 每小時）推估移動時間，"
                               "不含休息、拍照、排隊；環境係數與背負係數都是保守假設")]}
     if target_moving_h:
         need = tot["ep"] / target_moving_h

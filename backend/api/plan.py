@@ -84,10 +84,9 @@ def _wko5_settings() -> dict:
 
 
 def _kinds() -> dict:
-    """Event kind labels; outside Taiwan (engine/region.py) 百岳 reads 多日登山
-    (same stored kind, old data reads the same)."""
-    from backend.engine import region as RG
-    return P.KINDS if RG.is_tw() else {**P.KINDS, "baiyue": "多日登山"}
+    """Event kind labels. SP-738: the baiyue kind reads 登山 everywhere (郊山、中級山、百岳; it
+    used to read 多日登山 outside Taiwan) — the stored kind is unchanged, old data reads the same."""
+    return dict(P.KINDS)
 
 
 def _notify(thresholds: bool) -> None:

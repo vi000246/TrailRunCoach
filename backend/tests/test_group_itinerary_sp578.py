@@ -29,7 +29,7 @@ from backend.tests.test_baiyue_capacity import _synthetic_cap, _v1, pandolf_v_cl
 from backend.tests.test_racepower_v2 import synthetic_track
 
 ROOT = Path(__file__).resolve().parents[2]
-W, L = 68.0, 9.0                       # _synthetic_cap's weight; the default pack day 1 (68 × 13 % → 9.0)
+W, L = 68.0, 4.0                       # _synthetic_cap's weight; the default pack of a single-day hike (SP-738: 4 kg)
 
 
 def course():

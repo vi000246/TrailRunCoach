@@ -117,7 +117,7 @@ const rng = (v, fmt = n0, unit = "") => !v ? "–" : (fmt(v[0]) === fmt(v[1]) ? 
 const tile = (k, v, s, main) => `<div class="tile ${main ? "main" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
 const CLS = { steep_down: "--c-sd", down: "--c-d", flat: "--c-f", up: "--c-u", steep_up: "--c-su" };
 const STOP = { water: ["水站", "💧"], aid: ["補給站", "🍌"], big: ["大補給站", "🍲"], medical: ["醫護站", "⛑️"], self: ["自備補給點", "🎒"] };
-const TYPE = { road: "路跑", trail: "越野", baiyue: "百岳" };
+const TYPE = { road: "路跑", trail: "越野", baiyue: "登山" };                // SP-738: 百岳 → 登山
 
 async function init() {
   let S;

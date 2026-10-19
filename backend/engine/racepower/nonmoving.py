@@ -105,10 +105,10 @@ NONMOVING = {
     "range_min_n": 8,          # fewer activities of the kind → the range from all kinds pooled
     "long_frac_default": 0.5,  # long ÷ all stops with no stops to read it from
 }
-KIND_LABEL = {"race": N_("比賽"), "solo": N_("自主長程"), "hike": N_("健行／百岳"),
-              "hike_group": N_("百岳（跟團）"), "hike_solo": N_("百岳（自己走）")}
+KIND_LABEL = {"race": N_("比賽"), "solo": N_("自主長程"), "hike": N_("登山"),
+              "hike_group": N_("登山（跟團）"), "hike_solo": N_("登山（自己走）")}
 HIKE_SUB = {"group": "hike_group", "solo": "hike_solo"}     # SP-732: a hike row's "trip" → its sub-kind
-SOURCE = N_("非移動時間：依活動類型（比賽／自主長程／健行百岳）用你之前同類活動的停留比例，隨移動時間增加、"
+SOURCE = N_("非移動時間：依活動類型（比賽／自主長程／登山）用你之前同類活動的停留比例，隨移動時間增加、"
             "2.5 小時後不再增加，資料少時收縮到先驗；≥ 60 秒算補給站／排隊，其餘算零碎停頓，"
             "移動定義和心率配速模型一樣（> 1 km/h）；補給站停留沒有文獻數字（Kerhervé 2015 只說快的人停得少）；推估")
 SOURCE_LEGACY = N_("非移動時間：你之前比賽／全力越野跑的停留（≥ 60 秒算補給站／排隊，其餘算零碎停頓），"

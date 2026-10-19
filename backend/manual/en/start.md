@@ -23,7 +23,7 @@ Sign in with your Google account; the first time you read the terms, tick to acc
 
 :::deep
 ### Why these three
-- **Weight**: power-to-weight (W/kg), running effectiveness, the Race calculator and the pack default (13 % of body weight). Each day uses the newest weight entry on or before it; with no weight, no default is slipped in — the numbers that need it say what is missing.
+- **Weight**: power-to-weight (W/kg), running effectiveness, and the Race calculator. Each day uses the newest weight entry on or before it; with no weight, no default is slipped in — the numbers that need it say what is missing.
 - **Sex**: the prior of the Anaerobic capacity (women 6.4, men 13.1 kJ) and the energy estimate.
 - **Age**: the energy estimate; with no max-HR data at all, also the max HR (208 − 0.7 × age, Tanaka 2001, an estimate; one person can be 10 bpm or more off). It is stored as a birth year, so it goes up by itself every year.
 

@@ -200,6 +200,6 @@ def test_page_says_what_cannot_be_computed_and_where_to_fill_it():
         cat = json.loads((static / "i18n" / loc / "racepower.json").read_text("utf-8"))
         assert cat.get("noweight.banner") and cat.get("noweight.link"), loc
     zh = json.loads((static / "i18n" / "zh-TW" / "racepower.json").read_text("utf-8"))["noweight.banner"]
-    for item in ("百岳能力模型", "背包預設", "熱量", "W/kg"):
+    for item in ("登山能力模型", "背包預設", "熱量", "W/kg"):
         assert item in zh
     assert "速度／瓦" in zh          # SP-444: road / trail are predicted per watt, not 「算不出」

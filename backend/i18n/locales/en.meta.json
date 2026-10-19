@@ -3391,7 +3391,7 @@
     "draft": true,
     "src": "backend/engine/advanced_params.py:31"
   },
-  "多日行程（{n} 天）不匯出至課表：課表一天一堂，只有單日（單攻）百岳可以匯出": {
+  "多日行程（{n} 天）不匯出至課表：課表一天一堂，只有單日登山可以匯出": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:319"
   },
@@ -4283,7 +4283,7 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:401"
   },
-  "推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 百岳心率窗，AeT；{note}）": {
+  "推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 登山心率窗，AeT；{note}）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:396"
   },
@@ -5819,15 +5819,15 @@
     "draft": true,
     "src": "backend/engine/injuries.py:493"
   },
-  "百岳多為跟團": {
+  "登山多為跟團": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:397"
   },
-  "百岳心率帶 AeT": {
+  "登山心率帶 AeT": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:269"
   },
-  "百岳用步行模型，不需要 CP": {
+  "登山用步行模型，不需要 CP": {
     "draft": false,
     "src": "backend/engine/racepower/race_estimate.py:48"
   },
@@ -6395,7 +6395,7 @@
     "draft": true,
     "src": "backend/engine/baiyue_multiday.py:481"
   },
-  "行程會跨過午夜（多日）不匯出至課表：只有當天來回的單攻百岳可以匯出": {
+  "行程會跨過午夜（多日）不匯出至課表：只有當天來回的登山可以匯出": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:323"
   },
@@ -11411,11 +11411,11 @@
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"
   },
-  "健行／百岳": {
+  "登山": {
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"
   },
-  "非移動時間：依活動類型（比賽／自主長程／健行百岳）用你之前同類活動的停留比例，隨移動時間增加、2.5 小時後不再增加，資料少時收縮到先驗；≥ 60 秒算補給站／排隊，其餘算零碎停頓，移動定義和心率配速模型一樣（> 1 km/h）；補給站停留沒有文獻數字（Kerhervé 2015 只說快的人停得少）；推估": {
+  "非移動時間：依活動類型（比賽／自主長程／登山）用你之前同類活動的停留比例，隨移動時間增加、2.5 小時後不再增加，資料少時收縮到先驗；≥ 60 秒算補給站／排隊，其餘算零碎停頓，移動定義和心率配速模型一樣（> 1 km/h）；補給站停留沒有文獻數字（Kerhervé 2015 只說快的人停得少）；推估": {
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"
   },
@@ -11459,11 +11459,11 @@
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"
   },
-  "百岳（跟團）": {
+  "登山（跟團）": {
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"
   },
-  "百岳（自己走）": {
+  "登山（自己走）": {
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"
   },

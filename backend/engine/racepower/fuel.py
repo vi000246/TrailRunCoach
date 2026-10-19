@@ -57,7 +57,7 @@ CHO_RULES = {
                     "> 3 h 至少 60 g/h（常見建議，推估）"},
     "ultra": {"lo": 30.0, "hi": 90.0, "dose_g": 25.0, "every": (30, 45), "label": "超過 6 h：30–50 起步，能吃就往 60–90",
               "src": "Tiller 2019 ISSN 超馬立場（30–50 g/h、150–400 kcal/h）；Jeukendrup 2014（超耐力約 90 g/h）"},
-    "hike": {"lo": 30.0, "hi": 50.0, "dose_g": 40.0, "every": (45, 60), "label": "百岳行進間（推估）",
+    "hike": {"lo": 30.0, "hi": 50.0, "dose_g": 40.0, "every": (45, 60), "label": "登山行進間（推估）",
              "src": "推估：ISSN 超馬下限（Tiller 2019）＋低強度往下調（Jeukendrup 2014）；每 45–60 分鐘一次（§5.3 推估）"},
 }
 # water (§4.2): ml/h band moved inside the source range by temperature (推估)

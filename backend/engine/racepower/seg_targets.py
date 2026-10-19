@@ -44,7 +44,7 @@ SRC = {"run_climb": "3–8 % 坡：Stryd 功率 ≈ 固定代謝負荷（van Ras
        # SP-247: Gravina-Cognetti et al. 2025 (Sports 13:294; power-gap-trail-validity.md §3 #2)
        "descent": N_("下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全"),
        "flat": "平路與可跑段：功率（沒有 CP 時看心率）",
-       "hike": "百岳揹重：心率 ≤ AeT（Uphill Athlete）＋ VAM；配速受地形與背負影響，不當目標"}
+       "hike": "登山揹重：心率 ≤ AeT（Uphill Athlete）＋ VAM；配速受地形與背負影響，不當目標"}
 
 # SP-244 「會用登山杖」 hints (docs/research/trekking-poles.md §2.1–§2.3, §5 #3); no number changes
 POLE_DESCENT = -0.15            # steep descents only: the knee-load studies are 25° / −15 % and steeper

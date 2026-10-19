@@ -970,7 +970,7 @@ def create_share(body: ShareIn):
     p = _py(make_plan(body))
     req = {"date": body.date, "start_time": body.start_time, "stops": [x.model_dump() for x in body.stops]}
     title = body.share_title or p.get("course_name") or \
-        f"{ {'road': '路跑', 'trail': '越野', 'baiyue': '百岳'}.get(body.type, '')} {p['summary']['km']:.1f} km"
+        f"{ {'road': '路跑', 'trail': '越野', 'baiyue': '登山'}.get(body.type, '')} {p['summary']['km']:.1f} km"
     curve = None
     if body.include_cairn_curve:
         from backend.engine.racepower import cairn_curve as CC

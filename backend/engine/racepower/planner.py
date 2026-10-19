@@ -1207,7 +1207,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
         warnings.append(H.tag("RC8", "分段時間是推估：回測通過前，整趟移動時間照 v1 EP/h 模型算，分段只負責分配"))
     hk = inp.get("hiking") or {}
     if not hk.get("solo_n"):
-        warnings.append(H.tag("RC1", (hk.get("note") or "百岳多為跟團，速度不代表個人能力，不列入目標時間推算") +
+        warnings.append(H.tag("RC1", (hk.get("note") or "登山多為跟團，速度不代表個人能力，不列入目標時間推算") +
                         "：步行速度用 Tobler 先驗加上你心率 ≥ AeT 的陡坡爬升窗（推估）"))
     warnings.append(H.tag("RC8", clock_line))
     if weight:
@@ -1224,7 +1224,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
                "badge": None if v2_primary else "推估", "day_starts": starts,
                # racepower-v2.md §8: Hadley only on running segments → 百岳 keeps one heat value
                "heat": {"mode": "single", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
-                        "reason": "百岳用單一溫度（逐時熱修正只用在跑步）", "badge": None}}
+                        "reason": "登山用單一溫度（逐時熱修正只用在跑步）", "badge": None}}
     hike_clock({"summary": summary, "days": days}, stops)          # SP-732: clock = moving + each day's stops
     summary["snow"] = _snow_summary(opts.get("snow"), snow, t1, t1_base, t1_hi, lam, ratio_eff, stops, km)
     group = _group_compare_v1(opts, out, lam) if gpx else None
@@ -1402,7 +1402,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     if pack1 is None:
         pack1 = CAP.pack_default(weight, n_days)
     pack_src = "手動" if opts.get("pack_kg") is not None else \
-        f"預設 {CAP.pack_default_text(weight)}"
+        f"預設背負 {CAP.pack_default_text(weight, n_days)}"
 
     def load_of(n):
         if len(pack_by_day) >= n:
@@ -1573,7 +1573,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     warnings.append(H.tag("RC1", LIMITS_NOTE))
     if n_days > 1:
         warnings.append(H.tag("RC1", "多日疲勞沒有研究與足夠個人資料（心率–速度斜率 β 不可靠），每天都用 1.0"))
-    base_txt = (f"以你的越野走路窗與百岳心率窗為主（{bs.get('trail_windows', 0) + bs.get('hike_windows', 0)} 窗、"
+    base_txt = (f"以你的越野走路窗與登山心率窗為主（{bs.get('trail_windows', 0) + bs.get('hike_windows', 0)} 窗、"
                 f"{bs.get('trail_activities', 0)} 次越野 + {bs.get('hike_trips', 0)} 趟登山）")
     warnings.append(H.tag("RC1", base_txt + ("，回測通過" if v2_primary else "，待回測（推估）")))
     if band_id == "cap":
@@ -1589,7 +1589,8 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         warnings.append(H.tag("RC11", f"熱：每段溫度由 {to['temp_c']:.1f} °C（{z0:.0f} m）以 0.0065 K/m 遞減率推算；"
                         f"熱適應 S {hacc['s']:.0%}（{hacc['source']}，推估）"))
     if pack_src.startswith("預設"):
-        warnings.append(H.tag("RC1", f"背負{pack_src}，之後每天 −{CAP.daily_drop():g} kg（糧食，推估）"))
+        warnings.append(H.tag("RC1", f"沒填背負：用{pack_src}" +
+                              (f"，之後每天 −{CAP.daily_drop():g} kg（糧食，推估）" if n_days > 1 else "")))
     main = "group" if (kind == "group" and grp) else "capacity"
     summary = {"time_s": T, "capacity_time_s": T, "clock_s": T / ratio + _stops_before(stops, km + 1),
                "rest": rest, "day_ratios": day_ratios,
@@ -1605,7 +1606,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                "moving_ratio": ratio_eff, "moving_ratio_group": ratio_grp, "moving_ratio_solo": ratio_solo,
                "badge": None if v2_primary else "推估", "days": n_days, "day_starts": starts,
                "heat": {"mode": "lapse", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
-                        "reason": "百岳：登山口／測站溫度依遞減率推算到每段", "badge": "推估", "ref_alt_m": z0},
+                        "reason": "登山：登山口／測站溫度依遞減率推算到每段", "badge": "推估", "ref_alt_m": z0},
                "heat_accl": ({k: hacc[k] for k in ("mode", "s", "s_from", "a", "source", "badge", "a_literature",
                                                    "a_reason", "a_supported")} if hacc else None)}
     hike_clock({"summary": summary, "days": days}, stops)          # SP-732: clock = moving + each day's stops

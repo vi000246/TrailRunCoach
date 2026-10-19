@@ -265,7 +265,7 @@ SOLO_HIKES = None      # fixed file (tests); None = the tenant's (private) racep
 def _solo_hikes_path() -> Path:
     from backend import tenancy
     return Path(SOLO_HIKES) if SOLO_HIKES is not None else tenancy.private_path("racepower_solo_hikes.json")
-GROUP_HIKE_NOTE = "百岳多為跟團，速度不代表個人能力，不列入目標時間推算"
+GROUP_HIKE_NOTE = "登山多為跟團，速度不代表個人能力，不列入目標時間推算"
 HIKE_SPORTS = ("hiking", "mountaineering")
 HIKE_TAGS = {"hiking", "mountaineering"}
 
@@ -713,7 +713,7 @@ def baiyue_on(ds, day: dt.date) -> Optional[str]:
             continue
         d0 = e.start
         if d0 <= day < d0 + dt.timedelta(days=max(1, int(e.days or 1))):
-            return getattr(e, "name", "") or "百岳"
+            return getattr(e, "name", "") or "登山"
     return None
 
 
@@ -1856,7 +1856,7 @@ def activity_pack(w, meta: Optional[dict] = None) -> dict:
     rec = (_trip_of(meta, w) or {}).get("pack_kg")
     return {"pack_kg": None if rec is None else float(rec), "recorded": rec is not None,
             "default_kg": None if rec is None else float(rec), "range": [0, 40], "file": w.entry.file,
-            "note": "這次背多少（kg）：記下來，百岳預測會用；空白 = 沒記錄"}
+            "note": "這次背多少（kg）：記下來，登山預測會用；空白 = 沒記錄"}
 
 
 def walk_capacity_inputs(ds, today: dt.date, exclude: Optional[set] = None, runs: Optional[list] = None,
