@@ -234,5 +234,6 @@ def test_a_gpx_trip_without_day_ends_is_hinted_as_an_estimate(store):
 
 def test_the_plan_page_offers_a_gpx_instead_of_the_rows():
     from pathlib import Path
-    html = (Path(__file__).resolve().parents[1] / "static" / "plan.html").read_text("utf-8")
+    # SP-691: the event editor moved from the season plan page to 賽事管理
+    html = (Path(__file__).resolve().parents[1] / "static" / "races.html").read_text("utf-8")
     assert 'id="evgpxfile"' in html and 'id="evgpxlater"' in html and "gpx_pending" in html

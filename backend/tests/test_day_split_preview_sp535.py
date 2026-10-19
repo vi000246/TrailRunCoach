@@ -144,7 +144,7 @@ def test_no_clues_is_an_equal_split_and_single_days_need_none():
 
 def test_both_pages_use_the_one_preview_and_store_only_on_ok():
     rp = (STATIC / "racepower.html").read_text("utf-8")
-    plan = (STATIC / "plan.html").read_text("utf-8")
+    plan = (STATIC / "races.html").read_text("utf-8")   # SP-691: the event editor moved to 賽事管理
     for html in (rp, plan):
         assert '<script src="/api/v1/static/daysplit.js"></script>' in html and "DaySplit.open(" in html
     # the calculator: no more applying a click on the profile / a candidate chip right away
@@ -192,7 +192,7 @@ def test_osm_huts_and_cairn_nights_reach_the_preview(plan_api, monkeypatch):
     assert hut and hut[0]["kind"] == "hut" and hut[0]["km"] == pytest.approx(3.0, abs=0.05) and hut[0]["osm_kind"]
     assert "OpenStreetMap" in r["osm_attr"]["text"]
     assert r["source"]["nights"] == [{"night": 1, "km": 5.0, "name": "營地"}] and r["stored_km"] == [5.0]
-    plan = (STATIC / "plan.html").read_text("utf-8")
+    plan = (STATIC / "races.html").read_text("utf-8")   # SP-691
     assert 'applied: cairn.length ? "cairn" : null' in plan and "osmAttr: pv.osm_attr" in plan
     rp = (STATIC / "racepower.html").read_text("utf-8")
     assert 'kind: "hut", src: "osm"' in rp and 'applied: CAIRN_NIGHTS && CAIRN_NIGHTS.length ? "cairn" : null' in rp

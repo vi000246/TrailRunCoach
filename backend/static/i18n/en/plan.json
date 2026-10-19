@@ -35,7 +35,7 @@
   "ev.gpx_later": "I'll upload the GPX later — skip the days for now",
   "ev.gpx_help": "With a GPX (or \"upload later\" ticked) you don't type each day: each day's distance and climb come from the GPX. Once saved, press the trip's \"Days\" (or \"Day split preview\" in the race calculator) to set where each day ends (camp waypoints, OSM huts and the nights of a recording are listed as candidates; a Cairn import's overnight stops are applied as they are); until then each day is an equal share of the distance (estimate).",
   "ev.gpx_have": "GPX attached ({f}): each day's numbers come from it — the rows are optional",
-  "ev.gpx_nosplit": "The GPX has no day ends yet: each day is an equal share of the distance for now (estimate). Press \"Days\" on the right to set where each day ends",
+  "ev.gpx_nosplit": "The GPX has no day ends yet: each day is an equal share of the distance for now (estimate). Open this race in the Race manager and press \"Days\" to set where each day ends",
   "ev.overnight_sep": ", ",
   "ev.cairn_attach": "Or paste a Cairn share link",
   "ev.cairn_btn": "From Cairn",
@@ -69,5 +69,9 @@
   "ev.res_unmatched": "Finished, no activity matched",
   "ev.res_manual": "set by you on the activity page",
   "ev.res_fix": "To set it, open the activity on the Activities page and pick this race under “Plan race”.",
-  "to_races": "Race manager →"
+  "to_races": "Race manager →",
+  "ev.manage": "Add or change a race, upload a GPX: in the Race manager →",
+  "ev.edit_in_races": "Edit in the Race manager →",
+  "ev.edit_in_races_tip": "Opens this race's editor in the Race manager (days, GPX, cutoff and the rest are changed there); this page shows the change when you come back",
+  "ev.add_in_races": "Add one in the Race manager →"
 }

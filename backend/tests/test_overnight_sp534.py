@@ -142,5 +142,5 @@ def test_the_pages_ask_before_applying():
     root = Path(__file__).resolve().parents[1] / "static"
     rp = (root / "racepower.html").read_text("utf-8")
     assert 'id="overnight-ask"' in rp and "overnight.apply" in rp and "overnight.no" in rp
-    plan = (root / "plan.html").read_text("utf-8")
+    plan = (root / "races.html").read_text("utf-8")      # SP-691: the event's GPX is uploaded in 賽事管理
     assert "askOvernights" in plan and "confirm(" in plan

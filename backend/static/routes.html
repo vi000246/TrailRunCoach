@@ -132,6 +132,13 @@ tr.go { cursor: pointer; }
 tr.go:hover td { background: var(--soft); }
 td.nmc { max-width: 22em; overflow: hidden; text-overflow: ellipsis; }
 #segtab td:first-child { padding: 2px 0 2px 4px; }
+/* SP-694: ? help (hover shows, tap pins) */
+.q { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--line);
+  background: transparent; color: var(--muted); font: 600 11px/1 system-ui, sans-serif; cursor: help; padding: 0; flex: none; }
+.q:hover, .q:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.qpop { position: fixed; z-index: 100; max-width: min(340px, calc(100vw - 24px)); white-space: pre-line; background: var(--panel);
+  color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; line-height: 1.55;
+  box-shadow: 0 8px 24px rgba(0,0,0,.2); pointer-events: none; font-weight: 400; }
 @media (max-width: 900px) {
   .wrap { grid-template-columns: 1fr; padding: 10px; }
   .list { max-height: none; }
@@ -191,6 +198,57 @@ function hms(s) {
   const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
 }
+// SP-694: a duration in words for the trend chart's time axis and tooltip ("23 分 20 秒", "1 小時 05 分"),
+// so a tick never reads like a time of day (hms() gives 23:20)
+function dur(s) {
+  if (s == null) return "—";
+  s = Math.round(s);
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60, out = [];
+  if (h) out.push(T("dur.h", { n: h }));
+  if (m || (h && x)) out.push(T("dur.m", { n: h ? String(m).padStart(2, "0") : m }));
+  if (x || !out.length) out.push(T("dur.s", { n: x }));
+  return out.join(" ");
+}
+// the time axis' ticks: whole seconds / minutes (10 s … 2 h), about 4–6 of them, from just under the
+// fastest to just over the slowest — ECharts' own nice numbers step by 100 s (8:20, 10:00, 11:40 …) and
+// round the end past the data, which is where an empty 23:20 at the bottom came from
+const DUR_STEPS = [10, 15, 20, 30, 60, 120, 180, 300, 600, 900, 1200, 1800, 3600, 7200];
+function durAxis(vals) {
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = Math.max(1, hi - lo);
+  const step = DUR_STEPS.find((x) => span / x <= 5) || 7200;
+  const min = Math.max(0, Math.floor(lo / step) * step);
+  return { min, max: Math.max(min + step, Math.ceil(hi / step) * step), interval: step };
+}
+// ? help: hover shows it, a tap / click pins it (a phone has no hover); one popup at a time
+const qBtn = (tip, label) => `<button type="button" class="q" aria-label="${esc(label)}" data-tip="${esc(tip)}">?</button>`;
+let qPop = null, qPinned = false;
+function qHide() { if (qPop) { qPop.remove(); qPop = null; qPinned = false; } }
+function qShow(b) {
+  qHide();
+  qPop = document.createElement("div");
+  qPop.className = "qpop"; qPop.setAttribute("role", "note"); qPop._for = b;
+  qPop.textContent = b.dataset.tip;
+  document.body.appendChild(qPop);
+  const r = b.getBoundingClientRect(), w = qPop.offsetWidth, h = qPop.offsetHeight;
+  qPop.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+  qPop.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("button.q[data-tip]");
+  if (!b) { qHide(); return; }
+  if (qPop && qPop._for === b && qPinned) { qHide(); return; }
+  qShow(b); qPinned = true;
+});
+document.addEventListener("mouseover", (e) => {
+  const b = e.target.closest && e.target.closest("button.q[data-tip]");
+  if (b && !qPinned && (!qPop || qPop._for !== b)) qShow(b);
+});
+document.addEventListener("mouseout", (e) => {
+  const b = e.target.closest && e.target.closest("button.q[data-tip]");
+  if (b && !qPinned && qPop && qPop._for === b) qHide();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") qHide(); });
+addEventListener("scroll", qHide, { passive: true });
 function dhms(s) { return s == null ? "—" : s === 0 ? T("best") : `+${hms(s)}`; }
 function pace(v) { if (v == null || !isFinite(v)) return "—"; const m = Math.floor(v), s = Math.round((v - m) * 60); return `${m}:${String(s === 60 ? 59 : s).padStart(2, "0")}`; }
 function km(m) { return m == null ? "—" : (m / 1000).toFixed(m < 10000 ? 2 : 1) + " km"; }
@@ -391,6 +449,7 @@ function renderDetail() {
     <div class="note">${esc(T("map.note", { what }))} <span style="color:var(--ok)">●</span> ${esc(T("map.start"))}、<span style="color:var(--err,#b91c1c)">●</span> ${esc(T("map.end"))}${esc(T("map.hover"))}</div></div>
   ${d.kind === "route" ? `<div class="panel card" id="segcard"><h3>${esc(T("segs.h"))} <span class="meta" id="segsub"></span></h3><div class="tablewrap"><table id="segtab"></table></div></div>` : ""}
   <div class="panel card"><h3>${esc(T("trend.h"))} <span class="seg" id="tmode"><button data-v="time" class="on">${esc(timeName)}</button>${up ? '<button data-v="vam">VAM</button>' : ""}${d.kind === "route" ? "" : `<button data-v="pace">${esc(T("pace"))}</button>`}</span>
+    ${qBtn(T(tk === "elapsed_s" ? "t.elapsed_tip" : "t.moving_tip"), T("t.tip_label", { t: timeName }))}
     ${hasWx ? `<button class="tog ${S.colorTemp ? "on" : ""}" id="ctemp" title="${esc(T("ctemp_tip"))}">${esc(T("ctemp"))}</button>` : ""}
     <span class="meta">${esc(T(up ? "trend.sub_up" : "trend.sub"))}</span></h3>
     <div class="chart tall" id="trend"></div></div>
@@ -537,7 +596,8 @@ function drawTrend(mode) {
     orient: "horizontal", right: 16, top: 0, itemWidth: 10, itemHeight: 120, calculable: false, precision: 0,
     text: ["°C", ""], textStyle: { color: css("--muted"), fontSize: 11 } }] : undefined;
   const eff = d.efforts.map((e) => ({ value: [e.start.slice(0, 10), up ? e.hr_vam : e.avg_hr], e })).filter((p) => p.value[1] != null);
-  const fmtY = mode === "vam" ? (v) => Math.round(v) : mode === "pace" ? pace : hms;
+  const fmtY = mode === "vam" ? (v) => Math.round(v) : mode === "pace" ? pace : dur;
+  const yRange = mode === "time" && pts.length ? durAxis(pts.map((p) => p.value[1])) : {};
   const ax = axisStyle();
   c.setOption({
     animation: false, textStyle: { color: css("--text") },
@@ -545,7 +605,7 @@ function drawTrend(mode) {
     visualMap,
     tooltip: { trigger: "item", formatter: (p) => {
       const e = p.data.e;
-      return `${e.start.slice(0, 16).replace("T", " ")} ${esc(e.sport_type || "")}<br>${esc(T(d.time_key === "elapsed_s" ? "t.elapsed_short" : "t.moving_short"))} ${hms(e[d.time_key])}（${esc(T("rank_n", { n: e.rank ?? "—" }))}）` +
+      return `${e.start.slice(0, 16).replace("T", " ")} ${esc(e.sport_type || "")}<br>${esc(T(d.time_key === "elapsed_s" ? "t.elapsed_short" : "t.moving_short"))} ${esc(dur(e[d.time_key]))}（${esc(T("rank_n", { n: e.rank ?? "—" }))}）` +
         (e.vam != null ? `<br>VAM ${Math.round(e.vam)} m/h` : "") + (e.avg_hr != null ? `<br>${esc(T("hr"))} ${num(e.avg_hr)} bpm` : "") +
         (e.max_hr != null ? `（${esc(T("max"))} ${num(e.max_hr)}）` : "") +
         (e.hr_vam != null ? ` · HR÷VAM ${num(e.hr_vam, 0)}` : "") +
@@ -553,8 +613,10 @@ function drawTrend(mode) {
         (e.phase ? `<br>${esc(e.phase)}` : ""); } },
     xAxis: [{ type: "time", gridIndex: 0, ...ax, axisLabel: { show: false }, splitLine: { show: false } },
       { type: "time", gridIndex: 1, ...ax, splitLine: { show: false } }],
-    yAxis: [{ type: "value", gridIndex: 0, scale: true, inverse: mode !== "vam", ...ax, nameLocation: mode !== "vam" ? "start" : "end",
-      name: mode === "vam" ? "VAM m/h" : mode === "pace" ? "min/km" : T("time"), axisLabel: { color: css("--muted"), formatter: fmtY } },
+    // SP-694: the time mode's axis is how long the stretch took (a duration, faster = higher), not a clock time
+    yAxis: [{ type: "value", gridIndex: 0, scale: true, inverse: mode !== "vam", ...ax, ...yRange, nameLocation: mode !== "vam" ? "start" : "end",
+      name: mode === "vam" ? "VAM m/h" : mode === "pace" ? "min/km" : T("trend.y_time"),
+      nameTextStyle: { color: css("--muted"), align: mode === "time" ? "left" : "center", padding: mode === "time" ? [0, 0, 0, -40] : 0 }, axisLabel: { color: css("--muted"), formatter: fmtY } },
       { type: "value", gridIndex: 1, scale: true, ...ax, name: up ? "HR÷VAM" : "bpm" }],
     series: [
       { type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts, symbolSize: byTemp ? 9 : 7, symbol: byTemp ? "circle" : "emptyCircle",

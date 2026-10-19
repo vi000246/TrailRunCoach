@@ -35,7 +35,7 @@
   "ev.gpx_later": "之後再上傳 GPX，先不填",
   "ev.gpx_help": "附了 GPX（或勾「之後再上傳」）就不用逐日填：每天的距離和爬升從 GPX 算。存好之後按這場的「分日」（或賽事計算器的「分日預覽」）設每天的終點（營地航點、OSM 山屋、紀錄的過夜點會列成候選；Cairn 匯入的過夜點直接套用），設之前每天平均分距離（推估）。",
   "ev.gpx_have": "已附 GPX（{f}）：每天的數字從 GPX 算，可以不填",
-  "ev.gpx_nosplit": "GPX 還沒有分日點：每天先平均分距離（推估）。按右邊的「分日」設每天的終點",
+  "ev.gpx_nosplit": "GPX 還沒有分日點：每天先平均分距離（推估）。到賽事管理打開這場，按「分日」設每天的終點",
   "ev.overnight_sep": "、",
   "ev.cairn_attach": "或貼疊石 Cairn 分享連結",
   "ev.cairn_btn": "從 Cairn 匯入",
@@ -69,5 +69,9 @@
   "ev.res_unmatched": "已完賽，沒對上活動",
   "ev.res_manual": "你在活動頁指定的",
   "ev.res_fix": "要指定就到活動頁打開那次活動，在「對到哪場賽事」選這場。",
-  "to_races": "賽事管理 →"
+  "to_races": "賽事管理 →",
+  "ev.manage": "新增或修改賽事、上傳 GPX：到賽事管理 →",
+  "ev.edit_in_races": "到賽事管理編輯 →",
+  "ev.edit_in_races_tip": "在賽事管理打開這場的編輯（天數、GPX、關門時間等都在那裡改）；改完回來這頁就會看到",
+  "ev.add_in_races": "到賽事管理新增一場 →"
 }

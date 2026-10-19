@@ -466,7 +466,7 @@ function renderKpis() {
   out.push(`<div class="kpi"><div class="k">${I("flag")}${esc(t("overview.kpi.next_a"))}${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "")}</div>
     ${g.next_a ? `<div class="row"><div class="v">${g.days_to_next_a}<small>${esc(t("overview.kpi.days", { n: g.days_to_next_a }))}</small></div></div>
       <div class="sub"><span>${esc(name || "")}</span>${STATUS.phase ? stw("info", STATUS.phase.label).replace(I("info"), I("flag")) : ""}</div>`
-      : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="/api/v1/plan/page">${esc(t("overview.kpi.add_race"))}</a>${
+      : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="/api/v1/app/races/page">${esc(t("overview.kpi.add_race"))}</a>${
         // SP-102: no A race — the 維持期 / a B race's light prep says so, with its plain why
         STATUS.phase && (STATUS.phase.maintain || STATUS.phase.light) ? stw("info", STATUS.phase.label).replace(I("info"), I("flag")) : ""}</div>${
         STATUS.phase && (STATUS.phase.maintain || STATUS.phase.light) && STATUS.phase.why ? `<div class="sub why">${esc(STATUS.phase.why)}</div>` : ""}`}</div>`);

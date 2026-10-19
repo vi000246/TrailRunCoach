@@ -124,7 +124,7 @@ def _cat(loc: str) -> dict:
 
 
 def test_the_page_drops_required_for_an_old_trip_and_hints_instead():
-    html = (STATIC / "plan.html").read_text("utf-8")
+    html = (STATIC / "races.html").read_text("utf-8")   # SP-691: the event editor moved to 賽事管理
     # the edit remembers whether the event lacks its per-day numbers on the server…
     assert re.search(r"dayPlanLenient\s*=\s*!!e\.day_plan_missing", html)
     # …and the rows are required unless it does (and none of them is filled in yet)
@@ -181,7 +181,7 @@ def test_a_new_trip_keeps_the_sums_whatever_totals_are_sent():
 
 
 def test_the_page_unlocks_the_totals_only_for_an_old_trip_with_blank_rows():
-    html = (STATIC / "plan.html").read_text("utf-8")
+    html = (STATIC / "races.html").read_text("utf-8")   # SP-691
     # SP-114 locked them for every multi-day trip: `readOnly = on`
     assert not re.search(r"climbing_m\.readOnly\s*=\s*on\s*;", html)
     # now locked while the rows are required (a new trip, a trip with its numbers, an old trip once a row is filled)

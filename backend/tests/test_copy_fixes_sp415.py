@@ -15,7 +15,7 @@ from pathlib import Path
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 SETTINGS = STATIC / "settings.html"
-PLAN = STATIC / "plan.html"
+PLAN = STATIC / "races.html"        # SP-691: the event editor (the summit km input) moved to 賽事管理
 
 
 def _cat(loc: str, ns: str) -> dict:

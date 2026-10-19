@@ -72,27 +72,10 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 input, select, button, textarea { font: inherit; color: var(--text); background: var(--panel);
   border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
 input[type=number] { width: 84px; }
-/* SP-415: the 山頂在第幾 km hint is longer than a number (84px cut it to 「空白＝GP」) */
-#summitwrap input { width: 15em; max-width: 100%; }
 button { cursor: pointer; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.link { border: 0; background: none; color: var(--accent); padding: 0 4px; }
 .form { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin-top: 10px; }
-.form label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 2px; }
-.form label[hidden] { display: none; }
-.form .dayplan { flex-basis: 100%; }
-.form .dayplan[hidden] { display: none; }
-.form .dayplan td, .form .dayplan th { padding: 2px 6px; }
-.form .dayplan .hint[hidden] { display: none; }
-/* SP-533: a GPX instead of typing each day */
-.form .dayplan .dpgpx { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin: 4px 0 6px; }
-.form .dayplan .dpgpx label { flex-direction: row; align-items: center; gap: 6px; }
-.form .dayplan .dpgpx input[type=file] { max-width: 100%; }
-.form .dayplan .dpgpx .meta { flex-basis: 100%; }
-.form .dayplan .dpgpx [hidden] { display: none; }
-.form .dayplan .dpgpx .cairnl { flex: 1 1 260px; }
-.form .dayplan .dpgpx .cairnl input { flex: 1; min-width: 0; }
-#cairnres { white-space: pre-line; }
 .hint { color: var(--warn); font-size: 12px; }
 .pri { display: inline-block; min-width: 20px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; padding: 0 4px; }
 .pri.A { background: var(--bad); color: #fff; } .pri.B { background: var(--warn); color: #fff; } .pri.C { background: var(--line); }
@@ -110,7 +93,6 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 <script src="/api/v1/static/shell.js" data-page="plan"></script>
 <script src="/api/v1/static/hints.js"></script>
 <script src="/api/v1/static/feasibility.js"></script>
-<script src="/api/v1/static/daysplit.js"></script>
 <header>
   <h1>賽事周期</h1>
   <span class="meta" id="todayinfo"></span>
@@ -146,52 +128,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
         <th class="num">爬升 m</th><th class="num">m/km</th><th class="num">預估時間 h</th><th class="num">倒數</th><th>備註</th><th>路線 GPX</th><th></th></tr></thead>
       <tbody id="events"></tbody>
     </table></div>
-    <div class="hint" id="cairnres" hidden></div>
-    <input type="file" id="gpxpick" accept=".gpx,.fit,application/gpx+xml" hidden>
-    <form class="form" id="evform">
-      <input type="hidden" name="id">
-      <label>名稱<input name="name" required placeholder="例：玉山前峰～主峰"></label>
-      <label>日期<input type="date" name="date" required></label>
-      <label>類型<select name="kind" id="kindsel"></select></label>
-      <label>優先<select name="priority"><option>A</option><option>B</option><option>C</option></select></label>
-      <label>天數<input type="number" name="days" min="1" value="1"></label>
-      <!-- SP-114 賽制: only a ≥ 2 day 越野賽／其他 (百岳 is always split by day; 路跑 is never asked) -->
-      <label id="formatwrap" hidden data-i18n-attr="title:plan.ev.format_tip"
-        title="分站：每天一站，主辦單位定好，要填每一站的距離和爬升。連續：不分站、一次跑完全程，在哪睡自己決定，不用填每天的數字，改在賽事計算器的補給站加睡眠點。"><span data-i18n="plan.ev.format">賽制</span><select name="race_format">
-        <option value="stage" data-i18n="plan.ev.format_stage">分站（每天一站）</option>
-        <option value="continuous" data-i18n="plan.ev.format_continuous">連續（一次跑完全程）</option></select></label>
-      <label>距離 km<input type="number" name="distance_km" step="0.1" min="0"></label>
-      <label>爬升 m<input type="number" name="climbing_m" step="10" min="0"></label>
-      <!-- SP-114: every multi-day trip (百岳, a 分站 越野賽／其他) fills each day; the totals add up -->
-      <div id="dayplanwrap" class="dayplan" hidden>
-        <div class="meta" data-i18n="plan.ev.dayplan_help">沒有 GPX 時，每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</div>
-        <!-- SP-412: editing an old trip saved without them — the rows are not required, this asks for them -->
-        <!-- SP-533: a trip with a GPX (attached here, already stored, or to come) needn't type each day -->
-        <div class="dpgpx">
-          <span class="meta" id="dpgpxhave" hidden></span>
-          <label><span data-i18n="plan.ev.gpx_attach">附 GPX</span><input type="file" id="evgpxfile" accept=".gpx,.fit"></label>
-          <label><input type="checkbox" id="evgpxlater"><span data-i18n="plan.ev.gpx_later">之後再上傳 GPX，先不填</span></label>
-          <!-- SP-537: or the trip planned in 疊石 Cairn: its GPX + the nights marked there as the day ends -->
-          <label class="cairnl"><span data-i18n="plan.ev.cairn_attach">或貼疊石 Cairn 分享連結</span><input type="url" id="evcairn" autocomplete="off" spellcheck="false" placeholder="https://…/?gpx=…&amp;share=…"></label>
-          <div class="meta" data-i18n="plan.ev.gpx_help">附了 GPX（或勾「之後再上傳」）就不用逐日填：每天的距離和爬升從 GPX 算。存好之後按這場的「分日」（或賽事計算器的「分日預覽」）設每天的終點（營地航點、OSM 山屋、紀錄的過夜點會列成候選；Cairn 匯入的過夜點直接套用），設之前每天平均分距離（推估）。</div>
-        </div>
-        <div id="dayplanold" class="hint" data-i18n="plan.ev.dayplan_old" hidden>這筆舊行程還沒填每天的距離和爬升，可以先照原樣存，總距離、總爬升也可以直接改；沒填時每天的量是用總距離、總爬升平均分的，補上會比較準。要補就每天的距離和爬升都要填。</div>
-        <table><thead><tr><th></th><th class="num" data-i18n="plan.ev.day_km">距離 km</th><th class="num" data-i18n="plan.ev.day_gain">爬升 m</th>
-          <th class="num" data-i18n="plan.ev.day_loss">下降 m（選填）</th></tr></thead><tbody id="dayplanrows"></tbody></table>
-      </div>
-      <label>預估移動時間 h<input type="number" name="est_hours" step="0.5" min="0"></label>
-      <!-- SP-87 土徑比 (engine/technical.py): ≥ 50 % → the 專項期's weekly 技術地形 session, < 50 % none, blank as before -->
-      <label data-i18n-attr="title:plan.ev.trail_pct_tip" title="路線中土徑、山徑（不是柏油、水泥路）的比例。≥ 50%：專項期每週排一堂接近比賽路況的技術地形課；< 50%：路線多半是柏油或水泥，不排；空白：照原本的規則排（每週一堂）。"><span data-i18n="plan.ev.trail_pct">土徑比 %</span><input type="number" name="trail_pct" step="1" min="0" max="100" data-i18n-attr="placeholder:plan.ev.optional" placeholder="選填"></label>
-      <label title="百岳／多日行程第 1 天的背包重量；空白 = 體重 × 13 %（沒有體重時 9 kg，推估）。百岳預測用它，賽前的陡坡健走也用它算模擬負重的坡度">行程背包 kg<input type="number" name="pack_kg" step="0.5" min="0" max="40" placeholder="9"></label>
-      <!-- SP-105 (engine/race_feasibility.py): 賽事 = 關門時間; 百岳 = 撤退時間 (hours from the summit day's start) + the summit km -->
-      <label id="cutwrap"><span id="cutlab" data-i18n="plan.ev.cutoff">關門時間 h</span><input type="number" name="cutoff_hours" step="0.25" min="0" max="240" data-i18n-attr="placeholder:plan.ev.optional" placeholder="選填"></label>
-      <label id="summitwrap" hidden><span data-i18n="plan.ev.summit_km">山頂在第幾 km</span><input type="number" name="summit_km" step="0.1" min="0" data-i18n-attr="placeholder:plan.ev.summit_ph" placeholder="空白＝GPX 最高點"></label>
-      <!-- SP-244: the race calculator adds a hint on steep climbs / descents; no prediction reads it -->
-      <label data-i18n-attr="title:plan.ev.poles_tip" title="勾了之後，賽事計算器在陡上坡和陡下坡（≤ −15 %）的段多一句用杖提示。預估時間、配速、心率都不變：研究顯示用杖主要是覺得比較輕鬆、膝蓋負擔比較小，速度差不多。比賽當天（多日行程每一天）的活動也會先標成「有杖」，你自己改過的不會被蓋掉。"><span data-i18n="plan.ev.poles">會用登山杖</span><input type="checkbox" name="poles" style="align-self:flex-start"></label>
-      <label>備註<input name="note"></label>
-      <button class="primary" type="submit" id="evsubmit">新增</button>
-      <button type="button" id="evcancel" hidden>取消編輯</button>
-    </form>
+    <p class="meta"><a class="link" id="to-races-add" href="/api/v1/app/races/page" data-i18n="plan.ev.manage">新增或修改賽事、上傳 GPX：到賽事管理 →</a></p>
   </section>
 
   <!-- 賽事評估 (engine/race_feasibility.py, SP-105): one card per upcoming A / B race — 可行性 (來不來得及練)
@@ -357,12 +294,12 @@ function renderGoals() {
   $("#goals").innerHTML = S.goals.events.length ? cards.join("") : `<p class="meta">還沒有接下來的 A / B 賽事。</p>`;
 }
 
+// SP-691: no editor here — each race links to 賽事管理, which opens that race's editor (?event=<id>&edit=1)
+const RACES = "/api/v1/app/races/page";
+const raceHref = (e, edit) => `${RACES}?event=${encodeURIComponent(e.id)}${edit ? "&edit=1" : ""}`;
 function renderEvents() {
-  const kinds = S.kinds;
-  $("#kindsel").innerHTML = Object.entries(kinds).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
-  cutoffLabels();
-  // finished events (last day already past) are hidden; one row at the bottom reveals them for
-  // editing — they stay in the plan because the race-power back-test uses past races
+  // finished events (last day already past) are hidden; one row at the bottom reveals them — they
+  // stay in the plan because the race-power back-test uses past races
   const done = (e) => e.days_to + Math.max(1, e.days || 1) - 1 < 0;
   const past = S.events.filter(done);
   const shown = S.showPast ? S.events : S.events.filter((e) => !done(e));
@@ -371,13 +308,13 @@ function renderEvents() {
   if (S.showPast && past.length && RACE_RES === null) loadRaceResults();
   $("#events").innerHTML = (shown.map((e) => `<tr style="${done(e) ? "opacity:.55" : ""}">
     <td><span class="pri ${e.priority}">${e.priority}</span></td><td>${e.date}${e.days > 1 ? "～" + e.end.slice(5) : ""}</td>
-    <td>${esc(e.name)}${evHints(e)}${done(e) ? raceResult(e) : ""}</td><td>${esc(e.kind_label)}</td><td class="num">${e.days}</td>
+    <td><a href="${raceHref(e)}">${esc(e.name)}</a>${evHints(e)}${done(e) ? raceResult(e) : ""}</td><td>${esc(e.kind_label)}</td><td class="num">${e.days}</td>
     <td class="num">${fmt(e.distance_km, 1)}</td><td class="num">${fmt(e.climbing_m)}</td><td class="num">${fmt(e.climb_per_km)}</td>
     <td class="num">${fmt(e.est_hours, 1)}</td><td class="num">${e.days_to >= 0 ? e.days_to + " 天" : "已過"}</td>
     <td class="meta">${esc(e.note)}</td>
     <td>${gpxCell(e)}</td>
-    <td><button class="link" data-edit="${e.id}">編輯</button><button class="link" data-del="${e.id}">刪除</button></td></tr>`).join("")
-    || `<tr><td colspan="13" class="meta">${past.length ? "沒有接下來的賽事。" : "還沒有賽事。"}在下面填一場。</td></tr>`) + toggle;
+    <td><a class="link" href="${raceHref(e, true)}" title="${esc(t("plan.ev.edit_in_races_tip"))}">${esc(t("plan.ev.edit_in_races"))}</a></td></tr>`).join("")
+    || `<tr><td colspan="13" class="meta">${past.length ? "沒有接下來的賽事。" : "還沒有賽事。"}<a href="${RACES}">${esc(t("plan.ev.add_in_races"))}</a></td></tr>`) + toggle;
   const tg = $("#togglepast");
   if (tg) tg.onclick = () => { S.showPast = !S.showPast; renderEvents(); };
 }
@@ -419,91 +356,16 @@ function evHints(e) {
   return out.map((x) => `<div class="hint">⚠ ${esc(x)}</div>`).join("");
 }
 
-// the event's GPX (engine/event_gpx.py): upload once here or in 賽事計算器; the calculator, the
-// コース定数 reference lines and share links reuse it
+// the event's GPX (engine/event_gpx.py), read-only here: uploading, replacing, 分日 and Cairn are in 賽事管理
+// (SP-691) or 賽事計算器; the calculator, the コース定数 reference lines and share links reuse it
 function gpxCell(e) {
-  const g = e.gpx, tP = (k) => (window.I18N ? I18N.t("plan.ev." + k) : k);
-  if (!g) return `<button class="link" data-gpxup="${e.id}" title="上傳這場賽事的 .gpx / .fit 路線；存起來之後賽事計算器、コース定数參考線都會用它">上傳</button>`;
-  const t = `${g.filename}\n${fmt(g.km, 1)} km ↑${fmt(g.gain_m)} m ↓${fmt(g.loss_m)} m（平滑後）\n存成 ${Math.max(1, Math.round(g.bytes_gz / 1024))} KB（原檔 ${Math.max(1, Math.round(g.bytes_raw / 1024))} KB）・${g.uploaded_at || ""}`;
-  return `<span class="meta" title="${esc(t)}">📍 ${fmt(g.km, 1)} km ↑${fmt(g.gain_m)}</span>
-    <a class="link" href="${API}/events/${encodeURIComponent(e.id)}/gpx/file" title="下載原檔">下載</a>
-    ${(e.days || 1) > 1 ? `<button class="link" data-gpxsplit="${e.id}">${esc(tP("split_btn"))}</button>` : ""}
-    <button class="link" data-gpxup="${e.id}" title="換一個 GPX">換檔</button><button class="link" data-gpxdel="${e.id}">刪除</button>${cairnCell(e)}`;
-}
-// SP-537: the trip planned in 疊石 Cairn, by its share link — the GPX and the nights marked there become
-// the event's GPX and day ends at once (the days follow; still changeable in the race calculator). The
-// link's token reads Cairn once on the server and is not kept (the row keeps the route's token-free link).
-const tC = (k, p) => (window.I18N ? I18N.t("plan.ev." + k, p) : k);
-function cairnCell(e) {
-  const src = e.gpx && e.gpx.source && e.gpx.source.kind === "cairn" ? e.gpx.source : null;
-  return (src ? ` <a class="link" href="${esc(src.url)}" target="_blank" rel="noopener noreferrer" title="${esc(tC("cairn_from"))}">⛰ Cairn ↗</a>` : "")
-    + ` <button class="link" data-cairnup="${e.id}" title="${esc(tC("cairn_tip"))}">${esc(tC(src ? "cairn_again" : e.gpx ? "cairn_use" : "cairn_btn"))}</button>`;
-}
-async function importEventCairn(eid, url) {
-  const box = $("#cairnres");
-  const r = await fetch(`${API}/events/${encodeURIComponent(eid)}/gpx/cairn`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    box.textContent = tC("cairn_fail", { msg: typeof j.detail === "string" ? j.detail : r.status });
-    box.hidden = false; box.scrollIntoView({ block: "nearest" }); return null;
-  }
-  const c = j.cairn, ds = (j.days && j.days.days) || [];
-  const nights = (c.nights || []).map((x) => tC("cairn_night", { n: x.night, name: x.name || "", km: fmt(x.km, 1) })).join(tC("overnight_sep"));
-  const per = ds.length > 1 ? ds.map((d) => tC("cairn_day", { d: d.day, km: fmt(d.km, 1), up: fmt(d.gain_m) })).join(tC("overnight_sep")) : "";
-  box.textContent = [tC("cairn_done", { name: c.name, days: j.event_days }), nights, per, ...(c.notes || [])].filter(Boolean).join("\n");
-  box.hidden = false;
-  toast(tC("cairn_toast", { days: j.event_days }));
-  return j;
-}
-let gpxFor = null;
-$("#gpxpick").addEventListener("change", async (ev) => {
-  const f = ev.target.files[0]; ev.target.value = "";
-  if (!f || !gpxFor) return;
-  const up = await uploadEventGpx(gpxFor, f);
-  if (up) { await load(); await askOvernights(gpxFor, up.overnights); loadFeas(); }
-});
-// upload (or replace) an event's GPX; its answer ({gpx, days, overnights}) when stored, else null
-async function uploadEventGpx(eid, f) {
-  const fd = new FormData(); fd.append("file", f);
-  const r = await fetch(`${API}/events/${encodeURIComponent(eid)}/gpx`, { method: "POST", body: fd });
-  if (!r.ok) { toast("GPX 失敗：" + (await r.text()).slice(0, 120)); return null; }
-  toast("GPX 已存");
-  return r.json();
-}
-// SP-534: a recorded track's nights (停留 ≥ 6 h or the watch off, 推估) become the trip's day ends only
-// when the user says so (SP-522 Q1): SP-535's preview opens with them selected; 確定 stores them
-const EV_KEYS = ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "note", "heat",
-  "pack_kg", "cutoff_hours", "summit_km", "race_format", "poles", "trail_pct"];
-async function askOvernights(eid, N) {
-  if (!N || !(N.stops || []).length) return;
-  await openSplits(eid, N);
-}
-// SP-535: the day-split preview (static/daysplit.js — the same dialog as 賽事計算器): candidates, each day's
-// km / climb / time as the day ends move; nothing is stored until 確定 (取消 changes nothing)
-async function openSplits(eid, N) {
-  const tO = (k, p) => (window.I18N ? I18N.t("plan.ev." + k, p) : k);
-  let pv;
-  try { pv = await call("GET", `/events/${encodeURIComponent(eid)}/gpx/preview`); } catch (e) { return; }
-  const nights = N || pv.overnights;
-  // SP-537: a Cairn import's nights are already the day ends (applied as is); they stay as 🪨 candidates
-  const cairn = pv.source && pv.source.kind === "cairn" ? (pv.source.nights || pv.stored_km.map((km, i) => ({ night: i + 1, km }))) : [];
-  const cands = [...(pv.candidates || []),
-    ...((nights && nights.stops) || []).map((x) => ({ km: x.km, kind: "night", night: x.night, hours: x.hours })),
-    ...cairn.map((x) => ({ km: x.km, kind: "cairn", night: x.night, name: x.name }))];
-  const r = await DaySplit.open({ name: pv.name, days: pv.days, splits: pv.stored_km, total: pv.total_km, profile: pv.profile,
-    pieces: pv.pieces, hours: pv.hours, candidates: cands, osmAttr: pv.osm_attr, applied: cairn.length ? "cairn" : null,
-    proposal: N && (N.stops || []).length ? { kind: "night", splits: N.splits_km, days: N.days } : null });
-  if (!r) return;
-  await call("PUT", `/events/${encodeURIComponent(eid)}/gpx/splits`, { day_splits_km: r.splits });
-  const e = S.events.find((x) => x.id === eid);
-  if (e && Math.max(1, e.days || 1) !== r.days) {
-    const body = Object.fromEntries(EV_KEYS.map((k) => [k, e[k] ?? null]));
-    body.days = r.days; body.day_plan = null; body.note = body.note || "";
-    await call("PUT", "/events", body);
-  }
-  toast(tO("splits_saved", { days: r.days }));
-  await load();
-  loadFeas();
+  const g = e.gpx;
+  if (!g) return `<span class="meta">–</span>`;
+  const tip = `${g.filename}\n${fmt(g.km, 1)} km ↑${fmt(g.gain_m)} m ↓${fmt(g.loss_m)} m（平滑後）\n存成 ${Math.max(1, Math.round(g.bytes_gz / 1024))} KB（原檔 ${Math.max(1, Math.round(g.bytes_raw / 1024))} KB）・${g.uploaded_at || ""}`;
+  const src = g.source && g.source.kind === "cairn" ? g.source : null;
+  return `<span class="meta" title="${esc(tip)}">📍 ${fmt(g.km, 1)} km ↑${fmt(g.gain_m)}</span>
+    <a class="link" href="${API}/events/${encodeURIComponent(e.id)}/gpx/file" title="下載原檔">下載</a>` +
+    (src ? ` <a class="link" href="${esc(src.url)}" target="_blank" rel="noopener noreferrer" title="${esc(t("plan.ev.cairn_from"))}">⛰ Cairn ↗</a>` : "");
 }
 
 function renderPhases() {
@@ -550,92 +412,6 @@ function renderGuide() {
   if (r.b_prep_weeks) $("#prihelp").textContent = t("plan.ev.priority_help_n", { w: r.b_prep_weeks, d: r.b_prep_taper_days });
 }
 
-// ---- events ----
-$("#evform").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const f = new FormData(ev.target), body = {};
-  for (const [k, v] of f.entries()) body[k] = v === "" ? null : v;
-  for (const k of ["days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km", "trail_pct"]) if (body[k] != null) body[k] = Number(body[k]);
-  body.days = body.days || 1; body.note = body.note || "";
-  body.poles = ev.target.poles.checked;
-  body.day_plan = needsDayPlan() ? readDayRows().map((r) => ({ km: r.km, gain_m: r.gain_m, loss_m: r.loss_m })) : null;
-  const file = $("#evgpxfile").files[0] || null;
-  const cairn = $("#evcairn").value.trim();
-  body.gpx_pending = !!file || !!cairn || $("#evgpxlater").checked;
-  const saved = await call("PUT", "/events", body);
-  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; dayPlanLenient = false; dayPlanTotals = null; evGpx = null; cutoffLabels(); dayPlanForm([]);
-  toast("已儲存");
-  const up = file && saved.event ? await uploadEventGpx(saved.event.id, file) : null;
-  if (!file && cairn && saved.event) await importEventCairn(saved.event.id, cairn);
-  await load();
-  if (up) await askOvernights(saved.event.id, up.overnights);
-  loadFeas();
-});
-// SP-114: a multi-day trip (百岳, a 分站 越野賽／其他 — not 路跑, not a 連續 race) fills each day's
-// distance and climb; the totals are their sums (read-only while the rows are shown)
-const FORMAT_KINDS = ["race", "other"];
-// SP-412: editing an old multi-day trip that has no per-day numbers on the server (day_plan_missing)
-let dayPlanLenient = false, dayPlanTotals = null;
-const dayFilled = (rows) => rows.some((r) => r && ["km", "gain_m", "loss_m"].some((k) => r[k] != null));
-// SP-533: the trip has a GPX (stored, attached in the form) or one is to come: its days come from the GPX
-let evGpx = null;
-const gpxDays = () => !!evGpx || !!$("#evgpxfile").files.length || !!$("#evcairn").value.trim() || $("#evgpxlater").checked;
-function dayPlanRequired(rows) { return !(dayPlanLenient || gpxDays()) || dayFilled(rows || readDayRows()); }
-function syncDayRequired() {
-  const req = dayPlanRequired(), f = $("#evform");
-  $("#dayplanrows").querySelectorAll('input[data-k="km"], input[data-k="gain_m"]').forEach((x) => { x.required = req; });
-  f.distance_km.readOnly = f.climbing_m.readOnly = needsDayPlan() && req;   // SP-412: see dayPlanForm
-}
-function needsDayPlan() {
-  const f = $("#evform"), n = Number(f.days.value) || 1, k = f.kind.value;
-  const cont = FORMAT_KINDS.includes(k) && f.race_format && f.race_format.value === "continuous";
-  return n > 1 && k !== "road" && !cont;
-}
-function readDayRows() {
-  const rows = [];
-  $("#dayplanrows").querySelectorAll("input").forEach((x) => {
-    const i = +x.dataset.d; rows[i] = rows[i] || {}; rows[i][x.dataset.k] = x.value === "" ? null : Number(x.value);
-  });
-  return rows;
-}
-function dayPlanForm(plan) {
-  const f = $("#evform"), n = Math.max(1, Number(f.days.value) || 1);
-  $("#formatwrap").hidden = !(FORMAT_KINDS.includes(f.kind.value) && n > 1);      // 賽制: ≥ 2 day 越野賽／其他 only
-  const on = needsDayPlan();
-  const tP = (k, p) => (window.I18N ? I18N.t("plan.ev." + k, p) : k);
-  $("#dayplanwrap").hidden = !on;
-  const old = plan || readDayRows(), req = dayPlanRequired(old);
-  // the totals are the sums of the days (read-only) — but an old trip without its per-day numbers
-  // (SP-412, decision 2026-10-13) has only its totals: editable while its rows are blank
-  f.distance_km.readOnly = f.climbing_m.readOnly = on && req;
-  $("#dayplanold").hidden = !(on && dayPlanLenient);
-  const have = $("#dpgpxhave");
-  have.hidden = !evGpx;
-  have.textContent = evGpx ? tP("gpx_have", { f: evGpx.filename || "GPX" }) : "";
-  $("#evgpxlater").closest("label").hidden = !!evGpx;
-  $("#dayplanrows").innerHTML = on ? Array.from({ length: n }, (_, i) => `<tr><td>${esc(tP("day_n", { n: i + 1 }))}</td>`
-    + ["km", "gain_m", "loss_m"].map((k) => `<td><input type="number" data-d="${i}" data-k="${k}" step="${k === "km" ? 0.1 : 10}" min="0"`
-      + `${k !== "loss_m" && req ? " required" : ""} value="${old[i]?.[k] ?? ""}"></td>`).join("") + "</tr>").join("") : "";
-  sumDays();
-}
-function sumDays() {
-  if (!needsDayPlan()) return;
-  const f = $("#evform"), rows = readDayRows();
-  const s = (k) => rows.reduce((a, r) => a + (r && r[k] != null ? r[k] : 0), 0);
-  // SP-412: the old trip's rows emptied again → its totals back (as saved, or as typed since; they are what gets saved)
-  if (dayPlanTotals && !dayFilled(rows)) { f.distance_km.value = dayPlanTotals.distance_km; f.climbing_m.value = dayPlanTotals.climbing_m; return; }
-  if (rows.some((r) => r && r.km != null)) f.distance_km.value = Math.round(s("km") * 10) / 10;
-  if (rows.some((r) => r && r.gain_m != null)) f.climbing_m.value = Math.round(s("gain_m"));
-}
-$("#dayplanrows").addEventListener("input", () => { sumDays(); syncDayRequired(); });
-for (const id of ["#evgpxfile", "#evgpxlater"]) $(id).addEventListener("change", () => syncDayRequired());
-$("#evcairn").addEventListener("input", () => syncDayRequired());
-// SP-412: a total typed into an old trip is what comes back when its rows are emptied again
-for (const k of ["distance_km", "climbing_m"]) $("#evform")[k].addEventListener("input", () => {
-  if (dayPlanTotals && !dayFilled(readDayRows())) dayPlanTotals[k] = $("#evform")[k].value;
-});
-$("#evform").days.addEventListener("input", () => dayPlanForm());
-$("#evform").race_format.addEventListener("change", () => dayPlanForm());
 // 賽事評估 of the upcoming A / B races (static/feasibility.js; GET /api/v1/overview/feasibility):
 // fetched apart from the plan — the first race-calculator read of the activities takes ~1 min, so the
 // section shows 「評估中」 from the start and only hides once it knows there is no A / B race
@@ -671,39 +447,6 @@ async function loadFeas() {
     box.querySelector(".feas-retry").onclick = () => loadFeas();
   }
 }
-// 賽事: 關門時間; 百岳: 撤退時間 (from the summit day's start) + where the summit is
-function cutoffLabels() {
-  const hike = $("#kindsel").value === "baiyue", tP = (k) => (window.I18N ? I18N.t("plan.ev." + k) : k);
-  $("#cutlab").textContent = tP(hike ? "turnaround" : "cutoff");
-  $("#cutwrap").title = tP(hike ? "turnaround_tip" : "cutoff_tip");
-  $("#summitwrap").hidden = !hike;
-}
-$("#kindsel").addEventListener("change", () => { cutoffLabels(); dayPlanForm(); });
-$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; dayPlanLenient = false; dayPlanTotals = null; evGpx = null; cutoffLabels(); dayPlanForm([]); };
-$("#events").addEventListener("click", async (ev) => {
-  const ed = ev.target.dataset.edit, del = ev.target.dataset.del;
-  if (ed) {
-    const e = S.events.find((x) => x.id === ed), f = $("#evform");
-    for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km", "trail_pct", "note"]) f[k].value = e[k] ?? "";
-    f.race_format.value = e.race_format || "stage";
-    f.poles.checked = !!e.poles;
-    // SP-412: an old trip saved without its per-day numbers can be saved as it is (the server lets
-    // all-blank rows through for it); filling some rows makes every day required again
-    dayPlanLenient = !!e.day_plan_missing && !(e.day_plan || []).length && !e.gpx;
-    evGpx = e.gpx || null;
-    dayPlanTotals = dayPlanLenient ? { distance_km: f.distance_km.value, climbing_m: f.climbing_m.value } : null;
-    cutoffLabels(); dayPlanForm(e.day_plan || []);
-    $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-  if (ev.target.dataset.gpxup) { gpxFor = ev.target.dataset.gpxup; $("#gpxpick").click(); }
-  if (ev.target.dataset.gpxsplit) await openSplits(ev.target.dataset.gpxsplit);
-  if (ev.target.dataset.cairnup) {
-    const url = prompt(tC("cairn_prompt"));
-    if (url && url.trim()) { await importEventCairn(ev.target.dataset.cairnup, url.trim()); await load(); loadFeas(); }
-  }
-  if (ev.target.dataset.gpxdel && confirm("刪除這場賽事的 GPX？")) { await call("DELETE", `/events/${encodeURIComponent(ev.target.dataset.gpxdel)}/gpx`); toast("GPX 已刪除"); load(); loadFeas(); }
-  if (del && confirm("刪除這場賽事？")) { await call("DELETE", "/events/" + del); toast("已刪除"); load(); loadFeas(); }
-});
 
 // ---- phases ----
 $("#tomanual").onclick = () => { manual = S.phases.map((p) => ({ kind: p.kind, start: p.start, end: p.end, event_id: p.event_id })); renderPhases(); };
