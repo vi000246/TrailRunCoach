@@ -148,7 +148,15 @@ def test_api_aerobic_suggest_structure_save_and_push(env):
     e = env
     sug = _suggest(e, kind="quality", family="aerobic")
     v = sug["variant"]
-    assert sug["locked"] is None and v["key"] in {x.key for x in IL.LIBRARY[QG.rung_now(GATE, "z3")]}
+    # SP-733: the generator's own pick for that week — this week's 4.5 h puts A2 over the Zone 3 cap, so it is
+    # A2's 巡航版 (before SP-733 the ladder's A2 itself), still counted as the rung
+    from backend.engine import overview as O
+    wk = SS.week_of(e.inp, "2026-10-03")
+    dec = QG.week_decision(GATE, wk["kind"], wk["mode"], wk["monday"], n=1)
+    gen = O.quality_sessions(GATE, dec, wk["kind"], e.inp["thresholds"], {}, wk["hours"], None, [],
+                             SS.mountain_of(e.inp), False)[0]
+    assert sug["locked"] is None and v["key"] == gen["variant_key"] and sug["title"] == gen["title"]
+    assert v["key"] in {x.key for x in IL.LIBRARY[QG.cruise_for(QG.rung_now(GATE, "z3"), None)]}
     assert "3×10" not in sug["title"] and sug["minutes"] > 0
     # the structure: the variant's own (not the title's), its work steps on 自動 (target_policy by type)
     d = e.c.post(f"{_api()}/steps/derive", json={"kind": "quality", "title": sug["title"], "minutes": sug["minutes"],
@@ -176,7 +184,10 @@ def test_api_vo2max_closed_is_v1_marked_and_saved_as_not_counted(env):
     v = sug["variant"]
     d = e.c.post(f"{_api()}/steps/derive", json={"kind": "quality", "minutes": sug["minutes"], "variant_key": v["key"],
                                                  "variant_blocks": v["blocks"], "variant_adj": v["adj"]}).json()
-    chk = e.c.post(f"{_api()}/steps/check", json={"kind": "quality", "variant_key": v["key"], "steps": d["steps"]}).json()
+    # (SP-628 R2: the dialog says which structure is its own locked one — swap "locked" in the body, weSession —
+    # since a Zone 5 template inserted by hand is no longer marked)
+    chk = e.c.post(f"{_api()}/steps/check", json={"kind": "quality", "variant_key": v["key"], "steps": d["steps"],
+                                                  "swap": SS.LOCKED}).json()
     assert not chk.get("equiv") and "算進階" not in str(chk)
     s = e.c.post(f"{_api()}/sessions", json=_body(sug, "vo2max")).json()
     assert s["variant_key"] == "v1a" and s["equiv"] is False and s["swap"] == SS.LOCKED
@@ -186,9 +197,79 @@ def test_api_vo2max_closed_is_v1_marked_and_saved_as_not_counted(env):
     # editing its text later keeps the mark
     s2 = e.c.patch(f"{_api()}/sessions/{s['uid']}", json={"title": "我的 VO2max"}).json()
     assert s2["swap"] == SS.LOCKED and s2["equiv"] is False
-    # a Zone 5 variant inserted by hand (插入範本) while closed: the same mark
+
+
+# ---------------------------------------------------------------------------
+# SP-628 R2 (Q2): 速度 marked like VO2max; a template inserted by hand is not blocked
+# ---------------------------------------------------------------------------
+
+def test_r2_a_zone5_template_inserted_by_hand_is_saved_and_counted_as_before(env):
+    """Q2-3 (owner: 「要讓使用者能自己新增想要的課表，不需要擋，擋的是自動產生的邏輯」): 插入範本's V2 while the
+    Zone 5 track is closed is stored as it was before SP-628 — the same fields as with the track open, on
+    the Zone 5 ladder, the editor's progression note as usual."""
+    e = env
     t = e.c.post(f"{_api()}/sessions", json={"day": "2026-10-03", "kind": "quality", "variant_key": "v2a"}).json()
-    assert t["equiv"] is False and t["swap"] == SS.LOCKED
+    assert t["swap"] != SS.LOCKED and t["swap_reason"] != "還沒解鎖：手動加的，不算進階"
+    e.inp["cur"]["quality_gate"] = copy.deepcopy(GATE_OPEN)
+    o = e.c.post(f"{_api()}/sessions", json={"day": "2026-10-03", "kind": "quality", "variant_key": "v2a"}).json()
+    assert (t["equiv"], t["swap"], t["rung_key"]) == (o["equiv"], o["swap"], o["rung_key"])
+    assert QG.row_track(t) == "z5"
+    e.inp["cur"]["quality_gate"] = copy.deepcopy(GATE)
+    d = e.c.post(f"{_api()}/steps/derive", json={"uid": t["uid"]}).json()
+    chk = e.c.post(f"{_api()}/steps/check", json={"uid": t["uid"], "steps": d["steps"]}).json()
+    if t["equiv"]:
+        assert "算進階" in str(chk)
+    # unsaved, from the editor (no swap in the body): no 「還沒解鎖」 either
+    chk = e.c.post(f"{_api()}/steps/check", json={"kind": "quality", "variant_key": "v2a", "steps": d["steps"]}).json()
+    assert ("算進階" in str(chk)) == bool(t["equiv"])
+
+
+def test_r2_speed_closed_is_marked_and_saved_as_not_counted(env):
+    """Q2-1: 速度 before the Zone 5 track opens — marked 「還沒解鎖：手動加的，不算進階」 like VO2max (the
+    dialog asks once on save), stored swap LOCKED: on neither ladder."""
+    e = env
+    sp = _suggest(e, kind="quality", family="speed", terrain="road")
+    assert sp["template_key"] == "lib:daniels_r"
+    assert sp["locked"]["text"] == "還沒解鎖：手動加的，不算進階" and sp["locked"]["why"]
+    assert sp["detail"] == "還沒解鎖：手動加的，不算進階"
+    body = {"day": "2026-10-03", "kind": "quality", "family": "speed", "title": sp["title"], "minutes": sp["minutes"],
+            "target": "", "detail": sp["detail"], "suggest": "speed"}
+    s = e.c.post(f"{_api()}/sessions", json=body).json()
+    assert s["swap"] == SS.LOCKED and s["equiv"] is False and s["kind"] == "quality" and s["family"] == "speed"
+    assert QG.row_track({**s, "stimulus": "z5"}) is None
+    # editing it later keeps the mark
+    s2 = e.c.patch(f"{_api()}/sessions/{s['uid']}", json={"title": "我的速度課"}).json()
+    assert s2["swap"] == SS.LOCKED
+    # the same 速度 template inserted by hand (no `suggest`): not marked
+    t = e.c.post(f"{_api()}/sessions", json={**{k: v for k, v in body.items() if k != "suggest"}, "detail": ""}).json()
+    assert t.get("swap") != SS.LOCKED
+
+
+def test_r2_the_texts_name_the_card_as_it_is_called_now():
+    """Q2-3: the 5 區 card is 「強度課表解鎖條件」 since SP-678 (not the 5 區開放流程 / a 「VO2max 階梯」 chart)."""
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    zh = json.loads((root / "static/i18n/zh-TW/schedule.json").read_text(encoding="utf-8"))
+    en = json.loads((root / "static/i18n/en/schedule.json").read_text(encoding="utf-8"))
+    title = json.loads((root / "static/i18n/zh-TW/overview.json").read_text(encoding="utf-8"))["z5.title"]
+    en_title = json.loads((root / "static/i18n/en/overview.json").read_text(encoding="utf-8"))["z5.title"]
+    assert title in zh["suggest.ask"] and "階梯" not in zh["suggest.ask"]
+    assert en_title in en["suggest.ask"] and "ladder" not in en["suggest.ask"]
+    for k in ("suggest.locked_speed", "suggest.locked_why_speed", "suggest.ask_h_speed"):
+        assert zh[k] and en[k]
+    src = (root / "engine/quality_gate.py").read_text(encoding="utf-8")
+    assert "（5 區流程）" not in src and f"有氧基礎已確認（{title}的 5 區）" in src
+
+
+def test_r2_speed_open_is_not_marked(env):
+    e = env
+    e.inp["cur"]["quality_gate"] = copy.deepcopy(GATE_OPEN)
+    sp = _suggest(e, kind="quality", family="speed", terrain="trail")
+    assert sp["locked"] is None and sp["detail"] == "" and sp["template_key"] == "lib:ua_hill_sprints"
+    s = e.c.post(f"{_api()}/sessions", json={"day": "2026-10-03", "kind": "quality", "family": "speed",
+                                             "title": sp["title"], "minutes": sp["minutes"], "suggest": "speed"}).json()
+    assert s.get("swap") != SS.LOCKED
 
 
 def test_api_vo2max_open_counts(env):

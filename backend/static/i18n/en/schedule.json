@@ -474,7 +474,10 @@
   "suggest.speed": "A speed session picked for your phase and this day's time",
   "suggest.locked": "VO2max isn't unlocked yet: added by hand, doesn't count toward progress",
   "suggest.locked_why": "VO2max isn't unlocked yet ({why}): added by hand, doesn't count toward progress",
+  "suggest.locked_speed": "Zone 5 isn't unlocked yet (speed work is Zone 5): added by hand, doesn't count toward progress",
+  "suggest.locked_why_speed": "Zone 5 isn't unlocked yet ({why}; speed work is Zone 5): added by hand, doesn't count toward progress",
   "suggest.ask_h": "VO2max isn't unlocked yet",
-  "suggest.ask": "You're adding this by hand: it doesn't count toward progress and won't move the VO2max ladder. Your aerobic base isn't confirmed yet, so rest well after it. Add it?",
+  "suggest.ask_h_speed": "Zone 5 isn't unlocked yet (speed work is Zone 5)",
+  "suggest.ask": "You're adding this by hand: it doesn't count toward progress, nor toward Zone 5 in \"Intensity unlock conditions\". Your aerobic base isn't confirmed yet, so rest well after it. Add it?",
   "suggest.ask_ok": "Add anyway"
 }

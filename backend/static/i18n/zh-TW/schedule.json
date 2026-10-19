@@ -474,7 +474,10 @@
   "suggest.speed": "依期別和這天的時間挑的速度課",
   "suggest.locked": "VO2max 還沒解鎖：手動加的，不算進階",
   "suggest.locked_why": "VO2max 還沒解鎖（{why}）：手動加的，不算進階",
+  "suggest.locked_speed": "5 區還沒解鎖（速度課算 5 區）：手動加的，不算進階",
+  "suggest.locked_why_speed": "5 區還沒解鎖（{why}；速度課算 5 區）：手動加的，不算進階",
   "suggest.ask_h": "VO2max 還沒解鎖",
-  "suggest.ask": "這堂是手動加的，不算進階，也不會讓 VO2max 階梯往前。有氧基礎還沒確認，做完多休息。要加嗎？",
+  "suggest.ask_h_speed": "5 區還沒解鎖（速度課算 5 區）",
+  "suggest.ask": "這堂是手動加的，不算進階，也不算進「強度課表解鎖條件」的 5 區。有氧基礎還沒確認，做完多休息。要加嗎？",
   "suggest.ask_ok": "照樣加"
 }

@@ -767,26 +767,10 @@ def _with_variant(data: dict, inp: dict, rung: Optional[str], day: Optional[str]
     # 每堂課前加熱身 (SP-364): the warm-up floor as it is now (None = off); plan_store merges it into the
     # row's variant_adj, keeping the state machine's rest / power tweak
     body["_variant"]["variant_adj"] = vp.get("variant_adj")
-    _lock_z5(body["_variant"], ctx["gate"])
+    # SP-628 R2 (owner 2026-10-19: 「要讓使用者能自己新增想要的課表，不需要擋，擋的是自動產生的邏輯」): a Zone 5
+    # variant inserted by hand (插入範本) is saved and counted as it was before SP-628, the Zone 5 track
+    # open or not — only the session the 新增課表 dialog fills in by itself is marked (_with_suggestion)
     return body
-
-
-def _lock_z5(var: dict, gate: Optional[dict]) -> dict:
-    """SP-628: a Zone 5 variant added by hand while the Zone 5 track is still closed
-    (quality_gate.z5_track) is marked 「還沒解鎖：手動加的，不算進階」 — not an equivalent, swap
-    session_suggest.LOCKED — so it never moves the Zone 5 ladder (quality_gate.row_track). The gate
-    and the generator are untouched; it still counts as a 強度課 (budget, 48 h)."""
-    from backend.engine import interval_library as IL
-    from backend.engine import session_suggest as SS
-    v = IL.get(var.get("variant_key"))
-    if v is not None and IL.is_z5(v) and SS.locked_z5(gate):
-        var.update(equiv=False, swap=SS.LOCKED, swap_reason=_t(SS.LOCKED_NOTE))
-    return var
-
-
-def _t(msg: str) -> str:
-    from backend.i18n import _
-    return _(msg)
 
 
 def _suggest_quality(inp: dict, family: str, day: Optional[str], terrain: Optional[str] = None,
@@ -798,8 +782,16 @@ def _suggest_quality(inp: dict, family: str, day: Optional[str], terrain: Option
     if family == "speed":
         ter = "trail" if terrain in ("trail", "hike") else "road"
         pick = SS.speed(tpl or {}, cap=ctx["cap"], terrain=ter, phase=_phase_on(inp, day),
-                        sport=(inp.get("cur") or {}).get("primary_sport") or "trail")
-        return {"speed": pick}
+                        sport=(inp.get("cur") or {}).get("primary_sport") or "trail") if tpl is not None else None
+        # SP-628 R2 (Q2-1): 速度 is a Zone 5 session too (template_recs treats it so) — before the Zone 5
+        # track opens it is marked like VO2max: 「還沒解鎖：手動加的，不算進階」, asked once on save
+        return {"speed": pick, "locked": SS.locked_info(ctx["gate"])}
+    if family == "aerobic":
+        # SP-733: the generator's own pick for that day (overview.ladder_session: 3 區上限／平日上限 → 巡航版,
+        # 增量週 → 只排閾值, 越野專項期 → 上坡版); a plan without a gate state keeps the ladder's step
+        a = SS.aerobic(inp, day, ctx["gate"], ctx["th"], cap=ctx["cap"], prefs=ctx["prefs"])
+        if a is not None:
+            return a
     return SS.ladder(family, ctx["gate"], ctx["th"], cap=ctx["cap"], history=ctx["history"], prefs=ctx["prefs"],
                      mountain=SS.mountain_of(inp))
 
@@ -809,6 +801,15 @@ def _with_suggestion(data: dict, inp: dict) -> Optional[dict]:
     fields of that suggestion, recomputed here for the day (the reps re-cut to the day's cap, the
     「還沒解鎖」 mark) — None when it isn't one (another variant: _with_variant)."""
     fam = data.get("suggest")
+    if fam == "speed" and data.get("kind", "quality") == "quality" and not data.get("variant_key"):
+        # 速度 (SP-628 R2): a template applied as the structure — before the Zone 5 track opens, stored
+        # 「還沒解鎖」: swap LOCKED (quality_gate.row_track: on neither ladder), not counted
+        body = {k: v for k, v in data.items() if k != "suggest"}
+        lk = _suggest_quality(inp, "speed", data.get("day"))["locked"]
+        if lk:
+            from backend.engine import session_suggest as SS
+            body["_variant"] = {"swap": SS.LOCKED, "swap_reason": lk["text"], "equiv": False}
+        return body
     if fam not in ("aerobic", "vo2max") or data.get("kind", "quality") != "quality" or not data.get("variant_key"):
         return None
     s = _suggest_quality(inp, fam, data.get("day"))["session"]
@@ -895,8 +896,10 @@ async def suggest_session(body: dict = Body(...), db: AsyncSession = Depends(get
             if pick:
                 from backend.engine import template_recs as TR
                 row = pick["row"]
+                lk = r.get("locked")
                 out.update(title=row.get("title") or row.get("label"), minutes=int(round(TR.row_minutes(row))),
-                           template_key=row["key"], reason=pick["reason"], detail="")
+                           template_key=row["key"], reason=pick["reason"], detail=lk["text"] if lk else "",
+                           locked=lk)
             return out
         s = r["session"]
         out.update(title=s["title"], minutes=s["minutes"], target=s["target"], detail=s["detail"],
@@ -917,7 +920,7 @@ SWAP_TO = ("climb",)
 def _with_swap(patch: dict, inp: dict, cur: Optional[dict]) -> dict:
     """A body that swaps the session for another of the same time (`swap_to`; SP-87, the 課表's
     「換成長爬坡有氧（同樣時間）」 on a long run — owner: 「我想要爬山，就把 LSD 改成同強度的穩定地形爬坡
-    課表」): the long run keeps its day, minutes, kind and TSS and becomes engine/base_climb's 長爬坡有氧
+    課表」): the long run keeps its day, minutes and kind (its TSS is the new structure's) and becomes engine/base_climb's 長爬坡有氧
     (title, detail, trail, structure at HR ≤ the easy cap, climb). A user edit like any other."""
     from backend.engine import base_climb as BC
     from backend.engine.hr_profile import easy_cap_measured
@@ -938,8 +941,9 @@ def _with_swap(patch: dict, inp: dict, cur: Optional[dict]) -> dict:
     for k in ("title", "detail", "terrain", "climb_m", "steps"):
         body.setdefault(k, f[k])
     body.setdefault("minutes", cur.get("minutes"))
-    if cur.get("tss") is not None:
-        body.setdefault("tss", cur["tss"])                  # same time at the same easy HR
+    # SP-453: no TSS carried over from the long run — _with_steps takes it from the new structure (at the long
+    # run's own rate, SP-437's edit_rate: same time at the same easy HR gives the same number), so the card, the
+    # week's total and the editor's 預估 TSS are one number even when a step is open
     return body
 
 
@@ -1811,7 +1815,7 @@ async def steps_preview(body: dict = Body(...)):
 
 STEP_FIELDS = ("kind", "title", "minutes", "target", "detail", "source", "terrain", "protocol", "day",
                "variant_key", "variant_reps", "variant_blocks", "variant_adj", "rung_key", "heat", "target_basis",
-               "climb_per_km", "distance_km", "climb_m")
+               "climb_per_km", "distance_km", "climb_m", "swap")
 _tp_cache: dict = {}
 
 
@@ -1959,10 +1963,11 @@ async def _steps_env(s: dict, inp: dict, stored: Optional[dict] = None) -> dict:
     if s.get("kind") == "quality":
         rung = s.get("rung_key") or getattr(IL.get(s.get("variant_key")), "rung", None)
         from backend.engine import session_suggest as SS
-        v = IL.get(s.get("variant_key"))
-        if s.get("swap") == SS.LOCKED or (stored is None and v is not None and IL.is_z5(v)
-                                          and SS.locked_z5((inp.get("cur") or {}).get("quality_gate"))):
-            rung = None             # SP-628: a Zone 5 session before the track opened — no 「這堂算進階」
+        if s.get("swap") == SS.LOCKED:
+            # SP-628: the dialog's own Zone 5 session before the track opened (stored, or the new one the
+            # dialog filled in: its body says so) — no 「這堂算進階」. A Zone 5 template inserted by hand is
+            # not this one (SP-628 R2): it counts as before
+            rung = None
     cap = day_cap(prefs, s.get("day")) if s.get("kind") not in ("test",) else None
     return {"ctx": c, "th": th, "policy": pol, "cap": cap, "cap_mode": getattr(prefs, "cap_mode", "soft"),
             "rung": rung if rung in IL.LIBRARY else None, "provider": prov.describe()}

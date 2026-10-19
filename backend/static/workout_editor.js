@@ -1244,6 +1244,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     }
     // one template row into the structure (整份換 / 只換主課 by tplFull), as a click in 插入範本 does
     applyRow(row) {
+      // a derive still in flight (the 類型 just changed) must not replace the template once it lands — as setDoc
+      // (SP-628 R2: the 新增課表 dialog's 速度 template came up empty when its suggestion beat the derive)
+      ++this.seq;
       const fresh = (xs) => xs.map(clone);
       if (!this.doc) this.doc = { origin: "user", items: [] };
       const items = this.doc.items;

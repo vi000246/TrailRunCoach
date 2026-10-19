@@ -1216,6 +1216,37 @@ def _cruise_for_cap(rung: str, cap: Optional[float], history=None, prefs=None, m
     return None
 
 
+def ladder_session(gate: dict, it: dict, kind: str, th: dict, hours: Optional[float], prefs=None, history=None,
+                   mountain: bool = False, road: bool = False, cap: Optional[float] = None,
+                   alt_caps: Optional[list] = None, notes: Optional[list] = None, left: Optional[float] = None,
+                   hill: Optional[bool] = None) -> dict:
+    """One base / 專項期 week_decision item as the week's interval session — the one place the
+    generator's re-picks are decided (SP-733: quality_sessions and the 新增課表 dialog,
+    engine/session_suggest.aerobic, both call it):
+      * a CTL ramp at the watch line (week_decision's SUB) → threshold only (有氧間歇（巡航）3×6 分);
+      * the rung's time in zone over the week's Zone 3 cap (`left`: what the week's ≤ 20 % leaves after
+        Zone 5) → the 巡航版 of the same position; the day's `cap` can't fit the rung → the 巡航版 that fits
+        (_gate_session);
+      * the 越野 專項期 (and the 維持期's 爬坡 block, `hill`) → the rung's uphill version (SP-75 / SP-102;
+        課表偏好 terrain_quality = flat still wins).
+    `mountain`: the generator's own (quality_sessions' caller: the mountain goal in the base phase, not
+    road in the 專項期)."""
+    from backend.engine import quality_gate as QG
+    if kind == "specific" and it.get("spec") is QG.SUB:
+        # 專項期 under a CTL ramp at the watch line (week_decision): the threshold-only session, as in the base phase
+        return _gate_session(gate, it, th, hours, prefs, history, mountain, cap, alt_caps, notes)
+    it = {**it, "hill": (kind == "specific" and not road) if hill is None else bool(hill)}   # SP-75 / SP-102
+    # (the 維持期's 爬坡 block opens the uphill versions; 課表偏好 terrain_quality = flat still wins)
+    s = _gate_session(gate, {**it, "budget": left} if it.get("track") == "z3" else it, th, hours, prefs, history,
+                      mountain or bool(hill), cap, alt_caps, notes)
+    if it.get("maint"):
+        # SP-353's Zone 5 maintenance session: stored 不算進階 (equiv False), so a done 達標 one is
+        # judged but doesn't step the ladder (quality_gate.variant_spec → counted False), as in the projection
+        s.update(equiv=False, progress=False,
+                 swap_reason=_("5 區維持課（長距離越野的專項期後段每 3 週 1 堂）：照目前那一階，判定但不算進階"))
+    return s
+
+
 def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hours: Optional[float], prefs=None,
                      history=None, mountain: bool = False, road: bool = False, cap: Optional[float] = None,
                      alt_caps: Optional[list] = None, notes: Optional[list] = None,
@@ -1255,9 +1286,9 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
             s = _second_z3(gate, built, it, th, hours, prefs, history, mountain, cap, left, notes)
             if s is None:
                 continue
-        elif kind == "specific" and it.get("spec") is QG.SUB:
-            # 專項期 under a CTL ramp at the watch line (week_decision): the threshold-only session, as in the base phase
-            s = _gate_session(gate, it, th, hours, prefs, history, mountain, cap, alt_caps, notes)
+        elif kind in ("base", "specific"):
+            s = ladder_session(gate, it, kind, th, hours, prefs, history, mountain, road, cap, alt_caps, notes,
+                               left=left, hill=hill)
         elif kind == "taper" and t == "z3":
             # SP-478: the Zone 3 row's HR and the template's % CP (TAPER_Z3_TARGET), as taper_rules' 越野 ones;
             # `th` = the week's thresholds (week_plan's tt / the projection's): its easy-run cap first
@@ -1268,15 +1299,8 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
         elif kind == "taper":
             s = dict(TAPER_Q, target=tgt.get("threshold", ""))
         else:
-            it = {**it, "hill": (kind == "specific" and not road) if hill is None else bool(hill)}   # SP-75 / SP-102
-            # (the 維持期's 爬坡 block opens the uphill versions; 課表偏好 terrain_quality = flat still wins)
-            s = _gate_session(gate, {**it, "budget": left} if t == "z3" else it, th, hours, prefs, history,
-                              mountain or bool(hill), cap, alt_caps, notes)
-            if it.get("maint"):
-                # SP-353's Zone 5 maintenance session: stored 不算進階 (equiv False), so a done 達標 one is
-                # judged but doesn't step the ladder (quality_gate.variant_spec → counted False), as in the projection
-                s.update(equiv=False, progress=False,
-                         swap_reason=_("5 區維持課（長距離越野的專項期後段每 3 週 1 堂）：照目前那一階，判定但不算進階"))
+            s = ladder_session(gate, it, kind, th, hours, prefs, history, mountain, road, cap, alt_caps, notes,
+                               left=left, hill=hill)
         if left is not None and session_tiz_min(s) > left + 1e-6:
             if reserved:
                 # the user's own sessions came first: even the 縮量版 floor must fit, else none

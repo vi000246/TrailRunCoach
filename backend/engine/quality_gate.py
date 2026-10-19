@@ -550,8 +550,9 @@ def row_track(h: dict) -> Optional[str]:
     if h.get("unplanned"):
         return None
     if h.get("swap") == "locked":
-        # SP-628: a Zone 5 session added by hand before the track opened (session_suggest.LOCKED) —
-        # on neither ladder: it doesn't move the Zone 5 rung or count as the track under way
+        # SP-628: the Zone 5 session (VO2max / 速度) the 新增課表 dialog filled in before the track opened
+        # (session_suggest.LOCKED) — on neither ladder: it doesn't move the Zone 5 rung or count as the
+        # track under way. A Zone 5 template inserted by hand is not marked (SP-628 R2) and counts
         return None
     rung = h.get("rung_key")
     v = _IL.get(h.get("variant_key"))
@@ -1673,7 +1674,8 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
         # under a rebuild the method was already held to evidence after it (evaluate: _rebased)
         path, label = "method", f"間歇門檻已解鎖（{LABEL.get(mode, mode)}）"
     elif (z5.get("since") and ok_after(z5.get("since"))) or z5.get("open"):
-        path, label = "z5", "有氧基礎已確認（5 區流程）"
+        # (SP-628 R2: the card is 「強度課表解鎖條件」 since SP-678, no longer the 5 區開放流程)
+        path, label = "z5", "有氧基礎已確認（強度課表解鎖條件的 5 區）"
     elif pause.get("kind") == "reentry_z3":
         path, label = "reentry", "恢復期後先排 3 區"
     elif not brk and not rb_from and int(d3.get("met") or 0) + int(d3.get("step") or 0) > 0:

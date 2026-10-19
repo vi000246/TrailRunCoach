@@ -14,6 +14,10 @@ the one the automatic plan would give you, not a fixed title read back into step
     the week's intensity budget and the 48-h spacing count it like any other.
   * 強度課 › 速度: there is no speed ladder; the best full-session 速度 template for the day
     (template_recs' own rules: phase, the day's cap, terrain), applied as a structure of your own.
+    Before the Zone 5 track opens it is marked like VO2max (SP-628 R2, Q2-1: locked_info), saved with
+    swap LOCKED.
+  * Only what the dialog fills in by itself is marked (SP-628 R2, Q2-3): a Zone 5 template inserted by
+    hand (插入範本) is saved and counted as before — 「不需要擋，擋的是自動產生的邏輯」.
   * 輕鬆跑 / LSD: the minutes, title, target and detail of that kind in the generated week of the
     day (the projected one past this week), else this week's.
 
@@ -44,6 +48,14 @@ def locked_z5(gate: Optional[dict]) -> bool:
     """A Zone 5 session added now would be one before the track opened. Only with a gate that has
     a state (an old / test plan without one keeps the old behaviour)."""
     return bool(gate and gate.get("state")) and not z5_state(gate)["open"]
+
+
+def locked_info(gate: Optional[dict]) -> Optional[dict]:
+    """{"text", "why"} of the 「還沒解鎖」 mark of a Zone 5 session (VO2max, 速度) the dialog fills in
+    while the Zone 5 track is closed; None when it is open (or the plan has no gate state)."""
+    if not locked_z5(gate):
+        return None
+    return {"text": _(LOCKED_NOTE), "why": z5_state(gate).get("reason") or ""}
 
 
 def _dose(gate: dict, track: str) -> dict:
@@ -79,12 +91,114 @@ def ladder(family: str, gate: Optional[dict], th: Optional[dict], *, cap: Option
     if locked:
         f = {**f, "equiv": False, "progress": False, "rung": rung, "reason": _(LOCKED_NOTE)}
     s = IL.session_for(f, tth, pre, lthr_default, prefs, swap=LOCKED if locked else "user")
-    lk = None
-    if locked:
-        z5 = z5_state(gate)
-        lk = {"text": _(LOCKED_NOTE), "why": z5.get("reason") or ""}
+    lk = {"text": _(LOCKED_NOTE), "why": z5_state(gate).get("reason") or ""} if locked else None
     return {"session": s, "locked": lk, "rung": f.get("rung") or rung,
             "reason": f.get("reason") or ""}
+
+
+def week_of(inp: dict, day: Optional[str]) -> dict:
+    """The generated week `day` falls in: {"monday" date, "kind" (phase), "mode", "hours", "sessions",
+    "first" (this week: today's guardrails apply), "maintain"} — this week's when `day` is in no
+    projected week (or is None)."""
+    cur = (inp or {}).get("cur") or {}
+    this = {"monday": _date(((cur.get("week") or {}).get("start"))), "kind": cur.get("phase") or "base",
+            "mode": cur.get("mode") or cur.get("phase") or "base",
+            "hours": (cur.get("target") or {}).get("hours"), "sessions": cur.get("sessions") or [], "first": True,
+            "maintain": cur.get("maintain")}
+    d = _date(day)
+    if d is None or this["monday"] is None or this["monday"] <= d < this["monday"] + dt.timedelta(days=7):
+        return this
+    for w in (inp or {}).get("weeks") or []:
+        ws = _date(w.get("start"))
+        if ws is not None and ws <= d < ws + dt.timedelta(days=7):
+            return {"monday": ws, "kind": w.get("phase") or this["kind"], "mode": w.get("mode") or w.get("phase"),
+                    "hours": w.get("hours"), "sessions": w.get("sessions") or [], "first": False,
+                    "maintain": w.get("maintain")}
+    return this
+
+
+def _date(s) -> Optional[dt.date]:
+    try:
+        return dt.date.fromisoformat(str(s)[:10]) if s else None
+    except ValueError:
+        return None
+
+
+def z3_item(gate: dict, wk: dict, prefs=None) -> dict:
+    """The Zone 3 item of the week's week_decision (quality_gate, the generator's own call: the week's phase,
+    mode, Monday, sessions a week; this week with today's guardrails — a CTL ramp at the watch line gives
+    the threshold-only SUB —, a projected week at the step its generated Zone 3 session reached). A week
+    without one (a Zone 5 week, a recovery week, a guardrail, Zone 3 not unlocked yet): the track's rung as
+    it stands, as SP-628 gave it — you asked for an 有氧間歇 that day."""
+    from backend.engine import overview as O
+    from backend.engine import quality_gate as QG
+    kind, mode = wk["kind"], wk["mode"] or wk["kind"]
+    if kind in ("base", "specific"):
+        step = None
+        if not wk["first"]:
+            rk = next((s.get("rung_key") for s in wk["sessions"] or ()
+                       if s.get("kind") == "quality" and s.get("rung_key") in IL.Z3_TRACK), None)
+            if rk:
+                step = {"z3": IL.Z3_TRACK.index(rk)}
+        dec = QG.week_decision(gate, kind, mode, wk["monday"], step, first=wk["first"],
+                               n=O.quality_per_week(prefs, kind, mode, gate),
+                               prefer="z5" if wk.get("maintain") else None)
+        it = next((x for x in dec.get("items") or () if x.get("track") == "z3" and not x.get("cruise")), None)
+        if it is not None:
+            return it
+    d3 = QG._track_doses(gate)[0] or {}
+    s3 = int(d3.get("step") or 0)
+    adj = (d3.get("adjust") or None) if wk["first"] else None
+    spec = QG.track_spec("z3", s3)
+    return {"track": "z3", "spec": QG.adjusted_spec(spec, adj) if adj else spec, "advance": True, "adjust": adj,
+            "first": s3 == 0 and int(d3.get("met") or 0) == 0}
+
+
+def aerobic(inp: dict, day: Optional[str], gate: Optional[dict], th: Optional[dict], *, cap: Optional[float] = None,
+            prefs=None) -> Optional[dict]:
+    """有氧間歇 as the generator would schedule it on `day` (SP-733): the week's Zone 3 item (z3_item) through
+    overview.ladder_session — the same function quality_sessions calls, so the three re-picks come with it
+    (the week's Zone 3 cap → 巡航版, the day's cap → 巡航版, a CTL ramp week → threshold only) and the 越野
+    專項期's uphill version — then the week's ≤ 20 % (overview._shorten), Zone 5 first as the generator
+    counts it. `cap`: the day's (課表偏好). Same shape as ladder(); None without a gate state (an old / test
+    plan: ladder() then) or when the rung isn't a library one."""
+    from backend.engine import overview as O
+    from backend.engine import quality_gate as QG
+    gate = gate or {}
+    if not gate.get("state"):
+        return None
+    wk = week_of(inp, day)
+    it = z3_item(gate, wk, prefs)
+    kind = wk["kind"] if wk["kind"] in ("base", "specific") else "base"
+    cur = (inp or {}).get("cur") or {}
+    road = (cur.get("primary_sport") or "trail") == "road"
+    mountain = mountain_of(inp) if kind == "base" else not road
+    mw = wk.get("maintain")
+    hill = (mw.get("focus") == "hill") if isinstance(mw, dict) else None
+    hours = wk["hours"]
+    total = QG.QUALITY_SHARE_MAX * hours * 60.0 if hours else None
+    used = sum(O.session_tiz_min(s) for s in wk["sessions"] or ()
+               if s.get("kind") == "quality" and _is_z5(s))
+    left = None if total is None else max(0.0, total - used)
+    th = th or {}
+    tth = {k: th.get(k) for k in ("cp", "lthr", "aet", "hr_model", "power_model")}
+    s = O.ladder_session(gate, it, kind, tth, hours, prefs, O.variant_history(wk["monday"] or _date(day)
+                                                                                or dt.date.today(), gate),
+                         mountain, road, cap, None, None, left=left, hill=hill)
+    if not s.get("variant_key"):
+        return None
+    if left is not None and O.session_tiz_min(s) > left + 1e-6:
+        s = O._shorten(s, left, total, hours, tth, gate, prefs, None)
+    # added by you, from the dialog: the user's (the generator's own swap "auto" / "cap" is its own choice)
+    s = {**s, "swap": "user"}
+    return {"session": s, "locked": None, "rung": s.get("rung_key"), "reason": s.get("swap_reason") or ""}
+
+
+def _is_z5(s: dict) -> bool:
+    if IL.track_of(s.get("rung_key")) == "z5":
+        return True
+    v = IL.get(s.get("variant_key"))
+    return v is not None and IL.is_z5(v)
 
 
 def speed(tpl: dict, *, cap: Optional[float] = None, terrain: str = "road", phase: Optional[str] = None,

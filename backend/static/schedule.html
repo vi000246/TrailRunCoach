@@ -2129,7 +2129,13 @@ function weSession() {
     ...(dlg.variant ? { variant_key: dlg.variant.key, variant_reps: dlg.variant.reps, variant_blocks: dlg.variant.blocks,
       variant_adj: dlg.variant.adj } : dlg.orig && dlg.orig.variant_key ? {
       variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
-      variant_adj: dlg.orig.variant_adj, rung_key: dlg.orig.rung_key } : {}) };
+      variant_adj: dlg.orig.variant_adj, rung_key: dlg.orig.rung_key } : {}),
+    // SP-628: the dialog's own Zone 5 session before the track opened — the editor says nothing about progression
+    ...(dlg.locked && sugOwn() ? { swap: "locked" } : {}) };
+}
+// SP-628 R2: the structure is still the one the dialog filled in by itself (not a template inserted by hand)
+function sugOwn() {
+  return !dlg.uid && !!dlg.sug && !!((dlg.variant && dlg.variant.suggest) || dlg.sugTpl);
 }
 // 分鐘 follows the structure whenever there is one (locked, computed from the steps; click it
 // to open the structure). Distance / lap-button steps make it an estimate (約, ? = how).
@@ -2157,6 +2163,16 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   rpeKind(v && mine ? v.rpe_role : null, we.dirty && !dlg.ro);
   if (v && "family" in v) { dlg.stepsFam = v.family; famHint(); }
 }, onTemplate: (row) => {
+  // SP-628 R2: a template inserted by hand replaces the dialog's suggestion — not marked, not asked
+  // (「要讓使用者能自己新增想要的課表，不需要擋」); the dialog's own 速度 template is the suggestion itself
+  if (!dlg.sugApplying && !dlg.uid && dlg.sug) {
+    // the suggestion's title goes with it: the template names the session (below), as a default title would
+    if (dlg.sug.title && F.title.value === dlg.sug.title && !dlg.titleTouched) dlg.tplTitle = F.title.value;
+    if (dlg.sug.detail && F.detail.value === dlg.sug.detail) F.detail.value = "";   // its 「還沒解鎖」 / ladder note
+    dlg.sugTpl = false; dlg.locked = null;
+    dlg.sug = { ...dlg.sug, locked: null, variant: null, template_key: null };
+    sugHint();
+  }
   // an interval-ladder session (what the old 間歇範本 dropdown set): saved with its variant_key, so
   // it keeps its rung and counts for progression; a library template is a structure of your own
   if (kindVal() === "quality") dlg.variant = row.variant ? { key: row.key } : null;
@@ -2442,7 +2458,7 @@ async function suggest() {
   if (dlg.uid || dlg.ro || dlg.preset) return;
   const k = kindVal(), fam = famVal(), my = dlg.sugSeq = (dlg.sugSeq || 0) + 1;
   if (!["quality", "easy", "long"].includes(k)) {
-    if (dlg.sug) { dlg.variant = null; dlg.sug = null; dlg.locked = null; sugHint(); }
+    if (dlg.sug) { dlg.variant = null; dlg.sug = null; dlg.locked = null; dlg.sugTpl = false; sugHint(); }
     return;
   }
   let r;
@@ -2452,6 +2468,7 @@ async function suggest() {
   if (my !== dlg.sugSeq || dlg.uid || !$("sd").open || kindVal() !== k || famVal() !== fam) return;
   const prev = dlg.sug || {};
   dlg.sug = r;
+  dlg.sugTpl = false;
   if (r.minutes == null) { dlg.variant = null; dlg.locked = null; sugHint(); return; }
   if (r.title && (!dlg.titleTouched || !F.title.value || F.title.value === prev.title)) { F.title.value = r.title; dlg.titleTouched = false; }
   if (r.target != null && !dlg.targetTouched) F.target.value = r.target;
@@ -2461,8 +2478,12 @@ async function suggest() {
   dlg.locked = r.locked || null;
   dlg.lockOk = false;
   sugHint();
-  if (r.template_key) await WE.applyKey(r.template_key);       // 速度: the template, as a structure of your own
-  else await WE.rederive({});
+  if (r.template_key) {
+    // 速度: the template, as a structure of your own — the dialog's suggestion still (SP-628 R2: marked before
+    // the Zone 5 track opens), until another template is inserted by hand
+    dlg.sugApplying = true;
+    try { if (await WE.applyKey(r.template_key)) dlg.sugTpl = true; } finally { dlg.sugApplying = false; }
+  } else await WE.rederive({});
   tgtHint();
 }
 function sugHint() {
@@ -2471,7 +2492,8 @@ function sugHint() {
   el.hidden = !show;
   el.classList.toggle("warn", !!(show && r.locked));
   if (!show) { el.textContent = ""; return; }
-  el.textContent = r.locked ? (r.locked.why ? tt("suggest.locked_why", { why: r.locked.why }) : tt("suggest.locked"))
+  const sp = r.family === "speed" ? "_speed" : "";            // SP-628 R2: 速度 is a Zone 5 session too
+  el.textContent = r.locked ? (r.locked.why ? tt("suggest.locked_why" + sp, { why: r.locked.why }) : tt("suggest.locked" + sp))
     : r.template_key ? tt("suggest.speed") : tt("suggest.ladder");
 }
 F.target.addEventListener("input", () => { dlg.targetTouched = true; tgtHint(); });
@@ -2493,8 +2515,11 @@ F.addEventListener("submit", async (e) => {
   if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
   // SP-628: the dialog's suggestion — the server rebuilds it for the day (the reps for its cap, the mark)
   if (dlg.variant && dlg.variant.suggest && body.kind === "quality") body.suggest = dlg.variant.suggest;
-  if (!dlg.uid && dlg.locked && dlg.variant && body.kind === "quality" && !dlg.lockOk) {
-    if (!(await ask(tt("suggest.ask_h"), `<p style="margin:0">${esc(tt("suggest.ask"))}</p>`,
+  else if (!dlg.uid && dlg.sugTpl && body.kind === "quality" && famVal() === "speed") body.suggest = "speed";
+  // SP-628 R2: only the session the dialog filled in by itself is asked about (a template inserted by hand is not)
+  if (!dlg.uid && dlg.locked && sugOwn() && body.kind === "quality" && !dlg.lockOk) {
+    const sp = (dlg.sug || {}).family === "speed" ? "_speed" : "";
+    if (!(await ask(tt("suggest.ask_h" + sp), `<p style="margin:0">${esc(tt("suggest.ask"))}</p>`,
       tt("suggest.ask_ok")))) return;
     dlg.lockOk = true;
   }
