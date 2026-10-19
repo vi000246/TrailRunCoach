@@ -11462,5 +11462,45 @@
   "範圍是你過去每移動小時停留的 25–75 百分位": {
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "{n} 分鐘後可以再按": {
+    "draft": true,
+    "src": "backend/cooldown.py:115"
+  },
+  "約 {n} 小時後可以再按": {
+    "draft": true,
+    "src": "backend/cooldown.py:116"
+  },
+  "重新估算自動參數": {
+    "draft": true,
+    "src": "backend/cooldown.py:28"
+  },
+  "更新路線": {
+    "draft": true,
+    "src": "backend/cooldown.py:29"
+  },
+  "完整檢查與補下載": {
+    "draft": true,
+    "src": "backend/cooldown.py:30"
+  },
+  "手動同步": {
+    "draft": true,
+    "src": "backend/cooldown.py:31"
+  },
+  "立即自動調整課表": {
+    "draft": true,
+    "src": "backend/cooldown.py:32"
+  },
+  "重建去重": {
+    "draft": true,
+    "src": "backend/cooldown.py:33"
+  },
+  "重新讀取計算機的個人數據": {
+    "draft": true,
+    "src": "backend/cooldown.py:34"
+  },
+  "重新查詢路面": {
+    "draft": true,
+    "src": "backend/cooldown.py:35"
   }
 }

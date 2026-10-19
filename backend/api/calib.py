@@ -114,9 +114,68 @@ async def clear_manual(name: str, db: AsyncSession = Depends(get_db)):
     return CAL.describe(name, None)
 
 
+def _job_key() -> tuple:
+    from backend import tenancy
+    return ("calib", tenancy.current().id)
+
+
+def _fit_job(athlete_id: int):
+    """The queued fit (SP-714): its own event loop and DB engine in the job's thread (as
+    wko5views._calibrate_never_fitted), the Dataset read inside the job (it holds a place)."""
+    import asyncio
+
+    def body(job):
+        from backend.api.wko5views import _dataset
+        ds = _dataset(False)
+
+        async def fit():
+            from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+            from backend.db.database import DATABASE_URL
+            eng = create_async_engine(DATABASE_URL)
+            try:
+                async with async_sessionmaker(eng, expire_on_commit=False)() as db:
+                    return await CAL.calibrate(db, athlete_id, ds=ds)
+            finally:
+                await eng.dispose()
+        return asyncio.run(fit())
+    return body
+
+
+def _job_view(job) -> dict:
+    out = {"state": job.state, "position": 0}
+    if job.state == "queued":
+        from backend import jobs
+        out["position"] = jobs.position(job)
+    if job.state == "done" and isinstance(job.result, dict):
+        out["written"] = job.result.get("written") or []
+    if job.state == "failed":
+        out["error"] = job.error
+    return out
+
+
 @router.post("/run")
-async def run_now(db: AsyncSession = Depends(get_db)):
-    """Fit every item now (otherwise it runs after each sync that imports an activity)."""
-    res = await CAL.calibrate(db, current_athlete_id())
+async def run_now():
+    """Fit every item now (otherwise it runs after each sync that imports an activity): queued in
+    the server's job queue (SP-714: `full`, someone waits — `user`; one per tenant), never computed
+    in the request. Answers at once {status: queued, job}; GET /run tells how it went. A cool-down
+    per person (cooldown `calib`, 429 COOLDOWN); a run already queued / running is the same job."""
+    from backend import cooldown, jobs
+    key = _job_key()
+    cur = jobs.find(key)
+    if cur is not None and cur.state in ("queued", "running"):
+        return {"status": "queued", "job": _job_view(cur)}
+    cooldown.take("calib")
+    job = jobs.submit(_fit_job(current_athlete_id()), cls="full", priority="user", label="calibration (manual)",
+                      key=key)
+    return {"status": "queued", "job": _job_view(job)}
+
+
+@router.get("/run")
+async def run_status(db: AsyncSession = Depends(get_db)):
+    """The last manual fit of this tenant: {job: {state queued | running | done | failed, position,
+    written} | null, items} — the page polls it after 「現在重新估算」."""
+    from backend import jobs
+    job = jobs.find(_job_key())
     repo = SettingsRepository(db, current_athlete_id())
-    return {**res, "items": [CAL.describe(n, await repo.get(CAL.key(n))) for n in sorted(CAL._registry())]}
+    items = [CAL.describe(n, await repo.get(CAL.key(n))) for n in sorted(CAL._registry())]
+    return {"job": _job_view(job) if job is not None else None, "items": items}

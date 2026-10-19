@@ -1791,6 +1791,7 @@ function renderPull() {
   $("pull-lbl").textContent = " " + tt("pull.btn", { src });
   $("pull-btn").title = tt("pull.tip", { src });
   $("pull-btn").disabled = !!S.pulling;
+  $("pull-btn").dataset.cooldown = "sync:" + PRI.source;        // SP-714: the shell locks it while cooling down
   $("pull-login").textContent = tt(PRI.logged_in ? "pull.off_link" : "pull.login_link", { src });
 }
 async function pull() {
@@ -1803,6 +1804,7 @@ async function pull() {
       msg(spin + esc(tt("pull.progress", { src, checked: st.total ? `${st.checked} / ${st.total}` : st.checked, down: st.downloaded })));
     } });
     if (st.busy && !st.checked) { msg(esc(tt("pull.busy", { src }))); return; }
+    if (st.cooldown) { msg(esc(st.cooldown.text)); return; }                // SP-714: 「X 分鐘後可以再按」
     if (st.fatal && st.fatal.auth) {
       PRI.logged_in = false;
       msg(`${esc(tt("pull.auth", { src }))} · <a href="/api/v1/app/settings#sync">${esc(tt("pull.relogin"))}</a>`, "err");
@@ -2932,7 +2934,7 @@ $("ap-run").onclick = async () => {
     $("ap-err").textContent = "";
     window.autoPlanRefresh?.();
     load();
-  } catch (x) { $("ap-err").textContent = tt("pf.ap_run_err", { msg: x.message }); }
+  } catch (x) { if (!window.AppCooldown?.is(x)) $("ap-err").textContent = tt("pf.ap_run_err", { msg: x.message }); }
   finally { bt.disabled = false; }
 };
 // ---- 固定星期: a row per session type (engine/plan_prefs.py day_owners / overlaps /

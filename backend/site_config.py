@@ -14,6 +14,7 @@ is where it is changed afterwards (it shows which one is in force). Removing the
 For one person (`effective`), three layers before that:
   personal setting (the tenant's own, where the item has one: retention years, region)
     -> the plan's default (site.json `plan.<free|subscriber>.<key>`, items with plan=True)
+    -> the plan's program default (Item.plan_defaults: a subscriber's shorter cool-down, SP-714)
     -> the site value above (page -> env -> default)
 The owner is never limited by a plan's default (the self-hosted app behaves as before).
 
@@ -53,6 +54,7 @@ class Item:
     plan: bool = False               # a plan may have its own default
     personal: Optional[str] = None   # the tenant's own setting that comes first
     max_len: int = 500
+    plan_defaults: dict = field(default_factory=dict)   # a plan's own program default (SP-714), below its page value
 
 
 ITEMS: dict[str, Item] = {i.key: i for i in (
@@ -79,6 +81,26 @@ ITEMS: dict[str, Item] = {i.key: i for i in (
     Item("defaults.region", "shared", "choice", "intl", choices=("tw", "intl"), personal="athlete.region"),
     Item("notice.zh", "shared", "text", "", max_len=500),
     Item("notice.en", "shared", "text", "", max_len=500),
+    # 冷卻時間 (SP-714): minutes after one manual run before the same person may press again. The
+    # site value is the free tier's; a subscriber's own default is shorter (plan_defaults). 推估:
+    # the cost of one run (calibrate ~12 s on the NAS, a full listing of COROS / TP, the routes'
+    # weather calls) against how often a person needs it (the data changes about daily)
+    *(Item(f"cooldown.{k}", "cooldown", "int", free, 0, 10080, plan=True, plan_defaults={"subscriber": paid})
+      for k, free, paid in (
+          ("calib", 1440, 60),             # 重新估算: free 24 h, paid 1 h
+          ("check", 1440, 60),             # 完整檢查 / 補下載: free 24 h, paid 1 h
+          ("routes", 360, 15),             # 路線「更新」: free 6 h, paid 15 min
+          ("sync", 30, 2),                 # 立即同步 (per source): free 30 min, paid 2 min
+          ("plan_auto", 60, 5),            # 立即自動調課表: free 1 h, paid 5 min
+          ("dedup", 1440, 60),             # 重建去重 (API only): free 24 h, paid 1 h
+          ("racepower_inputs", 10, 1),     # 計算機的個人數據 refresh (the cache's own 10 min): free 10, paid 1
+          ("surface", 60, 5),              # 路面重查: free 1 h, paid 5 min
+      )),
+    # 請求限流 (SP-714): every signed-in person's requests per minute (static files not counted), and
+    # their heavy computations' (tenancy_mw.HEAVY); the owner and admins are not limited. 推估: a
+    # page load makes ~10–40 requests; 300 / min is the demo's per-IP limit
+    Item("ratelimit.user_per_min", "ratelimit", "int", 300, 30, 100000),
+    Item("ratelimit.heavy_per_min", "ratelimit", "int", 20, 1, 10000),
 )}
 
 
@@ -189,6 +211,13 @@ def plan_value(plan: str, key: str) -> Optional[Any]:
     return _valid(key, SS.get(plan_key(plan, key)))
 
 
+def plan_default(plan: str, key: str) -> Optional[Any]:
+    """The program's own default for a plan (Item.plan_defaults; SP-714's cool-downs), used when
+    the admin page set none for that plan."""
+    it = _item(key)
+    return it.plan_defaults.get(plan) if it.plan else None
+
+
 def effective(key: str, personal: Any = None, plan: Optional[str] = None, owner: bool = False) -> Any:
     """For one person: their own setting -> their plan's default -> the site value. The owner
     skips the plan layer."""
@@ -199,6 +228,8 @@ def effective(key: str, personal: Any = None, plan: Optional[str] = None, owner:
             return v
     if plan and not owner:
         v = plan_value(plan, key)
+        if v is None:
+            v = plan_default(plan, key)
         if v is not None:
             return v
     return get(key)
@@ -246,6 +277,8 @@ def view() -> dict:
             row["env_value"] = _env(it)
         if it.kind == "text":
             row["max_len"] = it.max_len
+        if it.plan_defaults:
+            row["plan_defaults"] = dict(it.plan_defaults)
         items.append(row)
     plans = {p: {k: plan_value(p, k) for k, it in ITEMS.items() if it.plan} for p in PLANS}
     return {"items": items, "plans": plans}

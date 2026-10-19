@@ -1944,7 +1944,7 @@ $("s-check").onclick = async () => {
   try {
     const r = await j(`${SYNC}/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
     toast(t(r.started.length ? "settings.synccheck.started" : "settings.synccheck.none_ready"));
-  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
+  } catch (e) { if (!window.AppCooldown?.is(e)) toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
   loadCheck();
 };
 $("s-check-res").addEventListener("click", async (e) => {
@@ -1954,7 +1954,7 @@ $("s-check-res").addEventListener("click", async (e) => {
   try {
     await j(`${SYNC}/check/${b.dataset.fill}/fill`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
     toast(t("settings.synccheck.fill_started"));
-  } catch (err) { b.disabled = false; toast(t("settings.failed", { msg: err.message.slice(0, 80) })); }
+  } catch (err) { b.disabled = false; if (!window.AppCooldown?.is(err)) toast(t("settings.failed", { msg: err.message.slice(0, 80) })); }
   loadCheck();
 });
 
@@ -2334,6 +2334,7 @@ async function syncNow(src) {
       txt.textContent = t("settings.sync.progress", { checked: st.checked + (st.total ? " / " + st.total : ""), dl: st.downloaded, err: st.errors });
     } });
     if (st.busy && !st.checked) { txt.textContent = t("settings.sync.busy"); toast(t("settings.sync.busy")); return; }
+    if (st.cooldown) { txt.textContent = st.cooldown.text; return; }      // SP-714 (the shell locks the button)
     const fatal = st.fatal && (st.fatal.auth ? t("settings.sync.auth_lost") : (st.fatal.detail || st.fatal.code || t("settings.sync.fail_word")));
     txt.textContent = fatal ? t("settings.sync.failed_msg", { msg: fatal })
       : st.finished ? t("settings.sync.done_msg", { dl: st.downloaded, checked: st.checked, err: st.errors })
@@ -2515,7 +2516,12 @@ function calibRows(items) {
       ${it.bounds ? `min="${it.bounds[0]}" max="${it.bounds[1]}"` : ""}>
       <button data-a="set">指定</button>${it.source === "user" ? ' <button data-a="auto">改回自動</button>' : ""}</td></tr>`).join("");
 }
-async function loadCalib() { try { calibRows((await j(CAL)).items); } catch (e) { $("calib").hidden = true; } }
+async function loadCalib() {
+  try { calibRows((await j(CAL)).items); } catch (e) { $("calib").hidden = true; return; }
+  // a fit still queued / running from before this page load (SP-714): keep showing it
+  j(`${CAL}/run`).then((r) => { if (r.job && (r.job.state === "queued" || r.job.state === "running")) {
+    const b = $("calib-run"); b.disabled = true; waitCalib(b).catch(() => {}).finally(() => { b.disabled = false; }); } }).catch(() => {});
+}
 $("calib-rows").onclick = async (e) => {
   // the chip's explanation on a tap too (title is hover only — phones have none; SP-69)
   const c = e.target.closest(".cchip");
@@ -2542,12 +2548,25 @@ $("calib-rpe").onclick = (e) => {          // a level's chip: its explanation on
   const c = e.target.closest(".cchip"); if (!c) return;
   const tip = $("calib-tip"); tip.textContent = `${c.closest("tr").cells[0].textContent}：${c.title}`; tip.hidden = false; tip.classList.remove("err-text");
 };
-$("calib-run").onclick = async (e) => {
-  const b = e.currentTarget; b.disabled = true; $("calib-msg").textContent = "估算中…";
-  try { const r = await j(`${CAL}/run`, { method: "POST" }); calibRows(r.items);
+// SP-714: the fit is queued on the server (jobs); poll GET /run until it is done
+async function waitCalib(b) {
+  for (;;) {
+    const r = await j(`${CAL}/run`), job = r.job || { state: "done", written: [] };
+    if (job.state === "queued" || job.state === "running") {
+      $("calib-msg").textContent = job.state === "queued" && job.position > 1 ? `已排入，前面還有 ${job.position - 1} 件` : "估算中…";
+      await new Promise((ok) => setTimeout(ok, 2000)); continue;
+    }
+    calibRows(r.items);
     j(`${SYNC}/settings`).then((s) => showRpe(s.rpe_load)).catch(() => {});      // the RPE levels refit too (SP-57)
-    $("calib-msg").textContent = r.written.length ? `更新了 ${r.written.length} 項` : "資料還不夠，維持原值"; }
-  catch (err) { $("calib-msg").textContent = "失敗：" + err.message.slice(0, 80); }
+    $("calib-msg").textContent = job.state === "failed" ? "失敗：" + String(job.error || "").slice(0, 80)
+      : (job.written || []).length ? `更新了 ${job.written.length} 項` : "資料還不夠，維持原值";
+    return;
+  }
+}
+$("calib-run").onclick = async (e) => {
+  const b = e.currentTarget; b.disabled = true; $("calib-msg").textContent = "已排入…";
+  try { await j(`${CAL}/run`, { method: "POST" }); await waitCalib(b); }
+  catch (err) { $("calib-msg").textContent = window.AppCooldown?.is(err) ? "" : "失敗：" + err.message.slice(0, 80); }
   b.disabled = false;
 };
 

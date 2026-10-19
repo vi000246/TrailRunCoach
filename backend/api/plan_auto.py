@@ -52,8 +52,9 @@ async def put_settings(body: dict = Body(...), db: AsyncSession = Depends(get_db
 
 @router.post("/run")
 async def run_now(db: AsyncSession = Depends(get_db)):
-    from backend import membership as MS
+    from backend import cooldown, membership as MS
     MS.require("plan:auto")
+    cooldown.take("plan_auto")                    # SP-714: a cool-down per person (429 COOLDOWN)
     # stamp ignored, but a big change is still held for approval: force=False + no stamp
     cfg = await PA.settings(db)
     st = dict(cfg["state"] or {})

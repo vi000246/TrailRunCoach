@@ -7,6 +7,7 @@
  * src: "coros" | "garmin" | "tp" (the /sync/<src> folder name, GET /api/v1/sync/primary → source).
  * st (also handed to onEvent after each event, counters already updated):
  *   busy      409 SYNC_BUSY — that source is already syncing (nothing ran)
+ *   cooldown  429 (SP-714): { key, retry_after, text 「X 分鐘後可以再按」 } — nothing ran
  *   total     activities to look at (range_list / changed_list), 0 = unknown
  *   checked / downloaded / errors
  *   fatal     run-level failure (no workout id): { code, detail } — COROS_AUTH_REQUIRED /
@@ -26,6 +27,13 @@
     const url = `${API}/${START[src] || "start"}` + (since ? `?since=${encodeURIComponent(since)}` : "");
     const r = await fetch(url, { method: "POST" });
     if (r.status === 409) { st.busy = true; return st; }
+    if (r.status === 429) {                    // SP-714: a cool-down (or the per-person limit): nothing ran
+      let d = null; try { d = (await r.json()).detail; } catch (_) {}
+      const s = Number(d && d.retry_after) || 60;
+      st.cooldown = { key: d && d.key, retry_after: s,
+        text: (d && d.message) || (window.AppCooldown ? window.AppCooldown.text(s * 1000) : "") };
+      return st;
+    }
     if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
     const reader = r.body.getReader(), dec = new TextDecoder();
     let buf = "";

@@ -713,7 +713,11 @@ bindSeg("f-kind", "kind");
 bindSeg("f-dir", "dir");
 $("f-fav").onclick = () => { S.fav = !S.fav; favBtn(); savePrefs(); loadList(); };
 $("f-sport").onchange = (e) => { S.sport = e.target.value; savePrefs(); loadList(); };
-$("rebuild").onclick = async () => { await j(`${API}/rebuild`, { method: "POST" }); loadList(); };
+$("rebuild").onclick = async () => {
+  // a 429 (SP-714 cool-down): the shell says when it can be pressed again and locks the button
+  try { await j(`${API}/rebuild`, { method: "POST" }); } catch (e) { if (!window.AppCooldown?.is(e)) throw e; return; }
+  loadList();
+};
 window.addEventListener("popstate", () => {
   const id = location.hash.slice(1);
   if (id) openDetail(id, false); else document.body.classList.remove("has-detail");

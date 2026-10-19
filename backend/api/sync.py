@@ -45,6 +45,9 @@ async def _sse_sync(db: AsyncSession, source: str, athlete_id: int, since: Optio
     if runner.is_busy(source):
         raise HTTPException(409, "SYNC_BUSY")
     disabled = await _disabled(db, athlete_id, runner.SETTING_NAME[source])
+    if not disabled:
+        from backend import cooldown
+        cooldown.take(f"sync:{source}")          # SP-714: a cool-down per person and source (429 COOLDOWN)
 
     async def generate():
         if disabled:
@@ -247,10 +250,12 @@ async def check_start(body: Optional[CheckBody] = None, athlete_id: int = 1, db:
     compared with the DB by provider id. Never deletes, never moves the cursor. `started` /
     `skipped` {source: disabled | not_logged_in | busy}; 409 SYNC_BUSY when the one source
     asked for is busy."""
+    from backend import cooldown
     from backend.sync import check
     want = (body.source if body else None)
     if want is not None and want not in check.REMOTES:
         raise HTTPException(400, "source must be coros or tp")
+    cooldown.check("check")                       # SP-714: counted below only when a check started
     ready = await runner.ready_sources(db, athlete_id)
     started, skipped = [], {}
     # Garmin (SP-91 trial) has no full check: a listing of the whole history would use the
@@ -264,6 +269,8 @@ async def check_start(body: Optional[CheckBody] = None, athlete_id: int = 1, db:
             started.append(src)
     if want and skipped.get(want) == "busy":
         raise HTTPException(409, "SYNC_BUSY")
+    if started:
+        cooldown.mark("check")
     return {"started": started, "skipped": skipped}
 
 
@@ -273,9 +280,12 @@ async def check_fill(source: str, body: Optional[CheckBody] = None, athlete_id: 
     """「補下載」: download the last 完整檢查's missing activities of `source` (or `ids` of them)
     in the background, through the sync's own fetch (a failure goes to the failed list).
     409 SYNC_BUSY / NOT_READY, 404 when there is nothing to download."""
+    from backend import cooldown
     from backend.sync import check
     if source not in check.REMOTES:
         raise HTTPException(400, "source must be coros or tp")
+    cd_key = f"check:fill-{source}"               # SP-714: the 完整檢查's wait, counted on its own
+    cooldown.check(cd_key)
     last = await SettingsRepository(db, athlete_id).get(check.key(source, check.FULL)) or {}
     if not last.get("missing"):
         raise HTTPException(404, "NOTHING_MISSING")
@@ -286,6 +296,7 @@ async def check_fill(source: str, body: Optional[CheckBody] = None, athlete_id: 
         raise HTTPException(409, f"NOT_READY: {ready}")
     if check.start(source, athlete_id, check.FILL, ids=(body.ids if body else None)) is None:
         raise HTTPException(409, "SYNC_BUSY")
+    cooldown.mark(cd_key)
     return {"source": source, "status": "started"}
 
 
@@ -464,6 +475,8 @@ async def browser_timezone(body: BrowserZone, athlete_id: int = 1, db: AsyncSess
 
 @router.post("/dedup/rebuild")
 async def rebuild_dedup(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    from backend import cooldown
+    cooldown.take("dedup")                        # SP-714: a cool-down per person (429 COOLDOWN)
     r = await dedup.rebuild(db, athlete_id)
     await db.commit()
     return r

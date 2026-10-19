@@ -43,6 +43,9 @@ above), per request:
      anything else there 401 TOKEN_INVALID (429 once the IP failed too often)
   6. a user who hasn't accepted the current terms: pages go to /signup, the rest gets
      403 {"code": "TERMS_REQUIRED"} (the owner accepts none)
+  6b. a signed-in person's request limit (SP-714, user_limited): site_config ratelimit.user_per_min
+     per minute, ratelimit.heavy_per_min more for the HEAVY writes; 429 RATE_LIMITED past it. The
+     static files are not counted; the owner and admins are not limited
   7. tenant: the user's (the owner's own for user 1; a new user's folder and DB on first use),
      signed out the anonymous one (no caps; reading its data raises)
   8. an answer without Cache-Control gets "private, no-store"
@@ -128,6 +131,43 @@ WRITES_PER_DAY = 2000
 MAX_SESSIONS, MAX_EVENTS, MAX_PHASES, MAX_TEXT = 400, 20, 30, 200
 TEXT_FIELDS = ("note", "name", "title", "label", "description", "reason", "swap_reason")
 HEAVY_GATE = RL.Gate(n=3, wait_s=10.0)
+
+# sign-in mode (SP-714): every signed-in person's requests per minute, and their heavy computations
+# (HEAVY, writes) on top; the numbers are site_config's ratelimit.* (the admin page), the buckets
+# rebuilt when one changes. Not counted: the static files; not limited: the owner and admins (and the
+# weight / debug / link tokens' and the webhooks' paths, which never get this far)
+STATIC_PREFIX = "/api/v1/static/"
+STATIC_PATHS = frozenset({"/sw.js", "/manifest.webmanifest", "/favicon.ico", "/robots.txt"})
+_USER_LIMITS: dict = {"key": None, "all": None, "heavy": None}
+
+
+def _user_limits() -> tuple:
+    from backend import site_config as SC
+    key = (SC.get("ratelimit.user_per_min"), SC.get("ratelimit.heavy_per_min"))
+    if _USER_LIMITS["key"] != key:
+        _USER_LIMITS.update(key=key, all=RL.Buckets(rate=key[0], per=60), heavy=RL.Buckets(rate=key[1], per=60))
+    return _USER_LIMITS["all"], _USER_LIMITS["heavy"]
+
+
+def reset_user_limits() -> None:
+    """Tests: fresh per-person buckets."""
+    _USER_LIMITS.update(key=None, all=None, heavy=None)
+
+
+def user_limited(user, method: str, path: str) -> Optional[str]:
+    """Sign-in mode: None when this request may go on, else the message of the 429."""
+    if user is None or getattr(user, "is_admin", False) or path.startswith(STATIC_PREFIX) or path in STATIC_PATHS:
+        return None
+    try:
+        every, heavy = _user_limits()
+    except Exception:                  # noqa: BLE001 — site.json unreadable: no limit rather than no site
+        return None
+    key = f"u{user.id}"
+    if not every.take(key):
+        return _("請求太頻繁，請稍後再試")
+    if method not in ("GET", "HEAD", "OPTIONS") and HEAVY.match(path) and not heavy.take(key):
+        return _("計算太頻繁，請稍後再試")
+    return None
 
 
 def allowed_write(method: str, path: str) -> bool:
@@ -443,6 +483,10 @@ class TenancyMiddleware:
             body = _demo_error("TERMS_REQUIRED", _("條款已更新，請先閱讀並同意"))
             body["signup"] = "/signup"
             await _json_response(send, 403, body, extra)
+            return
+        limited = user_limited(user, method, path)    # SP-714: every signed-in person's request limit
+        if limited:
+            await _json_response(send, 429, _demo_error("RATE_LIMITED", limited), extra + [(b"retry-after", b"30")])
             return
         if found is not None and found[1]:          # the expiry slid: so does the cookie
             set_cookies.append(f"{session_cookie}={token}; {LG.cookie_attrs(found[1])}".encode())

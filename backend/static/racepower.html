@@ -1054,7 +1054,7 @@ function renderGround() {
   if (GROUND.status === "loading") { b.innerHTML = `<span class="meta">${esc(T("ground.loading"))}</span>`; return; }
   if (GROUND.status !== "ok") {
     b.innerHTML = `<span class="meta">${esc(GROUND.message ? T("ground.unknown_why", { why: GROUND.message }) : T("ground.unknown"))}</span>` +
-      `<span class="meta">${esc(T("ground.unknown_ok"))} <button class="btn" type="button" id="ground-retry">${esc(T("ground.retry"))}</button></span>`;
+      `<span class="meta">${esc(T("ground.unknown_ok"))} <button class="btn" type="button" id="ground-retry" data-cooldown="surface">${esc(T("ground.retry"))}</button></span>`;
     $("ground-retry").onclick = () => loadGround(true);
     return;
   }

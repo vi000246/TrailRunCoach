@@ -387,6 +387,76 @@
     };
   }
 
+  // ---- cool-downs (SP-714, backend/cooldown.py): after a manual recompute the same person waits
+  // before the next. GET /api/v1/session's membership.cooldowns {key: seconds left} and any 429
+  // COOLDOWN {key, retry_after} disable the matching button ([data-cooldown="<key>"], or the
+  // selectors below) and say 「X 分鐘後可以再按」 next to it until the wait is over.
+  {
+    const CD = {};                                    // key -> until (ms)
+    for (const [k, s] of Object.entries((MS && MS.cooldowns) || {})) CD[k] = Date.now() + s * 1000;
+    const CD_SELECTORS = [
+      ["calib", "#calib-run"], ["check", "#s-check"], ["routes", "#rebuild"], ["plan_auto", "#ap-run"],
+      ["check:fill-coros", '[data-fill="coros"]'], ["check:fill-tp", '[data-fill="tp"]'],
+      ...["coros", "tp", "garmin", "intervals"].map((s) => [`sync:${s}`, `#src-${s} [data-act=sync]`]),
+    ];
+    const cdText = (ms) => {
+      const min = Math.max(1, Math.ceil(ms / 60000));
+      return min < 60 ? T("cooldown.min", { n: min }) : T("cooldown.hour", { n: Math.ceil(min / 60) });
+    };
+    let timer = 0;
+    const tick = () => {
+      const now = Date.now();
+      for (const [k, sel] of CD_SELECTORS) for (const el of document.querySelectorAll(sel)) if (!el.dataset.cooldown) el.dataset.cooldown = k;
+      let live = Object.values(CD).some((u) => u > now);      // also before the page rendered its button
+      for (const el of document.querySelectorAll("[data-cooldown]")) {
+        if (el.dataset.scopeLocked) continue;
+        const left = (CD[el.dataset.cooldown] || 0) - now;
+        let note = el.nextElementSibling && el.nextElementSibling.classList.contains("cd-note") ? el.nextElementSibling : null;
+        if (left > 0) {
+          el.dataset.cdLocked = "1";
+          el.disabled = true;
+          const txt = cdText(left);
+          el.title = txt;
+          if (!note) { note = document.createElement("span"); note.className = "cd-note meta"; note.style.marginLeft = "6px"; el.after(note); }
+          note.textContent = txt;
+        } else if (el.dataset.cdLocked) {
+          el.disabled = false;                       // the page re-renders what it disables for its own reasons
+          delete el.dataset.cdLocked; el.removeAttribute("title");
+          if (note) note.remove();
+        }
+      }
+      clearTimeout(timer);
+      // while one cools down: every second (the count, and the buttons a page renders meanwhile)
+      timer = live ? setTimeout(tick, 1000) : 0;
+    };
+    const start = () => tick();
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
+    window.AppCooldown = {
+      // a page's catch: any 429 was already explained by the shell (the toast) — COOLDOWN, RATE_LIMITED
+      is: (err) => !!err && (err.status === 429 || /^429\b/.test(String(err.message || ""))),
+      left: (key) => Math.max(0, (CD[key] || 0) - Date.now()),
+      text: cdText,
+    };
+    const cdFetch = window.fetch;
+    let lastCd = 0;
+    window.fetch = async (input, init) => {
+      const r = await cdFetch(input, init);
+      if (r.status === 429) {
+        r.clone().json().then((j) => {
+          const d = j && j.detail;
+          if (d && d.code === "RATE_LIMITED" && !DEMO && Date.now() - lastCd > 4000) {     // SP-714: the per-person limit
+            lastCd = Date.now(); toast(d.message || T("cooldown.rate")); return;
+          }
+          if (!d || d.code !== "COOLDOWN" || !d.key) return;
+          CD[d.key] = Date.now() + (Number(d.retry_after) || 60) * 1000;
+          setTimeout(tick, 0); setTimeout(tick, 300);        // after the page's own finally (re-enabling the button)
+          if (Date.now() - lastCd > 4000) { lastCd = Date.now(); toast(cdText((Number(d.retry_after) || 60) * 1000)); }
+        }).catch(() => {});
+      }
+      return r;
+    };
+  }
+
   // ---- the public mirror (SP-500): no calculation core, so a request that needs it answers
   // 503 CORE_NOT_INCLUDED (backend/main.py); say so once per page
   {

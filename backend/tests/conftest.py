@@ -62,13 +62,16 @@ def _no_live_google(monkeypatch):
     def refuse(request):
         raise httpx.ConnectError(f"no live network in tests: {request.url.host}", request=request)
     monkeypatch.setattr(google, "TRANSPORT", httpx.MockTransport(refuse))
+    from backend import tenancy_mw
     google.forget_keys()
     login.reset_mode()
     login.reset_limits()
+    tenancy_mw.reset_user_limits()            # SP-714: the per-person request limit
     yield
     google.forget_keys()
     login.reset_mode()
     login.reset_limits()
+    tenancy_mw.reset_user_limits()
 
 
 @pytest.fixture(autouse=True)

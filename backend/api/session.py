@@ -73,6 +73,13 @@ def session_info(had_cookie: bool = False) -> dict:
         body["membership"] = MS.session_view(t)
     except Exception:                      # noqa: BLE001 — the page still loads; the API still checks
         body["membership"] = None
+    # SP-714: the buttons cooling down now {key: seconds left} (the shell disables them on load)
+    if body["membership"] is not None:
+        try:
+            from backend import cooldown
+            body["membership"]["cooldowns"] = cooldown.active()
+        except Exception:                  # noqa: BLE001 — the API still answers 429
+            body["membership"]["cooldowns"] = {}
     # 站內公告 (SP-351): the admin's notice in the page's language (the other one when only it is set)
     try:
         from backend import i18n, site_config as SC

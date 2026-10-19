@@ -198,7 +198,7 @@ td .rolebox small { color: var(--muted); font-size: 11.5px; white-space: normal;
   const failed = (e) => { panel.innerHTML = `<p class="empty msg err">${esc(t("load_failed", { error: e.message }))}</p>`; };
 
   // ---------------------------------------------------------------- site settings
-  const GROUPS = ["sync", "members", "quota", "coros", "retention", "shared"];
+  const GROUPS = ["sync", "members", "quota", "coros", "retention", "shared", "cooldown", "ratelimit"];
   let cfg = null;
   const srcBadge = (it) => {
     const txt = it.source === "env" ? t("src.env", { env: it.env }) : t("src." + it.source);
@@ -213,13 +213,16 @@ td .rolebox small { color: var(--muted); font-size: 11.5px; white-space: normal;
     if (it.kind === "text") return `<textarea name="${name}" maxlength="${it.max_len}">${esc(v || "")}</textarea>`;
     if (it.kind === "time") return `<input type="time" name="${name}" value="${esc(v || "")}">`;
     const step = it.kind === "float" ? "any" : "1";
-    return `<input type="number" name="${name}" step="${step}" min="${it.min ?? ""}" max="${it.max ?? ""}" value="${v == null ? "" : esc(v)}"${plan ? ` placeholder="${esc(t("plan.same"))}"` : ""}>`;
+    // SP-714: a plan with a program default of its own (a subscriber's shorter cool-down) shows it as the placeholder
+    const pd = plan && it.plan_defaults && it.plan_defaults[plan];
+    const ph = pd != null ? t("plan.default", { v: pd }) : t("plan.same");
+    return `<input type="number" name="${name}" step="${step}" min="${it.min ?? ""}" max="${it.max ?? ""}" value="${v == null ? "" : esc(v)}"${plan ? ` placeholder="${esc(ph)}"` : ""}>`;
   };
   const row = (it) => {
     const help = window.I18N.t(`admin.item.${it.key}.help`, "");
     const range = it.min != null && it.kind !== "choice" ? `<span class="range">${esc(t("range", { min: it.min, max: it.max }))}</span>` : "";
     const plans = it.plan ? `<div class="plans" title="${esc(t("plan_title"))}">${Object.keys(cfg.plans).map((p) =>
-      `<label>${esc(t("plan." + p))} ${input(it, cfg.plans[p][it.key], `plan:${p}:${it.key}`, true)}</label>`).join("")}</div>` : "";
+      `<label>${esc(t("plan." + p))} ${input(it, cfg.plans[p][it.key], `plan:${p}:${it.key}`, p)}</label>`).join("")}</div>` : "";
     return `<div class="row" data-key="${esc(it.key)}"><div class="lbl"><b>${esc(t("item." + it.key))}</b>${help ? `<small>${esc(help)}</small>` : ""}</div>
       <div class="ctl">${input(it, it.value, `site:${it.key}`)} ${range} ${srcBadge(it)}
         ${it.source === "site" ? `<button type="button" class="linkbtn" data-reset="${esc(it.key)}" title="${esc(t("reset_title"))}">${t("reset")}</button>` : ""}${plans}</div></div>`;
@@ -231,7 +234,8 @@ td .rolebox small { color: var(--muted); font-size: 11.5px; white-space: normal;
   const renderConfig = () => {
     const by = (g) => cfg.items.filter((i) => i.group === g);
     panel.innerHTML = `<p class="note">${esc(t("order_note"))}</p>` + sourcesSec() + GROUPS.map((g) =>
-      `<section class="sec"><h2>${t("group." + g)}</h2>${by(g).map(row).join("")}</section>`).join("") +
+      `<section class="sec"><h2>${t("group." + g)}</h2>${(() => { const lead = window.I18N.t(`admin.group.${g}_lead`, "");
+        return lead ? `<p class="sub">${esc(lead)}</p>` : ""; })()}${by(g).map(row).join("")}</section>`).join("") +
       `<div class="savebar"><button type="button" class="btn primary" id="save">${t("save")}</button><span class="msg" id="smsg"></span></div>`;
     for (const cb of panel.querySelectorAll("[data-source]")) cb.addEventListener("change", async () => {
       const name = t("source." + cb.dataset.source);

@@ -104,6 +104,15 @@ def inputs(refresh: bool = False) -> dict:
 
 @router.get("/inputs")
 def get_inputs(refresh: bool = False):
+    """`refresh` skips the cache — at most once per cool-down per person (SP-714, cooldown
+    `racepower_inputs`); while it cools down the cached answer comes back, never an error (the
+    page asks for it on its own after saving the 百岳單攻 list)."""
+    if refresh:
+        from backend import cooldown
+        if cooldown.ready("racepower_inputs"):
+            cooldown.mark("racepower_inputs")
+        else:
+            refresh = False
     return inputs(refresh)
 
 
@@ -1209,6 +1218,9 @@ def course_surface(cid: str, body: Optional[SurfaceIn] = None):
     row = CS.get(cid)
     if row and row.get("profile") and not body.refresh:
         return SF.view(cid, row)
+    if body.refresh:                              # 重查: a cool-down per person (SP-714, 429 COOLDOWN)
+        from backend import cooldown
+        cooldown.take("surface")
     track = _surface_track(cid, body.event_id)
     if track is None:
         return SF.view(cid, None, SF.SurfaceError("course", "no track"))

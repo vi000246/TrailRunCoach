@@ -346,8 +346,14 @@ class RebuildBody(BaseModel):
 
 @router.post("/rebuild")
 def rebuild(body: Optional[RebuildBody] = None):
+    """「更新」 (or {full: true}): a cool-down per person (SP-714, cooldown `routes`), counted only
+    when a build really started."""
+    from backend import cooldown
     full = bool(body and body.full)
+    cooldown.check("routes")
     started = BUILDER.start(_source, full=full)
+    if started:
+        cooldown.mark("routes")
     return {"started": started, "status": _status()}
 
 

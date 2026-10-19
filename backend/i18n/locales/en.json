@@ -3036,5 +3036,15 @@
   "範圍是你所有活動停留的 25–75 百分位（同類次數少）": "the 25th–75th percentile of your stops in all activities (few of this type)",
   "沒有補給站資料：你過去比賽每移動小時停 {m:.1f} 分（≥ 60 秒的停留）": "No aid stations listed: in earlier races you stopped {m:.1f} min per moving hour (stops ≥ 60 s)",
   "；零碎停頓 {p:.1%} 的移動時間": "; short pauses {p:.1%} of the moving time",
-  "範圍是你過去每移動小時停留的 25–75 百分位": "the 25th–75th percentile of your stops per moving hour"
+  "範圍是你過去每移動小時停留的 25–75 百分位": "the 25th–75th percentile of your stops per moving hour",
+  "{n} 分鐘後可以再按": "You can press it again in {n} min",
+  "約 {n} 小時後可以再按": "You can press it again in about {n} h",
+  "重新估算自動參數": "Re-estimate the automatic parameters",
+  "更新路線": "Update routes",
+  "完整檢查與補下載": "Full check and download missing",
+  "手動同步": "Manual sync",
+  "立即自動調整課表": "Adjust the schedule automatically now",
+  "重建去重": "Rebuild duplicates",
+  "重新讀取計算機的個人數據": "Reload the calculator's personal data",
+  "重新查詢路面": "Look up the surface again"
 }
