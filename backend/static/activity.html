@@ -101,10 +101,27 @@ td.c-act .acts { display: inline-flex; gap: 4px; align-items: center; }
 .badge.rc { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .empty { color: var(--muted); padding: 28px 6px; text-align: center; }
 .loading { color: var(--muted); padding: 14px 8px; }
+/* SP-731: 跟團 / 自己 chips and the 地形難度 select, edited in place; a suggestion is faded until clicked */
+.mk { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.mkc { border: 0; border-radius: 0; padding: 1px 8px; font-size: 12px; color: var(--muted); background: none; white-space: nowrap; }
+.mkc + .mkc { border-left: 1px solid var(--line); }
+.mkc[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+.mkc.sug { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); opacity: .75; font-style: italic; }
+.mks { font-size: 12px; padding: 1px 4px; max-width: 12em; }
+.mks.sug { color: var(--muted); font-style: italic; }
+.mkbtn { display: none; width: 26px; height: 24px; padding: 0; font-size: 13px; color: var(--accent); }
+.mkbtn.done { color: var(--ok); }
+.mkbtn[aria-expanded="true"] { background: var(--soft); }
+tr.mkrow { display: none; }
+.mkwrap { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; white-space: normal; }
+.mkl { font-size: 12px; color: var(--muted); }
 /* phone: date, name (with a one-line summary), distance, actions */
 @media (max-width: 699px) {
   main { padding: 10px 10px 20px; }
-  .c-climb, .c-hr, .c-pw, .c-tss, .c-rpe, .c-src, .c-pain, .c-type, .c-dur { display: none; }
+  .c-climb, .c-hr, .c-pw, .c-tss, .c-rpe, .c-src, .c-pain, .c-type, .c-dur, .c-grp, .c-tdiff { display: none; }
+  .mkbtn { display: inline-grid; place-items: center; }
+  tr.mkrow { display: table-row; }
+  tr.mkrow td { background: var(--bg); }
   td.c-name { min-width: 0; max-width: none; }
   td.c-name .sub { display: block; }
   th, td { padding: 6px 6px; }
@@ -234,6 +251,7 @@ dialog#exp .row .sp { flex: 1; }
     <select id="f-src" data-acts-only data-i18n-attr="aria-label:activity.f.src" aria-label=""></select>
     <label class="ck" data-pain-only data-acts-only hidden><input type="checkbox" id="f-pain"><span data-i18n="activity.f.pain">只看有疼痛</span></label>
     <label class="ck" data-acts-only><input type="checkbox" id="f-race"><span data-i18n="activity.f.race">只看比賽</span></label><button type="button" class="qtip" data-acts-only aria-label="?" data-i18n-attr="data-tip:activity.help.race" data-tip="" style="margin-left:-4px">?</button>
+    <label class="ck" data-acts-only><input type="checkbox" id="f-unmarked"><span data-i18n="activity.f.unmarked">只看還沒標的健行</span></label><button type="button" class="qtip" data-acts-only aria-label="?" data-i18n-attr="data-tip:activity.help.f_unmarked" data-tip="" style="margin-left:-4px">?</button>
     <label class="ck" data-acts-only><input type="checkbox" id="f-ach"><span data-i18n="activity.f.ach">有成就</span></label><button type="button" class="qtip" aria-label="?"
       data-acts-only data-i18n-attr="data-tip:activity.help.f_ach" data-tip="" style="margin-left:-4px">?</button>
     <button type="button" class="reset" id="f-reset" data-i18n="activity.f.reset">清除篩選</button>
@@ -349,6 +367,9 @@ const COLS = [
   { k: "rpe", cls: "c-rpe num", get: (a) => a.rpe },
   { k: "src", cls: "c-src", get: (a) => a.origin || "", asc: true },
   { k: "pain", cls: "c-pain", get: (a) => a.pain, pain: true },
+  // SP-731: the two marks edited in place — 跟團 / 自己 on hikes, 地形難度 on trail runs and hikes; blank elsewhere
+  { k: "grp", cls: "c-grp", get: (a) => (isHikeRow(a) ? groupOf(a) || "~" + (sugGroup(a) || "") : null), asc: true },
+  { k: "tdiff", cls: "c-tdiff", get: (a) => (tdiffRow(a) ? TDIFF_OPTS.indexOf(tdiffOf(a) || "normal") : null) },
 ];
 const cols = () => COLS.filter((c) => (!c.power || S.usePower) && (!c.pain || S.pain));
 
@@ -370,7 +391,7 @@ $("thead").addEventListener("click", (e) => {
 const FIDS = ["f-q", "f-from", "f-to", "f-type", "f-src"];
 function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREF) || "{}"); } catch { return {}; } }
 function savePrefs() {
-  const p = { sort: S.sort, pain: $("f-pain").checked, ach: $("f-ach").checked, race: $("f-race").checked,
+  const p = { sort: S.sort, pain: $("f-pain").checked, ach: $("f-ach").checked, race: $("f-race").checked, unmarked: $("f-unmarked").checked,
     asort: S.asort, akind: $("a-kind").value, acls: [...S.acls], ahid: $("a-hidden").checked };
   for (const k of FIDS) p[k] = $(k).value;
   try { localStorage.setItem(PREF, JSON.stringify(p)); } catch {}
@@ -380,7 +401,7 @@ function restorePrefs() {
   for (const k of FIDS) if (p[k] && $(k)) { $(k).value = p[k]; if ($(k).value !== p[k]) $(k).value = ""; }
   $("f-pain").checked = !!p.pain;
   $("f-ach").checked = !!p.ach;
-  $("f-race").checked = !!p.race;
+  $("f-race").checked = !!p.race; $("f-unmarked").checked = !!p.unmarked;
   if (p.sort && COLS.some((c) => c.k === p.sort.k)) S.sort = { k: p.sort.k, dir: p.sort.dir > 0 ? 1 : -1 };
   if (p.asort && ACOLS.some((c) => c.k === p.asort.k && c.get)) S.asort = { k: p.asort.k, dir: p.asort.dir > 0 ? 1 : -1 };
   if (p.akind) { $("a-kind").value = p.akind; if ($("a-kind").value !== p.akind) $("a-kind").value = ""; }
@@ -403,7 +424,7 @@ function fillFilterOptions() {
 function filtered() {
   const from = $("f-from").value, to = $("f-to").value, ty = $("f-type").value, src = $("f-src").value,
     pain = S.pain && $("f-pain").checked, q = $("f-q").value.trim().toLowerCase(), achOnly = $("f-ach").checked,
-    raceOnly = $("f-race").checked;
+    raceOnly = $("f-race").checked, unmarkedOnly = $("f-unmarked").checked;
   return S.acts.filter((a) => {
     const d = a.start.slice(0, 10);
     if (from && d < from) return false;
@@ -412,6 +433,8 @@ function filtered() {
     if (src && a.origin !== src) return false;
     if (pain && !(a.pain >= 1)) return false;
     if (raceOnly && a.user_type !== "race") return false;
+    // SP-731: the hikes still missing a mark (跟團 / 自己 or 地形難度), to fill them in one go
+    if (unmarkedOnly && !(isHikeRow(a) && (!groupOf(a) || !tdiffOf(a)))) return false;
     const r = (achOnly || q) ? achOf(a) : null;
     if (achOnly && !(r && !r.hidden)) return false;
     if (q) {
@@ -431,12 +454,12 @@ function sorted(rows) {
   }).map(([a]) => a);
 }
 const refresh = () => { render(); renderAch(); };
-for (const id of ["f-from", "f-to", "f-type", "f-src", "f-pain", "f-ach", "f-race"]) $(id).addEventListener("change", () => { S.page = 0; savePrefs(); refresh(); });
+for (const id of ["f-from", "f-to", "f-type", "f-src", "f-pain", "f-ach", "f-race", "f-unmarked"]) $(id).addEventListener("change", () => { S.page = 0; savePrefs(); refresh(); });
 let qTimer = null;
 $("f-q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { S.page = 0; savePrefs(); refresh(); }, 120); });
 $("f-reset").addEventListener("click", () => {
   for (const k of FIDS) $(k).value = "";
-  $("f-pain").checked = false; $("f-ach").checked = false; $("f-race").checked = false; S.page = 0; savePrefs(); refresh();
+  $("f-pain").checked = false; $("f-ach").checked = false; $("f-race").checked = false; $("f-unmarked").checked = false; S.page = 0; savePrefs(); refresh();
 });
 
 // ---- table ------------------------------------------------------------------
@@ -483,8 +506,67 @@ function cell(c, a) {
     case "rpe": return a.rpe != null ? `${+a.rpe}` : "—";
     case "src": return srcBadge(a);
     case "pain": return painBadge(a);
+    case "grp": return grpCtl(a);
+    case "tdiff": return tdiffCtl(a);
   }
   return "";
+}
+// ---- SP-731: 跟團 / 自己 and 地形難度 in the list (one click saves: PATCH /activities, the same marks as the editor)
+// 健行 rows = a hiking / mountaineering sport or the user's 爬山 / 百岳跟團 type; 地形難度 also on trail runs
+const HIKE_SPORTS = ["hiking", "mountaineering"];
+const isHikeRow = (a) => HIKE_SPORTS.includes(a.sport_type) || MOUNTAIN_TYPES.includes(a.user_type);
+const isTrailRow = (a) => !!a.trail || a.sport_type === "trail running" || a.terrain?.value === "trail";
+const tdiffRow = (a) => isTrailRow(a) || isHikeRow(a);
+// the faded suggestions (GET /activities/hints): the SP-716 rule for 跟團 / 自己 (engine/group_hint.py) and the
+// route's default 地形難度 (訓練路線; it applies until the activity has its own mark)
+const sugGroup = (a) => (S.hints?.group?.[a.key]?.suggest) || null;
+const routeTdiff = (a) => (S.hints?.terrain_route?.[a.key]) || null;
+function grpCtl(a) {
+  if (!isHikeRow(a)) return "";
+  const cur = groupOf(a), sug = cur ? null : sugGroup(a);
+  return `<span class="mk" role="group" aria-label="${esc(T("col.grp"))}">` + ["group", "solo"].map((v) => {
+    const on = cur === v, s = sug === v;
+    const tip = on ? T("grp.on_tip") : s ? T("grp.sug_tip", { v: T("grp." + v) }) : T("grp.set_tip", { v: T("grp." + v) });
+    return `<button type="button" class="mkc${s ? " sug" : ""}" data-grp="${v}" data-k="${esc(a.key)}" aria-pressed="${on}" title="${esc(tip)}">${esc(T("grp." + v))}${s ? "?" : ""}</button>`;
+  }).join("") + `</span>`;
+}
+function tdiffCtl(a) {
+  if (!tdiffRow(a)) return "";
+  const cur = tdiffOf(a), rt = cur ? null : routeTdiff(a);
+  const none = rt ? T("tdiff.route_opt", { v: T("tdiff." + rt) }) : T("tdiff.none");
+  return `<select class="mks${rt ? " sug" : ""}" data-tdiff-sel data-k="${esc(a.key)}" aria-label="${esc(T("f_tdiff"))}"` +
+    `${rt ? ` title="${esc(T("tdiff.route_tip"))}"` : ""}><option value="" ${cur ? "" : "selected"}>${esc(none)}</option>` +
+    ["normal", "technical", "scramble"].map((v) => `<option value="${v}" ${cur === v ? "selected" : ""}>${esc(T("tdiff." + v))}</option>`).join("") +
+    `</select>`;
+}
+// phone: the two columns fold into one small button on the row; it opens the row's marks under it
+const markable = (a) => isHikeRow(a) || tdiffRow(a);
+function mkBtn(a) {
+  if (!markable(a)) return "";
+  const done = (!isHikeRow(a) || groupOf(a)) && (!tdiffRow(a) || tdiffOf(a));
+  return `<button type="button" class="mkbtn${done ? " done" : ""}" data-mk="${esc(a.key)}" aria-expanded="${S.mkOpen === a.key}"` +
+    ` title="${esc(T("mk.tip"))}" aria-label="${esc(T("mk.label", { name: title(a) }))}">${done ? "✓" : "＋"}</button>`;
+}
+function mkRow(a, span) {
+  if (S.mkOpen !== a.key || !markable(a)) return "";
+  return `<tr class="mkrow"><td colspan="${span}"><div class="mkwrap">` +
+    (isHikeRow(a) ? `<span class="mkl">${esc(T("col.grp"))}</span>${grpCtl(a)}` : "") +
+    (tdiffRow(a) ? `<span class="mkl">${esc(T("col.tdiff"))}</span>${tdiffCtl(a)}` : "") + `</div></td></tr>`;
+}
+async function saveMark(a, field, value, el) {
+  if (el) el.disabled = true;
+  try {
+    await send(`${API}/activities`, "PATCH", { items: [{ key: a.key, file: a.file }], [field]: value });
+    a.tags = withMark(a.tags, field === "group" ? S.groupTags : S.terrainTags, value);
+    render();
+    if (S.sel === a.key && $("ed").open) renderEditor();
+  } catch (err) {
+    if (el) { el.disabled = false; alertRow(el, T("save_failed", { err: err.message })); }
+  }
+}
+async function loadHints() {
+  try { S.hints = await j(`${API}/activities/hints`); } catch { S.hints = null; }
+  render();
 }
 function render() {
   renderHead();
@@ -498,9 +580,10 @@ function render() {
       const href = viewerHref(a);
       return `<tr data-k="${esc(a.key)}" class="${a.excluded ? "excl" : ""} ${a.key === S.sel ? "on" : ""}">` +
         cs.map((c) => `<td class="${c.cls}">${cell(c, a)}</td>`).join("") +
-        `<td class="c-act"><span class="acts">${raceBtn(a)}<button type="button" class="edit" data-edit="${esc(a.key)}" aria-label="${esc(T("edit_label", { name: title(a) }))}">${esc(T("edit"))}</button>` +
+        `<td class="c-act"><span class="acts">${mkBtn(a)}${raceBtn(a)}<button type="button" class="edit" data-edit="${esc(a.key)}" aria-label="${esc(T("edit_label", { name: title(a) }))}">${esc(T("edit"))}</button>` +
         cmpBtn(a) +
-        `<a class="iconlink${href ? "" : " off"}" ${href ? `href="${esc(href)}"` : 'aria-hidden="true" tabindex="-1"'} title="${esc(T("open_chart"))}" aria-label="${esc(T("open_chart"))}">${CHART_ICON}</a></span></td></tr>`;
+        `<a class="iconlink${href ? "" : " off"}" ${href ? `href="${esc(href)}"` : 'aria-hidden="true" tabindex="-1"'} title="${esc(T("open_chart"))}" aria-label="${esc(T("open_chart"))}">${CHART_ICON}</a></span></td></tr>` +
+        mkRow(a, cs.length + 1);
     }).join("");
   }
   $("pager").innerHTML = `<span class="cnt">${esc(T("count", { n, total: S.acts.length }))}</span>` + (pages > 1
@@ -514,7 +597,22 @@ $("pager").addEventListener("click", (e) => {
   S.page += +b.dataset.pg; render();
   $("tbl").scrollIntoView({ block: "start" });
 });
+$("tbody").addEventListener("change", (e) => {
+  const s = e.target.closest("select[data-tdiff-sel]");
+  if (!s) return;
+  const a = actOf(s.dataset.k);
+  if (a) saveMark(a, "terrain_difficulty", s.value || null, s);
+});
 $("tbody").addEventListener("click", (e) => {
+  const g = e.target.closest("button[data-grp]");
+  if (g) {
+    const a = actOf(g.dataset.k);
+    // one click saves; the chosen one again = back to 未標
+    if (a) saveMark(a, "group", groupOf(a) === g.dataset.grp ? null : g.dataset.grp, g);
+    return;
+  }
+  const mk = e.target.closest("button[data-mk]");
+  if (mk) { S.mkOpen = S.mkOpen === mk.dataset.mk ? null : mk.dataset.mk; render(); return; }
   const cb = e.target.closest("button[data-cmp]");
   if (cb) { pickCompare(+cb.dataset.cmp); return; }
   const r = e.target.closest("button[data-race]");
@@ -605,6 +703,7 @@ async function loadList() {
   S.poleNoneTag = r.pole_none_tag || null;
   S.poleCompare = r.pole_compare || null;
   S.surfaceTags = r.surface_tags || {};
+  S.terrainTags = r.terrain_tags || {}; S.groupTags = r.group_tags || {};
   S.rainHintMm = r.rain_hint_mm ?? null;
   S.merge = r.merge || null; S.originLabels = { upload: T("src_upload_long"), ...(r.origin_labels || {}) };
   S.actMin = new Map();
@@ -716,7 +815,17 @@ function bumpPoleCount(a, from, to) {      // keep the hint live after a save (t
 // splits on it once both groups have enough data. A 3-way choice, never typed.
 const SURFACE_OPTS = ["dry", "wet", ""];
 const isSurfaceTag = (t) => Object.values(S.surfaceTags).includes(t);
-const isMarkTag = (t) => isPoleTag(t) || isSurfaceTag(t);
+// 地形難度 (SP-725): 一般 / 技術路段多 / 需要手腳並用 / 未標, the user's own mark, one free-form tag (server:
+// activity_tags.TERRAINS); the trail HR model fits its per-level multiplier from the marked runs. 跟團 / 自己
+// (SP-731): one tag too (activity_tags.GROUPS) — the single truth of 「自己走」 (athlete.solo_hikes reads it).
+const TDIFF_OPTS = ["normal", "technical", "scramble", ""];
+const isTerrainTag = (t) => Object.values(S.terrainTags || {}).includes(t);
+const isGroupTag = (t) => Object.values(S.groupTags || {}).includes(t);
+const markOf = (a, table) => { let p = ""; for (const t of a.tags || []) for (const [k, v] of Object.entries(table || {})) if (t === v) p = k; return p; };
+const tdiffOf = (a) => markOf(a, S.terrainTags);
+const groupOf = (a) => markOf(a, S.groupTags);
+const withMark = (tags, table, p) => [...(tags || []).filter((t) => !Object.values(table || {}).includes(t)), ...(table && table[p] ? [table[p]] : [])];
+const isMarkTag = (t) => isPoleTag(t) || isSurfaceTag(t) || isTerrainTag(t) || isGroupTag(t);
 function surfaceOf(a) {
   let p = "";
   for (const t of a.tags || []) for (const [k, v] of Object.entries(S.surfaceTags)) if (t === v) p = k;
@@ -834,6 +943,9 @@ function renderEditor() {
       <div class="ctl" role="group" aria-label="${esc(T("f_surface"))}">${SURFACE_OPTS.map((v) =>
         `<button type="button" class="cchip" data-surface="${v}" aria-pressed="${surfaceOf(a) === v}">${esc(T("surface." + (v || "none")))}</button>`).join("")}</div>
       ${rainHint(a) != null ? `<div class="why" data-rain-hint>${esc(T("surface.rain_hint", { mm: num(rainHint(a), 1) }))} <button type="button" data-rain-wet>${esc(T("surface.mark_wet"))}</button></div>` : ""}</div>
+    <div class="fld"><span class="lab">${esc(T("f_tdiff"))}${qt(T("help.tdiff"))}</span>
+      <div class="ctl" role="group" aria-label="${esc(T("f_tdiff"))}">${TDIFF_OPTS.map((v) =>
+        `<button type="button" class="cchip" data-tdiff="${v}" aria-pressed="${tdiffOf(a) === v}">${esc(T("tdiff." + (v || "none")))}</button>`).join("")}</div></div>
     ${S.pain ? `<div class="fld"><span class="lab">${esc(T("col.pain"))}${qt(T("help.pain"))}</span><div class="ctl" id="pain-ctl">${PainPicker.html(painState(a), S.pain, { qtip: qt })}</div></div>` : ""}
     ${a.index != null ? `<div class="fld"><span class="lab">${esc(T("f_pack"))}${qt(T("help.pack"))}</span>
       <div class="ctl">${!d ? esc(T("loading")) : `<input type="number" data-pack min="0" max="40" step="0.5" inputmode="decimal" style="width:6em" value="${pk?.pack_kg ?? ""}" placeholder="—" aria-label="${esc(T("f_pack"))}"> kg`}</div></div>` : ""}
@@ -923,6 +1035,8 @@ async function saveFields(a, patch) {
       for (const k of ["note", "name", "tags"]) if (k in patch) a[k] = k === "name" ? (patch.name || "").trim() || null : patch[k];
       if ("poles" in patch) a.tags = withPoles(a.tags, patch.poles);
       if ("surface" in patch) a.tags = withSurface(a.tags, patch.surface);
+      if ("terrain_difficulty" in patch) a.tags = withMark(a.tags, S.terrainTags, patch.terrain_difficulty);
+      if ("group" in patch) a.tags = withMark(a.tags, S.groupTags, patch.group);
       if ("pain" in patch) { a.pain = patch.pain; if (!(patch.pain >= 1)) a.pain_area = null; if (patch.pain == null) a.pain_score = null; }
       if ("pain_area" in patch) a.pain_area = patch.pain_area;
       if ("pain_score" in patch) a.pain_score = patch.pain_score;
@@ -936,7 +1050,7 @@ async function saveFields(a, patch) {
 async function rebuildAndReopen(key) {
   setMsg(T("rebuilding"));
   await loadList();
-  S.auto = null; loadAuto(); loadStats();
+  S.auto = null; loadAuto(); loadStats(); loadHints();
   await openEditor(key);
   setMsg(T("saved"), "ok");
 }
@@ -961,6 +1075,9 @@ function wireEditor(a) {
     if (surfaceOf(a) !== b.dataset.surface) saveFields(a, { surface: b.dataset.surface || null });
   }));
   ed.querySelector("button[data-rain-wet]")?.addEventListener("click", () => saveFields(a, { surface: "wet" }));
+  ed.querySelectorAll("button[data-tdiff]").forEach((b) => b.addEventListener("click", () => {
+    if (tdiffOf(a) !== b.dataset.tdiff) saveFields(a, { terrain_difficulty: b.dataset.tdiff || null });
+  }));
   const nm = ed.querySelector("input[data-name]");
   nm.addEventListener("change", () => saveFields(a, { name: nm.value.trim() || null }));
   ed.querySelector("button[data-name-clear]")?.addEventListener("click", () => saveFields(a, { name: null }));
@@ -982,6 +1099,10 @@ function wireEditor(a) {
     if (S.poleNoneTag && v === S.poleNoneTag) { tin.value = ""; if (userPole(a) !== "none") saveFields(a, { poles: "none" }); return; }
     const surf = Object.keys(S.surfaceTags).find((k) => S.surfaceTags[k] === v);
     if (surf) { tin.value = ""; if (surfaceOf(a) !== surf) saveFields(a, { surface: surf }); return; }   // typed 乾路 / 濕路 → the 路況 choice
+    const td = Object.keys(S.terrainTags || {}).find((k) => S.terrainTags[k] === v);
+    if (td) { tin.value = ""; if (tdiffOf(a) !== td) saveFields(a, { terrain_difficulty: td }); return; }   // typed 技術路段多 … → the 地形難度 choice
+    const gp = Object.keys(S.groupTags || {}).find((k) => S.groupTags[k] === v);
+    if (gp) { tin.value = ""; if (groupOf(a) !== gp) saveFields(a, { group: gp }); return; }   // typed 跟團 / 自己步調 → the mark
     if ((a.tags || []).some((t) => t.toLowerCase() === v.toLowerCase())) { tin.value = ""; return; }
     saveFields(a, { tags: [...(a.tags || []), v] });
   };
@@ -1250,7 +1371,7 @@ $("fi-open").addEventListener("click", () => {
   fiMounted = true;
   FitImport.mount(p, { onDone: (r) => {
     if (!r.added && !r.duplicate) return;
-    loadList().then(() => { loadStats(); loadAuto(); }).catch(() => {});
+    loadList().then(() => { loadStats(); loadAuto(); loadHints(); }).catch(() => {});
   } });
 });
 
@@ -1282,7 +1403,7 @@ $("fi-open").addEventListener("click", () => {
     S.page = Math.max(0, Math.floor(i / PER)); render();
     openEditor(want);
   }
-  loadStats(); loadAuto();
+  loadStats(); loadAuto(); loadHints();
 })();
 </script>
 </body>

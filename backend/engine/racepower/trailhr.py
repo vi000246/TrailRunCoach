@@ -573,7 +573,9 @@ def fit(points: list[dict], delta: Optional[float]) -> dict:
     if not pts:
         return out
     x = np.array([p["x"] for p in pts])
-    v0 = np.array([p["v"] / dbar(p["T_h"], d) for p in pts])
+    # SP-725: a run on harder terrain (its 地形難度 multiplier m on the effort km, fit_terrain) is put
+    # back on 一般 terrain: it covered m × E effort km in its time, so its v₀ = m·v / D̄(T)
+    v0 = np.array([p["v"] * p.get("terrain_mult", 1.0) / dbar(p["T_h"], d) for p in pts])
     out["c"] = float(median(v0 / x))
     if len(pts) >= k["min_runs"] and np.ptp(x) > 0:
         b, a = np.polyfit(x, v0, 1)
@@ -752,10 +754,102 @@ def loo_error(points, delta: float, min_h: Optional[float] = None) -> Optional[f
         if min_h is not None and p["T_h"] < min_h:
             continue
         m = fit(pts[:i] + pts[i + 1:], delta)
-        t = predict_time(m, p["eff_km"], p["x"])
+        t = predict_time(m, p["eff_km"] * p.get("terrain_mult", 1.0), p["x"])
         if t:
             errs.append(abs(t / (p["T_h"] * 3600.0) - 1.0))
     return float(median(errs)) if errs else None
+
+
+# ---- 地形難度 multipliers (SP-725; engine/terrain_difficulty.py) ----------------
+# Per marked level (技術路段多 / 需要手腳並用): each marked run's ratio r = actual ÷ predicted no-decay
+# time (= the effort-km multiplier that makes the model meet the run), the run left out of the v₀ fit
+# and the other marked runs put back on 一般 terrain with the current multipliers (three passes from
+# the prior); the level's multiplier = (n·median r + k·prior) / (n + k), clamped to MULT_RANGE.
+# 一般 (marked or not) = 1. A level with no marked run = its prior (label 推估).
+
+TERRAIN_PASSES = 3
+
+
+def _with_mult(pts, mult: dict) -> list[dict]:
+    return [{**p, "terrain_mult": mult.get(p.get("terrain") or "normal", 1.0)} for p in pts]
+
+
+def _terrain_ratio(train, p, delta: float) -> Optional[float]:
+    """r = actual ÷ predicted no-decay time of run p from a v₀ fitted on `train` (its D̄ undone)."""
+    m = fit(train, delta)
+    v = v0_at(m, p["x"])
+    if not v or v <= 0 or not p.get("eff_km"):
+        return None
+    return dist_nodecay(p["T_h"], m["delta"]) * v / p["eff_km"]
+
+
+def fit_terrain(points, delta: Optional[float], prior: Optional[dict] = None,
+                k: Optional[float] = None) -> dict:
+    """The 地形難度 multipliers from the runs' "terrain" level (see the block above): {"mult": {level:
+    m}, "levels": {level: {mult, n, raw (median r), prior, label: 推估 | 你的紀錄, ratios}}, "k",
+    "source"}. 一般 is always 1."""
+    from backend.engine import terrain_difficulty as TD
+    prior = prior or TD.PRIOR
+    k = TD.SHRINK_K if k is None else float(k)
+    lo, hi = TD.MULT_RANGE
+    pts = [p for p in points or [] if p]
+    d = float(min(TRAILHR["delta_max"], max(0.0, delta or 0.0)))
+    marked = [lv for lv in TD.LEVELS if lv != "normal"]
+    mult = {"normal": 1.0, **{lv: prior[lv] for lv in marked}}
+    raws: dict = {lv: [] for lv in marked}
+    if any(p.get("terrain") in marked for p in pts) and len(pts) >= 4:
+        for _ in range(TERRAIN_PASSES):
+            cur = _with_mult(pts, mult)
+            raws = {lv: [] for lv in marked}
+            for i, p in enumerate(pts):
+                lv = p.get("terrain")
+                if lv not in marked:
+                    continue
+                r = _terrain_ratio(cur[:i] + cur[i + 1:], p, d)
+                if r is not None and math.isfinite(r) and r > 0:
+                    raws[lv].append(r)
+            for lv in marked:
+                n = len(raws[lv])
+                if n:
+                    m = (n * float(median(raws[lv])) + k * prior[lv]) / (n + k)
+                    mult[lv] = float(min(hi, max(lo, m)))
+    levels = {"normal": {"mult": 1.0, "n": sum(1 for p in pts if p.get("terrain") == "normal"), "raw": None,
+                         "prior": 1.0, "label": "定義"}}
+    for lv in marked:
+        n = len(raws[lv])
+        levels[lv] = {"mult": mult[lv], "n": n, "raw": float(median(raws[lv])) if n else None,
+                      "prior": prior[lv], "label": "你的紀錄" if n else "推估",
+                      "ratios": [round(x, 4) for x in raws[lv]]}
+    return {"mult": mult, "levels": levels, "k": k, "source": TD.SOURCE}
+
+
+def terrain_loo(points, delta: Optional[float]) -> dict:
+    """Leave-one-out check of the 地形難度 multipliers (SP-725 acceptance 3): every run marked
+    技術路段多 / 需要手腳並用 predicted (at its own HR) from the others — once with no terrain at all
+    (every run 一般) and once with the multipliers fitted WITHOUT it (nested: the run is out of both the
+    v₀ fit and its level's median). {n, median_abs_plain, median_abs_terrain, rows [{idx, date, level,
+    err_plain, err_terrain, mult}]}."""
+    pts = [p for p in points or [] if p]
+    d = float(min(TRAILHR["delta_max"], max(0.0, delta or 0.0)))
+    rows = []
+    for i, p in enumerate(pts):
+        lv = p.get("terrain")
+        if lv not in ("technical", "scramble"):
+            continue
+        others = pts[:i] + pts[i + 1:]
+        act = p["T_h"] * 3600.0
+        plain = [{**q, "terrain_mult": 1.0} for q in others]
+        tp = predict_time(fit(plain, d), p["eff_km"], p["x"])
+        tf = fit_terrain(others, d)
+        mi = tf["mult"].get(lv, 1.0)
+        tt = predict_time(fit(_with_mult(others, tf["mult"]), d), p["eff_km"] * mi, p["x"])
+        if tp and tt:
+            rows.append({"idx": p.get("idx"), "date": p.get("date"), "level": lv, "mult": mi,
+                         "err_plain": tp / act - 1.0, "err_terrain": tt / act - 1.0})
+    ap = [abs(r["err_plain"]) for r in rows]
+    at = [abs(r["err_terrain"]) for r in rows]
+    return {"n": len(rows), "median_abs_plain": float(median(ap)) if ap else None,
+            "median_abs_terrain": float(median(at)) if at else None, "rows": rows}
 
 
 GATE_MIN_RUNS = 4     # 推估: the long-run gate needs ≥ 4 runs ≥ 1.5 h to score on (loo_error's floor)

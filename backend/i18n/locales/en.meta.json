@@ -2743,6 +2743,26 @@
     "draft": true,
     "src": "backend/engine/racepower/planner.py:513"
   },
+  "地形難度「{name}」effort km ×{m:.2f}（{basis}），": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "你標過的 {n} 筆": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "推估，你還沒標過這一級的活動": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "技術路段多": {
+    "draft": true,
+    "src": "backend/engine/terrain_difficulty.py"
+  },
+  "需要手腳並用": {
+    "draft": true,
+    "src": "backend/engine/terrain_difficulty.py"
+  },
   "有補給的長跑分組估計": {
     "draft": true,
     "src": "backend/engine/racepower/planner.py:506"

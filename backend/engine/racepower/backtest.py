@@ -752,6 +752,15 @@ def evaluate_trail_hr(case: dict, ctx: dict) -> dict:
     trn, _ = TH.predict_race(m, pt["eff_km"], m.get("xstar"), delta=0.0, x_shift=sh)
     xm = m.get("x_race_median")
     tm = TH.predict_time(m, pt["eff_km"], xm - sh) if xm else None
+    # SP-725: the case's own 地形難度 with the multipliers fitted as of the day before WITHOUT it (the
+    # model is built without the case); the plain rows above are the no-terrain baseline
+    lv = case.get("terrain") or "normal"
+    tmult = ((m.get("terrain") or {}).get("mult") or {}).get(lv, 1.0)
+    if tmult != 1.0:
+        tgt = TH.predict_time(m, pt["eff_km"] * tmult, pt["x"])
+        trt, _x = TH.predict_race(m, pt["eff_km"] * tmult, m.get("xstar"), x_shift=sh)
+    else:
+        tgt, trt = tg, tr
     nm_act = case.get("nm_row") or {}
     nm = NM.predict(m.get("nonmoving"), tr, kind=case.get("stop_kind") or "race") if tr else None
     el = nm_act.get("elapsed_s")
@@ -766,7 +775,10 @@ def evaluate_trail_hr(case: dict, ctx: dict) -> dict:
             "err_th_given": tg / act - 1.0 if tg else None, "err_th_nodur": tn / act - 1.0 if tn else None,
             "err_th_race": tr / act - 1.0 if tr else None, "err_th_race_nodur": trn / act - 1.0 if trn else None,
             "err_th_race_median": tm / act - 1.0 if tm else None,
-            "err_th_total": tot / el - 1.0 if (tot and el) else None}
+            "err_th_total": tot / el - 1.0 if (tot and el) else None,
+            "terrain": lv, "terrain_mult": tmult,
+            "err_th_given_terrain": tgt / act - 1.0 if tgt else None,
+            "err_th_race_terrain": trt / act - 1.0 if trt else None}
 
 
 # SP-240 (docs/research/long-race-durability-shape.md §1.3, §5 #2): races with ≥ 8 h of
@@ -807,6 +819,24 @@ def summarise_double_count(races: list[dict]) -> dict:
             "delta_only": stats(r.get("err_th_race_median") for r in ls)}
 
 
+def summarise_terrain_difficulty(rows: list[dict]) -> dict:
+    """SP-725 acceptance 3: the trail cases marked 技術路段多 / 需要手腳並用 (the user's mark or the
+    route's default), each predicted without itself — the whole-activity moving-time error without
+    terrain (err_th_given / err_th_race) against with its level's multiplier (fitted without it).
+    `better` = the median |error| at the case's own HR is lower with the multiplier (None below 1 case)."""
+    rs = [r for r in rows if r.get("terrain") in ("technical", "scramble") and r.get("err_th_given") is not None]
+    out = {"n": len(rs),
+           "by_level": {lv: sum(1 for r in rs if r["terrain"] == lv) for lv in ("technical", "scramble")},
+           "given": stats(r.get("err_th_given") for r in rs),
+           "given_terrain": stats(r.get("err_th_given_terrain") for r in rs),
+           "race_level": stats(r.get("err_th_race") for r in rs),
+           "race_level_terrain": stats(r.get("err_th_race_terrain") for r in rs),
+           "source": "地形難度倍率（推估）：每一筆都用前一天、不含該筆的資料擬合"}
+    a, b = out["given"]["median_abs"], out["given_terrain"]["median_abs"]
+    out["better"] = None if a is None or b is None else b < a
+    return out
+
+
 def summarise_trail_hr(rows: list[dict]) -> dict:
     """Trail HR pace model errors: every trail case (given HR), the races
     (activity type 比賽) and the 全力 capacity samples (given and race level)."""
@@ -829,6 +859,7 @@ def summarise_trail_hr(rows: list[dict]) -> dict:
                 "total": st_ub(r.get("err_th_total") for r in rs),
                 "power_envelope": stats(r.get("err_c") for r in rs)}
     return {"all": blk(th), "races": blk(races), "max_effort": blk(maxes),
+            "terrain": summarise_terrain_difficulty(th),
             "long_races": summarise_long_races(races),
             "double_count_check": summarise_double_count(races),
             "race_rows": [{k: r.get(k) for k in ("date", "label", "file", "effort_tag", "effort_overridden",
@@ -1046,6 +1077,12 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
     race_idx = {i for i, c in classes.items()
                 if ((c.get("capacity") or {}).get("tags") or {}).get("activity_type") == "race"
                 or (c.get("capacity") or {}).get("ok")}
+    # SP-725: each case's 地形難度 (the user's mark, else its route's default)
+    from backend.engine import terrain_difficulty as TD
+    try:
+        tlv = TD.levels(ds, tags)
+    except Exception:                       # noqa: BLE001 — no marks: every case 一般
+        tlv = {}
     cases, arrays = [], {}
     for c in candidates(ds, today, classes, marked):
         w = by_idx[c["idx"]]
@@ -1053,6 +1090,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
         if arr is None:
             continue
         c = {**c, "power_source": A.power_source(ds, w), "surface": smarks.get(c["idx"]),
+             "terrain": (tlv.get(c["idx"]) or {}).get("level"),
              "stop_kind": A.nonmoving_kind(w, race_idx)}           # SP-721: whose stops predict its total
         if c["category"] == "hike":
             for n, part in _hike_days(arr, w.entry.start):

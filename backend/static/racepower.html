@@ -391,6 +391,12 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <div class="seg" id="surface"><button data-s="dry" data-i18n="racepower.surface.dry">乾</button><button data-s="wet" data-i18n="racepower.surface.wet">濕</button></div>
       <span class="meta" id="surface-meta"></span>
     </div>
+    <!-- SP-725: 地形難度 (trail; renderTerrainDiff): the HR model's per-level multiplier on the effort km -->
+    <div class="row tf" id="tdiff-row"><span class="lbl" data-i18n="racepower.tdiff.label">地形難度</span>
+      <div class="seg" id="tdiff"><button data-d="normal" data-i18n="racepower.tdiff.normal">一般</button><button data-d="technical" data-i18n="racepower.tdiff.technical">技術路段多</button><button data-d="scramble" data-i18n="racepower.tdiff.scramble">需要手腳並用</button></div>
+      <span class="help" tabindex="0">?<span class="tip" id="tdiff-tip"></span></span>
+      <span class="meta" id="tdiff-meta"></span>
+    </div>
 
     <div class="row"><span class="lbl">路線</span>
       <div class="seg" id="csrc"><button data-c="manual">手動</button><button data-c="gpx">GPX</button></div>
@@ -813,7 +819,7 @@ function syncForm() {
   $("goal-basis").textContent = "";
   segOn("mode", "m", md); segOn("tunit", "u", S.tunit); segOn("punit", "u", S.punit); segOn("effort", "e", S.effort);
   segOn("csrc", "c", S.csrc); segOn("split", "s", S.split); segOn("strategy", "k", S.strategy); segOn("measure", "m", measure());
-  segOn("tripkind", "k", S.trip); segOn("hrband", "b", S.hrband);
+  segOn("tripkind", "k", S.trip); segOn("hrband", "b", S.hrband); renderTerrainDiff();
   $("mode-time").classList.toggle("hidden", md !== "time");
   $("mode-power").classList.toggle("hidden", md !== "power");
   $("mode-auto").classList.toggle("hidden", md !== "auto");
@@ -1542,6 +1548,7 @@ function planBody(extra = {}) {
     hourly: !tempOverridden() && ($("hourlyheat").checked || WX?.provider === "climatology") ? (WX?.hourly || null) : null,
     to_provider: tempOverridden() ? null : (WX?.provider || null),
     heat_acclimatisation: heatAcclBody(), surface: type === "trail" ? (S.surface || null) : null,
+    terrain_difficulty: type === "trail" ? (S.tdiff || "normal") : null,       // SP-725 地形難度
     rain: WX?.rain || null, wind: WX?.wind || null, sun: WX?.sun || null,
     // SP-553: each section's rows (its hourly ones only when the race-day temperature is the forecast's, as `hourly`)
     weather_points: WX?.points?.length ? WX.points.map((p) => ({ i: p.i, from_km: p.from_km, to_km: p.to_km, elevation_m: p.elevation_m,
@@ -1597,7 +1604,7 @@ function planBody(extra = {}) {
 }
 function renderAll() {
   renderResults(); renderGroup(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
-  renderStops(); renderExportBtn(); renderSurface(); renderRain(); fillSleepDefaults();
+  renderStops(); renderExportBtn(); renderSurface(); renderTerrainDiff(); renderRain(); fillSleepDefaults();
   if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
 }
 let RUN_SEQ = 0;
@@ -3250,6 +3257,25 @@ function renderSurface() {
   segOn("surface", "s", S.surface || "");
   $("surface-meta").textContent = sf?.available
     ? T(sf.total_from_hr ? "surface.meta_hr" : "surface.meta", { dry: sf.n?.dry ?? 0, wet: sf.n?.wet ?? 0 }) : "";
+}
+// SP-725 地形難度: 一般 (default) / 技術路段多 / 需要手腳並用; the ? lists each level's multiplier and how many of
+// your marked activities it comes from (PLAN.summary.trail_hr.terrain; before a plan: the priors, 推估)
+bindSeg("tdiff", "d", "tdiff", (x) => x, () => renderTerrainDiff());
+function renderTerrainDiff() {
+  const cur = S.tdiff || "normal";
+  segOn("tdiff", "d", cur);
+  // the priors (engine/terrain_difficulty.PRIOR) until a plan brings the fitted ones
+  const prior = { normal: { mult: 1, n: 0 }, technical: { mult: 1.15, n: 0 }, scramble: { mult: 1.35, n: 0 } };
+  const th = PLAN?.summary?.trail_hr, t = th?.terrain, lv = t?.levels || prior;
+  const src = (x) => (x.n ? T("tdiff.src_n", { n: x.n }) : T("tdiff.src_est"));
+  $("tdiff-tip").innerHTML = [esc(T("tdiff.tip")),
+    ...["normal", "technical", "scramble"].map((k) => `<b>${esc(T("tdiff." + k))}</b> ${esc(T("tdiff.what_" + k))}` +
+      (k === "normal" ? "" : `：×${(+lv[k].mult).toFixed(2)}（${esc(src(lv[k]))}）`)),
+    esc(T("tdiff.how"))].join("<br>");
+  const meta = $("tdiff-meta");
+  if (cur === "normal" || !PLAN || type !== "trail") meta.textContent = "";
+  else if (!th) meta.textContent = T("tdiff.no_hr");
+  else meta.textContent = T("tdiff.meta", { m: (+t.mult).toFixed(2), src: src(t) });
 }
 bindSeg("tripkind", "k", "trip"); bindSeg("hrband", "b", "hrband");
 ["tripdays", "packdays", "heatz"].forEach((id) => $(id).addEventListener("input", schedule));

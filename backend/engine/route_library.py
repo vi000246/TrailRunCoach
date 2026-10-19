@@ -294,15 +294,20 @@ def mine_course(item: dict, track: Optional[dict]) -> dict:
         raise RouteError(ex.errors, 404)
 
 
-def mine_row(item: dict, name: str, fav: bool = False) -> dict:
-    return {"id": item["id"], "name": name, "kind": item["kind"], "direction": item.get("direction"),
-            "length_m": item.get("length_m"), "gain_m": item.get("gain_m"), "n_efforts": item.get("n_efforts"),
-            "n_activities": item.get("n_activities"), "best_s": item.get("best_s"), "last_s": item.get("last_s"),
-            "last_date": item.get("last_date"), "time_key": item.get("time_key"), "fav": fav,
-            "renamed": name != item.get("auto_name")}
+def mine_row(item: dict, name: str, fav: bool = False, terrain: Optional[dict] = None) -> dict:
+    """One 「我的路段」 row. `terrain` = {route id: 地形難度} (SP-731): a whole route (kind "route") carries
+    its default level (None = 未設) — the activities on it without their own mark take it."""
+    out = {"id": item["id"], "name": name, "kind": item["kind"], "direction": item.get("direction"),
+           "length_m": item.get("length_m"), "gain_m": item.get("gain_m"), "n_efforts": item.get("n_efforts"),
+           "n_activities": item.get("n_activities"), "best_s": item.get("best_s"), "last_s": item.get("last_s"),
+           "last_date": item.get("last_date"), "time_key": item.get("time_key"), "fav": fav,
+           "renamed": name != item.get("auto_name")}
+    if item["kind"] == "route":
+        out["terrain"] = (terrain or {}).get(item["id"])
+    return out
 
 
-def mine_rows(view: Optional[dict], names: dict, favs: dict) -> list[dict]:
+def mine_rows(view: Optional[dict], names: dict, favs: dict, terrain: Optional[dict] = None) -> list[dict]:
     """「我的路段」 on the page and in the picker: the segments and routes done at least MINE_MIN times —
     starred first, then renamed, then by kind (MINE_KINDS: climbs first), then the most done."""
     if not view:
@@ -311,7 +316,7 @@ def mine_rows(view: Optional[dict], names: dict, favs: dict) -> list[dict]:
     for it in view.get("items", {}).values():
         if it.get("kind") not in MINE_KINDS or (it.get("n_activities") or 0) < MINE_MIN:
             continue
-        out.append(mine_row(it, names.get(it["id"]) or it.get("auto_name") or "", it["id"] in favs))
+        out.append(mine_row(it, names.get(it["id"]) or it.get("auto_name") or "", it["id"] in favs, terrain))
     out.sort(key=lambda r: (not r["fav"], not r["renamed"], MINE_KINDS.index(r["kind"]), -(r["n_efforts"] or 0), r["name"]))
     return out
 

@@ -26,8 +26,9 @@ Merge rules:
   * two columns of one row: both kept (each column has its own winner).
   * `tags` (the free-form tag list) is merged as a set, not as one value: a device sends `add` /
     `remove` of ONE tag, and each tag has its own last writer. Two devices adding a tag each keep
-    both (as one LWW list, one of them would be lost). The 登山杖 and 路況 marks, stored as tags too,
-    are their own columns `poles` / `surface` (one value each, LWW) and cannot be added as tags.
+    both (as one LWW list, one of them would be lost). The 登山杖, 路況, 地形難度 and 跟團 marks, stored
+    as tags too, are their own columns `poles` / `surface` / `terrain_difficulty` / `group` (one value
+    each, LWW) and cannot be added as tags.
   * a setting the server validates as a set (課表偏好: plan_prefs.check) refuses a change that would
     make the set invalid (e.g. 長跑日上限 shorter than the weekday cap after two devices each changed
     one): INVALID_COMBINATION, the row keeps the server's values.
@@ -81,11 +82,11 @@ SETTING_PREFIXES = ("plan.prefs.",)     # 課表偏好: checked as a set (plan_p
 
 # activity_tags: one value per column (LWW) …
 TAG_SET_COLS = ("activity_type", "effort", "note", "exclusion", "name", "poles", "surface",
-                "source", "file", "distance_km", "label")
+                "terrain_difficulty", "group", "source", "file", "distance_km", "label")
 TAG_KEY_COL = "start_local"             # creates the row; never changes
 TAG_LIST_COL = "tags"                   # … and the free-form tags as a set (add / remove one tag)
 TAG_COLS = (TAG_KEY_COL,) + TAG_SET_COLS + (TAG_LIST_COL,)
-_SPECIAL_TAGS = frozenset(set(AT.POLES.values()) | {AT.POLE_NONE_TAG} | set(AT.SURFACES.values()))
+_SPECIAL_TAGS = AT.MARK_TAGS          # 登山杖, 路況, 地形難度, 跟團 / 自己: their own columns, not tags
 _TEXT_MAX = {"note": 5000, "source": 10, "file": 300, "label": 200}
 
 MAX_VALUE_BYTES = 20_000
@@ -348,7 +349,8 @@ def tag_values(t: ActivityTag) -> dict:
             "effort": t.effort if t.effort_overridden else None,
             "note": t.note, "exclusion": t.exclusion, "name": t.name,
             "tags": [x for x in tags if x not in _SPECIAL_TAGS],
-            "poles": AT.pole_choice(tags), "surface": AT.surface_of(tags)}
+            "poles": AT.pole_choice(tags), "surface": AT.surface_of(tags),
+            "terrain_difficulty": AT.terrain_of(tags), "group": AT.group_of(tags)}
 
 
 async def _row(db, tbl: str, row: str, aid: int) -> dict:
@@ -446,7 +448,8 @@ def _tag_changes(obj: ActivityTag) -> list[dict]:
                 "effort": get("effort") if get("effort_overridden") else None,
                 "note": get("note"), "exclusion": get("exclusion"), "name": get("name"),
                 "tags": [x for x in tags if x not in _SPECIAL_TAGS],
-                "poles": AT.pole_choice(tags), "surface": AT.surface_of(tags)}
+                "poles": AT.pole_choice(tags), "surface": AT.surface_of(tags),
+                "terrain_difficulty": AT.terrain_of(tags), "group": AT.group_of(tags)}
     a, b = vals(old.get), vals(lambda k: getattr(obj, k))
     out = []
     base = {"tbl": TAGS, "row_id": uid}

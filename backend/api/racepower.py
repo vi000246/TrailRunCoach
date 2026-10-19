@@ -751,8 +751,10 @@ def _trail_hr() -> Optional[dict]:
     with the inputs."""
     from backend.engine import activity_tags as AT
     from backend.engine.racepower import athlete as A
+    from backend.engine import terrain_difficulty as TD
     AT.load()
-    key = (*_tenancy.ds_key(_dataset()), today_local(), _plan_stamp(), AT._memo.get("stamp"))
+    # SP-725: a route's default 地形難度 (routes/terrain.json) refits the multipliers too
+    key = (*_tenancy.ds_key(_dataset()), today_local(), _plan_stamp(), AT._memo.get("stamp"), TD.stamp())
     hit = _cache.get("trail_hr")
     if hit and hit[0] == key:
         return hit[1]

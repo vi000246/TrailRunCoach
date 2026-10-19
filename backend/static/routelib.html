@@ -126,6 +126,10 @@ ul.items .sub { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); fon
 .gen ol .tg { color: var(--muted); font-size: 11.5px; margin-left: 6px; overflow-wrap: anywhere; }
 .gen ol li.up::marker { color: var(--climb); font-weight: 700; }
 .btn.gen-btn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.tdiff { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 13px; }
+.tdiff .q { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--line);
+  font-size: 11px; color: var(--muted); cursor: help; }
+.tdiff select { border: 1px solid var(--line); border-radius: 7px; padding: 3px 6px; background: var(--bg); color: var(--text); }
 .msg { font-size: 12.5px; } .msg.err { color: var(--bad); } .msg.ok { color: var(--good); } .msg:empty { display: none; }
 </style>
 </head>
@@ -215,7 +219,7 @@ function renderList() {
     `<span class="sub">${km(r.km)} · +${Math.round(r.gain_m || 0)} m · ${esc(T("n_climbs", { n: r.n_climbs || 0 }))}${r.from_tpl ? ` · ${esc(T("from_tpl"))}` : ""}</span></button></li>`).join("")
     : `<li class="empty">${esc(T("none_gpx"))}</li>`;
   $("rl-mine").innerHTML = S.mine.length ? S.mine.map((r) => `<li><button type="button" data-m="${esc(r.id)}" aria-current="${cur.src === "seg" && cur.id === r.id}">` +
-    `<span class="nm">${r.fav ? "★ " : ""}${esc(nameOf(r))}</span><span class="tag ${r.kind === "climb" ? "up" : ""}">${esc(T("kind." + r.kind))}</span>` +
+    `<span class="nm">${r.fav ? "★ " : ""}${esc(nameOf(r))}</span><span class="tag ${r.kind === "climb" ? "up" : ""}">${esc(T("kind." + r.kind))}${r.terrain && r.terrain !== "normal" ? ` · ${esc(T("tdiff." + r.terrain))}` : ""}</span>` +
     `<span class="sub">${km((r.length_m || 0) / 1000)} · ${gainTxt(r.gain_m)} · ${esc(T("n_times", { n: r.n_efforts || 0 }))} · ${esc(T("best"))} ${hms(r.best_s)}</span></button></li>`).join("")
     : `<li class="empty">${esc(T("none_mine"))}</li>`;
 }
@@ -284,6 +288,7 @@ function renderDetail() {
     `<div class="stats"><span>${esc(T("st_len"))} <b>${km(len)}</b></span><span>${esc(T("st_gain"))} <b>${gainTxt(gain)}</b></span>` +
     (gpx ? `<span>${esc(T("st_loss"))} <b>−${Math.round(d.loss_m || 0)} m</b></span><span>${esc(T("st_file"))} <b>${esc(d.filename || "")}</b></span>`
       : `<span>${esc(T("n_times", { n: d.n_efforts || 0 }))}</span><span>${esc(T("best"))} <b>${hms(d.best_s)}</b></span><span>${esc(T("last"))} <b>${hms(d.last_s)}</b>${d.last_date ? ` (${esc(d.last_date.slice(0, 10))})` : ""}</span>`) + `</div>` +
+    (!gpx && d.kind === "route" ? tdiffRow(d) : "") +
     `<div class="acts">` + (gpx
       ? `<a class="btn" href="${LAPI}/${d.id}/file">${esc(T("download"))}</a><button class="btn danger" type="button" id="rl-del">${esc(T("del"))}</button>`
       : `<a class="btn" href="${esc(d.link)}">${esc(T("history"))}</a>`) +
@@ -295,6 +300,16 @@ function renderDetail() {
     `<div id="rl-gen-prev" aria-live="polite"></div><p class="meta" style="margin:0">${esc(T("gen_note"))}</p></section>` +
     profile(d.profile || {}, climbs) +
     `<p class="hint">${esc(T("use_hint"))}</p>` + courseTable(tb);
+}
+
+// ---- SP-731: a whole route's default 地形難度 — the activities on it without their own mark take it (the
+// race calculator's trail model and the activity list); PUT /routes/mine/{id}/terrain
+const TDIFF = ["normal", "technical", "scramble"];
+function tdiffRow(d) {
+  return `<div class="tdiff"><label for="rl-tdiff">${esc(T("tdiff.label"))}</label> <select id="rl-tdiff">` +
+    `<option value="" ${d.terrain ? "" : "selected"}>${esc(T("tdiff.none"))}</option>` +
+    TDIFF.map((v) => `<option value="${v}" ${d.terrain === v ? "selected" : ""}>${esc(T("tdiff." + v))}</option>`).join("") +
+    `</select><span class="q" tabindex="0" role="note" title="${esc(T("tdiff.help"))}" aria-label="${esc(T("tdiff.help"))}">?</span></div>`;
 }
 
 // ---- 從這條路線產生課 (SP-641): the steps the server makes (POST /steps/from-route), shown here; the 課表
@@ -352,7 +367,18 @@ $("rl-det").addEventListener("click", async (e) => {
     await load(); setMsg(T("deleted"), "ok");
   }
 });
-$("rl-det").addEventListener("change", (e) => { if (e.target.id === "rl-gen-day") { S.genDay = e.target.value; genPreview(); } });
+$("rl-det").addEventListener("change", async (e) => {
+  if (e.target.id === "rl-gen-day") { S.genDay = e.target.value; genPreview(); return; }
+  if (e.target.id === "rl-tdiff") {
+    const level = e.target.value || null;
+    const r = await req("PUT", `${PAPI}/routes/mine/${encodeURIComponent(S.det.id)}/terrain`, { level });
+    if (!r.ok) { setMsg(errText(r), "err"); return; }
+    S.det.terrain = level;
+    const row = S.mine.find((x) => x.id === S.det.id);
+    if (row) row.terrain = level;
+    renderList(); setMsg(T("tdiff.saved"), "ok");
+  }
+});
 $("rl-det").addEventListener("keydown", (e) => { if (e.target.id === "rl-name" && e.key === "Enter") $("rl-ren").click(); });
 $("rl-up").addEventListener("click", () => $("rl-file").click());
 $("rl-file").addEventListener("change", async (e) => {

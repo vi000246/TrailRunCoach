@@ -604,6 +604,23 @@ class RouteStore:
         d = _read(self.favorites_path)
         return d if isinstance(d, dict) else {}
 
+    terrain_path = property(lambda self: self.root / "terrain.json")
+
+    def terrain(self) -> dict:
+        """{route id: 地形難度 "normal" / "technical" / "scramble"} — the user's default for the
+        activities on that route that have no mark of their own (SP-731, engine/terrain_difficulty.py)."""
+        d = _read(self.terrain_path)
+        return d if isinstance(d, dict) else {}
+
+    def set_terrain(self, sid: str, level: Optional[str], aliases: tuple = ()) -> None:
+        """Set a route's default 地形難度; None clears it (and the item's old ids)."""
+        f = self.terrain()
+        for k in (sid, *aliases):
+            f.pop(k, None)
+        if level:
+            f[sid] = level
+        _write(self.terrain_path, f, indent=1)
+
     def set_favorite(self, sid: str, on: bool, aliases: tuple = ()) -> None:
         """Star / unstar; unstarring also drops the item's old ids (`aliases`) still in the file."""
         f = self.favorites()

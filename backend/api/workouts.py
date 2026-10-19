@@ -82,12 +82,16 @@ class ActivityUpdate(BaseModel):
     surface: Optional[str] = None
     # SP-674: the plan event this race was (Event.id; null = unlinked) — sets the type 比賽
     race_event: Optional[str] = None
+    # 地形難度 (SP-725): "normal" 一般 / "technical" 技術路段多 / "scramble" 需要手腳並用 / null 未標 — one tag
+    terrain_difficulty: Optional[str] = None
+    # 跟團 / 自己 (SP-731): "group" / "solo" / null 未標 — one tag (athlete.solo_hikes reads it)
+    group: Optional[str] = None
 
 
 TAG_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "pain_side",
-              "poles", "surface", "pain_score", "race_event")
+              "poles", "surface", "pain_score", "race_event", "terrain_difficulty", "group")
 STORED_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "poles",
-                 "surface", "pain_score", "race_event")
+                 "surface", "pain_score", "race_event", "terrain_difficulty", "group")
 
 
 async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_local: str, athlete_id: int = 1,
@@ -105,7 +109,9 @@ async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_loc
                       body.poles if "poles" in sent else None,
                       body.surface if "surface" in sent else None,
                       body.pain_score if "pain_score" in sent else None,
-                      body.race_event if "race_event" in sent else None)
+                      body.race_event if "race_event" in sent else None,
+                      terrain_difficulty=body.terrain_difficulty if "terrain_difficulty" in sent else None,
+                      group=body.group if "group" in sent else None)
     painish = bool({"pain", "pain_area", "pain_side", "pain_score"} & sent)
     if painish:
         from backend.engine import injuries as INJ

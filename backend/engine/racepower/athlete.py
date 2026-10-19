@@ -274,30 +274,98 @@ def is_hike(w) -> bool:
     return w.sport_type in HIKE_SPORTS or bool(HIKE_TAGS & set(w.tags))
 
 
-def solo_hikes(path=None) -> set[str]:
-    """Hikes the user opted in as solo (paced by the athlete): their file
-    names (+ "starts": {file: local start}). Everything else tagged hiking /
-    mountaineering is treated as group-paced and kept out of every
-    target-time calibration. A ByStartSet (engine/activity_key.py): `file in
-    solo` also matches the same trip under another source's file name."""
-    from backend.engine.activity_key import ByStartSet
+TAG_KEY_PREFIX = "tag:"   # a solo hike known only by its activity_tags row (no file): "tag:<start_local>"
+
+
+def _legacy_solo(path) -> tuple[list, dict]:
     try:
-        d = json.loads((path or _solo_hikes_path()).read_text("utf-8"))
-        return ByStartSet(d.get("files") or [], d.get("starts") or {})
+        d = json.loads(Path(path).read_text("utf-8"))
+        return list(d.get("files") or []), dict(d.get("starts") or {})
     except (OSError, ValueError):
-        return ByStartSet()
+        return [], {}
+
+
+def solo_hikes(path=None, tags: Optional[list] = None) -> set[str]:
+    """Hikes paced by the athlete (自己): their file names (+ "starts": {file: local start}).
+    Everything else tagged hiking / mountaineering is treated as group-paced and kept out of every
+    target-time calibration. A ByStartSet (engine/activity_key.py): `file in solo` also matches the
+    same trip under another source's file name.
+
+    SP-731 — one truth: the activity_tags 跟團 / 自己 mark (activity_tags.GROUPS). The set is the old
+    opt-in file (racepower_solo_hikes.json: the opt-ins made before the mark existed; it only shrinks
+    now) without the trips marked 跟團, plus every activity marked 自己. `path` given (tests, the old
+    file alone): the file only. `tags` = activity_tags rows (default: activity_tags.load())."""
+    from backend.engine import activity_key as AK
+    from backend.engine import activity_tags as AT
+    files, starts = _legacy_solo(path or _solo_hikes_path())
+    if path is not None:
+        return AK.ByStartSet(files, starts)
+    if tags is None:
+        try:
+            tags = AT.load()
+        except Exception:                   # noqa: BLE001 — no tag store: the old file alone
+            tags = []
+    if not tags:
+        return AK.ByStartSet(files, starts)
+    keep = []
+    for f in files:
+        st = AK.to_dt(starts.get(f) or AK.start_of_file(f))
+        u = AT.find(tags, st, f) if st is not None else AT.find(tags, None, f)
+        if AT.group_of(AT.tags_of(u)) != "group":
+            keep.append(f)
+    out_starts = {f: v for f, v in starts.items() if f in keep}
+    for r in tags:
+        if AT.group_of(AT.tags_of(r)) != "solo" or not r.get("start_local"):
+            continue
+        k = r.get("file") or TAG_KEY_PREFIX + r["start_local"]
+        if k not in keep:
+            keep.append(k)
+        out_starts[k] = r["start_local"]
+    return AK.ByStartSet(keep, out_starts)
 
 
 def set_solo_hikes(files, path=None) -> set[str]:
+    """The old 「自己走」 toggle (the race calculator's hike list). `path` given, or a fixed SOLO_HIKES
+    file (tests): rewrites that file, as before. Live (SP-731): writes the activity_tags 跟團 / 自己 mark —
+    a trip ticked → 自己, un-ticked → 未標 (the group-paced default) and dropped from the old file."""
     from backend.engine import activity_key as AK
-    p = path or _solo_hikes_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    s = sorted({str(f) for f in files if f})
-    old = solo_hikes(p)
-    starts = {f: old.starts.get(f) or AK.key_of(AK.start_of_file(f)) for f in s}
-    starts = {f: v for f, v in starts.items() if v}
-    p.write_text(json.dumps({"files": s, "starts": starts}, ensure_ascii=False), "utf-8")
-    return AK.ByStartSet(s, starts)
+    if path is not None or SOLO_HIKES is not None:
+        p = Path(path or _solo_hikes_path())
+        p.parent.mkdir(parents=True, exist_ok=True)
+        s = sorted({str(f) for f in files if f})
+        _old, old_starts = _legacy_solo(p)
+        starts = {f: old_starts.get(f) or AK.key_of(AK.start_of_file(f)) for f in s}
+        starts = {f: v for f, v in starts.items() if v}
+        p.write_text(json.dumps({"files": s, "starts": starts}, ensure_ascii=False), "utf-8")
+        return AK.ByStartSet(s, starts)
+    from backend.engine import activity_tags as AT
+    cur = solo_hikes()
+    want = {str(f) for f in files if f}
+    db = AT._default_db()
+    rows = AT.load()
+
+    def mark(f: str, group: Optional[str]) -> None:
+        if db is None:
+            return
+        start = f[len(TAG_KEY_PREFIX):] if f.startswith(TAG_KEY_PREFIX) else (
+            cur.starts.get(f) or AK.key_of(AK.start_of_file(f)))
+        st = AK.to_dt(start)
+        u = AT.find(rows, st, None if f.startswith(TAG_KEY_PREFIX) else f)
+        key = (u or {}).get("start_local") or (AK.key_of(st) if st is not None else None)
+        if key:
+            AT.upsert(db, start_local=key, file=None if f.startswith(TAG_KEY_PREFIX) else f, group=group)
+    for f in sorted(want - set(cur)):
+        mark(f, "solo")
+    gone = set(cur) - want
+    for f in sorted(gone):
+        mark(f, None)
+    lp = _solo_hikes_path()
+    files, starts = _legacy_solo(lp)
+    if any(f in gone for f in files):
+        left = [f for f in files if f not in gone]
+        lp.write_text(json.dumps({"files": left, "starts": {f: v for f, v in starts.items() if f in left}},
+                                 ensure_ascii=False), "utf-8")
+    return solo_hikes()
 
 
 def hiking_days(ds, today: dt.date, solo: Optional[set] = None) -> list[dict]:
@@ -2028,12 +2096,15 @@ def own_paced(w, tags: Optional[list] = None, solo=None) -> bool:
     False for a hiking / mountaineering sport type or the user's 爬山 / 百岳跟團 mark, unless the
     trip is in the user's solo hikes (solo_hikes); every other run is the athlete's own pace."""
     from backend.engine import activity_tags as AT
+    u = AT.find(tags, w.entry.start, w.entry.file) if tags else None
+    g = AT.group_of(AT.tags_of(u))          # SP-731: the user's 跟團 / 自己 mark decides first
+    if g is not None:
+        return g == "solo"
     solo = solo_hikes() if solo is None else solo
     if w.entry.file in solo:
         return True
     if is_hike(w):
         return False
-    u = AT.find(tags, w.entry.start, w.entry.file) if tags else None
     return AT.user_type(u) not in GROUP_PACED_TYPES
 
 
@@ -2246,6 +2317,24 @@ def _fuel_tags(tags, w) -> Optional[bool]:
     return TH.fuel_of(words)
 
 
+def terrain_marks(ds, pts: list, tags: Optional[list]) -> dict:
+    """SP-725: each trail HR point's 地形難度 (terrain_difficulty.levels: the user's mark, else its
+    route's default) set as p["terrain"] / p["terrain_src"]; {"n_user", "n_route"}. Never fails the
+    model: no marks → every run 一般."""
+    from backend.engine import terrain_difficulty as TD
+    try:
+        lv = TD.levels(ds, tags)
+    except Exception:                       # noqa: BLE001
+        lv = {}
+    n = {"user": 0, "route": 0}
+    for p in pts:
+        x = lv.get(p.get("idx"))
+        if x:
+            p["terrain"], p["terrain_src"] = x["level"], x["src"]
+            n[x["src"]] += 1
+    return {"n_user": n["user"], "n_route": n["route"]}
+
+
 def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] = None,
                    race_idx: Optional[set] = None, tags: Optional[list] = None) -> dict:
     """The trail HR pace model (trailhr.py) as of `today`: the trail runs of
@@ -2306,7 +2395,15 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
         dinfo["use"] = ins["delta"]
         dinfo["n_evidence"] = ins["n"]
     dinfo["gate"] = TH.choose_delta(pts, dinfo)
+    # SP-725: the 地形難度 of each run (the user's mark, else its route's default) → the per-level
+    # multipliers on the effort km, fitted from the marked runs; the v₀ fit puts those runs back on 一般
+    tinfo = terrain_marks(ds, pts, tags)
+    terr = TH.fit_terrain(pts, dinfo["gate"]["delta"])
+    for p in pts:
+        p["terrain_mult"] = terr["mult"].get(p.get("terrain") or "normal", 1.0)
+    terr["n_route"] = tinfo["n_route"]
     m = TH.fit(pts, dinfo["gate"]["delta"])
+    m["terrain"] = terr
     m["delta_raw"] = dinfo["all"]["raw_median"]
     m["delta_info"] = dinfo
     m["n_durability"] = len(drows)

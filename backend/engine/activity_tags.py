@@ -331,6 +331,65 @@ def exclusive_surface(tags) -> list[str]:
     return ct if sum(t in _SURFACE_OF_TAG for t in ct) <= 1 else with_surface(ct, s)
 
 
+# 地形難度 (SP-725 / SP-731; the user's word, 2026-10-19 — not 「路線難度」): how technical the whole
+# activity's terrain was, the user's own mark (三級 一般 / 技術路段多 / 需要手腳並用), stored as one of three
+# free-form tags like the pole and surface marks (no schema change, so the export, the backup and the
+# device sync carry it with tags_json). No tag = 未標 (read as 一般 unless the activity's route has a
+# default, engine/terrain_difficulty.py). The trail HR model fits one time multiplier per level from the
+# marked activities (racepower/trailhr.fit_terrain). The tag strings are storage values.
+TERRAINS = {"normal": "地形一般", "technical": "技術路段多", "scramble": "需要手腳並用"}
+_TERRAIN_OF_TAG = {v: k for k, v in TERRAINS.items()}
+# 跟團 / 自己 (SP-731, SP-724): who set the pace of a hike. The user's mark, stored as a free-form tag;
+# the single truth for 「自己走」 — athlete.solo_hikes reads it (the old racepower_solo_hikes.json is
+# only the opt-ins made before, and set_solo_hikes now writes this tag). No tag = 未標.
+GROUPS = {"group": "跟團", "solo": "自己步調"}
+_GROUP_OF_TAG = {v: k for k, v in GROUPS.items()}
+
+
+def _mark_of(tags, table: dict) -> Optional[str]:
+    out = None
+    for t in tags or []:
+        out = table.get(str(t).strip(), out)
+    return out
+
+
+def terrain_of(tags) -> Optional[str]:
+    """"normal" / "technical" / "scramble" / None (未標); the last terrain tag wins."""
+    return _mark_of(tags, _TERRAIN_OF_TAG)
+
+
+def with_terrain(tags, level: Optional[str]) -> list[str]:
+    """The tag list with the 地形難度 mark set to `level` (None = 未標)."""
+    out = [t for t in clean_tags(tags) if t not in _TERRAIN_OF_TAG]
+    return out + [TERRAINS[level]] if level in TERRAINS else out
+
+
+def group_of(tags) -> Optional[str]:
+    """"group" (跟團) / "solo" (自己) / None (未標); the last group tag wins."""
+    return _mark_of(tags, _GROUP_OF_TAG)
+
+
+def with_group(tags, group: Optional[str]) -> list[str]:
+    """The tag list with the 跟團 / 自己 mark set to `group` (None = 未標)."""
+    out = [t for t in clean_tags(tags) if t not in _GROUP_OF_TAG]
+    return out + [GROUPS[group]] if group in GROUPS else out
+
+
+def exclusive_marks(tags) -> list[str]:
+    """A cleaned tag list with at most one terrain and one group tag (the last ones kept)."""
+    ct = clean_tags(tags)
+    if sum(t in _TERRAIN_OF_TAG for t in ct) > 1:
+        ct = with_terrain(ct, terrain_of(ct))
+    if sum(t in _GROUP_OF_TAG for t in ct) > 1:
+        ct = with_group(ct, group_of(ct))
+    return ct
+
+
+# every tag that is a mark, not a free-form tag (the pages keep them out of the tag chips)
+MARK_TAGS = frozenset(set(POLES.values()) | {POLE_NONE_TAG} | set(SURFACES.values())
+                      | set(TERRAINS.values()) | set(GROUPS.values()))
+
+
 # 「這次活動期間下過雨（N mm），要標成濕路嗎？」 (SP-299): the archive rain while the activity ran
 # (route_weather.activity_rain, activity_weather.json) only HINTS at the 濕 mark; the user presses
 # 「標成濕」 to set it. 推估: ≥ 1 mm (the ticket's suggested start: a trace under 1 mm rarely wets a
@@ -479,7 +538,11 @@ def user_exclusion(u: Optional[dict]) -> Optional[str]:
 
 def validate(activity_type=None, effort=None, exclusion=None, name=None, tags=None,
              pain=None, pain_area=None, poles=None, surface=None, pain_score=None,
-             race_event=None) -> Optional[str]:
+             race_event=None, terrain_difficulty=None, group=None) -> Optional[str]:
+    if terrain_difficulty is not None and terrain_difficulty not in TERRAINS:
+        return "INVALID_TERRAIN_DIFFICULTY"
+    if group is not None and group not in GROUPS:
+        return "INVALID_GROUP"
     if race_event is not None and (not isinstance(race_event, str) or not race_event.strip()
                                    or len(race_event) > RACE_EVENT_MAX):
         return "INVALID_RACE_EVENT"
@@ -520,7 +583,8 @@ _UNSET = object()
 def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=None, workout_id=None,
            distance_km=None, label=None, activity_type=_UNSET, effort=_UNSET, note=_UNSET,
            exclusion=_UNSET, name=_UNSET, tags=_UNSET, pain=_UNSET, pain_area=_UNSET, poles=_UNSET,
-           surface=_UNSET, pain_score=_UNSET, race_event=_UNSET) -> dict:
+           surface=_UNSET, pain_score=_UNSET, race_event=_UNSET, terrain_difficulty=_UNSET,
+           group=_UNSET) -> dict:
     """Write one user tag (sync; the seed script and tests). For each of
     activity_type / effort: a value sets it and its *_overridden flag; None
     clears it (back to auto); left out = unchanged. `exclusion`: "keep" /
@@ -534,7 +598,7 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
     from backend.db.models import ActivityTag
     un = lambda v: None if v is _UNSET else v       # noqa: E731
     err = validate(un(activity_type), un(effort), un(exclusion), un(name), un(tags), un(pain), un(pain_area),
-                   un(poles), un(surface), un(pain_score), un(race_event))
+                   un(poles), un(surface), un(pain_score), un(race_event), un(terrain_difficulty), un(group))
     if err:
         raise ValueError(err)
     eng = create_engine(f"sqlite:///{Path(db_path)}")
@@ -554,7 +618,8 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
             s.add(row)
         apply_update(row, activity_type=activity_type, effort=effort, note=note, exclusion=exclusion,
                      name=name, tags=tags, pain=pain, pain_area=pain_area, poles=poles, surface=surface,
-                     pain_score=pain_score, race_event=race_event)
+                     pain_score=pain_score, race_event=race_event, terrain_difficulty=terrain_difficulty,
+                     group=group)
         for k, v in (("source", source), ("file", file), ("workout_id", workout_id),
                      ("distance_km", distance_km), ("label", label)):
             if v is not None:
@@ -569,7 +634,8 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
 
 def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclusion=_UNSET,
                  name=_UNSET, tags=_UNSET, pain=_UNSET, pain_area=_UNSET, poles=_UNSET,
-                 surface=_UNSET, pain_score=_UNSET, race_event=_UNSET) -> None:
+                 surface=_UNSET, pain_score=_UNSET, race_event=_UNSET, terrain_difficulty=_UNSET,
+                 group=_UNSET) -> None:
     """Set the user fields of an ActivityTag row (shared by upsert and the
     async API): value → set + overridden; None → cleared, back to auto.
     `exclusion` (bad_activity.py): "keep" / "exclude", None = the auto rule.
@@ -578,19 +644,25 @@ def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclu
     tag). `poles` (登山杖, POLES): "with" / "without" / "none" = the user's 未標
     (POLE_NONE_TAG, keeps a race default off) / None = no choice — rewrites
     the pole tag of the (new) tag list, after `tags`. `surface` (路況,
-    SURFACES): "dry" / "wet" / None = 未標, the same way."""
+    SURFACES): "dry" / "wet" / None = 未標, the same way. `terrain_difficulty` (地形難度, TERRAINS)
+    and `group` (跟團 / 自己, GROUPS): the same way (None = 未標)."""
     import json
     if exclusion is not _UNSET:
         row.exclusion = exclusion
     if name is not _UNSET:
         row.name = (name or "").strip() or None
-    if tags is not _UNSET or poles is not _UNSET or surface is not _UNSET:
-        ct = exclusive_surface(exclusive_poles(tags)) if tags is not _UNSET \
+    if tags is not _UNSET or poles is not _UNSET or surface is not _UNSET or terrain_difficulty is not _UNSET \
+            or group is not _UNSET:
+        ct = exclusive_marks(exclusive_surface(exclusive_poles(tags))) if tags is not _UNSET \
             else tags_of({"tags_json": row.tags_json})
         if poles is not _UNSET:
             ct = with_poles(ct, poles)
         if surface is not _UNSET:
             ct = with_surface(ct, surface)
+        if terrain_difficulty is not _UNSET:
+            ct = with_terrain(ct, terrain_difficulty)
+        if group is not _UNSET:
+            ct = with_group(ct, group)
         row.tags_json = json.dumps(ct, ensure_ascii=False) if ct else None
     if activity_type is not _UNSET:
         row.activity_type = activity_type
@@ -912,6 +984,7 @@ def merge(auto: dict, user: Optional[dict]) -> dict:
             # pole_state(tags, race_poles(ds).get(idx)) over it — the race default (SP-300)
             "name": name_of(user), "tags": tags_of(user), "poles": poles_of(tags_of(user)),
             "surface": surface_of(tags_of(user)),
+            "terrain_difficulty": terrain_of(tags_of(user)), "group": group_of(tags_of(user)),
             "pain": (user or {}).get("pain"), "pain_area": (user or {}).get("pain_area"),
             "injury_id": (user or {}).get("injury_id"), "pain_score": (user or {}).get("pain_score"),
             "key": (user or {}).get("start_local")}

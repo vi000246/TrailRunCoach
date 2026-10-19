@@ -229,6 +229,9 @@ class PlanIn(PredictIn):
     heat_ref_alt_m: Optional[float] = None  # the elevation the race-day temperature refers to
     # 路況 (SP-250): the race-day trail surface; used only when the model has the dry / wet split
     surface: Optional[Literal["dry", "wet"]] = None
+    # 地形難度 (SP-725, engine/terrain_difficulty.py): the route's 一般 / 技術路段多 / 需要手腳並用 — the trail
+    # HR model's per-level multiplier (fitted from the user's marked runs, else the prior) on the effort km
+    terrain_difficulty: Optional[Literal["normal", "technical", "scramble"]] = None
     # SP-244: the plan event is marked 會用登山杖 → a hint on steep segments (seg_targets.pole_hint);
     # text only, no number changes
     poles: bool = False

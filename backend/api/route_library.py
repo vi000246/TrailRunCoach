@@ -11,6 +11,8 @@ the templates, and picking one for a day's structure.
   GET    /api/v1/overview/plan/routes/library/{id}/file    the stored file
   GET    /api/v1/overview/plan/routes/mine                 「我的路段」: climbs and routes done ≥ 2 times
   GET    /api/v1/overview/plan/routes/mine/{rid}           {…, profile, table, link (路線進步 page)}
+  PUT    /api/v1/overview/plan/routes/mine/{rid}/terrain   {level: normal | technical | scramble | null} — a
+                                                           route's default 地形難度 (SP-731)
   POST   /api/v1/overview/plan/steps/route                 {steps, route: {src: gpx | seg, id, climb?} | null,
                                                             + the session fields /steps/check takes}
                                                            → {steps, climbs, climb, applied, name}
@@ -169,12 +171,41 @@ def _mine_item(rid: str) -> tuple[dict, str, dict]:
     return it, names.get(rid) or it.get("auto_name") or "", track
 
 
+def _mine_terrain(view) -> dict:
+    """{route id: 地形難度} the user set (SP-731; routes/terrain.json), old ids resolved."""
+    from backend.api import routes as RA
+    from backend.engine import terrain_difficulty as TD
+    try:
+        return {k: v for k, v in RA._by_current_id(RA.STORE.terrain(), view).items() if TD.valid(v)}
+    except Exception:         # noqa: BLE001
+        return {}
+
+
 @router.get("/routes/mine")
 async def mine_list():
     from backend.engine import route_library as RL
     view, names, favs = _mine_view()
-    return {"rows": RL.mine_rows(view, names, favs), "built_at": (view or {}).get("built_at"),
+    return {"rows": RL.mine_rows(view, names, favs, _mine_terrain(view)), "built_at": (view or {}).get("built_at"),
             "page": "/api/v1/routes/page"}
+
+
+@router.put("/routes/mine/{rid}/terrain")
+async def mine_terrain(rid: str, body: dict = Body(...)):
+    """SP-731: a whole route's default 地形難度 {level: normal | technical | scramble | null}; the
+    activities on it without their own mark take it (engine/terrain_difficulty.py) — in the race
+    calculator's trail model as in the activity list. Only kind 「路線」."""
+    from backend.api import routes as RA
+    from backend.engine import terrain_difficulty as TD
+    level = (body or {}).get("level")
+    if level is not None and not TD.valid(level):
+        raise HTTPException(400, "INVALID_TERRAIN_DIFFICULTY")
+    it, _name, _track = _mine_item(rid)
+    if it.get("kind") != "route":
+        raise HTTPException(400, "ROUTE_ONLY")
+    view = RA._index() or {}
+    aliases = tuple(k for k, v in (view.get("aliases") or {}).items() if v == it["id"])
+    RA.STORE.set_terrain(it["id"], level, aliases)
+    return {"id": it["id"], "terrain": level}
 
 
 async def _mine_course(rid: str) -> tuple[dict, str, dict]:
@@ -191,7 +222,8 @@ async def _mine_course(rid: str) -> tuple[dict, str, dict]:
 async def mine_detail(rid: str, db: AsyncSession = Depends(get_db)):
     from backend.engine import route_library as RL
     it, name, got = await _mine_course(rid)
-    return {**RL.mine_row(it, name), "profile": _profile_out(got["profile"]), "totals": got["totals"],
+    view, _names, _favs = _mine_view()
+    return {**RL.mine_row(it, name, terrain=_mine_terrain(view)), "profile": _profile_out(got["profile"]), "totals": got["totals"],
             "table": await _table(got["course"], db), "link": f"/api/v1/routes/page#{it['id']}"}
 
 

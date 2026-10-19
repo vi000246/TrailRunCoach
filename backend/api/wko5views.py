@@ -1592,6 +1592,8 @@ async def patch_activity(i: int, body: dict):
             await save_activity_tag(db, upd, start_local=key, source=DSRC.current_source(),
                                     file=w.entry.file, distance_km=w.metrics.get("distance"),
                                     label=f"{w.entry.start:%Y-%m-%d} {w.sport_type}")
+        if "group" in tag_keys:
+            _solo_changed()
     return await run_in_threadpool(_activity_json, ds, w)
 
 
@@ -1695,6 +1697,8 @@ def activities_list():
     def user_part(u, race=None):
         return {"name": AT.name_of(u), "tags": AT.tags_of(u), **AT.pole_state(AT.tags_of(u), race),
                 "surface": AT.surface_of(AT.tags_of(u)),
+                # SP-731: the 地形難度 and 跟團 / 自己 marks (the list edits them in place)
+                "terrain_difficulty": AT.terrain_of(AT.tags_of(u)), "group": AT.group_of(AT.tags_of(u)),
                 "note": (u or {}).get("note"),
                 "user_type": AT.user_type(u), "user_effort": AT.user_effort(u),
                 "user_exclusion": AT.user_exclusion(u), **_pain_part(u),
@@ -1772,7 +1776,7 @@ def activities_list():
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": {**ORIGIN_LABELS, "wko5": _("對照資料夾")},
             "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES, "pole_none_tag": AT.POLE_NONE_TAG,
-            "surface_tags": AT.SURFACES,
+            "surface_tags": AT.SURFACES, "terrain_tags": AT.TERRAINS, "group_tags": AT.GROUPS,
             # 「再標 N 次就能比較」 beside the 登山杖 choice (SP-243): only the trail runs and
             # hikes the chart uses count
             "pole_compare": PC.counts(ds, tags, today_local()),
@@ -1869,6 +1873,37 @@ async def activities_stats():
     return await run_in_threadpool(work)
 
 
+@router.get("/activities/hints")
+async def activities_hints():
+    """SP-731: the faded suggestions of the list's two editable columns — {"group": {key: {suggest:
+    group | solo | null, hr_pct, vam_ratio}} for the hikes (engine/group_hint.py, SP-716's rule) and
+    {"terrain_route": {key: level}} for the activities whose 地形難度 comes from their route's default
+    (engine/terrain_difficulty.py). Asked after the list (the first call reads the activities' climbs
+    once; later ones come from the cache)."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.engine import activity_tags as AT
+
+    def work():
+        from backend.engine import group_hint as GH
+        from backend.engine import terrain_difficulty as TD
+        ds = _dataset()
+        tags = AT.load()
+        keys = {w.idx: AT.key_of(w.entry.start) for w in ds.workouts}
+        try:
+            gh = GH.compute(ds, tags)
+        except Exception:                   # noqa: BLE001 — no suggestion, the column still works
+            logging.getLogger(__name__).exception("group_hint failed")
+            gh = {}
+        try:
+            tl = TD.levels(ds, tags)
+        except Exception:                   # noqa: BLE001
+            tl = {}
+        return {"group": {keys[i]: v for i, v in gh.items() if i in keys},
+                "terrain_route": {keys[i]: v["level"] for i, v in tl.items() if v["src"] == "route" and i in keys},
+                "rule": GH.RULE, "source": GH.SOURCE}
+    return await run_in_threadpool(work)
+
+
 class BulkItem(BaseModel):
     key: str
     file: Optional[str] = None
@@ -1899,6 +1934,10 @@ class BulkBody(BaseModel):
     surface: Optional[str] = None
     # SP-674: the plan event this race was (null = unlinked; engine/race_activities.py)
     race_event: Optional[str] = None
+    # 地形難度 (SP-725 / SP-731): "normal" / "technical" / "scramble" / null 未標 (activity_tags.TERRAINS)
+    terrain_difficulty: Optional[str] = None
+    # 跟團 / 自己 (SP-731): "group" / "solo" / null 未標 (activity_tags.GROUPS; athlete.solo_hikes reads it)
+    group: Optional[str] = None
 
 
 BULK_MAX = 500
@@ -1919,7 +1958,7 @@ async def patch_activities(body: BulkBody):
     sent = body.model_fields_set
     base = {k: getattr(body, k) for k in ("activity_type", "effort", "note", "exclusion", "name", "tags",
                                           "pain", "pain_area", "pain_side", "pain_score", "poles", "surface",
-                                          "race_event")
+                                          "race_event", "terrain_difficulty", "group")
             if k in sent}
     for k in ("add_tags", "remove_tags"):
         v = getattr(body, k)
@@ -1946,7 +1985,21 @@ async def patch_activities(body: BulkBody):
                 continue
             await save_activity_tag(db, ActivityUpdate(**patch), start_local=key, source=src, file=it.file)
             saved.append(key)
+    if "group" in sent:
+        _solo_changed()
     return {"saved": saved, "n": len(saved)}
+
+
+def _solo_changed() -> None:
+    """A 跟團 / 自己 mark changed (SP-731): athlete.solo_hikes reads it, so the race calculator's cached
+    inputs and walking model (built on the solo hikes) are dropped."""
+    try:
+        from backend.api import racepower as RP
+        with RP._lock:
+            RP._cache.pop("inputs", None)
+            RP._cache.pop("grade", None)
+    except Exception:                       # noqa: BLE001
+        pass
 
 
 @router.get("/activities/page", include_in_schema=False)
