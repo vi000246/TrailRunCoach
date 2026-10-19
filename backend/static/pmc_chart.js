@@ -12,7 +12,8 @@
  *   PmcChart.band(f)              the band of a balance share f (balance ÷ yesterday's chronic load):
  *                                 {key: high_risk | optimal | grey | fresh | transition, color}
  *   PmcChart.pct(tsb, ctl)        that share, of CTL_MIN under it (engine/load_guard.tsb_share, SP-670)
- *   PmcChart.rule(tsb, ctl)       the schedule's guardrail: "recovery" (< −30 %), "hold" (< −20 %), "ok"
+ *   PmcChart.pctRound(f)          that share in %, whole, or one decimal when it rounds onto a line (LINES)
+ *   PmcChart.rule(tsb, ctl)      the schedule's guardrail: "recovery" (< −30 %), "hold" (< −20 %), "ok"
  *                                 (load_guard.week_rule)
  */
 (function (root, factory) {
@@ -24,13 +25,18 @@
 
   // [upper bound of balance ÷ yesterday's chronic load, colour, name]
   // the same numbers as engine/load_guard.py (TSB_ZONES, TSB_CTL_MIN, TSB_DEEP / TSB_HOLD; SP-670)
-  const BANDS = [[-0.3, "#e34948", "high_risk"], [-0.1, "#1baf7a", "optimal"], [0.05, "#a9a1e6", "grey"],
+  const BANDS = [[-0.3, "#e34948", "high_risk"], [-0.1, "#1baf7a", "optimal"], [0.1, "#a9a1e6", "grey"],
     [0.35, "#6a5cc9", "fresh"], [Infinity, "#eda100", "transition"]];
   const CTL_MIN = 30;
   const band = (f) => { const b = BANDS.find(([hi]) => f < hi); return { key: b[2], color: b[1] }; };
   const pct = (tsb, ctl) => (tsb == null ? 0 : tsb / Math.max(ctl > 0 ? ctl : 0, CTL_MIN));
   const rule = (tsb, ctl) => { const f = pct(tsb, ctl); return f < -0.3 ? "recovery" : f < -0.2 ? "hold" : "ok"; };
   const share = (r) => pct(r.tsb, r.prev);
+  // every line in whole % (load_guard.TSB_LINES_PCT): a share that rounds onto one but isn't on it keeps
+  // one decimal, so −30.3 % doesn't read 「−30%，低於 −30%」 (load_guard.tsb_pct_number, SP-670 Q1-5)
+  const LINES = [-30, -25, -20, -10, -5, 5, 10, 35];
+  const pctRound = (f) => { const p = f * 100, r = Math.round(p), d = Math.round(p * 10) / 10;
+    return LINES.includes(r) && d !== r ? d : r; };
   const one = (v) => (v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1));
 
   function option(rows, ctx) {
@@ -75,5 +81,5 @@
     return rows;
   }
 
-  return { BANDS, CTL_MIN, band, pct, rule, share, option, simulate, one };
+  return { BANDS, CTL_MIN, LINES, band, pct, pctRound, rule, share, option, simulate, one };
 });

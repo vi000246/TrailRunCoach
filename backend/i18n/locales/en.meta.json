@@ -9727,7 +9727,7 @@
     "draft": true,
     "src": "backend/engine/status.py:361"
   },
-  "長期負荷的 −10～+5%：維持中": {
+  "長期負荷的 −10～+10%：維持中": {
     "draft": true,
     "src": "backend/engine/status.py:405"
   },
@@ -10411,11 +10411,11 @@
     "draft": true,
     "src": "backend/accounts/links.py"
   },
-  "{pct:+.0%}（長期負荷不到 {floor:.0f}，以 {floor:.0f} 計）": {
+  "{pct}%（長期負荷不到 {floor:.0f}，以 {floor:.0f} 計）": {
     "draft": true,
     "src": "backend/engine/load_guard.py"
   },
-  "長期負荷的 {pct:+.0%}": {
+  "長期負荷的 {pct}%": {
     "draft": true,
     "src": "backend/engine/load_guard.py"
   },

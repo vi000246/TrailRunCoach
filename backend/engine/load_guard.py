@@ -176,7 +176,7 @@ def ramp_text(ramp: float, ctl_prev: Optional[float], level: str) -> str:
 # (panels/plan_projection) and, as the same numbers, views/training.json, views/periodization.json and
 # static/pmc_chart.js.
 #   zones (intervals.icu's Friel bands as % CTL, vendor rule of thumb): < −30 % 深度疲勞,
-#     −30…−10 % 正常訓練, −10…+5 % 恢復中, +5…+35 % 比賽狀態, ≥ +35 % 休息過久
+#     −30…−10 % 正常訓練, −10…+10 % 恢復中, +10…+35 % 比賽狀態, ≥ +35 % 休息過久
 #   planner: < −20 % hold the volume (no B2B / long climb / steep walk, intervals held), < −30 %
 #     recovery week (the old −20 / −30 points, Friel / TrainingPeaks)
 #   race day: A +10…+35 % (Palladino's +10…+20 points at CTL 60–80 ≈ +12…+33 %, and the app's own
@@ -186,7 +186,7 @@ def ramp_text(ramp: float, ctl_prev: Optional[float], level: str) -> str:
 TSB_CTL_MIN = 30.0
 TSB_DEEP, TSB_HOLD = -0.30, -0.20
 TSB_PRODUCTIVE = (TSB_DEEP, -0.10)
-TSB_FRESH = 0.05               # 恢復中's top: from here 比賽狀態
+TSB_FRESH = 0.10               # 恢復中's top: from here 比賽狀態 (SP-670 Q1-2: the A race's +10 %, was +5 %)
 TSB_STALE = 0.35               # 休息過久 from here (was +25 % / +25 points)
 TSB_RACE = {"A": (0.10, 0.35), "B": (-0.05, 0.05)}
 TSB_EASY_FIRST = -0.25         # panels/recommend: an easy day before the intensity session (was −25 points)
@@ -235,12 +235,29 @@ def week_rule(tsb: Optional[float], ctl: Optional[float]) -> Optional[str]:
     return None
 
 
+# Every line above in whole %, for tsb_pct_text: a share that rounds onto one of them but isn't on it
+# gets one decimal (SP-670 Q1-5, owner 2026-10-19: 「長期負荷的 −30%，低於 −30%」 read as a contradiction
+# at −30.3 %). static/pmc_chart.js LINES is the same list.
+TSB_LINES_PCT = sorted({round(v * 100) for v in (TSB_DEEP, TSB_HOLD, *TSB_PRODUCTIVE, TSB_FRESH, TSB_STALE,
+                                                  *TSB_RACE["A"], *TSB_RACE["B"], TSB_EASY_FIRST)})
+
+
+def tsb_pct_number(share: float) -> str:
+    """「−30」, or 「−30.3」 when a whole % would read as sitting on a line it is not on."""
+    p = share * 100
+    r = round(p)
+    if r in TSB_LINES_PCT and round(p, 1) != r:
+        return f"{p:+.1f}"
+    return f"{r:+d}"
+
+
 def tsb_pct_text(tsb: float, ctl: Optional[float]):
-    """「長期負荷的 −30%」, or under the floor 「−30%（長期負荷不到 30，以 30 計）」 (an M_ text)."""
+    """「長期負荷的 −30%」, or under the floor 「−30%（長期負荷不到 30，以 30 計）」 (an M_ text);
+    one decimal when the whole % would land on a line (tsb_pct_number)."""
     s = tsb_share(tsb, ctl) or 0.0
     if _base(ctl) < TSB_CTL_MIN:
-        return M_("{pct:+.0%}（長期負荷不到 {floor:.0f}，以 {floor:.0f} 計）", pct=s, floor=TSB_CTL_MIN)
-    return M_("長期負荷的 {pct:+.0%}", pct=s)
+        return M_("{pct}%（長期負荷不到 {floor:.0f}，以 {floor:.0f} 計）", pct=tsb_pct_number(s), floor=TSB_CTL_MIN)
+    return M_("長期負荷的 {pct}%", pct=tsb_pct_number(s))
 
 
 # ---- PMC start values (SP-68) ---------------------------------------------------------

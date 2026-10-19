@@ -44,12 +44,15 @@ def test_under_ctl_30_the_share_is_of_30(ctl, base):
 
 def test_the_owners_lines():
     assert (LG.TSB_DEEP, LG.TSB_HOLD) == (-0.30, -0.20)
-    assert LG.TSB_PRODUCTIVE == (-0.30, -0.10) and LG.TSB_FRESH == 0.05 and LG.TSB_STALE == 0.35
+    # Q1-2 (owner 2026-10-19): 比賽狀態 starts at the A race's +10 %, was +5 %
+    assert LG.TSB_PRODUCTIVE == (-0.30, -0.10) and LG.TSB_FRESH == 0.10 and LG.TSB_STALE == 0.35
     assert LG.TSB_RACE == {"A": (0.10, 0.35), "B": (-0.05, 0.05)}
+    assert LG.TSB_FRESH == LG.TSB_RACE["A"][0]
 
 
 @pytest.mark.parametrize("share, zone", [(-0.31, "deep"), (-0.30, "productive"), (-0.11, "productive"),
-                                         (-0.10, "recovering"), (0.04, "recovering"), (0.05, "fresh"),
+                                         (-0.10, "recovering"), (0.04, "recovering"), (0.05, "recovering"),
+                                         (0.09, "recovering"), (0.10, "fresh"),
                                          (0.34, "fresh"), (0.35, "stale"), (0.80, "stale")])
 def test_zone(share, zone):
     assert LG.tsb_zone(share) == zone
@@ -72,6 +75,35 @@ def test_pct_text_says_when_the_floor_is_used():
     assert "−30%" in LG.tsb_pct_text(-12.0, 40.0) or "-30%" in LG.tsb_pct_text(-12.0, 40.0)
     low = LG.tsb_pct_text(-9.0, 15.0)
     assert "30" in low and "不到" in low
+
+
+@pytest.mark.parametrize("share, text", [
+    (-0.303, "-30.3"),      # rounds onto −30 % but is below it: one decimal (Q1-5, owner 2026-10-19)
+    (-0.297, "-29.7"),      # rounds onto −30 % but is above it
+    (-0.30, "-30"),         # on the line: whole
+    (-0.2049, "-20.5"),
+    (0.096, "+9.6"),        # rounds onto +10 % (比賽狀態 / A race) but isn't there yet
+    (0.346, "+34.6"),
+    (-0.22, "-22"),         # nowhere near a line: whole
+    (-0.276, "-28"),
+    (0.0, "+0"),
+])
+def test_pct_text_has_one_decimal_only_when_it_rounds_onto_a_line(share, text):
+    assert LG.tsb_pct_number(share) == text
+
+
+def test_pct_text_the_owners_example():
+    """「−17（長期負荷的 −30%），低於 −30%」 at −30.3 % (圖 5) now says −30.3%."""
+    assert str(LG.tsb_pct_text(-30.3, 100.0)) == "長期負荷的 -30.3%"
+    assert str(LG.tsb_pct_text(-30.0, 100.0)) == "長期負荷的 -30%"
+    assert str(LG.tsb_pct_text(-9.09, 15.0)).startswith("-30.3%（長期負荷不到 30")
+    assert set(LG.TSB_LINES_PCT) == {-30, -25, -20, -10, -5, 5, 10, 35}
+
+
+def test_pmc_chart_js_lines_match_the_helper():
+    js = (ROOT / "backend/static/pmc_chart.js").read_text("utf-8")
+    m = re.search(r"const LINES = \[([^\]]*)\]", js)
+    assert m and {int(x) for x in m.group(1).split(",")} == set(LG.TSB_LINES_PCT)
 
 
 # ---- the guardrails (acceptance 2: every absolute line is gone) -------------------------------
@@ -186,12 +218,13 @@ def test_chart_zones_use_the_same_lines_and_floor(path):
     for e in exprs:
         assert "shift(ctl, 1)" not in e.replace("if(shift(ctl, 1) < 30, 30, shift(ctl, 1))", "")   # the floor
         nums |= {float(x) for x in re.findall(r"(?<![\w.])-?\d*\.\d+", e)}
-    assert {-0.3, -0.1, 0.05, 0.35} <= nums and 0.25 not in nums
+    assert {-0.3, -0.1, 0.1, 0.35} <= nums and 0.25 not in nums and 0.05 not in nums   # Q1-2: +10 %, not +5 %
 
 
 def test_pmc_chart_js_bands_match():
     js = (ROOT / "backend/static/pmc_chart.js").read_text("utf-8")
     assert "[0.35," in js and "[0.25," not in js and "30" in js
+    assert '[0.1, "#a9a1e6", "grey"]' in js and "[0.05," not in js
 
 
 def test_chart_expression_equals_the_helper(monkeypatch):

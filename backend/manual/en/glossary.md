@@ -114,8 +114,8 @@ Bars = Load balance, coloured by its share of the Chronic load. Drag two big wee
 |---|---|---|
 | Red | < −30 % | High Risk |
 | Green | −30 to −10 % | Optimal |
-| Light purple | −10 to +5 % | Grey Zone |
-| Purple | +5 to +35 % | Fresh |
+| Light purple | −10 to +10 % | Grey Zone |
+| Purple | +10 to +35 % | Fresh |
 | Yellow | > +35 % | Transition |
 
 :::deep

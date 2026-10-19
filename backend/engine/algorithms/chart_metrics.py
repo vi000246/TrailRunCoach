@@ -55,7 +55,7 @@ import numpy as np
 
 # ---- Form%, load ratio -------------------------------------------------------
 # the same lines as engine/load_guard.py TSB_ZONES / TSB_CTL_MIN (SP-670: +35 %, was +25 %; of 30 under CTL 30)
-FORM_ZONES = ((-0.30, "high_risk"), (-0.10, "optimal"), (0.05, "grey"), (0.35, "fresh"))  # upper bounds
+FORM_ZONES = ((-0.30, "high_risk"), (-0.10, "optimal"), (0.10, "grey"), (0.35, "fresh"))  # upper bounds
 FORM_CTL_MIN = 30.0
 LOAD_RATIO_BANDS = (0.8, 1.3, 1.5)
 

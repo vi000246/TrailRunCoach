@@ -147,7 +147,7 @@ It starts from your own value (Settings › Physiology › the starting Chronic 
 - The cap on adding (the Chronic load ramp): Chronic load +4 % a week in Base (at least +2), +5 % in Build (at least +2.5); weekly hours at most 110 % of the reference (or +0.5 h).
 
 ### The colour bands
-A bar's colour is the Load balance ÷ yesterday's Chronic load: < −30 % High Risk, −30 … −10 % Optimal, −10 … +5 % Grey Zone, +5 … +35 % Fresh, > +35 % Transition (bands common in the industry). The recovery-week and hold rules and the race-day targets use this same share; under a Chronic load of 30 it is taken of 30.
+A bar's colour is the Load balance ÷ yesterday's Chronic load: < −30 % High Risk, −30 … −10 % Optimal, −10 … +10 % Grey Zone, +10 … +35 % Fresh, > +35 % Transition (bands common in the industry). The recovery-week and hold rules and the race-day targets use this same share; under a Chronic load of 30 it is taken of 30.
 :::
 
 ## Sending the schedule to the watch {#push}

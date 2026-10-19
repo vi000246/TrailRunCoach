@@ -190,7 +190,7 @@
       const k = PmcChart.rule(bal, end.ctl);               // SP-670: a share of chronic load, as the schedule
       rule.className = "mc-rule " + k;
       rule.textContent = t("chart.rule_" + k, { tsb: sgn(bal, (v) => v.toFixed(0)),
-        pct: sgn(Math.round(PmcChart.pct(bal, end.ctl) * 100), (v) => v.toFixed(0)) });
+        pct: sgn(PmcChart.pctRound(PmcChart.pct(bal, end.ctl)), (v) => v.toFixed(Number.isInteger(v) ? 0 : 1)) });
     }
     r1.addEventListener("input", render);
     r2.addEventListener("input", render);

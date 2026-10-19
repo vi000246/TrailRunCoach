@@ -455,7 +455,7 @@ class Status:
             elif zone == "productive":
                 lvl, v, act = GOOD, _("長期負荷的 −30～−10%：有效訓練的區間"), ""
             elif zone == "recovering":
-                lvl, v, act = GOOD, _("長期負荷的 −10～+5%：維持中"), ""
+                lvl, v, act = GOOD, _("長期負荷的 −10～+10%：維持中"), ""
             elif zone == "fresh":
                 lvl, v, act = WATCH, _("負荷平衡（Load balance）偏高，訓練量不足以進步"), _("把每週量加回來（每週 ≤ +10%）")
             else:
