@@ -245,6 +245,23 @@
   "rpe_load.row": "{label} (RPE {cr})",
   "rpe_load.value": "{tss_h} Load/h · intensity {if}",
   "tabs.aria": "Settings sections",
+  "plan_sum.free": "Plan: free",
+  "plan_sum.sub": "Plan: subscription",
+  "plan_sum.calc": {
+    "one": "{n} calculator use left this month",
+    "other": "{n} calculator uses left this month"
+  },
+  "plan_sum.charts": {
+    "one": "{n} chart page left today",
+    "other": "{n} chart pages left today"
+  },
+  "plan_sum.backtest": {
+    "one": "{n} backtest left this month",
+    "other": "{n} backtests left this month"
+  },
+  "plan_sum.unlimited": "unlimited calculator and charts",
+  "plan_sum.link": "Plans and subscription →",
+  "plan_sum.title": "How much of each quota is used, when it resets, and how the plans differ",
   "tabs.personal": "Personal",
   "tabs.body": "Physiology",
   "tabs.data": "Data & sync",

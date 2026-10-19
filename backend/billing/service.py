@@ -49,10 +49,14 @@ def view(user, now: Optional[dt.datetime] = None) -> dict:
     cfg = B.config()
     u = store.get_user(user.id) or user
     role = MS.role_of_user(u, now)
+    # SP-718: this period's use of each quota (as the role reads now, also right after a sync) and
+    # every plan's limits as the admin set them (the comparison table's numbers)
+    m = MS.Member(role, MS.PAID if role in (MS.SUBSCRIBER, MS.OWNER) else MS.FREE, u.id)
     return {"open": B.available() and cfg.ready, "env": cfg.env if cfg.ready else None,
             "prices": {i: {"amount": B.PRICES[i], "currency": B.CURRENCY} for i in B.INTERVALS},
             "role": role, "plan_expires_at": u.plan_expires_at if role == MS.SUBSCRIBER else None,
-            "subscription": E.summary(store.billing_row(u.id), now)}
+            "subscription": E.summary(store.billing_row(u.id), now),
+            "quotas": MS.quotas_of(m, now), "limits": MS.plan_limits()}
 
 
 async def checkout(user, interval: str, base_url: str) -> str:

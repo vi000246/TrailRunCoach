@@ -387,6 +387,77 @@
     };
   }
 
+  // ---- low quota (SP-718): a free user down to 20 % of a quota hears once, on the page that uses it
+  // (計算機: calc, 圖表: charts), that a subscription lifts it — never blocking. Once per quota and
+  // period (localStorage, by membership.quotas[key].resets); the page's own requests that count a use
+  // re-read GET /api/v1/session (debounced), so it can come up while the page is open.
+  // AppQuota.left(key) / .low(u) serve 設定's plan summary.
+  {
+    const QPAGE = { racepower: ["calc"], charts: ["charts"] };
+    const leftOf = (u) => (u && u.limit != null ? Math.max(0, u.limit - (u.used || 0)) : null);
+    const isLow = (u) => !!u && u.limit != null && u.limit > 0 && leftOf(u) <= u.limit * 0.2;
+    window.AppQuota = { left: leftOf, low: isLow, quotas: () => (MS && MS.quotas) || {} };
+    const keys = (MS && SESSION.login && MS.role === "user" && QPAGE[me?.dataset.page]) || [];
+    if (keys.length) {
+      const LS = "trc.quotaLow.";
+      const seen = (k, u) => { try { return localStorage.getItem(LS + k) === String(u.resets); } catch (_) { return false; } };
+      const mark = (k, u) => { try { localStorage.setItem(LS + k, String(u.resets)); } catch (_) {} };
+      let shown = false;
+      const show = (k, u) => {
+        shown = true; mark(k, u);
+        if (!document.getElementById("an-qlow-css")) {
+          const st = document.createElement("style"); st.id = "an-qlow-css";
+          st.textContent = `.an-qlow { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 79;
+            width: max-content; max-width: min(92vw, 480px); box-sizing: border-box; display: flex; gap: 10px; align-items: center; padding: 9px 10px 9px 14px; border-radius: 9px;
+            background: #1f2937; color: #fff; font: 13px/1.4 system-ui, sans-serif; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+            .an-qlow a { color: #9cc3ff; font-weight: 600; white-space: nowrap; }
+            .an-qlow button { font: inherit; font-size: 16px; line-height: 1; padding: 2px 6px; border: 0; border-radius: 6px;
+              background: transparent; color: #cbd5e1; cursor: pointer; }
+            .an-qlow button:hover { background: rgba(255,255,255,.12); color: #fff; }`;
+          document.head.appendChild(st);
+        }
+        const el = document.createElement("div");
+        el.className = "an-qlow"; el.setAttribute("role", "status"); el.dataset.quota = k;
+        const msg = document.createElement("span");
+        msg.textContent = T(`quota.low.${k}`, { n: leftOf(u), limit: u.limit }) + T("scope.sep") + T("quota.low.upgrade");
+        const a = document.createElement("a"); a.href = "/plans"; a.textContent = T("scope.see_plans");
+        const x = document.createElement("button"); x.type = "button"; x.textContent = "×";
+        x.setAttribute("aria-label", T("quota.low.close")); x.title = T("quota.low.close");
+        x.addEventListener("click", () => el.remove());
+        el.append(msg, a, x);
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 15000);
+      };
+      const check = (qs) => {
+        if (shown) return;
+        for (const k of keys) { const u = qs && qs[k]; if (isLow(u) && !seen(k, u)) { show(k, u); return; } }
+      };
+      const start = () => check(MS.quotas);
+      if (document.body) start(); else document.addEventListener("DOMContentLoaded", start);
+      // the requests that count a use on these pages: the calculator's entries, a chart
+      const COUNTS = /^\/api\/v1\/(racepower\/(plan|predict|estimate|share|export\/plan)$|app\/views\/[^/]+\/dashboards\/\d+\/charts\/)/;
+      let timer = 0, last = 0;
+      const reread = () => {
+        last = Date.now();
+        nativeFetch("/api/v1/session", { cache: "no-store", credentials: "same-origin" }).then((r) => r.json())
+          .then((j) => { const q = j && j.membership && j.membership.quotas; if (q) { MS.quotas = q; check(q); } }).catch(() => {});
+      };
+      const qFetch = window.fetch;
+      window.fetch = async (input, init) => {
+        const r = await qFetch(input, init);
+        if (!shown && r.ok) {
+          let p = "";
+          try { p = new URL(typeof input === "string" ? input : input.url, location.href).pathname; } catch (_) {}
+          if (COUNTS.test(p)) {
+            clearTimeout(timer);
+            timer = setTimeout(reread, Math.max(2000, 15000 - (Date.now() - last)));
+          }
+        }
+        return r;
+      };
+    }
+  }
+
   // ---- cool-downs (SP-714, backend/cooldown.py): after a manual recompute the same person waits
   // before the next. GET /api/v1/session's membership.cooldowns {key: seconds left} and any 429
   // COOLDOWN {key, retry_after} disable the matching button ([data-cooldown="<key>"], or the

@@ -325,6 +325,45 @@ def _period_key(period: str, now: dt.datetime) -> str:
     return local.strftime("%Y-%m-%d") if period == "day" else local.strftime("%Y-%m")
 
 
+def _resets_on(period: str, now: dt.datetime) -> str:
+    """The (Taiwan) date a counter of `period` starts again: tomorrow, or the 1st of next month."""
+    local = now.astimezone(dt.timezone(dt.timedelta(hours=8))).date()
+    if period == "day":
+        return (local + dt.timedelta(days=1)).isoformat()
+    return (local.replace(year=local.year + 1, month=1, day=1) if local.month == 12
+            else local.replace(month=local.month + 1, day=1)).isoformat()
+
+
+def plan_limit(plan: str, key: str) -> Optional[int]:
+    """A plan's quota limit as the admin set it (site_config quota.<plan>.<key>, SP-351), else the
+    default in QUOTAS; None when the plan has no such quota (unlimited)."""
+    q = QUOTAS.get(plan, {}).get(key)
+    if q is None:
+        return None
+    from backend import site_config as SC
+    ck = f"quota.{plan}.{key}"
+    if ck in SC.ITEMS:
+        try:
+            return int(SC.get(ck))
+        except (TypeError, ValueError):
+            return q.limit
+    return q.limit
+
+
+def plan_limits() -> dict:
+    """{plan: {key: {limit, period}}} for every plan's quotas, the admin's numbers (SP-718: the
+    plans page's comparison follows the 管理 page, not text written into the HTML)."""
+    return {plan: {k: {"limit": plan_limit(plan, k), "period": q.period} for k, q in qs.items()}
+            for plan, qs in QUOTAS.items()}
+
+
+def quotas_of(m: Member, now: Optional[dt.datetime] = None) -> dict:
+    """{key: usage} of the member's plan quotas (a user or a subscriber; {} for the owner / demo)."""
+    if m.role not in (USER, SUBSCRIBER):
+        return {}
+    return {k: usage(k, now=now, m=m) for k in QUOTAS.get(m.plan, {})}
+
+
 def quota_for(key: str, m: Optional[Member] = None, now: Optional[dt.datetime] = None) -> Optional[Quota]:
     """The plan's quota, its limit as the admin set it (site_config quota.<plan>.<key>, SP-351),
     plus this user's 本月額外次數 for a monthly quota (the admin page's user row, SP-713)."""
@@ -334,12 +373,9 @@ def quota_for(key: str, m: Optional[Member] = None, now: Optional[dt.datetime] =
     q = QUOTAS.get(m.plan, {}).get(key)
     if q is None:
         return None
-    from backend import site_config as SC
-    ck = f"quota.{m.plan}.{key}"
-    if ck in SC.ITEMS:
-        limit = SC.get(ck)
-        if limit != q.limit:
-            q = Quota(q.key, int(limit), q.period, q.label)
+    limit = plan_limit(m.plan, key)
+    if limit is not None and limit != q.limit:
+        q = Quota(q.key, limit, q.period, q.label)
     extra = extra_this_month(m.user_id, now) if q.period == "month" else 0
     if extra:
         q = Quota(q.key, q.limit + extra, q.period, q.label)
@@ -374,7 +410,7 @@ def usage(key: str, now: Optional[dt.datetime] = None, m: Optional[Member] = Non
     from backend.accounts import store
     pk = _period_key(q.period, now)
     out = {"used": store.usage_get(m.user_id, key, pk), "limit": q.limit, "period": q.period, "label": q.label,
-           "resets": pk}
+           "resets": pk, "resets_on": _resets_on(q.period, now)}
     if q.period == "month":
         out["extra"] = extra_this_month(m.user_id, now)
     return out
@@ -483,5 +519,5 @@ def session_view(tenant=None) -> dict:
         out["plan_expires_at"] = m.expires_at
     if m.test:
         out["test"] = True            # SP-611: the shell says so on every page
-    out["quotas"] = {k: usage(k, m=m) for k in QUOTAS.get(m.plan, {})} if m.role in (USER, SUBSCRIBER) else {}
+    out["quotas"] = quotas_of(m)
     return out

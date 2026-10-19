@@ -42,6 +42,18 @@ a { color: var(--accent); }
 .pl-now { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
 .pl-note { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
 .pl-note.warn { color: var(--warn); }
+.pl-use { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.pl-use h3 { margin: 0 0 8px; font-size: 15px; color: var(--muted); font-weight: 600; }
+.pl-q { display: grid; grid-template-columns: 7em 1fr 5.5em; gap: 2px 12px; align-items: center; margin: 0 0 10px; }
+.pl-q-name { font-weight: 600; }
+.pl-q-name button { margin-left: 4px; padding: 0 6px; font-size: 12px; line-height: 18px; border-radius: 999px; color: var(--muted); }
+.pl-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.pl-bar i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.pl-q.low .pl-bar i { background: var(--warn); }
+.pl-q.free .pl-bar i { background: var(--ok); opacity: .55; }
+.pl-q-num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; text-align: right; }
+.pl-q.low .pl-q-num { color: var(--warn); }
+.pl-q-meta { grid-column: 2 / 4; color: var(--faint); font-size: 13px; }
 table.pl-cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
 .pl-cmp th, .pl-cmp td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .pl-cmp th { color: var(--muted); font-weight: 600; font-size: 13px; }
@@ -62,6 +74,7 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button:disabled { opacity: .55; cursor: not-allowed; }
 .pl-msg { color: var(--muted); font-size: 14px; }
 .pl-msg.err { color: var(--err); }
+.pl-sandbox[hidden] { display: none; }
 .pl-sandbox { display: inline-block; margin: 0 0 10px; padding: 3px 10px; border-radius: 999px; background: var(--warn-bg);
   color: var(--warn); font-size: 13px; }
 @media (max-width: 599px) {
@@ -83,6 +96,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     <h2 data-i18n="plans.now.h">你目前的方案</h2>
     <p class="pl-now" id="pl-now"></p>
     <p class="pl-note" id="pl-now-note" hidden></p>
+    <!-- SP-718: this period's use of each quota (GET /api/v1/billing quotas; a subscription: 不限) -->
+    <div class="pl-use" id="pl-use" hidden>
+      <h3 data-i18n="plans.use.h">本期用量</h3>
+      <div id="pl-use-rows"></div>
+    </div>
   </section>
 
   <section class="pl-sec">
@@ -90,14 +108,14 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     <table class="pl-cmp">
       <thead><tr><th data-i18n="plans.compare.feature">功能</th><th data-i18n="plans.compare.free">免費</th><th data-i18n="plans.compare.paid">訂閱</th></tr></thead>
       <tbody>
-        <tr><td data-i18n="plans.row.view">看課表、改課表、手動記錄、活動列表、近 90 天圖表</td><td data-i18n="plans.row.view.free">✅（圖表每天 5 個）</td><td>✅</td></tr>
+        <tr><td data-i18n="plans.row.view">看課表、改課表、手動記錄、活動列表、近 90 天圖表</td><td data-i18n="plans.row.view.free" data-limit="free.charts" data-tpl="row.view.free_n">✅（圖表每天 5 個）</td><td>✅</td></tr>
         <tr><td data-i18n="plans.row.safety">安全提示、關門判斷、傷病紅燈、熱與寒冷提醒</td><td data-i18n="plans.row.safety.free">✅ 永遠免費</td><td>✅</td></tr>
         <tr><td data-i18n="plans.row.data">手動匯入 FIT、下載我的資料</td><td>✅</td><td>✅</td></tr>
         <tr><td data-i18n="plans.row.sync">自動同步</td><td data-i18n="plans.row.sync.free">每天夜間一次</td><td data-i18n="plans.row.sync.paid">有新活動就處理</td></tr>
         <tr><td data-i18n="plans.row.auto">自動調課表</td><td data-i18n="plans.row.auto.free">夜間同步後</td><td data-i18n="plans.row.auto.paid">即時</td></tr>
-        <tr><td data-i18n="plans.row.calc">賽事計算機</td><td data-i18n="plans.row.calc.free">每月 10 次（同一天同一條路線算 1 次）</td><td data-i18n="plans.row.calc.paid">不限次數</td></tr>
+        <tr><td data-i18n="plans.row.calc">賽事計算機</td><td data-i18n="plans.row.calc.free" data-limit="free.calc" data-tpl="row.calc.free_n">每月 10 次（同一天同一條路線算 1 次）</td><td data-i18n="plans.row.calc.paid">不限次數</td></tr>
         <tr><td data-i18n="plans.row.charts">365 天與全部歷史的圖表</td><td>—</td><td>✅</td></tr>
-        <tr><td data-i18n="plans.row.backtest">回測</td><td>—</td><td data-i18n="plans.row.backtest.paid">每月 2 次</td></tr>
+        <tr><td data-i18n="plans.row.backtest">回測</td><td>—</td><td data-i18n="plans.row.backtest.paid" data-limit="subscriber.backtest" data-tpl="row.backtest.paid_n">每月 2 次</td></tr>
         <tr><td data-i18n="plans.row.keep">完整資料保留</td><td data-i18n="plans.row.keep.free">1 年（之後只留摘要）</td><td data-i18n="plans.row.keep.paid">自選 2／3／5／10 年</td></tr>
       </tbody>
     </table>
@@ -157,6 +175,64 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     $("pl-closed").hidden = !!s.open || s.role === "owner";
     $("pl-manage").hidden = !(s.open && sub);
     $("pl-sandbox").hidden = s.env !== "sandbox";
+    renderUse(s);
+    renderLimits(s.limits);
+  };
+  // SP-718: the comparison's numbers are the admin's (GET /api/v1/billing limits {plan: {key: {limit}}})
+  const renderLimits = (limits) => {
+    if (!limits) return;
+    for (const td of document.querySelectorAll("[data-limit]")) {
+      const [plan, key] = td.dataset.limit.split(".");
+      const q = limits[plan] && limits[plan][key];
+      if (q && q.limit != null) td.textContent = T(td.dataset.tpl, { n: q.limit });
+    }
+  };
+  // a "YYYY-MM-DD" in the reader's own date format (no time zone shift)
+  const ymd = (s) => { const [y, m, d] = String(s).split("-").map(Number);
+    try { return new Date(y, m - 1, d).toLocaleDateString(document.documentElement.lang || "zh-TW", { month: "numeric", day: "numeric" }); }
+    catch (_) { return s; } };
+  // 本期用量: one bar per quota of the plan (used / limit, when it resets); a subscriber's calculator and
+  // charts — the free tier's quotas — read 不限. The owner has none.
+  const renderUse = (s) => {
+    const box = $("pl-use-rows");
+    box.textContent = "";
+    if (s.role !== "user" && s.role !== "subscriber") { $("pl-use").hidden = true; return; }
+    const own = s.quotas || {};
+    const lifted = s.role === "subscriber" ? Object.keys((s.limits && s.limits.free) || {}).filter((k) => !(k in own)) : [];
+    const rows = [...lifted.map((k) => [k, null]), ...Object.entries(own)];
+    for (const [k, u] of rows) {
+      const unl = !u || u.limit == null;
+      const left = unl ? null : Math.max(0, u.limit - (u.used || 0));
+      const low = !unl && u.limit > 0 && left <= u.limit * 0.2;
+      const row = document.createElement("div");
+      row.className = "pl-q" + (unl ? " free" : low ? " low" : "");
+      row.dataset.quota = k;
+      const name = document.createElement("span"); name.className = "pl-q-name"; name.textContent = T("use." + k);
+      const help = window.t("plans.use.q." + k);
+      if (help && help !== "plans.use.q." + k) {
+        const q = document.createElement("button"); q.type = "button"; q.textContent = "?"; q.title = help;
+        q.setAttribute("aria-label", T("use.q_aria") + ": " + help);
+        name.append(q);
+      }
+      const bar = document.createElement("div"); bar.className = "pl-bar";
+      const fill = document.createElement("i");
+      fill.style.width = unl ? "100%" : (u.limit > 0 ? Math.min(100, 100 * (u.used || 0) / u.limit) : 100).toFixed(1) + "%";
+      bar.append(fill);
+      bar.setAttribute("role", "img");
+      const num = document.createElement("span"); num.className = "pl-q-num";
+      num.textContent = unl ? T("use.unlimited") : T("use.of", { used: u.used || 0, limit: u.limit });
+      bar.setAttribute("aria-label", num.textContent);
+      row.append(name, bar, num);
+      if (!unl) {
+        const meta = [T(u.period === "day" ? "use.day" : "use.month"),
+          u.period === "day" ? T("use.resets_day") : (u.resets_on ? T("use.resets_month", { date: ymd(u.resets_on) }) : "")];
+        if (u.extra) meta.push(T("use.extra", { n: u.extra }));
+        const m = document.createElement("span"); m.className = "pl-q-meta"; m.textContent = meta.filter(Boolean).join(" · ");
+        row.append(m);
+      }
+      box.append(row);
+    }
+    $("pl-use").hidden = !rows.length;
   };
   const load = async () => {
     const r = await fetch("/api/v1/billing", { cache: "no-store" });

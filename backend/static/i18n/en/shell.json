@@ -100,6 +100,16 @@
   "account.plans_free": "Now: free plan",
   "account.plans_sub": "Now: subscription",
   "account.plans_title": "Compare the plans, subscribe or manage your subscription",
+  "quota.low.calc": {
+    "one": "{n} calculator use left this month (of {limit})",
+    "other": "{n} calculator uses left this month (of {limit})"
+  },
+  "quota.low.charts": {
+    "one": "{n} chart page left today (of {limit})",
+    "other": "{n} chart pages left today (of {limit})"
+  },
+  "quota.low.upgrade": "unlimited with a subscription",
+  "quota.low.close": "Close",
   "page.admin.name": "Admin",
   "page.admin.short": "Admin",
   "page.admin.purpose": "Site settings, users, waitlist",

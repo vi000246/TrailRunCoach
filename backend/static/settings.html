@@ -157,6 +157,9 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 @media (max-width: 480px) { .tabs button { flex: 1 1 auto; padding: 6px 4px; font-size: 13px; } }
 .tab-note { order: -1; margin: -6px 2px 0; }
+.plan-sum { order: -3; margin: 0 2px; font-size: 14px; color: var(--muted); }
+.plan-sum .low { color: var(--warn); font-weight: 600; }
+.plan-sum a { white-space: nowrap; font-weight: 600; }
 main > section.tab-off { display: none; }
 /* 生理數據: 心率 → 閾值測試紀錄 → 功率 (grid order; the HTML order stays) */
 #hr { order: 1; } #thresholds { order: 2; } #power { order: 3; }
@@ -212,6 +215,31 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
   <h1>設定</h1>
 </header>
 <main>
+  <!-- SP-718: the plan and what is left of its quotas, one line, to 方案與訂閱 (sign-in mode, a user
+       or a subscriber — the site owner has no plan) -->
+  <p class="plan-sum" id="plan-sum" hidden></p>
+  <script>
+  (() => {
+    const s = window.TRC_SESSION, ms = s && s.membership;
+    if (!(s && s.login && ms && (ms.role === "user" || ms.role === "subscriber"))) return;
+    const el = document.getElementById("plan-sum"), T = (k, p) => window.t("settings.plan_sum." + k, p);
+    const left = (u) => (u && u.limit != null ? Math.max(0, u.limit - (u.used || 0)) : null);
+    const parts = [T(ms.role === "subscriber" ? "sub" : "free")];
+    if (ms.role === "subscriber") parts.push(T("unlimited"));
+    for (const [k, u] of Object.entries(ms.quotas || {})) {
+      const n = left(u);
+      if (n == null) continue;
+      const span = document.createElement("span");
+      span.textContent = T(k, { n });
+      if (u.limit > 0 && n <= u.limit * 0.2) span.className = "low";
+      parts.push(span);
+    }
+    parts.forEach((p, i) => { if (i) el.append(" · "); el.append(p); });
+    const a = document.createElement("a"); a.href = "/plans"; a.textContent = T("link"); a.title = T("title");
+    el.append(" ", a);
+    el.hidden = false;
+  })();
+  </script>
   <nav class="tabs" role="tablist" aria-label="設定分類" data-i18n-attr="aria-label:settings.tabs.aria">
     <button type="button" role="tab" id="tab-personal" data-tab="personal" data-i18n="settings.tabs.personal">個人資料</button>
     <button type="button" role="tab" id="tab-body" data-tab="body" data-i18n="settings.tabs.body">生理數據</button>
