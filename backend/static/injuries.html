@@ -221,6 +221,11 @@ function areaCol(a) {
   let h = 0; for (const c of String(a || "")) h = (h * 31 + c.charCodeAt(0)) % 360;
   return `hsl(${h} 55% 50%)`;
 }
+// SP-457: 生病 has no body area (stored as 「unknown」) — its own colour (none of the areas'), one tone (no severity)
+const ILL_COL = "#0d9488", ILL_A = 0.6;
+const evCol = (x) => x.category === "illness" ? ILL_COL : areaCol(x.area);
+// the 備註 example follows the kind of record
+const NOTE_EX = { injury: "例如：下坡右膝外側；看過復健科", illness: "例如：發燒到 38.5；看過家醫科" };
 async function j(url, opt) {
   const r = await fetch(url, opt);
   let b = null; try { b = await r.json(); } catch {}
@@ -282,11 +287,13 @@ function drawTimeline() {
   let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="傷病時間軸">
     <defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="rgba(255,255,255,.45)"/></pattern></defs>`;
   for (const b of t.bands) {
-    const a = Math.max(L, X(b.start)), z = Math.min(W - R, X(b.end) + 2);
-    const tip = `<b>${esc(b.label)}・${esc(b.severity_label)}</b><br>${ymd(b.start)} – ${b.open ? "還沒好" : ymd(b.end)}${b.kind === "acute" ? "<br>急性" : ""}`;
-    s += `<g data-tip-html="${esc(tip)}" data-ev="${b.id}" style="cursor:pointer"><rect x="${a}" y="${T}" width="${Math.max(3, z - a)}" height="${plotB - T}" fill="${areaCol(b.area)}" opacity="${SEV_A[b.severity] || .4}"/>
-      ${b.open ? `<rect x="${a}" y="${T}" width="${Math.max(3, z - a)}" height="${plotB - T}" fill="url(#hatch)"/>` : ""}
-      <circle cx="${X(b.start)}" cy="${T + 5}" r="4" fill="${areaCol(b.area)}" stroke="var(--panel)" stroke-width="1.5"/></g>`;
+    const ill = b.category === "illness";
+    // SP-457: a few days on an 18-month axis is ~3 px — at least 5 px so a short spell (a cold, a fever) shows
+    const a = Math.max(L, X(b.start)), z = Math.min(W - R, X(b.end) + 2), bw = Math.max(5, z - a);
+    const tip = `<b>${esc(b.label)}${ill ? "" : "・" + esc(b.severity_label)}</b><br>${ymd(b.start)} – ${b.open ? (ill ? "還有症狀" : "還沒好") : ymd(b.end)}${b.kind === "acute" && !ill ? "<br>急性" : ""}`;
+    s += `<g data-tip-html="${esc(tip)}" data-ev="${b.id}" style="cursor:pointer"><rect x="${a}" y="${T}" width="${bw}" height="${plotB - T}" fill="${evCol(b)}" opacity="${ill ? ILL_A : SEV_A[b.severity] || .4}"/>
+      ${b.open ? `<rect x="${a}" y="${T}" width="${bw}" height="${plotB - T}" fill="url(#hatch)"/>` : ""}
+      <circle cx="${X(b.start)}" cy="${T + 5}" r="4" fill="${evCol(b)}" stroke="var(--panel)" stroke-width="1.5"/></g>`;
   }
   for (const w of ws) {
     const v = w[S.metric] || 0; if (!v) continue;
@@ -321,10 +328,11 @@ function drawTimeline() {
   s += `<text x="${L}" y="${plotB + 30}" style="font-size:10px">疼痛</text></svg>`;
   $("tl").innerHTML = s;
   hoverable($("tl"));
-  const used = [...new Set(t.bands.map((b) => b.area))];
+  const used = [...new Set(t.bands.filter((b) => b.category !== "illness").map((b) => b.area))];
   $("tl-leg").innerHTML = `<span><i style="background:var(--bar)"></i>每週${{ run_h: "跑步時間", desc: "下降", climb: "爬升", trail_h: "越野時間" }[S.metric]}</span>
     <span><i style="background:var(--accent);height:3px"></i>長期訓練負荷（Chronic load）</span>` +
     used.map((a) => `<span><i style="background:${areaCol(a)}"></i>${esc(areaLabel(a))}</span>`).join("") +
+    (t.bands.some((b) => b.category === "illness") ? `<span><i style="background:${ILL_COL}"></i>生病</span>` : "") +
     `<span><i style="background:var(--warn);width:3px"></i>痠</span><span><i style="background:var(--err);width:3px"></i>痛／中斷</span>`;
 }
 const areaLabel = (a) => (S.meta?.areas || []).find((x) => x.key === a)?.label || (a === "unknown" ? "未指定部位" : a);
@@ -344,7 +352,7 @@ function renderList() {
     return;
   }
   $("cards").innerHTML = L.map((x) => `<div class="card ${x.status === "draft" ? "draft" : ""} ${S.sel === x.id ? "on" : ""}" data-id="${x.id}">
-      <div class="t"><span class="dot" style="background:${areaCol(x.area)}"></span>${esc(x.label)}${x.category === "illness" ? "" : `<span class="sev ${x.severity}">${esc(x.severity_label)}</span>`}
+      <div class="t"><span class="dot" style="background:${evCol(x)}"></span>${esc(x.label)}${x.category === "illness" ? "" : `<span class="sev ${x.severity}">${esc(x.severity_label)}</span>`}
         ${x.light ? `<span class="badge light-${esc(x.light.color)}" data-hint-id="IJ1" title="${esc(x.light.reason)}">${esc(x.light.label)}${x.light.phase === "walkrun" ? "・" + esc(walkrunText(x.light)) : ""}</span>` : ""}${x.condition_label ? `<span class="badge" title="${esc((S.meta?.labels || {}).condition || "")}">${esc(x.condition_label)}</span>` : ""}${x.kind === "acute" ? `<span class="badge">急性</span>` : ""}${x.recurrence_of ? `<span class="badge" title="同部位、上次好了 42 天內">復發</span>` : ""}</div>
       <div class="s"><span>${ymd(x.onset_date)} – ${x.status === "resolved" ? ymd(x.resolved_date) : x.category === "illness" ? "還有症狀" : "還沒好"}</span><span>${x.day_n} 天</span>
         ${x.days_off != null ? `<span>停跑 ${x.days_off} 天${x.days_missed == null ? "（自動）" : ""}</span>` : ""}
@@ -542,6 +550,7 @@ function renderDlg() {
   document.querySelectorAll("#fm .ill-only").forEach((el) => { el.hidden = !ill; });
   $("f-res-l").textContent = ill ? "症狀消失" : "好了";
   $("f-today").textContent = ill ? "今天沒症狀了" : "今天好了";
+  $("f-note").placeholder = NOTE_EX[ill ? "illness" : "injury"];
   chipRow($("f-area"), m.areas.map((a) => [a.key, a.label, a.custom]), F.area, "area",
     `<input type="text" id="f-area-new" maxlength="12" placeholder="＋其他部位" style="width:7em;border-radius:12px;font-size:12px;padding:2px 7px" aria-label="新增部位，Enter">`);
   if (!ill) $("f-side-r").hidden = !F.area || m.no_side.includes(F.area);

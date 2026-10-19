@@ -124,7 +124,7 @@ def _https_url(raw: Optional[str]) -> Optional[str]:
 def join():
     """「用自己的資料算」 (SP-124): a public path (login.PUBLIC_PATHS), the same for every visitor —
     303 to sign-up (/login, then the race calculator), the waitlist (/login?waitlist=1) or, before
-    sign-up opens, the public demo (TRC_DEMO_URL); 404 when there is nowhere to go (and in the demo).
+    sign-up opens, the public demo (TRC_DEMO_URL), else the 關於 page (/about, SP-124 Q2); 404 in the demo.
     Reads nobody's data and computes nothing."""
     from fastapi.responses import RedirectResponse
 

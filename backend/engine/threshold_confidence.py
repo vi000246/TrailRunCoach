@@ -325,6 +325,28 @@ def consistency_signals(lthr: Optional[float], mhr: Optional[float], rhr: Option
     return out
 
 
+EST_LOW_EFFORT = N_("入選跑步的強度可能不夠，這個估算可能偏低：不提供一鍵套用。做一次 30 分鐘測試比較準，"
+                    "或確認 CP 後再估")
+
+
+def estimate_effort_warning(value, mhr: Optional[dict], rhr: Optional[dict]) -> Optional[dict]:
+    """SP-749: the automatic LTHR estimate (thresholds.estimate) counts runs whose best 30 min reached
+    95 % of the CP in effect. With that CP too low (an old test, an underestimating fit) steady easy
+    runs pass and the median is the top of Z2, not the threshold — and the CP cannot tell, it is the
+    premise. The HR can, the same way for everyone: an estimate below the usual share of the runner's
+    own max HR / HR reserve (the typical ranges of consistency_signals: < 85 % HRmax or < 80 % HRR)
+    says the runs were not hard enough. {text, signals, test} — the settings card then shows the
+    warning instead of 「套用」 — or None. No max HR, or only the age formula's: None (no own data)."""
+    v, mv = _f(value), _f((mhr or {}).get("value"))
+    if not v or not mv or (mhr or {}).get("source_kind") == "age":
+        return None
+    sigs = [s for s in consistency_signals(v, mv, _f((rhr or {}).get("value")), {})
+            if s.get("direction") == "up"]
+    if not sigs:
+        return None
+    return {"text": _(EST_LOW_EFFORT), "signals": [s["text"] for s in sigs], "test": schedule_link("tt30")}
+
+
 def effort_signals(lthr: float, runs: list[dict]) -> tuple[list[dict], dict]:
     """4–6 on the runs of the evidence window: (signals, support) where support says what
     corroborates the LTHR ({"race": [...], "cp_band": {...}, "hr60": ...})."""

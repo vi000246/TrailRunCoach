@@ -84,12 +84,16 @@ def test_warm_up_order_dataset_status_inputs_then_low_priority(monkeypatch):
     monkeypatch.setattr(AA, "job_for", lambda d, **kw: order.append("classify"))
     from backend.api import racepower as RP
     monkeypatch.setattr(RP, "warm_charts", lambda job=None: order.append("charts"))      # SP-366, last
+    # SP-677 Q3: the 專項期 card once, on the Dataset read after the wait
+    from backend.engine import race_readiness as RD
+    monkeypatch.setattr(RD, "warm", lambda plan, d, today: order.append(("readiness", d is ds)) or True)
     t = wko5views.warm_up("test")
     t.join(10)
     low = wko5views._warm_slot().get("low")
     low and low.join(10)
     # the low-priority part re-reads the Dataset after its wait (review SP-362 #4)
-    assert order == ["dataset", "status", "inputs", "plan busy", "plan idle", "dataset", "classify", "charts"]
+    assert order == ["dataset", "status", "inputs", "plan busy", "plan idle", "dataset", "classify",
+                     ("readiness", True), "charts"]
 
 
 def test_a_second_warm_up_runs_while_the_first_waits_for_the_plan(monkeypatch):

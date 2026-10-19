@@ -1,6 +1,6 @@
 ---
 id: faq
-order: 4
+order: 8
 title: FAQ
 summary: Sync failing, a missing activity, why the schedule looks like this, numbers that differ from the watch, too many tips, heat acclimation, importing and exporting files, background sync… each with a link to the full explanation.
 icon: faq
@@ -271,19 +271,20 @@ Activities older than “Activity retention” (3 years by default) lose their F
 
 ## Injured or ill — what now? {#injury}
 
-Record it in the Injury log: the severity decides how the schedule changes (mild = train as usual, moderate = less or different training, severe = no running). For travel or days you just can't train, use “⋯ → Set no-training days”. Coming back after a break, the schedule adds the volume back in stages.
+Mark pain on the activity after a run (“Pain” or “Stopped” opens an injury entry for you), and record illness in the Injury log. The schedule follows the **pain light**: green as usual, yellow no more load for now, red no running for now, then walk-run. For travel or days you just can't train, use “⋯ → Set no-training days”. Coming back after a break, the schedule adds the volume back in stages.
 
-More: [Replanning and automatic adjustment](schedule.md#replan) (no-training days), [Changing a session](schedule.md#edit).
+More: [Marking pain on an activity](injury.md#pain), [The pain light](injury.md#lights), [Illness](injury.md#illness), [Replanning and automatic adjustment](schedule.md#replan) (no-training days).
 
 :::deep
 ### Pain lights
-- Green: planned as usual.
-- Yellow: the rest of the week no longer than last week, no intervals, long run × 0.75.
-- Red: no running, no-training days offered; later, “ready to walk-run” starts from walk-runs.
+- Green: planned as usual (sessions the condition avoids are still avoided).
+- Yellow: the week's remaining running no more than “last week's actual − already run this week”, no intervals, long run × 0.75.
+- Red: no running this week, strength and cross-training as planned. Walk 30 minutes without pain first (or press “Ready to walk-run”), then walk-run; a run marked “No pain” during the red light goes straight back to green.
+Severity by itself mostly doesn't change the schedule; only “severe” turns the light red (see [The injury log](injury.md#log)).
 
 ### Illness
-A mild cold: only Z1 runs of 45 minutes or less. Fever or whole-body symptoms: no running until at least a day after they are gone, then a first run of 30 minutes or less at recovery pace.
+A mild cold: on days with symptoms only heart-rate zone 1 recovery runs of 45 minutes or less. Fever or whole-body symptoms: no running and no strength on the day they are gone either, then a first run of 30 minutes or less at recovery pace.
 
 ### After a break
-1–5 days off: straight back to the usual volume; 6–13 days: 50 %, then 75 %; longer breaks in more stages (after Jack Daniels' return-to-training table). None of this is a medical diagnosis — see a doctor when it really hurts.
+1–5 days off: straight back to the usual volume; 6–28 days: 50 %, then 75 %; 29–56 days in three stages; longer, a 15-week restart (after Jack Daniels' return-to-training table; see [Coming back after a break](injury.md#comeback)). None of this is a medical diagnosis — see a doctor when it really hurts.
 :::

@@ -138,7 +138,7 @@
       const diff = ["thresholds", "weights", "events", "phases"].filter((k) => pj[k] && !pj[k].same)
         .map((k) => t(`settings.upstream.k_${k}`) + ` ${pj[k].here} → ${pj[k].production}`);
       if (pj.profile && !pj.profile.same) diff.push(t("settings.upstream.k_profile"));
-      out.push(diff.length ? t("settings.upstream.r_plan_json", { list: diff.join("、") }) : t("settings.upstream.r_plan_json_same"));
+      out.push(diff.length ? t("settings.upstream.r_plan_json", { list: diff.join(t("settings.upstream.list_sep")) }) : t("settings.upstream.r_plan_json_same"));
       out.push(t("settings.upstream.r_injuries", { here: c.injuries.here, prod: c.injuries.production }));
       out.push(t("settings.upstream.r_tags", { here: c.activity_tags.here, prod: c.activity_tags.production }));
       if (c.terrain.production) out.push(t("settings.upstream.r_terrain", { n: c.terrain.changed, missing: c.terrain.missing_here }));

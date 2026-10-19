@@ -237,6 +237,267 @@
    "hide": [
     ".sugbox"
    ]
+  },
+  {
+   "name": "analysis-status",
+   "page": "overview",
+   "viewport": [
+    1100,
+    900
+   ],
+   "steps": [
+    {
+     "wait": "#kpis .kpi .v"
+    },
+    {
+     "wait": "#pmc canvas"
+    },
+    {
+     "sleep": 1500
+    }
+   ],
+   "clip": "#s-status",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "analysis-list",
+   "page": "activity",
+   "viewport": [
+    1720,
+    680
+   ],
+   "steps": [
+    {
+     "wait": "#tbody tr[data-k]"
+    },
+    {
+     "sleep": 800
+    }
+   ],
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "analysis-edit",
+   "page": "activity",
+   "steps": [
+    {
+     "wait": "#tbody button[data-edit]"
+    },
+    {
+     "click": "#tbody button[data-edit]"
+    },
+    {
+     "wait": "dialog#ed[open]"
+    },
+    {
+     "sleep": 1500
+    }
+   ],
+   "clip": "dialog#ed",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "analysis-review",
+   "path": "/api/v1/app/viewer?view=單次活動判讀&dash=0&chart=0&workout=6",
+   "viewport": [
+    1000,
+    430
+   ],
+   "steps": [
+    {
+     "wait": "dialog[open] .rv-c"
+    },
+    {
+     "sleep": 1500
+    }
+   ],
+   "clip": "dialog[open]",
+   "hide": [
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "race-inputs",
+   "path": "/api/v1/racepower/page?event=demo-maokong",
+   "viewport": [
+    1100,
+    900
+   ],
+   "steps": [
+    {
+     "eval": "new Promise(r=>{const t=Date.now(),f=()=>document.querySelector(\"#results .tiles\")||Date.now()-t>120000?r():setTimeout(f,500);f()})"
+    },
+    {
+     "fill": [
+      "#start",
+      "07:00"
+     ]
+    },
+    {
+     "sleep": 2500
+    }
+   ],
+   "clip": "#target-sec",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox",
+    "#ground-row"
+   ]
+  },
+  {
+   "name": "race-result",
+   "path": "/api/v1/racepower/page?event=demo-maokong",
+   "viewport": [
+    1100,
+    900
+   ],
+   "steps": [
+    {
+     "eval": "new Promise(r=>{const t=Date.now(),f=()=>document.querySelector(\"#results .tiles\")||Date.now()-t>120000?r():setTimeout(f,500);f()})"
+    },
+    {
+     "click": "#effort button[data-e=\"0.85\"]"
+    },
+    {
+     "sleep": 1500
+    },
+    {
+     "eval": "new Promise(r=>{const t=Date.now(),f=()=>document.querySelector(\"#ebar\")||Date.now()-t>120000?r():setTimeout(f,500);f()})"
+    },
+    {
+     "eval": "document.activeElement && document.activeElement.blur()"
+    },
+    {
+     "hover": "#results > h2"
+    },
+    {
+     "sleep": 2000
+    }
+   ],
+   "clip": "#results",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "season-timeline",
+   "page": "plan",
+   "viewport": [
+    1100,
+    700
+   ],
+   "steps": [
+    {
+     "wait": "#tl .seg"
+    },
+    {
+     "sleep": 800
+    }
+   ],
+   "clip": "main > section:nth-of-type(2)",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "injury-dialog",
+   "path": "/api/v1/app/injuries/page",
+   "steps": [
+    {
+     "click": "#add"
+    },
+    {
+     "wait": "#f-sev button"
+    },
+    {
+     "sleep": 500
+    }
+   ],
+   "clip": "#dlg",
+   "hide": [
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "settings-hints",
+   "page": "settings",
+   "hash": "#hint-level",
+   "clip": "#hint-level",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "settings-zones",
+   "page": "settings",
+   "hash": "#physio",
+   "steps": [
+    {
+     "wait": "#physio"
+    },
+    {
+     "sleep": 1000
+    }
+   ],
+   "clip": "#physio",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
+  },
+  {
+   "name": "settings-calib",
+   "page": "settings",
+   "hash": "#calib",
+   "viewport": [
+    1000,
+    1600
+   ],
+   "steps": [
+    {
+     "eval": "document.querySelector('#calib > details').open = true"
+    },
+    {
+     "wait": "#calib-rows tr"
+    },
+    {
+     "sleep": 800
+    }
+   ],
+   "clip": "#calib",
+   "hide": [
+    ".an-build",
+    ".an-offline",
+    ".appnav",
+    ".sugbox"
+   ]
   }
  ]
 }

@@ -907,6 +907,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:350"
   },
+  "入選跑步的強度可能不夠，這個估算可能偏低：不提供一鍵套用。做一次 30 分鐘測試比較準，或確認 CP 後再估": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py"
+  },
   "LTHR 測試（30 分鐘獨跑）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:527"
@@ -4807,11 +4811,11 @@
     "draft": true,
     "src": "backend/engine/altitude.py:215"
   },
-  "有 GPX 時橫軸可切換距離或時間。距離段照它的距離放；時間、直到按下計圈、負荷、RPE 段用你這段強度的平地速度，依坡度換算（Minetti 跑步耗能，跟賽事計算機的平地等效配速同一套），是推估。反覆爬坡（主課在上坡）的休息段畫成往回走下坡，每趟從坡底重來": {
+  "有 GPX 時橫軸可切換距離或時間。距離段照它的距離放；時間、直到按下計圈、負荷、RPE 段用你這段強度的平地速度，依坡度換算（Minetti 跑步耗能，跟賽事計算機的平地等效配速同一套；陡下坡 15% 以上不加速），是推估。反覆爬坡（主課在上坡）的休息段畫成往回走下坡，時間不夠走回坡底時，下一趟從停下的地方再往上爬": {
     "draft": false,
     "src": "backend/engine/user_templates.py"
   },
-  "坡段與爬坡由 GPX 平滑後切出；配速是你在這個強度的平地速度依坡度換算（Minetti，下坡最多快 10%），沒算技術地形，是推估。功率只在平路和可跑的坡（≤ 8%）當目標": {
+  "坡段與爬坡由 GPX 平滑後切出；配速是你在這個強度的平地速度依坡度換算（Minetti，下坡最多快 10%，陡下坡 15% 以上不加速），沒算技術地形，是推估。功率只在平路和可跑的坡（≤ 8%）當目標": {
     "draft": false,
     "src": "backend/engine/user_templates.py"
   },
@@ -9935,7 +9939,27 @@
     "draft": true,
     "src": "backend/engine/upstream.py"
   },
-  "連不到正式站（{err}）": {
+  "連不到正式站：{why}。確認網址、網路或 VPN 連得上": {
+    "draft": true,
+    "src": "backend/engine/upstream.py"
+  },
+  "等太久沒有回應": {
+    "draft": true,
+    "src": "backend/engine/upstream.py"
+  },
+  "HTTPS 憑證有問題": {
+    "draft": true,
+    "src": "backend/engine/upstream.py"
+  },
+  "找不到這個主機名稱": {
+    "draft": true,
+    "src": "backend/engine/upstream.py"
+  },
+  "對方拒絕連線": {
+    "draft": true,
+    "src": "backend/engine/upstream.py"
+  },
+  "網路連不上": {
     "draft": true,
     "src": "backend/engine/upstream.py"
   },
@@ -10115,7 +10139,7 @@
     "draft": true,
     "src": "backend/accounts/cairn_push.py"
   },
-  "你在疊石 Cairn 是免費方案：推行程要 Cairn 的基本會員以上": {
+  "你在疊石 Cairn 的方案不能推行程：要 Cairn 的輕度會員以上": {
     "draft": true,
     "src": "backend/accounts/cairn_push.py"
   },

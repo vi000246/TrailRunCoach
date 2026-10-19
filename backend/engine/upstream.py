@@ -96,7 +96,26 @@ def fetch_json(path: str) -> dict:
         raise UpstreamError(502, f"UPSTREAM_{code}", msg)
     except (urllib.error.URLError, OSError, ValueError) as e:
         log.warning("upstream pull: %s unreachable (%s)", urllib.parse.urlparse(base).hostname, type(e).__name__)
-        raise UpstreamError(502, "UNREACHABLE", _("連不到正式站（{err}）", err=type(e).__name__))
+        # SP-373 Q2 ③: the reason in plain words, never the exception's class name (that stays in the log)
+        raise UpstreamError(502, "UNREACHABLE", _("連不到正式站：{why}。確認網址、網路或 VPN 連得上",
+                                                  why=unreachable_why(e)))
+
+
+def unreachable_why(e: BaseException) -> str:
+    """Why production could not be reached, in the user's words (the cause of a URLError when it has one)."""
+    import socket
+    import ssl
+    r = getattr(e, "reason", None)
+    cause = r if isinstance(r, BaseException) else e
+    if isinstance(cause, (TimeoutError, socket.timeout)) or "timed out" in str(r or ""):
+        return _("等太久沒有回應")
+    if isinstance(cause, ssl.SSLError):
+        return _("HTTPS 憑證有問題")
+    if isinstance(cause, socket.gaierror):
+        return _("找不到這個主機名稱")
+    if isinstance(cause, ConnectionRefusedError):
+        return _("對方拒絕連線")
+    return _("網路連不上")
 
 
 async def state(db: AsyncSession) -> dict:

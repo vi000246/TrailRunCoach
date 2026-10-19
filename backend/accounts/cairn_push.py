@@ -3,8 +3,8 @@
 
 A season-plan event with its stored GPX and a saved calculation goes to 疊石 Cairn's internal API
 (SP-657, Cairn v2/server/src/routes/trc.ts), as the signed-in person (their Google sub) with the
-shared secret (TRC_CAIRN_LINK_SECRET — the same one as links.py; no Cairn user token exists or is
-kept):
+outbound secret (links.out_secret: TRC_CAIRN_OUT_SECRET, SP-329 Q1-1 — not the one Cairn calls here
+with; no Cairn user token exists or is kept):
 
   first push   POST <TRC_CAIRN_URL>/api/internal/trc/trips?sub=   → 201 {ok, data: {trip: {id, …}}}
                the trip id is kept with the event (table cairn_push in the tenant's app DB)
@@ -244,7 +244,7 @@ def status(user, eid: str) -> dict:
     _event(eid)
     linked = LK.is_linked(user, c)
     m = MS.member()
-    out = {"available": bool(LK.secret(c) and LK.base_url(c) and user.google_sub),
+    out = {"available": bool(LK.out_secret(c) and LK.base_url(c) and user.google_sub),
            "linked": linked, "allowed": linked and LK.allowed(user, c, SCOPE),
            "plan_ok": m.role in (MS.SUBSCRIBER, MS.OWNER), "upgrade": m.role == MS.USER,
            "consent_text": _(LK.SCOPE_TEXT[SCOPE]), "link_url": LK.link_url(c),
@@ -269,7 +269,7 @@ def push(user, eid: str, consent: bool = False) -> dict:
     """Create or update the event's trip in Cairn. {action: created | updated, trip_id, url}."""
     from backend.accounts import link_calc as LC, links as LK
     c = LK.CAIRN
-    url, key = LK.base_url(c), LK.secret(c)
+    url, key = LK.base_url(c), LK.out_secret(c)
     if not (url and key and user.google_sub):
         raise UserError(N_("推到疊石 Cairn 還沒開放"), code="LINK_UNAVAILABLE", status=409)
     if not LK.is_linked(user, c):
@@ -329,7 +329,8 @@ def _answer(r: httpx.Response, eid: str, updating: bool) -> Optional[str]:
     msg = j.get("message") if isinstance(j, dict) else None
     log.info("Cairn push: HTTP %d", r.status_code)
     if r.status_code == 403:
-        raise UserError(N_("你在疊石 Cairn 是免費方案：推行程要 Cairn 的基本會員以上"), code="CAIRN_PLAN", status=403)
+        # SP-666 Q1-2: Cairn's own plan names (一般／輕度／重度會員, the 設定 › Cairn tab's)
+        raise UserError(N_("你在疊石 Cairn 的方案不能推行程：要 Cairn 的輕度會員以上"), code="CAIRN_PLAN", status=403)
     if r.status_code == 429:
         raise UserError(N_("今天推到疊石 Cairn 的次數用完了，明天再推"), code="CAIRN_QUOTA", status=429)
     if r.status_code == 404:

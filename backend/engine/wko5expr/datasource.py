@@ -109,18 +109,33 @@ def primary_folder(user_id: int = 1) -> str:
     return P.folder(read_setting(P.SETTING_KEY, None, user_id))
 
 
+def _tenant_id() -> Optional[str]:
+    """The tenant whose WKO5 folder wko5_available looks at (a memo key part)."""
+    try:
+        from backend import tenancy
+        return str(tenancy.current().id)
+    except Exception:                       # noqa: BLE001
+        return None
+
+
 def current_source(user_id: int = 1, wko5_dir: Optional[Path] = None) -> str:
     """The Dataset the charts read: the 資料來源's folder; "wko5" when
     charts.data_source = wko5 (or without an app DB, the tests' / a bare
-    checkout's default) and a WKO5 athlete file exists."""
+    checkout's default) and a WKO5 athlete file exists. Inside settings_memo() the answer is
+    kept for the scope like the settings it reads (SP-752: the WKO5 folder's glob too)."""
     db = _db_path()
+    memo = _SETTINGS_MEMO.get()
+    mk = ("current_source", str(db), user_id, None if wko5_dir is None else str(wko5_dir), _tenant_id())
+    if memo is not None and mk in memo:
+        return memo[mk]
     if db is None or not db.exists():
         want = "wko5"
     else:
         want = "wko5" if read_setting("charts.data_source", None, user_id) == "wko5" else "source"
-    if want == "wko5" and wko5_available(wko5_dir):
-        return "wko5"
-    return primary_folder(user_id)
+    out = "wko5" if want == "wko5" and wko5_available(wko5_dir) else primary_folder(user_id)
+    if memo is not None:
+        memo[mk] = out
+    return out
 
 
 def athlete_tz(user_id: int = 1):

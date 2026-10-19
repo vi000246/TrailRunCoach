@@ -1,0 +1,690 @@
+{
+ "planned_days": 16,
+ "_about": "SP-637 R1: the 介紹頁's 課表 calendar (backend/scripts/intro_example.py: the demo athlete's plan before 示範山徑越野 50K; a fictional runner, no date)",
+ "weeks": [
+  {
+   "before": 3,
+   "phase": "specific",
+   "hours": 5.7,
+   "days": [
+    {
+     "sessions": [
+      {
+       "kind": "easy",
+       "title": "輕鬆跑",
+       "min": 55,
+       "km": null,
+       "gain_m": null,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "work",
+         "dur": {
+          "type": "time",
+          "value": 3300
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "sessions": [
+      {
+       "kind": "easy",
+       "title": "輕鬆跑",
+       "min": 20,
+       "km": null,
+       "gain_m": null,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "work",
+         "dur": {
+          "type": "time",
+          "value": 1200
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        }
+       ]
+      },
+      {
+       "kind": "strength",
+       "title": "肌力維持（高踏階＋離心下階＋引體向上）＋平衡／腳踝",
+       "min": 37,
+       "km": null,
+       "gain_m": null,
+       "items": []
+      }
+     ]
+    },
+    {
+     "sessions": [
+      {
+       "kind": "easy",
+       "title": "長爬坡反覆 3×20 分（9% 坡）",
+       "min": 120,
+       "km": null,
+       "gain_m": 699.0,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "warm",
+         "dur": {
+          "type": "time",
+          "value": 900
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        },
+        {
+         "id": "s4",
+         "kind": "repeat",
+         "times": 3,
+         "last_rest": true,
+         "note": "上坡 3×20 分",
+         "items": [
+          {
+           "id": "s2",
+           "kind": "work",
+           "dur": {
+            "type": "time",
+            "value": 1200
+           },
+           "target": {
+            "type": "rpe",
+            "lo": 4,
+            "hi": 4
+           },
+           "note": "上坡 · 心率約輕鬆跑上限 150 bpm（實測 AeT）"
+          },
+          {
+           "id": "s3",
+           "kind": "work",
+           "dur": {
+            "type": "time",
+            "value": 720
+           },
+           "target": {
+            "type": "rpe",
+            "lo": 3,
+            "hi": 4
+           },
+           "note": "下坡用跑的"
+          }
+         ]
+        },
+        {
+         "id": "s5",
+         "kind": "cool",
+         "dur": {
+          "type": "time",
+          "value": 540
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        }
+       ]
+      },
+      {
+       "kind": "strength",
+       "title": "肌力維持（高踏階＋離心下階＋引體向上）＋平衡／腳踝",
+       "min": 37,
+       "km": null,
+       "gain_m": null,
+       "items": []
+      }
+     ]
+    },
+    {
+     "sessions": [
+      {
+       "kind": "easy",
+       "title": "輕鬆跑",
+       "min": 20,
+       "km": null,
+       "gain_m": null,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "work",
+         "dur": {
+          "type": "time",
+          "value": 1200
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "sessions": [
+      {
+       "kind": "easy",
+       "title": "輕鬆跑",
+       "min": 40,
+       "km": null,
+       "gain_m": null,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "work",
+         "dur": {
+          "type": "time",
+          "value": 2400
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "sessions": [],
+     "race": {
+      "priority": "B",
+      "a": false
+     }
+    },
+    {
+     "sessions": []
+    }
+   ]
+  },
+  {
+   "before": 2,
+   "phase": "specific",
+   "hours": 9.8,
+   "days": [
+    {
+     "sessions": [
+      {
+       "kind": "easy",
+       "title": "輕鬆跑",
+       "min": 70,
+       "km": null,
+       "gain_m": null,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "work",
+         "dur": {
+          "type": "time",
+          "value": 4200
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        }
+       ]
+      },
+      {
+       "kind": "strength",
+       "title": "肌力維持（高踏階＋離心下階＋引體向上）＋平衡／腳踝",
+       "min": 37,
+       "km": null,
+       "gain_m": null,
+       "items": []
+      }
+     ]
+    },
+    {
+     "sessions": []
+    },
+    {
+     "sessions": [
+      {
+       "kind": "hike",
+       "title": "技術地形 95′（RPE 4–5）",
+       "min": 95,
+       "km": null,
+       "gain_m": 450.0,
+       "items": [
+        {
+         "id": "w1",
+         "kind": "warm",
+         "dur": {
+          "type": "time",
+          "value": 900
+         },
+         "target": {
+          "type": "hr",
+          "mode": "zone",
+          "zone": "aet"
+         },
+         "note": "好走的路段暖身"
+        },
+        {
+         "id": "w2",
+         "kind": "work",
+         "dur": {
+          "type": "time",
+          "value": 4200
+         },
+         "target": {
+          "type": "rpe",
+          "lo": 4,
+          "hi": 5,
+          "up": 450
+         },
+         "note": "接近比賽路況的技術路段"
+        },
+        {
+         "id": "w3",
+         "kind": "cool",
+         "dur": {
+          "type": "time",
+          "value": 600
+         },
+         "target": {
+          "type": "auto",
+          "intent": "open"
+         },
+         "note": "收操"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "sessions": [
+      {
+       "kind": "easy",
+       "title": "長爬坡反覆 3×20 分（9% 坡）",
+       "min": 120,
+       "km": null,
+       "gain_m": 699.0,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "warm",
+         "dur": {
+          "type": "time",
+          "value": 900
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        },
+        {
+         "id": "s4",
+         "kind": "repeat",
+         "times": 3,
+         "last_rest": true,
+         "note": "上坡 3×20 分",
+         "items": [
+          {
+           "id": "s2",
+           "kind": "work",
+           "dur": {
+            "type": "time",
+            "value": 1200
+           },
+           "target": {
+            "type": "rpe",
+            "lo": 4,
+            "hi": 4
+           },
+           "note": "上坡 · 心率約輕鬆跑上限 150 bpm（實測 AeT）"
+          },
+          {
+           "id": "s3",
+           "kind": "work",
+           "dur": {
+            "type": "time",
+            "value": 720
+           },
+           "target": {
+            "type": "rpe",
+            "lo": 3,
+            "hi": 4
+           },
+           "note": "下坡用跑的"
+          }
+         ]
+        },
+        {
+         "id": "s5",
+         "kind": "cool",
+         "dur": {
+          "type": "time",
+          "value": 540
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "sessions": [
+      {
+       "kind": "easy",
+       "title": "輕鬆跑",
+       "min": 95,
+       "km": null,
+       "gain_m": null,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "work",
+         "dur": {
+          "type": "time",
+          "value": 5700
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "sessions": [
+      {
+       "kind": "long",
+       "title": "LSD",
+       "min": 205,
+       "km": 32.6,
+       "gain_m": 1809.0,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "work",
+         "dur": {
+          "type": "time",
+          "value": 12300
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.88
+         },
+         "note": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "sessions": []
+    }
+   ]
+  },
+  {
+   "before": 1,
+   "phase": "taper",
+   "hours": 1.7,
+   "days": [
+    {
+     "sessions": [
+      {
+       "kind": "easy",
+       "title": "輕鬆跑",
+       "min": 35,
+       "km": null,
+       "gain_m": null,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "work",
+         "dur": {
+          "type": "time",
+          "value": 2100
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy",
+          "plo": 0.65,
+          "phi": 0.8
+         },
+         "note": ""
+        }
+       ]
+      },
+      {
+       "kind": "strength",
+       "title": "肌力維持（高踏階＋離心下階＋引體向上）＋平衡／腳踝",
+       "min": 37,
+       "km": null,
+       "gain_m": null,
+       "items": []
+      }
+     ]
+    },
+    {
+     "sessions": [
+      {
+       "kind": "quality",
+       "title": "有氧間歇（巡航）3×12 分上坡",
+       "min": 67,
+       "km": null,
+       "gain_m": null,
+       "items": [
+        {
+         "id": "s1",
+         "kind": "warm",
+         "dur": {
+          "type": "time",
+          "value": 600
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy"
+         },
+         "note": "輕鬆跑暖身"
+        },
+        {
+         "id": "s2",
+         "kind": "warm",
+         "dur": {
+          "type": "time",
+          "value": 180
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy"
+         },
+         "note": "輕鬆跑→漸進"
+        },
+        {
+         "id": "s5",
+         "kind": "repeat",
+         "times": 2,
+         "last_rest": true,
+         "note": "快步跑 2×20 秒",
+         "items": [
+          {
+           "id": "s3",
+           "kind": "other",
+           "dur": {
+            "type": "time",
+            "value": 20
+           },
+           "target": {
+            "type": "auto",
+            "intent": "open"
+           },
+           "note": "快步跑 20 秒"
+          },
+          {
+           "id": "s4",
+           "kind": "rest",
+           "dur": {
+            "type": "time",
+            "value": 40
+           },
+           "target": {
+            "type": "auto",
+            "intent": "open"
+           },
+           "note": "慢跑"
+          }
+         ]
+        },
+        {
+         "id": "s8",
+         "kind": "repeat",
+         "times": 3,
+         "last_rest": false,
+         "note": "",
+         "items": [
+          {
+           "id": "s6",
+           "kind": "work",
+           "dur": {
+            "type": "time",
+            "value": 720
+           },
+           "target": {
+            "type": "auto",
+            "intent": "band",
+            "lo": 0.88,
+            "hi": 0.95,
+            "cls": "Z3sub",
+            "hr": [
+             150,
+             168
+            ]
+           },
+           "note": ""
+          },
+          {
+           "id": "s7",
+           "kind": "rest",
+           "dur": {
+            "type": "time",
+            "value": 180
+           },
+           "target": {
+            "type": "auto",
+            "intent": "open"
+           },
+           "note": "慢跑／走下坡"
+          }
+         ]
+        },
+        {
+         "id": "s9",
+         "kind": "cool",
+         "dur": {
+          "type": "time",
+          "value": 600
+         },
+         "target": {
+          "type": "auto",
+          "intent": "easy"
+         },
+         "note": "緩和"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "sessions": []
+    },
+    {
+     "sessions": []
+    },
+    {
+     "sessions": []
+    },
+    {
+     "sessions": []
+    },
+    {
+     "sessions": []
+    }
+   ]
+  },
+  {
+   "before": 0,
+   "phase": "taper",
+   "hours": 0,
+   "days": [
+    {
+     "sessions": []
+    },
+    {
+     "sessions": []
+    },
+    {
+     "sessions": []
+    },
+    {
+     "sessions": []
+    },
+    {
+     "sessions": []
+    },
+    {
+     "sessions": [],
+     "race": {
+      "priority": "A",
+      "a": true
+     }
+    },
+    {
+     "sessions": []
+    }
+   ]
+  }
+ ]
+}

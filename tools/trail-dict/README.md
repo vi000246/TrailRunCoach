@@ -25,6 +25,18 @@ curl -O http://osm.kcwu.csie.org/download/tw-extract/recent/taiwan-latest.o5m.zs
 pyosmium (libosmium) reads the `.o5m`; the `.zst` is unpacked first (to `--work`, default next to
 `--out`, removed afterwards). Works on Linux (Actions) and Windows. A mismatching md5 stops the build.
 
+After a rules change (a `RULES_VERSION` bump) an earlier version can be rebuilt as it is, without the
+extract and without pyosmium: the kept tags and coordinates are all the rules read.
+
+```sh
+python -I tools/trail-dict/build.py --from <folder with manifest.json + trail-dict.ndjson.gz> --out out/
+```
+
+The new version has the same source (md5, date) and zoom, a new build time, the new `rules_version`,
+and `rebuilt_from: <the old version>` in its manifest. A bundle built before rules v2 does not keep
+`footway=*`, so its sidewalks are then decided by place like any other footway (they are almost all
+in town, so they stay unknown).
+
 Trial build, 2026-10-19 extract (433.7 MB packed, 1356 MB unpacked), Windows laptop:
 
 | | |
@@ -61,7 +73,7 @@ A way (bundle line, or tile piece):
 - `routes` only when the way is in a `route=hiking` / `route=foot` relation (Rudy's thick red line).
 - `tags`: the raw tags kept (`KEPT_TAGS`), so changed rules can be re-run without the source.
 
-### The classes (`trailclass.py`, rules v1)
+### The classes (`trailclass.py`, rules v2)
 
 `line` -- the line Rudy's map draws (MOI_OSM.xml / process_osm.py, SP-701):
 
@@ -89,7 +101,44 @@ nothing about difficulty.
 7. a road highway -> paved
 8. `smoothness` very_bad or worse -> dirt
 9. `highway=track` -> gravel
-10. otherwise unknown (a path with no surface and no sac_scale: could be a paved park path)
+10. a path / footway / bridleway with none of the above (not a sidewalk or crossing, `footway=sidewalk|crossing|traffic_island`):
+    **dirt out of town, unknown in town** (rules v2, SP-735; see below)
+11. otherwise unknown
+
+#### In town or not (rules v2, SP-735)
+
+About 126,000 of Taiwan's paths carry no surface, no `sac_scale` T2+ and no rough `smoothness`. In
+the mountains they are nearly all dirt trails; in town they can as well be a paved park path, so they
+are decided by place:
+
+- **Town roads per km2.** Every `residential`, `living_street`, `service`, `unclassified`, `tertiary`,
+  `secondary`, `primary` (and links), `road`, `pedestrian` and `cycleway` way is counted into a grid of
+  0.003 deg cells (about 330 m x 300 m). Motorways and trunk roads (they cross the mountains too) and
+  tracks (forest roads, farm tracks) are not counted.
+- **A point is in town** when the town roads in its 3 x 3 cells (about 1 km x 0.9 km) come to
+  **8 km per km2** or more; **a path is in town** when at least half of its length is. Both numbers
+  are 推估 (estimates), set from the spot check below: the riverside parks and town edges sit at
+  16-26 km/km2, farmland villages 10-27, the mountain paths 0-4, the 柴山 / 四獸山 park interiors 0-8.
+- Only the dictionary's own ways are read (no `landuse`, no elevation model), so a rules change
+  rebuilds from the previous version's bundle (`build.py --from`, below) without downloading the extract.
+- The classes are stored per way; readers (the NAS app once SP-710 reads the dictionary, the
+  inReachLiveTrack Worker) take them as they are and see the rules in `rules_version` (manifest and `latest.json`). The build prints, and the
+  manifest keeps (`stats.place_rule`), how many untagged paths went to dirt and how many stayed unknown:
+  the dirt ones are the ways rules v1 left unknown.
+
+Spot check, live OSM data of 2026-10-19 (Overpass), untagged paths in each area -> dirt:
+
+| area | untagged paths | -> dirt | stay unknown |
+|---|---|---|---|
+| 北插天山 / 東眼山 (24.80-24.85 N, 121.40-121.45 E) | 68 | 68 | 0 |
+| 柴山 (22.63-22.67 N, 120.25-120.28 E) | 478 | 434 | 44 (the town edge) |
+| 象山 / 四獸山 (25.020-25.035 N, 121.570-121.585 E) | 273 | 85 (the hill interior) | 188 (park edge, next to 信義) |
+| 大佳 / 美堤河濱 (25.066-25.08 N, 121.52-121.545 E) | 245 | 0 | 245 |
+| 雲林 farmland (23.70-23.72 N, 120.40-120.43 E) | 34 | 0 | 34 |
+| 烏來 (24.85-24.87 N, 121.54-121.56 E) | 17 | 12 | 5 (the village) |
+
+Sidewalks and crossings are not counted above (they never change). The nationwide count comes with
+the first rules-v2 build (`stats.place_rule.dirt`).
 
 `risk` -- shown as a trail-condition warning, not turned into a speed factor (SP-716):
 `closed` (`access=no`), `abandoned`, `sac_t4plus` (`sac_scale` T4-T6), `poor_visibility`

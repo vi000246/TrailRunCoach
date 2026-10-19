@@ -775,6 +775,23 @@ def user_edited(d: dict) -> bool:
     return bool(d.get("ext_key") and d.get("ext_sig")) and ext_signature(d) != d["ext_sig"]
 
 
+RACECALC_KEY = "racecalc:"      # the 賽事計算機's ext_key prefix (sync/coros_workouts.RACE_KEY_PREFIX)
+
+
+def calc_tss(d: dict) -> bool:
+    """SP-453 (owner's choice A): a 賽事計算機 export's stored TSS is the calculator's (the race HR,
+    the post-race correction) while its structure is the exported one — the 課表 shows that number,
+    labelled; a structure changed on the 課表 page is saved as origin "user" and takes the
+    structure's TSS (plan_sessions._with_steps). An export from before the origin mark: while
+    nothing was changed on the 課表 page since."""
+    if not str(d.get("ext_key") or "").startswith(RACECALC_KEY) or not (d.get("tss") or 0) > 0:
+        return False
+    st = d.get("steps") if isinstance(d.get("steps"), dict) else {}
+    if st.get("origin") == "racecalc":          # workout_steps.RACECALC_ORIGIN
+        return True
+    return bool(d.get("ext_sig")) and not user_edited(d)
+
+
 async def upsert_external(db: AsyncSession, ext_key: str, data: dict, today: str, *, kind: str = "race",
                           athlete_id: int = 1, blocked: Optional[dict] = None, write: bool = True) -> dict:
     """One stored session per `ext_key`, written as the user's own (edited: reconcile keeps it,

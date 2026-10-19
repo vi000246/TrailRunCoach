@@ -54,3 +54,46 @@ def test_the_calculator_export_carries_the_previews_tss(client, monkeypatch):   
     s = run(PS.load(db))[0]
     assert pv["tss"] == w["tss"] == s["tss"] == pv["tss_info"]["tss"]
     assert PSA.est_tss(s, {}) == pytest.approx(pv["tss"])            # the week's total counts the same number
+
+
+# ---- SP-453 Q1 → A: an export as exported keeps the calculator's TSS on the 課表 (labelled); a changed
+# structure takes the structure's ------------------------------------------------------------------------
+
+
+def test_the_export_marks_its_structure_and_the_calendar_says_whose_tss_it_is(client, monkeypatch):   # noqa: F811
+    from backend.engine import plan_store as PS
+    from backend.engine import workout_steps as WS
+    db, run, body = _export_env(client, monkeypatch)
+    w = client.post("/api/v1/racepower/export/plan", json={**body, "push": True}).json()
+    s = run(PS.load(db))[0]
+    assert s["steps"]["origin"] == WS.RACECALC_ORIGIN == "racecalc"     # kept through normalize and the store
+    assert PS.calc_tss(s) and s["tss"] == w["tss"]
+    row = PSA._decorate([s], [], {}, s["day"], s["day"])[0]
+    assert row["tss_by"] == "calc" and row["tss_est"] == pytest.approx(w["tss"], abs=0.05)
+    # the same export again is still unchanged (the origin mark is part of what was exported)
+    again = client.post("/api/v1/racepower/export/plan", json={**body, "push": True}).json()
+    assert again["action"] == "unchanged" and not again["previous"]["user_edited"]
+
+
+def test_a_title_edit_keeps_the_calculators_tss_a_structure_edit_does_not(client, monkeypatch):   # noqa: F811
+    from backend.engine import plan_store as PS
+    db, run, body = _export_env(client, monkeypatch)
+    client.post("/api/v1/racepower/export/plan", json={**body, "push": True})
+    s = run(PS.load(db))[0]
+    retitled = {**s, "title": s["title"] + "（改名）"}
+    assert PS.user_edited(retitled) and PS.calc_tss(retitled)             # the structure is still the exported one
+    # the 課表 editor saves a changed structure as origin "user" (_with_steps): the structure's TSS from then on
+    restructured = {**s, "steps": {**s["steps"], "origin": "user", "items": s["steps"]["items"][:-1]}}
+    assert not PS.calc_tss(restructured)
+    assert "tss_by" not in PSA._decorate([restructured], [], {}, s["day"], s["day"])[0]
+
+
+def test_an_export_from_before_the_mark_counts_while_unchanged():
+    from backend.engine import plan_store as PS
+    s = {"ext_key": "racecalc:e1", "tss": 120.0, "day": "2099-05-01", "kind": "race", "title": "賽事 x",
+         "minutes": 300, "target": "", "detail": "d", "steps": {"v": 1, "origin": "user", "items": []}}
+    s["ext_sig"] = PS.ext_signature(s)
+    assert PS.calc_tss(s)
+    assert not PS.calc_tss({**s, "detail": "changed"})                   # changed on the 課表 since: unknown → structure
+    assert not PS.calc_tss({**s, "ext_key": None})                       # not an export
+    assert not PS.calc_tss({**s, "tss": 0})

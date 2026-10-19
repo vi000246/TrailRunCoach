@@ -50,6 +50,8 @@ label { font-size: 13px; }
 table.wt { border-collapse: collapse; margin-top: 10px; min-width: 280px; }
 table.wt th, table.wt td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
 table.wt th { color: var(--muted); font-weight: 600; font-size: 12px; }
+/* Debug API tokens (SP-373 Q2 ②): the headers and the 撤銷 button stay on one line; the scopes wrap */
+#dbg-tokens th, #dbg-tokens td:last-child { white-space: nowrap; }
 /* 閾值測試紀錄: the table scrolls sideways on a phone; the estimate cards (LTHR / AeT 自動估算) */
 .tw { overflow-x: auto; }
 .tw table.wt { width: 100%; }
@@ -1582,12 +1584,17 @@ function drawEst() {
   const card = (key, label, est, curV, help) => {
     const ok = est && est.value != null;
     const same = ok && curV != null && Math.abs(est.value - curV) < 1;
+    // SP-749: the runs were too easy for this estimate (low against the runner's max HR / HRR): the
+    // warning and the test instead of 「套用」 — the value can still be typed in by hand
+    const low = ok && est.low_effort;
     const html = `<div class="card" data-hint-id="ST11"><div class="k">${esc(t("settings.thr.est_k", { name: label }))}</div>
       <div class="v">${ok ? est.value + " bpm" + pmBadge(est.pm) : "–"} <small>${ok && curV != null ? esc(t("settings.thr.est_cur", { v: num(curV) })) : ""}</small></div>
       <div class="s">${esc(est ? est.reason : "")}${ok && est.spread ? esc(t("settings.thr.est_spread", { lo: est.spread[0], hi: est.spread[1] })) : ""}${est && est.days ? esc(t("settings.thr.est_days", { n: est.days })) : ""}</div>
       ${help ? `<div class="s">${esc(help)}</div>` : ""}
       ${!ok && est && (est.links || []).length ? `<div class="s">${est.links.map((l) => `<a href="${esc(l.href)}">${esc(l.label)}</a>`).join(" ")}</div>` : ""}
-      ${ok && !same ? `<button class="primary" data-apply="${key}" data-v="${est.value}">${esc(t("settings.thr.est_apply", { v: est.value }))}</button>`
+      ${low ? `<div class="s meta warn" data-low-effort>⚠ ${esc(est.low_effort.text)}${(est.low_effort.signals || []).map((x) => `<br>${esc(x)}`).join("")}</div>
+        ${est.low_effort.test ? `<div class="s"><a href="${esc(est.low_effort.test.href)}">${esc(est.low_effort.test.label)}</a></div>` : ""}`
+        : ok && !same ? `<button class="primary" data-apply="${key}" data-v="${est.value}">${esc(t("settings.thr.est_apply", { v: est.value }))}</button>`
         : ok ? `<div class="s">${esc(t("settings.thr.est_same"))}</div>` : ""}</div>`;
     // the condition (R-less, §1 ST11): the estimate differs from what is in use by ≥ 1
     const state = !ok ? "none" : same ? "same" : "diff";
@@ -3034,7 +3041,9 @@ function drawCairnPlan() {
   add(t("settings.cairn.plan_cairn"), theirs);
   let per;
   if (rem && "push_per_day" in rem) {
+    // SP-666 Q1-1: Cairn's own count of today's pushes, when it tells it
     per = rem.push_per_day == null ? t("settings.cairn.per_day_unlimited")
+      : rem.push_per_day > 0 && rem.push_left_today != null ? t("settings.cairn.per_day_left", { left: rem.push_left_today, n: rem.push_per_day })
       : rem.push_per_day > 0 ? t("settings.cairn.per_day", { n: rem.push_per_day })
       : t("settings.cairn.per_day_none", { plan: cairnPlanName(rem.plan) });
   } else per = t("settings.cairn.per_day_table");

@@ -1,6 +1,6 @@
 ---
 id: glossary
-order: 3
+order: 7
 title: Glossary
 summary: The training terms on the screens — Training load, Chronic load, Load balance, CP, Anaerobic capacity, LTHR, zones… each in plain words, with a chart and the formula.
 icon: book

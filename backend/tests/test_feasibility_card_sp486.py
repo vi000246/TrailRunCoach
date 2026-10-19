@@ -79,8 +79,11 @@ def test_typical_race_lines_are_the_main_advice_and_the_specific_phase_note(monk
     assert r["days_to"] == 90 and by["weekly"]["level"] == "tight" and by["step"]["up"] == 1
     assert by["step"]["x2"] is False and "x2_note" not in r
     ids = [(h["id"], h["cls"], h.get("kind")) for h in r["hints"]]
-    assert ids == [("PL9", 1, "advice"), ("PL15", 3, "note")]
+    # Q1-1 (owner 2026-10-19: B): the tight week's pacing advice is class 2 — no red class-1 box; as the
+    # first suggestion it is still the card's main advice
+    assert ids == [("PL9", 2, "advice"), ("PL15", 3, "note")]
     assert r["hints"][0]["text"] == r["suggestions"][0] == "照分段的心率上限跑，補給站少停"
+    assert not any(h["cls"] == 1 for h in r["hints"])                 # a tight card has no red line
     # the climb advice (a second tight one, class 2) stays under 詳細
     assert "每週多排一些爬坡：長跑挑爬升多的路線" in r["suggestions"][1:]
     assert not any(h["text"].startswith("每週多排一些爬坡") for h in r["hints"])

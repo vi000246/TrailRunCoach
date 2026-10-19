@@ -225,10 +225,10 @@ body.swapping #cal .chip[draggable="true"] { cursor: copy; }
 /* SP-359 R1: the two sessions being swapped are locked until the server answers, and a toast at the
    bottom right says what is happening (picking / swapping / done) — the toolbar line was off screen */
 .chip.swap-lock { opacity: .55; cursor: progress; position: relative; }
-.chip.swap-lock::after { content: "⇄"; position: absolute; top: 2px; right: 4px; font-size: 12px; animation: swapPulse 1s ease-in-out infinite; }
-@keyframes swapPulse { 50% { opacity: .25; } }
-/* SP-445: a session just moved / edited, shown where it now is while the server saves it */
-.chip.swap-lock.pend::after { content: "↻"; }
+/* SP-454: the ⇄ (SP-445: ↻ while an edit saves) sits in the card's right-hand row, before the ring and
+   the watch icon — not over them (it was drawn on top of 未推送) */
+.chip .c-lock { color: var(--accent); font-weight: 700; font-size: 12px; line-height: 1; animation: swapPulse 1s ease-in-out infinite; }
+@keyframes swapPulse { 50% { opacity: .4; } }
 #swap-toast { position: fixed; right: 16px; bottom: 16px; z-index: 60; max-width: min(360px, calc(100vw - 32px));
   background: var(--panel); color: var(--text); border: 1px solid var(--accent); border-radius: 10px;
   box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 10px 12px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
@@ -1260,7 +1260,7 @@ function chipHtml(s, big) {
     vdFull, odOf(s) ? tt("od." + odOf(s)) : "", prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : "", watch ? syLabel(c.status) : ""].filter(Boolean).join("，");
   return `<button type="button" class="chip sc ${SessChip.cls(s)}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${lock ? " swap-lock" : ""}${pend ? " pend" : ""}" data-uid="${esc(s.uid)}" data-kind="${esc(s.kind)}"
       ${live && !lock ? 'draggable="true"' : ""}${lock ? ' aria-disabled="true"' : ""} aria-label="${esc(lbl)}" title="">
-    ${SessChip.icon(SessChip.kind(s), { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="c-t sc-t">${esc(s.title)}</span><span class="c-r">${SessChip.ring(st, (s.compliance || {}).pct, { prov })}${odMark(s)}${watch}</span>
+    ${SessChip.icon(SessChip.kind(s), { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="c-t sc-t">${esc(s.title)}</span><span class="c-r">${lock ? `<span class="c-lock" aria-hidden="true">${pend ? "↻" : "⇄"}</span>` : ""}${SessChip.ring(st, (s.compliance || {}).pct, { prov })}${odMark(s)}${watch}</span>
     <span class="c-m">${esc(meta)}</span>
     ${line ? `<span class="c-x">${esc(line)}</span>` : ""}${big ? cardLine(s) : ""}</button>`;
 }
@@ -1363,8 +1363,8 @@ function sumHtml(w) {
   return `${phPill(w)}
     <div class="r"><span>${esc(tt("wk.time"))}</span><span>${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span></div>
     ${future ? "" : `<div class="trk" role="img" aria-label="完成 ${h1(w.done_hours)} / 計畫 ${h1(w.planned_hours)} 小時"><i style="width:${pct(w.done_hours, w.planned_hours).toFixed(0)}%"></i></div>`}
-    <div class="r"><span>${esc(tt("load.col"))}</span><span>${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span></div>
-    ${future ? "" : `<div class="trk" role="img" aria-label="負荷完成 ${n0(w.done_tss)} / 計畫 ${n0(w.planned_tss)}"><i style="width:${pct(w.done_tss, w.planned_tss).toFixed(0)}%"></i></div>`}
+    ${w.compliance && !future ? "" : `<div class="r"><span>${esc(tt("load.col"))}</span><span>${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span></div>
+    ${future ? "" : `<div class="trk" role="img" aria-label="負荷完成 ${n0(w.done_tss)} / 計畫 ${n0(w.planned_tss)}"><i style="width:${pct(w.done_tss, w.planned_tss).toFixed(0)}%"></i></div>`}`}
     ${climbW(w, future)}
     ${compW(w)}
     ${w.provisional ? `<span class="tag">${esc(tt("wk.provisional"))}</span>` : cur ? `<span class="tag">${esc(tt("wk.this_week"))}</span>` : ""}`;
@@ -1400,6 +1400,7 @@ function climbAg(w, future) {
     `<span class="clg${c.short > 0 ? " short" : ""}">${esc(climbGap(c))}</span>`;
 }
 // the week's TSS done (SP-401): a number that only adds up, no colour; the plan in the hover
+// SP-454: a week with it drops the 「負荷 done / planned」 row and its bar above — the same done number twice
 const compW = (w) => w.compliance ? `<div class="r" title="${esc(tt("wk.plan_tss_tip", { p: n0(w.planned_tss) }))}"><span>${esc(tt("wk.done_col"))}</span><b>${n0(w.done_tss)}</b></div>` : "";
 function render() {
   const [a, b] = range();
@@ -1525,7 +1526,7 @@ function agendaHtml(a, ss, acts) {
   return `<div class="agenda"><div class="ag-sum ph-${esc(w.phase || (ph && ph.kind) || "none")}">
       ${phPill(w)}
       <span>${esc(tt("wk.time"))} ${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span>
-      <span>${esc(tt("load.short"))} ${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span>
+      ${w.compliance && !future ? "" : `<span>${esc(tt("load.short"))} ${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span>`}
       ${climbAg(w, future)}
       ${w.compliance ? `<span title="${esc(tt("wk.plan_tss_tip", { p: n0(w.planned_tss) }))}">${esc(tt("wk.done_tss"))} <b>${n0(w.done_tss)}</b></span>` : ""}
       ${w.provisional ? `<span class="faint">${esc(tt("wk.prov_short"))}</span>` : ""}</div>${days.join("")}</div>`;
@@ -1843,8 +1844,17 @@ function famHint() {
 // kind is unchanged; otherwise minutes × the kind's TSS per hour (tss_rates, same
 // per-category medians / fixed hard-session rates week_plan() uses)
 const rateOf = (k) => (D.tss_rates || {})[k] || D.tss_per_hour || 50;
+// SP-453 (owner's A): a 賽事計算機 export with its structure as exported keeps the calculator's TSS (race HR,
+// post-race correction) — the card, the week's total and this dialog one number; a changed structure: the structure's
+const CALC_TSS = "賽事計算機估（比賽心率、賽後校正）";
+function calcTss() {
+  const o = dlg.orig;
+  if (!o || o.tss_by !== "calc" || !(o.tss > 0) || kindVal() !== o.kind) return false;
+  try { return !(WE.dirty || WE.cleared); } catch (_) { return true; }    // WE not mounted yet: nothing changed
+}
 function estDialog() {
   const k = kindVal(), m = +F.minutes.value || 0, o = dlg.orig;
+  if (calcTss()) return { tss: o.tss, rate: o.minutes > 0 ? o.tss / o.minutes * 60 : 0, calc: true };
   // terrain / same-load panel: same intensity (≤ AeT) → the original session's TSS per hour
   if (eqOn()) return { tss: $("eq-tss").value !== "" ? +$("eq-tss").value : m / 60 * EQS.rate, rate: EQS.rate };
   if (o && o.kind === k && o.minutes > 0 && (o.tss || 0) > 0) return { tss: o.tss * m / o.minutes, rate: o.tss / o.minutes * 60 };
@@ -1858,6 +1868,7 @@ function tssHint() {
     return;
   }
   const e = estDialog();
+  if (e.calc) { $("sd-tss").innerHTML = `預估訓練負荷（Training load）<b class="num">${n0(e.tss)}</b> <span class="faint">${CALC_TSS}</span>`; return; }
   $("sd-tss").innerHTML = `預估訓練負荷（Training load）<b class="num">${n0(e.tss)}</b> <span class="faint">≈ ${n0(e.rate)} 負荷/小時 × ${+F.minutes.value || 0} 分${eqOn() ? "（同強度 ≤ AeT：沿用原本每小時的負荷）" : ""}</span>`;
 }
 
@@ -2123,6 +2134,9 @@ function weSession() {
     // 目標用: a user template's (SP-36) once one is applied, else the session's stored one
     target_basis: dlg.tplBasis !== undefined ? dlg.tplBasis : (dlg.orig || {}).target_basis,
     protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
+    // SP-453: the editor's own total shows the calculator's TSS too while the structure is unchanged
+    calc_tss: dlg.orig && dlg.orig.tss_by === "calc" && dlg.orig.tss > 0 && kindVal() === dlg.orig.kind
+      ? { tss: dlg.orig.tss, label: CALC_TSS } : null,
     ...(dlg.variant ? { variant_key: dlg.variant.key, variant_reps: dlg.variant.reps, variant_blocks: dlg.variant.blocks,
       variant_adj: dlg.variant.adj } : dlg.orig && dlg.orig.variant_key ? {
       variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
@@ -2156,7 +2170,10 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   minLock(v);
   // a structure of your own: the target text and the TSS estimate come from it
   if (v && v.totals && we.dirty && v.summary) F.target.value = v.summary;
-  if (v && v.totals && mine && !dlg.ro) $("sd-tss").innerHTML = `預估訓練負荷（Training load）<b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
+  if (v && v.totals && mine && !dlg.ro) {
+    if (calcTss()) tssHint();        // SP-453: the calculator's number while the structure is the exported one
+    else $("sd-tss").innerHTML = `預估訓練負荷（Training load）<b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
+  }
   rpeKind(v && mine ? v.rpe_role : null, we.dirty && !dlg.ro);
   if (v && "family" in v) { dlg.stepsFam = v.family; famHint(); }
 }, onTemplate: (row) => {
@@ -2376,6 +2393,14 @@ $("ad").addEventListener("click", (e) => { if (e.target.closest("[data-close]") 
 $("ad").addEventListener("change", (e) => { if (e.target.id === "ad-link" && e.target.value) {
   const a = $("ad").dataset.index; doLink(e.target.value, a); } });
 
+// SP-454: the 賽事計算機's 「匯出至課表」 writes the session as the user's own (edited, so reconcile keeps it):
+// the dialog names where it came from, and says 已修改 only once it was changed here since (ext_edited)
+const fromCalc = (s) => !!(s && String(s.ext_key || "").startsWith("racecalc:"));
+function subOrigin(s) {
+  if (!s) return "";
+  if (fromCalc(s)) return ` · ${tt("sd.from_calc")}${s.ext_edited ? " · 已修改" : ""}`;
+  return s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : "";
+}
 function openDlg(s, day) {
   closeMenus();
   const ro = s && !editable(s);
@@ -2385,7 +2410,7 @@ function openDlg(s, day) {
   $("sd-tkind").dispatchEvent(new Event("change"));
   $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
   const d = s ? s.day : day;
-  $("sd-sub").textContent = `${md(d)}（${wdl(d)}）${s && s.quality_family ? " · " + s.quality_family.text : ""}${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
+  $("sd-sub").textContent = `${md(d)}（${wdl(d)}）${s && s.quality_family ? " · " + s.quality_family.text : ""}${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${subOrigin(s)}`;
   $("sd-mark").innerHTML = s && window.PlanMark ? PlanMark.detail(s, KINDS) : "";      // SP-318
   $("sd-mark").hidden = !$("sd-mark").innerHTML;
   // 手錶: the push state in words (a card draws only 需更新 / 失敗; SP-396)
@@ -2424,7 +2449,7 @@ function openDlg(s, day) {
   F.minutes.readOnly = false;
   eqInit(s);
   tgtHint();
-  WE.open({ uid: s ? s.uid : null, ro, kind: s ? s.kind : "easy" });
+  WE.open({ uid: s ? s.uid : null, ro, kind: s ? s.kind : "easy", src: fromCalc(s) && !s.ext_edited ? "racecalc" : null });
   sugHint();
   $("sd").showModal();
   if (!s) suggest();
@@ -3483,12 +3508,14 @@ function swapToast(text, opt = {}) {
   el.hidden = false;
   if (opt.ms) swapToast.t = setTimeout(() => { el.hidden = true; }, opt.ms);
 }
+// SP-454: a phone / tablet has no Esc key — there the words point at the toast's 取消 instead
+const NO_KEYS = () => matchMedia("(hover: none) and (pointer: coarse)").matches;
 function swapStart(s) {
   if (S.swapLock) return;
   S.swapFrom = s;
   document.body.classList.add("swapping");
   render();
-  msg(esc(tt("swap.pick", { title: s.title })));
+  msg(esc(tt(NO_KEYS() ? "swap.pick_touch" : "swap.pick", { title: s.title })));
   swapToast(tt("swap.pick_toast", { title: s.title }), { cancel: true });
 }
 function swapEnd(cancelled) {
@@ -3540,7 +3567,8 @@ $("cal").addEventListener("click", (e) => {
   e.preventDefault(); e.stopPropagation();
   const c = e.target.closest(".chip[data-uid]"), b = c && findS(c.dataset.uid);
   if (!b || b.uid === S.swapFrom.uid) return swapEnd(true);
-  if (!canSwap(S.swapFrom, b)) { swapToast(tt("swap.not_this"), { cancel: true }); return msg(esc(tt("swap.not_this")), "warn"); }
+  const nt = NO_KEYS() ? "swap.not_this_touch" : "swap.not_this";
+  if (!canSwap(S.swapFrom, b)) { swapToast(tt(nt), { cancel: true }); return msg(esc(tt(nt)), "warn"); }
   doSwap(S.swapFrom, b);
 }, true);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.swapFrom) swapEnd(true); });

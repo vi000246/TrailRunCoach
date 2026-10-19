@@ -80,11 +80,11 @@ header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; jus
 <!--fill:join-->
 <script>
 const $ = (id) => document.getElementById(id);
-// 「用自己的資料算」 (SP-124): {kind: signup | waitlist | demo, url} from the server, the same for every visitor
+// 「用自己的資料算」 (SP-124): {kind: signup | waitlist | demo | about, url} from the server, the same for every visitor
 const JT = (k) => (window.I18N ? window.I18N.t("share." + k) : k);
 const JOIN = (() => {
   const j = window.TRC_JOIN;
-  if (!j || !["signup", "waitlist", "demo"].includes(j.kind) || typeof j.url !== "string") return null;
+  if (!j || !["signup", "waitlist", "demo", "about"].includes(j.kind) || typeof j.url !== "string") return null;
   return /^\/(?!\/)/.test(j.url) || /^https:\/\//.test(j.url) ? j : null;
 })();
 function joinLink(el) {

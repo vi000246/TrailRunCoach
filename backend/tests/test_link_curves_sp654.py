@@ -194,10 +194,10 @@ def test_the_feature_needs_its_own_consent_and_can_be_switched_off(c, app, cairn
         assert _curves(srv, tok).json()["detail"]["code"] == "CONSENT_REQUIRED"
     acts = [(x["action"], x["client"], json.loads(x["documents"] or "{}").get("scopes"))
             for x in store.consents(_uid("g-a"))]
-    assert acts[1:] == [("link", "cairn", ["link:account", "link:weather"]),
+    assert acts[1:] == [("link", "cairn", ["link:account"]),          # link:weather: not out yet (SP-329 Q1-3)
                         ("allow", "cairn", ["link:calc"]), ("disallow", "cairn", ["link:calc"]),
                         ("allow", "cairn", ["link:calc"]), ("unlink", "cairn", []),
-                        ("link", "cairn", ["link:account", "link:weather"])]
+                        ("link", "cairn", ["link:account"])]
     # the terms read as before (none of these rows is a terms row)
     assert store.consent_version(_uid("g-a")) is not None
 

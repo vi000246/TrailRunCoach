@@ -335,10 +335,13 @@ async def import_files(db: AsyncSession, athlete_id: int, files: Iterable) -> di
 
 
 async def stats(db: AsyncSession, athlete_id: int) -> dict:
-    """The imported activities (rows, date span) and the limits, for the page."""
+    """The imported activities (rows, date span) and the limits, for the page. Only the rows that
+    count: a file kept as a copy of another source's run (duplicate_of, counted once under that
+    source) is not an imported activity, so 「已匯入 n 筆」 matches the 「新增」 of the result (SP-456)."""
+    from backend.sync.dedup import canonical_clause
     n, d0, d1 = (await db.execute(select(
         func.count(WorkoutFile.id), func.min(WorkoutFile.workout_date), func.max(WorkoutFile.workout_date))
-        .where(WorkoutFile.athlete_id == athlete_id, WorkoutFile.source == SOURCE))).one()
+        .where(WorkoutFile.athlete_id == athlete_id, WorkoutFile.source == SOURCE, canonical_clause()))).one()
     iso = (lambda d: d if isinstance(d, str) or d is None else d.isoformat())
     return {"rows": int(n or 0), "date_from": iso(d0), "date_to": iso(d1), "limits": limits()}
 

@@ -1,7 +1,9 @@
 """
 SP-639: the step chart on a template's route GPX —
-  * hill repeats go up and back (a repeat whose work leg climbs: its recoveries come back down,
-    every rep starts again from the bottom), the axis is the distance covered;
+  * hill repeats go up and back (a repeat whose work leg climbs: its recoveries come back down, not
+    below the bottom; R1 / Q1-3 (b): a recovery too short to reach the bottom leaves the next rep
+    climbing from where it stopped), the axis is the distance covered;
+  * R1 / Q1-1 (a): no speed bonus on a descent of 15 % or steeper (chart and 坡段表);
   * the chart can be read on a time axis (each step's estimated seconds, the profile on time);
   * each step carries its climb / descent and estimated time (the tooltip);
   * the time ↔ distance of a step on the route by Minetti's running cost (the race calculator's
@@ -112,15 +114,88 @@ def test_hill_repeats_go_up_and_come_back_down():
     assert el["z_max"] == pytest.approx(up_km * 100, abs=1) and el["z_min"] == pytest.approx(0, abs=0.5)
 
 
-def test_a_recovery_with_a_target_jogs_down_and_the_next_rep_starts_at_the_bottom():
-    # 7′ up, 1′ jog back: not all the way down — the next rep still starts from the bottom
+def test_a_short_recovery_leaves_the_next_rep_climbing_from_where_it_stopped():
+    # 7′ up, 1′ jog back: not all the way down — SP-639 Q1-3 (b): the next rep climbs again from where
+    # the recovery stopped (no jump back to the bottom, no vertical line on the chart)
     steps = WS.normalize({"items": [{"kind": "repeat", "times": 2, "last_rest": True, "items": [
         st("work", 420, TG), st("rest", 60, TG)]}]})
     el = UT.route_elevation(steps, C, hill())
     up_km = v_on(0.1) * 420 / 3600.0
     back = v_on(-0.1) * 60 / 3600.0
     assert el["r"][1] == pytest.approx([up_km, up_km - back], abs=0.002)
-    assert el["r"][2][0] == 0.0
+    assert el["r"][2][0] == pytest.approx(up_km - back, abs=0.002)
+    assert el["r"][2][1] > el["r"][1][0]                  # the second climb goes on past the first one's top
+    # the drawn path is continuous: every step starts where the one before ended
+    for i in range(1, len(el["r"])):
+        assert el["r"][i][0] == pytest.approx(el["r"][i - 1][1], abs=0.002)
+
+
+def test_a_climb_to_the_top_after_a_short_recovery_climbs_only_what_is_left():
+    # the climb picked on 路線 (lap button at the top): each rep ends at the top; after a 2′ walk down
+    # the next one starts part-way and climbs only the rest of it
+    prof = {**hill(), "climb": {"no": 1, "start_km": 0.0, "end_km": 1.0}, "rep_km": 0.0}
+    steps = WS.normalize({"items": [{"kind": "repeat", "times": 2, "last_rest": True, "items": [
+        {"kind": "work", "dur": {"type": "open", "est": 900}, "target": TG, "note": "爬 100 m"},
+        st("rest", 120, None, "走下來")]}]})
+    el = UT.route_elevation(steps, C, prof)
+    back = v_on(-0.1, WS.WALK_KMH) * 120 / 3600.0
+    assert el["r"][0] == pytest.approx([0.0, 1.0], abs=0.002)
+    assert el["r"][1] == pytest.approx([1.0, 1.0 - back], abs=0.002)
+    assert el["r"][2] == pytest.approx([1.0 - back, 1.0], abs=0.002)        # to the top again, no further
+    assert el["up"][2] == pytest.approx(back * 100, abs=0.5) and el["up"][2] < el["up"][0]
+
+
+def test_a_lap_button_recovery_walks_all_the_way_down():
+    # 「走下坡」 until the lap button: pressed at the bottom — however long that takes, the next rep from there
+    steps = WS.normalize({"items": [{"kind": "repeat", "times": 2, "last_rest": True, "items": [
+        st("work", 420, TG), st("rest", {"type": "open"}, None, "走下坡")]}]})
+    el = UT.route_elevation(steps, C, hill())
+    up_km = v_on(0.1) * 420 / 3600.0
+    assert el["r"][1] == pytest.approx([up_km, 0.0], abs=0.002) and el["r"][2][0] == pytest.approx(0.0, abs=0.002)
+    assert el["s"][1] == pytest.approx(up_km / v_on(-0.1, WS.WALK_KMH) * 3600.0, rel=0.02)
+
+
+def test_a_recovery_never_goes_below_where_the_repeats_started():
+    # a long recovery still stops at the bottom of the repeats and spends the rest of its time there
+    steps = WS.normalize({"items": [st("warm", 300, TG), {"kind": "repeat", "times": 2, "last_rest": True, "items": [
+        st("work", 120, TG), st("rest", 900, TG)]}]})
+    el = UT.route_elevation(steps, C, hill())
+    base = el["r"][1][0]
+    assert base > 0 and el["r"][2][1] == pytest.approx(base, abs=0.002) and el["r"][3][0] == pytest.approx(base, abs=0.002)
+
+
+# ---------------------------------------------------------------------------
+# SP-639 Q1-1 (a): no speed bonus on a steep descent (≤ −15 %)
+# ---------------------------------------------------------------------------
+
+def test_a_steep_descent_is_no_faster_than_the_flat():
+    assert UT.STEEP_DOWN_GRADE == -0.15
+    for g in (-0.15, -0.2, -0.247, -0.35, -0.5):
+        assert UT._gf(g) >= 1.0, g                         # the flat pace or slower
+        assert UT._gf(g) == pytest.approx(max(1.0, grade_factor(g))), g
+    # a gentler descent keeps Minetti's bonus (at most 10 %), a climb is unchanged
+    assert UT._gf(-0.08) == pytest.approx(grade_factor(-0.08)) and UT._gf(-0.08) < 1.0
+    assert UT._gf(0.12) == pytest.approx(grade_factor(0.12))
+
+
+def test_the_chart_walks_a_steep_descent_at_the_flat_speed():
+    # down 200 m over 1 km (−20 %) at the easy speed: no faster than 6 km/h on the flat
+    prof = {"km": [0.0, 1.0, 2.0], "z": [300.0, 100.0, 100.0], "route_km": 2.0}
+    el = UT.route_elevation(WS.normalize({"items": [st("work", {"type": "distance", "value": 1000}, TG)]}), C, prof)
+    assert el["s"][0] == pytest.approx(1.0 / 6.0 * 3600.0 * max(1.0, grade_factor(-0.2)), rel=0.01)
+    assert el["s"][0] >= 600 - 1
+
+
+def test_the_table_gives_a_steep_descent_no_speed_bonus():
+    course = {"segments": [
+        {"i": 1, "start_km": 0, "end_km": 1, "dist_m": 1000, "gain_m": 0, "loss_m": 247, "grade": -0.247, "max_grade": -0.3},
+        {"i": 2, "start_km": 1, "end_km": 2, "dist_m": 1000, "gain_m": 0, "loss_m": 80, "grade": -0.08, "max_grade": -0.1}],
+        "climbs": []}
+    b = UT.course_table(course, C, [("easy", "輕鬆", 0.78)])
+    flat = b["levels"][0]["flat_pace_s_per_km"]
+    steep, gentle = (s["est"]["easy"]["pace_s_per_km"] for s in b["segments"])
+    assert steep >= flat - 0.5                              # was 10 % faster before (4:23 on −24.7 %)
+    assert gentle < flat                                    # a runnable descent is still a bit faster
 
 
 def test_repeats_on_flat_ground_keep_going_forward():
@@ -251,5 +326,8 @@ def test_the_chart_of_a_hill_template_on_the_route(monkeypatch):
         works = [i for i, o in enumerate(chk["order"]) if o["kind"] == "work"]
         rests = [i for i, o in enumerate(chk["order"]) if o["kind"] == "rest"]
         assert len(works) == 4 and all(el["up"][i] > 20 for i in works) and all(el["down"][i] > 20 for i in rests)
-        assert len({round(el["r"][i][0], 2) for i in works}) == 1     # every rep from the same bottom
+        # Q1-3 (b): each rep climbs again from where the recovery before it stopped
+        for w_, r_ in zip(works[1:], rests[:-1]):
+            assert el["r"][w_][0] == pytest.approx(el["r"][r_][1], abs=0.002)
+        assert all(el["r"][r_][1] >= el["r"][works[0]][0] - 0.002 for r_ in rests)    # never below the bottom
         assert math.isclose(el["xt"][-1], sum(el["s"]), abs_tol=1)

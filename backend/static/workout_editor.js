@@ -420,9 +420,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     // ---------------- lifecycle ----------------
     sess() { return this.o.session() || {}; }
     sig(s) { return JSON.stringify([s.kind, s.title, s.minutes, s.target, s.detail, s.protocol, s.variant_key, s.terrain]); }
-    async open({ uid, ro, kind } = {}) {
+    // src "racecalc" (SP-454): the stored structure is the 賽事計算機's export, not changed since — it
+    // says so instead of 「你改過的結構」 until it is edited here
+    async open({ uid, ro, kind, src } = {}) {
       this.dirty = false; this.cleared = false; this.sel = null; this.openT = null; this.auto = {}; this.rinfo = null;
-      this.ro = !!ro; this.uid = uid || null;
+      this.ro = !!ro; this.uid = uid || null; this.src = src || null;
       this.root.classList.toggle("we-ro", this.ro);
       this.root.closest("dialog")?.classList.add("we-wide");
       this.$("we-box").open = true;     // 結構 is expanded by default
@@ -461,7 +463,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       }, 220);
     }
     rederive(extra) { this.dirty = false; this.stored = false; return this.derive({ ...extra, rederive: true }); }
-    touch() { this.dirty = true; this.cleared = false; this.render(); this.refreshSoon(); }
+    touch() { this.dirty = true; this.cleared = false; this.src = null; this.render(); this.refreshSoon(); }
     refreshSoon() { clearTimeout(this.timer); this.timer = setTimeout(() => this.check(), 150); }
     payload() {
       if (this.cleared) return { steps: null };
@@ -589,7 +591,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       }
       const t = (v && v.totals) || {};
       this.$("we-sum").textContent = `${v ? v.structure : ""}${t.sec != null ? ` · ${t.est ? "約 " : ""}${mmss(t.sec)}${t.open ? "＋「直到按下計圈」段" : ""}` : ""}` +
-        (this.dirty ? " · 尚未儲存" : this.stored ? " · 你改過的結構" : "");
+        (this.dirty ? " · 尚未儲存" : this.stored ? (this.src === "racecalc" ? " · 賽事計算機匯出的結構" : " · 你改過的結構") : "");
       this.$("we-list").innerHTML = d.items.map((it) => this.itemHtml(it, 0)).join("");
       this.legend();
       this.stats();
@@ -732,13 +734,17 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     stats() {
       const v = this.view || {}, t = v.totals || {}, c = this.ctx || {};
       const cap = c.cap ? `${Math.round(c.cap)} 分（${c.cap_mode === "hard" ? "硬上限" : "軟上限"}）` : "不限";
+      // SP-453: a 賽事計算機 export as exported — its TSS is the calculator's (the host says so: calc_tss)
+      const fx = !this.dirty && !this.cleared ? this.sess().calc_tss : null;
+      const load = fx ? `<span>預估訓練負荷（Training load）<b>${Math.round(fx.tss)}</b> <span class="faint">${esc(fx.label || "")}</span></span>`
+        : `<span>預估訓練負荷（Training load）<b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span>`;
       this.$("we-stats").innerHTML = t.sec == null ? "" :
         `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋「直到按下計圈」段" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
         // SP-646: 中強度 / 高強度 / 5 區 (workout_steps.totals: Palladino's three zones; marathon pace = 中強度)
         `<span>${esc(tr("workout.mod_time"))} <b>${mmss(t.mod_s || 0)}</b></span>` +
         `<span>${esc(tr("workout.hard_time"))} <b>${mmss(t.hard_s)}</b></span>` +
         `<span>${esc(tr("workout.z5_time"))} <b>${mmss(t.z5_s || 0)}</b>${q(tr("workout.intensity_tip"))}</span>` +
-        `<span>預估訓練負荷（Training load）<b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
+        `${load}<span>這天上限 ${esc(cap)}</span>`;
     }
     issues() {
       const v = this.view || {}, list = v.issues || [];
@@ -1266,7 +1272,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.$("we-pop").hidden = true;
       const r = this.doc.route;
       if (r && r.src && this.o.routes !== false) {
-        this.dirty = true;
+        this.dirty = true; this.src = null;
         this.pickRoute({ src: r.src.kind, id: r.src.id, climb: r.climb ? r.climb.no : 0 });
       } else {
         delete this.doc.route;

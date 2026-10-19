@@ -82,7 +82,15 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     `blackouts`: a candidate 不排課日期 list (preview before saving); None = the stored one.
     Single flight (SP-362): on a cache miss, concurrent callers of the same key wait for one
     computation (_build_inputs). With _STALE_OK (GET /calendar only) a miss after new data or a
-    new day answers the previous inputs at once, marked `stale` (_stale_view, SP-362 B4)."""
+    new day answers the previous inputs at once, marked `stale` (_stale_view, SP-362 B4).
+    The key and the computation read the settings inside one settings_memo() (SP-752): each once,
+    and the computation sees the very values its key was made from."""
+    from backend.engine.wko5expr.datasource import settings_memo
+    with settings_memo():
+        return _compute_inputs_in(blackouts)
+
+
+def _compute_inputs_in(blackouts: Optional[list]) -> dict:
     key, build = _inputs_key(blackouts)
     with _lock:
         hit = _cache.get(key)
@@ -218,7 +226,17 @@ def _inputs_key(blackouts: Optional[list] = None) -> tuple:
 def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool, rpe_on: bool,
                   recorded) -> dict:
     """One key's computation (the single flight's leader, SP-362): from exactly the inputs the
-    key was built from, stored under that key, so every waiter gets its own key's result."""
+    key was built from, stored under that key, so every waiter gets its own key's result.
+    Inside datasource.settings_memo() (SP-752): one computation read the settings DB ~1,070 times
+    (read_setting / current_source for every session and activity it looked at); now each setting
+    once. A setting saved meanwhile is seen by the next computation, as with the key."""
+    from backend.engine.wko5expr.datasource import settings_memo
+    with settings_memo():
+        return _build_inputs_in(key, ds, today, prefs, bos, acc, auto_on, rpe_on, recorded)
+
+
+def _build_inputs_in(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool, rpe_on: bool,
+                     recorded) -> dict:
     from backend.api.overview import _status
     from backend.engine import overview as O
     from backend.engine import planning
@@ -673,7 +691,10 @@ async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end:
     out = {**_meta(inp), "summary": _summary(every, inp),
            "sessions": [{**_view(s, inp, rows, today, prov, walk, prefs), "mark": PMK.of(mk, s["uid"]),
                          # SP-469: 還原成自動 offered on an edited auto session
-                         **({"revertible": True} if s["state"] == "active" and PS.revertible(s, every, today) else {})}
+                         **({"revertible": True} if s["state"] == "active" and PS.revertible(s, every, today) else {}),
+                         # SP-454: a 賽事計算機 export (edited, so reconcile keeps it) is 「已修改」 only once
+                         # it was changed on the 課表 page since (the export's fingerprint, ext_sig)
+                         **({"ext_edited": PS.user_edited(s)} if s.get("ext_key") else {})}
                         for s in ss if s["state"] != "deleted" and s["state"] != "superseded"],
            # SP-469: deleted auto sessions 還原成自動 can bring back, shown on their day
            "deleted_auto": [d for d in PS.deleted_revertible(every, today)
@@ -3503,7 +3524,9 @@ def _decorate(every: list[dict], acts: list[dict], rates: dict, start: str, end:
             s = _fresh_done_by(s, acts_by)
             vs = PM.compare(s, est)
             out.append({**s, "tss_est": round(est, 1), "vs": vs,
-                        "compliance": C.with_plan_check(C.session_compliance(s, est), vs)})
+                        "compliance": C.with_plan_check(C.session_compliance(s, est), vs),
+                        # SP-453: the 賽事計算機's TSS (the editor shows it, labelled, until the structure changes)
+                        **({"tss_by": "calc"} if PS.calc_tss(s) else {})})
     return out
 
 

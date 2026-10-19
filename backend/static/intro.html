@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="intro.title">TrailRunCoach · 越野跑與百岳的備賽工具</title>
-<meta name="description" data-i18n-attr="content:intro.description" content="報了一場越野賽？用你的跑步資料預估完賽時間、每一段的配速和補給，排好備賽課表。給越野跑、百岳、路跑。">
+<meta name="description" data-i18n-attr="content:intro.description" content="報了一場越野賽？依目標賽事排好每一週的課表，再用你的跑步資料預估完賽時間、每一段的配速和補給。給越野跑、百岳、路跑。">
 <style>
 /* 介紹頁 (SP-622, api/intro.py): "/" signed out. The app's colours (login.html, demo.html), light and
    dark; no shell (its bar is the signed-in app's). One column on a phone, text and picture side by
@@ -141,6 +141,88 @@ footer .lang { margin-left: auto; }
 .calc-res .s { color: var(--muted); font-size: 14px; min-height: 1.4em; }
 .calc-res.busy .big { opacity: .55; }
 .calc-note { margin: 0; color: var(--muted); font-size: 12.5px; }
+.race-side { display: grid; gap: 14px; min-width: 0; }
+.feature .text .calc { margin: 4px 0 14px; }
+/* SP-637 R1: the 課表 calendar (hero) — four week rows of seven days; a day's sessions as chips, the
+   days after the plan's horizon hatched; the picked day's sessions and their structure below */
+:root { --k-easy: #16a34a; --k-long: #2a78d6; --k-climb: #b45309; --k-hike: #92400e; --k-quality: #dc2626;
+  --k-test: #7c3aed; --k-strength: #6b7280; --k-cross: #0d9488; --k-race: #2a78d6;
+  --lv0: #b8b8b2; --lv1: #9cc9a8; --lv2: #4fa36a; --lv3: #e0b13a; --lv4: #e07b2f; --lv5: #c93a3a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --k-easy: #4ade80; --k-long: #5a9cf0;
+  --k-climb: #f59e0b; --k-hike: #d6a06a; --k-quality: #f87171; --k-test: #a78bfa; --k-strength: #a1a1aa;
+  --k-cross: #2dd4bf; --k-race: #5a9cf0; --lv0: #5c5c57; --lv1: #3f6b4c; --lv2: #4f9e66; --lv3: #d4a22e;
+  --lv4: #e0782c; --lv5: #e05252; } }
+:root[data-theme="dark"] { --k-easy: #4ade80; --k-long: #5a9cf0; --k-climb: #f59e0b; --k-hike: #d6a06a;
+  --k-quality: #f87171; --k-test: #a78bfa; --k-strength: #a1a1aa; --k-cross: #2dd4bf; --k-race: #5a9cf0;
+  --lv0: #5c5c57; --lv1: #3f6b4c; --lv2: #4f9e66; --lv3: #d4a22e; --lv4: #e0782c; --lv5: #e05252; }
+.cal { width: 100%; min-width: 0; padding: 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line);
+  box-shadow: var(--shadow); display: grid; gap: 8px; }
+.cal-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; }
+.cal-sub { color: var(--muted); font-size: 13px; }
+.cal-dow, .cal-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-dow span { text-align: center; color: var(--muted); font-size: 12px; font-weight: 600; }
+.cal-weeks { display: grid; gap: 8px; }
+.cal-wl { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; font-size: 12.5px; color: var(--muted); margin-bottom: 3px; }
+.cal-wl b { color: var(--text); font-size: 13px; }
+.ph { padding: 0 7px; border-radius: 999px; font-weight: 600; background: var(--soft); color: var(--accent); }
+.ph.taper { background: rgba(180,83,9,.12); color: var(--warm); }
+.cal-day { font: inherit; text-align: left; min-height: 62px; min-width: 0; padding: 4px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text); display: flex; flex-direction: column; gap: 3px; }
+.cal-day:hover { border-color: var(--accent); }
+.cal-day[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.cal-day:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cal-day.rest .off { color: var(--muted); font-size: 12px; }
+.cal-day.later { cursor: default; border-style: dashed; color: var(--muted);
+  background: repeating-linear-gradient(135deg, transparent 0 6px, var(--line) 6px 7px); }
+.cal-day.later:hover { border-color: var(--line); }
+.chip { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 12px; line-height: 1.25; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; }
+.chip i { flex: none; width: 4px; align-self: stretch; min-height: 14px; border-radius: 2px; background: var(--k-easy); }
+.chip .lbl { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.chip .m { color: var(--muted); }
+.chip.race { padding: 1px 5px; border-radius: 6px; background: var(--k-race); color: #fff; font-weight: 700; justify-content: center; }
+.chip.race.b { background: var(--soft); color: var(--accent); }
+.k-easy i { background: var(--k-easy); } .k-long i { background: var(--k-long); } .k-climb i { background: var(--k-climb); }
+.k-hike i { background: var(--k-hike); } .k-quality i { background: var(--k-quality); } .k-test i { background: var(--k-test); }
+.k-strength i { background: var(--k-strength); } .k-cross i { background: var(--k-cross); }
+@media (max-width: 560px) {
+  .cal { padding: 12px; }
+  .cal-dow, .cal-row { gap: 3px; }
+  .cal-day { min-height: 54px; padding: 3px; }
+  .chip .lbl { display: none; }
+  .chip { font-size: 11.5px; gap: 3px; }
+  .chip.race { font-size: 11px; padding: 1px 2px; }
+}
+.cal-detail { min-height: 120px; padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 14px; display: grid; gap: 8px; }
+.cal-detail p { margin: 0; }
+.sess-h { font-weight: 700; }
+.sess-m { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.sess-s { font-size: 13px; }
+.bars { display: block; width: 100%; height: 44px; }
+.bars.big { height: 110px; }
+.lv0 { fill: var(--lv0); background: var(--lv0); } .lv1 { fill: var(--lv1); background: var(--lv1); }
+.lv2 { fill: var(--lv2); background: var(--lv2); } .lv3 { fill: var(--lv3); background: var(--lv3); }
+.lv4 { fill: var(--lv4); background: var(--lv4); } .lv5 { fill: var(--lv5); background: var(--lv5); }
+/* SP-637 R1: 新增一堂課 → 選範本 → 看結構 */
+.tpl { padding: 16px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
+  display: grid; gap: 8px; min-width: 0; }
+.tpl-h { margin: 0; font-size: 17px; }
+.tpl-step { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.tpl-step b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent);
+  color: #fff; font-size: 12px; }
+.tpl-list { display: grid; gap: 6px; }
+.tpl-row { font: inherit; text-align: left; cursor: pointer; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 10px;
+  align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.tpl-row:hover { border-color: var(--accent); }
+.tpl-row[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.tpl-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tpl-row .bars { grid-row: span 2; height: 28px; }
+.tpl-row .n { font-weight: 600; font-size: 14.5px; }
+.tpl-row .p { color: var(--muted); font-size: 12.5px; }
+.tpl-view { padding: 10px 12px; border-radius: 10px; background: var(--soft); display: grid; gap: 6px; min-height: 180px; }
+.tpl-view p { margin: 0; }
+.tpl-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: -2px; }
+.lv-legend i { width: 12px; height: 8px; }
 /* SP-637: the example's elevation profile (race section) */
 .prof { padding: 16px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
   display: grid; gap: 10px; min-width: 0; }
@@ -194,17 +276,98 @@ html.anim .reveal.in { opacity: 1; transform: none; }
         <div class="kinds" role="group" aria-label="適合誰" data-i18n-attr="aria-label:intro.tags.label">
           <button type="button" data-kind="trail" aria-pressed="true" data-i18n="intro.tags.trail">越野跑</button><button type="button" data-kind="baiyue" aria-pressed="false" data-i18n="intro.tags.baiyue">百岳／多日縱走</button><button type="button" data-kind="road" aria-pressed="false" data-i18n="intro.tags.road">路跑</button>
         </div>
-        <h1 id="hero-h" data-kind-text="h1" data-i18n="intro.hero.h1">報了一場越野賽？告訴你練不練得完、每一段怎麼跑。</h1>
-        <p class="lead" data-kind-text="lead" data-i18n="intro.hero.lead">給越野跑、百岳、路跑的備賽工具：用你的跑步資料預估比賽、排好課表、讀懂每一趟訓練。</p>
+        <h1 id="hero-h" data-kind-text="h1" data-i18n="intro.hero.h1">報了一場越野賽？課表幫你一週一週排到比賽日。</h1>
+        <p class="lead" data-kind-text="lead" data-i18n="intro.hero.lead">給越野跑、百岳、路跑的備賽工具：依目標賽事排好課表、每一堂課照你的狀況調，比賽前再算好每一段怎麼跑。</p>
         <div class="cta">
           <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
           <a class="btn" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
         </div>
         <p class="price" data-i18n="intro.cta.price">目前免費、名額有限，額滿收候補。</p>
       </div>
-      <!-- SP-637: the small calculator — the server computes (/api/v1/intro/estimate), the page only formats -->
-      <form class="calc" id="calc" aria-labelledby="calc-h" onsubmit="return false">
-        <h2 id="calc-h" class="calc-h" data-i18n="intro.calc.h">試算一場比賽</h2>
+      <!-- SP-637 R1: the 課表 calendar — the fictional runner's weeks before the 50K (/api/v1/intro/plan);
+           tap a day for its sessions and their structure -->
+      <div class="cal" id="cal" aria-labelledby="cal-h">
+        <div class="cal-top">
+          <h2 id="cal-h" class="calc-h" data-i18n="intro.cal.h">示範課表：比賽前的最後 4 週</h2>
+          <span class="cal-sub" data-i18n="intro.cal.sub">目標：示範山徑越野 50K（週六）</span>
+        </div>
+        <div class="cal-dow" aria-hidden="true">
+          <span data-i18n="intro.cal.dow.0">一</span><span data-i18n="intro.cal.dow.1">二</span><span data-i18n="intro.cal.dow.2">三</span><span data-i18n="intro.cal.dow.3">四</span><span data-i18n="intro.cal.dow.4">五</span><span data-i18n="intro.cal.dow.5">六</span><span data-i18n="intro.cal.dow.6">日</span>
+        </div>
+        <div id="cal-weeks" class="cal-weeks"></div>
+        <div class="cal-detail" id="cal-detail" aria-live="polite"><p class="muted" data-i18n="intro.cal.hint">點一天，看那天的課和結構。</p></div>
+        <p class="calc-note"><span data-i18n="intro.shot.fictional">畫面是示範資料：虛構跑者、虛構賽事。</span> <span data-i18n="intro.cal.later_note">斜線的日子還沒排：課表先排到下週，越接近比賽越照你當時的狀況排。</span></p>
+      </div>
+    </section>
+
+    <section aria-label="三個重點" data-i18n-attr="aria-label:intro.points.label">
+      <div class="points">
+        <div class="card reveal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>
+          <h3 data-i18n="intro.points.plan.h">課表跟著你的賽事和狀況走</h3>
+          <p data-i18n="intro.points.plan.p">依目標賽事分周期、按你的偏好排一週；狀況變了會重排，大變動先問你。</p>
+        </div>
+        <div class="card reveal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 6-10 4 6 3-4 5 8z"/><path d="M15.5 6.5h.01"/></svg>
+          <h3 data-i18n="intro.points.terrain.h">坡度、背包、天氣都算進去</h3>
+          <p data-i18n="intro.points.terrain.p">爬升、下坡、背包重量、比賽當天的氣溫和海拔，都換算成你跑得出來的配速。</p>
+        </div>
+        <div class="card reveal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8.5 7.5h7M8.5 11h5"/></svg>
+          <h3 data-i18n="intro.points.sources.h">每條規則都有出處</h3>
+          <p data-i18n="intro.points.sources.p">計算方法都列出公開文獻；沒有出處的數字標「推估」，再用你的資料校正。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="plan" class="feature" aria-labelledby="plan-h">
+      <div class="text">
+        <p class="kicker" data-i18n="intro.plan.kicker">從課表開始</p>
+        <h2 id="plan-h" data-i18n="intro.plan.h">課表與賽事周期</h2>
+        <p class="sec-lead" data-i18n="intro.plan.lead">設好 A／B／C 賽事，自動分成基礎、強化、專項、減量期，照你的偏好排出每一週。</p>
+        <ul>
+          <li data-i18n="intro.plan.li.prefs">哪天長跑、哪天休息照你排；拖曳就能換日</li>
+          <li data-i18n="intro.plan.li.templates">自己加課：選一個有出處的範本，結構（暖身、主課、恢復）一眼看懂</li>
+          <li data-i18n="intro.plan.li.replan">跑完的課自動對上；狀況變了會重排，大變動先等你同意</li>
+          <li data-i18n="intro.plan.li.ready">賽事評估：來不來得及練、現在練得夠不夠</li>
+          <li data-i18n="intro.plan.li.calendar">訂閱到 Google 日曆或 iPhone 行事曆</li>
+        </ul>
+        <a class="more" href="/manual/schedule" data-i18n="intro.plan.more">手冊：課表怎麼用 →</a>
+      </div>
+      <!-- SP-637 R1: 新增一堂課 → 選範本 → 看結構 (the built-in library, /api/v1/intro/templates) -->
+      <div class="tpl reveal" id="tpl" aria-labelledby="tpl-h">
+        <h3 id="tpl-h" class="tpl-h" data-i18n="intro.tpl.h">新增一堂課</h3>
+        <p class="tpl-step"><b>1</b> <span data-i18n="intro.tpl.step1">選類型</span></p>
+        <div class="kinds small" role="group" id="tpl-cats" aria-label="課的類型" data-i18n-attr="aria-label:intro.tpl.cats">
+          <button type="button" data-cat="easy" aria-pressed="true" data-i18n="intro.tpl.cat.easy">輕鬆跑／長跑</button><button type="button" data-cat="quality" aria-pressed="false" data-i18n="intro.tpl.cat.quality">強度課</button><button type="button" data-cat="trail" aria-pressed="false" data-i18n="intro.tpl.cat.trail">越野爬坡</button>
+        </div>
+        <p class="tpl-step"><b>2</b> <span data-i18n="intro.tpl.step2">選範本</span></p>
+        <div class="tpl-list" id="tpl-list" role="group" aria-label="範本" data-i18n-attr="aria-label:intro.tpl.list"></div>
+        <p class="tpl-step"><b>3</b> <span data-i18n="intro.tpl.step3">看結構</span></p>
+        <div class="tpl-view" id="tpl-view" aria-live="polite"></div>
+        <ul class="legend lv-legend" aria-hidden="true">
+          <li><i class="lv1"></i><span data-i18n="intro.lv.1">很輕鬆</span></li><li><i class="lv2"></i><span data-i18n="intro.lv.2">輕鬆</span></li><li><i class="lv3"></i><span data-i18n="intro.lv.3">中等</span></li><li><i class="lv4"></i><span data-i18n="intro.lv.4">閾值</span></li><li><i class="lv5"></i><span data-i18n="intro.lv.5">高強度</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="race" class="feature flip" aria-labelledby="race-h">
+      <div class="text">
+        <p class="kicker" data-i18n="intro.race.kicker">比賽前</p>
+        <h2 id="race-h" data-i18n="intro.race.h">賽事計算機</h2>
+        <p class="sec-lead" data-i18n="intro.race.lead">丟一條賽道 GPX，算出完賽時間、每一段的配速、功率、心率上限和補給量。</p>
+        <ul>
+          <li data-i18n="intro.race.li.legs">逐段配速：哪段該跑、哪段改用走的、陡下坡先求安全</li>
+          <li data-i18n="intro.race.li.weather">比賽日天氣：每一段用「跑到那裡時」的氣溫和濕度算熱負荷，也算海拔</li>
+          <li data-i18n="intro.race.li.fuel">補給：每小時碳水、水分、鈉，什麼時候吃</li>
+          <li data-i18n="intro.race.li.baiyue">百岳多日：按山屋與營地分日預覽，背包重量一起算</li>
+          <li data-i18n="intro.race.li.group">跟團對照：拿開團的時刻表比一比，逐段看跟不跟得上</li>
+          <li data-i18n="intro.race.li.share">算好的配速表可以存成課表，或用一個連結分享給同團的人</li>
+        </ul>
+      <!-- SP-637: the small calculator — the server computes (/api/v1/intro/estimate), the page only formats
+           (R1: here in the race section, the 課表 calendar is the hero) -->
+      <form class="calc reveal" id="calc" aria-labelledby="calc-h" onsubmit="return false">
+        <h3 id="calc-h" class="calc-h" data-i18n="intro.calc.h">試算一場比賽</h3>
         <div class="field">
           <label for="calc-km"><span data-i18n="intro.calc.km">距離</span><output id="calc-km-v" for="calc-km">50 km</output></label>
           <input type="range" id="calc-km" min="5" max="100" step="1" value="50">
@@ -220,44 +383,10 @@ html.anim .reveal.in { opacity: 1; transform: none; }
         </div>
         <p class="calc-note" data-i18n="intro.calc.note">一位虛構跑者的試算。登入後，用你自己的跑步資料算。</p>
       </form>
-    </section>
-
-    <section aria-label="三個重點" data-i18n-attr="aria-label:intro.points.label">
-      <div class="points">
-        <div class="card reveal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 6-10 4 6 3-4 5 8z"/><path d="M15.5 6.5h.01"/></svg>
-          <h3 data-i18n="intro.points.terrain.h">坡度、背包、天氣都算進去</h3>
-          <p data-i18n="intro.points.terrain.p">爬升、下坡、背包重量、比賽當天的氣溫和海拔，都換算成你跑得出來的配速。</p>
-        </div>
-        <div class="card reveal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>
-          <h3 data-i18n="intro.points.plan.h">課表跟著你的賽事和狀況走</h3>
-          <p data-i18n="intro.points.plan.p">依目標賽事分周期、按你的偏好排一週；狀況變了會重排，大變動先問你。</p>
-        </div>
-        <div class="card reveal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8.5 7.5h7M8.5 11h5"/></svg>
-          <h3 data-i18n="intro.points.sources.h">每條規則都有出處</h3>
-          <p data-i18n="intro.points.sources.p">計算方法都列出公開文獻；沒有出處的數字標「推估」，再用你的資料校正。</p>
-        </div>
-      </div>
-    </section>
-
-    <section id="race" class="feature" aria-labelledby="race-h">
-      <div class="text">
-        <p class="kicker" data-i18n="intro.race.kicker">主角</p>
-        <h2 id="race-h" data-i18n="intro.race.h">賽事計算機</h2>
-        <p class="sec-lead" data-i18n="intro.race.lead">丟一條賽道 GPX，算出完賽時間、每一段的配速、功率、心率上限和補給量。</p>
-        <ul>
-          <li data-i18n="intro.race.li.legs">逐段配速：哪段該跑、哪段改用走的、陡下坡先求安全</li>
-          <li data-i18n="intro.race.li.weather">比賽日天氣：每一段用「跑到那裡時」的氣溫和濕度算熱負荷，也算海拔</li>
-          <li data-i18n="intro.race.li.fuel">補給：每小時碳水、水分、鈉，什麼時候吃</li>
-          <li data-i18n="intro.race.li.baiyue">百岳多日：按山屋與營地分日預覽，背包重量一起算</li>
-          <li data-i18n="intro.race.li.group">跟團對照：拿開團的時刻表比一比，逐段看跟不跟得上</li>
-          <li data-i18n="intro.race.li.share">算好的配速表可以存成課表，或用一個連結分享給同團的人</li>
-        </ul>
         <p class="origin" data-i18n="intro.race.origin">完賽預估、環境修正與 CP 的公式移植自 Steve Palladino 的 SuperPower Calculator（跑步功率社群公開流通的試算表），不是我們發明的；越野與百岳的坡度、背包換算另外依照公開文獻。</p>
         <a class="more" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
       </div>
+      <div class="race-side">
       <!-- SP-637: the example's elevation profile — hover (desktop) or tap (phone) a leg -->
       <div class="prof reveal" id="profile">
         <div class="kinds small" role="group" aria-label="範例" data-i18n-attr="aria-label:intro.prof.kinds">
@@ -283,23 +412,7 @@ html.anim .reveal.in { opacity: 1; transform: none; }
         <div class="leg" id="prof-leg" aria-live="polite"><p class="muted" data-i18n="intro.prof.hint">滑過或點一下剖面，看每一段的配速、心率和補給。</p></div>
         <p class="calc-note" data-i18n="intro.shot.fictional">畫面是示範資料：虛構跑者、虛構賽事。</p>
       </div>
-    </section>
-
-    <section id="plan" class="feature flip" aria-labelledby="plan-h">
-      <div class="text">
-        <h2 id="plan-h" data-i18n="intro.plan.h">課表與賽事周期</h2>
-        <p class="sec-lead" data-i18n="intro.plan.lead">設好 A／B／C 賽事，自動分成基礎、強化、專項、減量期，照你的偏好排出每一週。</p>
-        <ul>
-          <li data-i18n="intro.plan.li.prefs">哪天長跑、哪天休息照你排；拖曳就能換日</li>
-          <li data-i18n="intro.plan.li.replan">跑完的課自動對上；狀況變了會重排，大變動先等你同意</li>
-          <li data-i18n="intro.plan.li.ready">賽事評估：來不來得及練、現在練得夠不夠</li>
-          <li data-i18n="intro.plan.li.calendar">訂閱到 Google 日曆或 iPhone 行事曆</li>
-        </ul>
-        <a class="more" href="/manual/schedule" data-i18n="intro.plan.more">手冊：課表怎麼用 →</a>
       </div>
-      <figure class="shot phone tall reveal">
-        <div class="frame"><img data-shot="intro-schedule" alt="課表的一週：每一天的課、類型與完成狀況" data-i18n-attr="alt:intro.plan.shot_alt" loading="lazy"></div>
-      </figure>
     </section>
 
     <section id="read" class="feature" aria-labelledby="read-h">
@@ -364,7 +477,7 @@ html.anim .reveal.in { opacity: 1; transform: none; }
     </section>
 
     <section class="end" aria-labelledby="end-h">
-      <h2 id="end-h" data-i18n="intro.end.h">下一場比賽，先算一次再出發。</h2>
+      <h2 id="end-h" data-i18n="intro.end.h">下一場比賽，從課表開始準備。</h2>
       <div class="cta">
         <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
         <a class="btn" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
@@ -585,6 +698,177 @@ html.anim .reveal.in { opacity: 1; transform: none; }
     const n = P.d.legs.length;
     select(sel < 0 ? 0 : Math.max(0, Math.min(n - 1, sel + (e.key === "ArrowRight" ? 1 : -1))));
   });
+
+  // ---- SP-637 R1: the 課表. Steps come as length + level 1–5 (api/intro.structure); this only draws them.
+  const dur = (s) => (s < 60 ? `${s}″` : s % 60 ? `${Math.floor(s / 60)}′${String(s % 60).padStart(2, "0")}″` : `${s / 60}′`);
+  const flat = (steps) => {
+    const out = [];
+    const walk = (xs) => xs.forEach((x) => {
+      if (x.items) {
+        for (let i = 0; i < x.x; i++) {
+          let kids = x.items;
+          if (i === x.x - 1 && !x.last_rest) { kids = kids.slice(); while (kids.length && kids[kids.length - 1].k === "rest") kids.pop(); }
+          walk(kids);
+        }
+      } else out.push(x);
+    });
+    walk(steps || []);
+    return out;
+  };
+  const totalS = (steps) => flat(steps).reduce((a, x) => a + x.s, 0);
+  // the structure as bars: width = time, height and colour = level (no level: an open bout, grey)
+  function bars(steps, cls) {
+    const rows = flat(steps), tot = rows.reduce((a, x) => a + x.s, 0) || 1, W = 300, H = 40;
+    const s = el("svg", { class: "bars" + (cls ? " " + cls : ""), viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", "aria-hidden": "true" });
+    let x = 0;
+    for (const r of rows) {
+      const w = (r.s / tot) * W, h = Math.max(4, ((r.lv || 1.6) / 5) * H);
+      s.appendChild(el("rect", { class: "lv" + (r.lv || 0), x: x.toFixed(2), y: (H - h).toFixed(2), width: Math.max(0.6, w - 0.6).toFixed(2), height: h.toFixed(2) }));
+      x += w;
+    }
+    return s;
+  }
+  // one step in words: zh uses the app's own name for it (its note) when there is one
+  function stepWords(x) {
+    const lv = x.lv ? L.t("intro.lv." + x.lv) : L.t("intro.lv.0");
+    // (not a note that is a target in numbers — 「65–79% HRmax」 — the level says it in words)
+    const own = loc !== "en" && x.n && !/%/.test(x.n) && (x.k === "work" || x.k === "other") ? x.n : null;
+    if (own) return /[′″分秒]|\d+\s*(m|km)\b/.test(own) ? own : `${dur(x.s)} ${own}`;
+    if (x.k === "work" || x.k === "other") return `${dur(x.s)} ${lv}`;
+    return `${L.t("intro.step." + x.k)} ${dur(x.s)}`;
+  }
+  const summary = (steps) => (steps || []).map((x) => x.items
+    ? L.t("intro.step.repeat", { n: x.x, what: x.items.map(stepWords).join(" ＋ ") }) : stepWords(x)).join(" → ");
+
+  // the calendar (hero)
+  const CAL = { d: null, w: -1, i: -1 };
+  const kindLabel = (k, long) => L.t(`intro.cal.kind.${k}${long ? "_long" : ""}`);
+  function weekLabel(n) { return n === 0 ? L.t("intro.cal.race_week") : L.t(n === 1 ? "intro.cal.week_1" : "intro.cal.weeks", { n }); }
+  function drawCal(d) {
+    CAL.d = d;
+    const box = $("cal-weeks");
+    box.textContent = "";
+    d.weeks.forEach((w, wi) => {
+      const wk = document.createElement("div"); wk.className = "cal-wk";
+      const lab = document.createElement("div"); lab.className = "cal-wl";
+      const b = document.createElement("b"); b.textContent = weekLabel(w.before); lab.appendChild(b);
+      if (w.phase) { const p = document.createElement("span"); p.className = "ph " + w.phase; p.textContent = L.t("intro.cal.phase." + w.phase); lab.appendChild(p); }
+      if (w.hours != null) { const h = document.createElement("span"); h.textContent = L.t("intro.cal.hours", { h: num(w.hours, 1) }); lab.appendChild(h); }
+      wk.appendChild(lab);
+      const row = document.createElement("div"); row.className = "cal-row";
+      w.days.forEach((day, i) => {
+        const later = !day.planned && !day.race;
+        const c = document.createElement(later ? "div" : "button");
+        c.className = "cal-day" + (later ? " later" : day.sessions.length || day.race ? "" : " rest");
+        const name = `${weekLabel(w.before)} ${L.t("intro.cal.dow_long." + i)}`;
+        if (later) { c.setAttribute("aria-label", name + "：" + L.t("intro.cal.later")); c.title = L.t("intro.cal.later"); }
+        else {
+          c.type = "button"; c.dataset.w = wi; c.dataset.i = i; c.setAttribute("aria-pressed", "false");
+          c.setAttribute("aria-label", name + "：" + (day.race ? L.t(day.race.main ? "intro.cal.race_a" : "intro.cal.race_b")
+            : day.sessions.length ? day.sessions.map((s) => kindLabel(s.kind, true) + " " + num(s.min) + "′").join("、") : L.t("intro.cal.rest")));
+          c.addEventListener("click", () => pickDay(wi, i));
+        }
+        if (day.race) {
+          const r = document.createElement("span"); r.className = "chip race" + (day.race.main ? "" : " b");
+          r.textContent = L.t(day.race.main ? "intro.cal.race_a_chip" : "intro.cal.race_b_chip"); c.appendChild(r);
+        }
+        for (const s of day.sessions) {
+          const ch = document.createElement("span"); ch.className = "chip k-" + s.kind;
+          ch.append(document.createElement("i"));
+          const l = document.createElement("span"); l.className = "lbl"; l.textContent = kindLabel(s.kind); ch.append(l);
+          const m = document.createElement("span"); m.className = "m"; m.textContent = num(s.min) + "′"; ch.append(m);
+          c.appendChild(ch);
+        }
+        if (!later && !day.sessions.length && !day.race) { const o = document.createElement("span"); o.className = "off"; o.textContent = L.t("intro.cal.rest_chip"); c.appendChild(o); }
+        row.appendChild(c);
+      });
+      wk.appendChild(row);
+      box.appendChild(wk);
+    });
+    // open on the first day with a structured session (a 爬坡 or 強度 day), so the panel is never empty
+    let first = null;
+    d.weeks.forEach((w, wi) => w.days.forEach((day, i) => { if (!first && day.sessions.some((s) => flat(s.steps).length > 2)) first = [wi, i]; }));
+    if (first) pickDay(...first);
+  }
+  function pickDay(wi, i) {
+    CAL.w = wi; CAL.i = i;
+    for (const b of document.querySelectorAll(".cal-day[data-w]")) b.setAttribute("aria-pressed", String(+b.dataset.w === wi && +b.dataset.i === i));
+    const w = CAL.d.weeks[wi], day = w.days[i], box = $("cal-detail");
+    box.textContent = "";
+    const head = document.createElement("p"); head.className = "sess-m";
+    head.textContent = `${weekLabel(w.before)} · ${L.t("intro.cal.dow_long." + i)}` + (w.phase ? ` · ${L.t("intro.cal.phase." + w.phase)}` : "");
+    box.appendChild(head);
+    if (day.race) {
+      const p = document.createElement("p"); p.className = "sess-h";
+      p.textContent = L.t(day.race.main ? "intro.cal.race_a" : "intro.cal.race_b"); box.appendChild(p);
+      const q = document.createElement("p"); q.className = "sess-s";
+      q.textContent = L.t(day.race.main ? "intro.cal.race_a_note" : "intro.cal.race_b_note"); box.appendChild(q);
+    }
+    if (!day.sessions.length && !day.race) {
+      const p = document.createElement("p"); p.className = "sess-h"; p.textContent = L.t("intro.cal.rest"); box.appendChild(p);
+    }
+    for (const s of day.sessions) {
+      const g = document.createElement("div");
+      const h = document.createElement("p"); h.className = "sess-h";
+      h.textContent = loc === "en" || !s.title ? kindLabel(s.kind, true) : s.title; g.appendChild(h);
+      const m = document.createElement("p"); m.className = "sess-m";
+      m.textContent = [num(s.min) + "′", s.km ? num(s.km, 1) + " km" : "", s.gain_m ? "↑" + num(s.gain_m) + " m" : "",
+        loc === "en" || !s.title ? "" : kindLabel(s.kind, true)].filter(Boolean).join(" · ");
+      g.appendChild(m);
+      if (flat(s.steps).length) {
+        g.appendChild(bars(s.steps));
+        const t = document.createElement("p"); t.className = "sess-s"; t.textContent = summary(s.steps); g.appendChild(t);
+      } else if (s.kind === "strength") {
+        const t = document.createElement("p"); t.className = "sess-s"; t.textContent = L.t("intro.cal.strength_note"); g.appendChild(t);
+      }
+      box.appendChild(g);
+    }
+  }
+  fetch(API + "plan").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then(drawCal)
+    .catch(() => { $("cal-detail").textContent = L.t("intro.calc.error"); });
+
+  // 新增一堂課 → 選範本 → 看結構 (the 課表 section)
+  const TPL = { d: null, cat: "easy", key: null };
+  function drawTplList() {
+    const cat = (TPL.d.cats || []).find((c) => c.id === TPL.cat) || { templates: [] };
+    for (const b of document.querySelectorAll("#tpl-cats button")) b.setAttribute("aria-pressed", String(b.dataset.cat === TPL.cat));
+    const list = $("tpl-list"); list.textContent = "";
+    for (const t of cat.templates) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "tpl-row"; b.dataset.key = t.key;
+      b.setAttribute("aria-pressed", String(t.key === TPL.key));
+      b.appendChild(bars(t.steps));
+      const n = document.createElement("span"); n.className = "n"; n.textContent = L.t(`intro.tpl.t.${t.key}.name`); b.appendChild(n);
+      const p = document.createElement("span"); p.className = "p"; p.textContent = L.t(`intro.tpl.t.${t.key}.purpose`); b.appendChild(p);
+      b.addEventListener("click", () => pickTpl(t.key));
+      list.appendChild(b);
+    }
+  }
+  function pickTpl(key) {
+    TPL.key = key;
+    for (const b of document.querySelectorAll(".tpl-row")) b.setAttribute("aria-pressed", String(b.dataset.key === key));
+    const t = TPL.d.cats.flatMap((c) => c.templates).find((x) => x.key === key), v = $("tpl-view");
+    v.textContent = "";
+    if (!t) return;
+    const h = document.createElement("p"); h.className = "sess-h";
+    h.textContent = `${L.t(`intro.tpl.t.${key}.name`)} · ${L.t("intro.tpl.total", { min: num(Math.round(totalS(t.steps) / 60)) })}`;
+    v.appendChild(h);
+    v.appendChild(bars(t.steps, "big"));
+    const ax = document.createElement("div"); ax.className = "tpl-axis";
+    ax.innerHTML = "<span>0′</span>"; const e = document.createElement("span"); e.textContent = num(Math.round(totalS(t.steps) / 60)) + "′"; ax.appendChild(e);
+    v.appendChild(ax);
+    const s = document.createElement("p"); s.className = "sess-s"; s.textContent = summary(t.steps); v.appendChild(s);
+    const p = document.createElement("p"); p.className = "sess-m"; p.textContent = L.t(`intro.tpl.t.${key}.purpose`); v.appendChild(p);
+  }
+  function setTplCat(cat) {
+    TPL.cat = cat;
+    const c = (TPL.d.cats || []).find((x) => x.id === cat);
+    TPL.key = c && c.templates.length ? c.templates[0].key : null;
+    drawTplList();
+    if (TPL.key) pickTpl(TPL.key);
+  }
+  for (const b of document.querySelectorAll("#tpl-cats button")) b.addEventListener("click", () => TPL.d && setTplCat(b.dataset.cat));
+  fetch(API + "templates").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then((d) => { TPL.d = d; setTplCat(TPL.cat); })
+    .catch(() => { $("tpl-view").textContent = L.t("intro.calc.error"); });
 
   // 越野／百岳／路跑: the hero's words, the calculator's range and first answer, the profile
   const EX = {};

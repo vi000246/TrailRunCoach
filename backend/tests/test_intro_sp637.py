@@ -10,6 +10,10 @@
 - exactly these paths are public; every other private path stays behind sign-in;
 - the page: no Stryd anywhere, the FAQ asks about a power meter; no formula in its script; the
   replaced screenshots gone from it and from the shot list.
+- R1 (2026-10-17, 「課表才是主角，計算機是配角」): the hero is the 課表 calendar (GET /api/v1/intro/plan: the
+  fictional runner's frozen weeks before the 50K, no date), the 課表 section's 新增一堂課 → 選範本 → 看結構 (GET
+  /api/v1/intro/templates: library templates as step lengths and levels, no target number, no source), the
+  small calculator moved into the race section after it.
 """
 from __future__ import annotations
 
@@ -217,11 +221,15 @@ def test_one_computation_is_quick():
 
 def test_exactly_the_intro_api_paths_are_public(c):
     from backend.accounts import login as LG
+    from backend.api import intro as I
     for p in ("/api/v1/intro/estimate", "/api/v1/intro/example/trail", "/api/v1/intro/example/baiyue",
-              "/api/v1/intro/example/road"):
+              "/api/v1/intro/example/road", "/api/v1/intro/templates", "/api/v1/intro/plan"):   # R1: the 課表 demo
         assert LG.is_public(p), p
+    assert {p for p in LG.PUBLIC_PATHS if p.startswith("/api/v1/intro")} == set(I.PUBLIC_PATHS)
     for p in ("/api/v1/intro", "/api/v1/intro/", "/api/v1/intro/example", "/api/v1/intro/example/x",
-              "/api/v1/intro/estimatex", "/api/v1/racepower/predict", "/api/v1/racepower/inputs"):
+              "/api/v1/intro/estimatex", "/api/v1/intro/plan/x", "/api/v1/intro/templatesx",
+              "/api/v1/overview/plan/calendar", "/api/v1/overview/plan/steps/templates",
+              "/api/v1/racepower/predict", "/api/v1/racepower/inputs"):
         assert not LG.is_public(p), p
     # still behind sign-in, signed out
     assert c.get("/api/v1/racepower/inputs").status_code == 401
@@ -301,15 +309,120 @@ def test_the_page_script_computes_no_finish_time():
         assert w not in script, w
 
 
-def test_the_hero_is_the_calculator_and_the_legs_are_the_profile():
+def test_the_hero_is_the_schedule_calendar_and_the_calculator_supports_the_race_section():
+    # R1 (2026-10-17): 「課表才是主角，計算機是配角」 — the hero's right side is the 課表 calendar, the 課表
+    # section (新增一堂課 → 選範本 → 看結構) comes before the race section, the small calculator lives there
     html = _page()
     hero = html[html.index('class="hero"'):html.index("</section>")]
-    assert 'id="calc"' in hero and 'type="range"' in hero and "data-shot" not in hero
-    race = html[html.index('id="race"'):html.index('id="plan"')]
-    assert 'id="profile"' in race and "data-shot" not in race
+    assert 'id="cal"' in hero and 'id="cal-weeks"' in hero and 'id="cal-detail"' in hero
+    assert 'id="calc"' not in hero and 'type="range"' not in hero and "data-shot" not in hero
+    assert html.index('id="plan"') < html.index('id="race"')
+    plan = html[html.index('id="plan"'):html.index('id="race"')]
+    assert 'id="tpl"' in plan and 'id="tpl-cats"' in plan and 'id="tpl-list"' in plan and 'id="tpl-view"' in plan
+    assert "data-shot" not in plan
+    race = html[html.index('id="race"'):html.index('id="read"')]
+    assert 'id="calc"' in race and 'type="range"' in race and 'id="profile"' in race and "data-shot" not in race
     shots = {s["name"] for s in json.loads(SHOTS.read_text("utf-8"))["shots"]}
-    assert "intro-race" not in shots and "intro-legs" not in shots
-    assert {"intro-schedule", "intro-status"} <= shots
+    assert "intro-race" not in shots and "intro-legs" not in shots and "intro-schedule" not in shots
+    assert "intro-status" in shots
+    script = "".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    assert '"plan"' in script and '"templates"' in script
+
+
+def test_every_word_the_schedule_demo_uses_is_in_both_languages():
+    from backend.api import intro as I
+    d, t = I.plan(), I.templates()
+    for loc in LOCALES:
+        cat = json.loads((STATIC / "i18n" / loc / "intro.json").read_text("utf-8"))
+        need = {"cal.h", "cal.sub", "cal.hint", "cal.later", "cal.later_note", "cal.weeks", "cal.week_1", "cal.race_week",
+                "cal.hours", "cal.rest", "cal.rest_chip", "cal.race_a", "cal.race_a_chip", "cal.race_a_note", "cal.race_b",
+                "cal.race_b_chip", "cal.race_b_note", "cal.strength_note", "tpl.h", "tpl.total", "step.repeat"}
+        need |= {f"cal.dow.{i}" for i in range(7)} | {f"cal.dow_long.{i}" for i in range(7)}
+        need |= {f"lv.{i}" for i in range(6)} | {f"step.{k}" for k in ("warm", "work", "rest", "cool", "other")}
+        need |= {f"cal.phase.{w['phase']}" for w in d["weeks"] if w["phase"]}
+        for w in d["weeks"]:
+            for day in w["days"]:
+                for s in day["sessions"]:
+                    need |= {f"cal.kind.{s['kind']}", f"cal.kind.{s['kind']}_long"}
+        for c in t["cats"]:
+            need.add(f"tpl.cat.{c['id']}")
+            for row in c["templates"]:
+                need |= {f"tpl.t.{row['key']}.name", f"tpl.t.{row['key']}.purpose"}
+        missing = sorted(k for k in need if not cat.get(k))
+        assert not missing, (loc, missing)
+        assert not [k for k in need if "stryd" in str(cat.get(k)).lower()], loc
+
+
+# ---------------------------------------------------------------------------- R1: the 課表 demo API
+
+def test_the_level_of_a_step_follows_its_own_target_scale():
+    from backend.api import intro as I
+    assert I.level({"type": "power", "mode": "pct", "lo": 0.65, "hi": 0.8}, "work") == 1
+    assert I.level({"type": "power", "mode": "pct", "lo": 1.01, "hi": 1.06}, "work") == 4
+    assert I.level({"type": "hr", "mode": "pct", "lo": 0.90, "hi": 0.94}, "work") == 3      # Friel Z3
+    assert I.level({"type": "hr", "mode": "pct", "lo": 0.91, "hi": 1.0}, "work") == 4       # Friel Z4 (95–99 %)
+    assert I.level({"type": "hr", "mode": "zone", "zone": "aet"}, "work") == 2
+    assert I.level({"type": "pace", "mode": "pct", "lo": 0.99, "hi": 1.01}, "work") == 4      # T pace: threshold
+    assert I.level({"type": "pace", "mode": "pct", "lo": 1.15, "hi": 1.25}, "work") == 1
+    assert I.level({"type": "rpe", "lo": 9, "hi": 10}, "work") == 5
+    assert I.level({"type": "auto", "intent": "easy"}, "cool") == 1
+    assert I.level({"type": "auto", "intent": "open"}, "work") is None       # an all-out / open bout: no level
+    assert I.level({"type": "auto", "intent": "open"}, "rest") == 1
+
+
+def test_a_structure_keeps_repeats_and_drops_every_target_number():
+    from backend.api import intro as I
+    from backend.engine import workout_templates as WT
+    st = I.structure(WT.items_of(WT.BY_KEY["daniels_cruise"]))
+    rep = next(x for x in st if "x" in x)
+    assert rep["x"] == 5 and [y["k"] for y in rep["items"]] == ["work", "rest"] and rep["items"][0]["lv"] == 4
+    assert rep["items"][0]["s"] == 360
+    for x in [y for x in st for y in (x.get("items") or [x])]:
+        assert set(x) == {"k", "s", "lv", "n"}, x
+        assert x["s"] > 0 and (x["lv"] is None or 1 <= x["lv"] <= 5)
+
+
+def test_templates_api_is_public_the_library_only_and_names_no_target_or_source(c, monkeypatch):
+    from backend.api import intro as I
+    from backend.engine import user_templates as UT
+    monkeypatch.setattr(UT, "list_all", lambda *a, **k: pytest.fail("read someone's templates"))
+    r = c.get("/api/v1/intro/templates")
+    assert r.status_code == 200
+    d = r.json()
+    assert [x["id"] for x in d["cats"]] == list(I.TEMPLATE_KEYS)
+    for cat in d["cats"]:
+        assert [t["key"] for t in cat["templates"]] == list(I.TEMPLATE_KEYS[cat["id"]])
+        for t in cat["templates"]:
+            assert set(t) == {"key", "steps"} and t["steps"], t["key"]
+    text = r.text
+    for w in ("Stryd", "Palladino", "http", "src", "CP", "LTHR", "lo\"", "hi\"", "target"):
+        assert w not in text, w
+
+
+def test_plan_api_is_the_frozen_fictional_calendar_without_a_date(c, monkeypatch):
+    from backend.api import plan_sessions as PSA
+    monkeypatch.setattr(PSA, "_inputs", lambda *a, **k: pytest.fail("read the live athlete"))
+    r = c.get("/api/v1/intro/plan")
+    assert r.status_code == 200
+    d = r.json()
+    assert [w["before"] for w in d["weeks"]] == [3, 2, 1, 0]
+    assert all(len(w["days"]) == 7 for w in d["weeks"])
+    races = [(wi, day["dow"], day["race"]) for wi, w in enumerate(d["weeks"]) for day in w["days"] if day["race"]]
+    assert (3, 5, {"priority": "A", "main": True}) in races              # the 50K on the race week's Saturday
+    sessions = [s for w in d["weeks"] for day in w["days"] for s in day["sessions"]]
+    assert len(sessions) >= 8 and any(s["steps"] for s in sessions)
+    assert {s["kind"] for s in sessions} >= {"easy", "climb", "long"}
+    # the days after the plan's horizon are marked, and they hold no session
+    later = [day for w in d["weeks"] for day in w["days"] if not day["planned"]]
+    assert later and not any(day["sessions"] for day in later)
+    assert re.search(r"\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}", r.text) is None
+    assert re.search(r"\d{4}-\d{2}-\d{2}", (Path(__file__).resolve().parents[1] / "demo" / "intro_plan.json").read_text("utf-8")) is None
+
+
+def test_plan_api_without_its_file_is_a_404(c, monkeypatch, tmp_path):
+    from backend.api import intro as I
+    monkeypatch.setattr(I, "PLAN_FILE", tmp_path / "none.json")
+    assert c.get("/api/v1/intro/plan").status_code == 404
 
 
 def test_the_switch_has_the_three_kinds_and_their_words():

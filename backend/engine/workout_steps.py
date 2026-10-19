@@ -4,7 +4,7 @@ work, rest, cool-down and other steps, ×N repeat blocks (one level of nesting),
 each step with a duration and a target. The 課表 page's editor shows and edits
 it; sync/coros_workouts pushes it.
 
-    {"v": 1, "origin": "derived" | "template:<variant key>" | "user", ["tpl": <user template id>,
+    {"v": 1, "origin": "derived" | "template:<variant key>" | "user" | "racecalc", ["tpl": <user template id>,
      "route": {"km", "z", "route_km", "gain_m", "name"} (that template's route profile, the
      session's own copy: user_templates.route_copy),]
      "items": [
@@ -66,6 +66,9 @@ from backend.engine.zones import (EASY_BAND, FRIEL_HR, FRIEL_PACE, LONG_BAND, PA
                                   TRAIL_BAND, watch_band)
 
 V = 1
+# SP-453: the 賽事計算機's 匯出至課表 structure as exported — the editor saves any change as "user", so the
+# session's TSS is the calculator's (race HR, post-race correction) only while this origin stays
+RACECALC_ORIGIN = "racecalc"
 KINDS = ("warm", "work", "rest", "cool", "other")
 KIND_LABEL = {"warm": "暖身", "work": "主課", "rest": "休息", "cool": "緩和", "other": "其他", "repeat": "重複"}
 TYPES = ("auto", "power", "hr", "pace", "rpe", "none")
@@ -1129,7 +1132,7 @@ def normalize(d, rpe_model=None) -> dict:
     if errs:
         raise StepsError(list(dict.fromkeys(errs)))
     origin = str(d.get("origin") or "user")
-    if not (origin in ("derived", "user") or origin.startswith("template:")):
+    if not (origin in ("derived", "user", RACECALC_ORIGIN) or origin.startswith("template:")):
         origin = "user"
     out = {"v": V, "origin": origin[:40], "items": items}
     # the user template it was made from (engine/user_templates.py: its route GPX on the chart)

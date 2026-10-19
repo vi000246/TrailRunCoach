@@ -39,6 +39,7 @@
   "crs_gain": "爬升",
   "crs_updown": "爬升／下降",
   "crs_grade": "坡度（最陡）",
+  "crs_grade_avg": "平均坡度",
   "crs_kind": "類別",
   "crs_pace": "配速",
   "crs_time": "預估時間",

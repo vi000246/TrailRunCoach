@@ -48,6 +48,7 @@ class FakeCairn:
     def __init__(self):
         self.calls: list[httpx.Request] = []
         self.people = {"g-a": "basic", "g-b": "basic"}     # sub → plan
+        self.account_extra: dict = {}                      # more fields in the account answer (SP-666 Q1-1)
         self.trips: dict = {}                              # id → {sub, body}
         self.quota_left = 100
         self.down = False
@@ -68,7 +69,8 @@ class FakeCairn:
         if path == "/api/internal/trc/account":
             if sub not in self.people:
                 return self.err(404, "NOT_FOUND", "no cairn account for this sub")
-            return httpx.Response(200, json={"ok": True, "sub": sub, "plan": self.people[sub], "plan_expires_at": None})
+            return httpx.Response(200, json={"ok": True, "sub": sub, "plan": self.people[sub], "plan_expires_at": None,
+                                             **self.account_extra})
         if not path.startswith("/api/internal/trc/trips"):
             return self.err(404, "NOT_FOUND", "no route")
         if sub not in self.people:

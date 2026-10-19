@@ -171,6 +171,7 @@
   "coros.tss_default": "no HR prediction: legs without a target at the default intensity {f}",
   "coros.tss_calib": "post-race correction ×{f} ({n} races; uncorrected {raw})",
   "coros.tss_nocalib": "no post-race correction yet (compared with the actual load after each race)",
+  "coros.tss_kept": "the Schedule keeps this number for the session (marked “race calculator estimate”); once its steps are changed on the Schedule page it is estimated from the structure",
   "close": "Close",
   "pick.btn": "🗺 Pick on map",
   "pick.title": "Pick a location on the map",

@@ -21,6 +21,7 @@
   --good: #1a7f37; --watch: #b45309; --bad: #c62828;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s7: #4a3aa7; --bar: #b9b8b1;
   --qf2: #d32f2f; --qf3: #8e24aa;
+  --ring: #d4d3ce;      /* SP-455: an empty session ring (本週 dots); the dark one ≥ 3:1 on the panel */
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
 }
 @media (prefers-color-scheme: dark) {
@@ -31,6 +32,7 @@
     --good: #4ade80; --watch: #fbbf24; --bad: #f87171;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s7: #9085e9; --bar: #5a5954;
     --qf2: #f0605d; --qf3: #c27ad6;
+    --ring: #6e6d67;
     --shadow: none;
   }
 }
@@ -41,6 +43,7 @@
   --good: #4ade80; --watch: #fbbf24; --bad: #f87171;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s7: #9085e9; --bar: #5a5954;
   --qf2: #f0605d; --qf3: #c27ad6;
+  --ring: #6e6d67;
   --shadow: none;
 }
 * { box-sizing: border-box; }
@@ -126,11 +129,17 @@ h2 .meta { font-weight: 400; }
 .acc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 699px) { .acc { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
 .dots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-.dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none;
-  border: 1.5px solid var(--line); color: var(--faint); background: transparent; }
+.dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; position: relative;
+  border: 1.5px solid var(--ring); color: var(--faint); background: transparent; }
 .dot svg { width: 15px; height: 15px; }
 .dot.done { border-color: var(--good); color: var(--text); background: color-mix(in srgb, var(--good) 14%, var(--panel)); }
 .dot.partial, .dot.off_plan { border-color: var(--watch); color: var(--text); background: color-mix(in srgb, var(--watch) 13%, var(--panel)); }
+/* SP-455: 部分 and 換了課 share the colour (no traffic light, SP-393 / SP-398) — told apart by shape without a hover:
+   換了課 a dashed ring, and both carry the status's own mark (◐ / ≠, the table's) at the corner */
+.dot.off_plan { border-style: dashed; }
+.dot .mk { position: absolute; right: -5px; bottom: -5px; min-width: 15px; height: 15px; padding: 0 2px; border-radius: 8px;
+  display: grid; place-items: center; font-size: 10.5px; line-height: 1; font-weight: 700;
+  color: var(--watch); background: var(--panel); border: 1px solid var(--watch); }
 /* 這週亮點 (SP-403): one line, only when there is one */
 .hl { display: flex; gap: 8px; align-items: baseline; margin: 10px 0 0; padding: 7px 11px; border-radius: 8px; font-size: 13px;
   background: color-mix(in srgb, var(--good) 9%, var(--panel)); }
@@ -439,6 +448,7 @@ async function load() {
 const ICON_OF = (x) => (x.kind === "quality" ? (x.family === "vo2max" || x.family === "speed" ? "z5" : "z3")
   : { easy: "easy", long: "long", hike: "hike", test: "test", strength: "strength", heat_passive: "heat" }[x.kind] || "easy");
 const di = (n) => (window.DI ? DI(n) : "");
+const DOT_MARK = ["partial", "off_plan"];          // SP-455: the two orange ones carry their status mark
 function renderNow() {
   const d = S.data, w = d.week || {}, st = d.active_streak || { weeks: 0, best: 0 };
   $("now-sub").textContent = w.start ? `${mdw(w.start)} – ${mdw(w.end)}` : "";
@@ -455,7 +465,8 @@ function renderNow() {
   $("dots").setAttribute("aria-label", T("now.dots_aria", { done: done.length, ahead: dots.length - done.length }));
   $("dots").innerHTML = dots.map((x) => {
     const word = x.status === "upcoming" ? T("now.ahead") : SW(x.status);
-    return `<span class="dot ${esc(x.status)}" title="${esc(`${mdw(x.day)} ${x.title} · ${word}`)}">${x.status === "upcoming" ? "" : di(ICON_OF(x))}</span>`;
+    const mk = DOT_MARK.includes(x.status) ? `<i class="mk" aria-hidden="true">${ICON[x.status]}</i>` : "";
+    return `<span class="dot ${esc(x.status)}" title="${esc(`${mdw(x.day)} ${x.title} · ${word}`)}">${x.status === "upcoming" ? "" : di(ICON_OF(x))}${mk}</span>`;
   }).join("");
   renderHighlight(d.highlight);
   const adj = d.adjusted || [];

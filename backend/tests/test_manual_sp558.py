@@ -35,7 +35,9 @@ LOCALES = ("zh-TW", "en")
 
 def test_both_languages_have_the_same_chapters_and_anchors():
     zh, en = M.chapters("zh-TW"), M.chapters("en")
-    assert [c.id for c in zh] == [c.id for c in en] == ["start", "schedule", "glossary", "faq"]     # + SP-559's 名詞表, SP-560's 常見問題
+    # + SP-559's 名詞表, SP-560's 常見問題; SP-561–564's 分析, 賽事計算機與賽季計畫, 傷病與復跑, 設定 before them
+    assert [c.id for c in zh] == [c.id for c in en] == ["start", "schedule", "analysis", "race", "injury", "settings",
+                                                        "glossary", "faq"]
     for a, b in zip(zh, en):
         assert [s.anchor for s in a.sections] == [s.anchor for s in b.sections], a.id
         assert a.title and b.title and a.summary and b.summary

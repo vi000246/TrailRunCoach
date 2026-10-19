@@ -1,7 +1,8 @@
 """SP-637: the 介紹頁's interactive parts in a real browser — the small calculator answers from the server and
 follows its sliders, the elevation profile shows a leg on hover (desktop) and on a tap (phone), 越野／百岳／路跑
 switch the words, the calculator and the profile, motion stops with 「減少動態效果」, no sideways scroll at
-phone width, no Stryd anywhere. Opened by its file name like test_intro_sp622_e2e (the e2e server's "/" is
+phone width, no Stryd anywhere. R1: the hero's 課表 calendar opens a day's sessions and structure; 新增一堂課
+picks a template and shows its structure. Opened by its file name like test_intro_sp622_e2e (the e2e server's "/" is
 not the introduction).
 
 Run: ./e2e.sh -k sp637 (see conftest.py)."""
@@ -118,6 +119,49 @@ def test_with_motion_the_sections_fade_in_and_the_numbers_count_up(app):
     page.locator(".stats").scroll_into_view_if_needed()
     page.wait_for_function("() => document.getElementById('profile').classList.contains('in')")
     page.wait_for_function("() => Number(document.querySelector('[data-stat=legs]').textContent) > 3")
+
+
+@pytest.mark.parametrize("size", [(390, 844), (1400, 900)])
+def test_the_hero_calendar_shows_a_day_and_its_structure(app, size):
+    # R1: the hero is the 課表 calendar — four weeks, the days after the horizon hatched; a day opens its
+    # sessions with their structure bars
+    page, _w = app
+    asked = _open(page, size=size)
+    page.wait_for_function("() => document.querySelectorAll('#cal-weeks .cal-wk').length === 4")
+    assert page.locator("#cal-weeks .cal-day.later").count() > 0
+    assert page.locator(".hero #calc").count() == 0
+    # opened on a structured day already: bars and the steps in words
+    assert page.locator("#cal-detail svg.bars rect").count() > 2
+    first = page.locator("#cal-detail").text_content()
+    page.locator(".cal-day[data-w='1'][data-i='5']").click()                  # 賽前 2 週 週六: the long run
+    page.wait_for_function("(t) => document.getElementById('cal-detail').textContent !== t", arg=first)
+    assert page.locator(".cal-day[data-w='1'][data-i='5']").get_attribute("aria-pressed") == "true"
+    assert "205′" in page.locator("#cal-detail").text_content()
+    page.locator(".cal-day.later").first.click(force=True)                    # not a button: nothing happens
+    assert page.locator(".cal-day[data-w='1'][data-i='5']").get_attribute("aria-pressed") == "true"
+    assert any("/api/v1/intro/plan" in u for u in asked) and all("/api/v1/intro/" in u for u in asked), asked
+    assert page.evaluate("() => document.documentElement.scrollWidth") <= size[0]
+
+
+@pytest.mark.parametrize("size", [(390, 844), (1400, 900)])
+def test_adding_a_session_picks_a_template_and_shows_its_structure(app, size):
+    # R1: 新增一堂課 → 選範本 → 看結構
+    page, _w = app
+    _open(page, size=size)
+    page.locator("#tpl").scroll_into_view_if_needed()
+    page.wait_for_function("() => document.querySelectorAll('.tpl-row').length === 3")
+    view = page.locator("#tpl-view").text_content()
+    assert page.locator("#tpl-view svg.bars.big rect").count() >= 3
+    page.locator("#tpl-cats button[data-cat='quality']").click()
+    page.wait_for_function("(t) => document.getElementById('tpl-view').textContent !== t", arg=view)
+    rows = page.locator(".tpl-row")
+    assert rows.count() == 3 and rows.nth(0).get_attribute("aria-pressed") == "true"
+    rows.nth(2).click()
+    assert rows.nth(2).get_attribute("aria-pressed") == "true"
+    text = page.locator("#tpl-view").text_content()
+    assert "16" in text and re.search(r"約 \d+ 分鐘", text)                   # 30-30 ×16, its length
+    assert page.locator("#tpl-view svg.bars.big rect").count() > 30           # 16 fast + 16 easy bouts
+    assert page.evaluate("() => document.documentElement.scrollWidth") <= size[0]
 
 
 @pytest.mark.parametrize("loc", ["zh-TW", "en"])

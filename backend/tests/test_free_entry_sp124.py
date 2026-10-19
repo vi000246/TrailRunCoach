@@ -5,8 +5,8 @@ online demo — and the 「用自己的資料算」 entry on both.
   that holds the snapshot (tenancy_mw._share_tenant); only the frozen, whitelisted snapshot is
   read there, nothing is computed (the calculator itself stays behind sign-in).
 - 「用自己的資料算」 (login.join_link): sign-up open -> /login (then the calculator); full -> the
-  waitlist (/login?waitlist=1); before sign-up opens -> the public demo (TRC_DEMO_URL), no button
-  when none is set. GET /join (an exact public path) redirects the same way; the demo's banner
+  waitlist (/login?waitlist=1); before sign-up opens -> the public demo (TRC_DEMO_URL), the 關於
+  page (/about) when none is set (Q2, owner 2026-10-19). GET /join (an exact public path) redirects the same way; the demo's banner
   links to it (WKO5COACH_DEMO_CTA_URL, https only).
 """
 from __future__ import annotations
@@ -185,11 +185,12 @@ def test_join_goes_to_sign_up_then_the_waitlist_when_full(c, app, plans, monkeyp
 
 
 def test_before_sign_up_opens_join_goes_to_the_demo(started, monkeypatch):
-    """Sign-in on but the owner not linked yet (sign-up refused): the demo, or no button."""
+    """Sign-in on but the owner not linked yet (sign-up refused): the demo, or the 關於 page (Q2)."""
     anyone = browser(started, ip="198.51.100.14")
     page = anyone.get("/share/" + "A" * 22, headers=HTML)
-    assert page.status_code == 200 and _join(page.text) is None
-    assert anyone.get("/join", headers=HTML).status_code == 404
+    assert page.status_code == 200 and _join(page.text) == {"kind": "about", "url": "/about"}
+    assert location(anyone.get("/join", headers=HTML)) == "/about"
+    assert anyone.get("/about", headers=HTML).status_code == 200          # public: where it goes opens signed out
     monkeypatch.setenv("TRC_DEMO_URL", "https://demo.example.org/")
     assert _join(anyone.get("/share/" + "A" * 22, headers=HTML).text) == {"kind": "demo", "url": "https://demo.example.org/"}
     assert location(anyone.get("/join", headers=HTML)) == "https://demo.example.org/"
@@ -200,13 +201,13 @@ def test_owner_mode_join_is_the_demo(monkeypatch):
     monkeypatch.delenv("WKO5COACH_MODE", raising=False)
     monkeypatch.setattr(LG, "required", lambda: False)
     monkeypatch.delenv("TRC_DEMO_URL", raising=False)
-    assert LG.join_link() is None
+    assert LG.join_link() == {"kind": "about", "url": "/about"}            # Q2: no demo site yet
     monkeypatch.setenv("TRC_DEMO_URL", "https://demo.example.org/x?y=1")
     assert LG.join_link() == {"kind": "demo", "url": "https://demo.example.org/x?y=1"}
     for bad in ("http://demo.example.org/", "javascript:alert(1)", "https://u:p@demo.example.org/", "/demo",
                 "https:///x", "https://demo.example.org/ x"):
         monkeypatch.setenv("TRC_DEMO_URL", bad)
-        assert LG.join_link() is None, bad
+        assert LG.join_link() == {"kind": "about", "url": "/about"}, bad   # never the bad address
 
 
 def test_the_demo_instance_has_no_join(monkeypatch):
@@ -242,7 +243,7 @@ def test_the_pages_carry_the_entry_in_both_languages():
     assert "<!--fill:join-->" in share and 'id="join-top"' in share and "joinCard()" in share
     for loc in ("zh-TW", "en"):
         cat = json.loads((STATIC / "i18n" / loc / "share.json").read_text("utf-8"))
-        assert {"join.button", "join.title", "join.signup", "join.waitlist", "join.demo"} <= set(cat), loc
+        assert {"join.button", "join.title", "join.signup", "join.waitlist", "join.demo", "join.about"} <= set(cat), loc
         assert all(v.strip() for v in cat.values())
         assert "waitlist" in json.loads((STATIC / "i18n" / loc / "login.json").read_text("utf-8"))
     zh = json.loads((STATIC / "i18n" / "zh-TW" / "share.json").read_text("utf-8"))

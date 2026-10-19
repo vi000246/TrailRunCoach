@@ -1,30 +1,6 @@
 {
- "_about": "The 介紹頁's screenshots (SP-622; backend/scripts/manual_shots.py --set intro --full: the full demo year, its 50K course): each taken in zh-TW and en, light and dark, on the synthetic demo athlete, saved as backend/static/intro/<name>.<locale>[.dark].webp. Keys as backend/tests/e2e/shots.py's shot list; \"page\" / \"path\" gets ?lang=<locale> added. R2 (readable on the page): each is one small part of a screen, taken at phone width and at twice the pixels, so the page shows it near the app's own text size instead of a whole desktop screen shrunk to half. SP-637: the hero's calculator result and the legs table are live parts of the page now (the small calculator, the elevation profile), no longer pictures.",
+ "_about": "The 介紹頁's screenshots (SP-622; backend/scripts/manual_shots.py --set intro --full: the full demo year, its 50K course): each taken in zh-TW and en, light and dark, on the synthetic demo athlete, saved as backend/static/intro/<name>.<locale>[.dark].webp. Keys as backend/tests/e2e/shots.py's shot list; \"page\" / \"path\" gets ?lang=<locale> added. R2 (readable on the page): each is one small part of a screen, taken at phone width and at twice the pixels, so the page shows it near the app's own text size instead of a whole desktop screen shrunk to half. SP-637: the hero's calculator result and the legs table are live parts of the page now (the small calculator, the elevation profile), no longer pictures. SP-637 R1: the 課表 week is live too now (the hero calendar), no longer a picture.",
  "shots": [
-  {
-   "name": "intro-schedule",
-   "page": "schedule",
-   "viewport": "mobile",
-   "schemes": [
-    "light",
-    "dark"
-   ],
-   "steps": [
-    {
-     "wait": "#calwrap"
-    },
-    {
-     "sleep": 2500
-    }
-   ],
-   "clip": "#calwrap",
-   "hide": [
-    ".an-build",
-    ".an-offline",
-    ".appnav",
-    ".sugbox"
-   ]
-  },
   {
    "name": "intro-status",
    "page": "overview",

@@ -138,6 +138,8 @@ def test_the_warm_ups_low_priority_thread_does_not_hold_the_last_dataset_while_i
             freed_while_waiting.append(made[0]() is None)
 
     def call(fn, **kw):
+        if not kw.get("label", "").startswith("warm-up calibration"):
+            return None                                   # SP-677 Q3: the readiness step makes no Dataset
         d = DS()
         made.append(weakref.ref(d))
         return d

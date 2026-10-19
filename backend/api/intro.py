@@ -31,6 +31,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import re
 import threading
 from collections import OrderedDict
 from pathlib import Path
@@ -45,7 +46,8 @@ from backend.security import ratelimit as RL
 PAGE = "intro"
 PREFIX = "/api/v1/intro"
 KINDS = ("trail", "baiyue", "road")
-PUBLIC_PATHS = frozenset({PREFIX + "/estimate"} | {f"{PREFIX}/example/{k}" for k in KINDS})
+PUBLIC_PATHS = frozenset({PREFIX + "/estimate", PREFIX + "/templates", PREFIX + "/plan"}
+                         | {f"{PREFIX}/example/{k}" for k in KINDS})
 
 RUNNER_FILE = Path(__file__).resolve().parents[1] / "demo" / "intro_runner.json"
 # the small calculator's range and grid per kind (km, gain in m)
@@ -296,6 +298,169 @@ def trimmed(kind: str) -> Optional[dict]:
             "summary": {"km": _r(s.get("km"), 1), "gain_m": _r(s.get("gain_m")), "loss_m": _r(s.get("loss_m")),
                         "time_s": _r(s.get("time_s")), "legs": len(legs)},
             "profile": _profile(snap.get("profile") or {}), "legs": legs, "days": days, "calc": calc}
+
+
+# ---------------------------------------------------------------------------- 課表 (SP-637 R1)
+#
+# R1 (the user, 2026-10-17): 課表 is the lead, the calculator the support — the hero shows the 課表
+# calendar and the 課表 section 「新增一堂課 → 選範本 → 看結構」. Both from public data only: the built-in
+# template library (engine/workout_templates.py, code) and the fictional runner's four weeks before the
+# 50K (backend/demo/intro_plan.json, frozen by scripts/intro_example.py from the demo athlete). Each
+# step goes out as its length and a level 1–5 (how hard, on the step's own target scale) — no target
+# number, no threshold, nothing of a model; the page words the level and draws the bars.
+
+PLAN_FILE = Path(__file__).resolve().parents[1] / "demo" / "intro_plan.json"
+# the 新增一堂課 demo: three categories × three library templates (names and purposes in intro.json)
+TEMPLATE_KEYS = {
+    "easy": ("daniels_e", "pal_ez", "pfitz_long"),
+    "quality": ("daniels_cruise", "koop_vo2", "billat_3030"),
+    "trail": ("dsw_classic", "long_climb", "tech_hard"),
+}
+# a step with no length of its own (lap button, distance): seconds to draw it with
+DIST_S_PER_M = 0.36            # 6:00 /km, the editor's own stand-in (workout_editor.js mini())
+OPEN_S = 60
+
+
+def _mid(t: dict) -> Optional[float]:
+    lo, hi = t.get("lo"), t.get("hi")
+    if not isinstance(lo, (int, float)) or not isinstance(hi, (int, float)):
+        return None
+    return (lo + hi) / 2
+
+
+def level(target: Optional[dict], kind: str) -> Optional[int]:
+    """How hard a step is, 1 (very easy) – 5 (hard), on its own target's scale: power × CP (Palladino's
+    zones, the editor's mini chart), heart rate × LTHR (Friel's zones), pace × threshold pace (Daniels:
+    slower than E, E, M, T, faster), RPE (Borg CR-10). None: no target (an open bout)."""
+    t = target or {}
+    ty, m = t.get("type"), _mid(t)
+    if ty == "auto":
+        intent = t.get("intent")
+        if intent == "easy":
+            return 1
+        if intent == "band" and m is not None:
+            ty = "power"
+        else:
+            return 1 if kind in ("rest", "warm", "cool") else None
+    if ty == "hr" and t.get("mode") == "zone":
+        return 2
+    if m is None:
+        return None
+    if ty == "power":
+        return 1 if m < .75 else 2 if m < .88 else 3 if m < 1.01 else 4 if m < 1.06 else 5
+    if ty == "hr":
+        return 1 if m < .85 else 2 if m < .90 else 3 if m < .95 else 4 if m < 1.0 else 5
+    if ty == "pace":                                       # × threshold pace: bigger = slower
+        return 1 if m > 1.12 else 2 if m > 1.04 else 3 if m > 1.01 else 4 if m > .97 else 5
+    if ty == "rpe":
+        return 1 if m <= 2 else 2 if m <= 4 else 3 if m <= 6 else 4 if m <= 8 else 5
+    return None
+
+
+def _secs(dur: Optional[dict]) -> int:
+    d = dur or {}
+    v = d.get("value")
+    if d.get("type") == "time" and isinstance(v, (int, float)) and v > 0:
+        return int(v)
+    if d.get("type") == "distance" and isinstance(v, (int, float)) and v > 0:
+        return int(round(v * DIST_S_PER_M))
+    est = d.get("est")
+    return int(est) if isinstance(est, (int, float)) and est > 0 else OPEN_S
+
+
+_STEP_KINDS = ("warm", "work", "rest", "cool", "other")
+
+
+def structure(items: list) -> list:
+    """A session's steps as the page draws them: [{"k": kind, "s": seconds, "lv": level}], a repeat as
+    {"x": times, "items": [...]} (its last rest dropped when the structure says so)."""
+    out = []
+    for x in items or []:
+        if not isinstance(x, dict):
+            continue
+        if x.get("kind") == "repeat":
+            kids = structure(x.get("items") or [])
+            times = x.get("times") if isinstance(x.get("times"), int) and x.get("times") > 0 else 1
+            if kids:
+                out.append({"x": times, "last_rest": x.get("last_rest") is not False, "items": kids})
+            continue
+        k = x.get("kind") if x.get("kind") in _STEP_KINDS else "other"
+        out.append({"k": k, "s": _secs(x.get("dur")), "lv": level(x.get("target"), k), "n": _note(x.get("note"))})
+    return out
+
+
+def _note(v) -> Optional[str]:
+    """A step's own words (the app's, 中文), its first part only: 「上坡 · 心率約…」 → 「上坡」."""
+    if not isinstance(v, str) or not v.strip():
+        return None
+    head = v.split(" · ")[0].strip()
+    if _TARGET_WORDS.search(head):              # 「EZ ≤ 80% CP」, 「心率 ≤ 150 bpm」: a target in numbers — the level says it
+        return None
+    return head[:24] or None
+
+
+_TARGET_WORDS = re.compile(r"%|bpm|\d\s*W\b|\bCP\b|LTHR|HRmax|AeT|Stryd", re.I)
+
+
+def templates() -> dict:
+    from backend.engine import workout_templates as WT
+    cats = []
+    for cat, keys in TEMPLATE_KEYS.items():
+        rows = [{"key": k, "steps": structure(WT.items_of(WT.BY_KEY[k]))} for k in keys if k in WT.BY_KEY]
+        cats.append({"id": cat, "templates": rows})
+    return {"cats": cats}
+
+
+PHASES = ("base", "build", "specific", "taper", "event", "recovery", "transition")
+_SESSION_KINDS = ("easy", "long", "quality", "test", "hike", "strength", "race", "cross", "rest")
+
+
+CLIMB_M = 300                  # an easy session with this much climb reads as 爬坡 on the calendar
+
+
+def _session(s: dict) -> dict:
+    k = s.get("kind") if s.get("kind") in _SESSION_KINDS else "easy"
+    if k == "easy" and isinstance(s.get("gain_m"), (int, float)) and s["gain_m"] >= CLIMB_M:
+        k = "climb"
+    return {"kind": k, "title": s.get("title") if isinstance(s.get("title"), str) else None,
+            "min": _r(s.get("min")), "km": _r(s.get("km"), 1), "gain_m": _r(s.get("gain_m")),
+            "steps": structure(s.get("items") or [])}
+
+
+def plan() -> Optional[dict]:
+    """The fictional runner's calendar, 賽前 N 週 down to the race week: per week its phase and planned
+    hours, per day (0 = Monday) its sessions; the race on its day. No date anywhere."""
+    try:
+        d = json.loads(PLAN_FILE.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    planned = d.get("planned_days") if isinstance(d.get("planned_days"), int) else 0
+    weeks = []
+    for wi, w in enumerate(d.get("weeks") or []):
+        days = []
+        for i, day in enumerate((w.get("days") or [])[:7]):
+            r = day.get("race") if isinstance(day.get("race"), dict) else None
+            days.append({"dow": i, "planned": wi * 7 + i < planned,
+                         "sessions": [_session(s) for s in day.get("sessions") or [] if isinstance(s, dict)],
+                         "race": ({"priority": r.get("priority") if r.get("priority") in ("A", "B", "C") else None,
+                                   "main": bool(r.get("a"))} if r else None)})
+        full = (wi + 1) * 7 <= planned
+        weeks.append({"before": _r(w.get("before")), "phase": w.get("phase") if w.get("phase") in PHASES else None,
+                      "hours": _r(w.get("hours"), 1) if full else None, "days": days})
+    return {"weeks": weeks}
+
+
+@router.get("/templates")
+def get_templates():
+    return JSONResponse(templates(), headers=CACHE_HEADERS)
+
+
+@router.get("/plan")
+def get_plan():
+    d = plan()
+    if d is None:
+        raise HTTPException(404, "no example plan")
+    return JSONResponse(d, headers=CACHE_HEADERS)
 
 
 @router.get("/example/{kind}")

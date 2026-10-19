@@ -88,7 +88,8 @@ def test_the_page_in_both_languages_in_the_decided_order(c):
         for k in ("hero.h1", "tags.trail", "tags.baiyue", "tags.road", "race.h", "plan.h", "read.h", "faq.h",
                   "cta.price", "race.origin"):
             assert cat[k].replace("\"", "&quot;") in r.text or cat[k] in r.text, (loc, k)
-        order = [r.text.index(x) for x in ('id="hero-h"', 'id="race"', 'id="plan"', 'id="read"', 'id="start"',
+        # SP-637 R1: 課表 is the lead — the schedule section comes before the race calculator
+        order = [r.text.index(x) for x in ('id="hero-h"', 'id="plan"', 'id="race"', 'id="read"', 'id="start"',
                                            'id="sources"', 'id="privacy"', 'id="faq"', "<footer>")]
         assert order == sorted(order), loc
     zh = c.get("/?lang=zh-TW", headers=HTML).text
@@ -176,7 +177,7 @@ def test_the_shot_list_expands_to_each_language_and_scheme():
     from backend.tests.e2e import shots as S
     spec = S.check_spec(MS.spec_for(MS.load(which="intro"), "en", "SP-622"))
     names = [s["name"] for s in spec["shots"]]
-    assert "intro-schedule.en" in names and "intro-schedule.en.dark" in names
+    assert "intro-status.en" in names and "intro-status.en.dark" in names
     assert {s["scheme"] for s in spec["shots"]} == {"light", "dark"}
     assert all("lang=en" in s["path"] for s in spec["shots"])
     with pytest.raises(S.SpecError):

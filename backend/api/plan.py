@@ -1187,10 +1187,24 @@ def _estimate_pending(ds) -> Optional[dict]:
 
 @router.get("/threshold-estimate")
 def threshold_estimate():
-    """Suggested LTHR / AeT from recent runs. Nothing is saved."""
+    """Suggested LTHR / AeT from recent runs. Nothing is saved. An LTHR the runs were too easy for
+    (low against the runner's max HR / HRR, SP-749) carries `low_effort`: no one-click 「套用」."""
     from backend.engine.thresholds import estimate
     ds = _estimate_dataset()
-    return _estimate_pending(ds) or estimate(ds, today_local())
+    today = today_local()
+    out = _estimate_pending(ds) or estimate(ds, today)
+    lt = out.get("lthr") if isinstance(out, dict) else None
+    if lt and lt.get("value") is not None:
+        from backend.engine import hr_profile as HP
+        from backend.engine import threshold_confidence as TC
+        try:
+            acc = HP.account()
+            warn = TC.estimate_effort_warning(lt["value"], TC.mhr_info(ds, today, acc), TC.rhr_info(ds, today, acc))
+        except Exception:                   # noqa: BLE001 — no max HR to judge by: the estimate as before
+            warn = None
+        if warn:
+            out = {**out, "lthr": {**lt, "low_effort": warn}}
+    return out
 
 
 def _history_settings() -> tuple:

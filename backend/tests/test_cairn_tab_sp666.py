@@ -48,8 +48,8 @@ def test_every_scope_says_whether_cairn_reads_or_writes_and_what(c, app, cairn):
     assert feats["link:calc"]["kind"] == "read" and feats["link:gpx_sync"]["kind"] == "write"
     for f in list(feats.values()) + row["scopes"]:
         assert f["detail"] and f["text"] and f["kind"] in ("read", "write"), f
-    # link:weather is still given by the link (no route yet): listed with what linking allows
-    assert {s["scope"]: s["kind"] for s in row["scopes"]} == {"link:account": "read", "link:weather": "read"}
+    # link:weather has no route yet: not given by the link, asked when it ships (SP-329 Q1-3)
+    assert {s["scope"]: s["kind"] for s in row["scopes"]} == {"link:account": "read"}
 
 
 def test_the_details_have_english(c, app, cairn):
@@ -78,6 +78,45 @@ def test_cairns_row_carries_the_plan_here_and_cairns_daily_pushes(c, app, cairn)
     assert "push_per_day" in r and r["push_per_day"] is None           # no limit
     cairn.people["g-a"] = "someday-plan"
     assert "push_per_day" not in _cairn_row(c)["remote"]               # not known: no number shown
+
+
+def test_cairns_own_limit_and_todays_count_win_over_the_table(c, app, cairn):
+    # SP-666 Q1-1: once Cairn answers trc_sync_per_day / trc_sync_used_today (the Cairn ticket), the tab
+    # shows 「今天還剩 N 次」 from them; without them the table as before
+    sign_up(c, "g-a", "alice@example.com")
+    _link(c)
+    cairn.account_extra = {"trc_sync_per_day": 30, "trc_sync_used_today": 12}
+    r = _cairn_row(c)["remote"]
+    assert r["push_per_day"] == 30 and r["push_used_today"] == 12 and r["push_left_today"] == 18
+    cairn.account_extra = {"trc_sync_per_day": 5, "trc_sync_used_today": 9}
+    assert _cairn_row(c)["remote"]["push_left_today"] == 0                # never below zero
+    cairn.account_extra = {"trc_sync_per_day": None, "trc_sync_used_today": 3}
+    r = _cairn_row(c)["remote"]
+    assert r["push_per_day"] is None and "push_left_today" not in r       # no limit: nothing left to count
+    for bad in ({"trc_sync_per_day": "20"}, {"trc_sync_per_day": -1}, {"trc_sync_per_day": True}):
+        cairn.account_extra = bad
+        r = _cairn_row(c)["remote"]
+        assert r["push_per_day"] == 20 and "push_left_today" not in r, bad   # ignored: the table (basic)
+    cairn.account_extra = {"trc_sync_per_day": 20, "trc_sync_used_today": "x"}
+    r = _cairn_row(c)["remote"]
+    assert r["push_per_day"] == 20 and "push_left_today" not in r
+    assert "rem.push_left_today" in PAGE and "settings.cairn.per_day_left" in PAGE
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((STATIC / "i18n" / loc / "settings.json").read_text("utf-8"))
+        assert "{left}" in cat["cairn.per_day_left"] and "{n}" in cat["cairn.per_day_left"], loc
+
+
+def test_the_plan_names_are_cairns_own_everywhere():
+    # SP-666 Q1-2: one set of names — Cairn's (一般／輕度／重度會員); the push refusal no longer says 基本會員
+    from backend.accounts import cairn_push as CP
+    src = Path(CP.__file__).read_text("utf-8")
+    assert "基本會員" not in src and "免費方案" not in src and "輕度會員以上" in src
+    zh = json.loads((STATIC / "i18n" / "zh-TW" / "settings.json").read_text("utf-8"))
+    assert [zh[f"cairn.cairn_plan_{p}"] for p in ("free", "basic", "pro")] == ["一般會員", "輕度會員", "重度會員"]
+    assert "基本會員" not in json.dumps(zh, ensure_ascii=False)
+    en = json.loads((Path(__file__).resolve().parents[1] / "i18n" / "locales" / "en.json").read_text("utf-8"))
+    msg = next(v for k, v in en.items() if "輕度會員以上" in k and "推行程" in k)
+    assert "Light member" in msg
 
 
 # ---------------------------------------------------------------------------- the trips pushed

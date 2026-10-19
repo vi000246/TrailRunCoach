@@ -710,7 +710,9 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                     # SP-224: no data supports slowing the first half for runners near the cutoff (SP-198
                     # §2.3: UTMB 2025's slow starters DNF'd more); stop time tracks the finish more
                     # closely than the pacing spread (Martínez-Navarro 2021 r = 0.64; Kerhervé 2015). 推估 wording
-                    out["suggestions"].append(H.tag("PL9", _("照分段的心率上限跑，補給站少停")))
+                    # SP-486 Q1-1 (owner 2026-10-19: B): a tight week is no safety matter — a class-2 line,
+                    # not the class-1 red box (shown on the card only when it is the first suggestion)
+                    out["suggestions"].append(H.tag("PL9", _("照分段的心率上限跑，補給站少停"), cls=2))
             if r_cl is not None:
                 # SP-112: the climb as a sub-check — at most tight (推估)
                 lv = "ok" if r_cl >= CLIMB_TIGHT else "tight"
@@ -1189,8 +1191,9 @@ def card_hints(r: dict) -> list[dict]:
     and the numbers next to them are the verdict, not hints (feasibility.js picks them by level):
 
       advice   the first suggestion (the main advice, as before) and every class-1 one — 只剩 N 天 (PL8),
-               報短一點的組別 / 有點趕的配速 (PL9), 跳太多 (PL10), 超過關門／撤退 (PL14); the rest (the
-               milestone PL13, a second tight advice) stay in 「詳細」 (feasibility.js lists them there)
+               報短一點的組別 (PL9), 跳太多 (PL10), 超過關門／撤退 (PL14); the rest (the milestone PL13,
+               有點趕的配速 PL9 class 2 since SP-486 Q1-1, a second tight advice) stay in 「詳細」
+               (feasibility.js lists them there)
       × 2      PL12, class 1 (the 跨級 check's x2_note)
       notes    PL6 每日距離爬升缺漏／超馬沒有 GPX (the event list no longer repeats them), PL15 還沒進專項期,
                PL19 連續賽以哪一段來比, PL20 資料少 (SP-292's data source and 偏樂觀)

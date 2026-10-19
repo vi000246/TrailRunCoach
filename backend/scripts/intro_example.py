@@ -27,6 +27,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 DEMO = Path(__file__).resolve().parents[1] / "demo"
 RUNNER = DEMO / "intro_runner.json"
@@ -51,6 +52,12 @@ def bring_forward(plan_json: Path, today: dt.date) -> None:
         if e.id in (KINDS["baiyue"][0], KINDS["road"][0]) and e.end < today:
             e.date = day
     plan.save(plan_json)
+
+
+def event_day(plan_json: Path, event: str) -> Optional[dt.date]:
+    from backend.engine.planning import Plan
+    e = next((e for e in Plan.load(plan_json).events if e.id == event), None)
+    return dt.date.fromisoformat(str(e.date)[:10]) if e else None
 
 
 def out_file(kind: str) -> Path:
@@ -102,6 +109,62 @@ def runner(url: str) -> dict:
             **{k: d.get(k) for k in RUNNER_KEYS}}
 
 
+PLAN = DEMO / "intro_plan.json"
+PLAN_WEEKS = 4          # 賽前 4 週 … the race week (the 50K on its Saturday)
+
+
+def _get(url: str, path: str, body: Optional[dict] = None) -> dict:
+    import urllib.request
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    rq = urllib.request.Request(url.rstrip("/") + path, data=data, method="POST" if body is not None else "GET",
+                                headers={"Content-Type": "application/json", "Cookie": "lang=zh-TW"})
+    with urllib.request.urlopen(rq, timeout=600) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def calendar(url: str, race_day: dt.date) -> dict:
+    """SP-637 R1: the 介紹頁's 課表 calendar — the demo athlete's plan from the Monday PLAN_WEEKS weeks before
+    the 50K to its race week: per week its phase and planned hours, per day its sessions (kind, the app's own
+    title, minutes, km, climb, the structure as the editor derives it) and the races on it. No date: weeks
+    count down to the race, days are weekdays."""
+    monday = race_day - dt.timedelta(days=race_day.weekday())
+    first = monday - dt.timedelta(weeks=PLAN_WEEKS - 1)
+    last = monday + dt.timedelta(days=6)
+    cal = _get(url, f"/api/v1/overview/plan/calendar?start={first}&end={last}")
+    rows = {w["start"]: w for w in cal.get("week_rows") or []}
+    races = {}
+    for r in cal.get("races") or []:
+        if r.get("kind") == "race" and r.get("day"):           # the trail races (not the 百岳／road A's moved here)
+            races[r["day"]] = {"priority": r.get("priority"), "a": r.get("id") == KINDS["trail"][0]}
+    weeks = []
+    for w in range(PLAN_WEEKS):
+        start = first + dt.timedelta(weeks=w)
+        row = rows.get(start.isoformat()) or {}
+        days = []
+        for i in range(7):
+            day = (start + dt.timedelta(days=i)).isoformat()
+            ss = []
+            for s in cal.get("sessions") or []:
+                if s.get("day") != day or s.get("state") not in ("active", "done") or s.get("kind") == "race":
+                    continue
+                steps = (s.get("steps") or None) or _get(url, "/api/v1/overview/plan/steps/derive", {"uid": s["uid"]}).get("steps")
+                ss.append({"kind": s.get("kind"), "title": s.get("title"), "min": s.get("minutes"),
+                           "km": s.get("distance_km"), "gain_m": s.get("climb_m"),
+                           "items": (steps or {}).get("items") or []})
+            days.append({"sessions": ss, **({"race": races[day]} if day in races else {})})
+        weeks.append({"before": PLAN_WEEKS - 1 - w, "phase": row.get("phase"),
+                      "hours": round(row.get("planned_hours") or 0, 1), "days": days})
+    # the plan is laid out day by day only to its horizon (the app plans about two weeks ahead): the days
+    # after it are counted, so the page can show them as not planned yet
+    try:
+        planned = (dt.date.fromisoformat(str(cal.get("horizon_end"))[:10]) - first).days + 1
+    except ValueError:
+        planned = PLAN_WEEKS * 7
+    return {"planned_days": max(0, min(PLAN_WEEKS * 7, planned)),
+            "_about": "SP-637 R1: the 介紹頁's 課表 calendar (backend/scripts/intro_example.py: the demo athlete's plan "
+                      "before 示範山徑越野 50K; a fictional runner, no date)", "weeks": weeks}
+
+
 def freeze(req: dict, plan: dict, title: str = KINDS["trail"][1], min_km: float = 40.0) -> dict:
     from backend.engine.racepower import share as SH
     km = (plan.get("summary") or {}).get("km") or 0
@@ -151,7 +214,10 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--url", help="a running demo server built in full (run bring_forward on its plan.json first)")
     ap.add_argument("--kind", choices=[*KINDS, "all"], default="all", help="which example (default: all three)")
     ap.add_argument("--no-runner", action="store_true", help="leave backend/demo/intro_runner.json as it is")
+    ap.add_argument("--no-plan", action="store_true", help="leave backend/demo/intro_plan.json as it is")
+    ap.add_argument("--race-day", help="with --url: the 50K's date (YYYY-MM-DD) for the 課表 calendar")
     a = ap.parse_args(argv)
+    race_day = dt.date.fromisoformat(a.race_day) if a.race_day else None
     home = srv = None
     try:
         url = a.url
@@ -163,6 +229,7 @@ def main(argv: list[str]) -> int:
             os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)
             base = B.build(home / "demo-root", anchor=dt.date.today(), weeks=52, small=False, warm=False)
             bring_forward(base / "plan.json", dt.date.today())
+            race_day = race_day or event_day(base / "plan.json", KINDS["trail"][0])
             srv = _server.Server(base, home / "uvicorn.log")
             url = srv.url
         for kind in (list(KINDS) if a.kind == "all" else [a.kind]):
@@ -177,6 +244,11 @@ def main(argv: list[str]) -> int:
         if not a.no_runner:
             RUNNER.write_text(json.dumps(runner(url), ensure_ascii=False, indent=1) + "\n", "utf-8")
             print(f"→ {RUNNER.relative_to(RUNNER.parents[2])}")
+        if not a.no_plan:
+            if race_day is None:
+                raise SystemExit("the 課表 calendar needs --race-day with --url (or --no-plan)")
+            PLAN.write_text(json.dumps(calendar(url, race_day), ensure_ascii=False, indent=1) + "\n", "utf-8")
+            print(f"→ {PLAN.relative_to(PLAN.parents[2])}")
         return 0
     finally:
         if srv:

@@ -210,13 +210,16 @@ def test_every_race_type_loads_the_charts():
 JS = r"""
 const vm = require("vm");
 const els = {};
-const el = (id) => els[id] || (els[id] = { id, innerHTML: "", btn: null,
+const cls = () => { const on = new Set(); return { on,
+  toggle(c, v) { if (v === undefined ? !on.has(c) : v) on.add(c); else on.delete(c); } }; };
+const el = (id) => els[id] || (els[id] = { id, innerHTML: "", btn: null, classList: cls(),
   querySelector() { return this.btn || (this.btn = { onclick: null }); } });
+const failed = (sec) => el(sec).classList.on.has("chart-failed");
 let calls = 0, answer = null;
 const ctx = {
   API: "/api", GM: null, CAD: null, console,
   $: el, esc: (s) => String(s), T: (k) => "<" + k + ">", css: () => "", ok: (v) => v != null && isFinite(v),
-  r3: String, n0: String, f1: String, hm: String, pct: String, axisStyle: () => ({}),
+  r3: String, reF: String, n0: String, f1: String, hm: String, pct: String, axisStyle: () => ({}),
   chart: () => ({ setOption() {} }),
   j: () => { calls += 1; return answer(); },
 };
@@ -229,7 +232,12 @@ const run = async () => {
     answer = () => Promise.reject(err);
     ctx.GM = null; await vm.runInNewContext("renderGM()", ctx);
     out[name] = el("gm-detail").innerHTML;
+    out[name + "_folded"] = failed("gm-sec");
   }
+  // SP-459: an answer unfolds it again
+  answer = () => Promise.resolve({ grade_re: { bins: [], re_flat: 1, n_samples: 0, n_activities: 0, runwalk: null } });
+  ctx.GM = null; await vm.runInNewContext("renderGM()", ctx);
+  out.gm_unfolded = !failed("gm-sec");
   // one request in flight: toggling twice while it loads asks once
   calls = 0; let release;
   answer = () => new Promise((res) => { release = res; });
@@ -239,11 +247,13 @@ const run = async () => {
   release({ seconds: [0, 60], bins: [100, 105], threshold_spm: 130, valley_spm: null, verdict: "few", total_s: 60, n_runs: 0 });
   await a; await b;
   out.after = el("cad-detail").innerHTML.length > 0;
+  out.cad_unfolded = !failed("cad-sec");
   // the retry button asks again
   calls = 0;
   answer = () => Promise.reject({ message: "Failed to fetch" });
   ctx.CAD = null; await vm.runInNewContext("renderCad()", ctx);
   answer = () => Promise.reject({ message: "Failed to fetch" });
+  out.cad_folded = failed("cad-sec");
   el("cad-detail").btn.onclick(); await new Promise((r) => setTimeout(r, 0));
   out.retry_calls = calls;
   console.log(JSON.stringify(out));
@@ -262,3 +272,21 @@ def test_errors_retry_and_one_request_in_flight():
     assert "沒有資料" in out["s400"] and "charts.neterr" not in out["s400"]
     assert out["inflight_calls"] == 1 and out["after"]
     assert out["retry_calls"] == 2
+    # SP-459: a failed chart folds its section's plot away; an answer unfolds it
+    assert all(out[k + "_folded"] for k in ("drop", "s502", "s524", "s400")) and out["cad_folded"]
+    assert out["gm_unfolded"] and out["cad_unfolded"]
+
+
+def test_a_failed_chart_leaves_no_empty_plot_and_both_messages_sit_under_their_heading():
+    """SP-459: the error went into the detail column beside (坡度 RE) or under (步頻) a 300 px empty plot,
+    with the 跑走切換速度 block empty below. Now `.chart-failed` hides each plot's wrapper and the 跑走
+    block, so in both sections the detail — the message — is the first thing under the heading."""
+    src = PAGE.read_text("utf-8")
+    assert re.search(r"\.chart-failed \.plotwrap, \.chart-failed \.rw-block \{ display: none; \}", src)
+    gm = re.search(r'<section id="gm-sec".*?</section>', src, re.S).group(0)
+    cad = re.search(r'<section id="cad-sec".*?</section>', src, re.S).group(0)
+    # 坡度 RE: the plot's wrapper, then the detail; the 跑走 heading and its chart inside the block
+    assert re.search(r'<div class="plotwrap"><div class="plot" id="gm-chart"></div></div><div id="gm-detail">', gm)
+    assert re.search(r'<div class="rw-block"><h3[^>]*>[^<]*</h3>.*id="rw-chart".*id="rw-detail"', gm, re.S)
+    # 步頻: the same — the plot's wrapper, then the detail
+    assert re.search(r'<div class="plotwrap"><div class="plot" id="cad-chart"></div></div><div id="cad-detail">', cad)

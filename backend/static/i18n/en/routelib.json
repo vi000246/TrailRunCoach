@@ -39,6 +39,7 @@
   "crs_gain": "Climb",
   "crs_updown": "Up / down",
   "crs_grade": "Grade (steepest)",
+  "crs_grade_avg": "Average grade",
   "crs_kind": "Kind",
   "crs_pace": "Pace",
   "crs_time": "Est. time",

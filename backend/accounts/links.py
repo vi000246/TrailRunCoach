@@ -7,8 +7,11 @@ the same person on both sides. Nothing is linked on its own (SP-571 Q4 B): the u
 something — and can unlink there at any time. Each link / unlink is a consents row (action
 "link" / "unlink", client "cairn", the scopes granted), so the history is in 下載我的資料.
 
-Service to service, two directions, one shared secret per project (TRC_CAIRN_LINK_SECRET, from
-the environment only, never stored in accounts.db or a tenant folder):
+Service to service, two directions, one shared secret per direction (SP-329 Q1-1, owner 2026-10-19:
+a leaked one opens one way only) — from the environment only, never stored in accounts.db or a
+tenant folder: TRC_CAIRN_LINK_SECRET for Cairn's calls here, TRC_CAIRN_OUT_SECRET for this app's
+calls to Cairn (out_secret; while it is not set, the first one with a warning — the deployments
+before the split):
 
   Cairn → here   POST /api/v1/link/cairn/token   {sub}   Authorization: Bearer <shared secret>
                  a linked user's service token (`trc_…`, 30 days, one live per user: a new one
@@ -18,7 +21,7 @@ the environment only, never stored in accounts.db or a tenant folder):
                  GET /api/v1/link/account   Authorization: Bearer <service token>
                  (api/link.py; the login gate opens only the routes in ROUTES with such a token)
   here → Cairn   cairn_status(sub): GET <TRC_CAIRN_URL>/api/internal/trc/account?sub=…
-                 with the same shared secret — Cairn's side of the contract (to be built there).
+                 with the outbound secret — Cairn's side of the contract (to be built there).
                  Only for a linked user; nothing kept (no Cairn token is ever stored here)
 
 Each feature beyond the account asks on its own (FEATURES, SP-654): GET /api/v1/link/cairn/curves
@@ -52,11 +55,14 @@ class Client:
     secret_env: str
     url_env: str
     scopes: tuple              # what the project may ask for: linking grants these but FEATURES,
-                               # which the person allows one by one (the settings page lists them)
+                               # which the person allows one by one (the settings page lists them),
+                               # and NOT_YET (no route yet: asked when it ships)
+    out_secret_env: str = ""   # this app's calls to the project (SP-329 Q1-1); secret_env: its calls here
 
 
 CAIRN = Client(
     id="cairn", name=N_("疊石 Cairn"), secret_env="TRC_CAIRN_LINK_SECRET", url_env="TRC_CAIRN_URL",
+    out_secret_env="TRC_CAIRN_OUT_SECRET",
     # link:participant_ability is never granted by a link: it reads someone else's ability and needs
     # that person's own consent (SP-326), a separate step of its own
     scopes=("link:account", "link:calc", "link:gpx_sync", "link:weather"),
@@ -83,6 +89,10 @@ FEATURES: dict[str, dict] = {
     "link:calc": {"plan": "subscriber"},
     "link:gpx_sync": {"plan": "subscriber"},
 }
+# what the project may ask for but no route serves yet (SP-329 Q1-3, owner 2026-10-19: each feature
+# asks when it launches): not granted by linking, not offered as a switch, never in a token; it moves
+# to FEATURES with its route. A link recorded before keeps its consents row, the scope is dropped.
+NOT_YET = frozenset({"link:weather"})
 TOKEN_PATH = "/api/v1/link/{client}/token"
 
 # what the user is told they allow (the settings page); one line per granted scope
@@ -136,8 +146,28 @@ def client(cid: str) -> Optional[Client]:
 
 
 def secret(c: Client) -> Optional[str]:
+    """The secret the project calls here with (the token exchange)."""
     from backend.settings.env_secrets import secret_env
     return secret_env(c.secret_env)
+
+
+_WARNED: set = set()
+
+
+def out_secret(c: Client) -> Optional[str]:
+    """The secret this app calls the project with (SP-329 Q1-1: its own, out_secret_env). Not set:
+    the inbound one, with a warning once — so a deployment from before the split keeps working
+    until both sides set the second secret."""
+    from backend.settings.env_secrets import secret_env
+    own = secret_env(c.out_secret_env) if c.out_secret_env else None
+    if own:
+        return own
+    shared = secret(c)
+    if shared and c.id not in _WARNED:
+        _WARNED.add(c.id)
+        log.warning("%s: %s not set — calling %s with the inbound secret; set a second one (SP-329)",
+                    c.id, c.out_secret_env or "an outbound secret", c.id)
+    return shared
 
 
 def base_url(c: Client) -> Optional[str]:
@@ -194,8 +224,8 @@ def plan_here() -> dict:
 
 
 def link_scopes(c: Client) -> tuple:
-    """What linking itself allows (the features asked on their own left out)."""
-    return tuple(s for s in c.scopes if s not in FEATURES)
+    """What linking itself allows (the features asked on their own and those not out yet left out)."""
+    return tuple(s for s in c.scopes if s not in FEATURES and s not in NOT_YET)
 
 
 def features(c: Client) -> tuple:
@@ -266,8 +296,9 @@ def issue_token(c: Client, sub: str) -> Optional[dict]:
     if u is None or u.disabled or not is_linked(u, c):
         return None
     granted = (store.link_state(u.id, c.id) or {}).get("scopes") or link_scopes(c)
-    # the features too: what the project may ask for; whether it may now is checked per request
-    scopes = sorted((set(granted) | set(features(c))) & set(c.scopes))
+    # the features too: what the project may ask for; whether it may now is checked per request.
+    # A scope not out yet is never in a token, even when an older link recorded it (SP-329 Q1-3)
+    scopes = sorted(((set(granted) | set(features(c))) & set(c.scopes)) - NOT_YET)
     token, exp = store.replace_service_token(u.id, c.id, scopes, TOKEN_DAYS)
     return {"token": token, "token_type": "Bearer", "expires_at": exp, "scopes": scopes}
 
@@ -286,7 +317,7 @@ def cairn_status(user, c: Client = CAIRN) -> Optional[dict]:
     """The person's plan at Cairn (SP-328's shared subscription), asked server to server: only
     for a linked user with a Google account, only when TRC_CAIRN_URL and the secret are set. None
     when not asked or Cairn did not answer (never an error for the page)."""
-    url, key = base_url(c), secret(c)
+    url, key = base_url(c), out_secret(c)
     if not (url and key and user.google_sub and is_linked(user, c)):
         return None
     try:
@@ -310,4 +341,15 @@ def cairn_status(user, c: Client = CAIRN) -> Optional[dict]:
            "plan_expires_at": body.get("plan_expires_at") if isinstance(body.get("plan_expires_at"), str) else None}
     if out["plan"] in CAIRN_PUSH_PER_DAY:
         out["push_per_day"] = CAIRN_PUSH_PER_DAY[out["plan"]]
+    # SP-666 Q1-1: Cairn tells its own limit and today's count (trc_sync_per_day — null: no limit — and
+    # trc_sync_used_today, the fields asked for in the Cairn ticket); then they win over the table above
+    lim, used = body.get("trc_sync_per_day", _ABSENT), body.get("trc_sync_used_today")
+    if lim is None or (isinstance(lim, int) and not isinstance(lim, bool) and lim >= 0):
+        out["push_per_day"] = lim
+        if lim is not None and isinstance(used, int) and not isinstance(used, bool) and used >= 0:
+            out["push_used_today"] = used
+            out["push_left_today"] = max(0, lim - used)
     return out
+
+
+_ABSENT = object()

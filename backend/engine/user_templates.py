@@ -57,9 +57,13 @@ CLIMB_MIN_GAIN_M = 30.0
 CLIMB_DROP_M = 10.0
 CLIMB_DROP_FRAC = 0.05
 # a repeat whose first work leg climbs at least this (average grade on the route): a hill repeat —
-# its recoveries come back down, every rep starts again from the bottom (推估: the usual 登山王 /
-# Koop 上坡 shape; a flatter repeat keeps going forward along the route)
+# its recoveries come back down (not below where the repeat started) and the next rep climbs again
+# from wherever the recovery stopped (SP-639 Q1-3: a short recovery leaves you part-way down; 推估:
+# the usual 登山王 / Koop 上坡 shape; a flatter repeat keeps going forward along the route)
 HILL_REP_GRADE = 0.03
+# SP-639 Q1-1: a descent this steep or steeper gets no downhill speed bonus on the template's chart
+# and 坡段表 (the flat pace or slower; 推估 — the runner's own grade model is a later step)
+STEEP_DOWN_GRADE = -0.15
 COURSE_V = 1                     # the stored segments' format
 
 ROOT = None                      # fixed folder (tests); None = the tenant's template_gpx/
@@ -67,8 +71,9 @@ ROOT = None                      # fixed folder (tests); None = the tenant's tem
 MINE = N_("我的範本")
 SRC = N_("我的範本（自己排的）")
 ELEV_NOTE = N_("有 GPX 時橫軸可切換距離或時間。距離段照它的距離放；時間、直到按下計圈、負荷、RPE 段用你這段強度的平地速度，"
-               "依坡度換算（Minetti 跑步耗能，跟賽事計算機的平地等效配速同一套），是推估。反覆爬坡（主課在上坡）的休息段畫成往回走下坡，每趟從坡底重來")
-TABLE_NOTE = N_("坡段與爬坡由 GPX 平滑後切出；配速是你在這個強度的平地速度依坡度換算（Minetti，下坡最多快 10%），"
+               "依坡度換算（Minetti 跑步耗能，跟賽事計算機的平地等效配速同一套；陡下坡 15% 以上不加速），是推估。反覆爬坡（主課在上坡）的休息段畫成往回走下坡，"
+               "時間不夠走回坡底時，下一趟從停下的地方再往上爬")
+TABLE_NOTE = N_("坡段與爬坡由 GPX 平滑後切出；配速是你在這個強度的平地速度依坡度換算（Minetti，下坡最多快 10%，陡下坡 15% 以上不加速），"
                 "沒算技術地形，是推估。功率只在平路和可跑的坡（≤ 8%）當目標")
 LEVEL_EASY = N_("輕鬆（Z2）")
 LEVEL_MAIN = N_("這個範本的主課強度")
@@ -479,9 +484,12 @@ def _flat_kmh(f: Optional[float], c) -> float:
 
 def _gf(g: float) -> float:
     """Minetti's running cost at grade g relative to the flat, the 10 % downhill floor: the race
-    calculator's GAP curve (planner: gap_pace = pace × this)."""
+    calculator's GAP curve (planner: gap_pace = pace × this). SP-639 Q1-1 (the user: 陡下坡在山上實際是
+    減速的): from STEEP_DOWN_GRADE down no speed bonus — the flat pace, or slower where Minetti's cost
+    is above the flat's."""
     from backend.engine.algorithms.minetti import grade_factor
-    return grade_factor(g)
+    f = grade_factor(g)
+    return max(1.0, f) if g <= STEEP_DOWN_GRADE else f
 
 
 def _mins(s: float) -> str:
@@ -675,6 +683,16 @@ def _foot(prof: dict, k0: float, end: float) -> Optional[float]:
     return v if 0.0 <= v < end else None
 
 
+def _top(prof: dict, k0: float, end: float) -> Optional[float]:
+    """The top of the climb picked for the hill repeats (the route copy's `climb.end_km`) on the 0-based
+    km, None without one."""
+    try:
+        v = float((prof.get("climb") or {}).get("end_km")) - k0
+    except (TypeError, ValueError):
+        return None
+    return min(v, end) if v > 0 else None
+
+
 PATH_OUT = 600                   # elevation-path points sent with a chart
 
 
@@ -695,8 +713,9 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
     rest without a target walks, WALK_KMH; a lap-button step without an estimate the chart's
     OPEN_CHART_S), each piece of the route at that speed over Minetti's grade factor (_gf: the race
     calculator's GAP curve). In a repeat whose first work leg climbs (≥ HILL_REP_GRADE on the route)
-    the rests come back down — not below where the repeat started — and every rep starts again from
-    there; other repeats go on forward. All 推估: the real pace on a climb isn't known before the run."""
+    the rests come back down — not below where the repeat started — and the next rep climbs again from
+    where the rest stopped (SP-639 Q1-3; a rest too short to get back to the bottom leaves it part-way
+    up); other repeats go on forward. All 推估: the real pace on a climb isn't known before the run."""
     from backend.engine import workout_steps as WS
     km, z = list(prof.get("km") or []), list(prof.get("z") or [])
     if len(km) < 2 or len(km) != len(z):
@@ -712,6 +731,7 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
     # SP-640: the climb picked for the hill repeats (route_library.apply): the first repeat starts at its
     # foot, whatever the warm-up covered (推估: you get there before the first rep)
     foot = _foot(prof, k0, w.end)
+    top = _top(prof, k0, w.end) if foot is not None else None
     for row in WS.flat(steps["items"]):
         st = row["st"]
         inner = row["rep"][-1] if row["rep"] else None
@@ -724,9 +744,7 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
                     pos = foot
                 rs = reps[rid] = {"base": pos, "hill": None, "pass": pi}
             elif pi != rs["pass"]:
-                rs["pass"] = pi
-                if rs["hill"]:
-                    pos = rs["base"]             # the next rep: from the bottom again
+                rs["pass"] = pi                  # the next rep climbs from where the recovery stopped (Q1-3)
         r = WS.resolve(st, c)
         s, _e = WS._secs(st, r, c)
         typ = st["dur"]["type"]
@@ -743,6 +761,15 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
         if typ == "distance":
             pos, used_t, used_d, gn, ls, pts = w.move(pos, -1 if back else 1, v, dist=st["dur"]["value"] / 1000.0,
                                                       floor=rs["base"] if back else 0.0)
+        elif (rs is not None and typ == "open" and st["kind"] in ("work", "other") and top is not None
+              and pos < top - 1e-6 and not back):
+            # the climb picked on 路線 (route_library.apply: 「爬 120 m」 ends with the lap button at the top):
+            # up to the top from wherever this rep starts — a rep after a short recovery climbs less (Q1-3)
+            pos, used_t, used_d, gn, ls, pts = w.move(pos, 1, v, dist=top - pos)
+        elif back and typ == "open" and not st["dur"].get("est"):
+            # a 直到按下計圈 recovery of a hill repeat (「走下坡」): you press the lap at the bottom — walked
+            # all the way down, however long that takes (SP-639 Q1-3: only a timed one can stop part-way)
+            pos, used_t, used_d, gn, ls, pts = w.move(pos, -1, v, dist=max(0.0, pos - rs["base"]), floor=rs["base"])
         else:
             pos, used_t, used_d, gn, ls, pts = w.move(pos, -1 if back else 1, v, secs=max(0.0, s),
                                                       floor=rs["base"] if back else 0.0)

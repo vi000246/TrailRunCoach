@@ -426,6 +426,32 @@ def _calibrated():
     return ds
 
 
+def _weak(obj):
+    """A weak reference to `obj`, or a plain closure for one that cannot have one (a test double)."""
+    import weakref
+    try:
+        return weakref.ref(obj)
+    except TypeError:
+        return lambda obj=obj: obj
+
+
+def _warm_readiness(ds) -> bool:
+    """The 專項期 card computed once (race_readiness.warm, SP-677 Q3); never fails the warm-up."""
+    import logging
+    from backend.engine import race_readiness as RD
+    if ds is None:                       # the Dataset went meanwhile: the next warm-up does it
+        return False
+    try:
+        plan = getattr(ds, "plan", None)
+        if plan is None:
+            from backend.engine.planning import Plan
+            plan = Plan.load()
+        return RD.warm(plan, ds, today_local())
+    except Exception as e:               # noqa: BLE001 — the card computes it on its first view then
+        logging.getLogger(__name__).warning("readiness warm-up failed: %s", type(e).__name__)
+        return False
+
+
 def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
     """The warm-up's lowest-priority part, in its own thread (review SP-362 #4): wait for an
     automatic plan run to end, then queue each step in the server's job queue at `warm`
@@ -436,7 +462,8 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
     changed; after a version change in age tiers, the hot one at the warm-up's priority —
     _hot_priority, SP-394 第 3 條 — and once its last tier is done the old series rows of this
     tenant go, _sweep_when_done, and then the cold-data sweep is queued at `cold`,
-    coldstore.schedule_sweep, SP-340) and, owner only, the race calculator's charts
+    coldstore.schedule_sweep, SP-340), the 賽前完備程度 專項期 card once (`single`, _warm_readiness: its
+    per-file caches, SP-677 Q3) and, owner only, the race calculator's charts
     (racepower.warm_charts, `full`, after the classification's warm tier). A warm-up asked for
     while this waits only marks it to run once more (`low_again`)."""
     import logging
@@ -451,6 +478,12 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
             # cold-data sweep is queued (SP-340)
             job = AA.job_for(ds, priority=_hot_priority(reason))
             _sweep_when_done(job, ds)
+            # SP-677 Q3: the 賽前完備程度 專項期 card's per-file caches, before anyone opens it
+            # (the Dataset held weakly: a finished job must not keep one alive, SP-394 第 6 條)
+            ref = _weak(ds)
+            jobs.call(lambda: _warm_readiness(ref()), cls="single", priority="warm",
+                      label=f"warm-up readiness ({reason})")
+            ref = None
             ds = None                            # the job holds it weakly; not while warm_charts waits
             RP.warm_charts(job)                  # then the race calculator's charts (SP-366; owner only)
             if reason.startswith("sync"):
@@ -2206,6 +2239,8 @@ def workout_samples(idx: int, parity: Optional[bool] = None):
     if not 0 <= idx < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     w = ds.workouts[idx]
+    from backend import membership as MS
+    MS.require_workout_age(ds, w)            # SP-756: per-point data reaches only as far back as the charts
     t = ds.channel(idx, "elapsedtime")
     n = 0 if t is None else len(t)
     step = max(1, int(math.ceil(n / MAX_POINTS))) if n else 1

@@ -151,6 +151,50 @@ def test_phase_of_the_next_a_race(monkeypatch):
     assert RD.phase(plan, TAPER_FROM - dt.timedelta(days=1)) == "build"
 
 
+def test_the_warm_up_computes_the_build_card_once_only_with_a_race_ahead(monkeypatch):
+    # SP-677 Q3: the warm-up's low-priority part runs the 專項期 card once (its per-file caches), so the first
+    # view does not wait; nothing without a next A race
+    from backend.engine import specific_phase as SP
+    plan = type("P", (), {"events": []})()
+    ran = []
+    monkeypatch.setattr(RD, "compute", lambda p, d, today, predict=None: ran.append(today) or {})
+    monkeypatch.setattr(SP, "race_day", lambda *a, **k: None)
+    assert RD.warm(plan, object(), IN_TAPER) is False and ran == []
+    monkeypatch.setattr(SP, "race_day", lambda *a, **k: race())
+    assert RD.warm(plan, object(), TAPER_FROM - dt.timedelta(days=20)) is True
+    assert ran == [TAPER_FROM - dt.timedelta(days=20)]
+
+
+def test_the_warm_up_step_never_fails_the_warm_up(monkeypatch):
+    from backend.api import wko5views as W
+
+    def boom(*a, **k):
+        raise RuntimeError("no plan")
+    monkeypatch.setattr(RD, "warm", boom)
+    assert W._warm_readiness(type("DS", (), {"plan": object()})()) is False
+
+
+def test_the_build_card_reads_the_climbing_speed_from_the_per_file_cache():
+    # what the warm-up fills: the second read of a session's climbing speed is the cache's, not evaluated again
+    calls, store = [], {}
+
+    class DS:
+        def cached_series(self, key, w, f, extra=None):
+            k = (key, w, tuple(extra or ()))
+            if k not in store:
+                store[k] = f()
+            return store[k]
+
+    class Ev:
+        def evaluate(self, expr, w):
+            calls.append(expr)
+            return 500.0
+    st = type("ST", (), {"ev": Ev()})()
+    ds = DS()
+    assert RD._uphill(ds, st, "w1") == (500.0, 500.0) and len(calls) == 2
+    assert RD._uphill(ds, st, "w1") == (500.0, 500.0) and len(calls) == 2
+
+
 def test_view_charts_name_their_phase():
     v = json.loads((ROOT.parent / "views" / "periodization.json").read_text("utf-8"))
     ch = {c["id"]: c for d in v["dashboards"] for c in d.get("charts") or []}

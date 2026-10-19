@@ -2684,7 +2684,8 @@ function mcOverOption(s, ids, vals, ax = "t", segs = []) {
       { type: "value", show: false, min: elo - er * 0.04, max: ehi + er * 0.12 },
       ...ids.map((id, k) => k < 2
         ? { type: "value", position: k ? "right" : "left", scale: true, splitNumber: 3, inverse: id === "pace", ...mcRange(id, vals),
-          name: `${meta[id].name} ${meta[id].unit}`, nameLocation: "end", nameGap: 6,
+          // SP-458: an inverted (pace) axis ends at the bottom, where its name sat on the time ticks — the name at the top
+          name: `${meta[id].name} ${meta[id].unit}`, nameLocation: id === "pace" ? "start" : "end", nameGap: 6,
           nameTextStyle: { color: meta[id].color, fontSize: 10, align: k ? "right" : "left" },
           axisLine: { show: false }, axisTick: { show: false }, axisLabel: { ...lbl, color: meta[id].color, formatter: (v) => mcFmt(id, v) },
           splitLine: k ? { show: false } : { lineStyle: { color: T.line, opacity: 0.5 } } }
@@ -3209,7 +3210,10 @@ function drawPlot(card, res, series) {
           formatter: (p) => p.dataIndex === 0 ? t("viewer.proj.fitness", { n: Math.round(r.ctl) })
             : t("viewer.proj.form", { n: `${r.tsb >= 0 ? "+" : ""}${Math.round(r.tsb)}` }) },
         markLine: { silent: true, symbol: "none", lineStyle: { color: r.color, type: "dashed", width: 1 },
-          label: { show: true, position: "insideEndTop", color: r.color, fontSize: 10, formatter: `${r.grade} ${r.name}` },
+          // SP-458: the name runs along the top of its line, where the dashed CTL / ATL projections cross it (the B
+          // race's orange on ATL's): on a chip of the page's background, so those lines pass under it, not through it
+          label: { show: true, position: "insideEndTop", color: r.color, fontSize: 10, formatter: `${r.grade} ${r.name}`,
+            backgroundColor: css("--panel") || "#fff", padding: [1, 3], borderRadius: 3 },
           data: [{ xAxis: r.date }] },
         markArea: r.band ? { silent: true, itemStyle: { color: r.color, opacity: 0.18 },
           data: [[{ xAxis: x - hw, yAxis: r.band[0] }, { xAxis: x + hw, yAxis: r.band[1] }]] } : undefined }, null);

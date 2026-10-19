@@ -925,7 +925,10 @@ def race_session(body: ExportIn, p: dict, ev, calib: Optional[dict] = None) -> t
     if cf["n"]:
         detail += f"；賽後校正 ×{cf['factor']:.2f}（{cf['n']} 場）"
     km, gain = sm.get("km"), sm.get("gain_m")
-    s = {"title": f"賽事 {name}"[:200], "day": str(ev.date)[:10], "steps": ex["doc"], "detail": detail,
+    # SP-453: marked as the calculator's structure — the 課表 keeps this TSS (labelled) until it is changed there
+    from backend.engine import workout_steps as WS
+    s = {"title": f"賽事 {name}"[:200], "day": str(ev.date)[:10], "steps": {**ex["doc"], "origin": WS.RACECALC_ORIGIN},
+         "detail": detail,
          "minutes": max(1, min(1440, round(float(sm.get("time_s") or 0) / 60))),
          "tss": tss, "terrain": TERRAIN.get(p["type"]),
          "distance_km": min(500.0, float(km)) if km else None, "climb_m": min(20000.0, float(gain)) if gain else None,

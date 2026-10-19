@@ -113,7 +113,11 @@ def _status(ds, today: dt.date) -> Status:
             done = _status_cache.get(key)
         if done is not None:
             return done
-        st = Status(ds, today=today, prefs=prefs).compute()
+        # each setting read once for the whole computation (SP-753, datasource.settings_memo): the
+        # stored sessions' rebase (activity_key.rebase_stored → current_source) asked the DB per row
+        from backend.engine.wko5expr.datasource import settings_memo
+        with settings_memo():
+            st = Status(ds, today=today, prefs=prefs).compute()
         # kept below for this tenant: without the Dataset, which the Dataset cache's budget decides
         # on (SP-394 第 6 條; a test's stand-in may have no detach)
         if hasattr(st, "detach"):

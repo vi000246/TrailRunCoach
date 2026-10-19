@@ -125,6 +125,8 @@ PUBLIC_PATHS = PUBLIC_PATHS | {"/"}
 # its examples and small calculator (SP-637, api/intro.py): the built-in fictional runner only, limited per
 # client and cached — exactly /api/v1/intro/estimate and /api/v1/intro/example/<trail|baiyue|road>
 PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/estimate"} | {f"/api/v1/intro/example/{k}" for k in ("trail", "baiyue", "road")}
+# SP-637 R1: the 課表 demo — the built-in template library and the fictional runner's frozen calendar
+PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/templates", "/api/v1/intro/plan"}
 PUBLIC_PREFIXES = ("/api/v1/static/", "/manual/")
 _OAUTH_CALLBACK = ("/oauth/", "/callback")
 # never a place to come back to after signing in (loops)
@@ -345,6 +347,7 @@ def full() -> bool:
 # the public demo's address (a site setting, https only): where the button goes before sign-up opens
 ENV_DEMO_URL = "TRC_DEMO_URL"
 JOIN_NEXT = "/api/v1/racepower/page"      # after signing up: the race calculator, with one's own data
+ABOUT_URL = "/about"                      # before sign-up opens and no demo site is set (SP-124 Q2)
 
 
 def demo_url() -> Optional[str]:
@@ -367,7 +370,8 @@ def join_link() -> Optional[dict]:
                 then the race calculator
       waitlist  sign-in on and full -> /login?waitlist=1 (signing in puts the e-mail on the list)
       demo      sign-up not open yet (owner mode, or sign-in on before the owner's first sign-in)
-                -> the public demo (TRC_DEMO_URL); none set: no button
+                -> the public demo (TRC_DEMO_URL)
+      about     the same, no demo set -> the 關於 page (/about: what the tool computes and from what)
     Never anything of the viewer's or the share's: the same answer for every visitor."""
     from urllib.parse import urlencode
 
@@ -384,7 +388,8 @@ def join_link() -> Optional[dict]:
                 return {"kind": "waitlist", "url": "/login?waitlist=1"}
             return {"kind": "signup", "url": "/login?" + urlencode({"next": JOIN_NEXT})}
     url = demo_url()
-    return {"kind": "demo", "url": url} if url else None
+    # SP-124 Q2 (owner, 2026-10-19): no demo site yet -> the 關於 page (/about, public) until one is set
+    return {"kind": "demo", "url": url} if url else {"kind": "about", "url": ABOUT_URL}
 
 
 def try_link() -> dict:

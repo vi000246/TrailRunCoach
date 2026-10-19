@@ -370,10 +370,18 @@ def run_heat(ds, runs: list, acts: list[dict], weather: Optional[dict] = None) -
     with none of them is left out."""
     weather = weather_of(ds, acts) if weather is None else weather
     watch = {}
+    # disk-memoised per file (SP-753): the 測試 indicator and the LTHR evidence each walked ~520 runs'
+    # temperature channels from the npz on every status computation (~1.8 + ~1.6 CPU s after a sync)
     for w in runs:
-        t = watch_temp(ds, w)
+        t = _run_watch_temp(ds, w)
         if t is not None:
             watch[w.idx] = t
+    flush = getattr(ds, "flush_series", None)
+    if flush is not None and runs:
+        try:
+            flush()
+        except Exception:                           # noqa: BLE001 — the memo is only a speed-up
+            pass
     bias = watch_bias([(weather[i]["temp_c"], t) for i, t in watch.items() if i in weather])
     out = {}
     for w in runs:

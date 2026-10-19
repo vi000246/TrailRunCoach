@@ -34,6 +34,8 @@ def _limits(monkeypatch):
     LK.reset_limits()
     monkeypatch.delenv("TRC_CAIRN_LINK_SECRET", raising=False)
     monkeypatch.delenv("TRC_CAIRN_LINK_SECRET_FILE", raising=False)
+    monkeypatch.delenv("TRC_CAIRN_OUT_SECRET", raising=False)
+    monkeypatch.delenv("TRC_CAIRN_OUT_SECRET_FILE", raising=False)
     monkeypatch.delenv("TRC_CAIRN_URL", raising=False)
     yield
     LK.reset_limits()
@@ -57,10 +59,11 @@ class FakeCairn:
         self.calls: list = []
         self.plans: dict = {}
         self.lie_about_sub = False
+        self.secret = SECRET            # the one Cairn checks this app's calls with
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.calls.append(request)
-        if request.headers.get("authorization") != f"Bearer {SECRET}":
+        if request.headers.get("authorization") != f"Bearer {self.secret}":
             return httpx.Response(401, json={"error": "unauthorized"})
         if request.url.path != "/api/internal/trc/account":
             return httpx.Response(404)
@@ -113,7 +116,8 @@ def test_the_same_google_account_is_the_same_person_once_linked(c, app, cairn):
         assert r.status_code == 200, r.text
         got = r.json()
         assert got["token"].startswith("trc_") and got["token_type"] == "Bearer"
-        assert set(got["scopes"]) == {"link:account", "link:calc", "link:gpx_sync", "link:weather"}
+        # link:weather has no route yet: not in a token (SP-329 Q1-3: asked when it ships)
+        assert set(got["scopes"]) == {"link:account", "link:calc", "link:gpx_sync"}
         assert "link:participant_ability" not in got["scopes"]          # never by a link: SP-326
         r = _read(srv, got["token"])
         assert r.status_code == 200, r.text
@@ -152,7 +156,8 @@ def test_linking_and_unlinking_are_consent_rows_and_unlinking_ends_the_tokens(c,
     assert [(x["action"], x["client"]) for x in rows] == [("terms", None), ("link", "cairn"), ("unlink", "cairn")]
     # link:calc is not granted by the link: it asks on its own (SP-654, links.FEATURES)
     # link:calc (SP-654) and link:gpx_sync (SP-655) ask on their own: not granted by the link
-    assert json.loads(rows[1]["documents"])["scopes"] == ["link:account", "link:weather"]
+    # link:weather (no route yet) is not granted either: asked when it ships (SP-329 Q1-3)
+    assert json.loads(rows[1]["documents"])["scopes"] == ["link:account"]
     # the terms and the analysis consent read as before (a link row says neither)
     assert store.consent_version(uid) == version and store.analysis_consent(uid) is True
     assert c.get("/api/v1/plan").status_code == 200
@@ -326,6 +331,61 @@ def test_cairn_is_never_called_without_its_address(c, app, cairn, monkeypatch):
     sign_up(c, "g-a", "alice@example.com")
     _link(c)
     assert LK.cairn_status(store.get_user(_uid("g-a"))) is None and cairn.calls == []
+
+
+OUT_SECRET = "out-secret-for-calls-to-cairn-0123456789"
+
+
+def test_each_direction_has_its_own_secret(c, app, cairn, monkeypatch):
+    """SP-329 Q1-1 (owner 2026-10-19): one secret per direction — Cairn's calls here are checked
+    with TRC_CAIRN_LINK_SECRET, this app calls Cairn with TRC_CAIRN_OUT_SECRET; neither opens the
+    other way."""
+    from backend.accounts import links as LK, store
+    from backend.settings import env_secrets as ES
+    monkeypatch.setenv("TRC_CAIRN_OUT_SECRET", OUT_SECRET)
+    cairn.secret = OUT_SECRET
+    sign_up(c, "g-a", "alice@example.com")
+    cairn.plans["g-a"] = "basic"
+    _link(c)
+    assert LK.cairn_status(store.get_user(_uid("g-a")))["plan"] == "basic"
+    assert cairn.calls[-1].headers["authorization"] == f"Bearer {OUT_SECRET}"
+    with _server(app) as srv:
+        r = _token(srv, "g-a", secret=OUT_SECRET)                       # the outbound one never gets in here
+        assert r.status_code == 401 and r.json()["detail"]["code"] == "SECRET_INVALID"
+        assert _token(srv, "g-a").status_code == 200
+    assert "TRC_CAIRN_OUT_SECRET" in ES.NAMES                           # masked in the log like the other
+
+
+def test_without_the_outbound_secret_the_inbound_one_is_used_with_a_warning(c, app, cairn, caplog):
+    """The deployments from before the split keep calling Cairn until both sides set the second one."""
+    import logging
+    from backend.accounts import links as LK, store
+    LK._WARNED.clear()
+    sign_up(c, "g-a", "alice@example.com")
+    cairn.plans["g-a"] = "pro"
+    _link(c)
+    with caplog.at_level(logging.WARNING, logger="backend.links"):
+        assert LK.cairn_status(store.get_user(_uid("g-a")))["plan"] == "pro"
+        LK.cairn_status(store.get_user(_uid("g-a")))
+    assert cairn.calls[-1].headers["authorization"] == f"Bearer {SECRET}"
+    assert sum("TRC_CAIRN_OUT_SECRET not set" in r.getMessage() for r in caplog.records) == 1   # once
+
+
+def test_a_scope_not_out_yet_is_never_granted(c, app, cairn):
+    """SP-329 Q1-3 (owner 2026-10-19): each feature asks when it launches — link:weather has no route:
+    linking does not grant it, it is no switch, and a token never carries it, even for a link recorded
+    with it before."""
+    from backend.accounts import links as LK, store
+    assert "link:weather" in LK.NOT_YET and "link:weather" in LK.CAIRN.scopes
+    assert "link:weather" not in LK.link_scopes(LK.CAIRN) and "link:weather" not in LK.features(LK.CAIRN)
+    sign_up(c, "g-a", "alice@example.com")
+    store.record_link(_uid("g-a"), "cairn", True, ("link:account", "link:weather"))   # an older link
+    row = c.get(LINKS_URL).json()["clients"][0]
+    assert [s["scope"] for s in row["scopes"]] == ["link:account"]
+    assert "link:weather" not in {f["scope"] for f in row["features"]}
+    with _server(app) as srv:
+        got = _token(srv, "g-a").json()
+    assert "link:weather" not in got["scopes"] and "link:account" in got["scopes"]
 
 
 # ---------------------------------------------------------------------------- not in the owner's app

@@ -246,6 +246,49 @@ def test_the_fetch_is_a_get_over_https_with_the_token_header(monkeypatch):
                            "https://elsewhere.example/")
 
 
+@pytest.mark.parametrize("err, words", [
+    (urllib.error.URLError(TimeoutError("timed out")), "等太久沒有回應"),
+    (urllib.error.URLError("timed out"), "等太久沒有回應"),
+    (urllib.error.URLError(__import__("socket").gaierror(8, "nodename nor servname provided")), "找不到這個主機名稱"),
+    (urllib.error.URLError(ConnectionRefusedError(61, "Connection refused")), "對方拒絕連線"),
+    (urllib.error.URLError(__import__("ssl").SSLError("bad cert")), "HTTPS 憑證有問題"),
+    (urllib.error.URLError(OSError(65, "No route to host")), "網路連不上"),
+    (OSError("boom"), "網路連不上"),
+])
+def test_an_unreachable_production_is_said_in_words_not_an_exception_name(monkeypatch, err, words):
+    """SP-373 Q2 ③ (owner 2026-10-17: 修): 「連不到正式站（URLError）」 showed the exception's class name."""
+    from backend.scripts import debug_fetch as F
+
+    def down(url, hdrs, timeout=120.0):
+        raise err
+    monkeypatch.setattr(F, "fetch", down)
+    monkeypatch.setenv(UP.URL_ENV, "https://coach.example.org/")
+    monkeypatch.setenv(UP.TOKEN_ENV, "trcd_" + "t" * 43)
+    with pytest.raises(UP.UpstreamError) as ex:
+        UP.fetch_json(UP.PATHS["plan"])
+    msg = str(ex.value)
+    assert ex.value.code == "UNREACHABLE" and words in msg and msg.startswith("連不到正式站：")
+    assert not any(n in msg for n in ("URLError", "OSError", "Error", "gaierror", "timeout"))
+
+
+def test_the_preview_list_and_the_token_table_read_right_in_both_languages():
+    """SP-373 Q2 ① the preview's list joined by the language's own separator (not 「、」 in English);
+    ② the token table's headers and 撤銷 button stay on one line."""
+    from pathlib import Path
+    static = Path(__file__).resolve().parents[1] / "static"
+    js = (static / "debug_api.js").read_text("utf-8")
+    assert 'diff.join("、")' not in js and 'diff.join(t("settings.upstream.list_sep"))' in js
+    sep = {loc: json.loads((static / "i18n" / loc / "settings.json").read_text("utf-8"))["upstream.list_sep"]
+           for loc in ("zh-TW", "en")}
+    assert sep == {"zh-TW": "、", "en": ", "}
+    assert "#dbg-tokens th, #dbg-tokens td:last-child { white-space: nowrap; }" in \
+        (static / "settings.html").read_text("utf-8")
+    en = json.loads((Path(__file__).resolve().parents[1] / "i18n" / "locales" / "en.json").read_text("utf-8"))
+    for k in ("連不到正式站：{why}。確認網址、網路或 VPN 連得上", "等太久沒有回應", "HTTPS 憑證有問題",
+              "找不到這個主機名稱", "對方拒絕連線", "網路連不上"):
+        assert en.get(k), k
+
+
 def test_without_an_upstream_the_block_says_so(monkeypatch, tmp_path):
     for v in (UP.URL_ENV, UP.TOKEN_ENV, UP.TOKEN_ENV + "_FILE"):
         monkeypatch.delenv(v, raising=False)

@@ -151,6 +151,8 @@ tr.hl td { background: var(--soft); }
 .warn li { margin: 2px 0; }
 .ok { color: var(--good); } .no { color: var(--bad); } .wn { color: var(--watch); }
 .plot { width: 100%; height: 300px; }
+/* SP-459: a chart whose request failed folds its plot away; the message sits right under the heading */
+.chart-failed .plotwrap, .chart-failed .rw-block { display: none; }
 .profile { width: 100%; height: 320px; }
 /* course map (GPX courses only): Leaflet + basemaps.js */
 .cmap { width: 100%; height: 340px; border-radius: 8px; overflow: hidden; background: var(--line); z-index: 0; margin: 2px 0 4px; }
@@ -620,12 +622,12 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
   </div>
 
   <section id="gm-sec" class="tab-calc"><h2>坡度 RE 曲線 <span class="meta">你的 Stryd 功率在不同坡度換成多少速度</span></h2>
-    <details><summary>展開</summary><div class="two"><div><div class="plot" id="gm-chart"></div></div><div id="gm-detail"></div></div>
-      <h3 data-i18n="racepower.rw.title">跑走切換速度</h3><div class="two"><div><div class="plot" id="rw-chart"></div></div><div id="rw-detail"></div></div></details>
+    <details><summary>展開</summary><div class="two"><div class="plotwrap"><div class="plot" id="gm-chart"></div></div><div id="gm-detail"></div></div>
+      <div class="rw-block"><h3 data-i18n="racepower.rw.title">跑走切換速度</h3><div class="two"><div><div class="plot" id="rw-chart"></div></div><div id="rw-detail"></div></div></div></details>
   </section>
 
   <section id="cad-sec" class="tab-calc"><details><summary><b data-i18n="racepower.cad.title">爬坡步頻分布</b> <span class="meta" data-i18n="racepower.cad.sub">檢查「步頻 &lt; 130 spm 算走」</span></summary>
-    <div class="plot" id="cad-chart"></div><div id="cad-detail"></div></details></section>
+    <div class="plotwrap"><div class="plot" id="cad-chart"></div></div><div id="cad-detail"></div></details></section>
 
   <section id="cp-sec" class="tab-calc"><details><summary><b>CP 分析</b> <span class="meta" id="cp-sub"></span></summary>
     <div class="two"><div><div class="plot" id="cp-chart"></div></div><div id="cp-detail"></div></div></details>
@@ -2296,7 +2298,8 @@ function renderProfile() {
   // at least ± 30 s/km, ± 10 % W, ± 15 bpm around the targets: a flat cap is not drawn as a big swing
   const span = vals.length ? Math.max(...vals) - Math.min(...vals) : 0, mid = vals.length ? Math.max(...vals) : 0;
   const pad = Math.max(span * 0.15, m === "pace" ? 30 : m === "power" ? mid * 0.10 : 15);
-  const yMain = { type: "value", name: M.unit, scale: true, inverse: M.inverse, ...axisStyle(),
+  // SP-458: an inverted axis (pace) ends at the bottom — its name 「/km」 sat on the km axis's 「0」; the name at the top
+  const yMain = { type: "value", name: M.unit, nameLocation: M.inverse ? "start" : "end", scale: true, inverse: M.inverse, ...axisStyle(),
     min: vals.length ? Math.floor(Math.min(...vals) - pad) : null, max: vals.length ? Math.ceil(Math.max(...vals) + pad) : null,
     axisLabel: { color: css("--muted"), fontSize: 11, formatter: M.axis } };
   const yElev = { type: "value", show: false, scale: true, min: pr ? Math.min(...pr.z) - (Math.max(...pr.z) - Math.min(...pr.z) || 50) * 0.1 : null };
@@ -2621,6 +2624,7 @@ function cxTss(r) {
   let h = T("coros.tss", { tss: Math.round(t.tss) });
   if (t.open_h > 0) h += " · " + (t.fallback ? T("coros.tss_default", { f: t.open_if.toFixed(2) }) : T("coros.tss_hr", { f: t.open_if.toFixed(2), src: t.open_src }));
   h += " · " + (t.n ? T("coros.tss_calib", { f: t.factor.toFixed(2), n: t.n, raw: Math.round(t.raw) }) : T("coros.tss_nocalib"));
+  h += " · " + T("coros.tss_kept");        // SP-453: the 課表 shows this number, not its own structure estimate
   return `<div class="meta">${esc(h)}</div>`;
 }
 const cxLink = (r) => `<a href="${esc(r.plan_url)}">${esc(T("coros.open"))}</a>`;
@@ -2855,7 +2859,11 @@ function zoneOf(p, cp) { const zs = PLAN?.zones || LAST?.zones || []; const x = 
 // short message with 重試; one request per chart at a time (toggling while it loads asks nothing more)
 const NET_STATUS = new Set([502, 503, 504, 520, 521, 522, 523, 524]);
 const netFail = (e) => !e || !e.status || NET_STATUS.has(e.status);
-function chartErr(el, e, retry) {
+// SP-459: while a chart failed its section folds the plot (and the 跑走 block under 坡度 RE) away, so
+// the message is the first thing under each heading — no empty 300 px box, both in the same place
+const chartFailed = (sec, on) => $(sec).classList.toggle("chart-failed", on);
+function chartErr(sec, el, e, retry) {
+  chartFailed(sec, true);
   if (!netFail(e)) { $(el).innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   $(el).innerHTML = `<div class="err">${esc(T("charts.neterr"))} <button class="btn" type="button">${esc(T("charts.retry"))}</button></div>`;
   $(el).querySelector("button").onclick = () => { $(el).innerHTML = ""; retry(); };
@@ -2864,7 +2872,8 @@ let GM_P = null, CAD_P = null;               // the request in flight
 async function renderGM() {
   if (GM_P) return;
   GM_P = GM ? Promise.resolve(GM) : j(`${API}/grade-model`);
-  try { GM = await GM_P; } catch (e) { chartErr("gm-detail", e, renderGM); return; } finally { GM_P = null; }
+  try { GM = await GM_P; } catch (e) { chartErr("gm-sec", "gm-detail", e, renderGM); return; } finally { GM_P = null; }
+  chartFailed("gm-sec", false);
   const g = GM.grade_re, bins = g.bins.filter((b) => Math.abs(b.grade) <= 0.35);
   chart("gm-chart").setOption({
     animation: false, grid: { left: 48, right: 14, top: 44, bottom: 38 }, legend: { top: 0, textStyle: { color: css("--muted"), fontSize: 11 } },
@@ -2910,7 +2919,8 @@ function renderRW(rw) {
 async function renderCad() {
   if (CAD_P) return;
   CAD_P = CAD ? Promise.resolve(CAD) : j(`${API}/cadence-check`);
-  try { CAD = await CAD_P; } catch (e) { chartErr("cad-detail", e, renderCad); return; } finally { CAD_P = null; }
+  try { CAD = await CAD_P; } catch (e) { chartErr("cad-sec", "cad-detail", e, renderCad); return; } finally { CAD_P = null; }
+  chartFailed("cad-sec", false);
   const c = CAD, mins = c.seconds.map((x) => x / 60), on = c.bins.filter((b, i) => mins[i] > 0.05);
   const lo = on.length ? Math.max(0, Math.floor((on[0] - 15) / 10) * 10) : 60, hi = on.length ? Math.ceil((on[on.length - 1] + 15) / 10) * 10 : 220;
   const lines = [{ xAxis: c.threshold_spm, lineStyle: { color: css("--accent"), width: 2 }, label: { formatter: T("cad.line"), color: css("--accent") } }];

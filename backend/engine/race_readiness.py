@@ -1084,6 +1084,18 @@ def _compute_taper(plan, ds, today: dt.date, predict=None, build=None) -> dict:
     return taper(rc, today, data.pop("acts", []), taper_days=_taper_days(e), build=build, **data)
 
 
+def warm(plan, ds, today: dt.date) -> bool:
+    """SP-677 Q3 (使用者 2026-10-19「要」): the 專項期 card computed once in the warm-up's low-priority part, so
+    its first view does not wait ~1.3 s for the per-file caches it fills (each mountain session's climbing
+    speed, UPHILL_KEY; each foot activity's longest climb, SERIES_KEY). Only with a next A race ahead (the
+    card shows; the 減量期 card's last line reads the same board); True when it ran."""
+    rc, _e = _next_race(plan, today)
+    if rc is None:
+        return False
+    compute(plan, ds, today)
+    return True
+
+
 def build_day(plan, today: dt.date, predict=None) -> Optional[dt.date]:
     """The day the 專項期 result is read on for the 減量期 card's last line: the end of 賽前第 3 週 once it is
     over (the result no longer changes then), else today; None without a next A race."""

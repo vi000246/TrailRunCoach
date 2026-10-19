@@ -171,6 +171,7 @@
   "coros.tss_default": "沒有心率預測，無目標段用預設強度比 {f}",
   "coros.tss_calib": "賽後校正 ×{f}（{n} 場比賽；未校正 {raw}）",
   "coros.tss_nocalib": "還沒有賽後校正（比賽完成後自動比對實際負荷）",
+  "coros.tss_kept": "課表上那堂課沿用這個數字（標「賽事計算機估」）；在課表改了步驟後改依結構估",
   "close": "關閉",
   "pick.btn": "🗺 地圖選點",
   "pick.title": "在地圖上選地點",

@@ -127,6 +127,25 @@ def test_a_run_coros_already_synced_is_counted_once(tmp_path):
     run(go())
 
 
+def test_the_imported_count_leaves_out_the_copies_kept_of_another_sources_run(tmp_path):
+    """SP-456: 「已匯入 n 筆」 beside the buttons is the activities the upload added — a file kept
+    only as a copy of a COROS run (counted once, under COROS) is not one of them, so the count
+    matches the 「新增」 of the result."""
+    async def go():
+        s = await make_session(tmp_path)
+        await _coros_sync(s, [_coros_act("111", _run(0, power=240))])
+        r = await UP.import_files(s, 1, [_in("same_as_coros.fit", _run(0)), _in("b.fit", _run(3)),
+                                         _in("c.fit", _run(5))])
+        assert _status(r) == (2, 1, 0, 0)
+        st = await UP.stats(s, 1)
+        assert st["rows"] == r["added"] == 2
+        assert (st["date_from"], st["date_to"]) == ("2026-09-05", "2026-09-07")   # the copy's day is COROS's
+        # a COROS sync that later takes over an uploaded run takes it out of the count too
+        await _coros_sync(s, [_coros_act("111", _run(0, power=240)), _coros_act("333", _run(3, power=240), 3)])
+        assert (await UP.stats(s, 1))["rows"] == 1
+    run(go())
+
+
 def test_a_later_coros_sync_of_the_same_run_is_not_a_second_activity(tmp_path):
     async def go():
         s = await make_session(tmp_path)

@@ -122,7 +122,7 @@ Max and resting HR are used for the heart-rate-reserve and max-HR zones. Usually
 
 1. "Settings" → "Physiology" → "Heart rate" shows the values in use and where they come from.
 2. To set them yourself: open its advanced part, enter max / resting HR and save; "back to automatic" returns to the app's values.
-3. "Workout HR zones" choose which zones the workouts' HR targets use (default: 6 zones of the lactate threshold HR).
+3. "Workout HR zones" choose which zones the workouts' HR targets use (default "auto": the 6 lactate-threshold zones when the LTHR is believable, otherwise by max and resting HR).
 
 :::deep
 ### Max HR from your runs

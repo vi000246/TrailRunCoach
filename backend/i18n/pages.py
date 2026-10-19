@@ -38,6 +38,11 @@ ALWAYS_NS = ("common", "shell")
 # races: the event editor moved there from the season plan page (SP-691) and keeps its plan.ev.* text
 PAGE_NS = {"charts": ("viewer",), "share": ("share", "racepower"), "races": ("races", "plan")}
 I18N_JS = "/api/v1/static/i18n/i18n.js"
+I18N_JS_FILE = CATALOG_DIR / "i18n.js"
+# pages a visitor opens without signing in, through a gate that lets only their own path through (the
+# share link: Cloudflare Access lets /share/* by, not /api/v1/static/*): i18n.js goes inline, else
+# t() is missing and the page shows its keys — 「join.title」 (SP-698)
+INLINE_I18N_PAGES = frozenset({"share"})
 
 
 class PageResponse(HTMLResponse):
@@ -127,6 +132,9 @@ def render(name: str, loc: Optional[str] = None, debug: Optional[bool] = None) -
     path = STATIC / f"{name}.html"
     nss = namespaces_for(name)
     stamp = [path.stat().st_mtime_ns]
+    inline = name in INLINE_I18N_PAGES
+    if inline:
+        stamp.append(I18N_JS_FILE.stat().st_mtime_ns)
     for l in {i18n.DEFAULT_LOCALE, loc}:
         for ns in nss:
             try:
@@ -143,7 +151,12 @@ def render(name: str, loc: Optional[str] = None, debug: Optional[bool] = None) -
     out = apply_catalog(src, cat)
     out = _HTML_LANG.sub(lambda m: m.group(1) + loc + m.group(2), out, count=1)
     boot = json.dumps({"locale": loc, "debug": bool(debug), "catalog": cat}, ensure_ascii=False).replace("</", "<\\/")
-    inject = f'<script>window.__I18N__ = {boot};</script><script src="{I18N_JS}"></script>'
+    if inline:
+        js = re.sub(r"</(script)", r"<\\/\1", I18N_JS_FILE.read_text("utf-8"), flags=re.I)
+        loader = f"<script>{js}</script>"
+    else:
+        loader = f'<script src="{I18N_JS}"></script>'
+    inject = f'<script>window.__I18N__ = {boot};</script>{loader}'
     m = _HEAD.search(out)
     out = out[:m.end()] + inject + out[m.end():] if m else inject + out
     with _LOCK:

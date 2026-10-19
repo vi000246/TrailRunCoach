@@ -1,6 +1,6 @@
 ---
 id: glossary
-order: 3
+order: 7
 title: 名詞表
 summary: 畫面上的訓練名詞：訓練負荷、長期訓練負荷、負荷平衡、CP、無氧容量、LTHR、區間……每個都有白話、一張圖和公式。
 icon: book
