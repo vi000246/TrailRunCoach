@@ -97,7 +97,8 @@ def test_english_page(app):
     page, _ = app
     open_page(page, PAGE + "?lang=en")
     _first_row(page)
-    expect(page.locator("h1")).to_have_text("Route progress")
+    expect(page.locator("h1")).to_have_text("Routes")                  # SP-693: 路線 › 我跑過的
+    expect(page.locator('.rtabs a[aria-current="page"]')).to_contain_text("Run before")
     expect(page.locator("#f-fav")).to_have_text(re.compile("Favourites"))
     cjk = re.compile(r"[㐀-鿿]")
     texts = page.locator(".filters button, #count, .sect, #list .sub").all_inner_texts()

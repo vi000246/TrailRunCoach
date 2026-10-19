@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="routelib.page_title">路線</title>
 <style>
-/* 路線 (SP-640; engine/route_library.py, api/route_library.py): the fourth tab of 課表. The training
-   routes, apart from the templates (a template is a structure only; the route is picked in the
-   課表 editor when the structure is put on a day). Left: the uploaded GPX routes and 「我的路段」
-   (the climbs and routes found in the activities, engine/routes.py); right: the chosen one — its
+/* 路線 › 上傳的 (SP-640, SP-693; engine/route_library.py, api/route_library.py): the second tab of 路線,
+   beside 我跑過的 (routes.html, the climbs and routes found in the activities — listed there only). The
+   training routes, apart from the templates (a template is a structure only; the route is picked in the
+   課表 editor when the structure is put on a day). Left: the uploaded GPX routes; right: the chosen one — its
    elevation profile with the climbs marked, and the 坡段表 (SP-639's climbs and grade segments at the
    easy run; every number from the server). Upload, rename, download and delete the uploaded ones;
-   a segment links to its 路線進步 page. 「從這條路線產生課」 (SP-641): pick a day, see the steps the server
+   「用這條排課」 (SP-641, once 從這條路線產生課; 我跑過的 has the same): pick a day, see the steps the server
    makes (POST /steps/from-route: one step per climb, each to the lap button), then the 課表 editor opens
    with them (?route=) — saved there as the user's own session. Tokens as templates.html (light / dark / data-theme). */
 :root {
@@ -40,7 +40,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 syst
 button, input, select { font: inherit; color: inherit; }
 .meta { color: var(--muted); font-size: 12.5px; }
 .faint { color: var(--faint); }
-main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
+main { max-width: 1500px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 10px; }
 h1 { margin: 0; font-size: 20px; }
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .spacer { flex: 1; }
@@ -52,21 +52,26 @@ h1 { margin: 0; font-size: 20px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .btn.danger { color: var(--bad); }
 .btn.danger.armed { background: var(--bad); border-color: var(--bad); color: #fff; }
-/* page switch 日曆 | 課表統計 | 範本 | 路線 (schedule.html .modesw) */
-.modesw { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-self: start; padding: 4px; border-radius: 12px; max-width: 100%;
-  background: color-mix(in srgb, #b4530f 9%, var(--bg)); --mc: #b4530f; --mc2: #8f3f0a; }
-.modesw .mcard { display: flex; align-items: center; gap: 9px; text-decoration: none; text-align: left;
-  padding: 6px 14px 6px 10px; border-radius: 9px; background: var(--panel); color: var(--text);
-  box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background .18s, color .18s, box-shadow .18s, transform .08s; }
-.modesw .mcard svg { width: 22px; height: 22px; flex: none; color: var(--mc); }
-.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; }
-.modesw .mcard small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
-.modesw .mcard:hover { box-shadow: 0 0 0 1.5px var(--mc), 0 2px 6px rgba(0,0,0,.12); }
-.modesw .mcard[aria-current="page"] { background: linear-gradient(180deg, var(--mc), var(--mc2)); color: #fff; box-shadow: 0 3px 8px rgba(143,63,10,.35); }
-.modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
-.modesw .mcard[aria-current="page"] small { opacity: .85; }
-.modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
-@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 10px 6px 8px; gap: 6px; } .modesw .mcard svg { width: 18px; height: 18px; } }
+/* SP-693: 路線 is one page with two tabs — 我跑過的 (routes.html) | 上傳的 (this file); the same nav there */
+/* the tab bar sits where 我跑過的 has it: a full-width header (routes.html header) */
+.rhead { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px;
+  display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.rhead .spacer { flex: 1; }
+.rtabs { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-self: start; padding: 4px; border-radius: 12px; max-width: 100%;
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg)); }
+.rtabs a { display: flex; align-items: center; gap: 8px; text-decoration: none; padding: 5px 13px 5px 9px; border-radius: 9px;
+  background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.rtabs a svg { width: 20px; height: 20px; flex: none; color: var(--accent); }
+.rtabs a b { display: block; font-size: 14px; line-height: 1.2; }
+.rtabs a small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
+.rtabs a:hover { box-shadow: 0 0 0 1.5px var(--accent), 0 2px 6px rgba(0,0,0,.12); }
+.rtabs a[aria-current="page"] { background: var(--accent); color: #fff; }
+.rtabs a[aria-current="page"] svg, .rtabs a[aria-current="page"] small { color: #fff; }
+.rtabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.q { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--line);
+  font-size: 11px; color: var(--muted); cursor: help; }
+@media (max-width: 620px) { .rtabs a small { display: none; } }
 
 .rl { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 12px; align-items: start; }
 @media (max-width: 860px) { .rl { grid-template-columns: minmax(0, 1fr); } }
@@ -126,49 +131,33 @@ ul.items .sub { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); fon
 .gen ol .tg { color: var(--muted); font-size: 11.5px; margin-left: 6px; overflow-wrap: anywhere; }
 .gen ol li.up::marker { color: var(--climb); font-weight: 700; }
 .btn.gen-btn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.tdiff { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 13px; }
-.tdiff .q { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--line);
-  font-size: 11px; color: var(--muted); cursor: help; }
-.tdiff select { border: 1px solid var(--line); border-radius: 7px; padding: 3px 6px; background: var(--bg); color: var(--text); }
 .msg { font-size: 12.5px; } .msg.err { color: var(--bad); } .msg.ok { color: var(--good); } .msg:empty { display: none; }
 </style>
 </head>
 <body>
-<script src="/api/v1/static/shell.js" data-page="schedule"></script>
-<main>
-  <nav class="modesw" data-i18n-attr="aria-label:routelib.tabs.label" aria-label="課表檢視">
-    <a class="mcard" href="/api/v1/overview/plan/schedule/page">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
-      <span><b data-i18n="routelib.tabs.calendar">日曆</b><small data-i18n="routelib.tabs.calendar_sub">每天排了什麼課</small></span></a>
-    <a class="mcard" href="/api/v1/overview/plan/compliance/page">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V8M17 17v-8"/></svg>
-      <span><b data-i18n="routelib.tabs.compliance">課表統計</b><small data-i18n="routelib.tabs.compliance_sub">計畫 vs 實際、負荷</small></span></a>
-    <a class="mcard" href="/api/v1/overview/plan/templates/page">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
-      <span><b data-i18n="routelib.tabs.templates">範本</b><small data-i18n="routelib.tabs.templates_sub">自己的課表範本</small></span></a>
-    <a class="mcard" href="/api/v1/overview/plan/routes/page" aria-current="page">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 5.5-9 4 6 3-4.5L21 19z"/><circle cx="17" cy="6" r="2"/></svg>
-      <span><b data-i18n="routelib.tabs.routes">路線</b><small data-i18n="routelib.tabs.routes_sub">GPX 與我的路段</small></span></a>
-  </nav>
-  <div class="bar">
-    <h1 data-i18n="routelib.title">訓練路線</h1>
-    <span class="meta" data-i18n="routelib.lead">上傳的 GPX 和系統從運動紀錄找出的「我的路段」。範本只放結構，套到某天的課表時，在課表編輯器的「路線」選一條。</span>
+<script src="/api/v1/static/shell.js" data-page="routes"></script>
+<header class="rhead">
+  <h1 class="vh" data-i18n="routelib.page_title">路線</h1>
+    <nav class="rtabs" data-i18n-attr="aria-label:routelib.tabs.label" aria-label="路線">
+      <a href="/api/v1/routes/page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-6 4 3 5-7 4 4"/><path d="M3 21h18"/></svg>
+        <span><b data-i18n="routelib.tabs.ran">我跑過的</b><small data-i18n="routelib.tabs.ran_sub">從紀錄找出、看進步</small></span></a>
+      <a href="/api/v1/routes/uploaded/page" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 5.5-9 4 6 3-4.5L21 19z"/><path d="M17 3v6M14.5 5.5 17 3l2.5 2.5"/></svg>
+        <span><b data-i18n="routelib.tabs.up">上傳的</b><small data-i18n="routelib.tabs.up_sub">GPX、排課用</small></span></a>
+    </nav>
+    <span class="q" tabindex="0" role="note" data-i18n-attr="title:routelib.lead;aria-label:routelib.lead" title="自己上傳的 GPX，排課用。範本只放結構，套到某天的課表時，在課表編輯器的「▲ 路線」選一條（跑過的路線也列在那裡）。" aria-label="自己上傳的 GPX，排課用。範本只放結構，套到某天的課表時，在課表編輯器的「▲ 路線」選一條（跑過的路線也列在那裡）。">?</span>
     <span class="spacer"></span>
     <button class="btn primary" type="button" id="rl-up" data-i18n="routelib.upload">＋ 上傳 GPX</button>
     <input type="file" id="rl-file" accept=".gpx,.fit,application/gpx+xml" hidden>
-  </div>
+</header>
+<main>
   <div class="msg" id="rl-msg" aria-live="polite"></div>
   <div class="rl">
     <aside class="card rl-list" id="rl-list" data-i18n-attr="aria-label:routelib.list" aria-label="路線清單">
       <section>
         <h2><span data-i18n="routelib.sec_gpx">上傳的路線</span> <span class="meta" id="rl-ngpx"></span></h2>
         <ul class="items" id="rl-gpx"></ul>
-      </section>
-      <section>
-        <h2><span data-i18n="routelib.sec_mine">我的路段</span> <span class="meta" id="rl-nmine"></span>
-          <a href="/api/v1/routes/page" data-i18n="routelib.mine_all">路線進步 →</a></h2>
-        <p class="meta" data-i18n="routelib.mine_lead" style="margin:2px 0 4px">系統從你的運動紀錄找出、跑過 2 次以上的爬坡、路線與路段。</p>
-        <ul class="items" id="rl-mine"></ul>
       </section>
     </aside>
     <section class="card">
@@ -196,32 +185,22 @@ const hms = (s) => { if (s == null) return "–"; s = Math.round(s); const h = M
 const pace = (s) => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "–";
 const pct = (g) => `${Math.round((g || 0) * 1000) / 10}%`;
 const gainTxt = (m) => (m || 0) < 0 ? `−${Math.round(-m)} m` : `+${Math.round(m || 0)} m`;     // a descent's is negative
-// an automatic name is written in Chinese on the server (engine/routes.py auto_name): its kind word is
-// translated (as routes.html nameOf); the user's own names stay as they are
-const AUTO_WORDS = { "爬坡": "climb", "下坡": "descent", "路段": "stretch", "路線": "route" };
-const nameOf = (r) => r.renamed || !window.I18N || I18N.locale === "zh-TW" ? r.name
-  : String(r.name).replace(/(^|\s)(爬坡|下坡|路段|路線)(?=\s|$)/, (m, sp, w) => sp + T("kind." + AUTO_WORDS[w]));
-const S = { gpx: [], mine: [], sel: null, det: null, seq: 0, genSeq: 0, genDay: null };
+// SP-693: the segments found in the activities are listed once, on 我跑過的 (routes.html) — not here any more
+const S = { gpx: [], sel: null, det: null, seq: 0, genSeq: 0, genDay: null };
 function setMsg(t, cls) { const m = $("rl-msg"); m.textContent = t || ""; m.className = "msg" + (cls ? " " + cls : ""); }
 
 async function load() {
-  const [g, m] = await Promise.all([req("GET", LAPI), req("GET", PAPI + "/routes/mine")]);
+  const g = await req("GET", LAPI);
   S.gpx = g.ok ? g.body.routes : [];
-  S.mine = m.ok ? m.body.rows : [];
   renderList();
 }
 function renderList() {
   const cur = S.sel || {};
   $("rl-ngpx").textContent = S.gpx.length ? T("n", { n: S.gpx.length }) : "";
-  $("rl-nmine").textContent = S.mine.length ? T("n", { n: S.mine.length }) : "";
   $("rl-gpx").innerHTML = S.gpx.length ? S.gpx.map((r) => `<li><button type="button" data-g="${r.id}" aria-current="${cur.src === "gpx" && cur.id === r.id}">` +
     `<span class="nm">${esc(r.name)}</span><span class="tag gpx">GPX</span>` +
     `<span class="sub">${km(r.km)} · +${Math.round(r.gain_m || 0)} m · ${esc(T("n_climbs", { n: r.n_climbs || 0 }))}${r.from_tpl ? ` · ${esc(T("from_tpl"))}` : ""}</span></button></li>`).join("")
     : `<li class="empty">${esc(T("none_gpx"))}</li>`;
-  $("rl-mine").innerHTML = S.mine.length ? S.mine.map((r) => `<li><button type="button" data-m="${esc(r.id)}" aria-current="${cur.src === "seg" && cur.id === r.id}">` +
-    `<span class="nm">${r.fav ? "★ " : ""}${esc(nameOf(r))}</span><span class="tag ${r.kind === "climb" ? "up" : ""}">${esc(T("kind." + r.kind))}${r.terrain && r.terrain !== "normal" ? ` · ${esc(T("tdiff." + r.terrain))}` : ""}</span>` +
-    `<span class="sub">${km((r.length_m || 0) / 1000)} · ${gainTxt(r.gain_m)} · ${esc(T("n_times", { n: r.n_efforts || 0 }))} · ${esc(T("best"))} ${hms(r.best_s)}</span></button></li>`).join("")
-    : `<li class="empty">${esc(T("none_mine"))}</li>`;
 }
 
 // ---- the elevation profile, the climbs marked (inline SVG; numbers from the server)
@@ -269,30 +248,23 @@ async function select(sel) {
   const seq = ++S.seq;
   $("rl-empty").hidden = true; $("rl-det").hidden = false;
   $("rl-det").innerHTML = `<p class="meta">${esc(T("loading"))}</p>`;
-  const r = await req("GET", sel.src === "gpx" ? `${LAPI}/${sel.id}` : `${PAPI}/routes/mine/${encodeURIComponent(sel.id)}`);
+  const r = await req("GET", `${LAPI}/${sel.id}`);
   if (seq !== S.seq) return;
   if (!r.ok) { $("rl-det").innerHTML = `<p class="msg err">${esc(errText(r))}</p>`; return; }
   S.det = r.body;
   renderDetail();
-  history.replaceState(null, "", `#${sel.src === "gpx" ? "g" : "m"}${sel.id}`);
+  history.replaceState(null, "", `#g${sel.id}`);
   if (matchMedia("(max-width: 860px)").matches) $("rl-det").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 function renderDetail() {
-  const d = S.det, gpx = S.sel.src === "gpx", tb = d.table || {};
+  const d = S.det, tb = d.table || {};
   const climbs = tb.climbs || [];
-  const gain = gpx ? d.gain_m : (d.totals || {}).gain_m ?? d.gain_m;
-  const len = gpx ? d.km : (d.length_m || 0) / 1000;
-  $("rl-det").innerHTML = `<div class="head">` + (gpx
-      ? `<input class="text" id="rl-name" maxlength="60" value="${esc(d.name)}" aria-label="${esc(T("name"))}"><button class="btn" type="button" id="rl-ren">${esc(T("rename"))}</button><span class="tag gpx">GPX</span>`
-      : `<h2>${esc(nameOf(d))}</h2><span class="tag ${d.kind === "climb" ? "up" : ""}">${esc(T("kind." + d.kind))}</span>`) + `</div>` +
-    `<div class="stats"><span>${esc(T("st_len"))} <b>${km(len)}</b></span><span>${esc(T("st_gain"))} <b>${gainTxt(gain)}</b></span>` +
-    (gpx ? `<span>${esc(T("st_loss"))} <b>−${Math.round(d.loss_m || 0)} m</b></span><span>${esc(T("st_file"))} <b>${esc(d.filename || "")}</b></span>`
-      : `<span>${esc(T("n_times", { n: d.n_efforts || 0 }))}</span><span>${esc(T("best"))} <b>${hms(d.best_s)}</b></span><span>${esc(T("last"))} <b>${hms(d.last_s)}</b>${d.last_date ? ` (${esc(d.last_date.slice(0, 10))})` : ""}</span>`) + `</div>` +
-    (!gpx && d.kind === "route" ? tdiffRow(d) : "") +
-    `<div class="acts">` + (gpx
-      ? `<a class="btn" href="${LAPI}/${d.id}/file">${esc(T("download"))}</a><button class="btn danger" type="button" id="rl-del">${esc(T("del"))}</button>`
-      : `<a class="btn" href="${esc(d.link)}">${esc(T("history"))}</a>`) +
-    `<button class="btn gen-btn" type="button" id="rl-gen-btn" aria-expanded="false" aria-controls="rl-gen">▶ ${esc(T("gen_btn"))}</button></div>` +
+  $("rl-det").innerHTML = `<div class="head">` +
+      `<input class="text" id="rl-name" maxlength="60" value="${esc(d.name)}" aria-label="${esc(T("name"))}"><button class="btn" type="button" id="rl-ren">${esc(T("rename"))}</button><span class="tag gpx">GPX</span></div>` +
+    `<div class="stats"><span>${esc(T("st_len"))} <b>${km(d.km)}</b></span><span>${esc(T("st_gain"))} <b>${gainTxt(d.gain_m)}</b></span>` +
+    `<span>${esc(T("st_loss"))} <b>−${Math.round(d.loss_m || 0)} m</b></span><span>${esc(T("st_file"))} <b>${esc(d.filename || "")}</b></span></div>` +
+    `<div class="acts"><button class="btn gen-btn" type="button" id="rl-gen-btn" aria-expanded="false" aria-controls="rl-gen">▶ ${esc(T("gen_btn"))}</button>` +
+    `<a class="btn" href="${LAPI}/${d.id}/file">${esc(T("download"))}</a><button class="btn danger" type="button" id="rl-del">${esc(T("del"))}</button></div>` +
     `<section class="gen" id="rl-gen" hidden aria-labelledby="rl-gen-h"><h3 id="rl-gen-h">${esc(T("gen_title"))}</h3>` +
     `<p class="meta" style="margin:0">${esc(T("gen_lead"))}</p>` +
     `<div class="row"><label>${esc(T("gen_day"))} <input type="date" id="rl-gen-day" min="${today()}" value="${S.genDay || today()}"></label>` +
@@ -300,16 +272,6 @@ function renderDetail() {
     `<div id="rl-gen-prev" aria-live="polite"></div><p class="meta" style="margin:0">${esc(T("gen_note"))}</p></section>` +
     profile(d.profile || {}, climbs) +
     `<p class="hint">${esc(T("use_hint"))}</p>` + courseTable(tb);
-}
-
-// ---- SP-731: a whole route's default 地形難度 — the activities on it without their own mark take it (the
-// race calculator's trail model and the activity list); PUT /routes/mine/{id}/terrain
-const TDIFF = ["normal", "technical", "scramble"];
-function tdiffRow(d) {
-  return `<div class="tdiff"><label for="rl-tdiff">${esc(T("tdiff.label"))}</label> <select id="rl-tdiff">` +
-    `<option value="" ${d.terrain ? "" : "selected"}>${esc(T("tdiff.none"))}</option>` +
-    TDIFF.map((v) => `<option value="${v}" ${d.terrain === v ? "selected" : ""}>${esc(T("tdiff." + v))}</option>`).join("") +
-    `</select><span class="q" tabindex="0" role="note" title="${esc(T("tdiff.help"))}" aria-label="${esc(T("tdiff.help"))}">?</span></div>`;
 }
 
 // ---- 從這條路線產生課 (SP-641): the steps the server makes (POST /steps/from-route), shown here; the 課表
@@ -340,7 +302,6 @@ function genGo() {
 $("rl-list").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.g) select({ src: "gpx", id: +b.dataset.g });
-  else if (b.dataset.m) select({ src: "seg", id: b.dataset.m });
 });
 $("rl-det").addEventListener("click", async (e) => {
   const gb = e.target.closest("#rl-gen-btn");
@@ -368,16 +329,7 @@ $("rl-det").addEventListener("click", async (e) => {
   }
 });
 $("rl-det").addEventListener("change", async (e) => {
-  if (e.target.id === "rl-gen-day") { S.genDay = e.target.value; genPreview(); return; }
-  if (e.target.id === "rl-tdiff") {
-    const level = e.target.value || null;
-    const r = await req("PUT", `${PAPI}/routes/mine/${encodeURIComponent(S.det.id)}/terrain`, { level });
-    if (!r.ok) { setMsg(errText(r), "err"); return; }
-    S.det.terrain = level;
-    const row = S.mine.find((x) => x.id === S.det.id);
-    if (row) row.terrain = level;
-    renderList(); setMsg(T("tdiff.saved"), "ok");
-  }
+  if (e.target.id === "rl-gen-day") { S.genDay = e.target.value; genPreview(); }
 });
 $("rl-det").addEventListener("keydown", (e) => { if (e.target.id === "rl-name" && e.key === "Enter") $("rl-ren").click(); });
 $("rl-up").addEventListener("click", () => $("rl-file").click());
@@ -394,10 +346,11 @@ $("rl-file").addEventListener("change", async (e) => {
   setMsg(T("uploaded", { name: body.name }), "ok");
 });
 
-load().then(() => {
+// an old 課表 › 路線 link to a segment found in the activities (#m<id>): that one is on 我跑過的 now (SP-693)
+if (/^#m./.test(location.hash)) location.replace(`/api/v1/routes/page#${location.hash.slice(2)}`);
+else load().then(() => {
   const h = location.hash.slice(1);
   if (h[0] === "g" && S.gpx.some((r) => r.id === +h.slice(1))) select({ src: "gpx", id: +h.slice(1) });
-  else if (h[0] === "m" && h.length > 1) select({ src: "seg", id: decodeURIComponent(h.slice(1)) });
 });
 </script>
 </body>

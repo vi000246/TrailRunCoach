@@ -359,7 +359,15 @@ def rebuild(body: Optional[RebuildBody] = None):
 
 @router.get("/page", include_in_schema=False)
 def page():
+    """路線 › 我跑過的 (SP-693): the repeated segments and routes found in the activities."""
     return render_page("routes")
+
+
+@router.get("/uploaded/page", include_in_schema=False)
+def uploaded_page():
+    """路線 › 上傳的 (SP-693; static/routelib.html, api/route_library.py): the uploaded GPX routes —
+    once 課表 › 路線 (SP-640), whose old URL redirects here."""
+    return render_page("routelib")
 
 
 def _get(rid: str) -> dict:
@@ -440,6 +448,15 @@ def detail(rid: str):
                        for sid, pos in it.get("segments") or [] if sid in items]
     out["status"] = _status()
     out["weather"] = _index().get("weather")
+    # SP-731 / SP-693: a whole route's default 地形難度 (set here since 課表 › 路線 moved into this page)
+    if it["kind"] == "route":
+        try:
+            out["terrain"] = _by_current_id(STORE.terrain(), _index()).get(rid)
+        except Exception:      # noqa: BLE001 — unreadable: not set
+            out["terrain"] = None
+    # SP-693: 「用這條排課」 — the kinds a session can be made from (engine/route_library.MINE_KINDS)
+    from backend.engine import route_library as RL
+    out["plannable"] = it["kind"] in RL.MINE_KINDS
     return out
 
 

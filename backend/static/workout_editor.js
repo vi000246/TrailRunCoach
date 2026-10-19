@@ -11,7 +11,7 @@
  *   we.setDoc(doc)                  a structure made elsewhere as this session's own (SP-641, the 路線 page)
  *
  * ▲ 路線 (SP-640, opts.routes !== false): the route is picked per session, not per template — the
- * uploaded GPX routes and 「我的路段」 (GET …/routes/library, …/routes/mine); POST …/steps/route returns
+ * uploaded GPX routes and the ones run before (GET …/routes/library, …/routes/mine); POST …/steps/route returns
  * the steps with the route's profile copy (`route`: src, the climb, rep_km) and each hill repeat's
  * climb ending with the lap button at the top, named 「爬 120 m · 約 6′」. The climb can be changed or
  * left out on the line under the tools; the watch gets the steps only.
@@ -1061,7 +1061,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       else if (a === "add-rep") { this.doc.items.splice(this.insertAt(), 0, this.newRep()); this.touch(); }
       else if (a === "reset") { this.cleared = true; this.dirty = false; this.stored = false; this.$("we-reset").hidden = true; this.derive({ rederive: true }).then(() => { this.cleared = true; this.render(); this.o.onView && this.o.onView(this.view, this); }); }
     }
-    // ▲ 路線 (SP-640): the uploaded routes and 「我的路段」, fetched once per editor
+    // ▲ 路線 (SP-640): the uploaded routes and the ones run before (SP-693: 我跑過的), fetched once per editor
     async routeMenu(btn) {
       const pop = this.$("we-rpop");
       if (!pop.hidden) { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); return; }
@@ -1074,7 +1074,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const cur = ((this.doc || {}).route || {}).src || {};
       const km = (v) => `${(+v || 0).toFixed(1)} km`;
       const row = (rs, name, sub, on) => `<button type="button" class="r" data-rs="${esc(rs)}" aria-current="${on}"><span>${esc(name)}</span><small>${esc(sub)}</small></button>`;
-      const page = `${this.o.api}/routes/page`;
+      const page = "/api/v1/routes/uploaded/page";      // 路線 › 上傳的 (SP-693)
       const G = this.routes.gpx, M = this.routes.mine;
       pop.innerHTML = `<div class="rh"><span>${esc(tr("workout.route_gpx"))}</span><a href="${esc(page)}">${esc(tr("workout.route_page"))}</a></div>` +
         (G.length ? G.map((r) => row(`gpx:${r.id}`, r.name, `${km(r.km)} · +${Math.round(r.gain_m || 0)} m · ${tr("workout.route_nclimbs", { n: r.n_climbs || 0 })}`,

@@ -312,15 +312,20 @@ def test_each_person_sees_only_their_own_routes(tmp_path, monkeypatch):
 # the page
 # ---------------------------------------------------------------------------
 
-def test_the_routes_page_is_the_fourth_tab_of_the_plan(monkeypatch):
-    with LEnv(monkeypatch) as e:
+def test_the_routes_page_is_the_uploaded_tab_of_routes(monkeypatch):
+    """SP-693: once the fourth tab of 課表; now 路線 › 上傳的 (the old URL redirects there; the rest of the
+    move is backend/tests/test_routes_page_sp693.py)."""
+    e = LEnv(monkeypatch)
+    e.c.app.include_router(RA.router)
+    with e:
         p = e.c.get(f"{API}/routes/page")
         assert p.status_code == 200 and 'id="rl-list"' in p.text
-        assert p.text.count('class="mcard"') == 4 and f'href="{API}/routes/page" aria-current="page"' in p.text
+        assert str(p.url).endswith("/api/v1/routes/uploaded/page")
+        assert 'href="/api/v1/routes/uploaded/page" aria-current="page"' in p.text
     from backend.i18n import use_locale
     from backend.i18n.pages import render_page
     for page in ("schedule", "compliance", "templates"):
-        assert f'href="{API}/routes/page"' in render_page(page).body.decode()
+        assert f'href="{API}/routes/page"' not in render_page(page).body.decode()
     with use_locale("en"):
         en = render_page("routelib").body.decode()
-    assert ">Routes</title>" in en and "My segments" in en
+    assert ">Routes</title>" in en and "Uploaded routes" in en

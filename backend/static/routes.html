@@ -139,6 +139,34 @@ td.nmc { max-width: 22em; overflow: hidden; text-overflow: ellipsis; }
 .qpop { position: fixed; z-index: 100; max-width: min(340px, calc(100vw - 24px)); white-space: pre-line; background: var(--panel);
   color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; line-height: 1.55;
   box-shadow: 0 8px 24px rgba(0,0,0,.2); pointer-events: none; font-weight: 400; }
+/* SP-693: 路線 is one page with two tabs — 我跑過的 (this file) | 上傳的 (routelib.html); the same nav there */
+.rtabs { display: inline-flex; flex-wrap: wrap; gap: 6px; padding: 4px; border-radius: 12px; max-width: 100%;
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg)); }
+.rtabs a { display: flex; align-items: center; gap: 8px; text-decoration: none; padding: 5px 13px 5px 9px; border-radius: 9px;
+  background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.rtabs a svg { width: 20px; height: 20px; flex: none; color: var(--accent); }
+.rtabs a b { display: block; font-size: 14px; line-height: 1.2; }
+.rtabs a small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
+.rtabs a:hover { box-shadow: 0 0 0 1.5px var(--accent), 0 2px 6px rgba(0,0,0,.12); }
+.rtabs a[aria-current="page"] { background: var(--accent); color: #fff; }
+.rtabs a[aria-current="page"] svg, .rtabs a[aria-current="page"] small { color: #fff; }
+.rtabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 620px) { .rtabs a small { display: none; } }
+/* SP-693: 用這條排課 (POST /overview/plan/steps/from-route, as 上傳的 has it) and a route's 地形難度 (SP-731) */
+.acts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; flex-basis: 100%; }
+button.gen-btn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.gen { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel)); flex-basis: 100%; min-width: 0; }
+.gen[hidden] { display: none; }
+.gen > * { min-width: 0; }
+.gen .grow { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.gen ol { margin: 0; padding-left: 22px; display: grid; gap: 2px; font-size: 12.5px; }
+.gen ol li { overflow-wrap: anywhere; }
+.gen ol .tg { color: var(--muted); font-size: 11.5px; margin-left: 6px; }
+.gen ol li.up::marker { color: var(--up); font-weight: 700; }
+.tdiff { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 13px; }
+.msg { font-size: 12.5px; } .msg.err { color: #c62828; } .msg.ok { color: var(--ok); } .msg:empty { display: none; }
 @media (max-width: 900px) {
   .wrap { grid-template-columns: 1fr; padding: 10px; }
   .list { max-height: none; }
@@ -161,7 +189,15 @@ td.nmc { max-width: 22em; overflow: hidden; text-overflow: ellipsis; }
 <body>
 <script src="/api/v1/static/shell.js" data-page="routes"></script>
 <header>
-  <h1 data-i18n="routes.h1">路線進步</h1>
+  <h1 class="vh" data-i18n="routes.title">路線</h1>
+  <nav class="rtabs" data-i18n-attr="aria-label:routes.tabs.label" aria-label="路線">
+    <a href="/api/v1/routes/page" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-6 4 3 5-7 4 4"/><path d="M3 21h18"/></svg>
+      <span><b data-i18n="routes.tabs.ran">我跑過的</b><small data-i18n="routes.tabs.ran_sub">從紀錄找出、看進步</small></span></a>
+    <a href="/api/v1/routes/uploaded/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 5.5-9 4 6 3-4.5L21 19z"/><path d="M17 3v6M14.5 5.5 17 3l2.5 2.5"/></svg>
+      <span><b data-i18n="routes.tabs.up">上傳的</b><small data-i18n="routes.tabs.up_sub">GPX、排課用</small></span></a>
+  </nav>
   <span class="meta" id="builtinfo"></span>
   <span class="prog" id="prog" hidden><span id="progtxt"></span><span class="bar"><i id="progbar" style="width:0"></i></span></span>
   <span style="flex:1"></span>
@@ -274,7 +310,7 @@ async function j(url, opt) {
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   return r.json();
 }
-const errMsg = (e) => { try { const d = JSON.parse(e.message.replace(/^\d+ /, "")).detail; return typeof d === "string" ? d : d?.message || e.message; } catch { return e.message; } };
+const errMsg = (e) => { try { const d = JSON.parse(e.message.replace(/^\d+ /, "")).detail; return typeof d === "string" ? d : d?.message || d?.errors?.join("；") || e.message; } catch { return e.message; } };
 
 // ---- sparkline: last efforts' times, lower is better (drawn inverted so up = faster)
 function spark(pts) {
@@ -444,6 +480,7 @@ function renderDetail() {
       <span>${esc(T("best_short"))} <b>${hms(best?.[tk])}</b>（${day(best?.start)}）</span><span>${esc(T("last_short"))} <b>${hms(last?.[tk])}</b>（${day(last?.start)}）</span>
       ${d.renamed ? `<span class="meta">${esc(T("auto_name", { name: d.auto_name }))}</span>` : ""}</div>
     ${relations(d)}
+    ${planRow(d)}
   </div>
   <div class="panel card"><div id="map"></div>
     <div class="note">${esc(T("map.note", { what }))} <span style="color:var(--ok)">●</span> ${esc(T("map.start"))}、<span style="color:var(--err,#b91c1c)">●</span> ${esc(T("map.end"))}${esc(T("map.hover"))}</div></div>
@@ -464,6 +501,7 @@ function renderDetail() {
     ${wxNote ? `<div class="note">${esc(wxNote)}</div>` : ""}</div>`;
   $("back").onclick = () => { document.body.classList.remove("has-detail"); history.pushState({}, "", location.pathname); };
   $("pen").onclick = startRename;
+  bindPlan();
   document.querySelectorAll(".rel a[data-go]").forEach((a) => a.onclick = () => openDetail(a.dataset.go, true));
   document.querySelectorAll(".rel a[data-w]").forEach((a) => a.onclick = () => openWorkout(+a.dataset.w));
   drawMap();
@@ -505,6 +543,65 @@ function drawSegs() {
     S.preset = tr.dataset.eff ? { b: tr.dataset.eff } : null;
     openDetail(tr.dataset.seg, true);
   });
+}
+
+// ---- SP-693: 用這條排課 — the same session 上傳的 makes from a GPX (SP-641): one step per climb, each
+// to the lap button (POST /overview/plan/steps/from-route, route {src: "seg", id}); the 課表 editor
+// opens with it on the chosen day (?route=) and nothing is saved until 儲存 there. A whole route also
+// has its default 地形難度 here (SP-731, PUT /overview/plan/routes/mine/{id}/terrain).
+const PAPI = "/api/v1/overview/plan";
+const TDIFF = ["normal", "technical", "scramble"];
+const today = () => { const x = new Date(); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+function planRow(d) {
+  if (d.plannable === false) return "";
+  const td = d.kind === "route" ? `<span class="tdiff"><label for="rt-tdiff">${esc(T("tdiff.label"))}</label> <select id="rt-tdiff">` +
+    `<option value="" ${d.terrain ? "" : "selected"}>${esc(T("tdiff.none"))}</option>` +
+    TDIFF.map((v) => `<option value="${v}" ${d.terrain === v ? "selected" : ""}>${esc(T("tdiff." + v))}</option>`).join("") +
+    `</select>${qBtn(T("tdiff.help"), T("tdiff.label"))}</span>` : "";
+  return `<div class="acts"><button type="button" class="gen-btn" id="gen-btn" aria-expanded="false" aria-controls="gen">▶ ${esc(T("plan.btn"))}</button>` +
+    `${qBtn(T("plan.tip"), T("plan.btn"))}${td}<span class="msg" id="rt-msg" aria-live="polite"></span></div>` +
+    `<section class="gen" id="gen" hidden><div class="grow"><label>${esc(T("plan.day"))} <input type="date" id="gen-day" min="${today()}" value="${S.genDay || today()}"></label>` +
+    `<button type="button" class="primary" id="gen-go">${esc(T("plan.go"))}</button></div>` +
+    `<div id="gen-prev" aria-live="polite"></div></section>`;
+}
+function tgText(t) {
+  t = t || {};
+  const base = t.type === "power" ? `${T("plan.tg_power")} ${Math.round(t.lo * 100)}–${Math.round(t.hi * 100)}% CP` : t.type === "hr" ? T("plan.tg_hr")
+    : t.type === "rpe" ? T("plan.tg_rpe", { lo: t.lo, hi: t.hi }) : T("plan.tg_none");
+  return t.ep ? `${base} · ${T("plan.tg_ep")}` : base;
+}
+async function genPreview() {
+  const box = $("gen-prev"), id = S.detail.id, seq = S.genSeq = (S.genSeq || 0) + 1;
+  box.innerHTML = `<p class="meta" style="margin:0">${esc(T("plan.loading"))}</p>`;
+  let b;
+  try {
+    b = await j(`${PAPI}/steps/from-route`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "hike", terrain: "trail", day: $("gen-day").value, route: { src: "seg", id } }) });
+  } catch (e) { if (seq === S.genSeq) box.innerHTML = `<p class="msg err">${esc(T("plan.failed", { msg: errMsg(e) }))}</p>`; return; }
+  if (seq !== S.genSeq || !S.detail || S.detail.id !== id) return;
+  box.innerHTML = `<div class="meta"><b>${esc(b.title)}</b> · ${esc(T("plan.sum", { n: b.legs.length, min: b.minutes, km: (+b.km).toFixed(1), gain: Math.round(b.gain_m) }))}</div>` +
+    `<ol>${b.legs.map((lg) => `<li class="${lg.type === "climb" ? "up" : ""}">${esc(lg.name)}<span class="tg">${esc(tgText(lg.target))}</span></li>`).join("")}</ol>`;
+}
+function bindPlan() {
+  const gb = $("gen-btn");
+  if (!gb) return;
+  gb.onclick = () => {
+    const box = $("gen"), open = box.hidden;
+    box.hidden = !open; gb.setAttribute("aria-expanded", String(open));
+    if (open) genPreview();
+  };
+  $("gen-day").onchange = (e) => { S.genDay = e.target.value; genPreview(); };
+  $("gen-go").onclick = () => {
+    location.href = `${PAPI}/schedule/page?${new URLSearchParams({ day: $("gen-day").value || today(), route: `seg:${S.detail.id}` })}`;
+  };
+  const sel = $("rt-tdiff");
+  if (sel) sel.onchange = async () => {
+    const level = sel.value || null, m = $("rt-msg");
+    try {
+      await j(`${PAPI}/routes/mine/${encodeURIComponent(S.detail.id)}/terrain`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ level }) });
+    } catch (e) { m.textContent = errMsg(e); m.className = "msg err"; return; }
+    S.detail.terrain = level; m.textContent = T("tdiff.saved"); m.className = "msg ok";
+  };
 }
 
 // parent route, sub-routes, runs that covered only a part, merged pieces, the routes a segment lies on

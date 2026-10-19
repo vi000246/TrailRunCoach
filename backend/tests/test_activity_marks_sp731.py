@@ -257,7 +257,8 @@ def test_list_page_columns_filter_phone_fold_and_i18n():
         for k in ("col.grp", "col.tdiff", "grp.group", "grp.solo", "grp.sug_tip", "tdiff.route_opt", "f.unmarked",
                   "help.f_unmarked", "mk.tip", "f_tdiff", "help.tdiff", "tdiff.technical", "tdiff.scramble"):
             assert cat.get(k), (loc, k)
-        rl = json.loads((ROOT / "static" / "i18n" / loc / "routelib.json").read_text(encoding="utf-8"))
+        # SP-693: the route default moved with 「我的路段」 to 路線 › 我跑過的 (routes.html)
+        rl = json.loads((ROOT / "static" / "i18n" / loc / "routes.json").read_text(encoding="utf-8"))
         for k in ("tdiff.label", "tdiff.help", "tdiff.none", "tdiff.technical"):
             assert rl.get(k), (loc, k)
         rp = json.loads((ROOT / "static" / "i18n" / loc / "racepower.json").read_text(encoding="utf-8"))
@@ -265,7 +266,7 @@ def test_list_page_columns_filter_phone_fold_and_i18n():
             assert rp.get(k), (loc, k)
     zh = json.loads((ROOT / "static" / "i18n" / "zh-TW" / "activity.json").read_text(encoding="utf-8"))
     assert zh["col.tdiff"] == "地形難度" and "路線難度" not in json.dumps(zh, ensure_ascii=False)
-    rl = (ROOT / "static" / "routelib.html").read_text(encoding="utf-8")
-    assert 'id="rl-tdiff"' in rl and "/terrain`" in rl
+    rl = (ROOT / "static" / "routes.html").read_text(encoding="utf-8")
+    assert 'id="rt-tdiff"' in rl and "/terrain`" in rl
     rp = (ROOT / "static" / "racepower.html").read_text(encoding="utf-8")
     assert 'id="tdiff-row"' in rp and "terrain_difficulty: type === \"trail\"" in rp

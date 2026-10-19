@@ -427,7 +427,8 @@ two pickers and a 「只看比賽」 filter (the user's own 比賽 mark, as on t
 | PATCH | `/api/v1/routes/{id}` | `{"name": ""}` clears the rename |
 | PUT | `/api/v1/routes/{id}/favorite` | `{"on": true}` stars, false unstars (SP-626) |
 | GET | `/api/v1/routes/{id}/compare?a=&b=` | effort ids from the detail |
-| GET | `/api/v1/routes/page` | the page (`render_page("routes")`, localized) |
+| GET | `/api/v1/routes/page` | the page (`render_page("routes")`, localized): 路線 › 我跑過的 (SP-693) — beside 上傳的, `/api/v1/routes/uploaded/page` (`routelib.html`); 「用這條排課」 (POST `/overview/plan/steps/from-route`, `src: seg`) and a route's default 地形難度 (SP-731) on the detail (`terrain`, `plannable`) |
+| GET | `/api/v1/routes/uploaded/page` | 路線 › 上傳的 (SP-693): the uploaded GPX routes (`render_page("routelib")`; the old `/overview/plan/routes/page` redirects here) |
 | GET | `/api/v1/app/workouts/{idx}/segments` | segments / routes this activity matched, rank, Δ best; the activity's file in the route index is found by start when the current source names it otherwise |
 
 No request waits for a build: the first request (and any request a minute

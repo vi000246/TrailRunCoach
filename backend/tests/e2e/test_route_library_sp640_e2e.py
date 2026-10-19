@@ -54,11 +54,11 @@ def test_routes_page_profile_table_rename(app):
     open_page(page, PAGE)
     btn = page.locator(f'#rl-gpx button[data-g="{r["id"]}"]')
     expect(btn).to_be_visible(timeout=60_000)
-    expect(page.locator("#rl-mine")).to_be_visible()                   # 我的路段: on the same page
-    expect(page.locator('.modesw a[aria-current="page"]')).to_have_attribute("href", PAGE)
+    expect(page.locator("#rl-mine")).to_have_count(0)                  # SP-693: listed on 我跑過的 only
+    expect(page.locator('.rtabs a[aria-current="page"]')).to_have_attribute("href", PAGE)
     btn.click()
     det = page.locator("#rl-det")
-    expect(det.locator("svg.prof")).to_be_visible()
+    expect(det.locator("svg.prof")).to_be_visible(timeout=60_000)
     assert det.locator("svg.prof rect.cl").count() >= 1                # the climbs marked on the profile
     assert det.locator("tr.climb").count() >= 1
     expect(det.locator("tr.climb").first).to_contain_text("爬 ")       # the step name a climb gets
@@ -81,7 +81,7 @@ def test_templates_page_points_to_the_routes(app):
     open_page(page, f"{_server.PAGES['templates']}#{t['id']}")
     box = page.locator("#tm-gpx")
     expect(box).to_contain_text("old.gpx", timeout=60_000)
-    expect(box.locator("a")).to_have_attribute("href", re.compile(r"/routes/page#g\d+$"))
+    expect(box.locator("a")).to_have_attribute("href", re.compile(r"/routes/uploaded/page#g\d+$"))
     expect(page.locator("#we-route")).to_be_hidden()                    # a template: structure only
 
 
@@ -115,7 +115,7 @@ def test_pick_a_route_in_the_editor(app):
     page.click("#we-routebtn")
     pop = page.locator("#we-rpop")
     expect(pop).to_be_visible()
-    expect(pop).to_contain_text("我的路段")
+    expect(pop).to_contain_text("我跑過的")                             # SP-693: both tabs' routes listed
     pop.locator(f'button[data-rs="gpx:{r["id"]}"]').click()
     line = page.locator("#we-rline")
     expect(line).to_be_visible()
@@ -151,7 +151,7 @@ def test_phone_no_sideways_scroll(app, e2e_browser, e2e_server):
         assert m.evaluate("document.documentElement.scrollWidth") <= 390
         for p in ("schedule", "templates"):
             open_page(m, _server.PAGES[p])
-            expect(m.locator(".modesw a.mcard")).to_have_count(4)
+            expect(m.locator(".modesw a.mcard")).to_have_count(3)     # SP-693: 路線 is its own page
             assert m.evaluate("document.documentElement.scrollWidth") <= 390, p
     finally:
         ctx.close()

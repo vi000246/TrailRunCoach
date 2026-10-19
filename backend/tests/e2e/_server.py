@@ -39,7 +39,7 @@ PAGES = {
     "activity": "/api/v1/app/activities/page",
     "viewer": "/api/v1/app/viewer",
     "routes": "/api/v1/routes/page",
-    "routelib": "/api/v1/overview/plan/routes/page",     # 課表 › 路線 (SP-640)
+    "routelib": "/api/v1/routes/uploaded/page",          # 路線 › 上傳的 (SP-640; SP-693 moved it out of 課表)
 }
 
 

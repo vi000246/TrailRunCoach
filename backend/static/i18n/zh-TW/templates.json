@@ -7,8 +7,6 @@
   "tabs.compliance_sub": "計畫 vs 實際、負荷",
   "tabs.templates": "範本",
   "tabs.templates_sub": "自己的課表範本",
-  "tabs.routes": "路線",
-  "tabs.routes_sub": "GPX 與我的路段",
   "title": "課表範本",
   "lead": "自己排的範本會出現在課表編輯器的「插入範本」裡（依分類）；內建的有出處、唯讀，可以複製成自己的再改。",
   "new": "＋ 新增範本",

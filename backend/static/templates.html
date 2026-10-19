@@ -136,9 +136,6 @@ details.cm li input { flex: 1; min-width: 0; font-size: 13px; padding: 3px 6px; 
     <a class="mcard" href="/api/v1/overview/plan/templates/page" aria-current="page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
       <span><b data-i18n="templates.tabs.templates">範本</b><small data-i18n="templates.tabs.templates_sub">自己的課表範本</small></span></a>
-    <a class="mcard" href="/api/v1/overview/plan/routes/page">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 5.5-9 4 6 3-4.5L21 19z"/><circle cx="17" cy="6" r="2"/></svg>
-      <span><b data-i18n="templates.tabs.routes">路線</b><small data-i18n="templates.tabs.routes_sub">GPX 與我的路段</small></span></a>
   </nav>
   <div class="bar">
     <h1 data-i18n="templates.title">課表範本</h1>
@@ -195,7 +192,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const PAPI = "/api/v1/overview/plan";
 const UAPI = PAPI + "/steps/templates/user";
-const ROUTES = PAPI + "/routes/page";
+const ROUTES = "/api/v1/routes/uploaded/page";      // 路線 › 上傳的 (SP-693; was 課表 › 路線)
 const req = (m, u, b) => WorkoutEditor.request(m, u, b);
 const errText = (r) => { const d = r.body.detail || {}; return (d.errors || [typeof d === "string" ? d : (r.body.message || T("failed"))]).join("；"); };
 const KIND_OF = (cats) => cats.includes("quality") ? "quality" : cats.includes("test") ? "test" : cats.includes("trail") ? "hike" : "easy";

@@ -2146,8 +2146,9 @@ which one. The response keeps the `coros` field names.
   range in the tooltip, the elevation behind them as a light area + thin line with its own m scale
   (`elev`, `backend/static/workout_editor.js:659`), in the chart viewer's neutral elevation colour.
   **SP-640 — routes apart from templates (課表 › 路線)**: a template is a structure only; the route
-  is picked when the structure is put on a day. The routes page (`backend/static/routelib.html`,
-  GET /routes/page, the fourth 課表 tab) lists the uploaded GPX routes (`training_routes`,
+  is picked when the structure is put on a day. The routes page (`backend/static/routelib.html`;
+  SP-693: now 路線 › 上傳的 at GET /api/v1/routes/uploaded/page, no longer a 課表 tab — the old GET
+  /routes/page redirects there, and 「我的路段」 are listed only on 路線 › 我跑過的, `routes.html`) lists the uploaded GPX routes (`training_routes`,
   `backend/engine/route_library.py`: upload / rename / delete / download, `<HOME>/route_gpx/<id>.gz`
   per tenant, the profile and SP-639 坡段表 cached) and 「我的路段」 (`engine/routes.py`'s segments
   and routes done ≥ 2 times, climbs first; their profile from the reference effort's compact track),

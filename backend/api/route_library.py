@@ -1,8 +1,9 @@
 """
-課表 › 路線 (SP-640; engine/route_library.py, static/routelib.html): the training routes, apart from
-the templates, and picking one for a day's structure.
+路線 › 上傳的 (SP-640, SP-693; engine/route_library.py, static/routelib.html): the training routes,
+apart from the templates, and picking one for a day's structure. The page is GET /api/v1/routes/uploaded/page
+(api/routes.py), the second tab of 路線 beside 我跑過的 (static/routes.html); it was 課表 › 路線 once.
 
-  GET    /api/v1/overview/plan/routes/page
+  GET    /api/v1/overview/plan/routes/page                 → 307 to /api/v1/routes/uploaded/page (old URL)
   GET    /api/v1/overview/plan/routes/library              {routes, limits} (a template's GPX moved here once)
   POST   /api/v1/overview/plan/routes/library              upload (multipart file, name?)
   GET    /api/v1/overview/plan/routes/library/{id}         {…, profile, table (the 坡段表 at the easy run)}
@@ -27,13 +28,13 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from backend.db.database import get_db
 from backend.i18n import _
-from backend.i18n.pages import render_page
 
 router = APIRouter(prefix="/api/v1/overview/plan", tags=["overview"])
 
@@ -50,10 +51,15 @@ async def _call(fn, *a, **kw):
         raise _err(e)
 
 
+UPLOADED_PAGE = "/api/v1/routes/uploaded/page"
+
+
 @router.get("/routes/page", include_in_schema=False)
-def routes_page():
-    """路線 (static/routelib.html, SP-640): the fourth tab of 課表."""
-    return render_page("routelib")
+def routes_page(request: Request):
+    """The old 課表 › 路線 URL (SP-640): the page is 路線 › 上傳的 now (SP-693). A bookmark's #g<id>
+    stays on the URL (the browser keeps the fragment); #m<id> is sent on to 我跑過的 by the page."""
+    q = request.url.query
+    return RedirectResponse(UPLOADED_PAGE + (f"?{q}" if q else ""), status_code=307)
 
 
 async def _env(body: Optional[dict], db: AsyncSession) -> dict:

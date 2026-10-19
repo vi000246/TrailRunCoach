@@ -260,8 +260,8 @@ def test_templates_page_is_the_third_tab(monkeypatch):
     with Env(monkeypatch) as e:
         p = e.c.get(f"{API}/templates/page")
         assert p.status_code == 200 and 'id="tm-we"' in p.text and "workout_editor.js" in p.text
-        # SP-640: 日曆 · 課表統計 · 範本 · 路線
-        assert p.text.count('class="mcard"') == 4 and 'href="/api/v1/overview/plan/templates/page" aria-current="page"' in p.text
+        # 日曆 · 課表統計 · 範本 (SP-693: 路線 left 課表 for its own page)
+        assert p.text.count('class="mcard"') == 3 and 'href="/api/v1/overview/plan/templates/page" aria-current="page"' in p.text
         for page in ("schedule", "compliance"):
             assert "/api/v1/overview/plan/templates/page" in e.c.get(f"{API}/{page}/page").text
     from backend.i18n import use_locale

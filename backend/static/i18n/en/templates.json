@@ -7,8 +7,6 @@
   "tabs.compliance_sub": "Planned vs actual, load",
   "tabs.templates": "Templates",
   "tabs.templates_sub": "Your own workout templates",
-  "tabs.routes": "Routes",
-  "tabs.routes_sub": "GPX and my segments",
   "title": "Workout templates",
   "lead": "Your templates show up in the workout editor's Insert template menu (by category); the built-in ones cite their source and are read-only: copy one to change it.",
   "new": "+ New template",

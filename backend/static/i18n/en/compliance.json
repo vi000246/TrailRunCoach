@@ -84,8 +84,6 @@
   "tabs.compliance_sub": "Planned vs actual, load",
   "tabs.templates": "Templates",
   "tabs.templates_sub": "Your own workout templates",
-  "tabs.routes": "Routes",
-  "tabs.routes_sub": "GPX and my segments",
   "period.phases": "Season plan phases",
   "period.phase_tip": "{label}: {start} – {end}",
   "ratio.title": "Load ratio (acute ÷ chronic)",
