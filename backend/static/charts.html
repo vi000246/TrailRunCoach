@@ -1529,8 +1529,8 @@ function drawInto(box, res) {
   if (res.range_note) box.insertAdjacentHTML("beforeend", `<p class="meta range-note">${esc(res.range_note)}</p>`);
   if (res.basis_note) box.insertAdjacentHTML("beforeend", `<p class="meta basis-note">${esc(res.basis_note)}</p>`);
   const rb = res.recent_bests;
-  // the gains are read off the chart (owner: no list of 「+32 W」 under it); only say why there's none
-  if (rb?.note && !rb.items?.length) box.insertAdjacentHTML("beforeend", `<p class="meta recent-note">${esc(rb.note)}</p>`);
+  // one plain sentence under the chart: what got better in the last 14 days, or why nothing did (SP-688)
+  if (rb?.note) box.insertAdjacentHTML("beforeend", `<p class="meta recent-note">${esc(rb.note)}</p>`);
   if (res.kind === "zones") drawZones(box, res);
   else if (res.kind === "targets") drawTargets(box, res);
   else if (res.kind === "z5gate") drawZ5Gate(box, res);

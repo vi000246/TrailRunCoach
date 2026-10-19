@@ -157,7 +157,10 @@ def test_custom_pd_chart_highlights_and_lists_the_improvements(api):
     # 1 min: 320 vs history's (20·400 + 40·250)/60 = 300 -> +20 W
     assert got[60] == 20
     assert 1800 not in got and 600 not in got
-    assert rb["note"].startswith("最近 14 天，") and "1 分鐘的功率比以前最好多了 20 W" in rb["note"]
+    assert rb["note"].startswith("最近 14 天，")
+    top3 = sorted(rb["items"], key=lambda i: -i["gain"])[:3]      # the sentence names the three biggest
+    assert all(f"{i['label']}" in rb["note"] and f"{i['gain']} W" in rb["note"] for i in top3)
+    assert rb["note"].count(" W") == min(3, len(rb["items"]))
     hl = j["series"][1]["data"]["points"]
     assert sum(p[1] is None for p in hl) == 1                # two bands, one break
 
