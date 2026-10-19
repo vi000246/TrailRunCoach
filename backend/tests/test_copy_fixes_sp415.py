@@ -160,7 +160,7 @@ _BACKUP_KEYS = ("backup.help", "backup.restore_help", "backup.fit_help", "backup
 
 def _backup_section() -> str:
     html = SETTINGS.read_text(encoding="utf-8")
-    m = re.search(r'<section id="backup">.*?</section>', html, re.S)
+    m = re.search(r'<section id="backup"[^>]*>.*?</section>', html, re.S)     # SP-711: starts `hidden`
     assert m, "備份 section not found"
     return m.group(0)
 

@@ -2580,6 +2580,7 @@
   "推估（RPE 1–10 對 55–110% CP 的表照用）": "Estimate (the RPE 1–10 to 55–110% CP table as is)",
   "用 RPE 當目標的步驟（技術地形、下坡）照「RPE 對 % CP 表 × 這個數」算強度，決定這段的訓練負荷（Training load）。本人值 = 你一年內有自評 RPE 的跑步：同一個 RPE 至少 3 次才算，實際強度比（Intensity）的中位數 ÷ 表上的值，依筆數平均；1 筆 = 一次有自評的跑步。自評是整趟的感覺（含暖身），所以是推估。只影響計畫的訓練負荷，不會改已推到手錶的課。": "A step with an RPE target (technical terrain, downhill) counts at \"the RPE-to-% CP table × this number\", which sets its training load. Your value = your runs with a self-rated RPE over the last year: an RPE value counts once it has at least 3 runs, its median actual intensity ÷ the table's value, averaged by the number of runs; 1 data point = one rated run. A rating is how the whole run felt (warm-up included), so this is an estimate. It only changes the plan's training load, never a workout already sent to the watch.",
   "只有站主可以使用 Debug API": "Only the site admin can use the debug API",
+  "只有站主可以使用伺服器備份": "Only the site admin can use the server backup",
   "plan_sessions 資料表（含刪除／取代的標記）；不含 COROS 推送紀錄": "the plan_sessions table (with the deleted / replaced markers); not the COROS push records",
   "這台沒有設定正式站（環境變數 {url}、{token}）": "This machine names no production server (environment variables {url}, {token})",
   "{url} 要是 https://（只有 localhost 可以用 http）": "{url} must be https:// (http only for localhost)",

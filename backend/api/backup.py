@@ -25,7 +25,22 @@ from backend.i18n import _
 from backend.settings.repository import SettingsRepository
 
 log = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/backup", tags=["backup"])
+
+
+def owner_only() -> None:
+    """SP-711: the server-side backup is the owner's alone (tenancy.OWNER_ONLY_CAPS `backup`): it
+    writes into any folder the server can write to and restores the whole DB. In sign-in mode every
+    other user (a member, an admin, a test account) gets 403 before anything is read or written —
+    their data is in the whole-server backup (accounts/server_backup.py) and `export:data`. The
+    owner tenant AND the cap: a tenant built without caps (the dataclass default) is not enough.
+    The daily automatic backup (auto_tick) is no route: the scheduler runs it as the owner."""
+    from backend import tenancy
+    t = tenancy.current()
+    if not (tenancy.is_owner(t) and t.can("backup")):
+        raise HTTPException(403, {"code": "OWNER_ONLY", "message": _("只有站主可以使用伺服器備份")})
+
+
+router = APIRouter(prefix="/api/v1/backup", tags=["backup"], dependencies=[Depends(owner_only)])
 UPLOAD_RE = re.compile(r"^[0-9a-f]{32}$")
 MAX_UPLOAD = 8 << 30
 

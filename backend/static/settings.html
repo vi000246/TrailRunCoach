@@ -674,7 +674,8 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     <p class="meta" data-i18n="settings.wsync.proxy">網站前面如果還有一層登入保護（例如 Cloudflare Access），手機的請求會被擋在外面：請管理者只對這一個網址開例外（token 仍然要對），或在捷徑多帶那層保護的服務 token。</p>
   </section>
 
-  <section id="backup">
+  <!-- SP-711: the server-side backup is the owner's alone (OWNER_ONLY_CAPS backup): hidden until CAN_BACKUP -->
+  <section id="backup" hidden>
     <h2>備份 <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.help" title="把資料庫（活動紀錄、課表、設定、傷病紀錄等）和你改過的檔案（賽季計畫、校正、標註、圖表檢視、路線名稱、上傳的 GPX）打包成一個 zip，存到下面設定的備份資料夾。這個資料夾在伺服器（執行 App 的那台機器）上，備份不會下載到你的手機或電腦。資料來源（COROS、Garmin、TrainingPeaks、intervals.icu）的登入憑證和記住的密碼不放進備份。伺服器上如果有雲端硬碟（iCloud Drive／OneDrive／Google 雲端硬碟／Dropbox）的資料夾，選它就由它們的同步程式自動上傳；App 不會登入任何雲端帳號。保留最近 7 天每天一份、加上最近 4 週每週一份，更舊的自動刪除——只會刪這個功能建立的備份檔，資料夾裡的其他檔案不會動。">?</button>
       <span class="pill" id="b-pill" hidden></span></h2>
     <div class="row" id="b-cloud"></div>
@@ -2401,6 +2402,9 @@ const bytes = (n) => n == null ? "–" : n < 1024 ? `${n} B` : n < 1048576 ? `${
   : n < 1073741824 ? `${(n / 1048576).toFixed(1)} MB` : `${(n / 1073741824).toFixed(2)} GB`;
 const jput = (url, body, method = "PUT") => j(url, { method, headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body) });
+// SP-711: only with the session's backup cap (the owner); a member never sees it nor calls the API
+const CAN_BACKUP = !!(window.TRC_SESSION && (window.TRC_SESSION.caps || []).includes("backup"));
+$("backup").hidden = !CAN_BACKUP;
 let BS = null;
 function renderBackup(s) {
   BS = s;
@@ -3043,7 +3047,8 @@ if (window.TRC_SESSION && TRC_SESSION.login && TRC_SESSION.login.signed_in) $("t
 tabFromHash();
 foldQ();
 
-loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadPz(); loadExclusions(); loadBackup(); loadArchive(); loadCalib(); loadCal();
+loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadPz(); loadExclusions(); if (CAN_BACKUP) loadBackup();
+loadArchive(); loadCalib(); loadCal();
 loadAccount();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 // 匯入 FIT (SP-323): the imported files sit in the 資料來源's folder, so its stats change too

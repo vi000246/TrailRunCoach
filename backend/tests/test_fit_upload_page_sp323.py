@@ -158,7 +158,7 @@ def test_the_picker_offers_files_and_a_folder_and_the_demo_lock_finds_it():
 
 def test_settings_and_the_activity_list_mount_it():
     s = (STATIC / "settings.html").read_text("utf-8")
-    sync = s[s.index('<section id="sync">'):s.index('<section id="backup">')]
+    sync = s[s.index('<section id="sync">'):s.index('<section id="backup"')]
     assert '<div id="fit-import"></div>' in sync and 'data-i18n="common.fitimport.open"' in sync
     assert '<script src="/api/v1/static/fitimport.js"></script>' in s
     assert 'FitImport.mount($("fit-import"), { listLink: true' in s

@@ -225,12 +225,23 @@ def _build_dataset(cfg_json: str, source: str = "wko5", stamp: str = "", shared:
 _dataset_cfg = _DatasetCache(_build_dataset)
 
 
+def drop_tenant_datasets() -> None:
+    """Drop the current tenant's cached Datasets only (SP-712): the key's last field is the
+    tenant's shared root (_dataset_key), so another user's Datasets — a ~50 s rebuild each — stay.
+    A demo sandbox maps to its base (the same shared root), as its Dataset does."""
+    mine = str(tenancy.current().shared)
+    for k in _dataset_cfg.entries():
+        if k[3] == mine:
+            _dataset_cfg.drop(k)
+
+
 def plan_changed(thresholds: bool) -> None:
     """Season plan edited. Event / phase edits only move goal lines, so the
     cached datasets just pick up the new plan; threshold edits change hrTSS
-    and zones everywhere, so the datasets are rebuilt."""
+    and zones everywhere, so the tenant's datasets are rebuilt (only its own:
+    SP-712 — one user's settings never cost everyone else a rebuild)."""
     if thresholds:
-        _dataset_cfg.cache_clear()
+        drop_tenant_datasets()
     # events / phases: Dataset.plan reads the tenant's plan.json per request
     # (memoised on its stamp), so nothing to push into the shared Datasets
 
@@ -2016,10 +2027,7 @@ def put_config(body: dict):
         raise MS.scope_error("admin")
     cfg = EngineConfig.from_dict({**EngineConfig.load().to_dict(), **body})
     cfg.save()
-    mine = str(tenancy.base_of().shared)
-    for k in _dataset_cfg.entries():
-        if k[3] == mine:
-            _dataset_cfg.drop(k)
+    drop_tenant_datasets()
     return {"config": cfg.to_dict()}
 
 
@@ -2053,7 +2061,7 @@ def approve_corrections(body: ApproveBody):
     """Apply exactly the proposals passed in — the approval step."""
     store = CorrectionStore()
     added = store.add(proposals_to_corrections(body.proposals))
-    _dataset_cfg.cache_clear()
+    drop_tenant_datasets()                  # the corrections file is the tenant's own (SP-712)
     return {"added": [asdict(c) for c in added], "total": len(store.items)}
 
 
@@ -2062,7 +2070,7 @@ def undo_correction(correction_id: str):
     store = CorrectionStore()
     if not store.remove(correction_id):
         raise HTTPException(404, "correction not found")
-    _dataset_cfg.cache_clear()
+    drop_tenant_datasets()
     return {"removed": correction_id, "total": len(store.items)}
 
 

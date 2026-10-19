@@ -32,7 +32,8 @@ def spy(tmp_path, monkeypatch):
     monkeypatch.setattr(API, "_estimate_dataset", lambda: None)
     monkeypatch.setattr(API, "hr_profile_view", lambda ds, today: {"ok": True})
     seen = {"cleared": 0, "replans": 0}
-    monkeypatch.setattr(WV._dataset_cfg, "cache_clear", lambda: seen.__setitem__("cleared", seen["cleared"] + 1))
+    # SP-712: a rebuild drops the tenant's own Datasets (drop_tenant_datasets), no longer every one
+    monkeypatch.setattr(WV, "drop_tenant_datasets", lambda: seen.__setitem__("cleared", seen["cleared"] + 1))
     monkeypatch.setattr(PA, "after_thresholds", lambda: seen.__setitem__("replans", seen["replans"] + 1))
     return seen
 

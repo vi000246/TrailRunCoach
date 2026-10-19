@@ -103,7 +103,7 @@ def test_a_new_test_re_zones_from_its_day(tmp_path, monkeypatch):
     tt = training_targets(ds, end)
     assert tt["cp"] == 210 and tt["aet"] == 144 and tt["aet_measured"]
     cleared = []
-    monkeypatch.setattr(WV._dataset_cfg, "cache_clear", lambda: cleared.append(1))
+    monkeypatch.setattr(WV, "drop_tenant_datasets", lambda: cleared.append(1))     # SP-712: the tenant's own
     WV.plan_changed(True)
     assert cleared == [1]
 

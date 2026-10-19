@@ -379,7 +379,7 @@ OUT = { ok: [ok.kind, ok.text, ok.act], fail: [fail.kind, fail.act, fail.text],
 
 def test_settings_puts_it_under_the_fit_import():
     s = (STATIC / "settings.html").read_text("utf-8")
-    sync = s[s.index('<section id="sync">'):s.index('<section id="backup">')]
+    sync = s[s.index('<section id="sync">'):s.index('<section id="backup"')]
     up = sync[sync.index('<div class="src" id="src-upload">'):]
     assert '<div id="fit-folder" hidden></div>' in up and up.index('id="fit-import"') < up.index('id="fit-folder"')
     assert '<script src="/api/v1/static/fitfolder.js"></script>' in s

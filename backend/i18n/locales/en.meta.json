@@ -9899,6 +9899,10 @@
     "draft": true,
     "src": "backend/api/debug.py"
   },
+  "只有站主可以使用伺服器備份": {
+    "draft": true,
+    "src": "backend/api/backup.py"
+  },
   "plan_sessions 資料表（含刪除／取代的標記）；不含 COROS 推送紀錄": {
     "draft": true,
     "src": "backend/api/debug.py"
