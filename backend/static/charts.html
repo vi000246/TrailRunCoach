@@ -197,7 +197,13 @@ aside .hint { font-size: 11.5px; color: var(--muted); margin: -2px 0 6px; }
   .crumb .c2, .crumb .c2 + .sep { display: none; }
 }
 @media (max-width: 520px) { .seg button .sub { display: none; } }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; position: relative; }
+/* SP-689: 「計算中」 while a toggle (配速／功率, 日／週, 近 N 天, variant, zone model) recomputes a drawn chart: one box
+   floating over the middle of the card (cardBusy), not a line appended under the chart — the layout does not move */
+.card-busy { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; pointer-events: none;
+  padding: 8px 18px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  box-shadow: 0 4px 18px rgba(0,0,0,.18); font-size: 13px; white-space: nowrap; }
+.card:has(> .card-busy) > :not(.card-busy):not(h2) { opacity: .55; transition: opacity .15s; }
 .card.wide { grid-column: 1 / -1; }
 .card h2 { font-size: 13px; margin: 0 0 4px; }
 .desc { color: var(--muted); font-size: 11px; margin: 0 0 6px; max-height: 3em; overflow: hidden; }
@@ -1364,13 +1370,30 @@ function variantToggle(card, res, pkey, rerender) {
     aria-pressed="${key === res.variant}">${esc(label)}</button>`).join("");
   seg.onclick = async (e) => {
     const b = e.target.closest("button[data-p]");
-    if (!b || b.dataset.p === card._res?.variant) return;
+    if (!segPick(seg, b)) return;
     try { localStorage.setItem(VARIANT_KEY, JSON.stringify({ ...variantPrefs(), [pkey]: b.dataset.p })); } catch {}
-    card.insertAdjacentHTML("beforeend", `<div class="loading">${esc(t("viewer.computing"))}</div>`);
-    await rerender();
-    if (ZOOM.card === card) fillZoom();
+    cardBusy(card);
+    if (await rerender() && ZOOM.card === card) fillZoom();
   };
   card.querySelector("h2").appendChild(seg);
+}
+// SP-689: a drawn card recomputing after a toggle: one 「計算中」 box over the middle of the card (and over the zoom
+// view when the card is zoomed), however many clicks; renderCard's redraw replaces the card's content (and the box)
+function cardBusy(card) {
+  for (const box of [card, ZOOM.card === card ? $("zoombody") : null]) {
+    if (box && !box.querySelector(":scope > .card-busy"))
+      box.insertAdjacentHTML("beforeend", `<div class="card-busy" role="status" aria-live="polite">${esc(t("viewer.computing"))}</div>`);
+  }
+}
+window.cardBusy = cardBusy;          // climb_vam.js
+function clearBusy(card) {
+  for (const box of [card, $("zoombody")]) box?.querySelector(":scope > .card-busy")?.remove();
+}
+// a segmented toggle's button picked at once (the newest choice, before its answer): false when it already was
+function segPick(seg, b) {
+  if (!b || b.classList.contains("on")) return false;
+  for (const x of seg.querySelectorAll("button[data-p]")) { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); }
+  return true;
 }
 function disposeCardCharts(card) {
   for (const el of card.querySelectorAll(".plot")) {
@@ -1382,11 +1405,15 @@ function disposeCardCharts(card) {
     inst.dispose();
   }
 }
+// → true when it drew the card; false when a newer request for the same card (a later click) or a new page load
+// made this one moot (SP-689: an older answer never overwrites a newer choice)
 async function renderCard(card, v, di, c, q, token, opts = {}) {
   const pkey = `${v.name}|${di}|${c.index}`;
   const period = periodPrefs()[pkey];
   const win = windowPrefs()[pkey];
   const basis = !S.usePower && c.power_basis ? "pace" : basisPrefs()[pkey];
+  const seq = card._seq = (card._seq || 0) + 1;
+  const moot = () => token !== loadToken || seq !== card._seq;
   try {
     const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`
       + (period && c.kind === "athlete" ? `&period=${period}` : "")
@@ -1396,7 +1423,7 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
       + (c.kind === "zones" && zsPrefs()[pkey] ? `&zsys=${encodeURIComponent(zsPrefs()[pkey])}` : "")
       + (c.kind === "climbvam" && window.cvQuery ? cvQuery(c) : "")    // climb_vam.js
       + (STALE_OK && opts.stale !== false ? "&stale=1" : ""));
-    if (token !== loadToken) return;
+    if (moot()) return false;
     if (res.pending) {
       // SP-394: a first import's older activities still back-filling and this chart reads them
       // (CTL's warm-up, a long range): no line until they are in; asked again every 15 s
@@ -1428,11 +1455,10 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
         aria-pressed="${p === res.x_period}">${lab}</button>`).join("");
       seg.onclick = async (e) => {
         const b = e.target.closest("button[data-p]");
-        if (!b || b.dataset.p === card._res?.x_period) return;
+        if (!segPick(seg, b)) return;
         savePeriod(pkey, b.dataset.p);
-        card.insertAdjacentHTML("beforeend", `<div class="loading">${esc(t("viewer.computing"))}</div>`);
-        await renderCard(card, v, di, c, q, loadToken);
-        if (ZOOM.card === card) fillZoom();
+        cardBusy(card);
+        if (await renderCard(card, v, di, c, q, loadToken) && ZOOM.card === card) fillZoom();
       };
       card.querySelector("h2").appendChild(seg);
     }
@@ -1447,11 +1473,10 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
         aria-pressed="${w === res.window}">${esc(t("viewer.n_days", { n: w }))}</button>`).join("");
       seg.onclick = async (e) => {
         const b = e.target.closest("button[data-p]");
-        if (!b || +b.dataset.p === card._res?.window) return;
+        if (!segPick(seg, b)) return;
         saveWindow(pkey, b.dataset.p);
-        card.insertAdjacentHTML("beforeend", `<div class="loading">${esc(t("viewer.computing"))}</div>`);
-        await renderCard(card, v, di, c, q, loadToken);
-        if (ZOOM.card === card) fillZoom();
+        cardBusy(card);
+        if (await renderCard(card, v, di, c, q, loadToken) && ZOOM.card === card) fillZoom();
       };
       card.querySelector("h2").appendChild(seg);
     }
@@ -1468,11 +1493,10 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
         aria-pressed="${b === res.basis}">${esc(res.basis_labels?.[b] || b)}</button>`).join("");
       seg.onclick = async (e) => {
         const b = e.target.closest("button[data-p]");
-        if (!b || b.dataset.p === card._res?.basis) return;
+        if (!segPick(seg, b)) return;
         saveBasis(pkey, b.dataset.p);
-        card.insertAdjacentHTML("beforeend", `<div class="loading">${esc(t("viewer.computing"))}</div>`);
-        await renderCard(card, v, di, c, q, loadToken);
-        if (ZOOM.card === card) fillZoom();
+        cardBusy(card);
+        if (await renderCard(card, v, di, c, q, loadToken) && ZOOM.card === card) fillZoom();
       };
       card.querySelector("h2").appendChild(seg);
     }
@@ -1480,14 +1504,18 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
     drawInto(card, res);
     if (res.stale) markStale(card, res.stale, async (giveUp) => {
       // gave up waiting: ask without stale, so this request computes it itself
-      await (giveUp ? renderCard(card, v, di, c, q, token, { stale: false }) : renderCard(card, v, di, c, q, token));
-      if (ZOOM.card === card) fillZoom();
+      const drew = await (giveUp ? renderCard(card, v, di, c, q, token, { stale: false }) : renderCard(card, v, di, c, q, token));
+      if (drew && ZOOM.card === card) fillZoom();
     });
     if (S.zoomAfter === c.index && token === loadToken) { S.zoomAfter = null; openZoom(card, zb); }
+    return true;
   } catch (e) {
+    if (moot()) return false;            // a newer request for this card is on its way: it says how it went
     console.error(c.title, e);
+    clearBusy(card);
     card.querySelector(".loading")?.remove();
     card.insertAdjacentHTML("beforeend", `<div class="loading st-err">${esc(t("viewer.error", { msg: e.message }))}</div>`);
+    return false;
   }
 }
 
@@ -1834,7 +1862,7 @@ function drawZones(card, res) {
     bar.innerHTML = `<label class="meta">${esc(t("viewer.zone_model"))} <select aria-label="${esc(t("viewer.zone_model"))}">${Z.choices.map((o) => `<option value="${esc(o.id)}"${o.id === Z.system ? " selected" : ""}>${esc(o.title)}</option>`).join("")}</select></label>${Z.estimate ? ` <span class="badge">${esc(t("viewer.est"))}</span>` : ""}`;
     bar.querySelector("select").onchange = (e) => {
       zsSave(pkey, e.target.value);
-      card.insertAdjacentHTML("beforeend", `<div class="loading">${esc(t("viewer.computing"))}</div>`);
+      cardBusy(card);
       renderCard(card, v, di, c, q, loadToken);
     };
     card.appendChild(bar);
@@ -1880,12 +1908,12 @@ function pzQuery(c) {
 }
 async function pzRefresh() {
   const cards = [...document.querySelectorAll("#grid .card")].filter((k) => k._ctx?.c.kind === "periodzones");
-  await Promise.all(cards.map((card) => {
-    card.insertAdjacentHTML("beforeend", `<div class="loading">${esc(t("viewer.computing"))}</div>`);
+  const drew = await Promise.all(cards.map((card) => {
+    cardBusy(card);
     const { v, di, c, q } = card._ctx;
-    return renderCard(card, v, di, c, q, loadToken);
+    return renderCard(card, v, di, c, q, loadToken).then((ok) => ok && card === ZOOM.card);
   }));
-  if (ZOOM.card?._ctx?.c.kind === "periodzones") fillZoom();
+  if (ZOOM.card?._ctx?.c.kind === "periodzones" && drew.some(Boolean)) fillZoom();
 }
 function pzDark() {
   const t = document.documentElement.dataset.theme;

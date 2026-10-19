@@ -1141,17 +1141,26 @@ def readiness_stamp() -> str:
         from backend.engine.panels import plan_projection as PJ
         t = today_local()
         return PJ.inputs(t, t + dt.timedelta(days=80))
-    rpe = safe(AT.load_recorded) or []
-    return json.dumps([today_local().isoformat(), safe(INJ.load_events), safe(B2B.load_accepted),
-                       [[r.get("start"), r.get("file"), r.get("rpe")] for r in rpe if isinstance(r, dict)],
-                       safe(plan_days)], default=str, sort_keys=True)
+    from backend.engine.wko5expr.datasource import settings_memo
+    with settings_memo():                      # read on every request, a cache hit too (SP-685)
+        rpe = safe(AT.load_recorded) or []
+        return json.dumps([today_local().isoformat(), safe(INJ.load_events), safe(B2B.load_accepted),
+                           [[r.get("start"), r.get("file"), r.get("rpe")] for r in rpe if isinstance(r, dict)],
+                           safe(plan_days)], default=str, sort_keys=True)
 
 
 def readiness_panel(ch: dict, ds: Dataset, b: float, e: float) -> dict:
     """The 賽前完備程度 cards, as of today (the range does not change them). SP-677: phase "build" (專項期
     page) = race_readiness.compute (① and ②, weeks 10 → 3) with the 減量期 card's link; phase "taper" (減量期
     page) = race_readiness.compute_taper (the countdown and four checks) with the 專項期 result's line and
-    the 專項期 card's link. The 課表 page on this week's Monday for 「安排課表」."""
+    the 專項期 card's link. The 課表 page on this week's Monday for 「安排課表」. The settings are read once for
+    the whole card (datasource.settings_memo, SP-685)."""
+    from backend.engine.wko5expr.datasource import settings_memo
+    with settings_memo():
+        return _readiness_panel(ch, ds, b, e)
+
+
+def _readiness_panel(ch: dict, ds: Dataset, b: float, e: float) -> dict:
     from backend.api.overview import READY_CARD, _chart_href_by_id
     from backend.engine import race_readiness as RD
     from backend.engine.quality_gate import SCHEDULE_PAGE

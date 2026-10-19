@@ -45,8 +45,9 @@ details.cvdet table { margin-top: 4px; font-size: 11.5px; }`;
   function rerender(card) {
     if (!card._ctx) return;
     const { v, di, c, q } = card._ctx;
-    card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
-    renderCard(card, v, di, c, q, loadToken).then(() => { if (ZOOM.card === card) fillZoom(); });
+    // SP-689: the charts page's one floating 「計算中」 box (charts.html cardBusy), and an older answer never redraws
+    if (window.cardBusy) window.cardBusy(card); else card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+    renderCard(card, v, di, c, q, loadToken).then((drew) => { if (drew !== false && ZOOM.card === card) fillZoom(); });
   }
 
   function help(card, res) {

@@ -32,8 +32,18 @@
     const st = document.createElement("style");
     st.id = "rd-style";
     st.textContent = `
-.rd { --rd-good: var(--ok, #15803d); --rd-bad: var(--err, #b91c1c); --rd-warn: var(--warn, #b45309); --rd-tap: #7c3aed;
+.rd { --rd-good: var(--ok, #15803d); --rd-bad: var(--err, #b91c1c); --rd-warn: var(--warn, #b45309);
+  /* SP-685: the taper's colour is a light, bright cyan (the 減量期 page's 每週時數 bars are cyan too), not purple:
+     --rd-tap fills, --rd-tap-ink its text / thin marks (readable on the panel), --rd-tap-big the big 「賽前 N 天」,
+     --rd-tap-on the text on a fill.
+     --rd-on: the text on a filled chip (white on the light theme, the dark panel on the dark one, where the
+     fills are light). --rd-rule: the table's lines, --rd-head: the 賽前第幾週 row. */
+  --rd-tap: #22c3dd; --rd-tap-ink: #0e7490; --rd-tap-big: #0891b2; --rd-tap-on: #083344; --rd-on: var(--panel, #fff);
+  --rd-rule: color-mix(in srgb, var(--muted) 22%, transparent); --rd-head: var(--accent-soft);
   container-type: inline-size; display: grid; gap: 10px; min-width: 0; font-size: 13px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rd { --rd-tap: #22d3ee; --rd-tap-ink: #67e8f9; --rd-tap-big: #22d3ee;
+  --rd-rule: color-mix(in srgb, var(--muted) 30%, transparent); } }
+:root[data-theme="dark"] .rd { --rd-tap: #22d3ee; --rd-tap-ink: #67e8f9; --rd-tap-big: #22d3ee; --rd-rule: color-mix(in srgb, var(--muted) 30%, transparent); }
 .rd-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .rd-head b { font-size: 14px; }
 .rd-lv { font-size: 11px; padding: 0 8px; border-radius: 999px; border: 1px solid currentColor; }
@@ -43,7 +53,7 @@
 .rd-here .k { color: var(--accent); font-size: 12px; font-weight: 650; width: 100%; }
 .rd-chip { border: 1.5px solid var(--accent); color: var(--accent); background: var(--panel); border-radius: 999px;
   padding: 1px 10px; font-size: 12.5px; }
-.rd-sched { margin-left: auto; color: #fff; background: var(--accent); border-radius: 6px; padding: 3px 10px;
+.rd-sched { margin-left: auto; color: var(--rd-on); background: var(--accent); border-radius: 6px; padding: 3px 10px;
   text-decoration: none; font-weight: 650; font-size: 12.5px; white-space: nowrap; }
 .rd-rail { display: flex; align-items: stretch; gap: 8px; }
 .rd-gate { flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit; border: 1px solid var(--line);
@@ -54,8 +64,8 @@
 .rd-gate .g1 { display: flex; align-items: center; gap: 8px; }
 .rd-gate .num { width: 22px; height: 22px; flex: none; border-radius: 50%; display: inline-flex; align-items: center;
   justify-content: center; font-weight: 700; font-size: 12px; border: 1.5px solid var(--muted); color: var(--muted); }
-.rd-gate.open .num { background: var(--accent); border-color: var(--accent); color: #fff; }
-.rd-gate.passed .num { background: var(--rd-good); border-color: var(--rd-good); color: #fff; }
+.rd-gate.open .num { background: var(--accent); border-color: var(--accent); color: var(--rd-on); }
+.rd-gate.passed .num { background: var(--rd-good); border-color: var(--rd-good); color: var(--rd-on); }
 .rd-gate .nm { font-weight: 700; white-space: nowrap; }
 .rd-gate .st { margin-left: auto; font-size: 11px; padding: 0 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
 .rd-gate.open .st { color: var(--accent); } .rd-gate.passed .st { color: var(--rd-good); }
@@ -66,27 +76,34 @@
 .rd-pbar b { position: absolute; top: -3px; left: 66.6%; width: 2px; height: 11px; background: var(--text); }
 .rd-desk { overflow-x: auto; }
 .rd-cal { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
-.rd-cal th, .rd-cal td { padding: 4px 3px; text-align: center; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
-.rd-cal thead th { color: var(--muted); font-weight: 500; font-size: 11.5px; line-height: 1.3; }
+.rd-cal th, .rd-cal td { padding: 4px 3px; text-align: center; border-bottom: 1px solid var(--rd-rule); }
+/* SP-685: the 賽前第幾週 row has its own band (the accent's soft tint) and a firm line under it, so it does not
+   read as one more item row; the current week's column is a stronger tint of the same colour */
+.rd-cal thead th { color: var(--text); background: var(--rd-head); font-weight: 600; font-size: 11.5px; line-height: 1.3;
+  padding: 6px 3px; border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.rd-cal thead th span { color: var(--muted); }
+.rd-cal thead th:first-child { border-top-left-radius: 8px; } .rd-cal thead th:last-child { border-top-right-radius: 8px; }
 .rd-cal th.lab, .rd-cal td.lab { text-align: left; padding-left: 6px; }
+.rd-cal thead th.lab { color: var(--accent); font-weight: 700; padding-left: 8px; }
 .rd-cal td.lab { min-width: 150px; max-width: 240px; }
 .rd-cal td.lab small { display: block; color: var(--muted); font-size: 11px; }
 .rd-cal .cw { background: color-mix(in srgb, var(--accent) 9%, transparent); }
-.rd-cal thead th.cw { color: var(--accent); font-weight: 700; }
-.rd-cal tr.grp td { background: color-mix(in srgb, var(--line) 25%, transparent); text-align: left; font-weight: 700;
-  padding: 6px; border-top: 1px solid var(--line); }
+.rd-cal thead th.cw { color: var(--accent); font-weight: 800; background: color-mix(in srgb, var(--accent) 22%, var(--panel)); }
+.rd-cal thead th.cw span { color: var(--accent); }
+.rd-cal tr.grp td { background: color-mix(in srgb, var(--muted) 12%, transparent); text-align: left; font-weight: 700;
+  padding: 6px; border-top: 1px solid var(--rd-rule); }
 .rd-cal tr.grp td span { font-weight: 400; color: var(--muted); margin-left: 6px; }
 .rd-cal tr.locked td:not(.lab), .rd-cal tr.locked td.lab { opacity: .5; }
 .rd-cal tr.dim { opacity: .3; }
 .rd-ok { color: var(--rd-good); }
 .rd-c { display: inline-flex; min-width: 26px; height: 22px; padding: 0 4px; border-radius: 11px; align-items: center;
   justify-content: center; font-size: 11px; font-weight: 700; cursor: pointer; border: 0; font-family: inherit; }
-.rd-c.s-done { background: var(--rd-good); color: #fff; }
+.rd-c.s-done { background: var(--rd-good); color: var(--rd-on); }
 .rd-c.s-due { border: 2px solid var(--accent); color: var(--accent); background: var(--panel); }
 .rd-c.s-miss { background: color-mix(in srgb, var(--rd-bad) 16%, transparent); color: var(--rd-bad); }
-.rd-c.s-fut { border: 1.5px dashed var(--line); color: var(--muted); font-weight: 500; background: transparent; }
-.rd-c.s-tap { background: color-mix(in srgb, var(--rd-tap) 14%, transparent); color: var(--rd-tap); }
-.rd-c.s-unk { background: color-mix(in srgb, var(--line) 45%, transparent); color: var(--muted); }
+.rd-c.s-fut { border: 1.5px dashed color-mix(in srgb, var(--muted) 60%, transparent); color: var(--muted); font-weight: 500; background: transparent; }
+.rd-c.s-tap { background: color-mix(in srgb, var(--rd-tap) 16%, transparent); color: var(--rd-tap-ink); }
+.rd-c.s-unk { background: color-mix(in srgb, var(--muted) 20%, transparent); color: var(--muted); }
 .rd-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11.5px; color: var(--muted); margin-top: 8px; align-items: center; }
 .rd-legend .rd-c { min-width: 20px; height: 16px; font-size: 9px; cursor: default; }
 .rd-detail { margin-top: 8px; background: color-mix(in srgb, var(--line) 18%, var(--panel)); border: 1px solid var(--line);
@@ -99,14 +116,14 @@
 .rd-mlist .empty { color: var(--muted); padding: 4px 0; }
 .rd-gr { font: inherit; font-size: 11px; color: var(--accent); background: none; border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   border-radius: 999px; padding: 0 7px; margin-left: 6px; cursor: pointer; text-decoration: none; white-space: nowrap; }
-.rd-gr.on { background: var(--accent); color: #fff; }
+.rd-gr.on { background: var(--accent); color: var(--rd-on); }
 .rd-fig { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--panel); }
 .rd-fig .fh { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 4px; }
 .rd-fig .fh b { font-size: 13px; } .rd-fig .note { color: var(--muted); font-size: 12px; }
 .rd-fig .keys { display: inline-flex; gap: 4px; margin-left: auto; }
 .rd-fig .keys button { font: inherit; font-size: 11.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
   border-radius: 6px; padding: 0 8px; cursor: pointer; }
-.rd-fig .keys button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.rd-fig .keys button.on { background: var(--accent); border-color: var(--accent); color: var(--rd-on); }
 .rd-fig svg { width: 100%; height: auto; display: block; }
 .rd-fig svg text { font-size: 10px; fill: var(--muted); }
 .rd-foot { padding-top: 8px; border-top: 1px dashed var(--line); display: flex; gap: 6px 16px; flex-wrap: wrap; }
@@ -121,14 +138,14 @@
 .rd-mhint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
 .rd-go { color: var(--accent); text-decoration: none; margin-left: auto; }
 .rd-count { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
-.rd-count .big { font-size: 30px; font-weight: 800; color: var(--rd-tap); line-height: 1.2; }
+.rd-count .big { font-size: 30px; font-weight: 800; color: var(--rd-tap-big); line-height: 1.2; }
 .rd-count .meta { color: var(--muted); }
 .rd-days { display: flex; gap: 3px; min-width: 0; }
-.rd-days span { flex: 1; min-width: 0; height: 26px; border-radius: 5px; background: color-mix(in srgb, var(--rd-tap) 13%, var(--panel));
-  color: var(--rd-tap); font-size: 11px; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; }
-.rd-days span.past { background: var(--rd-tap); color: #fff; }
-.rd-days span.today { outline: 2px solid var(--rd-tap); outline-offset: -2px; background: var(--panel); font-weight: 700; }
-.rd-days span.race { background: var(--warn, #b45309); color: #fff; font-weight: 700; }
+.rd-days span { flex: 1; min-width: 0; height: 26px; border-radius: 5px; background: color-mix(in srgb, var(--rd-tap) 16%, var(--panel));
+  color: var(--rd-tap-ink); font-size: 11px; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; }
+.rd-days span.past { background: var(--rd-tap); color: var(--rd-tap-on); }
+.rd-days span.today { outline: 2px solid var(--rd-tap-ink); outline-offset: -2px; background: var(--panel); font-weight: 700; }
+.rd-days span.race { background: var(--warn, #b45309); color: var(--rd-on); font-weight: 700; }
 .rd-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .rd-chk { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel); min-width: 0; }
 .rd-chk .h { display: flex; align-items: center; gap: 6px; font-weight: 700; flex-wrap: wrap; }
@@ -139,9 +156,9 @@
 .rd-chk .now { font-size: 22px; font-weight: 800; margin-top: 4px; }
 .rd-chk .tg { color: var(--muted); font-size: 12px; }
 .rd-chk .todo { font-size: 13px; margin-top: 4px; color: var(--rd-warn); }
-.rd-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--line) 45%, transparent); position: relative; margin: 8px 0 4px; }
-.rd-bar .band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--rd-tap) 30%, transparent); border-radius: 4px; }
-.rd-bar .pt { position: absolute; top: -4px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: var(--rd-tap); }
+.rd-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 18%, transparent); position: relative; margin: 8px 0 4px; }
+.rd-bar .band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--rd-tap) 50%, transparent); border-radius: 4px; }
+.rd-bar .pt { position: absolute; top: -4px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: var(--rd-tap-ink); }
 .rd-bar .pt.warn { background: var(--rd-warn); }`;
     document.head.appendChild(st);
   }
@@ -228,7 +245,7 @@
     st.textContent = `
 .rd-count .big.g { color: var(--rd-good); }
 .rd-days.g span { background: color-mix(in srgb, var(--rd-good) 14%, var(--panel)); color: var(--rd-good); }
-.rd-days.g span.past { background: var(--rd-good); color: #fff; }
+.rd-days.g span.past { background: var(--rd-good); color: var(--rd-on); }
 .rd-days.g span.today { outline-color: var(--rd-good); background: var(--panel); }
 .rd-days.g span.base { background: var(--accent-soft); color: var(--accent); flex: 1.6; }
 .rd-chk .paths { margin-top: 6px; display: grid; gap: 2px; font-size: 12.5px; }

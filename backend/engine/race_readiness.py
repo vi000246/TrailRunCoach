@@ -989,8 +989,14 @@ def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = 
     from backend.engine import race_activities as RA
     ev_days |= {_d(a["date"]) for a in _safe(lambda: RA.race_activities(ds, lo, today, plan=plan, today=today), [])
                 if a["priority"] != "A" and (a["source"] == "manual" or a["priority"] in ("B", "C"))}
+    kinds: dict = {}                        # one classification per activity (the tests, then the self-ratings)
+
+    def kind_of(w):
+        if w.idx not in kinds:
+            kinds[w.idx] = O.session_of(ds, w).get("type")
+        return kinds[w.idx]
     out["tests"] = [O.wdate(w) for w in O.workouts_between(ds, lo, today + dt.timedelta(days=1))
-                    if O.wdate(w) in ev_days or (O.session_of(ds, w).get("type") or "").endswith("test")]
+                    if O.wdate(w) in ev_days or (kind_of(w) or "").endswith("test")]
     recorded = _safe(AT.load_recorded, [])
     rpe = []
     for w in O.workouts_between(ds, lo, today + dt.timedelta(days=1)):
@@ -998,7 +1004,7 @@ def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = 
             continue
         r = AT.recorded_of(recorded, w.entry.start, getattr(w.entry, "file", None)) if recorded else None
         if r and r.get("rpe") is not None:
-            rpe.append({"date": O.wdate(w), "kind": O.session_of(ds, w).get("type") or O.category(w), "rpe": r["rpe"]})
+            rpe.append({"date": O.wdate(w), "kind": kind_of(w) or O.category(w), "rpe": r["rpe"]})
     out["rpe"] = rpe
     out["first_day"] = _safe(lambda: day_to_date(min(w.day for w in ds.workouts)), None)
     return out
@@ -1039,7 +1045,14 @@ def _taper_days(e) -> int:
 
 
 def compute(plan, ds, today: dt.date, predict=None) -> dict:
-    """The 專項期 card's board of the next A race from the Dataset (SP-651's panel calls this)."""
+    """The 專項期 card's board of the next A race from the Dataset (SP-651's panel calls this); the settings
+    are read once for the whole card (datasource.settings_memo, SP-685)."""
+    from backend.engine.wko5expr.datasource import settings_memo
+    with settings_memo():
+        return _compute(plan, ds, today, predict)
+
+
+def _compute(plan, ds, today: dt.date, predict=None) -> dict:
     from backend.engine import b2b as B2B
     from backend.engine import primary_sport as PSP
     rc, e = _next_race(plan, today, predict)
@@ -1056,6 +1069,12 @@ def compute(plan, ds, today: dt.date, predict=None) -> dict:
 def compute_taper(plan, ds, today: dt.date, predict=None, build=None) -> dict:
     """The 減量期 card of the next A race from the Dataset (SP-677): only its four checks. `build`: the
     專項期 board's stage summary for the line at the bottom (the caller's, see readiness_panel)."""
+    from backend.engine.wko5expr.datasource import settings_memo
+    with settings_memo():
+        return _compute_taper(plan, ds, today, predict, build)
+
+
+def _compute_taper(plan, ds, today: dt.date, predict=None, build=None) -> dict:
     rc, e = _next_race(plan, today, predict)
     if rc is None:
         return taper(None, today, [])

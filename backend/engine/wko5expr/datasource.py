@@ -14,6 +14,8 @@ removed FITs, WKO5 rewrote its index), so an lru_cache keyed on it rebuilds.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import sqlite3
 import threading
@@ -33,25 +35,57 @@ def _db_path() -> Optional[Path]:
         return None
 
 
+_SETTINGS_MEMO: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("settings_memo", default=None)
+_NO_ROW = object()
+
+
+@contextlib.contextmanager
+def settings_memo():
+    """Inside: read_setting reads each (DB, user, key) once and serves the stored text again (each caller
+    still gets its own parsed copy). For one card's computation (SP-685: the 賽前準備 / 減量檢查 cards
+    classify every activity of ten weeks, and each classification read the same settings — the 課表
+    偏好, the HR account, the data source … — opening the DB hundreds of times). Outside it every call
+    reads the DB as before; nested scopes share the outer memo."""
+    tok = _SETTINGS_MEMO.set({}) if _SETTINGS_MEMO.get() is None else None
+    try:
+        yield
+    finally:
+        if tok is not None:
+            _SETTINGS_MEMO.reset(tok)
+
+
+def _setting_row(db: Path, key: str, user_id: int):
+    """The stored value_json text, _NO_ROW when there is none; raises sqlite3.Error."""
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        row = con.execute("SELECT value_json FROM user_settings WHERE user_id=? AND key=?",
+                          (user_id, key)).fetchone()
+    finally:
+        con.close()
+    return row[0] if row else _NO_ROW
+
+
 def read_setting(key: str, default=None, user_id: int = 1):
     """Synchronous, read-only lookup in the settings store (user_settings);
-    `default` when the DB, table or row is missing."""
+    `default` when the DB, table or row is missing. Memoised inside settings_memo()."""
     db = _db_path()
     if db is None or not db.exists():
         return default
-    try:
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    memo = _SETTINGS_MEMO.get()
+    mk = (str(db), user_id, key)
+    if memo is not None and mk in memo:
+        raw = memo[mk]
+    else:
         try:
-            row = con.execute("SELECT value_json FROM user_settings WHERE user_id=? AND key=?",
-                              (user_id, key)).fetchone()
-        finally:
-            con.close()
-    except sqlite3.Error:
-        return default
-    if not row:
+            raw = _setting_row(db, key, user_id)
+        except sqlite3.Error:
+            return default
+        if memo is not None:
+            memo[mk] = raw
+    if raw is _NO_ROW:
         return default
     try:
-        return json.loads(row[0])
+        return json.loads(raw)
     except ValueError:
         return default
 
