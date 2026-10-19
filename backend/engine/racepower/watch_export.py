@@ -17,11 +17,11 @@ Two ways to end a step:
 
 Targets per leg (seg_targets.chart_rows): power ± 3 % where power is valid (road;
 trail flat / runnable 3–8 %), the HR cap on steep / walked climbs (and wherever there
-is no power), nothing on trail descents (控制、安全), pace on a road with no CP. A trail /
+is no power), nothing on trail descents (the step named 下坡), pace on a road with no CP. A trail /
 百岳 leg that is mostly steep / walked climbing (seg_targets.kind_of steep_climb) never
 gets the estimated power or a pace: the HR cap, else no target (自由). A 百岳 plan (單日 /
 單攻 only: multi_day blocks a multi-day trip) gets heart rate only on every leg — never power
-or pace (no power meter for 百岳); descents 控制、安全. When a leg merges
+or pace (no power meter for 百岳); descents named 下坡. When a leg merges
 segments of different kinds, the kind with the most time decides; merged power is
 time-weighted. Pure functions on the /plan payload.
 
@@ -207,7 +207,7 @@ def _target0(pc: dict, plan_type: str) -> tuple[dict, str]:
     kind = max(pc["kd"].items(), key=lambda kv: kv[1])[0] if pc.get("kd") else ""
     if plan_type == "baiyue":
         # 百岳 (單攻): heart rate only — no power meter, and pace is no target with a pack;
-        # descents 控制、安全 as on a trail, without a cap the step is open (自由)
+        # descents without a target as on a trail, without a cap the step is open (自由)
         if basis == "safe" or pc["group"] == "descent":
             return {"type": "none"}, "safe"
         if pc["hr"]:
@@ -294,7 +294,7 @@ def steps_for(plan: dict, rows: list[dict], *, mode: Optional[str] = None, stops
             name = f"{pc['start_km']:.1f}–{pc['end_km']:.1f} km"
             dur = {"type": "distance", "value": int(max(MIN_DIST_STEP_M, round(pc["dist_m"])))}
         if basis == "safe":
-            name += _(" 控制、安全")
+            name += " " + _("下坡")              # SP-700: just 下坡 (was 「控制、安全」)
         items.append({"id": f"r{j + 1}", "kind": "work", "dur": dur, "target": tg, "note": name[:WS.MAX_NOTE]})
         out_legs.append({"name": name[:WS.MAX_NOTE], "start_km": pc["start_km"], "end_km": pc["end_km"], "t": pc["t"],
                          "gain_m": pc["gain_m"], "loss_m": pc["loss_m"], "basis": basis, "target": tg})

@@ -37,7 +37,8 @@ def test_trail_targets_follow_the_policy():
     assert any("心率上限 165" in c["text"] for c in run["chips"])                     # ≤ 3 h: LTHR cap
     assert steep["basis"] == "hr" and steep["chips"][0]["text"] == "心率 ≤ 165"
     assert steep["vam"] == approx(300 / 1200 * 3600) and any("VAM 900" in c["text"] for c in steep["chips"])
-    assert down["basis"] == "none" and down["text"] == "控制、安全" and down["ref"] == ["配速參考 6:00 /km"]
+    # SP-700: no 「控制、安全」 chip on a descent
+    assert down["basis"] == "none" and down["chips"] == [] and down["text"] == "—" and down["ref"] == ["配速參考 6:00 /km"]
     assert flat["basis"] == "power" and segs[0]["target"]["n"] == 1
     # a long race caps at AeT
     plan["summary"]["time_s"] = 5 * 3600.0
@@ -49,7 +50,7 @@ def test_baiyue_targets_are_hr_and_vam_never_pace():
     segs = [seg(0.15, i=1, day=1), seg(-0.15, i=2, day=1), seg(0.0, i=3, day=2)]
     t = ST.plan_targets({"type": "baiyue", "segments": segs, "summary": {"hr_cap": 140.0}}, aet=140.0)
     assert t[0]["chips"][0]["text"] == "心率 ≤ 140" and "VAM" in t[0]["text"]
-    assert t[1]["text"] == "控制、安全" and t[2]["basis"] == "hr"
+    assert t[1]["chips"] == [] and t[1]["text"] == "—" and t[2]["basis"] == "hr"
     assert all(not x["ref"] and "配速" not in x["text"] for x in t)
 
 
@@ -75,7 +76,7 @@ def test_api_trail_plan_carries_the_targets(client):  # noqa: F811
     assert any(x["fuel_action"] for x in p["seg_targets"])
     tgs = [s["target"] for s in p["segments"]]
     assert {t["basis"] for t in tgs} >= {"hr", "none"}
-    assert any("控制、安全" in t["text"] for t in tgs)
+    assert all("控制、安全" not in t["text"] for t in tgs)       # SP-700
     road = client.post("/api/v1/racepower/plan", json={"type": "road", "distance_km": 10}).json()
     assert road["seg_targets"] is None
 

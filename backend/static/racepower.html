@@ -197,7 +197,13 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margi
 /* effort bar */
 .ebar { position: relative; height: 30px; border-radius: 6px; display: flex; overflow: hidden; cursor: ew-resize; touch-action: none;
   user-select: none; touch-action: none; margin: 6px 0 2px; }
+.ebar.ro { cursor: default; filter: grayscale(1); opacity: .55; }
 .busy { padding: 4px 0; color: var(--accent, #1565c0); }
+/* SP-697: the recompute line floats (fixed, bottom centre) — inserting it into the page moved the 努力度 bar
+   under the pointer between two drags */
+#recalc-busy { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 50; padding: 6px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  max-width: calc(100vw - 32px); }
 .ebar > div.z { height: 100%; display: grid; place-items: center; font-size: 12px; color: #fff; font-weight: 600; }
 .ebar .band { position: absolute; top: 0; bottom: 0; background: rgba(255,255,255,.35); pointer-events: none; }
 .ebar .needle { position: absolute; top: -4px; bottom: -4px; width: 4px; margin-left: -2px; background: var(--text); border-radius: 2px;
@@ -533,7 +539,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
 
   <section id="profile-sec" class="tab-calc hidden">
     <h2><span data-i18n="racepower.chart.title">分段目標</span> <span class="meta" id="profile-sub"></span><span id="profile-est"></span>
-      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.chart.tip">橫軸是距離（公里），縱軸一次看一種：配速、功率或心率。淺色底是海拔剖面。每段的目標由模型依坡度算：可跑的坡（3–8 %）和平路看功率；陡坡（> 8 %）或要走的段看心率上限；越野的下坡不看功率也不看心率，求控制、安全，所以那幾段在功率／心率圖上是空的。長距離（> 3 小時）的心率上限壓在 AeT。滑過圖或點表格看每段的細節。</span></span></h2>
+      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.chart.tip">橫軸是距離（公里），縱軸一次看一種：配速、功率或心率。淺色底是海拔剖面。每段的目標由模型依坡度算：可跑的坡（3–8 %）和平路看功率；陡坡（> 8 %）或要走的段看心率上限；越野的下坡不看功率也不看心率，所以那幾段在功率／心率圖上是空的。長距離（> 3 小時）的心率上限壓在 AeT。滑過圖或點表格看每段的細節。</span></span></h2>
     <div class="note hidden" id="pole-line" data-rh="RC24"></div>
     <div id="course-map-wrap" class="hidden"><div class="cmap" id="course-map"></div><div class="maphint" id="course-map-hint" hidden></div>
       <div class="legend" id="course-map-legend"></div><div class="legend" id="course-map-ground"></div></div>
@@ -679,7 +685,7 @@ async function errText(r) {
   return `${r.status} ${t.slice(0, 300)}`;
 }
 async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) { const e = new Error(await errText(r)); e.status = r.status; throw e; } return r.json(); }
-const post = (url, body) => j(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const post = (url, body, signal) => j(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
 const ls = { get(k, d) { try { const v = localStorage.getItem("racepower." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("racepower." + k, JSON.stringify(v)); } catch {} } };
 
@@ -756,6 +762,7 @@ let ALTD = null;                          // /altitude-acclimatisation for the r
 let HIKEMETA = null;                      // /hike-meta rows
 let COURSE = ls.get("course", null);      // {course_id, name, km, gain_m} — the file itself is not stored
 let LOCKS = {};                           // seg index -> power
+let LOCK_AT = {};                         // seg index -> {km, n}: where the locked segment started and how many there were (SP-700)
 let SPLITS = [];                          // day split km (百岳)
 let TERRAIN = {};                         // seg index -> terrain key
 let SEL = new Set(), HOVER = null;        // selected segments (click; shift+click adds / removes) and the hovered one
@@ -984,7 +991,7 @@ async function loadEventGpx(eid, keep = false) {          // keep: the restored 
     const c = await post(`${API}/course/event/${encodeURIComponent(eid)}`, { split: S.split, ...Object.fromEntries(courseOpts(false)) });
     COURSE = { course_id: c.course_id, event_id: eid, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null,
       group: c.schedule || null };    // SP-577: the Cairn timetable kept with the event
-    ls.set("course", COURSE); if (!keep) { LOCKS = {}; TERRAIN = {}; SPLITS = c.day_splits_km || []; }
+    ls.set("course", COURSE); if (!keep) { LOCKS = {}; LOCK_AT = {}; TERRAIN = {}; SPLITS = c.day_splits_km || []; }
     NIGHTS = c.overnights || null;
     CAIRN_NIGHTS = c.gpx?.source?.kind === "cairn" ? (c.gpx.source.nights || null) : null;   // SP-535 / 537
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
@@ -1169,7 +1176,7 @@ async function uploadGpx(file) {
     LAST_FILE = file;
     COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null };
     // SP-533: the camp / hut waypoints are candidates (renderSplitCands), never day ends by themselves
-    ls.set("course", COURSE); LOCKS = {}; SPLITS = []; TERRAIN = {}; NIGHTS = c.overnights || null; CAIRN_NIGHTS = null;
+    ls.set("course", COURSE); LOCKS = {}; LOCK_AT = {}; SPLITS = []; TERRAIN = {}; NIGHTS = c.overnights || null; CAIRN_NIGHTS = null;
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
     STOP_SUGG = c.stop_suggestions || [];
     S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); renderNightsAsk(); schedule(); autoWeather();
@@ -1203,7 +1210,7 @@ async function importCairn() {
       info = c.cairn; days = c.days; LAST_FILE = null;
       COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null, cairn: true,
         group: c.cairn?.schedule || null };
-      ls.set("course", COURSE); LOCKS = {}; TERRAIN = {}; NIGHTS = null; SPLITS = [...(c.day_splits_km || [])];
+      ls.set("course", COURSE); LOCKS = {}; LOCK_AT = {}; TERRAIN = {}; NIGHTS = null; SPLITS = [...(c.day_splits_km || [])];
       $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
       STOP_SUGG = c.stop_suggestions || [];
       S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); renderNightsAsk();
@@ -1542,7 +1549,7 @@ function planBody(extra = {}) {
     strategy: { kind: S.strategy, amount: S.strategy === "even" ? 0 : Number($("amount").value) / 100 },
     hills: { up: (num("hup") ?? 5) / 100, down: (num("hdown") ?? 10) / 100 }, acclimatisation: accl(),
     effort_target: Number(S.effort), wbal: null,
-    locks: Object.entries(LOCKS).map(([seg, power]) => ({ seg: +seg, power })), day_splits_km: SPLITS,
+    locks: Object.entries(LOCKS).map(([seg, power]) => ({ seg: +seg, power, ...(LOCK_AT[seg] || {}) })), day_splits_km: SPLITS,
     terrain: TERRAIN, hourly_heat: $("hourlyheat").checked && !tempOverridden(),
     // SP-257: the climatology's rows go even with per-segment heat off: the plan widens its daytime To to the hours on course
     hourly: !tempOverridden() && ($("hourlyheat").checked || WX?.provider === "climatology") ? (WX?.hourly || null) : null,
@@ -1607,20 +1614,27 @@ function renderAll() {
   renderStops(); renderExportBtn(); renderSurface(); renderTerrainDiff(); renderRain(); fillSleepDefaults();
   if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
 }
-let RUN_SEQ = 0;
+let RUN_SEQ = 0, RUN_CTL = null;
 async function run() {
   if (!INP) return;
   const miss = markRequired();
-  if (miss.length) { $("results").innerHTML = missingHtml(miss); return; }
+  if (miss.length) { busyOff(); $("results").innerHTML = missingHtml(miss); return; }
   const seq = ++RUN_SEQ;
+  // SP-697: a newer run cancels the one still on its way; any answer of an older run (a result or an
+  // error) is dropped by its sequence number, so it never overwrites the newer one
+  RUN_CTL?.abort();
+  const ctl = RUN_CTL = typeof AbortController === "function" ? new AbortController() : null;
   try {
-    const p = await post(`${API}/plan`, planBody());
+    const p = await post(`${API}/plan`, planBody(), ctl?.signal);
     if (seq !== RUN_SEQ) return;                 // a newer run started meanwhile
     PLAN = p; LAST = PLAN.v1;
+    // SP-700: locks the new split no longer matches (the server ignored them and said so) are forgotten
+    (PLAN.summary?.locks_dropped || []).forEach((k) => { delete LOCKS[k]; delete LOCK_AT[k]; });
     STOP_SUGG = PLAN.stop_suggestions || [];
     renderAll();
     saveEvent();
   } catch (e) {
+    if (seq !== RUN_SEQ || e?.name === "AbortError") return;      // SP-697: an older run's error
     if (e.status === 410) { COURSE = null; ls.set("course", null); syncForm(); $("results").innerHTML = `<h2>預估結果</h2><div class="err">GPX 路線已過期（伺服器重啟過），請重新上傳。</div>`; return; }
     let msg = e.message;
     // SP-293: no CP yet → the finish time from your race results (POST /estimate: road Riegel, trail §0.5.5,
@@ -1628,11 +1642,11 @@ async function run() {
     const b = planBody();
     if (e.status === 400 && b.type !== "baiyue") {
       try {
-        const est = await post(`${API}/estimate`, b);
+        const est = await post(`${API}/estimate`, b, ctl?.signal);
         if (seq !== RUN_SEQ) return;
         if (est.available) { renderEstimate(est); return; }
         if (est.reason) msg += "；" + est.reason;
-      } catch (_) { /* the original error stands */ }
+      } catch (_) { if (seq !== RUN_SEQ) return; /* else the original error stands */ }
     }
     $("results").innerHTML = `<h2>預估結果</h2><div class="err">${esc(msg)}</div>`;
     $("fuel-sec").classList.add("hidden");
@@ -1759,13 +1773,14 @@ function warnList(ws) { return ws && ws.length ? `<ul class="warn">${ws.map((w) 
 // effort bar: 60–110 % mapped across the width
 const EMIN = 0.6, EMAX = 1.1;
 const ex = (f) => Math.max(0, Math.min(100, (f - EMIN) / (EMAX - EMIN) * 100));
-function effortBar(e, hike) {
+function effortBar(e, hike, ro = false) {
   let cuts, lo = EMIN, hi = EMAX, val, band = null, lab = ["輕鬆", "穩定", "吃力", "極限", "超出"];
   if (hike) { cuts = [0.6].concat(e.cuts); lo = 0.6; hi = Math.max(1.5, e.cuts[3] * 1.15); val = e.r; }
   else { cuts = e.cuts.map((c) => Math.max(EMIN, c.from)); val = e.f; band = e.band; }
   const X = (f) => Math.max(0, Math.min(100, (f - lo) / (hi - lo) * 100));
   const edges = cuts.concat([hi]);
-  let h = `<div class="ebar" id="ebar" data-lo="${lo}" data-hi="${hi}">`;
+  // ro (SP-697): a result, not an input — greyed, no drag cursor
+  let h = `<div class="ebar${ro ? " ro" : ""}" id="ebar" data-lo="${lo}" data-hi="${hi}">`;
   for (let i = 0; i < 5; i++) {
     const w = X(edges[i + 1]) - X(edges[i]);
     h += `<div class="z" style="width:${w}%;background:${css(EFF_COLORS[i])}"><span class="full">${w > 6 ? lab[i] : ""}</span></div>`;
@@ -1881,7 +1896,9 @@ function renderResults() {
   h += tile("平均配速", pace(s.pace_s_per_km), trail ? "實際距離" : "");
   // SP-632: the race's flat-equivalent pace (the segments' GAP by time) and what it means
   if (trail && ok(s.flat_pace_s_per_km)) h += `<div class="tile" id="flat-pace"><div class="k">${esc(T("flat.k"))}${help(esc(T("flat.tip")))}</div><div class="v">${pace(s.flat_pace_s_per_km)}</div><div class="s">${esc(T("flat.s"))}</div></div>`;
-  h += tile("努力度", `<span style="color:${css(EFF_COLORS[["easy", "steady", "hard", "max", "over"].indexOf(e.key)])}">${esc(e.label)}</span>`, `${pct(e.f)} 可持續功率`);
+  // SP-697: trail 「模型預測」 with the HR model — 努力度 is the HR level picked (of the all-out race HR)
+  const hrE = e.basis === "hr";
+  h += tile("努力度", `<span style="color:${css(EFF_COLORS[["easy", "steady", "hard", "max", "over"].indexOf(e.key)])}">${esc(e.label)}</span>`, `${pct(e.f)} ${hrE ? "全力心率" : "可持續功率"}`);
   h += tile("環境係數 M", s.M.toFixed(3), P.course_source === "gpx" ? "逐段海拔的平均" : "功率 × M");
   h += `</div>`;
   // SP-485 (R11): the heat-acclimatisation block only when the heat changes the time ≥ 1 % (完整: always;
@@ -1896,11 +1913,19 @@ function renderResults() {
     else how.push(RH().make("RC4", "", { html: hh.replace(' data-rh="RC4"', "") }));
   }
   // effort bar
-  const mult = e.multiple, tl = e.t_lim_s;
-  h += `<h3>努力度${est("results", T("est.w.effort"), e.badge)}${help("把這個平均功率和「你能撐這麼久的功率」比。淡色帶是 CP ±3% 與 Riegel k ±0.01 的不確定範圍。拖動指針可以改努力目標（會切到「通通幫我算」）。")}</h3>`;
-  h += effortBar(e, false);
-  h += `<div class="eline" data-rh="RC5">${e.f <= 1.0000001 && ok(mult) ? `這個強度你大約可以撐 <b>${mult.toFixed(1)} ×</b> 目標時間（約 ${hm(mult * s.time_s)}）` :
-    `這個平均功率大約只撐得了 <b>${hm(tl)}</b>，比預計時間短`}</div>`;
+  const pw = hrE ? (e.power || {}) : e, mult = pw.multiple, tl = pw.t_lim_s, drag = effortDraggable();
+  const powerLine = pw.f <= 1.0000001 && ok(mult) ? `這個強度你大約可以撐 <b>${mult.toFixed(1)} ×</b> 目標時間（約 ${hm(mult * s.time_s)}）` :
+    `這個平均功率大約只撐得了 <b>${hm(tl)}</b>，比預計時間短`;
+  const dragHow = drag ? "拖動指針（或上方 100／95／85 % 按鈕）可以改努力目標，放開後重新計算。" : "";
+  const tip = hrE
+    ? `越野「模型預測」的完賽時間來自心率配速模型：努力度＝比賽的心率水準相對你的全力比賽心率（選 95 % 就是 95 %）。${dragHow}` +
+      `功率比例（參考）：平均功率是你能撐這麼久的功率的 ${pct(pw.f)}（${esc(pw.label || "")}）；${powerLine.replace(/<\/?b>/g, "")}。`
+    : `把這個平均功率和「你能撐這麼久的功率」比。淡色帶是 CP ±3% 與 Riegel k ±0.01 的不確定範圍。${dragHow}`;
+  h += `<h3>努力度${est("results", T("est.w.effort"), e.badge)}${help(tip)}</h3>`;
+  h += effortBar(e, false, !drag);
+  if (!drag) h += `<div class="meta" id="ebar-ro">這是結果：切到「${esc(T("goal.model"))}」才能調整努力度</div>`;
+  else if (hrE) h += `<div class="eline">努力目標 <b id="ebar-val">${Math.round(e.f * 100)}%</b>：比賽心率水準 = 全力比賽心率的 ${pct(e.f)}</div>`;
+  if (!hrE) h += `<div class="eline" data-rh="RC5">${powerLine}</div>`;
   h += zoneBar(s.power, cp);
   // compare
   const cmp = P.compare?.auto, g = P.goal;
@@ -1947,22 +1972,34 @@ function otherCalcs() {
       <td class="n">${W(s.power_sustainable)}</td><td class="n">${W(s.cp_required)}</td><td class="${s.feasible ? "ok" : "no"}">${s.feasible ? "✓" : "✕"}</td></tr>`).join("") + `</tbody></table></div>`;
   return h;
 }
+// SP-697: one 「重新計算中…」 line on top of the result (a second release updates it, never adds one);
+// the result, an estimate or an error replaces #results and takes it away
+function busyOn(text) {
+  let el = $("recalc-busy");
+  if (!el) { $("results").insertAdjacentHTML("afterbegin", `<div class="meta busy" id="recalc-busy"></div>`); el = $("recalc-busy"); }
+  el.textContent = text;
+}
+function busyOff() { $("recalc-busy")?.remove(); }
+const EFFORT_DEBOUNCE_MS = 600;
+// SP-697: the 努力度 bar is an input only in 「模型預測」 (the mode decides what is the input): with a target
+// pace or power it shows the result, greyed, and dragging does nothing — it never switches the mode.
+function effortDraggable() { return PLAN && PLAN.type !== "baiyue" && mode() === "auto" && PLAN.summary?.mode === "auto"; }
 function wireEffortBar() {
-  const bar = $("ebar"); if (!bar || PLAN.type === "baiyue") return;
+  const bar = $("ebar"); if (!bar || PLAN.type === "baiyue" || !effortDraggable()) return;
   let drag = false;
   const at = (ev) => { const r = bar.getBoundingClientRect(); const x = (ev.clientX - r.left) / r.width; return EMIN + Math.max(0, Math.min(1, x)) * (EMAX - EMIN); };
-  // while dragging only the needle moves; releasing it recomputes at once (no debounce) and
-  // says so, so a slow GPX plan doesn't look like nothing happened
-  const move = (ev) => { if (!drag) return; const f = Math.round(at(ev) * 100) / 100; bar.querySelector(".needle").style.left = ex(f) + "%";
-    S.mode = "auto"; S.effort = Math.max(0.6, Math.min(1.05, f));
-    const lab = bar.querySelector(".needle-val"); if (lab) lab.textContent = Math.round(S.effort * 100) + "%"; };
-  bar.addEventListener("pointerdown", (ev) => { drag = true; bar.setPointerCapture(ev.pointerId); move(ev); });
+  // while dragging only the needle moves; on release the plan is recomputed after a short pause
+  // (another drag within it restarts the wait), and one line says so
+  const move = (ev) => { if (!drag) return; const f = Math.round(at(ev) * 100) / 100; S.effort = Math.max(0.6, Math.min(1.05, f));
+    bar.querySelector(".needle").style.left = ex(S.effort) + "%";
+    const lab = $("ebar-val"); if (lab) lab.textContent = Math.round(S.effort * 100) + "%"; };
+  bar.addEventListener("pointerdown", (ev) => { drag = true; clearTimeout(timer); bar.setPointerCapture(ev.pointerId); move(ev); });
   bar.addEventListener("pointermove", move);
   const done = () => {
     if (!drag) return; drag = false;
-    syncForm(); saveForm(); clearTimeout(timer);
-    $("results").insertAdjacentHTML("afterbegin", `<div class="meta busy">以努力度 ${Math.round(S.effort * 100)}% 重新計算中…</div>`);
-    run();
+    syncForm(); saveForm(); saveUI(); clearTimeout(timer);
+    busyOn(`以努力度 ${Math.round(S.effort * 100)}% 重新計算中…`);
+    timer = setTimeout(run, EFFORT_DEBOUNCE_MS);
   };
   bar.addEventListener("pointerup", done);
   bar.addEventListener("pointercancel", done);
@@ -2235,8 +2272,8 @@ const rowsOf = (P) => P.chart_rows || [];
 function rowAt(km) { return rowsOf(PLAN).find((r) => km >= r.start_km && km <= r.end_km); }
 // a measure that is not a valid target on a segment (trail: power on steep climbs / descents, HR on
 // descents) is written as a grey 「參考」 (seg_targets.chart_rows power_ref / hr_ref), never left blank
-const REF_TIP = { power: "參考：這段功率不準（> 8% 陡坡功率會低估、下坡測不到離心負荷），看心率、VAM 或控制安全",
-  hr: "參考：下坡心率不代表負荷，這段看控制和安全" };
+const REF_TIP = { power: "參考：這段功率不準（> 8% 陡坡功率會低估、下坡測不到離心負荷），看心率或 VAM",
+  hr: "參考：下坡心率不代表負荷" };
 function refCell(m, txt) { return `<span class="ref" title="${esc(REF_TIP[m])}">${txt} 參考</span>`; }
 function fmtRow(r, m, plain = false) {
   if (m === "pace") return ok(r.pace_s_per_km) ? pace(r.pace_s_per_km) : "–";
@@ -2574,7 +2611,7 @@ function renderSegCompact() {
       <td>${r.mark}${hike && r.day ? ` <span class="faint">D${r.day}</span>` : ""}</td><td class="n">${f1(r.start_km)}–${f1(r.end_km)}</td>
       <td class="n ${r.walk ? "walk" : ""}">${f1((r.grade || 0) * 100)}%${r.walk ? " " + esc(T("walk")) : r.gait === "either" ? " " + esc(T("gait.either")) : ""}</td>${td("pace", r)}${hike ? "" : td("power", r)}${td("hr", r)}
       <td class="n">${dur(r.t)}</td><td class="n">${dur(r.cum_s)}${r.eta ? ` <span class="faint">${esc(r.eta)}</span>` : ""}</td>
-      ${nightCol ? `<td>${r.night ? "🌙" : ""}</td>` : ""}<td class="fuel">${r.basis === "safe" ? `🛡️ ${esc(T("safe_short"))}${r.fuel ? "；" : ""}` : ""}${esc(r.fuel || "")}${perSeg ? poleHint(r.pole_hint) : ""}</td></tr>`;
+      ${nightCol ? `<td>${r.night ? "🌙" : ""}</td>` : ""}<td class="fuel">${esc(r.fuel || "")}${perSeg ? poleHint(r.pole_hint) : ""}</td></tr>`;
   }
   const s = PLAN.summary;
   h += `<tr class="center"><td colspan="2">${esc(T("total"))}</td><td></td><td class="n opt ${m === "pace" ? "cur" : ""}">${pace(s.pace_s_per_km || (s.time_s / s.km))}</td>` +
@@ -2629,7 +2666,10 @@ function renderSegments() {
   if (hike) h += `<div class="note">速度已含背負、海拔、地形與多日修正。</div>`;
   $("segtable").innerHTML = h;
   document.querySelectorAll("[data-lock]").forEach((e) => e.addEventListener("change", () => {
-    const v = Number(e.value); if (v > 0) LOCKS[e.dataset.lock] = v; else delete LOCKS[e.dataset.lock]; schedule(); }));
+    const k = e.dataset.lock, v = Number(e.value), sg = (PLAN?.segments || []).find((s) => String(s.i) === k);
+    if (v > 0) { LOCKS[k] = v; LOCK_AT[k] = sg ? { km: sg.start_km, n: PLAN.segments.length } : {}; }
+    else { delete LOCKS[k]; delete LOCK_AT[k]; }
+    schedule(); }));
   document.querySelectorAll("[data-terr]").forEach((e) => e.addEventListener("change", () => { TERRAIN[e.dataset.terr] = e.value; schedule(); }));
   document.querySelectorAll("#segtable tr[data-seg]").forEach((e) => {
     e.addEventListener("click", (ev) => { if (["INPUT", "SELECT"].includes(ev.target.tagName)) return; pickSeg(+e.dataset.seg, ev.shiftKey); });
@@ -3135,7 +3175,7 @@ function snapshot() {
   const env = {};
   ENV_IDS.forEach((id) => { if ($(id).classList.contains("ovr")) env[id] = $(id).value; });
   return { v: 1, type, S: { ...S }, form: formValues(), ovr: { ...ovr }, prior: ls.get("prior", ""), stops: STOPS,
-    locks: LOCKS, terrain: TERRAIN, splits: SPLITS, course: COURSE, env, wx: WX, wx_key: WX_KEY };
+    locks: LOCKS, lock_at: LOCK_AT, terrain: TERRAIN, splits: SPLITS, course: COURSE, env, wx: WX, wx_key: WX_KEY };
 }
 function restore(x) {
   if (!x || typeof x !== "object") return;
@@ -3148,6 +3188,8 @@ function restore(x) {
   STOPS = Array.isArray(x.stops) ? x.stops : parseStops($("stops").value); sortStops();
   LOCKS = x.locks || {}; TERRAIN = x.terrain || {}; SPLITS = x.splits || [];
   COURSE = x.course || null; ls.set("course", COURSE);
+  // SP-700: locks saved before they carried their place hold the segment count the course had then
+  LOCK_AT = x.lock_at || Object.fromEntries(Object.keys(LOCKS).map((k) => [k, COURSE?.segments ? { n: COURSE.segments } : {}]));
   ENV_IDS.forEach((id) => { const v = (x.env || {})[id]; $(id).value = v ?? ""; $(id).classList.toggle("ovr", v != null && v !== ""); $(id).dataset.auto = v != null ? "0" : "1"; });
   WX = x.wx || null; WX_KEY = x.wx_key || null;
   // a forecast saved more than 6 h ago is fetched again (autoWeather)
@@ -3255,7 +3297,7 @@ function bindSeg(id, attr, key, cast = (x) => x, after) {
 document.querySelectorAll("#type button").forEach((b) => b.onclick = () => { setType(b.dataset.t); schedule(); });
 document.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => applyPreset(PRESETS[b.dataset.preset]));
 bindSeg("mode", "m", "mode"); bindSeg("tunit", "u", "tunit"); bindSeg("punit", "u", "punit"); bindSeg("effort", "e", "effort", Number);
-bindSeg("csrc", "c", "csrc", (x) => x, () => { LOCKS = {}; }); bindSeg("split", "s", "split", (x) => x, () => { LOCKS = {}; });
+bindSeg("csrc", "c", "csrc", (x) => x, () => { LOCKS = {}; LOCK_AT = {}; }); bindSeg("split", "s", "split", (x) => x, () => { LOCKS = {}; LOCK_AT = {}; });
 bindSeg("strategy", "k", "strategy", (x) => x, () => { S.amount = null; });
 document.querySelectorAll("#measure button").forEach((b) => b.onclick = () => { S.measure = b.dataset.m; saveUI(); if (PLAN) { renderProfile(); renderSegCompact(); } });
 // SP-250 路況: clicking the chosen one again clears it (no choice = the pooled factor, as before)
@@ -3378,7 +3420,7 @@ drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.ad
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); uploadGpx(e.dataTransfer.files[0]); });
 $("splitpreview").onclick = () => openSplitPreview();
-$("unlock").onclick = () => { LOCKS = {}; schedule(); };
+$("unlock").onclick = () => { LOCKS = {}; LOCK_AT = {}; schedule(); };
 $("gm-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderGM(); });
 $("cad-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderCad(); });
 // charts inside a closed <details> have no size: draw them when opened

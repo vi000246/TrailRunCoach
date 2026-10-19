@@ -358,19 +358,14 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [],
     "badge": null,
     "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
     "vam": null,
     "hr_cap": 150.0,
     "hr_cap_src": "AeT",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -496,19 +491,14 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [],
     "badge": null,
     "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
     "vam": null,
     "hr_cap": 150.0,
     "hr_cap_src": "AeT",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -640,19 +630,14 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [],
     "badge": null,
     "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
     "vam": null,
     "hr_cap": 150.0,
     "hr_cap_src": "AeT",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -784,19 +769,14 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [],
     "badge": null,
     "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
     "vam": null,
     "hr_cap": 150.0,
     "hr_cap_src": "AeT",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -878,19 +858,14 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [],
     "badge": null,
     "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
     "vam": null,
     "hr_cap": 150.0,
     "hr_cap_src": "AeT",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -922,19 +897,14 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [],
     "badge": null,
     "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
     "vam": null,
     "hr_cap": 150.0,
     "hr_cap_src": "AeT",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -1016,19 +986,14 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [],
     "badge": null,
     "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
     "vam": null,
     "hr_cap": 150.0,
     "hr_cap_src": "AeT",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -1060,19 +1025,14 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [],
     "badge": null,
     "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
     "vam": null,
     "hr_cap": 150.0,
     "hr_cap_src": "AeT",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   }
@@ -1292,19 +1252,14 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [],
    "badge": null,
    "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
    "vam": null,
    "hr_cap": 150.0,
    "hr_cap_src": "AeT",
-   "text": "控制、安全",
+   "text": "—",
    "i": 7,
    "day": 1,
    "start_km": 7.83,
@@ -1391,19 +1346,14 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [],
    "badge": null,
    "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
    "vam": null,
    "hr_cap": 150.0,
    "hr_cap_src": "AeT",
-   "text": "控制、安全",
+   "text": "—",
    "i": 10,
    "day": 1,
    "start_km": 10.34,
@@ -1494,19 +1444,14 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [],
    "badge": null,
    "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
    "vam": null,
    "hr_cap": 150.0,
    "hr_cap_src": "AeT",
-   "text": "控制、安全",
+   "text": "—",
    "i": 13,
    "day": 2,
    "start_km": 14.15,
@@ -1597,19 +1542,14 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [],
    "badge": null,
    "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
    "vam": null,
    "hr_cap": 150.0,
    "hr_cap_src": "AeT",
-   "text": "控制、安全",
+   "text": "—",
    "i": 16,
    "day": 2,
    "start_km": 18.71,
@@ -1664,19 +1604,14 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [],
    "badge": null,
    "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
    "vam": null,
    "hr_cap": 150.0,
    "hr_cap_src": "AeT",
-   "text": "控制、安全",
+   "text": "—",
    "i": 18,
    "day": 2,
    "start_km": 23.83,
@@ -1695,19 +1630,14 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [],
    "badge": null,
    "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
    "vam": null,
    "hr_cap": 150.0,
    "hr_cap_src": "AeT",
-   "text": "控制、安全",
+   "text": "—",
    "i": 19,
    "day": 3,
    "start_km": 24.967417947554164,
@@ -1762,19 +1692,14 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [],
    "badge": null,
    "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
    "vam": null,
    "hr_cap": 150.0,
    "hr_cap_src": "AeT",
-   "text": "控制、安全",
+   "text": "—",
    "i": 21,
    "day": 3,
    "start_km": 31.02,
@@ -1793,19 +1718,14 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [],
    "badge": null,
    "src": "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全",
    "vam": null,
    "hr_cap": 150.0,
    "hr_cap_src": "AeT",
-   "text": "控制、安全",
+   "text": "—",
    "i": 22,
    "day": 3,
    "start_km": 32.99,

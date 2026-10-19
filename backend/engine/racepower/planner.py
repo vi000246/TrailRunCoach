@@ -60,6 +60,47 @@ def _pace(v: float) -> Optional[float]:
     return 1000.0 / v if v and v > 0 else None
 
 
+def effort_basis(eff: dict, hr_level: Optional[float]) -> dict:
+    """What the 努力度 shows (SP-697). Trail 「模型預測」 with the HR model: the total comes from the
+    HR level the athlete picked × their all-out race HR, so 努力度 is that level (95 % picked → 95 %)
+    and the power ratio (average power ÷ sustainable power, the old number) moves to `power` for the
+    ? help. Elsewhere (target pace / power, road, no HR model) it stays the power ratio."""
+    if hr_level is None:
+        return {**eff, "basis": "power"}
+    f = float(hr_level)
+    power = {x: eff.get(x) for x in ("f", "key", "label", "multiple", "t_lim_s", "band", "p_sus")}
+    return {**eff, "f": f, **DF.label_of(f), "basis": "hr", "band": None, "power": power}
+
+
+LOCK_KM_TOL = 0.05            # SP-700: a lock's segment must still start within 50 m of where it did
+
+
+def lock_map(locks, segs: list[dict]) -> tuple[dict, list[int]]:
+    """The per-segment power locks ({index0: power}) and the segment numbers dropped (SP-700).
+    Locks are by segment number, so a new split (advanced options, or a new default) would put
+    them on other ground: a lock that says where its segment started (`km`) must still find a
+    segment starting there; one that only says how many segments there were (`n`) must find
+    that many. A lock with neither applies as before."""
+    keep, dropped = {}, []
+    for x in locks or []:
+        try:
+            seg, power = int(x["seg"]), float(x.get("power") or 0.0)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if power <= 0:
+            continue
+        ok = 0 < seg <= len(segs)
+        if ok and x.get("km") is not None:
+            ok = abs(float(segs[seg - 1].get("start_km") or 0.0) - float(x["km"])) <= LOCK_KM_TOL
+        elif ok and x.get("n") is not None:
+            ok = int(x["n"]) == len(segs)
+        if ok:
+            keep[seg - 1] = power
+        else:
+            dropped.append(seg)
+    return keep, dropped
+
+
 def flat_pace(segs: list[dict]) -> Optional[float]:
     """SP-632: the race's 「平地等效配速」 (s/km): every segment's GAP (gap_pace_s_per_km, the
     Minetti running curve with the 10 % downhill floor) averaged by the segment's time. None
@@ -639,8 +680,10 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     sigma = STRATEGY_SIGN.get(skind, 0.0) * amount
     if amount >= 0.04:
         warnings.append(H.tag("RC15", "配速幅度 ≥ 4 %：過去的比賽資料顯示，前後差距小的配速通常比較快"))
-    locks = {int(x["seg"]) - 1: float(x["power"]) for x in opts.get("locks") or []
-             if x.get("power") and 0 < int(x["seg"]) <= len(segs)}
+    locks, locks_dropped = lock_map(opts.get("locks"), segs)
+    if locks_dropped:
+        warnings.append(H.tag("RC15", _("分段變了（分段設定或預設改過），{n} 個功率鎖定指的已經不是同一段，已取消",
+                                         n=len(locks_dropped))))
 
     # SP-229: with the back-test's go (GaitRE.speed_gait) the walking / running curve follows the
     # predicted speed (re_at) instead of the majority gait — trail GPX only: the gate judged trail
@@ -892,9 +935,11 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     km = course["totals"]["km"]
     tl = eff["t_lim_s"]
     if eff["f"] > 1.0 + 1e-9:
-        warnings.append(H.tag("RC14", f"努力度 {eff['f']:.0%} 超出模型可持續範圍：這個平均功率大約只撐得了 {tl / 3600:.1f} h"))
+        what = "功率比例" if hr_est is not None else "努力度"
+        warnings.append(H.tag("RC14", f"{what} {eff['f']:.0%} 超出模型可持續範圍：這個平均功率大約只撐得了 {tl / 3600:.1f} h"))
     if longest_s and T > EXTRAP_FACTOR * longest_s and mode == "auto" and f_target > 0.95:
         warnings.append(H.tag("RC14", f"預估時間超過你最長有效紀錄的 {EXTRAP_FACTOR} 倍：建議把努力目標降到 95 %（吃力）"))
+    eff = effort_basis(eff, f_target if hr_est is not None else None)
     dmg = PC.damage_index(rows, lambda p: DF.t_lim(p / mbar, cp, w_prime, tte, k, cp2=cp2))
     hr_first = None
     if trail and gpx:
@@ -997,7 +1042,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                "strategy": skind, "strategy_amount": amount, "alpha": alpha, "heat": heat_info,
                "runwalk": {"shift": rw_shift, "personal": bool((getattr(grade_re, "runwalk", None) or {}).get("personal")),
                            "speed_gait": speed_gait},
-               "heat_accl": heat_accl}
+               "heat_accl": heat_accl,
+               "locks_dropped": locks_dropped}               # SP-700: the page forgets these locks
     heat_profile = _heat_profile(heat_rows, start_dt, out_segs, stops) if heat_info["mode"] == "hourly" else None
     return {"type": kind, "summary": summary, "effort": eff, "segments": out_segs, "target": target,
             "heat_profile": heat_profile,

@@ -11,7 +11,7 @@ vo2max-gate-and-trail-metric.md §2.3, engine/target_policy.py):
                               predicted speed, SP-226): 陡坡（走／走跑皆可／跑）; a 3–8 %
                               climb counts here only when it is walked: 爬坡（走）
     descent                   no power / HR target: time and pace as a reference,
-                              「控制、安全」 (Stryd power under-reads the descent's load:
+                              no chip (SP-700) (Stryd power under-reads the descent's load:
                               −7 → +7 % power +90 %, VO2 +74 %, Gravina-Cognetti 2025)
     flat / runnable           power (HR when there is no CP)
     百岳 (pack)                HR ≤ AeT + VAM + segment / day time; never pace
@@ -164,7 +164,7 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
              load on 0–8 %, van Rassel 2026; > 8 % under-reads, descents too, Gravina-Cognetti 2025);
              百岳: none
       hr     the race cap (hr_cap: LTHR ≤ 3 h, AeT beyond, the trail HR model's race HR;
-             百岳 AeT); none on trail / 百岳 descents (控制、安全)
+             百岳 AeT); none on trail / 百岳 descents
       pace   every segment (the model's pace, already grade / walk / technical adjusted)
     plus the split, cumulative time, ETA, walk flag and the fuelling in the segment;
     `pole_hint` (SP-244, pole_hint) when the race is marked 會用登山杖 (`poles`).
@@ -228,10 +228,9 @@ def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[floa
         k = kind_of(s)
         chips, basis, badge = [], "none", None
         v = vam(s)
+        # SP-700: a descent has no target chip (the 「控制、安全」 chip said nothing the runner can act on)
         if hike:
-            if k == "descent":
-                chips.append({"icon": "🛡️", "text": "控制、安全"})
-            else:
+            if k != "descent":
                 basis = "hr"
                 if cap:
                     chips.append({"icon": "❤️", "text": f"心率 ≤ {cap:.0f}", "role": "main"})
@@ -239,7 +238,6 @@ def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[floa
                     chips.append({"icon": "⛰️", "text": f"VAM {v:.0f} m/h"})
             src = SRC["hike"] if k != "descent" else _(SRC["descent"])
         elif k == "descent":
-            chips.append({"icon": "🛡️", "text": "控制、安全"})
             src = _(SRC["descent"])
         elif k == "steep_climb":
             basis = "hr"

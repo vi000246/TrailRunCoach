@@ -127,6 +127,10 @@ class CourseRef(BaseModel):
 class LockIn(BaseModel):
     seg: int
     power: float
+    # SP-700: where the locked segment started (km) / how many segments there were when it was set —
+    # a new split drops a lock that no longer points at the same ground (planner.lock_map)
+    km: Optional[float] = None
+    n: Optional[int] = None
 
 
 class StopIn(BaseModel):

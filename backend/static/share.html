@@ -183,13 +183,14 @@ function fuelHtml(S) {
   return h + `</section>`;
 }
 
+// SP-700: links shared before it still carry the descents' 🛡️ 「控制、安全」 chip (the only 🛡️ one) — not shown any more
 function targetsHtml(S) {
   const hike = S.type === "baiyue";
   return `<h2 style="margin-top:10px">分段目標</h2><div class="tcards">` + S.seg_targets.map((t) => {
     const sg = (S.segments || []).find((x) => x.i === t.i && (x.day || 1) === (t.day || 1)) || {};
     return `<div class="tcard" style="border-left-color:${css(CLS[sg.cls] || "--c-f")}" title="${esc(t.src)}">
       <div class="th"><b>${t.mark} ${esc(t.label)}</b><span class="meta">${hike && t.day ? `D${t.day} · ` : ""}${f1(t.start_km)}–${f1(t.end_km)} km · ↑${n0(t.gain_m)} ↓${n0(t.loss_m)}</span></div>
-      <div class="tc">${t.chips.map((c) => `<span class="${c.role === "main" ? "main" : ""}">${c.icon} ${esc(c.text)}</span>`).join("") || "<span>—</span>"}</div>
+      <div class="tc">${t.chips.filter((c) => c.icon !== "🛡️").map((c) => `<span class="${c.role === "main" ? "main" : ""}">${c.icon} ${esc(c.text)}</span>`).join("") || "<span>—</span>"}</div>
       <div class="meta">⏱ ${dur(t.t)} · 累計 ${dur(t.cum_s)}${t.eta ? ` · ETA ${esc(t.eta)}` : ""}${(t.ref || []).length ? " · " + esc(t.ref.join(" · ")) : ""}</div>
       ${t.fuel_action ? `<div class="fa">🍬 ${esc(t.fuel_action)}</div>` : ""}</div>`;
   }).join("") + `</div>`;

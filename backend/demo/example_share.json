@@ -121,12 +121,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:45 /km"
     ],
@@ -135,7 +130,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -222,12 +217,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:18 /km"
     ],
@@ -236,7 +226,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -325,12 +315,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:06 /km"
     ],
@@ -339,7 +324,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -373,12 +358,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:32 /km"
     ],
@@ -387,7 +367,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -474,12 +454,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:10 /km"
     ],
@@ -488,7 +463,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -574,12 +549,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:45 /km"
     ],
@@ -588,7 +558,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -674,12 +644,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:06 /km"
     ],
@@ -688,7 +653,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -722,12 +687,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:50 /km"
     ],
@@ -736,7 +696,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -769,12 +729,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:06 /km"
     ],
@@ -783,7 +738,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   },
@@ -868,12 +823,7 @@
     "kind": "descent",
     "label": "下坡",
     "basis": "none",
-    "chips": [
-     {
-      "icon": "🛡️",
-      "text": "控制、安全"
-     }
-    ],
+    "chips": [],
     "ref": [
      "配速參考 5:11 /km"
     ],
@@ -882,7 +832,7 @@
     "vam": null,
     "hr_cap": 148.43341723744263,
     "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-    "text": "控制、安全"
+    "text": "—"
    },
    "badge": "推估"
   }
@@ -932,12 +882,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:45 /km"
    ],
@@ -946,7 +891,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 2,
    "day": null,
    "start_km": 0.67,
@@ -1003,12 +948,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:18 /km"
    ],
@@ -1017,7 +957,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 4,
    "day": null,
    "start_km": 6.04,
@@ -1078,12 +1018,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:06 /km"
    ],
@@ -1092,7 +1027,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 6,
    "day": null,
    "start_km": 10.75,
@@ -1111,12 +1046,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:32 /km"
    ],
@@ -1125,7 +1055,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 7,
    "day": null,
    "start_km": 14.4,
@@ -1182,12 +1112,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:10 /km"
    ],
@@ -1196,7 +1121,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 9,
    "day": null,
    "start_km": 18.43,
@@ -1253,12 +1178,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:45 /km"
    ],
@@ -1267,7 +1187,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 11,
    "day": null,
    "start_km": 29.98,
@@ -1324,12 +1244,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:06 /km"
    ],
@@ -1338,7 +1253,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 13,
    "day": null,
    "start_km": 33.15,
@@ -1357,12 +1272,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:50 /km"
    ],
@@ -1371,7 +1281,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 14,
    "day": null,
    "start_km": 36.93,
@@ -1390,12 +1300,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:06 /km"
    ],
@@ -1404,7 +1309,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 15,
    "day": null,
    "start_km": 37.87,
@@ -1461,12 +1366,7 @@
    "kind": "descent",
    "label": "下坡",
    "basis": "none",
-   "chips": [
-    {
-     "icon": "🛡️",
-     "text": "控制、安全"
-    }
-   ],
+   "chips": [],
    "ref": [
     "配速參考 5:11 /km"
    ],
@@ -1475,7 +1375,7 @@
    "vam": null,
    "hr_cap": 148.43341723744263,
    "hr_cap_src": "越野心率模型的比賽心率（88% LTHR）",
-   "text": "控制、安全",
+   "text": "—",
    "i": 17,
    "day": null,
    "start_km": 47.06,

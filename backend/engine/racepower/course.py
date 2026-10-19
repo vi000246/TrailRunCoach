@@ -33,6 +33,9 @@ DEFAULT_EPS_M = 10.0
 FLAT_PCT = 2.0
 STEEP_PCT = 15.0
 FLAT_SPLIT_M = 3000.0
+MIN_LEN_M = 500.0              # SP-700: the default shortest segment = max(this, MIN_LEN_FRAC × total)
+MIN_LEN_FRAC = 0.03
+MAX_SEGMENTS = 15              # SP-700: the default grade split's cap (long flats split per km come after)
 PROFILE_MAX = 1500
 CAMP_WORDS = ("營地", "山屋", "營", "camp", "hut", "山莊", "避難")
 
@@ -329,6 +332,12 @@ def merge(bounds: list[int], xs: np.ndarray, zs: np.ndarray, min_len_m: float,
     return b
 
 
+def default_min_len(total_m: float) -> float:
+    """The default shortest segment (SP-700): max(500 m, 3 % of the course); was max(200 m, 1 %),
+    which cut a 24 km mountain route into ~40 segments. Our own choice (推估)."""
+    return max(MIN_LEN_M, MIN_LEN_FRAC * float(total_m))
+
+
 def split_long_flats(bounds: list[int], xs: np.ndarray, zs: np.ndarray, flat_pct: float = FLAT_PCT,
                      max_m: float = FLAT_SPLIT_M) -> list[int]:
     out = [bounds[0]]
@@ -499,15 +508,21 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
         zs, scale = _scale_to_gain(zs, official_gain_m)
     gain, loss = gain_loss(zs, HYST_M)
     total = float(xs[-1])
-    if min_len_m is None:
-        min_len_m = max(200.0, 0.01 * total)
+    auto_len = min_len_m is None
+    if auto_len:
+        min_len_m = default_min_len(total)
     if split == "none":
         bounds = [0, len(xs) - 1]
     elif split == "km":
         bounds = km_bounds(xs)
     else:
-        bounds = douglas_peucker(xs, zs, eps_m)
-        bounds = merge(bounds, xs, zs, min_len_m, flat_pct)
+        dp = douglas_peucker(xs, zs, eps_m)
+        bounds = merge(dp, xs, zs, min_len_m, flat_pct)
+        # SP-700: the default split stays readable — at most MAX_SEGMENTS grade segments; past that
+        # the shortest segment grows. A shortest segment set by hand (進階選項) is kept as given.
+        while auto_len and len(bounds) - 1 > MAX_SEGMENTS and min_len_m < total:
+            min_len_m *= 1.2
+            bounds = merge(bounds, xs, zs, min_len_m, flat_pct)
         bounds = split_long_flats(bounds, xs, zs, flat_pct)
     climbs = _climbs(xs, zs, **(climb_kw or {}))
     segs = segment_rows(bounds, xs, zs, flat_pct, climbs)
