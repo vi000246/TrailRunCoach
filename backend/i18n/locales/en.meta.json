@@ -9787,18 +9787,6 @@
     "draft": true,
     "src": "backend/engine/wko5expr/recentbests.py:81"
   },
-  "近 {n} 天沒有新活動": {
-    "draft": true,
-    "src": "backend/engine/wko5expr/recentbests.py:142"
-  },
-  "近 {n} 天沒有超越先前的最佳": {
-    "draft": true,
-    "src": "backend/engine/wko5expr/recentbests.py:144"
-  },
-  "近 {n} 天新高：": {
-    "draft": true,
-    "src": "backend/engine/wko5expr/recentbests.py:146"
-  },
   "這段期間擬合不出功率–時間（PD）模型，所以 PD 曲線、模型閾值功率、無氧容量（Anaerobic capacity）、Pmax、TTE 都沒有值。": {
     "draft": true,
     "src": "backend/engine/wko5expr/render.py:273"
@@ -11550,5 +11538,21 @@
   "重新查詢路面": {
     "draft": true,
     "src": "backend/cooldown.py:35"
+  },
+  "最近 {n} 天沒有新的跑步": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/recentbests.py"
+  },
+  "最近 {n} 天沒有比以前更好的紀錄": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/recentbests.py"
+  },
+  "最近 {n} 天，{d}的功率比以前最好多了 {g} {u}": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/recentbests.py"
+  },
+  "、{d}多了 {g} {u}": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/recentbests.py"
   }
 }

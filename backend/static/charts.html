@@ -1469,7 +1469,7 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
       card.querySelector("h2").appendChild(seg);
     }
     if (res.window_toggle && res.window_choices?.length) {
-      // 近 N 天新高: 7／14／28 天 window (remembered per chart)
+      // 近 N 天新高: the window toggle, only when a chart offers more than one (SP-688: the power curve is fixed at 14)
       const seg = document.createElement("div");
       seg.className = "seg period";
       seg.dataset.kind = "window";

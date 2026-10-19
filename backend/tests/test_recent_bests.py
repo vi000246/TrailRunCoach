@@ -140,7 +140,7 @@ def test_custom_pd_chart_sits_in_the_ability_tab():
     di, ci, title = _pd_chart_index()
     assert title == "能力"
     ch = WV._view("我的訓練")["dashboards"][di]["charts"][ci]
-    assert ch["window"] == {"default": 7, "choices": [7, 14, 28]}
+    assert ch["window"] == {"default": 14, "choices": [14]}
     assert [s["expression"] for s in ch["series"]][0] == "meanmax(runpower)"
 
 
@@ -150,30 +150,28 @@ def test_custom_pd_chart_highlights_and_lists_the_improvements(api):
     write(28, RECENT, "2_2026-09-28_run.fit")
     j = _get(client)
     names = [s["name"] for s in j["series"]]
-    assert names == ["MMP 曲線", "近 7 天新高", "PD 模型曲線"]   # the gain series is not drawn
-    assert j["window"] == 7 and j["window_toggle"] and j["window_choices"] == [7, 14, 28]
+    assert names == ["MMP 曲線", "近 14 天新高", "PD 模型曲線"]   # the gain series is not drawn
+    assert j["window"] == 14 and not j["window_toggle"] and j["window_choices"] == [14]
     rb = j["recent_bests"]
     got = {i["secs"]: i["gain"] for i in rb["items"]}
     # 1 min: 320 vs history's (20·400 + 40·250)/60 = 300 -> +20 W
     assert got[60] == 20
     assert 1800 not in got and 600 not in got
-    assert rb["note"].startswith("近 7 天新高：") and "1 分鐘 +20 W" in rb["note"]
+    assert rb["note"].startswith("最近 14 天，") and "1 分鐘的功率比以前最好多了 20 W" in rb["note"]
     hl = j["series"][1]["data"]["points"]
     assert sum(p[1] is None for p in hl) == 1                # two bands, one break
 
 
-def test_window_toggle_changes_the_recent_range(api):
+def test_the_window_is_fixed_at_14_days(api):
+    """SP-688: no 7／14／28 toggle — always the last 14 days."""
     client, write = api
-    write(10, HISTORY, "1_2026-09-10_run.fit")
-    write(20, RECENT, "2_2026-09-20_run.fit")               # 10 days ago
-    j7 = _get(client)
-    assert j7["series"][1]["data"]["points"] == []
-    assert j7["recent_bests"]["note"] == "近 7 天沒有新活動（資料到 9/20）"
-    j14 = _get(client, 14)
-    assert j14["window"] == 14 and j14["title"] == "跑步功率曲線"      # the title stays plain
-    assert j14["series"][1]["name"] == "近 14 天新高"
-    assert {i["secs"]: i["gain"] for i in j14["recent_bests"]["items"]}[60] == 20
-    assert _get(client, 5)["window"] == 7                    # not a choice: the default
+    write(1, HISTORY, "1_2026-09-01_run.fit")
+    write(10, RECENT, "2_2026-09-10_run.fit")               # 20 days ago: outside 14 days
+    j = _get(client)
+    assert j["window"] == 14 and not j["window_toggle"] and j["title"] == "跑步功率曲線"
+    assert j["series"][1]["data"]["points"] == []
+    assert j["recent_bests"]["note"] == "最近 14 天沒有新的跑步（資料到 9/10）"
+    assert _get(client, 7)["window"] == 14                   # an old ?window=7 link: the default
 
 
 def test_recent_activity_without_a_best_says_so(api):
@@ -181,7 +179,7 @@ def test_recent_activity_without_a_best_says_so(api):
     write(10, HISTORY, "1_2026-09-10_run.fit")
     write(27, [100] * 600, "2_2026-09-27_run.fit")
     rb = _get(client)["recent_bests"]
-    assert rb["items"] == [] and rb["note"] == "近 7 天沒有超越先前的最佳（資料到 9/27）"
+    assert rb["items"] == [] and rb["note"] == "最近 14 天沒有比以前更好的紀錄（資料到 9/27）"
 
 
 def test_window_rewrite_only_touches_the_leading_literal():

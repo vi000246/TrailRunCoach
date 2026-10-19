@@ -111,7 +111,7 @@ def test_recent_bests_note_and_durations_in_english():
         r = RB.summarize({"series": []}, ds, 7)
     assert r["note"].startswith("Nothing beat your earlier bests in the last 7 days (data up to ")
     with use_locale("zh-TW"):
-        assert RB.summarize({"series": []}, ds, 7)["note"].startswith("近 7 天沒有超越先前的最佳（資料到 ")
+        assert RB.summarize({"series": []}, ds, 7)["note"].startswith("最近 7 天沒有比以前更好的紀錄（資料到 ")
 
 
 def test_power_curve_legend_in_english_follows_the_window():
@@ -121,9 +121,7 @@ def test_power_curve_legend_in_english_follows_the_window():
     ch = next(c for d in en["dashboards"] for c in d["charts"] if c.get("id") == "run-power-recent-bests")
     shown = [s["name"] for s in ch["series"] if s.get("role") != RB.GAIN_ROLE]
     _no_cjk(shown, "power curve legend")
-    assert "New bests, last 7 days" in shown
-    ch14, _info = RB.apply_window(ch, "14")
-    assert "New bests, last 14 days" in [s["name"] for s in ch14["series"]]
+    assert "New bests, last 14 days" in shown          # SP-688: fixed at 14 days
     zh = next(c for d in view["dashboards"] for c in d["charts"] if c.get("id") == "run-power-recent-bests")
     assert "近 14 天新高" in [s["name"] for s in RB.apply_window(zh, "14")[0]["series"]]
     # every series of the 能力 dashboard has its English name

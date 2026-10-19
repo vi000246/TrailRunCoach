@@ -162,7 +162,7 @@ def test_api_draws_the_line_on_opening(api):
     j = _get(client)
     line = next(s for s in j["series"] if s.get("role") == "cp_ref")
     assert line["data"] == {"kind": "hline", "y": 191.0} and "模型閾值功率" in line["name"]
-    assert [s["name"] for s in j["series"] if s.get("role") != "cp_ref"] == ["MMP 曲線", "近 7 天新高", "PD 模型曲線"]
+    assert [s["name"] for s in j["series"] if s.get("role") != "cp_ref"] == ["MMP 曲線", "近 14 天新高", "PD 模型曲線"]
 
 
 def test_api_without_a_fit_draws_no_line(api):
@@ -170,7 +170,7 @@ def test_api_without_a_fit_draws_no_line(api):
     write(2)                                       # two Stryd runs: no PD fit (5 needed), no CP
     j = _get(client)
     assert not any(s.get("role") == "cp_ref" for s in j["series"]) and j.get("cp_ref") is None
-    assert [s["name"] for s in j["series"]] == ["MMP 曲線", "近 7 天新高", "PD 模型曲線"]
+    assert [s["name"] for s in j["series"]] == ["MMP 曲線", "近 14 天新高", "PD 模型曲線"]
 
 
 def test_api_a_new_cp_is_not_served_from_the_cache(api):
