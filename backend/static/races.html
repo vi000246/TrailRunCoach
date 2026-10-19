@@ -49,17 +49,29 @@ button.danger { color: var(--bad); }
 .seg button { border: 0; border-radius: 0; padding: 3px 9px; font-size: 13px; background: transparent; color: var(--muted); }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--soft); color: var(--accent); font-weight: 600; }
-/* the list: one card per race (no wide table: a phone never scrolls sideways) */
-.race { display: grid; grid-template-columns: 28px 92px minmax(0, 1fr) auto; gap: 2px 10px; align-items: start;
-  padding: 8px 4px; border-bottom: 1px solid var(--line); }
-.race:last-child { border-bottom: 0; }
-.race.sel { background: var(--soft); border-radius: 6px; }
-.race .ck { padding-top: 2px; }
-.race .when { font-variant-numeric: tabular-nums; }
-.race .name { font-weight: 600; background: none; border: 0; padding: 0; color: var(--accent); text-align: left; cursor: pointer; }
-.race .facts { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 13px; }
-.race .right { text-align: right; font-variant-numeric: tabular-nums; }
-.race .right b { display: block; font-size: 15px; }
+/* SP-692: the list is a table like 活動列表 (sortable headers, 編輯 per row); on a phone the less
+   needed columns fold into a line under the name, so the page never scrolls sideways */
+.listwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+#tbl th, #tbl td { padding: 6px 8px; text-align: left; }
+#tbl tbody tr:last-child td { border-bottom: 0; }
+#tbl th { background: var(--panel); position: sticky; top: 0; }
+#tbl th button.sort { border: 0; background: none; padding: 0; color: inherit; font: inherit; display: inline-flex; gap: 3px; align-items: center; }
+#tbl th button.sort::after { content: "↕"; opacity: .35; font-size: 11px; }
+#tbl th[aria-sort="ascending"] button.sort, #tbl th[aria-sort="descending"] button.sort { color: var(--accent); }
+#tbl th[aria-sort="ascending"] button.sort::after { content: "↑"; opacity: 1; }
+#tbl th[aria-sort="descending"] button.sort::after { content: "↓"; opacity: 1; }
+#tbl .num { text-align: right; }
+#tbl th.num button.sort { flex-direction: row-reverse; }
+#tbl tbody tr:hover td { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+#tbl tbody tr.on td { background: var(--soft); }
+#tbl td.c-name { white-space: normal; min-width: 12em; max-width: 28em; }
+#tbl .name { font-weight: 600; background: none; border: 0; padding: 0; color: var(--accent); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+#tbl td.c-name .sub { display: none; color: var(--muted); font-size: 12px; }
+#tbl td.c-act { text-align: right; }
+#tbl td.c-act .edit { padding: 2px 10px; font-weight: 600; color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+#tbl td.c-act .edit:hover { background: var(--soft); }
+#tbl td.c-res { white-space: normal; max-width: 14em; color: var(--muted); }
+#sort { display: none; }
 .pr { display: inline-block; min-width: 20px; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 700; text-align: center;
   border: 1px solid var(--line); }
 .pr.A { background: #b91c1c; color: #fff; border-color: #b91c1c; }
@@ -92,6 +104,30 @@ td.worse { color: var(--bad); }
 dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text);
   width: min(560px, calc(100vw - 24px)); padding: 14px; }
 dialog::backdrop { background: rgba(0, 0, 0, .35); }
+/* SP-692: the add / edit popup, the activity list's editor style (a sticky title bar with ×, actions at the foot) */
+dialog#ed { border-radius: 12px; padding: 0; width: min(640px, calc(100vw - 24px)); max-height: calc(100vh - 40px);
+  box-shadow: 0 16px 48px rgba(0,0,0,.28); }
+dialog#ed::backdrop { background: rgba(10,14,20,.45); }
+dialog#ed[open] { display: flex; flex-direction: column; }
+.edhead { background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 10px 14px; display: flex; gap: 8px; align-items: center; }
+.edhead h2 { flex: 1; min-width: 0; margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.edhead .x { border: 0; background: none; font-size: 20px; line-height: 1; padding: 2px 6px; color: var(--muted); }
+.edbody { padding: 10px 14px 12px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.edfoot { background: var(--panel); border-top: 1px solid var(--line); padding: 10px 14px;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.edfoot .grow { flex: 1; }
+.edsec { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; display: grid; gap: 6px; }
+.edsec h3 { font-size: 13px; margin: 0; display: flex; align-items: center; gap: 4px; }
+.edsec .bar input[type=url] { flex: 1 1 220px; min-width: 0; width: auto; }
+/* ? → the explanation on hover / focus */
+.help { position: relative; display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%;
+  border: 1px solid var(--line); color: var(--muted); font: 600 11px/1 system-ui, sans-serif; cursor: help; }
+.help .tip { display: none; position: absolute; z-index: 30; top: 20px; left: -8px; width: max-content; max-width: min(320px, 76vw);
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  font: 400 12px/1.55 system-ui, sans-serif; white-space: normal; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+.help:hover .tip, .help:focus .tip { display: block; }
+@media (max-width: 699px) { dialog#ed { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; border: 0; } }
 .form { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; align-items: center; }
 .form input, .form select, .form textarea { width: 100%; }
 .form .full { grid-column: 1 / -1; }
@@ -107,8 +143,6 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
 .dpgpx label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .dpgpx input[type=file] { width: auto; max-width: 100%; }
 .dpgpx .meta { flex-basis: 100%; }
-.dpgpx .cairnl { flex: 1 1 260px; }
-.dpgpx .cairnl input { flex: 1; min-width: 0; width: auto; }
 .hint { color: var(--warn); font-size: 12px; }
 details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; margin: 2px 0 6px; }
 #cairnres { white-space: pre-line; }
@@ -121,10 +155,16 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
 @media (max-width: 699px) {
   header { padding: 10px 10px 0; }
   main { padding: 10px 10px 24px; }
-  .race { grid-template-columns: 24px minmax(0, 1fr) auto; }
-  .race .when { grid-column: 2 / 3; grid-row: 1; font-size: 12px; color: var(--muted); }
-  .race .body { grid-column: 2 / 4; }
-  .race .right { grid-column: 3; grid-row: 1; }
+  #tbl .c-kind, #tbl .c-gain, #tbl .c-st, #tbl .c-res { display: none; }
+  #tbl td.c-name { min-width: 0; max-width: none; }
+  #tbl td.c-name .sub { display: block; }
+  #tbl th, #tbl td { padding: 6px 4px; }
+  #tbl td.c-date { font-size: 12px; }
+  #tbl td.c-date .yr, #tbl td.c-date .meta { display: block; color: var(--muted); font-size: 11px; }
+  #tbl td.c-time { font-size: 12px; white-space: normal; }
+  #tbl td.c-act .edit { padding: 2px 6px; }
+  #tbl th { white-space: normal; }
+  #sort { display: inline-block; }
   .who { grid-template-columns: 1fr; }
   .chart { height: 230px; }
   th, td { padding: 5px 5px; }
@@ -175,7 +215,10 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
       <span class="meta" id="cmp-hint" data-i18n="races.cmp.hint">勾選兩場比完的比賽，疊在一起比</span>
     </div>
   </section>
-  <section class="panel"><div id="list"><div class="empty" data-i18n="races.loading">讀取中…</div></div></section>
+  <div class="listwrap"><table id="tbl">
+    <thead><tr id="thead"></tr></thead>
+    <tbody id="list"><tr><td class="empty" colspan="10" data-i18n="races.loading">讀取中…</td></tr></tbody>
+  </table></div>
   <section class="panel hidden" id="detail"></section>
   <section class="panel hidden" id="cmp"></section>
 </main>
@@ -183,8 +226,10 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
 <!-- SP-691: the one place a race is added or edited (the season plan page links here). The fields are the
      season plan's event (PUT /api/v1/plan/events): SP-114 days / 賽制 / per-day rows, SP-533 a GPX instead
      of the rows, SP-537 a Cairn link, SP-105 cutoff / summit, SP-87 土徑比, SP-244 poles, SP-675 result -->
-<dialog id="ed">
-  <h2 id="ed-h"></h2>
+<dialog id="ed" aria-labelledby="ed-h">
+  <div class="edhead"><h2 id="ed-h"></h2>
+    <button type="button" class="x" id="ed-x" data-i18n-attr="aria-label:races.close" aria-label="">×</button></div>
+  <div class="edbody">
   <form class="form" id="evform" novalidate>
     <input type="hidden" name="id">
     <label for="ed-name" data-i18n="races.ed.name">名稱</label><input id="ed-name" name="name" maxlength="120" required>
@@ -203,19 +248,17 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
     <label for="ed-gain" data-i18n="races.ed.gain">爬升（m）</label><input id="ed-gain" name="climbing_m" type="number" min="0" step="any" inputmode="numeric">
     <!-- SP-114: every multi-day trip (百岳, a 分站 越野賽／其他) fills each day; the totals add up -->
     <div id="dayplanwrap" class="full dayplan" hidden>
-      <div class="meta" data-i18n="plan.ev.dayplan_help">沒有 GPX 時，每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</div>
       <!-- SP-412: editing an old trip saved without them — the rows are not required, this asks for them -->
       <!-- SP-533: a trip with a GPX (attached here, already stored, or to come) needn't type each day -->
+      <!-- SP-692: the explanations behind a ? -->
       <div class="dpgpx">
         <span class="meta" id="dpgpxhave" hidden></span>
         <label><span data-i18n="plan.ev.gpx_attach">附 GPX</span> <input type="file" id="evgpxfile" accept=".gpx,.fit"></label>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="plan.ev.gpx_help">附了 GPX（或勾「之後再上傳」）就不用逐日填：每天的距離和爬升從 GPX 算。存好之後按這場的「分日」（或賽事計算器的「分日預覽」）設每天的終點（營地航點、OSM 山屋、紀錄的過夜點會列成候選；Cairn 匯入的過夜點直接套用），設之前每天平均分距離（推估）。</span></span>
         <label><input type="checkbox" id="evgpxlater"> <span data-i18n="plan.ev.gpx_later">之後再上傳 GPX，先不填</span></label>
-        <!-- SP-537: or the trip planned in 疊石 Cairn: its GPX + the nights marked there as the day ends -->
-        <label class="cairnl"><span data-i18n="plan.ev.cairn_attach">或貼疊石 Cairn 分享連結</span> <input type="url" id="evcairn" autocomplete="off" spellcheck="false" placeholder="https://…/?gpx=…&amp;share=…"></label>
-        <div class="meta" data-i18n="plan.ev.gpx_help">附了 GPX（或勾「之後再上傳」）就不用逐日填：每天的距離和爬升從 GPX 算。存好之後按這場的「分日」（或賽事計算器的「分日預覽」）設每天的終點（營地航點、OSM 山屋、紀錄的過夜點會列成候選；Cairn 匯入的過夜點直接套用），設之前每天平均分距離（推估）。</div>
       </div>
       <div id="dayplanold" class="hint" data-i18n="plan.ev.dayplan_old" hidden>這筆舊行程還沒填每天的距離和爬升，可以先照原樣存，總距離、總爬升也可以直接改；沒填時每天的量是用總距離、總爬升平均分的，補上會比較準。要補就每天的距離和爬升都要填。</div>
-      <table><thead><tr><th></th><th data-i18n="plan.ev.day_km">距離 km</th><th data-i18n="plan.ev.day_gain">爬升 m</th>
+      <table><thead><tr><th><span class="help" tabindex="0">?<span class="tip" data-i18n="plan.ev.dayplan_help">沒有 GPX 時，每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</span></span></th><th data-i18n="plan.ev.day_km">距離 km</th><th data-i18n="plan.ev.day_gain">爬升 m</th>
         <th data-i18n="plan.ev.day_loss">下降 m（選填）</th></tr></thead><tbody id="dayplanrows"></tbody></table>
     </div>
     <label for="ed-est" data-i18n="races.ed.est">預估時間（小時）</label><input id="ed-est" name="est_hours" type="number" min="0" step="any" inputmode="decimal">
@@ -240,35 +283,36 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
         <input id="ed-poles" name="poles" type="checkbox" style="width:auto;justify-self:start" data-i18n-attr="title:plan.ev.poles_tip" title="勾了之後，賽事計算器在陡上坡和陡下坡（≤ −15 %）的段多一句用杖提示。預估時間、配速、心率都不變：研究顯示用杖主要是覺得比較輕鬆、膝蓋負擔比較小，速度差不多。比賽當天（多日行程每一天）的活動也會先標成「有杖」，你自己改過的不會被蓋掉。">
       </div>
     </details>
+    <!-- SP-692 / 699: 疊石 Cairn in the popup — SP-537 import a share link (the race's GPX, day ends, and its
+         distance / climb / days follow the route), SP-655 push the course -->
+    <div class="full edsec" id="ed-cairn">
+      <h3><span data-i18n="races.cairn.import_h">從 Cairn 匯入 GPX</span>
+        <span class="help" tabindex="0">?<span class="tip"><span data-i18n="races.cairn.import_how"></span> <span data-i18n="races.cairn.import_pick_na"></span></span></span></h3>
+      <div class="bar">
+        <input id="evcairn" type="url" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:races.cairn.url_ph;aria-label:races.cairn.url_ph" placeholder="" aria-label="">
+        <button type="button" id="ci-go" data-i18n="races.cairn.import_go">匯入</button>
+      </div>
+      <div class="meta" id="ci-msg"></div>
+      <div id="cp-wrap">
+        <h3><span data-i18n="races.cairn.push_h">把路線推到 Cairn</span>
+          <span class="help" tabindex="0">?<span class="tip" data-i18n="races.cairn.what"></span></span></h3>
+        <div id="cp-body" class="note"></div>
+        <label class="note hidden" id="cp-consent-row"><input type="checkbox" id="cp-consent"> <span id="cp-consent-text"></span></label>
+        <div class="bar"><button id="cp-go" type="button" data-i18n="races.cairn.push_go">推到 Cairn</button><span class="meta" id="cp-msg"></span></div>
+      </div>
+    </div>
   </form>
-  <div class="actions" style="margin-top:10px">
+  </div>
+  <div class="edfoot">
     <button class="primary" id="ed-save" data-i18n="races.ed.save">儲存</button>
     <button id="ed-cancel" data-i18n="races.ed.cancel">取消</button>
     <span class="meta" id="ed-msg"></span>
+    <span class="grow"></span>
+    <button class="danger" id="ed-del" type="button" data-i18n="races.delete">刪除</button>
   </div>
 </dialog>
 <div class="toast" id="toast" role="status"></div>
 <input type="file" id="gpxpick" accept=".gpx,.fit,application/gpx+xml" hidden>
-
-<dialog id="cairn-dlg">
-  <h2 data-i18n="races.cairn.h">疊石 Cairn</h2>
-  <h3 class="meta" data-i18n="races.cairn.import_h">匯入 GPX</h3>
-  <div class="note" data-i18n="races.cairn.import_how">貼上 Cairn 行程的分享連結，路線和每天的終點會存成這場賽事的 GPX（原本的會被換掉）。</div>
-  <div class="bar" style="margin:6px 0">
-    <input id="ci-url" type="url" style="flex:1;min-width:0" data-i18n-attr="placeholder:races.cairn.url_ph" placeholder="">
-    <button id="ci-go" data-i18n="races.cairn.import_go">匯入</button>
-  </div>
-  <div class="note" id="ci-pick-na" data-i18n="races.cairn.import_pick_na">從已連結的 Cairn 帳號直接挑行程：Cairn 還沒提供這個功能，先用分享連結。</div>
-  <div class="meta" id="ci-msg"></div>
-  <h3 class="meta" data-i18n="races.cairn.push_h">推到 Cairn</h3>
-  <div id="cp-body" class="note"></div>
-  <label class="note hidden" id="cp-consent-row"><input type="checkbox" id="cp-consent"> <span id="cp-consent-text"></span></label>
-  <div class="actions">
-    <button class="primary" id="cp-go" data-i18n="races.cairn.push_go">推到 Cairn</button>
-    <button id="cairn-close" data-i18n="races.close">關閉</button>
-    <span class="meta" id="cp-msg"></span>
-  </div>
-</dialog>
 
 <script>
 const API = "/api/v1/app/races";
@@ -328,43 +372,87 @@ function loadPlanEvents() {
   }).catch(() => {});
   return S.planP;
 }
+// SP-692: the columns (活動列表's table): a header click sorts by it (again: the other way); on a phone the
+// 排序 select does it, and 類型 / 爬升 / 狀態 / 成績 fold into the line under the name
+const COLS = [
+  { k: "ck", cls: "c-ck", nosort: true },
+  { k: "date", cls: "c-date", get: (r) => r.date },
+  { k: "name", cls: "c-name", get: (r) => (r.name || "").toLowerCase(), asc: true },
+  { k: "kind", cls: "c-kind", get: (r) => kindName(r.kind), asc: true },
+  { k: "km", cls: "c-km num", get: (r) => r.distance_km },
+  { k: "gain", cls: "c-gain num", get: (r) => r.climbing_m },
+  { k: "st", cls: "c-st", get: (r) => statusText(r), asc: true },
+  { k: "time", cls: "c-time num", get: (r) => r.finish_s },
+  { k: "res", cls: "c-res", get: (r) => r.result || null, asc: true },
+];
+const SORT_SEL = { date_desc: ["date", -1], date_asc: ["date", 1], km: ["km", -1], gain: ["gain", -1], time: ["time", -1] };
+S.sort = { k: "date", dir: -1 };
+function renderHead() {
+  $("thead").innerHTML = COLS.map((c) => {
+    if (c.nosort) return `<th class="${c.cls}" scope="col"></th>`;
+    const s = S.sort.k === c.k ? (S.sort.dir > 0 ? "ascending" : "descending") : "none";
+    return `<th class="${c.cls}" aria-sort="${s}" scope="col"><button type="button" class="sort" data-sort="${c.k}">${esc(T("col." + c.k))}</button></th>`;
+  }).join("") + `<th class="c-act" scope="col"><span hidden>${esc(T("col.act"))}</span></th>`;
+}
+$("thead").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-sort]");
+  if (!b) return;
+  const c = COLS.find((x) => x.k === b.dataset.sort);
+  S.sort = S.sort.k === c.k ? { k: c.k, dir: -S.sort.dir } : { k: c.k, dir: c.asc ? 1 : -1 };
+  const sel = Object.entries(SORT_SEL).find(([, [k, d]]) => k === S.sort.k && d === S.sort.dir);
+  if (sel) $("sort").value = sel[0];
+  renderList();
+});
 function shown() {
-  const w = $("f-when").value, p = $("f-prio").value, k = $("f-kind").value, s = $("sort").value;
-  let rows = S.rows.filter((r) => (w === "all" || (w === "past" ? r.past : !r.past))
+  const w = $("f-when").value, p = $("f-prio").value, k = $("f-kind").value;
+  const rows = S.rows.filter((r) => (w === "all" || (w === "past" ? r.past : !r.past))
     && (!p || (p === "-" ? !r.priority : r.priority === p)) && (!k || r.kind === k));
-  const by = { date_desc: (a, b) => b.date.localeCompare(a.date), date_asc: (a, b) => a.date.localeCompare(b.date),
-    km: (a, b) => (b.distance_km || 0) - (a.distance_km || 0), gain: (a, b) => (b.climbing_m || 0) - (a.climbing_m || 0),
-    time: (a, b) => (b.finish_s || 0) - (a.finish_s || 0) }[s];
-  return rows.slice().sort(by);
+  const c = COLS.find((x) => x.k === S.sort.k) || COLS[1], dir = S.sort.dir;
+  return rows.map((r) => [r, c.get(r)]).sort(([a, x], [b, y]) => {
+    const nx = x == null || x === "", ny = y == null || y === "";
+    if (nx || ny) return nx === ny ? b.date.localeCompare(a.date) : nx ? 1 : -1;     // blanks last, either way
+    return (x < y ? -1 : x > y ? 1 : 0) * dir || b.date.localeCompare(a.date);
+  }).map(([r]) => r);
+}
+function cell(c, r) {
+  switch (c.k) {
+    case "ck": return r.compare_idx != null
+      ? `<input type="checkbox" data-pick="${esc(r.id)}" ${S.pick.includes(r.id) ? "checked" : ""} aria-label="${esc(T("cmp.pick"))}">` : "";
+    case "date": return `<span class="yr">${esc(r.date.slice(0, 5))}</span>${esc(r.date.slice(5))}${r.end !== r.date ? `<span class="meta"> – ${esc(r.end.slice(5))}</span>` : ""}`;
+    case "name": {
+      const sub = [kindName(r.kind), r.climbing_m ? `↑${num(r.climbing_m)} m` : "", statusText(r), r.result || ""].filter(Boolean).join(" · ");
+      return `${r.priority ? `<span class="pr ${r.priority}">${r.priority}</span> ` : ""}<button class="name" data-open="${esc(r.id)}">${esc(r.name || T("unnamed"))}</button>`
+        + `<span class="sub">${esc(sub)}</span>`;
+    }
+    case "kind": return esc(kindName(r.kind));
+    case "km": return r.distance_km != null ? num(r.distance_km, 1) : "—";
+    case "gain": return r.climbing_m ? num(r.climbing_m) : "—";
+    case "st": return `<span class="st ${r.status}">${esc(statusText(r))}</span>`;
+    case "time": return r.finish_s ? `<b>${hms(r.finish_s)}</b>` : r.past ? "—" : `<span class="meta">${esc(T("days_to", { n: daysTo(r.date) }))}</span>`;
+    case "res": return esc(r.result || "");
+  }
+  return "";
 }
 function renderList() {
-  const rows = shown();
-  if (!S.rows.length) { $("list").innerHTML = `<div class="empty">${esc(T("none"))}</div>`; return; }
-  if (!rows.length) { $("list").innerHTML = `<div class="empty">${esc(T("none_filtered"))}</div>`; return; }
-  $("list").innerHTML = rows.map((r) => {
-    const acts = r.activities.map((a) => `<a href="${esc(actUrl(a))}">${esc(a.title || a.date)}</a>`).join(", ");
-    const facts = [r.distance_km != null ? `${num(r.distance_km, 1)} km` : "", r.climbing_m ? `↑${num(r.climbing_m)} m` : "",
-      esc(kindName(r.kind)), r.calc.saved ? `<span title="${esc(T("calc.saved_tip"))}">🧮 ${esc(T("calc.short"))}</span>` : ""].filter(Boolean);
-    const ck = r.compare_idx != null
-      ? `<input type="checkbox" data-pick="${esc(r.id)}" ${S.pick.includes(r.id) ? "checked" : ""} aria-label="${esc(T("cmp.pick"))}">` : "";
-    return `<div class="race ${S.cur === r.id ? "sel" : ""}">
-      <span class="ck">${ck}</span>
-      <span class="when">${esc(r.date)}${r.end !== r.date ? `<span class="meta"> – ${esc(r.end.slice(5))}</span>` : ""}</span>
-      <div class="body">
-        <div>${r.priority ? `<span class="pr ${r.priority}">${r.priority}</span> ` : ""}<button class="name" data-open="${esc(r.id)}">${esc(r.name || T("unnamed"))}</button></div>
-        <div class="facts meta">${facts.join("<span>·</span>")}</div>
-        <div class="st ${r.status}">${esc(statusText(r))}${acts ? ` · ${acts}` : r.past && r.why ? ` · <span class="meta">${esc(r.why)}</span>` : ""}</div>
-      </div>
-      <div class="right">${r.finish_s ? `<b>${hms(r.finish_s)}</b>` : r.past ? "" : `<span class="meta">${esc(T("days_to", { n: daysTo(r.date) }))}</span>`}
-        ${r.result ? `<span class="meta">${esc(r.result)}</span>` : ""}</div>
-    </div>`;
-  }).join("");
+  renderHead();
+  const rows = shown(), span = COLS.length + 1;
+  if (!S.rows.length) { $("list").innerHTML = `<tr><td class="empty" colspan="${span}">${esc(T("none"))}</td></tr>`; return; }
+  if (!rows.length) { $("list").innerHTML = `<tr><td class="empty" colspan="${span}">${esc(T("none_filtered"))}</td></tr>`; return; }
+  $("list").innerHTML = rows.map((r) => `<tr class="${S.cur === r.id ? "on" : ""}">`
+    + COLS.map((c) => `<td class="${c.cls}">${cell(c, r)}</td>`).join("")
+    + `<td class="c-act">${r.event
+      ? `<button type="button" class="edit" data-edit="${esc(r.id)}" aria-label="${esc(T("edit_label", { name: r.name || T("unnamed") }))}">${esc(T("edit"))}</button>`
+      : `<button type="button" data-addplan="${esc(r.id)}" title="${esc(T("add_to_plan"))}">${esc(T("add_short"))}</button>`}</td></tr>`).join("");
   $("cmp-go").disabled = S.pick.length !== 2;
 }
 function daysTo(d) { return Math.round((Date.parse(d) - Date.parse(S.today)) / 86400000); }
 $("list").addEventListener("click", (e) => {
-  const id = e.target.dataset.open;
-  if (id) openRace(id);
+  const b = e.target.closest("button");
+  if (!b) return;
+  const row = (id) => S.rows.find((r) => r.id === id);
+  if (b.dataset.open) openRace(b.dataset.open);
+  if (b.dataset.edit && row(b.dataset.edit)) openEditor(row(b.dataset.edit));
+  if (b.dataset.addplan && row(b.dataset.addplan)) openEditor(null, row(b.dataset.addplan));
 });
 $("list").addEventListener("change", (e) => {
   const id = e.target.dataset.pick;
@@ -373,7 +461,8 @@ $("list").addEventListener("change", (e) => {
   if (e.target.checked) { S.pick.push(id); if (S.pick.length > 2) S.pick.shift(); }
   renderList();
 });
-for (const id of ["f-when", "f-prio", "f-kind", "sort"]) $(id).onchange = renderList;
+for (const id of ["f-when", "f-prio", "f-kind"]) $(id).onchange = renderList;
+$("sort").onchange = () => { const [k, dir] = SORT_SEL[$("sort").value]; S.sort = { k, dir }; renderList(); };
 
 // ---------------- one race ----------------
 function dispose(list) { list.splice(0).forEach((c) => c.dispose()); }
@@ -419,9 +508,8 @@ function renderDetail() {
     <div class="st ${r.status}">${esc(statusText(r))}${r.why ? ` <span class="meta">${esc(T("why_paren", { why: r.why }))}</span>` : ""}</div>
     ${r.result ? `<div>${esc(T("result_line", { v: "\u0000" })).replace("\u0000", `<b>${esc(r.result)}</b>`)}</div>` : ""}
     <div class="actions">
-      ${ev ? `<button id="d-edit">${esc(T("edit"))}</button><button class="danger" id="d-del">${esc(T("delete"))}</button>
-        <a class="calc" href="${esc(d.calc_url)}"><button>🧮 ${esc(calc)}</button></a>
-        <button id="d-cairn">${esc(T("cairn.btn"))}</button>`
+      ${ev ? `<button id="d-edit">${esc(T("edit"))}</button>
+        <a class="calc" href="${esc(d.calc_url)}"><button>🧮 ${esc(calc)}</button></a>`
       : `<button id="d-addplan">${esc(T("add_to_plan"))}</button>`}
       ${a ? `<a href="${esc(actUrl(a))}"><button>${esc(T("open_activity"))}</button></a>` : ""}
     </div>
@@ -439,8 +527,6 @@ function renderDetail() {
   }
   if ($("d-act")) $("d-act").onchange = () => { S.act = +$("d-act").value; renderDetail(); };
   if ($("d-edit")) $("d-edit").onclick = () => openEditor(r);
-  if ($("d-del")) $("d-del").onclick = () => delRace(r);
-  if ($("d-cairn")) $("d-cairn").onclick = () => openCairn(r);
   if ($("d-addplan")) $("d-addplan").onclick = () => openEditor(null, r);
   if (S.ready && S.ready.id === r.event_id) drawReadiness();
 }
@@ -668,7 +754,14 @@ async function openEditor(row, fromAct) {
   dayPlanTotals = dayPlanLenient ? { distance_km: f.distance_km.value, climbing_m: f.climbing_m.value } : null;
   cutoffLabels(); dayPlanForm(e.day_plan || []);
   $("ed-msg").textContent = "";
+  // SP-692: deleting and Cairn's import / push are in here too; a new race imports its Cairn link when saved
+  $("ed-del").hidden = !ev;
+  $("ci-msg").textContent = ev ? "" : T("cairn.on_save");
+  $("ci-go").hidden = !ev;
+  $("cp-wrap").hidden = !ev;
+  $("cp-msg").textContent = "";
   $("ed").showModal();
+  if (ev) { $("cp-body").textContent = T("loading"); $("cp-go").disabled = true; await cairnStatus(); cpRender(); }
 }
 async function saveEvent() {
   const f = EVF();
@@ -702,7 +795,14 @@ async function saveEvent() {
   openRace("e:" + id);
 }
 $("ed-save").onclick = () => saveEvent();
-$("ed-cancel").onclick = () => { $("ed").close(); dayPlanLenient = false; dayPlanTotals = null; evGpx = null; };
+function closeEditor() { $("ed").close(); dayPlanLenient = false; dayPlanTotals = null; evGpx = null; }
+$("ed-cancel").onclick = closeEditor;
+$("ed-x").onclick = closeEditor;
+$("ed-del").onclick = async () => {
+  const e = S.edit;
+  if (!e) return;
+  if (await delRace({ name: e.name, event_id: e.id })) closeEditor();
+};
 $("add").onclick = () => openEditor(null);
 
 // ---------------- the event's GPX (engine/event_gpx.py): here or in 賽事計算器; the calculator, the
@@ -787,24 +887,20 @@ $("detail").addEventListener("click", async (ev) => {
   }
 });
 async function delRace(r) {
-  if (!confirm(T("del_confirm", { name: r.name }))) return;
+  if (!confirm(T("del_confirm", { name: r.name }))) return false;
   try { await j(`${PLAN}/events/${encodeURIComponent(r.event_id)}`, { method: "DELETE" }); }
-  catch (e) { alert(e.message); return; }
-  S.cur = null; S.det = null; $("detail").classList.add("hidden"); dispose(S.charts);
+  catch (e) { alert(e.message); return false; }
+  if (S.cur === "e:" + r.event_id) { S.cur = null; S.det = null; $("detail").classList.add("hidden"); dispose(S.charts); }
+  toast(T("deleted"));
   writeUrl(); load();
+  return true;
 }
 
-// ---------------- Cairn: import a share link's GPX (SP-537), push the course (SP-655) ----------------
-let CAIRN_ROW = null;
-async function openCairn(r) {
-  CAIRN_ROW = r;
-  $("ci-url").value = ""; $("ci-msg").textContent = ""; $("cp-msg").textContent = "";
-  $("cp-body").textContent = T("loading");
-  $("cairn-dlg").showModal();
-  await cairnStatus(); cpRender();
-}
+// ---------------- Cairn in the editor popup: import a share link's GPX (SP-537), push the course (SP-655) ----------------
 async function cairnStatus() {
-  try { S.cp = await j(CPUSH + encodeURIComponent(CAIRN_ROW.event_id)); }
+  const id = S.edit?.id;
+  if (!id) return;
+  try { S.cp = await j(CPUSH + encodeURIComponent(id)); }
   catch (e) { S.cp = { unavailable: true, status: e.status }; }
 }
 function cpRender() {
@@ -830,25 +926,44 @@ $("cp-consent").onchange = () => { $("cp-go").disabled = !(S.cp?.ready && $("cp-
 $("cp-go").onclick = async () => {
   $("cp-go").disabled = true; $("cp-msg").textContent = T("sending");
   try {
-    const r = await send(CPUSH + encodeURIComponent(CAIRN_ROW.event_id) + "/push", "POST", { consent: !S.cp?.allowed && $("cp-consent").checked });
+    const r = await send(CPUSH + encodeURIComponent(S.edit.id) + "/push", "POST", { consent: !S.cp?.allowed && $("cp-consent").checked });
     await cairnStatus(); cpRender();
     $("cp-msg").innerHTML = `<span class="ok">${esc(T(r.action === "updated" ? "cairn.done_updated" : "cairn.done_created"))} ✓</span> <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(T("cairn.open"))}</a>`;
   } catch (e) { $("cp-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; await cairnStatus(); cpRender(); }
 };
-$("ci-go").onclick = async () => {
-  const url = $("ci-url").value.trim();
+// SP-699: the import replaces the race's GPX and the race takes the route's distance, climb and days
+// (the server writes them): the form shows them at once, the list and the open race reload behind it
+async function importCairnNow() {
+  const url = $("evcairn").value.trim(), e = S.edit;
+  if (!e) return;
   if (!url) { $("ci-msg").innerHTML = `<span class="err">${esc(T("cairn.need_url"))}</span>`; return; }
   $("ci-go").disabled = true; $("ci-msg").textContent = T("sending");
   try {
-    const r = await send(`${PLAN}/events/${encodeURIComponent(CAIRN_ROW.event_id)}/gpx/cairn`, "POST", { url });
-    $("ci-msg").innerHTML = `<span class="ok">${esc(T("cairn.imported", { name: r.cairn?.name || "", km: num(r.gpx?.km, 1) }))} ✓</span>`
+    const r = await send(`${PLAN}/events/${encodeURIComponent(e.id)}/gpx/cairn`, "POST", { url });
+    if (r.event) {
+      S.edit = { ...e, ...r.event, gpx: r.gpx };
+      const f = EVF();
+      f.days.value = r.event.days || 1;
+      f.distance_km.value = r.event.distance_km ?? "";
+      f.climbing_m.value = r.event.climbing_m ?? "";
+      evGpx = r.gpx || evGpx; dayPlanLenient = false; dayPlanTotals = null;
+      dayPlanForm(r.event.day_plan || []);
+      f.distance_km.value = r.event.distance_km ?? "";      // the route's totals, not the days' rounded sums
+      f.climbing_m.value = r.event.climbing_m ?? "";
+    }
+    $("evcairn").value = ""; syncDayRequired();
+    $("ci-msg").innerHTML = `<span class="ok">${esc(T("cairn.imported_ev", { name: r.cairn?.name || "", km: num(r.event?.distance_km ?? r.gpx?.km, 1),
+      gain: num(r.event?.climbing_m ?? r.gpx?.gain_m), days: r.event_days }))} ✓</span>`
       + (r.cairn?.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join("");
+    loadPlanEvents(); load().then(() => { if (S.cur) openRace(S.cur); });
     await cairnStatus(); cpRender();
-    await load(); if (S.cur) openRace(S.cur);
-  } catch (e) { $("ci-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  } catch (err) { $("ci-msg").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
   $("ci-go").disabled = false;
-};
-$("cairn-close").onclick = () => $("cairn-dlg").close();
+}
+$("ci-go").onclick = importCairnNow;
+$("evcairn").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && S.edit) { ev.preventDefault(); importCairnNow(); }
+});
 
 // ---------------- init ----------------
 window.addEventListener("resize", () => [...S.charts, ...S.cmpCharts].forEach((c) => c.resize()));

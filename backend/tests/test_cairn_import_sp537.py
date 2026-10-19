@@ -330,9 +330,10 @@ def test_an_older_event_gpx_table_gets_the_source_column(store):
 def test_the_pages_offer_the_import():
     calc = (ROOT / "backend/static/racepower.html").read_text("utf-8")
     assert 'id="cairn-url"' in calc and "/course/cairn" in calc and "/gpx/cairn" in calc
-    # SP-691: the event editor (its Cairn link) moved to 賽事管理, whose race has its own Cairn button
+    # SP-691: the event editor (its Cairn link) moved to 賽事管理; SP-692: its Cairn import / push sit in
+    # the editor popup (no separate Cairn button on the race any more)
     plan = (ROOT / "backend/static/races.html").read_text("utf-8")
-    assert 'id="evcairn"' in plan and 'id="d-cairn"' in plan and "/gpx/cairn" in plan
+    assert 'id="evcairn"' in plan and 'id="ed-cairn"' in plan and "/gpx/cairn" in plan
     for loc in ("zh-TW", "en"):
         rp = json.loads((ROOT / f"backend/static/i18n/{loc}/racepower.json").read_text("utf-8"))
         pl = json.loads((ROOT / f"backend/static/i18n/{loc}/plan.json").read_text("utf-8"))

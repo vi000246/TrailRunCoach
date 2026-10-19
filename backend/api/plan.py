@@ -414,18 +414,23 @@ async def import_event_cairn(eid: str, body: CairnIn):
                                                               "schedule": imp.get("schedule")}))
     except EG.EventGpxError as x:
         raise HTTPException(400, str(x))
-    _fill_totals_from_gpx(eid, row)
+    # SP-699: the race takes the Cairn route's distance and climb (a plain GPX upload only fills empty
+    # ones, SP-533 — importing a Cairn trip is choosing that route), and its days follow the nights
+    upd = {"distance_km": round(float(row["km"]), 2), "climbing_m": round(float(row["gain_m"]))}
     days = int(e.days or 1)
     if imp["nights"] and days != imp["days"]:
         days = imp["days"]
         st = EG.day_stats(eid, days)
-        dp = [{"km": d["km"], "gain_m": d["gain_m"], "loss_m": d["loss_m"]} for d in st["days"]] if st else None
-        plan = P.Plan.load()
-        plan.events = [dataclasses.replace(x, days=days, day_plan=dp) if x.id == eid else x for x in plan.events]
-        plan.save()
+        upd.update(days=days, day_plan=[{"km": d["km"], "gain_m": d["gain_m"], "loss_m": d["loss_m"]}
+                                        for d in st["days"]] if st else None)
+    plan = P.Plan.load()
+    plan.events = [dataclasses.replace(x, **upd) if x.id == eid else x for x in plan.events]
+    plan.save()
     _notify(False)
     from backend.api.racepower import group_ratio_rows
+    ev = next((x for x in plan.events if x.id == eid), e)
     return {"gpx": EG.meta(row), "days": EG.day_stats(eid, days), "event_days": days,
+            "event": P.event_json(ev, today_local()),
             "cairn": _cairn_out(imp, e.date, route_km=row["km"], ratio_rows=group_ratio_rows())}
 
 
