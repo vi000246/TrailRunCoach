@@ -11479,6 +11479,66 @@
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"
   },
+  "不分海拔": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "沒有路線最高海拔（手動路線請填目的地海拔），停留不分郊山／中級山／百岳": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "郊山": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "百岳": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "中級山": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "3000 m 以下": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "路線最高 {top:,.0f} m → {band}（{rng}），用你之前{band}的 {t} 趟（{d} 天）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "路線最高 {top:,.0f} m → {band}（{rng}），但{band}只有 {t0} 趟 {d0} 天（要 {min_t} 趟、{min_d} 天以上，推估），改用 3000 m 以下的 {t} 趟（{d} 天）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "路線最高 {top:,.0f} m → {band}（{rng}），但{band}只有 {t0} 趟 {d0} 天（要 {min_t} 趟、{min_d} 天以上，推估），改用所有登山的 {t} 趟": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "路線最高 {top:,.0f} m → {band}（{rng}），但{band}只有 {t0} 趟 {d0} 天、3000 m 以下也只有 {t2} 趟 {d2} 天（要 {min_t} 趟、{min_d} 天以上，推估），改用所有登山的 {t} 趟": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "所有登山 {t} 趟": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "{band} {t} 趟": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "{label}：{why}，停留約移動時間的 {s:.0%}": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "（天數少，往{parent}所有登山日的 {p:.0%} 收縮）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "範圍是你這一類（海拔）登山日停留的 25–75 百分位": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
   "時鐘時間 = 移動時間 + 每天的停留預測（{label}：{why}；推估）": {
     "draft": true,
     "src": "backend/engine/racepower/planner.py"

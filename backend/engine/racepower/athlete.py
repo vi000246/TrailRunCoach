@@ -2291,7 +2291,7 @@ def nonmoving_row(ds, w) -> Optional[dict]:
     return ds.cached_series(NONMOVING_KEY, w, lambda: _nonmoving_row(ds, w))
 
 
-NONMOVING_DAYS_KEY = "racepower_nonmoving_days_v1"
+NONMOVING_DAYS_KEY = "racepower_nonmoving_days_v2"       # v2 (SP-739): each day's top_m
 
 
 def _nonmoving_day_rows(ds, w) -> list:
@@ -2304,6 +2304,9 @@ def _nonmoving_day_rows(ds, w) -> list:
     for _day, part in BT._hike_days(a, w.entry.start):
         r = NM.run_row(part["t"], np.nan_to_num(part["kmh"]) > RUN_MOVING_KMH)
         if r:
+            z = np.asarray(part["z"], float) if part.get("z") is not None else np.array([])
+            z = z[np.isfinite(z)]
+            r["top_m"] = float(z.max()) if len(z) else None        # SP-739: the day's highest point
             out.append(r)
     return out
 
@@ -2356,9 +2359,13 @@ def nonmoving_history(ds, tday: int, race_idx, exclude=None, tags: Optional[list
                     solo = solo_hikes(tags=tags)
                 own = own_paced(w, tags, solo)
             extra["trip"] = "solo" if own else "group"
+            # SP-739: the altitude class goes by the whole trip's top (a route is classed by its top)
+            tops = [r["top_m"] for r in rows if r and r.get("top_m") is not None]
+            extra["top_m"] = max(tops) if tops else None
+            extra["trip_id"] = w.idx
         for r in rows:
             if r and r.get("moving_s") and r["moving_s"] >= NM.NONMOVING["min_s"]:
-                out.append({**r, **extra})
+                out.append({**r, "day_top_m": r.get("top_m"), **extra} if k == "hike" else {**r, **extra})
     ds.flush_series()
     return out
 

@@ -1147,7 +1147,8 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
         for d in r1["days"]:
             day_mv[int(d["day"])] = (d["moving_h"] * t1 / r1["time_s"] / lam if r1["time_s"] else d["moving_h"]) * 3600.0
     tk = opts.get("trip_kind") if opts.get("trip_kind") in TRIP_KINDS else None
-    rest, day_ratios, ratio_eff, clock_line = _hike_timeline(opts, tk, day_mv, ratio, ratio_src)
+    rest, day_ratios, ratio_eff, clock_line = _hike_timeline(opts, tk, day_mv, ratio, ratio_src,
+                                                             top_m=route_top_m(course))
 
     def rat(n: int) -> float:
         return day_ratios[n - 1] if day_ratios and 1 <= n <= len(day_ratios) else ratio
@@ -1255,15 +1256,26 @@ PARTIAL_NOTE = "部分適應＝已適應與未適應兩條曲線的中點（推�
 # stop editor are added at their km on top, as before. No stop profile (no history) → the old moving
 # ratio (hike.moving_ratio) for every day.
 
-def hike_rest(prof: Optional[dict], kind: str, day_moving: dict) -> Optional[dict]:
-    """Each day's predicted stops: {kind, kind_label, days: [{day, moving_s, rest_s, p25_s, p75_s,
-    ratio}], total_s, p25_s, p75_s, why, range_why, source, badge}; None without a profile."""
+def route_top_m(course: Optional[dict]) -> Optional[float]:
+    """SP-739: the route's highest point (the course totals' z_max, else its segments' — a manual
+    course carries the typed altitude there); None without one."""
+    t = (course or {}).get("totals") or {}
+    if t.get("z_max") is not None:
+        return float(t["z_max"])
+    zs = [s.get("z_max") for s in (course or {}).get("segments") or [] if s.get("z_max") is not None]
+    return float(max(zs)) if zs else None
+
+
+def hike_rest(prof: Optional[dict], kind: str, day_moving: dict, top_m: Optional[float] = None) -> Optional[dict]:
+    """Each day's predicted stops: {kind, kind_label, alt, days: [{day, moving_s, rest_s, p25_s, p75_s,
+    ratio}], total_s, p25_s, p75_s, why, range_why, source, badge}; None without a profile. `top_m`
+    (SP-739): the route's highest point → the altitude class of the stops (nonmoving.choose_alt)."""
     from backend.engine.racepower import nonmoving as NM
     if not prof or not day_moving:
         return None
     days, ref = [], None
     for n, mv in sorted(day_moving.items()):
-        nm = NM.predict(prof, mv, None, kind=kind) if mv and mv > 0 else None
+        nm = NM.predict(prof, mv, None, kind=kind, top_m=top_m) if mv and mv > 0 else None
         if nm is None:
             days.append({"day": int(n), "moving_s": float(mv or 0.0), "rest_s": 0.0, "p25_s": 0.0, "p75_s": 0.0,
                          "ratio": 1.0})
@@ -1275,9 +1287,14 @@ def hike_rest(prof: Optional[dict], kind: str, day_moving: dict) -> Optional[dic
     if ref is None:
         return None
     nm = ref[1]
-    return {"kind": nm["kind"], "kind_label": nm["kind_label"], "days": days,
+    label, why = nm["kind_label"], nm["why"]
+    if top_m is None and str(kind).startswith("hike") and f"{nm['kind']}@high" in (prof.get("kinds") or {}):
+        # SP-739: no route top (a manual route without the altitude) → not split by altitude, and said so
+        label += " · " + _("不分海拔")
+        why = _("沒有路線最高海拔（手動路線請填目的地海拔），停留不分郊山／中級山／百岳") + "；" + why
+    return {"kind": nm["kind"], "kind_label": label, "alt": nm.get("alt"), "days": days,
             "total_s": sum(d["rest_s"] for d in days), "p25_s": sum(d["p25_s"] for d in days),
-            "p75_s": sum(d["p75_s"] for d in days), "why": nm["why"], "range_why": nm["range_why"],
+            "p75_s": sum(d["p75_s"] for d in days), "why": why, "range_why": nm["range_why"],
             "n_kind": nm.get("n_kind"), "source": nm["source"], "badge": "推估"}
 
 
@@ -1317,13 +1334,14 @@ def hike_clock(plan: dict, stops) -> None:
     sm["moving_ratio"] = T / (T + rest["total_s"]) if T + rest["total_s"] > 0 else 1.0
 
 
-def _hike_timeline(opts: dict, trip_kind: Optional[str], day_moving: dict, ratio: float, ratio_src: str):
+def _hike_timeline(opts: dict, trip_kind: Optional[str], day_moving: dict, ratio: float, ratio_src: str,
+                   top_m: Optional[float] = None):
     """(rest, day_ratios, the trip's effective ratio, the clock line for the warnings) of a 百岳 plan:
-    the stop model's prediction per day (hike_rest) when the plan has a stop profile, else the old
-    moving ratio for every day (rest None)."""
+    the stop model's prediction per day (hike_rest, in the altitude class of the route's top `top_m`,
+    SP-739) when the plan has a stop profile, else the old moving ratio for every day (rest None)."""
     from backend.engine.racepower import nonmoving as NM
     kind = opts.get("stop_kind") or NM.plan_kind("baiyue", trip_kind=trip_kind)
-    rest = hike_rest(opts.get("nonmoving"), kind, day_moving)
+    rest = hike_rest(opts.get("nonmoving"), kind, day_moving, top_m=top_m)
     if rest is None:
         return None, None, ratio, f"時鐘時間 = 移動時間 ÷ {ratio:.2f}（{ratio_src}）"
     T = sum(d["moving_s"] for d in rest["days"])
@@ -1497,7 +1515,8 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     else:
         for d in r1["days"]:
             day_mv[int(d["day"])] = d["moving_h"] * snow_f / lam * 3600.0
-    rest, day_ratios, ratio_eff, clock_line = _hike_timeline(opts, kind, day_mv, ratio, ratio_src)
+    rest, day_ratios, ratio_eff, clock_line = _hike_timeline(opts, kind, day_mv, ratio, ratio_src,
+                                                             top_m=route_top_m(course))
 
     def rat(n: int) -> float:
         return day_ratios[n - 1] if day_ratios and 1 <= n <= len(day_ratios) else ratio

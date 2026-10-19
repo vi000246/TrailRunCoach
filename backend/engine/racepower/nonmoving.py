@@ -54,6 +54,11 @@ back to the hike kind's while it has fewer than RANGE_MIN_N days. The 百岳
 calculator predicts each day of a trip apart (planner.hike_rest) with the
 sub-kind of its trip kind (PlanIn.trip_kind; plan_kind).
 
+SP-739 — inside each hike kind the stops are learnt per altitude class of the
+route's top (郊山 < 1500 m, 中級山 1500–2999 m, 百岳 ≥ 3000 m; ALT_BANDS and
+choose_alt below), with the fallbacks ≥ 3000 / < 3000 and then the hike kind
+as a whole while a class has few trips.
+
 All of these numbers are 推估: no literature has aid-station or stop numbers
 (Kerhervé 2015 only reports that faster runners stop less, §0.8 "未找到來源");
 the priors are rough values of one athlete's SP-716 data and only matter for a
@@ -108,6 +113,43 @@ NONMOVING = {
 KIND_LABEL = {"race": N_("比賽"), "solo": N_("自主長程"), "hike": N_("登山"),
               "hike_group": N_("登山（跟團）"), "hike_solo": N_("登山（自己走）")}
 HIKE_SUB = {"group": "hike_group", "solo": "hike_solo"}     # SP-732: a hike row's "trip" → its sub-kind
+
+# SP-739 — inside each hike kind (hike, hike_group, hike_solo) the stops are learnt per altitude
+# class of the route's highest point (the user's decision, 2026-10-19): ≥ 3000 m 百岳, 1500–2999 m
+# 中級山, < 1500 m 郊山. A past hike day is classed by the top of its whole trip (the plan classes a
+# route by its top, every day alike). A class with fewer than ALT_MIN_TRIPS trips or ALT_MIN_DAYS
+# days (推估) falls back to the two classes ≥ 3000 / < 3000 (only the 郊山 / 中級山 side can: ≥ 3000
+# is the same class in both), then to the hike kind as a whole. Each class is fitted like a sub-kind,
+# shrunk to its hike kind's c and b (K_LEVEL / K_SLOPE pseudo-days).
+ALT_BANDS = ("low", "mid", "high", "lt3000")
+ALT_HIGH_M = 3000.0
+ALT_MID_M = 1500.0
+ALT_MIN_TRIPS = 3           # 推估
+ALT_MIN_DAYS = 5            # 推估
+ALT_LABEL = {"low": N_("郊山"), "mid": N_("中級山"), "high": N_("百岳"), "lt3000": N_("3000 m 以下")}
+ALT_RANGE = {"low": "< 1500 m", "mid": "1500–2999 m", "high": "≥ 3000 m", "lt3000": "< 3000 m"}
+
+
+def alt_band(top_m) -> Optional[str]:
+    """SP-739: the altitude class of a route / trip top: "high" ≥ 3000 m 百岳, "mid" 1500–2999 m 中級山,
+    "low" < 1500 m 郊山; None without a top."""
+    try:
+        z = float(top_m)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(z):
+        return None
+    return "high" if z >= ALT_HIGH_M else "mid" if z >= ALT_MID_M else "low"
+
+
+def _in_band(r: dict, band: str) -> bool:
+    b = alt_band(r.get("top_m"))
+    return b in ("low", "mid") if band == "lt3000" else b == band
+
+
+def _n_trips(rs: list[dict]) -> int:
+    """Trips of some rows (a row without a "trip_id" is a trip of its own)."""
+    return len({r.get("trip_id", ("row", i)) for i, r in enumerate(rs)})
 SOURCE = N_("非移動時間：依活動類型（比賽／自主長程／登山）用你之前同類活動的停留比例，隨移動時間增加、"
             "2.5 小時後不再增加，資料少時收縮到先驗；≥ 60 秒算補給站／排隊，其餘算零碎停頓，"
             "移動定義和心率配速模型一樣（> 1 km/h）；補給站停留沒有文獻數字（Kerhervé 2015 只說快的人停得少）；推估")
@@ -221,6 +263,16 @@ def profile(rows) -> Optional[dict]:
     hike_rows = [r for r in rs if (r.get("kind") or "race") == "hike"]
     subs = {sub: _fit_kind([r for r in hike_rows if r.get("trip") == trip], sub, parent=hike)
             for trip, sub in HIKE_SUB.items()}
+    # SP-739: the altitude classes of each hike kind, shrunk to that kind's fit
+    bases = {"hike": hike_rows, **{sub: [r for r in hike_rows if r.get("trip") == trip] for trip, sub in HIKE_SUB.items()}}
+    fits = {"hike": hike, **subs}
+    alts = {}
+    for base, brs in bases.items():
+        for band in ALT_BANDS:
+            bs = [r for r in brs if _in_band(r, band)]
+            kp = _fit_kind(bs, f"{base}@{band}", parent=fits[base])
+            kp.update(n_trips=_n_trips(bs), parent=base, alt=band)
+            alts[f"{base}@{band}"] = kp
     hike_resid = list(hike["resid"])
     for k, kp in kinds.items():
         finish(kp, pooled_resid, "pooled",
@@ -232,7 +284,21 @@ def profile(rows) -> Optional[dict]:
                hike["long_frac"], hike.get("stop_len_s"))
         kp["parent"] = "hike"
         kinds[sub] = kp
-    return {"v": 2, "n": len(rs), "kinds": kinds,
+    for key, kp in alts.items():
+        base = kinds[kp["parent"]]
+        mine = kp.pop("resid")
+        if len(mine) >= P["range_min_n"]:
+            q = np.percentile(mine, [25, 75])
+            kp["q25"], kp["q75"], kp["range_from"] = float(min(1.0, q[0])), float(max(1.0, q[1])), "alt"
+        else:                               # a thin class keeps its hike kind's range
+            kp["q25"], kp["q75"], kp["range_from"] = base["q25"], base["q75"], base["range_from"]
+        if kp["long_frac"] is None:
+            kp["long_frac"] = base["long_frac"]
+        if kp["stop_len_s"] is None:
+            kp["stop_len_s"] = base.get("stop_len_s")
+        kp["n_trips_parent"] = _n_trips(bases[kp["parent"]])
+        kinds[key] = kp
+    return {"v": 3, "n": len(rs), "kinds": kinds,
             "params": {k: P[k] for k in ("t_lo_h", "t_cap_h", "share_max", "b_prior", "k_level", "k_slope")},
             "source": SOURCE, "label": "推估"}
 
@@ -261,11 +327,61 @@ def _user_and_stations(stops) -> tuple[float, list]:
     return user_min, stations
 
 
-def predict(prof: Optional[dict], moving_s: Optional[float], stops=None, kind: str = "race") -> Optional[dict]:
+def _alt_enough(kp: Optional[dict]) -> bool:
+    return bool(kp) and kp.get("n_trips", 0) >= ALT_MIN_TRIPS and kp.get("n", 0) >= ALT_MIN_DAYS
+
+
+def choose_alt(prof: dict, kind: str, top_m) -> Optional[dict]:
+    """SP-739: which altitude class of hike kind `kind` a route with top `top_m` uses: {key (the
+    prof["kinds"] key to predict with), band (the route's class), used ("low" / "mid" / "high" /
+    "lt3000", or None = the hike kind as a whole), scheme ("three" / "two" / "all"), n_trips, n_days,
+    n_band (the trips of the route's own class), top_m, why}. None for a kind that is not a hike, a
+    profile without classes (stored before SP-739) or no top. A sub-kind with no days of its own
+    (跟團 / 自己 not marked yet) is the hike kind as a whole (SP-732), so its classes are the hike
+    kind's."""
+    ks = prof.get("kinds") or {}
+    band = alt_band(top_m)
+    if band is None or not str(kind).startswith("hike") or f"{kind}@high" not in ks:
+        return None
+    base = kind if ks.get(kind, {}).get("n") or kind == "hike" else "hike"
+    own = ks.get(f"{base}@{band}")
+    lt = ks.get(f"{base}@lt3000")
+    lab = {b: _(ALT_LABEL[b]) for b in ALT_BANDS}
+    common = {"band": band, "top_m": float(top_m), "n_band": (own or {}).get("n_trips", 0),
+              "label": lab[band], "range": ALT_RANGE[band]}
+    if _alt_enough(own):
+        used, scheme, kp = band, "three", own
+        why = _("路線最高 {top:,.0f} m → {band}（{rng}），用你之前{band}的 {t} 趟（{d} 天）",
+                top=float(top_m), band=lab[band], rng=ALT_RANGE[band], t=kp["n_trips"], d=kp["n"])
+    elif band != "high" and _alt_enough(lt):
+        used, scheme, kp = "lt3000", "two", lt
+        why = _("路線最高 {top:,.0f} m → {band}（{rng}），但{band}只有 {t0} 趟 {d0} 天（要 {min_t} 趟、{min_d} 天以上，推估），"
+                "改用 3000 m 以下的 {t} 趟（{d} 天）",
+                top=float(top_m), band=lab[band], rng=ALT_RANGE[band], t0=common["n_band"], d0=(own or {}).get("n", 0),
+                min_t=ALT_MIN_TRIPS, min_d=ALT_MIN_DAYS, t=kp["n_trips"], d=kp["n"])
+    else:
+        used, scheme, kp = None, "all", ks.get(base) or {}
+        t_all = (own or lt or {}).get("n_trips_parent", 0)
+        why = (_("路線最高 {top:,.0f} m → {band}（{rng}），但{band}只有 {t0} 趟 {d0} 天（要 {min_t} 趟、{min_d} 天以上，推估），"
+                 "改用所有登山的 {t} 趟", top=float(top_m), band=lab[band], rng=ALT_RANGE[band], t0=common["n_band"], d0=(own or {}).get("n", 0),
+                 min_t=ALT_MIN_TRIPS, min_d=ALT_MIN_DAYS, t=t_all) if band == "high" else
+               _("路線最高 {top:,.0f} m → {band}（{rng}），但{band}只有 {t0} 趟 {d0} 天、3000 m 以下也只有 {t2} 趟 {d2} 天"
+                 "（要 {min_t} 趟、{min_d} 天以上，推估），改用所有登山的 {t} 趟",
+                 top=float(top_m), band=lab[band], rng=ALT_RANGE[band], t0=common["n_band"], d0=(own or {}).get("n", 0),
+                 t2=(lt or {}).get("n_trips", 0), d2=(lt or {}).get("n", 0), min_t=ALT_MIN_TRIPS, min_d=ALT_MIN_DAYS, t=t_all))
+        return {**common, "key": base, "used": None, "scheme": scheme, "n_trips": t_all, "n_days": kp.get("n", 0),
+                "short": _("所有登山 {t} 趟", t=t_all), "why": why}
+    return {**common, "key": f"{base}@{used}", "used": used, "scheme": scheme, "n_trips": kp["n_trips"],
+            "n_days": kp["n"], "short": _("{band} {t} 趟", band=lab[used], t=kp["n_trips"]), "why": why}
+
+
+def predict(prof: Optional[dict], moving_s: Optional[float], stops=None, kind: str = "race",
+            top_m: Optional[float] = None) -> Optional[dict]:
     """Predicted non-moving seconds for an event of `moving_s` and `kind`
     (race / solo / hike; see the module docstring). `stops` = the race
-    calculator's aid stations [{km, minutes, type}]. None without a profile
-    or a moving time."""
+    calculator's aid stations [{km, minutes, type}]. `top_m` (SP-739, a hike
+    kind): the route's highest point → its altitude class (choose_alt). None
+    without a profile or a moving time."""
     if not prof or not moving_s or moving_s <= 0 or not math.isfinite(moving_s):
         return None
     if "kinds" not in prof:
@@ -273,7 +389,8 @@ def predict(prof: Optional[dict], moving_s: Optional[float], stops=None, kind: s
     if kind not in prof["kinds"]:
         # a hike sub-kind on a profile stored before SP-732 → the hike kind; anything else → race
         kind = "hike" if str(kind).startswith("hike") and "hike" in prof["kinds"] else "race"
-    kp = prof["kinds"][kind]
+    alt = choose_alt(prof, kind, top_m) if top_m is not None else None
+    kp = prof["kinds"][alt["key"]] if alt and alt["used"] else prof["kinds"][kind]
     share = share_at(kp, moving_s)
     s_model = share * moving_s
     long_model = s_model * kp["long_frac"]
@@ -292,24 +409,33 @@ def predict(prof: Optional[dict], moving_s: Optional[float], stops=None, kind: s
     lo = max(0.0, total + part * (kp["q25"] - 1.0))
     hi = max(total, total + part * (kp["q75"] - 1.0))
     capped = moving_s / 3600.0 > NONMOVING["t_cap_h"]
-    sub = kp.get("parent") == "hike"
-    if sub and not kp["n"]:
-        basis = _("{label}：你還沒有標成這一類的健行日，用你所有健行日估，停留約移動時間的 {s:.0%}",
-                  label=_(KIND_LABEL[kind]), s=share)
-    elif kp["n"]:
-        basis = _("{label}：用你之前 {n} 次同類活動估，停留約移動時間的 {s:.0%}", label=_(KIND_LABEL[kind]), n=kp["n"], s=share)
+    sub = kp.get("parent") == "hike" and not kp.get("alt")
+    if alt and alt["used"]:
+        basis = _("{label}：{why}，停留約移動時間的 {s:.0%}", label=_(KIND_LABEL[kind]), why=alt["why"], s=share)
+        if kp["n"] < 2 * NONMOVING["k_level"]:
+            basis += _("（天數少，往{parent}所有登山日的 {p:.0%} 收縮）", parent=_(KIND_LABEL[kp["parent"]]), p=kp["prior"])
     else:
-        basis = _("{label}：你還沒有同類活動，停留用先驗的移動時間 {s:.0%}", label=_(KIND_LABEL[kind]), s=share)
-    if kp["n"] and kp["n"] < 2 * NONMOVING["k_level"]:
-        basis += (_("（次數少，往你所有健行日的 {p:.0%} 收縮）", p=kp["prior"]) if sub else
-                  _("（次數少，往先驗 {p:.0%} 收縮）", p=kp["prior"]))
+        if sub and not kp["n"]:
+            basis = _("{label}：你還沒有標成這一類的健行日，用你所有健行日估，停留約移動時間的 {s:.0%}",
+                      label=_(KIND_LABEL[kind]), s=share)
+        elif kp["n"]:
+            basis = _("{label}：用你之前 {n} 次同類活動估，停留約移動時間的 {s:.0%}", label=_(KIND_LABEL[kind]), n=kp["n"], s=share)
+        else:
+            basis = _("{label}：你還沒有同類活動，停留用先驗的移動時間 {s:.0%}", label=_(KIND_LABEL[kind]), s=share)
+        if kp["n"] and kp["n"] < 2 * NONMOVING["k_level"]:
+            basis += (_("（次數少，往你所有健行日的 {p:.0%} 收縮）", p=kp["prior"]) if sub else
+                      _("（次數少，往先驗 {p:.0%} 收縮）", p=kp["prior"]))
+        if alt:                             # SP-739: no class with enough trips → the hike kind as a whole
+            basis = alt["why"] + "；" + basis
     if capped:
         basis += _("；移動超過 {h:g} 小時後比例不再增加", h=NONMOVING["t_cap_h"])
     rng = {"kind": _("範圍是你同類活動停留的 25–75 百分位"),
+           "alt": _("範圍是你這一類（海拔）登山日停留的 25–75 百分位"),
            "hike": _("範圍是你所有健行日停留的 25–75 百分位（這一類次數少）")}.get(
         kp.get("range_from"), _("範圍是你所有活動停留的 25–75 百分位（同類次數少）"))
+    label = _(KIND_LABEL[kind]) + (" · " + alt["short"] if alt else "")
     return {"total_s": total, "long_s": long_, "short_s": short, "p25_s": lo, "p75_s": hi, "method": method,
-            "kind": kind, "kind_label": _(KIND_LABEL[kind]), "share": share, "n_kind": kp["n"], "capped": capped,
+            "kind": kind, "kind_label": label, "alt": alt, "share": share, "n_kind": kp["n"], "capped": capped,
             "why": basis + "；" + why, "range_why": rng, "n_runs": prof["n"],
             "source": _(SOURCE), "badge": "推估"}
 
