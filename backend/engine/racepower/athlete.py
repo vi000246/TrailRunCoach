@@ -2018,6 +2018,62 @@ def _trail_durability(ds, w) -> Optional[dict]:
             "clean": cuts, "kept_share": float(keep[m].mean()) if len(m) else None}
 
 
+TRAILHR_INSIDE_KEY = "racepower_trailhr_inside_v1"   # SP-722: within-activity δ windows (trailhr step 8)
+# the user's activity types that mean a group-paced day unless the trip is opted in as solo (SP-722)
+GROUP_PACED_TYPES = ("hike", "baiyue_group")
+
+
+def own_paced(w, tags: Optional[list] = None, solo=None) -> bool:
+    """Whether the athlete set the pace (SP-722, trailhr step 8: "只用自己步調的活動，跟團健行不算"):
+    False for a hiking / mountaineering sport type or the user's 爬山 / 百岳跟團 mark, unless the
+    trip is in the user's solo hikes (solo_hikes); every other run is the athlete's own pace."""
+    from backend.engine import activity_tags as AT
+    solo = solo_hikes() if solo is None else solo
+    if w.entry.file in solo:
+        return True
+    if is_hike(w):
+        return False
+    u = AT.find(tags, w.entry.start, w.entry.file) if tags else None
+    return AT.user_type(u) not in GROUP_PACED_TYPES
+
+
+def _inside_windows(ds, w) -> Optional[dict]:
+    """trailhr step 8 for one run: the 50 m windows (trailhr.inside_windows) on the drift-v2-
+    cleaned samples, and the run's moving hours."""
+    from backend.engine.racepower import trailhr as TH
+    a = activity_arrays(ds, w)
+    if a is None or a["hr"] is None:
+        return None
+    mv = np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH
+    tm, es, m = TH.effort_speed_series(a["t"], a["d"], a["z"], mv)
+    if len(tm) < 100:
+        return None
+    es_all = np.full(len(a["t"]), np.nan)
+    es_all[m] = es
+    keep, _cuts = durability_clean_mask(a["t"], a["kmh"], a["hr"], es_all)
+    return {"wins": TH.inside_windows(a["t"], a["d"], a["z"], a["hr"], mv, keep), "T_h": float(tm[-1]) / 3600.0}
+
+
+def inside_acts(ds, today: dt.date, exclude: Optional[set] = None, tags: Optional[list] = None) -> list[dict]:
+    """The own-paced outdoor trail runs of trailhr.INSIDE["window_days"] before `today` (without
+    `exclude`) with their cached 50 m windows: [{"idx", "date", "T_h", "wins"}]."""
+    from backend.engine.racepower import trailhr as TH
+    from backend.engine.wko5expr.dataset import date_to_day
+    tday = date_to_day(today)
+    exclude = exclude or set()
+    solo = solo_hikes()
+    out = []
+    for w in ds.workouts:
+        if not (outdoor(w) and is_trail(w)) or w.idx in exclude \
+                or not tday - TH.INSIDE["window_days"] < w.day < tday + 1 or not own_paced(w, tags, solo):
+            continue
+        r = ds.cached_series(TRAILHR_INSIDE_KEY, w, lambda w=w: _inside_windows(ds, w))
+        if r and r.get("wins"):
+            out.append({"idx": w.idx, "date": w.entry.start.date().isoformat(), "T_h": r["T_h"], "wins": r["wins"]})
+    ds.flush_series()
+    return out
+
+
 def activity_hadley(ds) -> dict[int, float]:
     """{workout idx: the activity's Hadley sum} from route_weather's
     activity_weather.json (heat_data.exposures): by file name, else (a TP /
@@ -2123,6 +2179,61 @@ def nonmoving_row(ds, w) -> Optional[dict]:
     return ds.cached_series(NONMOVING_KEY, w, lambda: _nonmoving_row(ds, w))
 
 
+NONMOVING_DAYS_KEY = "racepower_nonmoving_days_v1"
+
+
+def _nonmoving_day_rows(ds, w) -> list:
+    from backend.engine.racepower import backtest as BT
+    from backend.engine.racepower import nonmoving as NM
+    a = activity_arrays(ds, w)
+    if a is None:
+        return []
+    out = []
+    for _day, part in BT._hike_days(a, w.entry.start):
+        r = NM.run_row(part["t"], np.nan_to_num(part["kmh"]) > RUN_MOVING_KMH)
+        if r:
+            out.append(r)
+    return out
+
+
+def nonmoving_day_rows(ds, w) -> list:
+    """nonmoving.run_row of each local day of one activity (a multi-day hike: one row per day;
+    disk-memoised)."""
+    return ds.cached_series(NONMOVING_DAYS_KEY, w, lambda: _nonmoving_day_rows(ds, w)) or []
+
+
+def nonmoving_kind(w, race_idx) -> Optional[str]:
+    """SP-721: the stop kind of one activity (nonmoving.py): "race" 比賽／全力 (in `race_idx`, the
+    trail_hr_model races), "solo" 自主長程 (any other outdoor trail run), "hike" 健行／百岳 (a hike
+    that is not a run — SP-724 will narrow this to the 跟團 mark); None = not used."""
+    if outdoor(w) and is_trail(w):
+        return "race" if w.idx in race_idx else "solo"
+    if w.sport != "run" and is_hike(w):
+        return "hike"
+    return None
+
+
+def nonmoving_history(ds, tday: int, race_idx, exclude=None) -> list[dict]:
+    """SP-721: the stop rows of every activity before day `tday` (all years; `exclude` left out),
+    each with its "kind" (nonmoving_kind); a hike gives one row per day. Rows with less than
+    nonmoving.NONMOVING["min_s"] moving are dropped."""
+    from backend.engine.racepower import nonmoving as NM
+    exclude = exclude or set()
+    out = []
+    for w in ds.workouts:
+        if w.day >= tday or w.idx in exclude:
+            continue
+        k = nonmoving_kind(w, race_idx)
+        if k is None:
+            continue
+        rows = nonmoving_day_rows(ds, w) if k == "hike" else [nonmoving_row(ds, w)]
+        for r in rows:
+            if r and r.get("moving_s") and r["moving_s"] >= NM.NONMOVING["min_s"]:
+                out.append({**r, "kind": k})
+    ds.flush_series()
+    return out
+
+
 def _fuel_tags(tags, w) -> Optional[bool]:
     from backend.engine import activity_tags as AT
     from backend.engine.racepower import trailhr as TH
@@ -2139,12 +2250,17 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
                    race_idx: Optional[set] = None, tags: Optional[list] = None) -> dict:
     """The trail HR pace model (trailhr.py) as of `today`: the trail runs of
     the RE window before `today` without `exclude` (x heat-shifted to Hadley
-    120); durability from the runs ≥ 2 h on their drift-v2-cleaned windows,
-    shrunk to the 0.05 /h prior, split by the user's fuelling tags when both
+    120); durability from the own-paced runs (own_paced: no group hike): the
+    within-activity slope of the runs ≥ 1.5 h of the last three years (SP-722,
+    trailhr step 8, `delta_info["inside"]`) shrunk by precision to the 0.05 /h
+    prior, with the runs ≥ 2 h on their drift-v2-cleaned windows kept as
+    `delta_info["all"]` (and used per group when the user's fuelling tags split
+    them), the LOO gate on top; split by the user's fuelling tags when both
     groups are big enough; the full-effort curve x*(T) from earlier `race_idx`
     runs (activity type 比賽 or 全力, road and trail; default:
-    capacity_samples' effective tags); the non-moving profile from the
-    earlier race / 全力 trail runs ≥ 90 min. `tags` = activity_tags rows
+    capacity_samples' effective tags); the non-moving profile per kind
+    (SP-721: race / solo trail runs, hike days) from every earlier
+    activity (nonmoving_history). `tags` = activity_tags rows
     (default: activity_tags.load(); only the fuelling covariate reads them)."""
     from backend.engine.racepower import nonmoving as NM
     from backend.engine.racepower import trailhr as TH
@@ -2162,8 +2278,10 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
             and tday - TH.TRAILHR["window_days"] < w.day < tday + 1]
     pts = trail_hr_points(ds, runs)
     drows, frows, n_long = [], [], 0
+    solo = solo_hikes()
     for p in pts:
-        if p["T_h"] * 3600.0 >= TH.TRAILHR["dur_min_s"]:
+        # SP-722: durability only from the athlete's own pace (no group hike)
+        if p["T_h"] * 3600.0 >= TH.TRAILHR["dur_min_s"] and own_paced(ds.workouts[p["idx"]], tags, solo):
             w = ds.workouts[p["idx"]]
             r = ds.cached_series(TRAILHR_DUR_KEY, w, lambda w=w: _trail_durability(ds, w))
             if p["T_h"] * 3600.0 >= TH.FADE["min_run_s"]:
@@ -2180,6 +2298,13 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
     ds.flush_series()
     dinfo = TH.delta_by_fuel(drows)
     dinfo["runs"] = drows
+    # SP-722 (trailhr step 8): the within-activity δ of every own-paced run, shrunk by precision;
+    # it replaces the long-run-only δ unless the fuelling split applies (that stays per group)
+    ins = TH.shrink_inside(TH.inside_delta(inside_acts(ds, today, exclude, tags)))
+    dinfo["inside"] = ins
+    if ins["n"] and not dinfo["split"]:
+        dinfo["use"] = ins["delta"]
+        dinfo["n_evidence"] = ins["n"]
     dinfo["gate"] = TH.choose_delta(pts, dinfo)
     m = TH.fit(pts, dinfo["gate"]["delta"])
     m["delta_raw"] = dinfo["all"]["raw_median"]
@@ -2200,15 +2325,8 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
     m["x_race"] = TH.xstar_at(m["xstar"], 3.0)
     m["x_race_source"] = (f"全力心率曲線 x*(T)（{m['xstar']['n']} 次比賽／全力跑，收縮到文獻先驗）"
                           if m["xstar"]["n"] else "沒有之前的比賽／全力跑：用文獻先驗 x*(T)")
-    nm_rows = []
-    for w in earlier:
-        if not is_trail(w):
-            continue
-        r = nonmoving_row(ds, w)
-        if r and r["moving_s"] >= TH.TRAILHR["race_min_s"]:
-            nm_rows.append(r)
-    ds.flush_series()
-    m["nonmoving"] = NM.profile(nm_rows)
+    # SP-721: the stop profile per kind (race / solo / hike) from every earlier activity
+    m["nonmoving"] = NM.profile(nonmoving_history(ds, tday, race_idx, exclude))
     m["today"] = today.isoformat()
     m["points"] = pts
     return m

@@ -441,7 +441,7 @@ def _heat_profile(hourly: list, start: dt.datetime, out_segs: list, stops) -> li
 
 def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target: float = 1.0,
                       hadley: Optional[float] = None, lthr: Optional[float] = None,
-                      stops=None) -> Optional[dict]:
+                      stops=None, stop_kind: str = "race") -> Optional[dict]:
     """The primary trail estimate (2026-10-01, trailhr.py): moving time of a
     course from the athlete's HR pace model at f_target × their full-effort
     HR curve x*(T) (2026-10-02: solved at the predicted T), with the
@@ -449,7 +449,8 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
     athlete's heat β moves the HR level (trailhr.heat_shift; the model's x
     is at Hadley 120), so the caller must not apply the Hadley time penalty
     on top (`heat_beta` True). The non-moving time (aid stations, queues,
-    stops) is predicted apart (nonmoving.py) and never added to time_s —
+    stops) is predicted apart (nonmoving.py: the `stop_kind` race / solo
+    stops, SP-721) and never added to time_s —
     the moving time stays the validated target; time_total_s = both. None
     without a usable model."""
     from backend.engine.racepower import nonmoving as NM
@@ -468,7 +469,7 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
         t, tn = TH.predict_time(model, e, x), TH.predict_time(model, e, x, delta=0.0)
     if not t:
         return None
-    nm = NM.predict(model.get("nonmoving"), t, stops)
+    nm = NM.predict(model.get("nonmoving"), t, stops, kind=stop_kind)
     di = model.get("delta_info") or {}
     return {"time_s": t, "time_no_durability_s": tn, "x": x, "x_star": x + sh, "eff_km": e,
             "x_race": model.get("x_race"), "x_race_source": model.get("x_race_source"), "delta": model.get("delta"),
@@ -481,7 +482,12 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
                                "n": (di.get("all") or {}).get("n"),
                                "shrunk": (di.get("all") or {}).get("delta"),
                                "choice": (di.get("gate") or {}).get("choice"),
-                               "prior": (di.get("all") or {}).get("prior")} if di else None,
+                               "prior": (di.get("all") or {}).get("prior"),
+                               # SP-722 (trailhr step 8): the within-activity δ of the own-paced runs
+                               "inside": {k: (di.get("inside") or {}).get(k)
+                                          for k in ("raw", "se", "ci95", "n", "w", "k", "delta", "prior_sd")}
+                               if di.get("inside") else None,
+                               "fuel_split": bool(di.get("split"))} if di else None,
             "xstar": {k: xs.get(k) for k in ("x0", "s", "n", "kind", "prior", "source")} if xs else None,
             "heat_beta": bool(TH.TRAILHR["heat_beta"] and hadley is not None and lthr),
             "heat_shift": sh, "hadley": hadley,
@@ -489,6 +495,23 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
             # SP-222: the athlete's own fade by moving hour (trailhr.fade_shape) for the segment times
             "fade": model.get("fade"),
             "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": "推估"}
+
+
+def durability_text(hr_est: dict) -> str:
+    """The RC7 durability clause (SP-722): the δ in use and where it comes from — the athlete's
+    within-activity value (runs, shrunk to the prior) or the prior and why (推估)."""
+    d = hr_est.get("delta") or 0.0
+    dm = hr_est.get("delta_measured") or {}
+    ins = dm.get("inside") or {}
+    if dm.get("fuel_split"):
+        basis = _("有補給的長跑分組估計")
+    elif ins.get("n") and dm.get("choice") != "prior":
+        basis = _("你的值：{n} 筆自己步調的越野跑活動內部估計，往 5 % 先驗收縮", n=ins["n"])
+    elif ins.get("n"):
+        basis = _("先驗；你 {n} 筆活動內部估計速度每小時 {v:+.1%}，留一誤差沒變好", n=ins["n"], v=-(ins.get("raw") or 0.0))
+    else:
+        basis = _("先驗：還沒有 ≥ 1.5 小時的自己步調越野跑")
+    return _("耐久每小時 −{d:.1%}（1 小時後；{basis}）", d=d, basis=basis)
 
 
 def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
@@ -584,7 +607,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         if not (trail and mode == "auto"):
             return None
         return trail_hr_estimate(trail_hr, course["totals"]["km"], course["totals"].get("gain_m") or 0.0, f_target,
-                                 hadley=hadley, lthr=capacity.get("lthr"), stops=opts.get("stops"))
+                                 hadley=hadley, lthr=capacity.get("lthr"), stops=opts.get("stops"),
+                                 stop_kind=opts.get("stop_kind") or "race")
     hr_est = hr_for(env["to"].get("heat_index_sum_f"))
     # the HR model is at Hadley 120 and its heat comes from β, so its time only takes the
     # altitude part of M: every segment's heat set equal to the training side (推估)
@@ -865,8 +889,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             warnings.append(H.tag("RC7", f"越野整場移動時間用心率配速模型（推估）：全力心率 {hr_est['x_star']:.0%} LTHR"
                             f"（{hr_est['x_race_source']}）"
                             + (f"，熱 −{hr_est['heat_shift']:.1%}（你的 β）" if hr_est.get("heat_beta") and hr_est["heat_shift"] > 0 else "")
-                            + f"，effort km {hr_est['eff_km']:.1f}，耐久每小時 −"
-                            f"{(hr_est['delta'] or 0):.1%}（1 小時後）；功率只當參考"))
+                            + f"，effort km {hr_est['eff_km']:.1f}，" + durability_text(hr_est) + "；功率只當參考"))
             if hr_est.get("delta_warning"):
                 warnings.append(H.tag("RC7", hr_est["delta_warning"]))
             fd = hr_est.get("fade")

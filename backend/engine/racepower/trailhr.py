@@ -88,6 +88,26 @@ Model (all 推估 until the back-test validates it):
    random-effects mean (DerSimonian–Laird) with a 95 % CI (pool_deltas),
    then the same n/(n+3) shrinkage to 0.05 /h and the LOO gate. Steps 2's
    ratio stays only as `delta_uncleaned` for comparison.
+8. Within-activity δ (SP-722, 2026-10-19; SP-716 research). The athlete has few ≥ 2 h runs, so
+   step 7 alone leaves δ at the prior. Instead every own-paced trail run (no group hike: the
+   user's 爬山 / 百岳跟團 mark or a hiking sport type counts only when opted in as solo,
+   athlete.own_paced) of the last INSIDE["window_days"] gives 50 m windows (moving share ≥ 0.8,
+   drift-v2-cleaned share ≥ 0.8, |grade| ≤ 45 %, the first 15 min skipped as warm-up), and
+       r = ln v − g(grade)          (g = the pooled grade curve: median ln v per 2 % grade bin)
+       r − r̄ᵢ = c·(HR_lag − H̄Rᵢ) − δ·(L − L̄ᵢ),   L = (t − T0)⁺ moving hours
+   on the runs ≥ INSIDE["min_run_s"] moving, each run demeaned (its own intercept: the day's form
+   and the route's surface cancel), one pooled fixed-effects slope with an activity-cluster SE
+   (inside_delta). Same definition as the model's δ: the speed lost per hour after T0 at the same
+   grade and the same HR. The long records are in it too, with the most weight (a run's weight
+   is its spread of L: a 1.5 h run has 0.5 h after T0, a 4 h run 3 h — the "short runs weigh
+   little" rule falls out of the regression). Runs under 1.5 h only shape g. Shrinkage to the
+   0.05 /h prior by precision (normal–normal, shrink_inside): δ = w·raw + (1 − w)·prior,
+   w = σ₀² / (σ₀² + SE²), σ₀ = INSIDE["prior_sd"] 0.02 /h (推估: the prior counts as a
+   measurement with SE 2 %/h, i.e. k = SE²/σ₀² "prior units"), then the LOO gate — since
+   SP-722 scored only on the runs ≥ 1.5 h (δ acts after T0; the short runs must not let a δ
+   through that makes the long ones worse), and the prior when fewer than 4 such runs exist.
+   The long-run rows of step 7 stay as `delta_info["all"]` (shown, and used per group when
+   the fuelling split applies).
 """
 from __future__ import annotations
 
@@ -132,8 +152,8 @@ XSTAR = {
     "road_min_s": 15 * 60.0,   # 推估: a road sample needs ≥ 15 min moving
 }
 SOURCE = ("越野心率配速模型：effort km（km + 爬升/153）÷ 移動時間 對 移動心率/LTHR 的個人回歸，"
-          "加耐久衰減（1 h 後每小時下降，先驗 0.05/h 收縮，降到 80 % 後持平）；比賽心率 x*(T) 隨時長下降（Fornasiero 2018、"
-          "Kerhervé 2015 當形狀先驗）；推估")
+          "加耐久衰減（1 h 後每小時下降：你自己步調的越野跑活動內部、同坡度同心率的斜率，往先驗 0.05/h 收縮，"
+          "降到 80 % 後持平）；比賽心率 x*(T) 隨時長下降（Fornasiero 2018、Kerhervé 2015 當形狀先驗）；推估")
 XSTAR_SOURCE = ("全力心率曲線 x*(T) = x₀ − s·ln(T)：先驗錨點 0.5 h 1.00（5K 最後 1/4 ≥ LTHR）、3 h 0.90"
                 "（Friel Z3 下緣）、12 h 0.85（Fornasiero 2018 77 % HRmax 換算）；你的比賽／全力跑以當天 LTHR 擬合，"
                 "錨點當 3 場虛擬比賽收縮；推估")
@@ -148,6 +168,26 @@ DUR = {
     "hr_lag_s": 60.0,          # athlete.HR_LAG_S
     "g_max": 0.40,
 }
+# within-activity δ (module docstring step 8, SP-722), all 推估 unless noted
+INSIDE = {
+    "win_m": 50.0,              # SP-716: 50 m windows along the distance
+    "moving_min": 0.8,          # SP-716: a window needs ≥ 80 % of its elapsed time moving
+    "keep_min": 0.8,            # ≥ 80 % of its moving time inside the drift-v2-cleaned samples (as DUR)
+    "g_max": 0.45,              # SP-716: |grade| ≤ 45 %
+    "v_range": (0.2, 7.0),      # m/s: GPS glitches out
+    "warmup_h": 0.25,           # SP-716: the first 15 min moving skipped (warm-up)
+    "grade_bin": 0.02,          # SP-716: the pooled grade curve, one median per 2 % bin
+    "bin_min": 20,              # a bin needs ≥ 20 windows (else its windows are dropped)
+    "min_windows": 20,          # usable windows per run
+    "min_run_s": 1.5 * 3600.0,  # SP-716: shorter runs' slopes are noise (0.5 h after T0 at most)
+    "late_min_h": 0.5,          # a run's spread of (t − T0)⁺ the slope needs (as DUR)
+    "window_days": 3 * 365,     # durability changes slowly: three years of runs (the v₀ fit keeps 365 d)
+    "prior_sd": 0.02,           # σ₀: the 0.05 /h prior counts as a measurement with SE 0.02 /h
+    "hr_lag_s": 60.0,           # athlete.HR_LAG_S
+}
+INSIDE_SOURCE = ("耐久衰減：你自己步調的越野跑（跟團健行不算）每 50 m 視窗扣掉你的坡度曲線，在同一筆活動內對"
+                 "「1 小時後的移動時數」回歸（每筆去截距、加心率項＝同坡度同心率），≥ 1.5 小時的活動合併成一條斜率，"
+                 "長的活動權重自然大；再往 Clark 2019 的 5 %/h 先驗依精度收縮（先驗當作 ±2 %/h 的一次量測）；推估")
 FUEL_YES = ("有補給", "補給", "吃膠", "能量膠", "fuelled", "fueled", "fuel", "gel")
 FUEL_NO = ("沒補給", "無補給", "不補給", "沒吃", "空腹", "unfuelled", "unfueled", "no fuel", "fasted")
 
@@ -362,6 +402,143 @@ def pool_deltas(rows) -> Optional[dict]:
     return {"mean": m, "se": se, "ci95": [m - 1.96 * se, m + 1.96 * se], "tau": math.sqrt(tau2), "n": len(r)}
 
 
+# ---- within-activity δ (module docstring step 8, SP-722) ---------------------
+
+def inside_windows(t, d_m, z, hr, moving, keep=None, win_m: float = INSIDE["win_m"],
+                   hr_lag_s: float = INSIDE["hr_lag_s"]) -> list[list[float]]:
+    """50 m windows of one activity for inside_delta: [[grade, ln v (m/s), moving hours at the
+    window start, HR read hr_lag_s later], …], only windows that pass the INSIDE filters (moving
+    share, cleaned share, grade, speed, an HR). The warm-up is cut later (inside_delta), so the
+    disk cache does not depend on it."""
+    k = INSIDE
+    t = np.asarray(t, float)
+    n = len(t)
+    if n < 10:
+        return []
+    dt_ = np.diff(t, prepend=t[0])
+    dt_[~np.isfinite(dt_) | (dt_ < 0) | (dt_ > 30)] = 0.0
+    mv = np.asarray(moving, bool)[:n] & (dt_ > 0)
+    kp = np.ones(n, bool) if keep is None else np.asarray(keep, bool)[:n]
+    cm = np.cumsum(np.where(mv, dt_, 0.0))
+    ce = np.cumsum(dt_)
+    ck = np.cumsum(np.where(mv & kp, dt_, 0.0))
+    hv = np.asarray(hr, float)[:n] if hr is not None else np.full(n, np.nan)
+    okt = np.isfinite(t) & np.isfinite(hv) & (hv > 40)
+    if okt.sum() < 10:
+        return []
+    lag = np.interp(t + hr_lag_s, t[okt], hv[okt])
+    okh = mv & okt
+    ch = np.cumsum(np.where(okh, lag * dt_, 0.0))
+    chn = np.cumsum(np.where(okh, dt_, 0.0))
+    d = np.maximum.accumulate(np.nan_to_num(np.asarray(d_m, float)[:n]))
+    zz = np.asarray(z, float)[:n]
+    ok = np.isfinite(zz)
+    if ok.sum() < 10 or d[-1] < 2 * win_m:
+        return []
+    zf = np.interp(np.arange(n), np.nonzero(ok)[0], zz[ok])
+    j = np.clip(np.searchsorted(d, np.arange(0.0, d[-1], win_m)), 0, n - 1)
+    lo, hi = k["v_range"]
+    out = []
+    for a, b in zip(j[:-1], j[1:]):
+        mt, el, dd = cm[b] - cm[a], ce[b] - ce[a], d[b] - d[a]
+        if b <= a or mt <= 0 or el <= 0 or dd < 0.5 * win_m:
+            continue
+        if mt / el < k["moving_min"] or (ck[b] - ck[a]) / mt < k["keep_min"] or chn[b] - chn[a] < 0.5 * mt:
+            continue
+        g, v = (zf[b] - zf[a]) / dd, dd / mt
+        if abs(g) > k["g_max"] or not lo < v < hi:
+            continue
+        out.append([round(float(g), 4), round(math.log(v), 4), round(float(cm[a]) / 3600.0, 4),
+                    round(float((ch[b] - ch[a]) / (chn[b] - chn[a])), 1)])
+    return out
+
+
+def _gbin(g: float) -> int:
+    return int(round(g / INSIDE["grade_bin"]))
+
+
+def grade_curve(acts) -> dict[int, float]:
+    """The pooled grade curve g: {2 % bin: median ln v} over every activity's windows after the
+    warm-up; bins with fewer than bin_min windows are left out."""
+    by: dict[int, list] = {}
+    for a in acts or []:
+        for g, lv, h, _hr in a.get("wins") or []:
+            if h >= INSIDE["warmup_h"]:
+                by.setdefault(_gbin(g), []).append(lv)
+    return {b: float(np.median(v)) for b, v in by.items() if len(v) >= INSIDE["bin_min"]}
+
+
+def inside_delta(acts, t0: float = TRAILHR["t0_h"]) -> Optional[dict]:
+    """The pooled within-activity δ (module docstring step 8). `acts` = [{"wins": inside_windows
+    rows, "T_h": moving hours, "idx", "date"}] (the own-paced runs; all of them shape the grade
+    curve, those ≥ min_run_s give the slope). Returns {raw (/h, + = slowing), se (activity-cluster),
+    n (runs in the slope), n_curve (runs in the curve), windows, hr_coef, runs [{idx, date, T_h,
+    lever}]} — lever = the run's Σ(L − L̄)², its share of the slope — or None (no usable run)."""
+    k = INSIDE
+    curve = grade_curve(acts)
+    blocks = []
+    for a in acts or []:
+        if (a.get("T_h") or 0.0) * 3600.0 < k["min_run_s"]:
+            continue
+        w = [x for x in a.get("wins") or [] if x[2] >= k["warmup_h"] and _gbin(x[0]) in curve]
+        if len(w) < k["min_windows"]:
+            continue
+        h = np.array([x[2] for x in w])
+        L = np.clip(h - t0, 0.0, None)
+        if np.ptp(L) < k["late_min_h"]:
+            continue
+        r = np.array([x[1] - curve[_gbin(x[0])] for x in w])
+        hr = np.array([x[3] for x in w])
+        X = np.column_stack([hr - hr.mean(), L - L.mean()])
+        blocks.append((X, r - r.mean(), a, float(((L - L.mean()) ** 2).sum())))
+    if not blocks:
+        return None
+    X = np.vstack([b[0] for b in blocks])
+    y = np.concatenate([b[1] for b in blocks])
+    xtx = X.T @ X
+    try:
+        inv = np.linalg.inv(xtx)
+    except np.linalg.LinAlgError:
+        return None
+    c = inv @ (X.T @ y)
+    # activity-cluster sandwich SE: neighbouring windows of one run are not independent
+    meat = np.zeros((2, 2))
+    for xb, yb, _a, _l in blocks:
+        s = xb.T @ (yb - xb @ c)
+        meat += np.outer(s, s)
+    g = len(blocks)
+    adj = g / (g - 1) if g > 1 else 1.0
+    var = float((inv @ meat @ inv)[1, 1]) * adj
+    # one run: no between-run spread to cluster on → its plain OLS SE
+    if g == 1:
+        res = y - X @ c
+        var = float(res @ res) / max(1, len(y) - 2) * float(inv[1, 1])
+    tot = sum(b[3] for b in blocks) or 1.0
+    return {"raw": float(-c[1]), "se": math.sqrt(max(var, 0.0)), "n": g, "n_curve": len(acts or []),
+            "windows": int(len(y)), "hr_coef": float(c[0]),
+            "runs": [{"idx": b[2].get("idx"), "date": b[2].get("date"), "T_h": b[2].get("T_h"),
+                      "lever": b[3] / tot} for b in blocks]}
+
+
+def shrink_inside(info: Optional[dict]) -> dict:
+    """The within-activity δ shrunk to the prior by precision (module docstring step 8):
+    δ = w·raw + (1 − w)·prior, w = σ₀²/(σ₀² + SE²), clamped to 0…delta_max. No measurement →
+    the prior (w 0). {delta, raw, se, n, w, prior, prior_sd, k (= SE²/σ₀², the prior's weight in
+    units of the measurement), source}."""
+    prior, sd = TRAILHR["delta_prior"], INSIDE["prior_sd"]
+    out = {"delta": prior, "raw": None, "se": None, "n": 0, "w": 0.0, "prior": prior, "prior_sd": sd,
+           "k": None, "source": INSIDE_SOURCE, "label": "推估"}
+    if not info or info.get("raw") is None or not info.get("se") or not math.isfinite(info["raw"]):
+        return out
+    se = float(info["se"])
+    w = sd ** 2 / (sd ** 2 + se ** 2)
+    d = w * float(info["raw"]) + (1.0 - w) * prior
+    out.update(delta=float(min(TRAILHR["delta_max"], max(0.0, d))), raw=float(info["raw"]), se=se,
+               n=int(info.get("n") or 0), w=w, k=se ** 2 / sd ** 2,
+               ci95=[float(info["raw"]) - 1.96 * se, float(info["raw"]) + 1.96 * se])
+    return out
+
+
 def effort_divisor() -> float:
     """The effort-km ascent divisor in use (TRAILHR override, else per athlete)."""
     from backend.engine.algorithms.effort import divisor_of
@@ -562,15 +739,18 @@ def shrink_delta(deltas, ses=None) -> dict:
             "tau": pool["tau"] if pool else None, "method": "pooled" if pool else "median"}
 
 
-def loo_error(points, delta: float) -> Optional[float]:
+def loo_error(points, delta: float, min_h: Optional[float] = None) -> Optional[float]:
     """Median |time error| of the given-HR prediction when each run is left
     out of the v₀ fit (the §0.4 rule: a parameter stays only when it lowers
-    the leave-one-out error); None with < 4 runs."""
+    the leave-one-out error); None with < 4 runs. `min_h`: only the runs of
+    at least that many moving hours are scored (all of them still fit v₀)."""
     pts = [p for p in points if p]
     if len(pts) < 4:
         return None
     errs = []
     for i, p in enumerate(pts):
+        if min_h is not None and p["T_h"] < min_h:
+            continue
         m = fit(pts[:i] + pts[i + 1:], delta)
         t = predict_time(m, p["eff_km"], p["x"])
         if t:
@@ -578,19 +758,33 @@ def loo_error(points, delta: float) -> Optional[float]:
     return float(median(errs)) if errs else None
 
 
+GATE_MIN_RUNS = 4     # 推估: the long-run gate needs ≥ 4 runs ≥ 1.5 h to score on (loo_error's floor)
+
+
 def choose_delta(points, dinfo: dict) -> dict:
     """The measured-and-shrunk δ only when its leave-one-out error is lower
-    than the prior's (§0.4); else the prior 0.05 /h. Returns {delta, choice,
-    loo_measured, loo_prior}."""
+    than the prior's (§0.4) on the runs ≥ 1.5 h (SP-722; with fewer than
+    GATE_MIN_RUNS of them, the prior); else the prior 0.05 /h. Returns
+    {delta, choice, loo_measured, loo_prior, loo_min_h}."""
     prior = TRAILHR["delta_prior"]
     d = dinfo["use"]
-    if dinfo["all"]["n"] == 0 or abs(d - prior) < 1e-9:
-        return {"delta": d, "choice": "prior" if dinfo["all"]["n"] == 0 else "measured",
-                "loo_measured": None, "loo_prior": None}
-    lm, lp = loo_error(points, d), loo_error(points, prior)
-    if lm is None or lp is None or lm < lp:
-        return {"delta": d, "choice": "measured", "loo_measured": lm, "loo_prior": lp}
-    return {"delta": prior, "choice": "prior", "loo_measured": lm, "loo_prior": lp}
+    # SP-722: the evidence behind `use` — the within-activity runs when that estimate is used
+    n = dinfo.get("n_evidence", dinfo["all"]["n"])
+    if n == 0 or abs(d - prior) < 1e-9:
+        return {"delta": d, "choice": "prior" if n == 0 else "measured",
+                "loo_measured": None, "loo_prior": None, "loo_min_h": None}
+    # SP-722: scored only on the runs δ acts on (moving ≥ INSIDE min_run_s; δ starts after T0 = 1 h)
+    # — the short runs, which δ hardly touches, must not let through a δ that makes the long ones
+    # worse; with fewer than GATE_MIN_RUNS of them nothing shows the δ helps → the prior
+    long_ = [p for p in points if p and p["T_h"] * 3600.0 >= INSIDE["min_run_s"]]
+    mh = INSIDE["min_run_s"] / 3600.0
+    if len(long_) < GATE_MIN_RUNS:
+        return {"delta": prior, "choice": "prior", "loo_measured": None, "loo_prior": None, "loo_min_h": mh,
+                "too_few_long": len(long_)}
+    lm, lp = loo_error(points, d, mh), loo_error(points, prior, mh)
+    if lm is not None and lp is not None and lm < lp:
+        return {"delta": d, "choice": "measured", "loo_measured": lm, "loo_prior": lp, "loo_min_h": mh}
+    return {"delta": prior, "choice": "prior", "loo_measured": lm, "loo_prior": lp, "loo_min_h": mh}
 
 
 def fuel_of(tags) -> Optional[bool]:

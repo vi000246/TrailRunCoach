@@ -95,6 +95,7 @@ input.small { width: 90px; }
 .tile.main { border-color: var(--accent); }
 .tile .ic { font-size: 15px; margin-right: 4px; }
 .tile .v .u { font-size: 13px; font-weight: 500; color: var(--muted); }
+.tile .v small.meta { font-weight: 400; white-space: nowrap; }   /* SP-721: the total's p25–p75 beside it */
 .tile.warnt { border-color: var(--watch); }
 .tile.warnt .v { color: var(--watch); }
 .stoptbl { width: auto; min-width: 320px; margin-top: 2px; }
@@ -1545,7 +1546,9 @@ function planBody(extra = {}) {
     // SP-553: each section's rows (its hourly ones only when the race-day temperature is the forecast's, as `hourly`)
     weather_points: WX?.points?.length ? WX.points.map((p) => ({ i: p.i, from_km: p.from_km, to_km: p.to_km, elevation_m: p.elevation_m,
       hourly: !tempOverridden() && $("hourlyheat").checked ? p.hourly : null, rain: p.rain, wind: p.wind })) : null,
-    night_slow_pct: Number($("nightslow").value || 0), ...extra };
+    night_slow_pct: Number($("nightslow").value || 0),
+    event_id: $("event")?.value || null,         // SP-721: a 越野賽 event → its stops are the race ones
+    ...extra };
   if (type === "baiyue") {
     body.trip_kind = S.trip; body.hr_band = S.hrband;
     body.pack_kg_by_day = $("packdays").value.split(/[,，\s]+/).map(Number).filter((x) => x > 0);
@@ -1862,8 +1865,10 @@ function renderResults() {
     hms(s.time_s), `${f1(s.km)} km${s.stops_s ? ` · 含補給 ${Math.round(s.stops_s / 60)} 分 → ${s.finish_eta || ""}` : s.finish_eta ? " · 抵達 " + s.finish_eta : ""}`, true);
   if (s.time_total_s && s.nonmoving) {
     const nm = s.nonmoving, rg = s.time_total_range_s;
-    h += tile(`含停留總時間${est("results", T("est.w.total"), "推估")}${help(`總時間 = 移動時間 + 非移動時間。非移動時間用你之前 ${nm.n_runs} 場比賽／全力越野跑的停留：≥ 60 秒算補給站／排隊，其餘算零碎停頓。${esc(nm.why)}。範圍是你過去每移動小時停留的 25–75 百分位。補給站停留沒有文獻數字，所以是推估；在補給站編輯器填「分鐘」會改用你填的。`)}`,
-      hms(s.time_total_s), `停留約 ${Math.round(nm.total_s / 60)} 分${rg ? `（${hms(rg[0])}–${hms(rg[1])}）` : ""}`);
+    // SP-721: one number (the median), the p25–p75 range of the total small beside it; the stops by kind
+    h += tile(`${esc(T("nm.k"))}${est("results", T("est.w.total"), "推估")}${help(esc(T("nm.tip", { why: nm.why || "", range: nm.range_why || T("nm.range_t") })))}`,
+      `<span id="nm-total">${hms(s.time_total_s)}</span>${rg ? ` <small class="meta" id="nm-range" title="${esc(T("nm.range_t"))}">${hms(rg[0])}–${hms(rg[1])}</small>` : ""}`,
+      esc(T("nm.s", { min: Math.round(nm.total_s / 60), kind: nm.kind_label || "" }).replace(/ · $/, "")));
   }
   h += tile("平均功率", W(s.power), `${pct(s.pct_cp)} CP · ${wkg(s.w_per_kg)}`, true);
   h += tile("平均配速", pace(s.pace_s_per_km), trail ? "實際距離" : "");
@@ -1903,12 +1908,14 @@ function renderResults() {
   wireEffortBar(); wireZoneBar(); bindHints();
 }
 function durText(m) {
-  // the terrain-matched durability measurement (trailhr step 7), for the ? tip
-  const how = "每次 ≥ 2 小時的越野跑：只用清過的視窗（去暖身、回程、停等後 60 秒、慢段），只比前後半都有跑到的坡度（坡度樣條當地形模型），心率延遲 60 秒，量「同坡度、同心率下每小時慢多少」；再把各次合併（隨機效應），往 Clark 2019 的 5%/h 先驗收縮，留一誤差沒變好就用先驗。";
-  if (!m || m.raw == null) return how + "目前沒有可量的長跑，用先驗 5%/h。";
-  const ci = m.ci95 ? `（95% 信賴區間 ${(m.ci95[0] * 100).toFixed(1)}–${(m.ci95[1] * 100).toFixed(1)}%/h）` : "";
-  const use = m.choice === "prior" ? "留一誤差沒有比先驗好，所以用先驗 5%/h" : `收縮後 ${((m.shrunk || 0) * 100).toFixed(1)}%/h`;
-  return how + `量到 ${(m.raw * 100).toFixed(1)}%/h${ci}，${m.n} 次；${use}。`;
+  // the durability δ behind the model (trailhr step 8, SP-722: within-activity slope of the own-paced runs), for the ? tip
+  const pct = (x) => (x * 100).toFixed(1);
+  const how = T("dur.how");
+  const ins = m && m.inside;
+  if (!ins || !ins.n) return how + T("dur.none");
+  const ci = ins.ci95 ? T("dur.ci", { lo: pct(ins.ci95[0]), hi: pct(ins.ci95[1]) }) : "";
+  const use = m.choice === "prior" ? T("dur.prior") : T("dur.shrunk", { v: pct(ins.delta || 0), w: Math.round((ins.w || 0) * 100) });
+  return how + T("dur.measured", { v: pct(ins.raw), ci, n: ins.n }) + use;
 }
 function otherCalcs() {
   const P = PLAN, v1 = P.v1, r = v1.result, cc = P.crosscheck || {};

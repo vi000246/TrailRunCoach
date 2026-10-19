@@ -1078,8 +1078,9 @@ def trail_finish(e, course: dict, plan_fn: Optional[Callable] = None) -> dict:
     race-day forecast is not fetched here (no network in the card): the calculator adds its heat when
     it has one. Moving = summary.time_s when the total came from the HR pace model (total_method
     "trail_hr"), else None (→ the old moving time). Stops, as the calculator's 含停留總時間: the
-    non-moving prediction (nonmoving.py — the stations' minutes, else your past races' rate, plus the
-    short stops) when there is a personal profile; else the stations' minutes; else none.
+    non-moving prediction (nonmoving.py — the stations' minutes, else the share of your earlier
+    activities of the event's stop kind at this moving time (SP-721), plus the short stops) when there
+    is a personal profile; else the stations' minutes; else none.
     SP-254: a saved night slowdown (with its start time) is passed on, so the cutoff check follows it.
     `plan_fn(body)` = calc.make_plan on the live context (tests)."""
     from backend.engine.racepower import calc as CALC
@@ -1101,6 +1102,7 @@ def trail_finish(e, course: dict, plan_fn: Optional[Callable] = None) -> dict:
                                       "loss": None if course.get("descent_assumed") else float(t["loss_m"] or 0.0)}))
         body = CALC.PlanIn(type="trail", mode="auto", effort_target=eff, date=e.date, distance_km=km,
                            gain_m=float(t["gain_m"] or 0.0), course=ref, stops=[CALC.StopIn(**s) for s in stops],
+                           event_id=getattr(e, "id", None),     # SP-721: a 越野賽 → the race stops
                            **calc_night(inp))
         s = plan_fn(body).get("summary") or {}
     except Exception:                       # noqa: BLE001 — no CP / RE / course: the old moving time

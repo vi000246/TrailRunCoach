@@ -36,7 +36,7 @@ SP-653（研究：`docs/analysis/sp570-cairn-itinerary-times.md`）。TrailRunCo
 | `start_times` | (`"HH:MM"` \| null)[] | TRC 計算時每天的出發時刻（第 1 天在前）；單日只有一個；`null` = 計算時沒填時刻（曲線不含依時刻的影響） |
 | `fallback` | `{kind:"munter-split", upEph, downEph}` | 退回用的 Cairn 腳程，直接是 Cairn 的 `munter-split` 參數（見下） |
 | `fallback_check` | object | 只供顯示：`trc_s`、`fallback_s`、`total_err_pct`、每天的 `{day, trc_s, fallback_s, err_pct}`、`rmse_s`（每段誤差）、`clamped`（參數被夾進 0.5–40） |
-| `rest_hint` | `{basis, days:[{day, rest_s, range_s}]}` \| null | **建議休息**，只提示、Cairn 不寫入。`basis`：`nonmoving:<user\|stations\|rate>`（越野／路跑的非移動時間預估，`range_s` = p25–p75）或 `moving_ratio`（百岳：每天時鐘時間 − 移動時間）。沒有預估時 `null`，Cairn 照常運作 |
+| `rest_hint` | `{basis, days:[{day, rest_s, range_s}]}` \| null | **建議休息**，只提示、Cairn 不寫入。`basis`：`nonmoving:<user\|stations\|rate>`（越野的非移動時間預估：SP-721 起依計畫的停留類型 `kind`（`race` 比賽／`solo` 自主長程）、停留比例隨移動時間增加且 2.5 小時封頂，`range_s` = p25–p75；`kind` 是選填欄位）或 `moving_ratio`（百岳：每天時鐘時間 − 移動時間）。沒有預估時 `null`，Cairn 照常運作 |
 | `computed_at` | `"YYYY-MM-DDTHH:MM:SS"` \| null | 計算存檔時刻（伺服器當地牆鐘，不帶時區） |
 | `model` | 字串 | 例 `trail/trail_hr`、`baiyue/capacity`，只供顯示 |
 

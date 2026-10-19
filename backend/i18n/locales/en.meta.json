@@ -2739,6 +2739,26 @@
     "draft": true,
     "src": "backend/engine/racepower/planner.py:715"
   },
+  "耐久每小時 −{d:.1%}（1 小時後；{basis}）": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:513"
+  },
+  "有補給的長跑分組估計": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:506"
+  },
+  "你的值：{n} 筆自己步調的越野跑活動內部估計，往 5 % 先驗收縮": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:508"
+  },
+  "先驗；你 {n} 筆活動內部估計速度每小時 {v:+.1%}，留一誤差沒變好": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:510"
+  },
+  "先驗：還沒有 ≥ 1.5 小時的自己步調越野跑": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:512"
+  },
   "分腿蹲": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:73"
@@ -11374,5 +11394,69 @@
   "（{x}：只算 {d} 之後的）": {
     "draft": true,
     "src": "backend/engine/phase_checks.py"
+  },
+  "自主長程": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "健行／百岳": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "非移動時間：依活動類型（比賽／自主長程／健行百岳）用你之前同類活動的停留比例，隨移動時間增加、2.5 小時後不再增加，資料少時收縮到先驗；≥ 60 秒算補給站／排隊，其餘算零碎停頓，移動定義和心率配速模型一樣（> 1 km/h）；補給站停留沒有文獻數字（Kerhervé 2015 只說快的人停得少）；推估": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "非移動時間：你之前比賽／全力越野跑的停留（≥ 60 秒算補給站／排隊，其餘算零碎停頓），移動定義和心率配速模型一樣（> 1 km/h）；補給站停留沒有文獻數字（Kerhervé 2015 只說快的人停得少）；推估": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "補給站停留用你填的 {m:g} 分": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "{n} 個補給站 × 你過去每次停留中位 {m:.1f} 分": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "沒有補給站資料：補給站／排隊佔停留的 {f:.0%}": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "{label}：用你之前 {n} 次同類活動估，停留約移動時間的 {s:.0%}": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "{label}：你還沒有同類活動，停留用先驗的移動時間 {s:.0%}": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "（次數少，往先驗 {p:.0%} 收縮）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "；移動超過 {h:g} 小時後比例不再增加": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "範圍是你同類活動停留的 25–75 百分位": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "範圍是你所有活動停留的 25–75 百分位（同類次數少）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "沒有補給站資料：你過去比賽每移動小時停 {m:.1f} 分（≥ 60 秒的停留）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "；零碎停頓 {p:.1%} 的移動時間": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "範圍是你過去每移動小時停留的 25–75 百分位": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
   }
 }

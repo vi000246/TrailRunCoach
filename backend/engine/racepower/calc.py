@@ -241,12 +241,14 @@ class PlanIn(PredictIn):
     # SP-580: a multi-day 百岳 trip's start time per day ('HH:MM', day 1 first; empty = start_time) —
     # the clock, the night marks and the cold / wind points of each day run from its own start
     day_starts: list[Optional[str]] = Field([], max_length=20)
+    # the plan event picked on the page (else the course's event): SP-721 reads its kind for the stop
+    # kind (越野賽 → race stops, else 自主長程); 匯出至課表: one 課表 session per event (re-export overwrites it)
+    event_id: Optional[str] = None
 
 
 class ExportIn(PlanIn):
     push: bool = False
     name: Optional[str] = None
-    event_id: Optional[str] = None          # the plan event: one 課表 session per event (re-export overwrites it)
     # lap = open steps ended with the lap button (trail / 百岳 default: watch GPS drifts on trails);
     # distance = distance steps (road default)
     step_mode: Optional[Literal["lap", "distance"]] = None
@@ -628,6 +630,21 @@ def course_ground(ctx: Context, body: PlanIn) -> Optional[dict]:
     return SF.effective(row["profile"], row.get("overrides"), row.get("manual"))
 
 
+def stop_kind(ctx: Context, body: PlanIn) -> str:
+    """SP-721: the stop kind (nonmoving.plan_kind) of a plan: its plan event — the one picked on the
+    page (`event_id`), else the course's — of kind 越野賽 → race; anything else (no event, an unknown
+    one, kind 其他) → solo (自主長程); 百岳 → hike."""
+    from backend.engine.racepower import nonmoving as NM
+    eid = body.event_id or (body.course.event_id if body.course else None)
+    ek = None
+    if eid:
+        try:
+            ek = getattr(ctx.event(eid), "kind", None)
+        except Exception:                   # noqa: BLE001 — a deleted / unknown event: no event
+            ek = None
+    return NM.plan_kind(body.type, ek, body.trip_kind)
+
+
 def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
     """The plan itself on a resolved course: v1 (the baseline / cross-check), the planner
     (plan_hike / plan_run, with the goal against the model in time / power mode) and the
@@ -676,6 +693,8 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
                         # SP-493: the 「LTHR」 cap under the 課表心率區間 in effect (zonebar.threshold_hr)
                         "thr": _thr(ctx, (inp.get("aet") or {}).get("lthr"))}
             th = ctx.trail_hr() if body.type == "trail" else None
+            if th is not None:
+                opts["stop_kind"] = stop_kind(ctx, body)
 
             def run(o: dict, v: dict) -> dict:
                 return night(PL.plan_run(v1=v, course=course, grade_re=gre, opts=o, validated=validated,

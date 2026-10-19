@@ -735,8 +735,9 @@ def evaluate_trail_hr(case: dict, ctx: dict) -> dict:
     T (trailhr.predict_race), the case's own heat moving the level by the
     athlete's β (the race-day forecast in a real plan); "race_median" = the
     old median race level with the same heat shift (comparison). "total" =
-    race moving time + the predicted non-moving time (nonmoving.py, earlier
-    races only) against the actual elapsed time — reported apart: moving
+    race moving time + the predicted non-moving time (nonmoving.py: the
+    case's own stop kind from earlier activities, SP-721) against the
+    actual elapsed time — reported apart: moving
     time stays the validated target."""
     from backend.engine.racepower import nonmoving as NM
     from backend.engine.racepower import trailhr as TH
@@ -752,7 +753,7 @@ def evaluate_trail_hr(case: dict, ctx: dict) -> dict:
     xm = m.get("x_race_median")
     tm = TH.predict_time(m, pt["eff_km"], xm - sh) if xm else None
     nm_act = case.get("nm_row") or {}
-    nm = NM.predict(m.get("nonmoving"), tr) if tr else None
+    nm = NM.predict(m.get("nonmoving"), tr, kind=case.get("stop_kind") or "race") if tr else None
     el = nm_act.get("elapsed_s")
     tot = (tr + nm["total_s"]) if (tr and nm) else None
     return {"th": {"moving_s": act, "eff_km": pt["eff_km"], "x": pt["x"], "x_raw": pt.get("x_raw"),
@@ -1051,7 +1052,8 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
         arr = A.activity_arrays(ds, w)
         if arr is None:
             continue
-        c = {**c, "power_source": A.power_source(ds, w), "surface": smarks.get(c["idx"])}
+        c = {**c, "power_source": A.power_source(ds, w), "surface": smarks.get(c["idx"]),
+             "stop_kind": A.nonmoving_kind(w, race_idx)}           # SP-721: whose stops predict its total
         if c["category"] == "hike":
             for n, part in _hike_days(arr, w.entry.start):
                 cc = {**c, "day": n, "date": (w.entry.start + dt.timedelta(seconds=float(np.nanmin(part["t"])))).date().isoformat()}

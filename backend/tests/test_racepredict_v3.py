@@ -246,10 +246,14 @@ def test_nonmoving_rows_split_long_and_short_stops():
 
 def test_nonmoving_predict_user_stations_and_rate():
     prof = NM.profile([_act([(1000, 1180), (8000, 8300)]), _act([(2000, 2240)])])
-    assert prof["n"] == 2 and prof["stop_len_s"] == pytest.approx(240.0)
+    race = prof["kinds"]["race"]                                            # rows without a kind are races
+    assert prof["n"] == 2 and race["n"] == 2 and race["stop_len_s"] == pytest.approx(240.0)
     assert NM.profile([_act([])]) is None                                   # one race is not a profile
     rate = NM.predict(prof, 4 * 3600.0)
-    assert rate["method"] == "rate" and rate["long_s"] == pytest.approx(prof["long_per_h_s"] * 4)
+    # SP-721: the kind's share at 4 h (capped curve) × T, its long part = the kind's long-stop share
+    s_model = NM.share_at(race, 4 * 3600.0) * 4 * 3600.0
+    assert rate["method"] == "rate" and rate["total_s"] == pytest.approx(s_model)
+    assert rate["long_s"] == pytest.approx(s_model * race["long_frac"])
     st = NM.predict(prof, 4 * 3600.0, [{"km": 10, "type": "aid"}, {"km": 20, "type": "water"}, {"km": 30, "type": "big"}])
     assert st["method"] == "stations" and st["long_s"] == pytest.approx(2 * 240.0)
     user = NM.predict(prof, 4 * 3600.0, [{"km": 10, "minutes": 3}, {"km": 20, "minutes": 2}])

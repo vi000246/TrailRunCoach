@@ -21,7 +21,8 @@ numbers). The fit matches TRC's total moving time exactly (one free scale) and p
 up/down ratio by least squares over the segments.
 
 `rest_hint` is a suggestion per day (Cairn shows it, never writes it): the non-moving
-prediction (nonmoving.py) of a race, or the moving-ratio rest of a 百岳 trip.
+prediction (nonmoving.py: by the plan's stop kind and moving time, SP-721) of a race, or
+the moving-ratio rest of a 百岳 trip.
 
 No coordinates, no stops, no ids or tokens leave in the curve.
 
@@ -280,7 +281,8 @@ def rest_hint(result: dict) -> Optional[dict]:
     if isinstance(nm, dict) and nm.get("total_s") is not None:
         rng = [round(nm["p25_s"]), round(nm["p75_s"])] if nm.get("p25_s") is not None and nm.get("p75_s") is not None \
             else None
-        return {"basis": f"nonmoving:{nm.get('method') or 'rate'}",
+        # SP-721: the prediction by the plan's stop kind (race / solo), share growing with the moving time
+        return {"basis": f"nonmoving:{nm.get('method') or 'rate'}", "kind": nm.get("kind"),
                 "days": [{"day": 1, "rest_s": round(nm["total_s"]), "range_s": rng}]}
     days = [d for d in (result or {}).get("days") or [] if d.get("moving_h") is not None and d.get("clock_h") is not None]
     if days and s.get("moving_ratio"):
