@@ -259,8 +259,8 @@ class Event:
         """pack_kg, else the default (4 kg single day, 9 kg multi-day, SP-738) (capacity.PACK_DEFAULT_MULTI / _SINGLE)."""
         if self.pack_kg is not None:
             return float(self.pack_kg)
-        from backend.engine.racepower.capacity import PACK_DEFAULT_MULTI, PACK_DEFAULT_SINGLE
-        return PACK_DEFAULT_MULTI if (self.days or 1) > 1 else PACK_DEFAULT_SINGLE
+        from backend.engine.racepower.capacity import pack_default    # SP-740: personalised
+        return pack_default(None, self.days or 1)
 
     @property
     def start(self) -> dt.date:

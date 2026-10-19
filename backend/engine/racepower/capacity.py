@@ -48,17 +48,21 @@ PACK_DEFAULT_SINGLE = 4.0
 
 
 def pack_default(weight: Optional[float] = None, days: int = 1) -> float:
-    """The trip pack (kg, day 1) when none was entered: PACK_DEFAULT_MULTI for a
-    multi-day trip, else PACK_DEFAULT_SINGLE (`weight` is accepted for the old
-    callers and not used, SP-738)."""
-    return PACK_DEFAULT_MULTI if (days or 1) > 1 else PACK_DEFAULT_SINGLE
+    """The trip pack (kg, day 1) when none was entered (racepower/pack_defaults.py, SP-740):
+    the 進階設定 value, else the median of the athlete's own recorded packs of that kind
+    (單日 / 多日, ≥ 3 trips), else PACK_DEFAULT_MULTI / PACK_DEFAULT_SINGLE. `weight` is
+    accepted for the old callers and not used (SP-738)."""
+    from backend.engine.racepower import pack_defaults as PD
+    return PD.resolve(days or 1)["kg"]
 
 
 def pack_default_text(weight: Optional[float] = None, days: Optional[int] = None) -> str:
-    """The 預設背負 rule in words: this trip's value when `days` is known, else both."""
+    """The 預設背負 rule in words: this trip's value and where it comes from when `days` is
+    known (「4 kg（單日）」, 「5 kg（你記過的 5 趟單日，中位數）」), else both kinds."""
+    from backend.engine.racepower import pack_defaults as PD
     if days is None:
-        return f"單日 {PACK_DEFAULT_SINGLE:g} kg、多日 {PACK_DEFAULT_MULTI:g} kg"
-    return f"{pack_default(None, days):g} kg（{'多日' if (days or 1) > 1 else '單日'}）"
+        return PD.rule_text()
+    return PD.resolve(days)["text"]
 PACK_DAILY_DROP = 0.7           # food eaten per day (推估, baiyue-from-running.md §3.2, user kept it)
 TRIP_DAYS_DEFAULT = 1           # SP-738: 1 day unless the route says more (was 3, 2026-09-30)
 TRIP_KIND_DEFAULT = "group"     # 跟團 (user decision 2026-09-30)

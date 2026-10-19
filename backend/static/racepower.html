@@ -498,7 +498,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <div class="seg" id="hrband"><button data-b="aet">AeT（多日建議）</button><button data-b="cap">能力上限（≤ 3 h）</button></div>
         <label class="meta">每天背負 kg <input id="packdays" placeholder="例 9, 8.3, 7.6" style="width:120px"></label>
         <label class="meta">氣溫所在海拔 m <input id="heatz" type="number" step="10" style="width:76px" placeholder="天氣點"></label>
-        <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 登山心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，推估）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
+        <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 登山心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負沒填用預設背負：單日 4 kg、多日 9 kg（推估），你記過的背負滿 3 趟就改用自己的中位數，也可以在 設定 → 進階設定 指定；多日之後每天 −0.7 kg（糧食，推估）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
       </div>
       <!-- SP-254: night slowdown, only on the dark part of each segment (default 0 %, 推估) -->
       <div class="row"><span class="lbl" data-i18n="racepower.night.label">夜間</span>
@@ -2045,7 +2045,7 @@ function renderBaiyueCapacity() {
     : tile("跟團時間", "–", "需要 ≥ 3 天跟團紀錄");
   h += grpMain ? grpTile + capTile : capTile + grpTile;
   if (s.rest) h += hikeTotalTile(s);          // SP-732: moving + each day's stops, with its range
-  h += tile("天數", `${P.days.length} 天`, `背負 ${s.pack_by_day.map((x) => f1(x)).join(" / ")} kg${s.pack_src?.startsWith("預設") ? "（預設背負）" : ""}`);
+  h += tile("天數", `${P.days.length} 天`, `背負 ${s.pack_by_day.map((x) => f1(x)).join(" / ")} kg${s.pack_src?.startsWith("預設") ? `（${s.pack_note?.short || "預設背負"}）` : ""}`);
   h += tile("熱量", ok(s.kcal) ? n0(s.kcal) + " kcal" : "–", "Yamamoto");
   h += tile("飲水", waterL(s.water_ml), "0.7–0.8 ml / kcal");
   h += tile("心率上限", ok(s.hr_cap) ? n0(s.hr_cap) + " bpm" : "–", "AeT，爬坡時壓住");
@@ -2822,7 +2822,7 @@ function renderHikeMeta() {
   let t = `<div class="note">跟團的速度不代表你的能力：登山時間改用<b>你的步行能力模型</b>（越野跑走路窗 + 登山心率 ≥ AeT 的爬升窗）。
     「看起來是自己走」是自動判斷的<b>建議</b>（推估規則：自己走的段 ≥ 60 %、被限制的段 ≤ 15 %），要你按「確認」才會寫進自己走的清單。
     ${esc(v.rule || "")}：目前手動標記 自己走 ${v.n_solo ?? 0} 天、跟團 ${v.n_group ?? 0} 天${v.agreement != null ? `，符合率 ${pct(v.agreement)}` : ""}，${v.validated ? "已可自動套用" : "還只是建議"}。
-    背負填了才準；沒填用預設背負（單日 4 kg、多日 9 kg；推估）。</div>`;
+    背負填了才準；沒填用預設背負（${esc(H.pack_rule || "單日 4 kg、多日 9 kg")}；記滿 3 趟用你自己的中位數，進階設定可手動指定）。</div>`;
   t += `<div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">移動</th><th class="n">EP/h</th><th>背負 kg</th><th>建議</th><th>目前</th></tr></thead><tbody>` +
     rows.map((d) => { const sg = d.suggest || {};
       const sug = sg.suggest ? `${sg.suggest === "solo" ? "看起來是自己走" : "看起來是跟團"}（${pct(sg.own_share)}）` : '<span class="faint">–</span>';

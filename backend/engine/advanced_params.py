@@ -38,6 +38,38 @@ CAL.register(CAL.Item(
     help=N_("多日行程第 2 天起，背包每天輕這麼多（糧食）。")))
 
 
+# 預設背負 (SP-740): blank = 自動 (the median of the athlete's own recorded packs of that kind once
+# there are 3, else 4 / 9 kg — racepower/pack_defaults.py); a manual value wins. The list page shows
+# the value in effect and where it comes from (pack_live_describe).
+PACK_ITEMS = {"pack_default_single_kg": 1, "pack_default_multi_kg": 2}
+CAL.register(CAL.Item(
+    name="pack_default_single_kg", label=N_("單日登山預設背負"), unit="kg", default=4.0,
+    default_src=N_("推估（通用值）"), k=1, min_n=10 ** 9, fit=_none,
+    bounds=(0.0, 40.0), digits=1, manual_only=True,
+    help=N_("沒填背負的單日登山（計算機、能力模型裡過去的健行）用這個。空白＝自動：你記過的單日背負滿 3 趟用自己的中位數，"
+            "不夠用 4 kg。")))
+CAL.register(CAL.Item(
+    name="pack_default_multi_kg", label=N_("多日登山預設背負"), unit="kg", default=9.0,
+    default_src=N_("推估（通用值）"), k=1, min_n=10 ** 9, fit=_none,
+    bounds=(0.0, 40.0), digits=1, manual_only=True,
+    help=N_("沒填背負的多日登山（第 1 天）用這個。空白＝自動：你記過的多日背負滿 3 趟用自己的中位數，不夠用 9 kg。")))
+
+
+def pack_live_describe(it: dict) -> dict:
+    """A 預設背負 row of the 進階設定 list with the value in effect: a manual one as stored, else
+    the automatic one — the own median (chip 「本人 n=…」, source fitted) or the 通用值."""
+    days = PACK_ITEMS.get(it.get("name"))
+    if days is None or it.get("source") == "user":
+        return it
+    from backend.engine.racepower import pack_defaults as PD
+    r = PD.resolve(days, manual_kg=None)
+    tip = r["note"] + "。沒填背負的行程（計算機、能力模型裡過去的健行）用這個；在右邊填數字就固定用你填的。"
+    if r["source"] == "own":
+        return {**it, "value": r["kg"], "n": r["n"], "source": "fitted",
+                "chip": {"text": _("本人 n={n}", n=r["n"]), "tip": tip}}
+    return {**it, "value": r["kg"], "n": r["n"], "chip": {**(it.get("chip") or {}), "tip": tip}}
+
+
 def partial_hadley() -> float:
     return CAL.value("heat_partial_hadley")
 

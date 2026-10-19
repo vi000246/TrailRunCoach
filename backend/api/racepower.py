@@ -668,7 +668,8 @@ def _hike_rows() -> list[dict]:
 @router.get("/hike-meta")
 def get_hike_meta():
     rows, val = _hike_rows()
-    return _py({"days": rows, "validation": val,
+    from backend.engine.racepower import capacity as CAP
+    return _py({"days": rows, "validation": val, "pack_rule": CAP.pack_default_text(),
                 "note": "「看起來是自己走」只是建議；確認後才寫進自己走的清單"})
 
 
@@ -676,10 +677,16 @@ def get_hike_meta():
 def post_hike_meta(body: HikeMetaIn):
     from backend.engine.racepower import athlete as A
     try:
-        trips = A.set_hike_meta(body.file, body.pack_kg)
+        w = next((x for x in _dataset().workouts if x.entry.file == body.file), None)
+    except Exception:                       # noqa: BLE001 — no dataset: the record without days / hike
+        w = None
+    try:
+        trips = A.set_hike_meta(body.file, body.pack_kg, w=w)
     except ValueError as e:
         raise HTTPException(400, str(e))
     with _lock:
+        # SP-740: the personal 預設背負 follows the recorded packs — inputs and the walking model go
+        _cache.pop("inputs", None)
         _cache.pop("grade", None)
     return {"trips": trips}
 

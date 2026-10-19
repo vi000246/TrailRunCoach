@@ -1421,6 +1421,10 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         pack1 = CAP.pack_default(weight, n_days)
     pack_src = "手動" if opts.get("pack_kg") is not None else \
         f"預設背負 {CAP.pack_default_text(weight, n_days)}"
+    # SP-740: where the 預設背負 comes from in one sentence (「你記過的 5 趟單日，中位數 5 kg」) for the 天數 tile
+    from backend.engine.racepower import pack_defaults as _PD
+    _pd = None if opts.get("pack_kg") is not None else _PD.resolve(n_days)
+    pack_note = {"short": _pd["short"], "note": _pd["note"], "source": _pd["source"]} if _pd else None
 
     def load_of(n):
         if len(pack_by_day) >= n:
@@ -1618,7 +1622,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                "main": main, "trip_kind": kind, "hr_band": band_id, "band": bnd,
                "speed_factor": lam, "km": km, "gain_m": gain, "loss_m": course["totals"].get("loss_m"),
                "M": (sum(r["t"] * r["A"] for r in rows) / sum(r["t"] for r in rows)) if rows else r1.get("M"),
-               "pack_kg": pack1, "pack_src": pack_src, "pack_by_day": [load_of(n) for n in range(1, n_days + 1)],
+               "pack_kg": pack1, "pack_src": pack_src, "pack_note": pack_note, "pack_by_day": [load_of(n) for n in range(1, n_days + 1)],
                "eph_personal": ep / (T / 3600.0) if T else None, "ep_per_h": ep / (T / 3600.0) if T else None,
                "kcal": kcal, "water_ml": [0.7 * kcal, 0.8 * kcal], "hr_cap": used.get("aet", {}).get("value"),
                "total_method": "capacity", "category": "hike", "mode": mode, "acclimatisation": accl,

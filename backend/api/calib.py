@@ -34,6 +34,15 @@ def _replan(name: str) -> None:
     if name in AP.Z3_RULE.values():
         from backend.engine import plan_auto as PA
         PA.after_settings()
+    if name in AP.PACK_ITEMS:
+        # SP-740: the 預設背負 feeds the calculator and its walking model — their caches go
+        try:
+            from backend.api import racepower as RP
+            with RP._lock:
+                RP._cache.pop("inputs", None)
+                RP._cache.pop("grade", None)
+        except Exception:                   # noqa: BLE001
+            pass
 
 
 async def _check_pair(repo: SettingsRepository, name: str, value) -> None:
@@ -66,6 +75,7 @@ async def list_calibration(db: AsyncSession = Depends(get_db)):
     from backend.engine import advanced_params as AP
     repo = SettingsRepository(db, current_athlete_id())
     items = [CAL.describe(n, await repo.get(CAL.key(n))) for n in sorted(CAL._registry())]
+    items = [AP.pack_live_describe(it) for it in items]           # SP-740: 預設背負 in effect
     cur = await _z3_values(repo)
     gap, relock = AP.Z3_RULE["gap"], AP.Z3_RULE["relock"]
     warn = AP.z3_pair_error(relock, cur[relock], cur.__getitem__)
@@ -178,4 +188,5 @@ async def run_status(db: AsyncSession = Depends(get_db)):
     job = jobs.find(_job_key())
     repo = SettingsRepository(db, current_athlete_id())
     items = [CAL.describe(n, await repo.get(CAL.key(n))) for n in sorted(CAL._registry())]
+    items = [AP.pack_live_describe(it) for it in items]           # SP-740: 預設背負 in effect
     return {"job": _job_view(job) if job is not None else None, "items": items}

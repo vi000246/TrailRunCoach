@@ -1609,15 +1609,12 @@ async def patch_activity(i: int, body: dict):
 def _set_pack(w, kg) -> None:
     from backend.engine.racepower import athlete as A
     try:
-        A.set_hike_meta(w.entry.file, None if kg in (None, "") else float(kg), start=w.entry.start)
+        A.set_hike_meta(w.entry.file, None if kg in (None, "") else float(kg), start=w.entry.start, w=w)
     except (TypeError, ValueError) as e:
         raise HTTPException(400, str(e) or "背負要在 0–40 kg")
-    try:                                     # the race-power walking model reads the packs too
-        from backend.api import racepower as RP
-        with RP._lock:
-            RP._cache.pop("grade", None)
-    except Exception:                       # noqa: BLE001
-        pass
+    # the race-power walking model reads the packs too, and the personal 預設背負 (SP-740) learns from
+    # them: the calculator's cached inputs and walking model go, as for a 跟團 mark (SP-731)
+    _solo_changed()
 
 
 # ---------------------------------------------------------------------------
@@ -1726,6 +1723,17 @@ def activities_list():
     # editor's 「對到哪場賽事」 offers
     race_auto, race_events = _race_part(ds, tags)
 
+    # 背負 (SP-731 ⑥): the recorded 「這次背多少」 of each activity in the dataset, the trip's calendar days
+    # (the placeholder shows that kind's 預設背負, SP-740)
+    try:
+        hmeta = A.hike_meta()
+    except Exception:                       # noqa: BLE001 — no file: nothing recorded
+        hmeta = {}
+
+    def pack_part(w):
+        rec = A._trip_of(hmeta, w) or {}
+        return {"pack_kg": rec.get("pack_kg"), "pack_days": A.trip_days(w)}
+
     for w in ds.workouts:
         u = AT.find(tags, w.entry.start, w.entry.file)
         m = w.metrics
@@ -1742,7 +1750,7 @@ def activities_list():
                     # its 有杖 / 沒杖 mark counts toward the comparison (trail runs and hikes, SP-243)
                     "pole_chart": PC.used(w), "rain_mm": rain_mm(w.entry.start, w.entry.file),
                     # the rain hint is for 越野跑 / 登山健行 only (SP-299, owner 2026-10-07)
-                    "rain_kind": AT.rain_kind(w, u),
+                    "rain_kind": AT.rain_kind(w, u), **pack_part(w),
                     **user_part(u, race_pole.get(w.idx))})
     for x in getattr(ds, "excluded", []):
         start = dt.datetime.fromisoformat(x["start"])
@@ -1791,7 +1799,17 @@ def activities_list():
             "pole_compare": PC.counts(ds, tags, today_local()),
             "rain_hint_mm": AT.RAIN_HINT_MM if rain else None,
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "events": race_events,
+            "pack_defaults": _pack_defaults(hmeta),
             "activities": out}
+
+
+def _pack_defaults(meta) -> Optional[dict]:
+    """The 預設背負 in effect per kind (racepower/pack_defaults.both, SP-740): the list's 背負 placeholder."""
+    try:
+        from backend.engine.racepower import pack_defaults as PD
+        return {k: {x: v[x] for x in ("kg", "source", "n", "note")} for k, v in PD.both(meta).items()}
+    except Exception:                       # noqa: BLE001 — never breaks the list
+        return None
 
 
 def _race_part(ds, tags) -> tuple[dict, list]:
@@ -1882,6 +1900,14 @@ async def activities_stats():
     return await run_in_threadpool(work)
 
 
+@router.get("/activities/pack-defaults")
+def activities_pack_defaults():
+    """SP-740: the 預設背負 in effect per kind ({single, multi}: kg, source manual | own | default, n, note) —
+    the list reads it again after a 背負 is typed (the own median may move)."""
+    from backend.engine.racepower import athlete as A
+    return _pack_defaults(A.hike_meta())
+
+
 @router.get("/activities/hints")
 async def activities_hints():
     """SP-731: the faded suggestions of the list's two editable columns — {"group": {key: {suggest:
@@ -1947,6 +1973,9 @@ class BulkBody(BaseModel):
     terrain_difficulty: Optional[str] = None
     # 跟團 / 自己 (SP-731): "group" / "solo" / null 未標 (activity_tags.GROUPS; athlete.solo_hikes reads it)
     group: Optional[str] = None
+    # 背負 (SP-731 ⑥ / SP-740): the 「這次背多少」 kg of a hike, the activity card's field (racepower_hike_meta.json;
+    # null = cleared); only activities in the dataset (an excluded / archived one has no workout)
+    pack_kg: Optional[float] = None
 
 
 BULK_MAX = 500
@@ -1976,6 +2005,25 @@ async def patch_activities(body: BulkBody):
     rows = AT.load()
     src = DSRC.current_source()
     saved = []
+    if "pack_kg" in sent:
+        from backend.i18n import _
+        if body.pack_kg is not None and not 0 <= body.pack_kg <= 40:
+            raise HTTPException(400, _("背負要在 0–40 kg"))
+        from starlette.concurrency import run_in_threadpool
+        ds = await run_in_threadpool(_dataset)
+        by_file = {w.entry.file: w for w in ds.workouts}
+        for it in body.items:
+            w = by_file.get(it.file)
+            if w is None:
+                try:
+                    st = dt.datetime.fromisoformat(it.key)
+                except ValueError:
+                    raise HTTPException(400, "INVALID_KEY")
+                w = next((x for x in ds.workouts if AT.key_of(x.entry.start) == AT.key_of(st)), None)
+            if w is None:
+                raise HTTPException(404, "workout not found")
+            await run_in_threadpool(_set_pack, w, body.pack_kg)
+            saved.append(it.key)
     async with AsyncSessionLocal() as db:
         for it in body.items:
             try:

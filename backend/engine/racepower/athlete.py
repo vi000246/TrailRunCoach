@@ -1816,12 +1816,15 @@ def hike_meta(path=None) -> dict:
         return ByStartDict()
 
 
-def set_hike_meta(file: str, pack_kg: Optional[float], path=None, start=None) -> dict:
+def set_hike_meta(file: str, pack_kg: Optional[float], path=None, start=None, w=None) -> dict:
     """Set / clear one trip's pack. The record of the same activity stored
     under another source's file stays the one updated; new records carry the
     local start (`start`, else the registered dataset's) so any source finds
-    them."""
+    them. With the dataset workout `w`, the record also keeps `days` (calendar
+    days, trip_days) and `hike` (is_hike) — the personal 預設背負 learns the
+    單日 / 多日 medians from them (racepower/pack_defaults.py, SP-740)."""
     from backend.engine import activity_key as AK
+    from backend.engine.racepower import pack_defaults as PD
     p = path or _hike_meta_path()
     trips = hike_meta(p)
     key = trips.key_for(str(file), start)
@@ -1834,10 +1837,26 @@ def set_hike_meta(file: str, pack_kg: Optional[float], path=None, start=None) ->
         st = AK.key_of(start) if start is not None else AK.key_of(AK.start_of_file(str(file)))
         if st and not rec.get("start"):
             rec["start"] = st
+        if w is not None:
+            rec["days"] = trip_days(w)
+            rec["hike"] = bool(is_hike(w) and w.sport != "run")
         trips[key] = rec
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"trips": dict(trips)}, ensure_ascii=False), "utf-8")
+    PD.forget()
     return trips
+
+
+def trip_days(w) -> int:
+    """Calendar days a workout spans (start → start + elapsed time), as _day_slices splits a
+    multi-day trip; 1 without a duration."""
+    try:
+        start = w.entry.start
+        dur = float((w.metrics or {}).get("duration") or 0.0)
+        end = start + dt.timedelta(seconds=max(0.0, dur))
+        return max(1, (end.date() - start.date()).days + 1)
+    except (AttributeError, TypeError, ValueError):
+        return 1
 
 
 def _trip_of(meta, w) -> Optional[dict]:

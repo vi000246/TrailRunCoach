@@ -109,6 +109,7 @@ td.c-act .acts { display: inline-flex; gap: 4px; align-items: center; }
 .mkc.sug { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); opacity: .75; font-style: italic; }
 .mks { font-size: 12px; padding: 1px 4px; max-width: 12em; }
 .mks.sug { color: var(--muted); font-style: italic; }
+.mkp { width: 4.5em; font-size: 12px; padding: 1px 4px; text-align: right; }
 .mkbtn { display: none; width: 26px; height: 24px; padding: 0; font-size: 13px; color: var(--accent); }
 .mkbtn.done { color: var(--ok); }
 .mkbtn[aria-expanded="true"] { background: var(--soft); }
@@ -119,6 +120,7 @@ tr.mkrow { display: none; }
 @media (max-width: 699px) {
   main { padding: 10px 10px 20px; }
   .c-climb, .c-hr, .c-pw, .c-tss, .c-rpe, .c-src, .c-pain, .c-type, .c-dur, .c-grp, .c-tdiff { display: none; }
+  .c-pack { display: none; }
   .mkbtn { display: inline-grid; place-items: center; }
   tr.mkrow { display: table-row; }
   tr.mkrow td { background: var(--bg); }
@@ -370,6 +372,8 @@ const COLS = [
   // SP-731: the two marks edited in place — 跟團 / 自己 on hikes, 地形難度 on trail runs and hikes; blank elsewhere
   { k: "grp", cls: "c-grp", get: (a) => (isHikeRow(a) ? groupOf(a) || "~" + (sugGroup(a) || "") : null), asc: true },
   { k: "tdiff", cls: "c-tdiff", get: (a) => (tdiffRow(a) ? TDIFF_OPTS.indexOf(tdiffOf(a) || "normal") : null) },
+  // SP-731 ⑥: 背負 (kg) on hikes, the activity card's 「這次背多少」 (SP-740 learns the 預設背負 from it)
+  { k: "pack", cls: "c-pack num", get: (a) => (packRow(a) ? a.pack_kg ?? -1 : null) },
 ];
 const cols = () => COLS.filter((c) => (!c.power || S.usePower) && (!c.pain || S.pain));
 
@@ -508,6 +512,7 @@ function cell(c, a) {
     case "pain": return painBadge(a);
     case "grp": return grpCtl(a);
     case "tdiff": return tdiffCtl(a);
+    case "pack": return packCtl(a);
   }
   return "";
 }
@@ -539,7 +544,33 @@ function tdiffCtl(a) {
     ["normal", "technical", "scramble"].map((v) => `<option value="${v}" ${cur === v ? "selected" : ""}>${esc(T("tdiff." + v))}</option>`).join("") +
     `</select>`;
 }
-// phone: the two columns fold into one small button on the row; it opens the row's marks under it
+// SP-731 ⑥: 背負 (kg) typed in place on hikes in the dataset (an excluded / archived one has no workout); blank = not
+// recorded — the placeholder is that kind's 預設背負 (SP-740: own median / 進階設定 / 4–9 kg), its source on hover
+const packRow = (a) => isHikeRow(a) && a.index != null;
+function packCtl(a) {
+  if (!packRow(a)) return "";
+  const d = S.packDefs?.[(a.pack_days || 1) > 1 ? "multi" : "single"];
+  return `<input type="number" class="mkp" data-pack-k="${esc(a.key)}" min="0" max="40" step="0.5" inputmode="decimal"` +
+    ` value="${a.pack_kg ?? ""}" placeholder="${d ? esc(String(d.kg)) : "—"}" aria-label="${esc(T("col.pack"))}"` +
+    ` title="${esc(T("pack.tip", { note: d ? d.note : "—" }))}">`;
+}
+async function savePack(a, el) {
+  const v = el.value.trim();
+  if (v !== "" && !(+v >= 0 && +v <= 40)) { alertRow(el, T("pack_range")); return; }
+  el.disabled = true;
+  try {
+    const kg = v === "" ? null : +v;
+    await send(`${API}/activities`, "PATCH", { items: [{ key: a.key, file: a.file }], pack_kg: kg });
+    a.pack_kg = kg;
+    // the 預設背負 may follow the new record (SP-740): the placeholders are read again
+    try { S.packDefs = (await j(`${API}/activities/pack-defaults`)) || S.packDefs; } catch {}
+    render();
+    if (S.sel === a.key && $("ed").open) { if (S.detail?.pack) S.detail.pack.pack_kg = kg; renderEditor(); }
+  } catch (err) {
+    el.disabled = false; alertRow(el, T("save_failed", { err: err.message }));
+  }
+}
+// phone: the columns fold into one small button on the row; it opens the row's marks under it
 const markable = (a) => isHikeRow(a) || tdiffRow(a);
 function mkBtn(a) {
   if (!markable(a)) return "";
@@ -551,7 +582,8 @@ function mkRow(a, span) {
   if (S.mkOpen !== a.key || !markable(a)) return "";
   return `<tr class="mkrow"><td colspan="${span}"><div class="mkwrap">` +
     (isHikeRow(a) ? `<span class="mkl">${esc(T("col.grp"))}</span>${grpCtl(a)}` : "") +
-    (tdiffRow(a) ? `<span class="mkl">${esc(T("col.tdiff"))}</span>${tdiffCtl(a)}` : "") + `</div></td></tr>`;
+    (tdiffRow(a) ? `<span class="mkl">${esc(T("col.tdiff"))}</span>${tdiffCtl(a)}` : "") +
+    (packRow(a) ? `<span class="mkl">${esc(T("col.pack"))}</span>${packCtl(a)}` : "") + `</div></td></tr>`;
 }
 async function saveMark(a, field, value, el) {
   if (el) el.disabled = true;
@@ -598,6 +630,8 @@ $("pager").addEventListener("click", (e) => {
   $("tbl").scrollIntoView({ block: "start" });
 });
 $("tbody").addEventListener("change", (e) => {
+  const p = e.target.closest("input[data-pack-k]");
+  if (p) { const a = actOf(p.dataset.packK); if (a) savePack(a, p); return; }
   const s = e.target.closest("select[data-tdiff-sel]");
   if (!s) return;
   const a = actOf(s.dataset.k);
@@ -704,6 +738,7 @@ async function loadList() {
   S.poleCompare = r.pole_compare || null;
   S.surfaceTags = r.surface_tags || {};
   S.terrainTags = r.terrain_tags || {}; S.groupTags = r.group_tags || {};
+  S.packDefs = r.pack_defaults || null;
   S.rainHintMm = r.rain_hint_mm ?? null;
   S.merge = r.merge || null; S.originLabels = { upload: T("src_upload_long"), ...(r.origin_labels || {}) };
   S.actMin = new Map();
@@ -1008,6 +1043,7 @@ function patchLocal(a, r) {
   if ("activity_type_overridden" in r) a.user_type = r.activity_type_overridden ? r.activity_type : null;
   if ("effort_overridden" in r) a.user_effort = r.effort_overridden ? r.effort : null;
   if ("rain_kind" in r) a.rain_kind = r.rain_kind;          // a type change (爬山) moves the rain hint
+  if (r.pack && "pack_kg" in r.pack) a.pack_kg = r.pack.pack_kg;   // the list's 背負 column (SP-731 ⑥)
   for (const k of ["note", "name", "tags"]) if (k in r) a[k] = r[k];
   if (r.pain_state) { a.pain = r.pain_state.pain; a.pain_area = r.pain_state.pain_area; a.pain_score = r.pain_state.pain_score ?? null; a.injury_id = r.pain_state.injury?.id ?? null; }
 }
