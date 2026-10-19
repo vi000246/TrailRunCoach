@@ -133,7 +133,8 @@ def test_the_physiology_tab_in_the_consistent_state(app, level):
     note = page.locator("#tab-note")
     if level == "full":                                       # 完整: everything as before (ST1 ●, cards open)
         expect(note).to_be_visible()
-        expect(page.locator("#hr-cmp h3")).to_be_visible()
+        # SP-662: the app-vs-watch check is one line in every level while every gap is within 5 bpm
+        expect(page.locator("#hr-cmp details.fold")).to_be_visible()
         expect(page.locator("#thr-est .card")).to_have_count(2)
         expect(page.locator("#hr-check .card")).to_be_visible()
         expect(page.locator("#thr-more")).to_be_hidden()
@@ -146,7 +147,7 @@ def test_the_physiology_tab_in_the_consistent_state(app, level):
     expect(page.locator("#thr-check")).to_be_hidden()
     expect(page.locator('#hr-conf [data-hint-id="ST7"]')).to_have_text("· 可信度高 ✓")
     expect(page.locator('#thr-conf [data-hint-id="ST8"]')).to_have_text("· 可信度高 ✓")
-    expect(page.locator("#hr-cmp details.fold > summary")).to_have_text("手錶設定和 app 一致 ✓（差距都在 5 bpm 內）")
+    expect(page.locator("#hr-cmp details.fold > summary")).to_have_text("跟手錶的設定差距不大（都在 5 bpm 內），不用改 ✓")
     expect(page.locator("#hr-cmp details.fold")).not_to_have_attribute("open", "")
     expect(page.locator("#thr-est")).to_be_hidden()
     expect(page.locator("#thr-more-sum")).to_have_text("自動估算：LTHR 和目前一致 ✓、AeT 和目前一致 ✓")
@@ -210,7 +211,7 @@ def test_switching_the_level_redraws_the_tab(app):
         expect(q).to_be_hidden()
         page.locator('.tabs [data-tab="body"]').click()
         expect(page.locator("#tab-note")).to_be_visible()
-        expect(page.locator("#hr-cmp h3")).to_be_visible()
+        expect(page.locator("#hr-cmp details.fold")).to_be_visible()      # SP-662: one line in 完整 too
         page.locator('.tabs [data-tab="personal"]').click()
         page.locator("#hint-auto").click()                    # back to automatic (標準 for the demo athlete)
         page.wait_for_function("() => HL === 'standard'")

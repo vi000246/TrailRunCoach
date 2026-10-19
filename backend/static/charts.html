@@ -317,6 +317,10 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 .mapside .ac-leg i.band { width: 14px; border: 1px solid var(--line); }
 .mcgrp { display: inline-flex; align-items: center; gap: 6px; }
 .mcdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+/* 區間上色 (SP-660): the toggle's dot is the zone ramp; the picker sits next to it */
+.mcdot.mczc { width: 12px; border-radius: 4px; background: linear-gradient(90deg, #3ba3dc, #26b37f, #f0bf1a, #f08a24, #a3202f); }
+.mcgrp select.mczs { font: inherit; font-size: 12.5px; max-width: min(320px, 100%); }
+.mapside .ac-leg .mczleg { display: contents; }
 .maplegend { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
 .maplegend i { display: inline-block; width: 90px; height: 8px; border-radius: 4px; }
 .maphint { margin: 6px 0 0; padding: 6px 10px; border-radius: 6px; font-size: 11.5px; color: var(--warn);
@@ -426,6 +430,7 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 <script src="/api/v1/static/climb_vam.js" defer></script>
 <script src="/api/v1/static/pole_compare.js" defer></script>
 <script src="/api/v1/static/pd_trend.js" defer></script>
+<script src="/api/v1/static/zonecolors.js" defer></script>
 <script src="/api/v1/static/readiness.js" defer></script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
@@ -2722,6 +2727,66 @@ function mcLegend(bands) {
     + lab.map((l, k) => `<span><i class="band" style="background:var(--mc-g${k})"></i>${esc(l)}</span>`).join("") : "")
     + `<span>${esc(t("viewer.mapchart.smooth"))}</span>`;
 }
+// ---- 區間上色 (SP-660): the HR / power / pace line coloured by the zone of each moment, in a zone set the
+// viewer picks (GET /workouts/{i}/zone-sets, panels/activity_charts.zone_sets); default the settings' zones
+// (the 課表心率區間 in effect, else the 課表功率區間). Colours: zonecolors.js, blue (easy) → dark red (hard).
+const MC_ZKINDS = [["hr", "viewer.mapchart.zc_hr"], ["power", "viewer.mapchart.zc_power"], ["pace", "viewer.mapchart.zc_pace"]];
+// the zone of v in rows (easy → hard, [from, to)); -1 without a value
+function mcZoneOf(v, rows) {
+  if (v == null || !isFinite(v)) return -1;
+  for (let k = 0; k < rows.length; k++) {
+    const r = rows[k];
+    if ((r.from == null || v >= r.from) && (r.to == null || v < r.to)) return k;
+  }
+  return v < (rows[0].from ?? 0) ? 0 : rows.length - 1;
+}
+// the zone set in use: the remembered "kind:model" among the lines shown, else the first shown kind's default
+function mcZonePick(zs, want, ids) {
+  if (!zs) return null;
+  const avail = (k) => (zs[k]?.models || []).filter((m) => m.available);
+  const [k0, id0] = (want || "").split(":");
+  const asked = ids.includes(k0) ? avail(k0).find((m) => m.id === id0) : null;
+  if (asked) return { kind: k0, model: asked };
+  for (const [k] of MC_ZKINDS) {
+    if (!ids.includes(k)) continue;
+    const m = avail(k).find((x) => x.id === zs[k].default) || avail(k)[0];
+    if (m) return { kind: k, model: m };
+  }
+  return null;
+}
+// one series per zone in place of the line `base` (data [[x, v]]): a point belongs to its zone's series and,
+// so the line has no gaps, to the series of the point before it; `area` fills under it (分開)
+function mcZoneSeries(base, rows, area) {
+  const n = rows.length, zi = base.data.map((p) => mcZoneOf(p[1], rows));
+  return rows.map((r, k) => {
+    const c = ZoneColors.color(k, n);
+    return { ...base, id: `${base.id}-z${k}`, name: `${base.name} ${r.id}`,
+      data: base.data.map((p, i) => [p[0], p[1] != null && (zi[i] === k || (i > 0 && zi[i - 1] === k)) ? p[1] : null]),
+      lineStyle: { ...base.lineStyle, color: c, width: area ? 1.4 : 2.2 }, itemStyle: { color: c },
+      ...(area ? { areaStyle: { color: c, opacity: 0.5 } } : {}) };
+  });
+}
+// the toggle and the zone-set picker (only the kinds of the lines shown; a set this activity can't use disabled)
+function mcZoneBar(zc, zs, pick, ids) {
+  const on = zc.on;
+  let html = `<span class="mcgrp"><button data-zc="1" class="${on ? "on" : ""}" aria-pressed="${on}" title="${esc(t("viewer.mapchart.zc_aria"))}">`
+    + `<i class="mcdot mczc"></i>${esc(t("viewer.mapchart.zc"))}</button>`;
+  if (on && zs) {
+    const groups = MC_ZKINDS.filter(([k]) => ids.includes(k) && zs[k]).map(([k, key]) => `<optgroup label="${esc(t(key))}">${
+      zs[k].models.map((m) => `<option value="${esc(k + ":" + m.id)}"${m.available ? "" : " disabled"}${pick && pick.kind === k && pick.model.id === m.id ? " selected" : ""}>${
+        esc(m.title)}${m.id === zs[k].default ? esc(t("viewer.mapchart.zc_default")) : ""}${esc(m.available ? (m.estimate ? t("viewer.az.est") : "") : t("viewer.az.na"))}</option>`).join("")}</optgroup>`).join("");
+    html += groups ? ` <select class="mczs" aria-label="${esc(t("viewer.mapchart.zc_set"))}">${groups}</select>` : "";
+  }
+  return html + "</span>";
+}
+// the legend chips of the zone set in use: colour, zone and its range
+function mcZoneLegend(pick) {
+  const rows = pick.model.rows, n = rows.length, id = pick.kind;
+  const f = (v) => mcFmt(id, v);
+  const rng = (r) => r.to == null ? `≥ ${f(r.from)}` : !r.from ? `< ${f(r.to)}` : `${f(r.from)}–${f(r.to)}`;
+  return `<span>${esc(t("viewer.mapchart.zc_leg", { name: pick.model.title }))}</span>` + rows.map((r, k) =>
+    `<span title="${esc(r.name)}"><i class="band" style="background:${ZoneColors.color(k, n)}"></i>${esc(r.id)} ${esc(rng(r))}</span>`).join("");
+}
 function mapChart(card, tb, wrap, s) {
   if (!s.byT) return;                         // no time axis: the map alone
   const pwOn = S.usePower !== false;
@@ -2736,6 +2801,10 @@ function mapChart(card, tb, wrap, s) {
   let view = mcView(pref, !!s.byD), layout = pref.layout === "left" ? "left" : "top";
   const pick = () => view.mode === "over" ? mcPickOver(want, has) : mcPick(want, has);
   let ids = pick();
+  // 區間上色 (SP-660): on / off and the remembered set; the sets are read when first switched on
+  let zc = { on: !!pref.zone?.on, set: pref.zone?.set || null }, ZS = null, zsBusy = null;
+  const zsLoad = () => ZS ? Promise.resolve(ZS) : (zsBusy = zsBusy || j(`${API}/workouts/${s.workout}/zone-sets?${tpParam()}`)
+    .then((r) => (ZS = r)).catch((e) => { zsBusy = null; throw e; }));
   // layout: map on top / on the left (hidden on narrow screens, where it is always on top)
   const lay = document.createElement("span");
   lay.className = "maplayout";
@@ -2766,19 +2835,34 @@ function mapChart(card, tb, wrap, s) {
   new ResizeObserver(() => chart.isDisposed() || chart.resize()).observe(el);
   const draw = () => {
     const over = view.mode === "over", show = over ? ids.length > 0 || has("elev") : ids.length > 0;
-    bar.innerHTML = mcBar(view.mode, ids, has, view.x, !!s.byD);
-    leg.hidden = !over || !show;
+    const zp = zc.on ? mcZonePick(ZS, zc.set, ids) : null;
+    bar.innerHTML = mcBar(view.mode, ids, has, view.x, !!s.byD) + mcZoneBar(zc, ZS, zp, ids);
+    leg.innerHTML = (over ? mcLegend(segs.length > 0) : "")
+      + (zp ? `<span class="mczleg">${mcZoneLegend(zp)}</span>` : zc.on && ZS ? `<span>${esc(t("viewer.mapchart.zc_none"))}</span>` : "");
+    leg.hidden = !show || !leg.innerHTML;
     none.hidden = show; el.hidden = !show;
     if (!show) return;
     el.style.height = `${over ? MC_OVER_H : 6 + ids.length * 92 + 18}px`;
     chart.resize();
-    chart.setOption(over ? mcOverOption(s, ids, vals, view.x, segs) : mcOption(s, ids, vals, view.x), true);
+    const opt = over ? mcOverOption(s, ids, vals, view.x, segs) : mcOption(s, ids, vals, view.x);
+    if (zp) opt.series = opt.series.flatMap((se) => se.id === zp.kind ? mcZoneSeries(se, zp.model.rows, !over && zp.kind !== "pace") : [se]);
+    chart.setOption(opt, true);
   };
   draw();
+  if (zc.on) zsLoad().then(draw).catch((e) => console.warn("zone sets:", e.message));
   hoverChart(chart, s, () => view.x);
+  bar.onchange = (e) => {
+    const sel = e.target.closest("select.mczs"); if (!sel) return;
+    zc = { ...zc, set: sel.value }; mcSave({ zone: zc });
+    draw();
+  };
   bar.onclick = (e) => {
     const b = e.target.closest("button"); if (!b || b.disabled) return;
-    if (b.dataset.v && b.dataset.v !== view.mode) { view = { ...view, mode: b.dataset.v }; mcSave({ mode: view.mode }); }
+    if (b.dataset.zc) {
+      zc = { ...zc, on: !zc.on }; mcSave({ zone: zc });
+      if (zc.on && !ZS) { draw(); zsLoad().then(draw).catch((err) => console.warn("zone sets:", err.message)); return; }
+    }
+    else if (b.dataset.v && b.dataset.v !== view.mode) { view = { ...view, mode: b.dataset.v }; mcSave({ mode: view.mode }); }
     else if (b.dataset.x && b.dataset.x !== view.x) { view = { ...view, x: b.dataset.x }; mcSave({ x: view.x }); }
     else if (b.dataset.m) {
       const id = b.dataset.m, on = !ids.includes(id);

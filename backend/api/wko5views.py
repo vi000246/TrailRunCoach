@@ -2196,6 +2196,17 @@ def workout_samples(idx: int, parity: Optional[bool] = None):
     }
 
 
+@router.get("/workouts/{idx}/zone-sets")
+def workout_zone_sets(idx: int, parity: Optional[bool] = None):
+    """The zone sets the route map's HR / power / pace lines can be coloured by (SP-660,
+    panels/activity_charts.zone_sets): every model's edges for this activity and the settings' default."""
+    from backend.engine.panels.activity_charts import zone_sets
+    ds = _dataset(parity)
+    if not 0 <= idx < len(ds.workouts):
+        raise HTTPException(404, "workout not found")
+    return zone_sets(ds, ds.workouts[idx])
+
+
 @router.get("/viewer", include_in_schema=False)
 def viewer():
     return render_page("charts")

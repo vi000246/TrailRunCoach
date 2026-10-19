@@ -511,6 +511,66 @@ def zone_times(ds, w, kind: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# zone sets for colouring the activity's lines (SP-660)
+# ---------------------------------------------------------------------------
+
+# the 課表心率區間 in effect (hr_profile.effective_model) → the HR model of this file with the same edges
+PLAN_HR_MODEL = {"lthr": "coroslthr", "hrr": "rqhrr", "hrmax": "coroshrmax"}
+PACE_MODEL = {"id": "frielpace", "title": N_("Friel 7 區（% 閾值配速）"), "basis": "tpace",
+              "source": N_("Friel 配速區間（% 閾值配速）；閾值配速是推估（thresholds.estimate_tpace）")}
+
+
+def plan_hr_default(ds) -> str:
+    """The HR model the settings' 課表心率區間 is in effect as (自動 → its pick); Friel without one."""
+    try:
+        return PLAN_HR_MODEL.get(HP.effective_model(ds)["model"], DEFAULT_MODEL["hr"])
+    except Exception:                       # noqa: BLE001 — no settings store (tests, scripts)
+        return DEFAULT_MODEL["hr"]
+
+
+def _pace_bounds(ds, w) -> dict:
+    """Friel's pace zones in s/km at the threshold pace estimated on the activity's day: rows easy → hard as
+    [from, to) s/km (zone 1 the slowest, open above; 5c open below), or {"reason"}."""
+    from backend.engine.thresholds import estimate_tpace
+    from backend.files.wko5_athlete import day_to_date
+    try:
+        tp = estimate_tpace(ds, day_to_date(math.floor(w.day)))
+    except Exception:                       # noqa: BLE001 — no runs / samples
+        tp = {"value": None, "reason": _("算不出閾值配速")}
+    v = tp.get("value")
+    if not v:
+        return {"reason": tp.get("reason") or _("算不出閾值配速")}
+    s = v * 60.0
+    # FRIEL_PACE (id, name, lo, hi) in fractions of the threshold pace: a zone holds lo·tpace ≤ pace < hi·tpace
+    # (zones.zone_expr), so in s/km it is [lo·s, hi·s) — zone 1 the slowest, open above; 5c open below
+    rows = [(zid, nm, 0.0 if lo is None else lo * s, None if hi is None else hi * s) for zid, nm, lo, hi in Z.FRIEL_PACE]
+    m, sec = divmod(round(s), 60)
+    return {"rows": rows, "basis_text": _("閾值配速 {p}/km（推估）", p=f"{m}:{sec:02d}"), "estimate": True}
+
+
+def zone_sets(ds, w) -> dict:
+    """The zone sets the activity's HR / power / pace lines can be coloured by (SP-660): per kind every
+    model with its edges for this activity ({id, title, available, reason | rows [{id, name, from, to}],
+    basis_text, estimate}, rows easy → hard, zone = [from, to)), and the default — the settings' zones:
+    the 課表心率區間 in effect and the 課表功率區間."""
+    from backend.engine.workout_review import _thresholds
+    ctx = {"thr": _thresholds(ds, w)}
+
+    def model(kind, m, b):
+        item = {"id": m["id"], "title": _(m["title"]), "source": m["source"]}
+        if "reason" in b:
+            return {**item, "available": False, "reason": b["reason"]}
+        return {**item, "available": True, "estimate": bool(b.get("estimate")), "basis_text": b.get("basis_text"),
+                "rows": [{"id": zid, "name": _(nm), "from": _r(lo, 1), "to": _r(hi, 1)} for zid, nm, lo, hi in b["rows"]]}
+
+    out = {k: {"models": [model(k, m, _bounds(ds, w, k, m, ctx)) for m in MODELS[k]]} for k in ("hr", "power")}
+    out["hr"]["default"] = plan_hr_default(ds)
+    out["power"]["default"] = default_model("power")
+    out["pace"] = {"models": [model("pace", PACE_MODEL, _pace_bounds(ds, w))], "default": PACE_MODEL["id"]}
+    return out
+
+
+# ---------------------------------------------------------------------------
 # WKO5 Heart Rate Variation and Trend
 # ---------------------------------------------------------------------------
 

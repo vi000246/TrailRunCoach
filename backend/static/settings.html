@@ -162,7 +162,36 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .plan-sum a { white-space: nowrap; font-weight: 600; }
 main > section.tab-off { display: none; }
 /* 生理數據: 心率 → 閾值測試紀錄 → 功率 (grid order; the HTML order stays) */
-#hr { order: 1; } #thresholds { order: 2; } #power { order: 3; }
+/* a grid item's min-content (閾值測試紀錄's table) widened the whole tab past a phone's width: the tables scroll in .tw instead */
+main > section { min-width: 0; }
+#physio { order: 0; } #hr { order: 1; } #thresholds { order: 2; } #power { order: 3; }
+/* 我的區間 (SP-662): the numbers as tiles, then each zone set as one coloured bar and a tinted row per zone
+   (zonecolors.js), light panels in both themes; the app-vs-watch check is one sentence under them */
+.pv-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-top: 10px; }
+.pv-tile { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.pv-tile .k { color: var(--muted); font-size: 12px; }
+.pv-tile .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.pv-tile .v small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.pv-tile .s { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-tile.unset .v { color: var(--muted); font-size: 16px; font-weight: 500; }
+.pv-zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 14px; }
+.pv-set h3 { font-size: 14px; margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.pv-set h3 .meta { font-weight: 400; }
+.pv-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+.pv-bar i { display: block; height: 100%; }
+.pv-list { display: grid; gap: 3px; }
+.pv-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto 72px; gap: 8px; align-items: center;
+  padding: 5px 10px 5px 0; border-radius: 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pv-row .z { font-weight: 700; text-align: center; border-left: 4px solid; padding-left: 4px; }
+.pv-row .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-row .r { font-weight: 650; white-space: nowrap; text-align: right; }
+.pv-row .p { color: var(--muted); font-size: 12px; white-space: nowrap; text-align: right; }
+.pv-row .pv-easy { color: var(--muted); font-size: 11.5px; }
+.pv-none { color: var(--muted); font-size: 13px; }
+.pv-watch { margin: 12px 0 0; font-size: 13px; }
+.pv-watch.ok { color: var(--ok); }
+.pv-watch.warn { color: var(--warn); }
+.pv-watch a { margin-left: 6px; }
 /* 這台裝置的離線資料 (SP-322, device_storage.js) */
 .ds-kv { grid-template-columns: minmax(96px, max-content) 1fr; gap: 6px 14px; align-items: baseline; }
 .ds-kv dd .meta { margin-left: 2px; }
@@ -211,6 +240,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 <script src="/api/v1/static/fitfolder.js"></script>
 <script src="/api/v1/static/exportimport.js"></script>
 <script src="/api/v1/static/device_storage.js"></script>
+<script src="/api/v1/static/zonecolors.js"></script>
 <header>
   <h1>設定</h1>
 </header>
@@ -377,6 +407,17 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     </details>
   </section>
 
+  <!-- SP-662: 我的區間 — the numbers in use and both zone sets at a glance (not folded); the editing stays below -->
+  <section id="physio">
+    <h2><span data-i18n="settings.pv.title">我的區間</span> <button type="button" class="q" id="pv-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pv.help" title="課表、活動判讀和圖表預設用的數字和區間。要改數字到下面的「心率」和「閾值測試紀錄」，要換區間的算法用「課表心率區間」「課表功率區間」。">?</button></h2>
+    <div class="pv-tiles" id="pv-tiles"></div>
+    <div class="pv-zones">
+      <div class="pv-set" id="pv-hr"></div>
+      <div class="pv-set" id="pv-pw"></div>
+    </div>
+    <div class="src cmp" id="hr-cmp" hidden></div>
+  </section>
+
   <section id="hr">
     <h2><span data-i18n="settings.hr.title">心率</span> <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.help" title="最大心率依序用：你填的值 → 手錶（COROS 帳號）的值 → 近 365 天跑步裡持續 5 秒以上的最高心率（濾掉光學心率的尖刺）→ 年齡公式 208 − 0.7 × 年齡（推估）。靜息心率：你填的值，沒有就用手錶（COROS 帳號）的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
     <dl class="kv" id="hr-kv"><dt data-i18n="settings.hr.max">最大心率</dt><dd class="meta" data-i18n="settings.pmc.loading">載入中…</dd></dl>
@@ -386,7 +427,6 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
       <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" id="hr-model-q" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.model_help" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。「自動」看哪個數字可信：LTHR 可信用乳酸閾值區間，否則最大心率和靜息心率可信用儲備心率區間，都不可信用最大心率區間；換了會通知一次。選其中一種就固定用那種。量過的 AeT（AeT 測試）一定當輕鬆跑上限。活動判讀（輕鬆跑／中強度）和自動調整（輕鬆跑偏強）也用同一個輕鬆跑上限：平均心率不超過上限 +3 算輕鬆。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
       <span class="meta" id="hr-model-note" role="status"></span>
     </div>
-    <div class="src cmp" id="hr-cmp" hidden></div>
     <details style="margin-top:6px"><summary class="meta" data-i18n="settings.hr.advanced">進階設定</summary>
       <div class="row"><label><span data-i18n="settings.hr.max">最大心率</span> <input type="number" id="hr-max" min="120" max="240" step="1" style="width:72px"> bpm</label>
         <button id="hr-max-save" data-i18n="settings.pmc.save">儲存</button><button id="hr-max-auto" data-i18n="settings.pmc.clear" hidden>改回自動</button></div>
@@ -1254,7 +1294,7 @@ $("saveprof").onclick = async () => {
 const HRP = "/api/v1/plan/hr-profile";
 let HR = null;
 function renderHr(r) {
-  HR = r;
+  HR = r; drawPhysio();
   const v = (x) => x && x.value != null ? `${Math.round(x.value)} bpm` : t("settings.hr.unset");
   // ST6 (●●▷): where the value comes from — 精簡 on hover only; a missing value's reason stays
   const src = (x) => x && x.source ? (LEAN() ? "" : `<span class="meta" data-hint-id="ST6">（${esc(x.source)}）</span>`)
@@ -1312,16 +1352,18 @@ function renderHrCompare(c) {
         <th>${esc(t("settings.hr.max"))}</th><th>${esc(t("settings.hr.rest"))}</th><th>${esc(t("settings.hr.cmp_hist_what"))}</th></tr></thead>
         <tbody>${hist}</tbody></table></div>` : "";
   const histNote = `<p class="meta">${esc(t(hist ? "settings.hr.cmp_hist_note" : "settings.hr.cmp_hist_none"))}</p>`;
-  // SP-488 (ST9, ●◐◐): 標準／精簡 fold the card into one line while every gap is within alert_bpm —
-  // the table, the note and the history inside (no 詳細 inside the 詳細, [U1]); a gap over it is class 1
-  const fold = !FULL() && !c.alert;
-  const body = `<div class="tw"><table class="wt"><thead><tr><th>${esc(t("settings.hr.cmp_item"))}</th><th>${esc(t("settings.hr.cmp_app"))}</th>
+  // SP-488 (ST9) → SP-662: while every gap is within alert_bpm the card is one line in every level — the table,
+  // the note and the history inside (no 詳細 inside the 詳細, [U1]); a gap over it is class 1: the card, with
+  // what to change on the watch in view and the table folded under 「詳細對照」
+  const fold = !c.alert;
+  const table = `<div class="tw"><table class="wt"><thead><tr><th>${esc(t("settings.hr.cmp_item"))}</th><th>${esc(t("settings.hr.cmp_app"))}</th>
       <th>${esc(t("settings.hr.cmp_watch"))}</th><th>${esc(t("settings.hr.cmp_gap"))}</th></tr></thead>
-      <tbody>${rows}${zrows}</tbody></table></div>
-    ${c.fixes.length ? `<ul>${c.fixes.map((f) => `<li>${esc(f)}</li>`).join("")}</ul><p>${esc(c.where)}</p>` : ""}
-    <p class="meta">${esc(c.note)}</p>
+      <tbody>${rows}${zrows}</tbody></table></div>`;
+  const notes = `<p class="meta">${esc(c.note)}</p>
     <p class="meta">${esc([c.read_day ? t("settings.hr.cmp_read", { day: c.read_day }) : "",
       h.last_change ? t("settings.hr.cmp_last", { day: h.last_change.day || "–", text: h.last_change.text }) : ""].filter(Boolean).join("　"))}</p>`;
+  const fixes = c.fixes.length ? `<ul>${c.fixes.map((f) => `<li>${esc(f)}</li>`).join("")}</ul><p>${esc(c.where)}</p>` : "";
+  const body = table + fixes + notes;
   box.dataset.hintId = "ST9";
   if (c.alert) box.dataset.hintCls = "1"; else delete box.dataset.hintCls;
   box.classList.toggle("folded", fold);
@@ -1332,9 +1374,10 @@ function renderHrCompare(c) {
     : `<h3>${esc(t("settings.hr.cmp_title"))}
       <span class="pill ${c.alert ? "warn" : "ok"}">${esc(t(c.alert ? "settings.hr.cmp_warn" : "settings.hr.cmp_ok", { bpm: c.alert_bpm }))}</span></h3>
     <p>${esc(c.summary)}</p>
-    ${body}
-    <details style="margin-top:6px"><summary class="meta">${esc(t("settings.hr.cmp_hist", { n: h.n }))}</summary>
-      ${histTable}${histNote}</details>`;
+    ${fixes}
+    <details style="margin-top:6px"><summary class="meta">${esc(t("settings.hr.cmp_detail"))}</summary>
+      ${table}${notes}
+      <p class="meta"><b>${esc(t("settings.hr.cmp_hist", { n: h.n }))}</b></p>${histTable}${histNote}</details>`;
 }
 async function loadHr() {
   try { renderHr(await j(HRP)); }
@@ -1352,6 +1395,7 @@ $("hr-model").onchange = (e) => putHr({ model: e.target.value }, t("settings.hr.
 // ---- 課表功率區間 (SP-363 R2; api/plan.py GET / PUT /power-zones, engine/power_zone_plan.py) -------------
 const PZM = "/api/v1/plan/power-zones";
 function renderPz(r) {
+  PZ = r; drawPhysio();
   $("pz-model").innerHTML = r.choices.map((c) => `<option value="${esc(c.id)}"${c.id === r.setting ? " selected" : ""}>${esc(c.title)}</option>`).join("");
   $("pz-model-note").textContent = r.fallback || "";
   $("pz-model-warn").textContent = r.warning ? "⚠ " + r.warning : "";   // SP-363: model threshold power far from the CP
@@ -1381,6 +1425,75 @@ function renderPz(r) {
   $("thr-pz-plan-basis").textContent = b ? t("settings.thr.pz_personal_basis",
     { w: Math.round(b.mftp || 0), date: b.date || "", from: b.from || "", days: b.days || 90 }) : "";
   $("thr-pz-plan-src").textContent = r.source ? t("settings.thr.pz_src_plain", { src: r.source }) : "";
+}
+// ---- 我的區間 (SP-662): the numbers in use as tiles, the 課表心率區間 and 課表功率區間 as a coloured bar each
+// (width ∝ the zone's span; the open first / last zone drawn as wide as its neighbour) and one tinted row per zone:
+// range and % of what the set is built on (LTHR / 最大心率 / 儲備心率 / CP or the model's threshold power).
+// Drawn from what the sections below already read (HR, TS, PZ); each redraws when one of them changes.
+let PZ = null;
+function zoneBar(rows, lo, hi) {
+  const n = rows.length, span = rows.map((z, i) => {
+    const a = lo(z, i), b = hi(z, i);
+    return a != null && b != null && b > a ? b - a : null;
+  });
+  const w = span.map((s, i) => s ?? span[i === 0 ? 1 : i - 1] ?? 1);
+  const sum = w.reduce((x, y) => x + y, 0) || 1;
+  return `<div class="pv-bar" aria-hidden="true">${w.map((x, i) =>
+    `<i style="width:${(x / sum * 100).toFixed(2)}%;background:${ZoneColors.color(i, n)}" title="${esc(rows[i].id)}"></i>`).join("")}</div>`;
+}
+function zoneRows(rows, range, pct, easy) {
+  const n = rows.length;
+  return `<div class="pv-list">${rows.map((z, i) => `<div class="pv-row" style="background:${ZoneColors.tint(i, n, 0.14)}">
+    <span class="z" style="border-color:${ZoneColors.color(i, n)}">${esc(z.id)}</span><span class="n" title="${esc(z.name)}">${esc(z.name)}${easy && easy.id === z.id
+      ? ` <small class="pv-easy">· ${esc(easy.text)}</small>` : ""}</span>
+    <span class="r">${range(z)}</span><span class="p">${pct(z)}</span></div>`).join("")}</div>`;
+}
+function drawPhysio() {
+  const num0 = (v) => v == null ? null : Math.round(v);
+  const ef = TS && TS.effective_thresholds;
+  const tile = (k, v, unit, s) => `<div class="pv-tile${v == null ? " unset" : ""}"><div class="k">${esc(k)}</div>
+    <div class="v">${v == null ? esc(t("settings.hr.unset")) : `${v}<small>${unit}</small>`}</div>
+    <div class="s" title="${esc(s || "")}">${esc(s || "")}</div></div>`;
+  const cp = ef ? num0(ef.cp.value) : PZ ? num0(PZ.cp) : null;
+  $("pv-tiles").innerHTML = [
+    tile(t("settings.hr.max"), HR && HR.max_hr ? num0(HR.max_hr.value) : null, "bpm", HR && HR.max_hr && (HR.max_hr.source || HR.max_hr.reason)),
+    tile(t("settings.hr.rest"), HR && HR.rest_hr ? num0(HR.rest_hr.value) : null, "bpm", HR && HR.rest_hr && (HR.rest_hr.source || HR.rest_hr.reason)),
+    tile("LTHR", ef ? num0(ef.lthr.value) : null, "bpm", t("settings.pv.lthr")),
+    tile("AeT", ef ? num0(ef.aethr.value) : null, "bpm", t("settings.pv.aet")),
+    tile("CP", cp, "W", t("settings.pv.cp")),
+  ].join("");
+  // 心率區間: the 課表心率區間 in effect (GET hr-profile plan_zones, engine/hr_profile.plan_hr_zones)
+  const z = HR && HR.plan_zones;
+  if (!HR) $("pv-hr").innerHTML = "";
+  else if (!z || !z.rows) $("pv-hr").innerHTML = `<h3>${esc(t("settings.pv.hr_h"))}</h3><p class="pv-none">${esc(t("settings.pv.hr_none"))}</p>`;
+  else {
+    const lthr = ef && ef.lthr.value, mhr = z.mhr || (HR.max_hr && HR.max_hr.value), rhr = z.rhr || (HR.rest_hr && HR.rest_hr.value);
+    const top = mhr && z.rows[5] && z.rows[5].lo && mhr > z.rows[5].lo ? mhr : null;
+    const lo = (r, i) => i === 0 ? (rhr && rhr < r.hi ? rhr : null) : r.lo, hi = (r, i) => r.hi ?? (i === z.rows.length - 1 ? top : null);
+    const of = z.model === "hrr" && mhr && rhr ? (b) => (b - rhr) / (mhr - rhr)
+      : z.model === "hrmax" && mhr ? (b) => b / mhr : lthr ? (b) => b / lthr : null;
+    const unit = t(`settings.pv.pct_${z.model === "hrr" ? "hrr" : z.model === "hrmax" ? "max" : "lthr"}`);
+    const pc = (b) => Math.round(of(b) * 100);
+    const range = (r) => r.hi == null ? `≥ ${Math.round(r.lo)}` : !r.lo ? `< ${Math.round(r.hi)}` : `${Math.round(r.lo)}–${Math.round(r.hi)}`;
+    const pct = (r) => !of ? "" : r.hi == null ? `≥ ${pc(r.lo)}%` : !r.lo ? `< ${pc(r.hi)}%` : `${pc(r.lo)}–${pc(r.hi)}%`;
+    const easy = z.easy ? { id: z.rows[1] && z.rows[1].id, text: t("settings.pv.easy", { lo: z.easy[0], hi: z.easy[1] }) } : null;
+    $("pv-hr").innerHTML = `<h3>${esc(t("settings.pv.hr_h"))} <span class="meta">${esc(z.short || z.label)} · bpm · ${esc(unit)}</span></h3>
+      ${zoneBar(z.rows, lo, hi)}${zoneRows(z.rows, range, pct, easy)}`;
+  }
+  // 功率區間: the 課表功率區間 in effect (GET power-zones levels at the CP in effect)
+  if (!PZ) $("pv-pw").innerHTML = "";
+  else if (!PZ.levels || !PZ.levels.length || !PZ.levels.some((l) => l.watts))
+    $("pv-pw").innerHTML = `<h3>${esc(t("settings.pv.pw_h"))}</h3><p class="pv-none">${esc(t("settings.pv.pw_none"))}</p>`;
+  else {
+    const L = PZ.levels, pers = PZ.system === "personal";
+    const frac = (l) => pers && l.pct_model ? l.pct_model : [l.lo, l.hi];
+    const lo = (l, i) => i === 0 && !frac(l)[0] ? null : frac(l)[0], hi = (l) => frac(l)[1] ?? null;
+    const p = (x) => Math.round(x * 100);
+    const range = (l) => !l.watts ? "–" : l.watts[1] == null ? `≥ ${l.watts[0]}` : !l.watts[0] ? `< ${l.watts[1]}` : `${l.watts[0]}–${l.watts[1]}`;
+    const pct = (l) => { const [a, b] = frac(l); return b == null ? `≥ ${p(a || 0)}%` : !a ? `< ${p(b)}%` : `${p(a)}–${p(b)}%`; };
+    $("pv-pw").innerHTML = `<h3>${esc(t("settings.pv.pw_h"))} <span class="meta">${esc(PZ.title)} · W · ${esc(pers ? t("settings.thr.pz_pct_model") : "% CP")}</span></h3>
+      ${zoneBar(L, lo, hi)}${zoneRows(L, range, pct, null)}`;
+  }
 }
 async function loadPz() {
   try { renderPz(await j(PZM)); } catch (e) { $("pz-model-note").textContent = t("settings.failed", { msg: e.message.slice(0, 80) }); }
@@ -1423,6 +1536,7 @@ function renderThr() {
     + (WKO5_RED ? ` <span class="err-text" data-hint-id="ST10">${esc(t("settings.thr.wko5_default", { date: w.date }))}</span>` : "");
   drawEst();
   drawConf();
+  drawPhysio();
   const cell = (i, f, v) => `<td><input type="number" data-t="${i}" data-f="${f}" value="${v ?? ""}" style="width:76px"></td>`;
   $("thr").innerHTML = TS.thresholds.map((r, i) => !thrShown(r) ? "" : `<tr>
     <td><input type="date" data-t="${i}" data-f="date" value="${esc(r.date)}"></td>
@@ -2990,7 +3104,7 @@ $("acct-analysis-btn").onclick = async () => {
 // hidden tab is never shown (個人資料 instead)
 const TABS = {
   personal: ["general", "sport", "map", "account"],
-  body: ["hr", "thresholds", "power"],
+  body: ["physio", "hr", "thresholds", "power"],
   data: ["sync", "weightsync", "backup", "archive", "device", "calendar"],
   advanced: ["mode", "calib", "fixes", "debugapi", "upstream"],
   cairn: ["cairn"],
