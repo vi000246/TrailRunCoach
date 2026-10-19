@@ -1,0 +1,124 @@
+# Shared trail dictionary (SP-709): once a month (and by hand) build it from the OSM extract Rudy's
+# map uses and publish it to Cloudflare R2 for TrailRunCoach and inReachLiveTrack.
+#
+# Download taiwan-latest.o5m.zst + its .md5 -> check the md5 -> tools/trail-dict/build.py ->
+# tools/trail-dict/publish.py (uploads the new version folder, checks every file is there, only then
+# moves latest.json, then keeps the newest two versions). Any failure fails the job, latest stays on
+# the previous version, and GitHub e-mails the failure (a scheduled run notifies whoever last edited
+# the cron line). Setup (bucket, token, secrets): tools/trail-dict/README.md.
+name: trail-dict
+
+on:
+  schedule:
+    - cron: "0 18 1 * *"          # the 2nd of every month, 02:00 Asia/Taipei
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Upload to R2 (off = build only, the result is kept as a workflow artifact)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: trail-dict
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_URL: http://osm.kcwu.csie.org/download/tw-extract/recent/taiwan-latest.o5m.zst
+
+jobs:
+  build:
+    # the public mirror carries this file too; only the private repo has the R2 secrets
+    if: github.repository == 'vi000246/TrailRunCoach-private'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the build tools
+        run: python -m pip install -r tools/trail-dict/requirements.txt
+
+      - name: Check the R2 settings
+        id: r2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          WANT_PUBLISH: ${{ github.event_name == 'schedule' || inputs.publish }}
+        run: |
+          missing=""
+          for k in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+            [ -n "${!k}" ] || missing="$missing $k"
+          done
+          if [ "$WANT_PUBLISH" != "true" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Build only (publish switched off); nothing goes to R2."
+          elif [ -n "$missing" ]; then
+            echo "::error::R2 is not set up: missing secrets$missing. Add them under Settings > Secrets and variables > Actions (see tools/trail-dict/README.md), or run by hand with publish off to build only."
+            exit 1
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download the extract and check its md5
+        id: src
+        run: |
+          mkdir -p "$RUNNER_TEMP/src"
+          cd "$RUNNER_TEMP/src"
+          for attempt in 1 2; do
+            curl -fsS --retry 3 --retry-delay 30 -o taiwan-latest.o5m.zst.md5 "$SOURCE_URL.md5"
+            curl -fsS --retry 3 --retry-delay 30 -D headers.txt -o taiwan-latest.o5m.zst "$SOURCE_URL"
+            # the extract is rebuilt daily: a mismatch can mean it changed mid-download, so try once more
+            if md5sum -c taiwan-latest.o5m.zst.md5; then break; fi
+            if [ "$attempt" = 2 ]; then echo "::error::md5 mismatch twice; not building"; exit 1; fi
+            sleep 120
+          done
+          lm=$(grep -i '^last-modified:' headers.txt | cut -d' ' -f2- | tr -d '\r')
+          if [ -n "$lm" ]; then
+            echo "last_modified=$(date -u -d "$lm" +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          fi
+          ls -l
+
+      - name: Build
+        run: |
+          set -o pipefail
+          python -I tools/trail-dict/build.py \
+            --source "$RUNNER_TEMP/src/taiwan-latest.o5m.zst" \
+            --md5-file "$RUNNER_TEMP/src/taiwan-latest.o5m.zst.md5" \
+            --out "$RUNNER_TEMP/out" --work "$RUNNER_TEMP/work" \
+            --source-url "$SOURCE_URL" \
+            --source-last-modified "${{ steps.src.outputs.last_modified }}" \
+            --summary "$GITHUB_STEP_SUMMARY" 2>&1 | tee build.log
+          rm -f "$RUNNER_TEMP/src/taiwan-latest.o5m.zst"
+
+      - name: Publish to R2
+        if: steps.r2.outputs.publish == 'true'
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PREFIX: ${{ vars.TRAIL_DICT_PREFIX }}
+        run: python -I tools/trail-dict/publish.py --out "$RUNNER_TEMP/out"
+
+      - name: Note a failure in the summary
+        if: failure()
+        run: echo "### trail-dict FAILED -- latest.json still points to the previous version" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the build when it was not published
+        if: steps.r2.outputs.publish != 'true' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trail-dict
+          path: |
+            ${{ runner.temp }}/out/manifest.json
+            ${{ runner.temp }}/out/trail-dict.ndjson.gz
+            build.log
+          retention-days: 7

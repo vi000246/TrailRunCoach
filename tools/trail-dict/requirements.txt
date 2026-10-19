@@ -1,0 +1,4 @@
+# tools/trail-dict only (SP-709); not part of the app's requirements.txt
+osmium==4.3.2          # pyosmium: reads the .o5m (libosmium); wheels for Linux and Windows
+zstandard==0.25.0      # unpacks taiwan-latest.o5m.zst
+boto3>=1.36            # publish.py: R2 through the S3 API (request_checksum_calculation needs >= 1.36)
