@@ -498,8 +498,9 @@
   "readiness.bars_head": "近 {n} 週（每週一條，三色＝這週的時間比例）",
   "readiness.bars_note": "底下數字＝輕鬆 %；淡的是恢復週",
   "readiness.rec_short": "恢復週",
-  "readiness.ramp_goal": "目標 {p} %",
-  "readiness.ramp_band": "綠色帶 {a}–{b} %",
-  "readiness.ramp_watch": "注意 {p} %",
+  "readiness.ramp_z_low": "沒在進步",
+  "readiness.ramp_z_ok": "照計畫",
+  "readiness.ramp_z_fast": "偏快",
+  "readiness.ramp_z_high": "注意",
   "readiness.pts": "{p} 點"
 }

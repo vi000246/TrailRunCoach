@@ -633,13 +633,14 @@ function renderRatio() {
   const last = rows[rows.length - 1], lb = zoneOf(last[1]);
   const top = 2.5;      // as views/training.json: a multi-day trip / the first weeks of data go off the top (hover)
   const markArea = { silent: true, label: { show: true, position: "right", color: muted, fontSize: 10.5, distance: 4 },
-    data: RATIO_BANDS.map((b, k) => [{ yAxis: b.lo, name: name(b), itemStyle: { color: b.c, opacity: dark ? 0.22 : 0.15 } },
+    data: RATIO_BANDS.map((b, k) => [{ yAxis: b.lo, name: name(b), itemStyle: { color: b.c, opacity: dark ? 0.16 : 0.12 } },
       { yAxis: k === RATIO_BANDS.length - 1 ? top : b.hi }]) };
+  // SP-686: no edge lines between the bands; 1 = as usual is the one solid, strong line (halfway from the muted
+  // text to the text), labelled at the start — as the viewer's zoned charts (views/training.json's zoned.ref)
+  const refInk = hexMix(muted, text, 0.5);
   const markLine = { silent: true, symbol: "none", label: { show: false },
-    data: [...RATIO_BANDS.slice(1).map((b) => ({ yAxis: b.lo, lineStyle: { color: b.c, type: "solid", width: 1, opacity: 0.8 } })),
-      // 1 = as usual: thin dashed, labelled at the start (as views/training.json's zoned.ref)
-      { yAxis: 1, lineStyle: { color: muted, type: [4, 4], width: 1 },
-        label: { show: true, position: "insideStartTop", color: muted, fontSize: 10.5, formatter: () => T("ratio.ref") } }] };
+    data: [{ yAxis: 1, lineStyle: { color: refInk, type: "solid", width: 1.5 },
+      label: { show: true, position: "insideStartTop", color: refInk, fontSize: 10.5, formatter: () => T("ratio.ref") } }] };
   ch.setOption({ ...axisBase(), grid: { left: 40, right: 50, top: 14, bottom: 26 },
     tooltip: { ...axisBase().tooltip, axisPointer: { type: "line", lineStyle: { color: css("--faint") } }, formatter: (ps) => {
       const p = [].concat(ps).find((x) => x.seriesName === "ratio"); if (!p) return "";

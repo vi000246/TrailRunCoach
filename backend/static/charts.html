@@ -1219,7 +1219,8 @@ async function load() {
       const { c, card } = queue.shift();
       if (token !== loadToken) return;
       try {
-        if (c.kind === "z5gate" || c.kind === "readiness" || (c.kind === "periodzones" && c.view === "weekly")) card.classList.add("wide");
+        // SP-687: both 區間時數 cards (total and weekly) take the full row, one above the other, never half width
+        if (c.kind === "z5gate" || c.kind === "readiness" || c.kind === "periodzones") card.classList.add("wide");
         if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "readiness", "periodzones", "climbvam", "pdtrend", "polecompare"].includes(c.kind)) { card.querySelector(".loading").textContent = t("viewer.unsupported"); continue; }
         if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = t("viewer.map_needs_act"); continue; }
         await renderCard(card, v, di, c, q, token);
@@ -2867,9 +2868,13 @@ function drawGauges(card, gauges) {
 }
 
 // ---- banded charts (views "zoned": {"line": name} — 負荷比, Form%): the {lo:hi} band series become
-// labelled shaded bands with solid edges, reference lines turn solid, and the named line is coloured
-// by the band it is in (a surface halo keeps it readable on its own band's tint), with the latest
-// value labelled「1.12 正常」. Text stays in text tokens; the band colour is only on marks.
+// labelled shaded bands (SP-686: no edge lines between them and no grid lines — only the names in the right
+// margin), the reference line (Form%'s 0, 負荷比's「1 = 跟平常一樣」) is the one solid, strong line, so it is
+// plain whether the line is above or under it, and the named line is coloured by the band it is in (a
+// surface halo keeps it readable on its own band's tint), with the latest value labelled「1.12 正常」.
+// Text stays in text tokens; the band colour is only on marks.
+// the reference line's ink: halfway from the muted text to the text (strong on both themes, not black)
+const zRefInk = () => zMix(css("--muted"), css("--text"), 0.5);
 function zHex(h) { const m = /^#?([0-9a-f]{6})$/i.exec(String(h || "").trim()); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; }
 function zMix(a, b, t) {
   const A = zHex(a), B = zHex(b);
@@ -2885,17 +2890,16 @@ function zonedSetup(out, srcOf, zoned) {
   // the line on its band: the band hue pulled 20 % toward the text ink (darker on light, lighter on dark)
   const lineColor = (b) => zMix(b.color, text, 0.2);
   for (const b of bands) {
-    b.o.markArea = { silent: true, itemStyle: { color: b.color, opacity: dark ? 0.22 : 0.15 },
+    b.o.markArea = { silent: true, itemStyle: { color: b.color, opacity: dark ? 0.16 : 0.12 },
       // the band's short name in the right margin, beside its band (never under the line); the
       // full range is in the hover and the ? text
       label: { show: true, position: "right", color: muted, fontSize: 10.5, distance: 4,
         formatter: (p) => String(p.name || "").split(" ")[0] },
       data: [[{ yAxis: b.lo, name: b.name }, { yAxis: b.hi }]] };
-    b.o.markLine = { silent: true, symbol: "none", label: { show: false },
-      lineStyle: { color: b.color, type: "solid", width: 1, opacity: 0.8 }, data: [{ yAxis: b.lo }, { yAxis: b.hi }] };
   }
+  const refInk = zRefInk();
   out.forEach((o, i) => {
-    if (srcOf[i]?.data.kind === "hline" && o.markLine) o.markLine.lineStyle = { ...o.markLine.lineStyle, type: "solid", color: muted, width: 1 };
+    if (srcOf[i]?.data.kind === "hline" && o.markLine) o.markLine.lineStyle = { ...o.markLine.lineStyle, type: "solid", color: refInk, width: 1.5, opacity: 1 };
   });
   const zoneOf = (y) => bands.find((b, k) => (k === 0 || y >= b.lo) && (k === bands.length - 1 || y < b.hi)) || null;
   const li = out.findIndex((o, i) => o.name === zoned.line && srcOf[i]?.data.kind === "points");
@@ -2914,10 +2918,10 @@ function zonedSetup(out, srcOf, zoned) {
         backgroundColor: panel, borderColor: b ? b.color : muted, borderWidth: 1, borderRadius: 4, padding: [2, 5],
         formatter: () => `${fmtU(last[1], u, { label: false })} ${b ? b.name.split(" ")[0] : ""}` } }] };
   }
-  // a reference line on the data line (zoned.ref, e.g. 負荷比's「1 = 跟平常一樣」): thin, dashed, labelled at the start
+  // a reference line on the data line (zoned.ref, e.g. 負荷比's「1 = 跟平常一樣」): solid and strong, labelled at the start
   if (zoned.ref && Number.isFinite(+zoned.ref.y)) {
-    L.markLine = { silent: true, symbol: "none", lineStyle: { color: muted, type: [4, 4], width: 1 },
-      label: { show: !!zoned.ref.label, position: "insideStartTop", color: muted, fontSize: 10.5, formatter: () => zoned.ref.label || "" },
+    L.markLine = { silent: true, symbol: "none", lineStyle: { color: refInk, type: "solid", width: 1.5 },
+      label: { show: !!zoned.ref.label, position: "insideStartTop", color: refInk, fontSize: 10.5, formatter: () => zoned.ref.label || "" },
       data: [{ yAxis: +zoned.ref.y }] };
   }
   const pieces = bands.map((b, k) => ({ ...(k > 0 ? { gte: b.lo } : {}), ...(k < bands.length - 1 ? { lt: b.hi } : {}),
@@ -3218,6 +3222,8 @@ function drawPlot(card, res, series) {
   const zoom = !!res._zoom;
   const Z = res.zoned ? zonedSetup(out, srcOf, res.zoned) : null;
   if (Z) {
+    // SP-686: no grid lines on a banded chart: the bands and the one reference line are the guides
+    for (const a of yAxis) a.splitLine = { show: false };
     // hovering the line: the value and its band in one line,「1.12 · 正常（0.8–1.3）」
     const f0 = tooltip.formatter;
     tooltip.formatter = (ps) => {

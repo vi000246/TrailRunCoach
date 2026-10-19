@@ -254,7 +254,7 @@ def base(today: dt.date, weeks: list[dict], ctl: list, *, phase: Optional[dict] 
     elif lo < EASY_MIN - 1e-9 or mid > MID_BAND[1] + 1e-9:
         st = "warn"
         lab = _("中間偏多") if mid > MID_BAND[1] + 1e-9 else _("輕鬆偏少")
-        todo = (_("中間區（黃）連 {n} 週變多：輕鬆跑放慢，強度課照排", n=rise + 1) if rise >= MID_RISE else
+        todo = (_("中間區連 {n} 週變多：輕鬆跑放慢，強度課照排", n=rise + 1) if rise >= MID_RISE else
                 _("輕鬆跑放慢到 AeT 以下，強度課照排"))
     else:
         st, lab, todo = "ok", _("照計畫"), None
@@ -312,7 +312,7 @@ def base(today: dt.date, weeks: list[dict], ctl: list, *, phase: Optional[dict] 
     out_n = sum(1 for x in rows if x["zone"] not in (None, "ok"))
     show = (_("{p}（{d} 點／週）", p=f"{v * 100:+.1f} %", d=f"{v * now[1]:+.1f}") if v is not None else "—")
     checks.append(_check("ramp", _("每週增量"), v, show,
-                         _("長期負荷每週增加多少（占長期負荷的 %）。綠色帶 {lo}–{hi}；目標 {g}（藍虛線）；超過 {w} 注意（紅虛線）",
+                         _("長期負荷每週增加多少（占長期負荷的 %）。綠色帶 {lo}–{hi}，目標 {g}；超過 {w} 注意（紅色帶）",
                            lo=_pct(lo_b), hi=_pct(hi_b), g=_pct(goal_pct), w=_pct(top)), st,
                          band=RAMP_BAND, scale=(-0.1, 0.15), label=lab, todo=todo, span=span8, weeks=rows,
                          goal=goal_pct, watch=top, line=True,

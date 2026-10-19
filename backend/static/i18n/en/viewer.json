@@ -516,8 +516,9 @@
   "readiness.bars_head": "Last {n} weeks (one bar a week, three colours = that week's time shares)",
   "readiness.bars_note": "Number below = easy %; faded = recovery week",
   "readiness.rec_short": "Recovery",
-  "readiness.ramp_goal": "goal {p} %",
-  "readiness.ramp_band": "green band {a}–{b} %",
-  "readiness.ramp_watch": "watch {p} %",
+  "readiness.ramp_z_low": "Flat",
+  "readiness.ramp_z_ok": "On plan",
+  "readiness.ramp_z_fast": "Fast",
+  "readiness.ramp_z_high": "Watch",
   "readiness.pts": "{p} pts"
 }

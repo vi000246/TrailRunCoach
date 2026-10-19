@@ -264,6 +264,13 @@
 .rd-sb > div.rec { opacity: .45; } .rd-sb > div.now { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rd-sb > div.none { background: color-mix(in srgb, var(--line) 40%, transparent); }
 .rd-rf { width: 100%; height: auto; display: block; margin-top: 6px; } .rd-rf text { font-size: 9px; fill: var(--muted); }
+.rd-rf .ref { stroke: color-mix(in srgb, var(--muted) 50%, var(--text)); stroke-width: 1.5; }
+.rd-rf .ln { stroke: color-mix(in srgb, var(--muted) 70%, var(--text)); stroke-width: 1.75; stroke-linejoin: round; }
+/* SP-690: the 強度分配 colours are the 區間時數 chart's 3-zone summary (the heart-rate red ramp, light → dark;
+   on the dark theme dark → light), and the 每週增量 bands are tinted as lightly as the 負荷平衡 % chart's */
+.rd { --rd-z1: #faa39c; --rd-z2: #b94642; --rd-z3: #570e10; --rd-band-op: .12; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rd { --rd-z1: #8c2525; --rd-z2: #e77d75; --rd-z3: #ffefec; --rd-band-op: .16; } }
+:root[data-theme="dark"] .rd { --rd-z1: #8c2525; --rd-z2: #e77d75; --rd-z3: #ffefec; --rd-band-op: .16; }
 .rd-sbn { display: flex; gap: 4px; font-size: 10px; color: var(--muted); text-align: center; }
 .rd-sbn span { flex: 1; min-width: 0; } .rd-sbn span.cur { color: var(--accent); font-weight: 700; }
 .rd-cond { display: flex; flex-wrap: wrap; gap: 4px 10px; }
@@ -291,7 +298,7 @@ details.ru-re summary .tag.warn { background: color-mix(in srgb, var(--rd-warn) 
 .ru-re .rd-bar .band { background: color-mix(in srgb, var(--rd-warn) 25%, transparent); }`;
     document.head.appendChild(st);
   }
-  const ZC = ["#16a34a", "#f59e0b", "#dc2626"];
+  const ZC = ["var(--rd-z1)", "var(--rd-z2)", "var(--rd-z3)"];     // 輕鬆 / 中間 / 高強度 (SP-690)
   const pos = (x, sc) => Math.max(0, Math.min(100, ((x - sc[0]) / (sc[1] - sc[0])) * 100));
   const sp = (x) => `${Math.round(x * 100)}`;
   function donutFig(k) {
@@ -307,31 +314,40 @@ details.ru-re summary .tag.warn { background: color-mix(in srgb, var(--rd-warn) 
       <div class="tg" style="margin-top:8px">${esc(T("bars_head", { n: (k.bars || []).length }))}</div><div class="rd-sb">${bars}</div><div class="rd-sbn">${nums}</div>
       <div class="tg" style="text-align:right">${esc(T("bars_note"))}</div>`;
   }
-  // 每週增量 (SP-678): a line of the last 8 weeks' chronic-load rise (% of it): the green band (2–5 %), the goal
-  // (blue dashed) and the 注意 line (red dashed); a point green in the band, yellow 5–10 %, red over the 注意 line,
-  // grey-blue under the band; recovery weeks grey (not judged); each week's % and points under the chart
-  const RZ = { ok: "#16a34a", fast: "#f59e0b", high: "#dc2626", low: "#64748b" };
+  // 每週增量 (SP-678; SP-690: drawn like the 負荷平衡 % chart): the last 8 weeks' chronic-load rise (% of it) on
+  // lightly tinted bands — 沒在進步 under the band (grey), 照計畫 2–5 % (green), 偏快 up to the 注意 line (yellow),
+  // 注意 above it (red) — named in the right margin, with no lines between them; 0 is the one solid, strong line.
+  // The line is neutral, a point takes its band's colour (recovery weeks grey, not judged); each week's % and
+  // points under the chart. Band colours = views/training.json's 負荷比 bands.
+  const RZ = { low: "#8a8984", ok: "#1baf7a", fast: "#eda100", high: "#e34948" };
+  const rzInk = (c) => `color-mix(in srgb, ${c} 80%, var(--text))`;     // the band hue pulled toward the text
   function rampFig(k) {
-    const W = 320, H = 136, x0 = 30, x1 = 298, yt = 8, yb = 108, lo = -0.10, hi = 0.15;
     const ws = k.weeks || [];
-    const y = (v) => yb - ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (yb - yt);
-    const x = (i) => ws.length > 1 ? x0 + (i * (x1 - x0)) / (ws.length - 1) : (x0 + x1) / 2;
     const [b0, b1] = k.band || [0.02, 0.05];
-    const hl = (v, c, txt, dash, anchor, dy, axis = true) => `<line x1="${x0}" x2="${x1}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="${dash ? 1 : 1.5}"${dash ? ` stroke-dasharray="${dash}"` : ""}/>${axis ? `<text x="${x0 - 3}" y="${y(v) + 3}" text-anchor="end" style="fill:${c}">${sp(v)}</text>` : ""}${txt ? `<text x="${anchor === "end" ? x1 - 2 : x0 + 4}" y="${y(v) + dy}" text-anchor="${anchor}" style="fill:${c}">${esc(txt)}</text>` : ""}`;
-    const rec = ws.map((w, i) => w.recovery ? `<rect x="${x(i) - 10}" y="${yt}" width="20" height="${yb - yt}" style="fill:color-mix(in srgb, var(--line) 45%, transparent)"/>` : "").join("");
+    const watch = k.watch != null ? k.watch : 0.10;
+    const W = 320, H = 136, x0 = 28, x1 = 270, yt = 6, yb = 108, lo = -0.10;
+    const hi = Math.max(0.15, Math.min(0.30, watch + 0.04));          // the 注意 band always shows
+    const y = (v) => yb - ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (yb - yt);
+    const x = (i) => ws.length > 1 ? x0 + 8 + (i * (x1 - x0 - 16)) / (ws.length - 1) : (x0 + x1) / 2;
+    const bands = [["low", lo, b0], ["ok", b0, b1], ["fast", b1, watch], ["high", watch, hi]].filter((b) => b[2] > b[1]);
+    const area = bands.map(([z, a, b]) => `<rect x="${x0}" y="${y(b)}" width="${x1 - x0}" height="${y(a) - y(b)}" style="fill:${RZ[z]};fill-opacity:var(--rd-band-op)"/>` +
+      `<text x="${x1 + 4}" y="${(y(a) + y(b)) / 2 + 3}">${esc(T("ramp_z_" + z))}</text>`).join("");
+    const ticks = [-0.1, 0, 0.1, 0.2, 0.3].filter((v) => v >= lo && v <= hi + 1e-9)
+      .map((v) => `<text x="${x0 - 4}" y="${y(v) + 3}" text-anchor="end">${sp(v)}</text>`).join("");
+    const zero = `<line x1="${x0}" x2="${x1}" y1="${y(0)}" y2="${y(0)}" class="ref"/>`;
+    const rec = ws.map((w, i) => w.recovery ? `<rect x="${x(i) - 10}" y="${yt}" width="20" height="${yb - yt}" style="fill:color-mix(in srgb, var(--muted) 14%, transparent)"/>` : "").join("");
     const pts = ws.map((w, i) => w.pct == null ? null : [x(i), y(w.pct)]);
     const path = pts.filter(Boolean).map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
     const sg = (v, d) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(d)}`;
-    const dots = ws.map((w, i) => w.pct == null ? "" : `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="${w.now ? 4.5 : 3.5}" fill="${w.recovery ? "#9ca3af" : RZ[w.zone] || "#9ca3af"}" stroke="#fff" stroke-width="1.5"/>`).join("");
+    const dots = ws.map((w, i) => w.pct == null ? "" : `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="${w.now ? 4.5 : 3.5}" style="fill:${w.recovery || !RZ[w.zone] ? "var(--muted)" : rzInk(RZ[w.zone])};stroke:var(--panel)" stroke-width="1.5"/>`).join("");
     const nums = ws.map((w, i) => {
       const st = w.now ? ' style="fill:var(--accent);font-weight:700"' : "";
       if (w.recovery || w.pct == null) return `<text x="${x(i)}" y="${yb + 14}" text-anchor="middle">${w.recovery ? esc(T("rec_short")) : "–"}</text>`;
       return `<text x="${x(i)}" y="${yb + 14}" text-anchor="middle"${st}>${sg(w.pct * 100, 1)}</text>` +
         (w.pts != null ? `<text x="${x(i)}" y="${yb + 25}" text-anchor="middle"${st}>${esc(T("pts", { p: sg(w.pts, 1) }))}</text>` : "");
     }).join("");
-    return `<svg class="rd-rf" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(k.name)}"><rect x="${x0}" y="${y(b1)}" width="${x1 - x0}" height="${y(b0) - y(b1)}" fill="#16a34a" fill-opacity=".14"/>
-      ${hl(b1, "#16a34a", "", "", "end", 0, false)}${hl(b0, "#16a34a", T("ramp_band", { a: sp(b0), b: sp(b1) }), "", "start", 10, false)}${k.goal != null ? hl(k.goal, "#2563eb", T("ramp_goal", { p: sp(k.goal) }), "4 3", "end", -3) : ""}${k.watch != null ? hl(k.watch, "#dc2626", T("ramp_watch", { p: sp(k.watch) }), "4 3", "end", -3) : ""}${hl(0, "#9ca3af", "", "2 2")}
-      ${rec}<path d="${path}" fill="none" stroke="#2563eb" stroke-width="2"/>${dots}${nums}</svg>`;
+    return `<svg class="rd-rf" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(k.name)}">${area}${ticks}${rec}${zero}
+      <path d="${path}" fill="none" class="ln"/>${dots}${nums}</svg>`;
   }
   const TU = (k, p) => L.t("common.unlock." + k, p);     // the unlock card is on the 總覽 too: common strings
   function chkCard(k, tr = T, todoHtml = null) {

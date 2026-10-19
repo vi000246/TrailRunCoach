@@ -10991,7 +10991,7 @@
     "draft": true,
     "src": "backend/engine/phase_checks.py:254"
   },
-  "中間區（黃）連 {n} 週變多：輕鬆跑放慢，強度課照排": {
+  "中間區連 {n} 週變多：輕鬆跑放慢，強度課照排": {
     "draft": true,
     "src": "backend/engine/phase_checks.py:255"
   },
@@ -11411,7 +11411,7 @@
     "draft": true,
     "src": "backend/engine/phase_checks.py"
   },
-  "長期負荷每週增加多少（占長期負荷的 %）。綠色帶 {lo}–{hi}；目標 {g}（藍虛線）；超過 {w} 注意（紅虛線）": {
+  "長期負荷每週增加多少（占長期負荷的 %）。綠色帶 {lo}–{hi}，目標 {g}；超過 {w} 注意（紅色帶）": {
     "draft": true,
     "src": "backend/engine/phase_checks.py"
   },

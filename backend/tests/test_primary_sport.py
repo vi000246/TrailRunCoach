@@ -160,7 +160,7 @@ TRAIL_ONLY = {
     "workout": {"route-difficulty", "climbs", "grades", "form-grades"},
 }
 ROAD_ONLY = {
-    "training": {"long-run-km", "long-run-pace", "mp-weekly"},
+    "training": {"long-run-km", "long-run-pace"},               # SP-687: 每週馬拉松配速時間 only on the 專項期 page
     "periodization": {"long-run-km-specific", "long-run-pace-specific", "mp-weekly-specific"},
     "workout": set(),
 }
@@ -184,7 +184,7 @@ def test_list_views_carries_the_tags(monkeypatch):
     monkeypatch.setattr(W, "_wko5_views", lambda parity=True: {})
     v = next(x for x in W.list_views() if x["name"] == _view("training")["name"])
     cs = {c["id"]: c for d in v["dashboards"] for c in d["charts"]}
-    assert cs["uphill-vam"]["sports"] == ["trail"] and cs["mp-weekly"]["sports"] == ["road"]
+    assert cs["uphill-vam"]["sports"] == ["trail"] and cs["long-run-km"]["sports"] == ["road"]
     assert cs["weekly-volume"]["order"] == {"road": -1} and "sports" not in cs["pmc-all"]
     # the 專項期 page has a 路跑 text (the viewer shows it instead of the trail one)
     pv = next(x for x in W.list_views() if x["name"] == _view("periodization")["name"])
@@ -248,7 +248,7 @@ def test_marathon_pace_time_counts_the_mp_band(tmp_path):
         dict(start=datetime(2026, 9, 3, tzinfo=UTC), seconds=1200, speed_m_s=3.15, sub_sport=3),   # trail
     ])
     b = date_to_day(date(2026, 8, 31))                                       # a Monday
-    r = Evaluator(ds, b, b + 6).evaluate(_series("training", "mp-weekly"))
+    r = Evaluator(ds, b, b + 6).evaluate(_series("periodization", "mp-weekly-specific"))
     got = _vals(r)
     assert got == [pytest.approx(1800, rel=0.05)]
 
