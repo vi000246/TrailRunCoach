@@ -35,7 +35,7 @@ def _expected(c, cap, k):
     for sg in c["segments"]:
         t_c = 10.0 - 0.0065 * (sg["z_mean"] - 3400)
         H = 1 - ENV.heat_penalty_pct(t_c, 70) / 100
-        t = sg["dist_m"] / (cap.v(sg["grade"], 9.0, 1.0, sg["z_mean"], h, 1) * H)
+        t = sg["dist_m"] / (cap.v(sg["grade"], 4.0, 1.0, sg["z_mean"], h, 1) * H)   # SP-738: single-day default pack 4 kg
         if sg["cls"] in ("up", "steep_up"):
             t *= k
         tot += t

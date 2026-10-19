@@ -159,5 +159,5 @@ def test_page_in_both_languages():
     from backend.i18n.pages import render
     zh, en = render("routes", "zh-TW"), render("routes", "en")
     assert "★ 最愛" in zh and "其他路段" in zh
-    assert "★ Favourites" in en and "Route progress" in en
+    assert "★ Favourites" in en and "Routes" in en          # SP-693: one 路線 page
     assert "prompt(" not in zh

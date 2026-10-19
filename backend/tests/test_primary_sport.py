@@ -89,7 +89,7 @@ def test_a_races_first_then_b_and_the_harder_race_decides_a_level():
     s = PS.suggest(ds, [a_road, _named("race", "沒距離", "2027-04-01", "A", km=None)], TODAY)
     assert s["sport"] == "trail" and "比不出來" in s["reason"]
     s = PS.suggest(ds, [_named("baiyue", "玉山", "2027-05-01", "B")], TODAY)            # 只有 B 百岳 → 越野
-    assert s["sport"] == "trail" and s["reason"] == "B 賽「玉山」是百岳"
+    assert s["sport"] == "trail" and s["reason"] == "B 賽「玉山」是登山"   # SP-738: the kind reads 登山
     s = PS.suggest(ds, [_named("road", "高雄馬", "2027-02-01", "B")], TODAY)            # 只有 B 路跑 → 路跑
     assert s["sport"] == "road" and s["reason"] == "下一場 B 賽「高雄馬」是路跑賽"
     s = PS.suggest(ds, [_named("race", "小越野", "2026-11-01", "C")], TODAY)            # 只有 C 越野 → 照佔比
@@ -102,7 +102,7 @@ def test_a_races_first_then_b_and_the_harder_race_decides_a_level():
     # the trail side of a comparison is its hardest race (a 3-day 百岳 = 超馬級 beats the marathon)
     s = PS.suggest(ds, [_named("race", "小越野", "2026-11-01", "A", km=10), a_road,
                         _named("baiyue", "南湖", "2027-07-01", "A", km=30, days=3)], TODAY)
-    assert s["sport"] == "trail" and s["reason"].startswith("A 賽「南湖」（百岳）比「台北馬」")
+    assert s["sport"] == "trail" and s["reason"].startswith("A 賽「南湖」（登山）比「台北馬」")
     # a past A race or an A 其他 event is not "a future A race": the B race decides
     s = PS.suggest(ds, [_named("road", "去年馬", "2025-10-01", "A"), _named("other", "其他", "2026-11-01", "A"),
                         b_trail], TODAY)
