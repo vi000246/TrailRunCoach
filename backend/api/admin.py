@@ -239,7 +239,18 @@ def _user_row(u, seen: dict, role_now: str) -> dict:
         row["bytes"] = _folder_bytes(root, u.is_owner) if root.exists() else 0
     row["admin"] = bool(getattr(u, "is_admin", u.is_owner))           # SP-351 R2
     row["me"] = u.id == _actor()                                       # SP-351 R2: no delete on your own row
+    row.update(_quota_view(u, role_now))                               # SP-713
     return row
+
+
+def _quota_view(u, role_now: str) -> dict:
+    """SP-713 本月額外次數: this month's extra uses an admin gave the user (added to their plan's
+    monthly limits: the calculator for the free tier, the back-test for a subscriber)."""
+    if u.is_owner:
+        return {}
+    plan = MS.PAID if role_now == MS.SUBSCRIBER else MS.FREE
+    monthly = [k for k, q in MS.QUOTAS.get(plan, {}).items() if q.period == "month"]
+    return {"extra_this_month": MS.extra_this_month(u.id), "extra_month": MS.month_key(), "extra_quotas": monthly}
 
 
 @router.get(API + "/users", dependencies=[USERS])
@@ -260,6 +271,7 @@ class UserIn(BaseModel):
     plan: Optional[str] = None
     plan_expires_at: Optional[str] = None
     test: Optional[bool] = None
+    extra_this_month: Optional[int] = None      # SP-713: this month's extra uses (0 = none)
 
 
 @router.put(API + "/users/{uid}", dependencies=[USERS, WRITE])
@@ -303,6 +315,17 @@ def put_user(uid: int = Path_(ge=1, le=2 ** 62), body: UserIn = Body(...)):
             store.set_plan(uid, plan, exp)
             SC.audit("user.plan", uid, {"plan": u.plan, "expires_at": u.plan_expires_at},
                      {"plan": plan, "expires_at": exp}, actor)
+    if body.extra_this_month is not None:                      # SP-713 本月額外次數
+        if u.is_owner:
+            raise HTTPException(400, {"code": "OWNER_PLAN"})
+        n = body.extra_this_month
+        if isinstance(n, bool) or not 0 <= n <= store.QUOTA_EXTRA_MAX:
+            raise HTTPException(400, {"code": "OUT_OF_RANGE", "key": "extra_this_month"})
+        month = MS.month_key()
+        old = store.quota_extra_get(uid, month)
+        if n != old:
+            store.quota_extra_set(uid, month, n)
+            SC.audit("user.quota_extra", uid, {"month": month, "extra": old}, {"month": month, "extra": n}, actor)
     seen = store.last_seen()
     nu = store.get_user(uid)
     return _user_row(nu, seen, MS.role_of_user(nu))

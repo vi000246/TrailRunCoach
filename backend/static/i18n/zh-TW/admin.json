@@ -254,5 +254,9 @@
   "audit.test.create": "建立測試帳號 {key}",
   "audit.test.link": "測試帳號 {key} 產生登入連結",
   "audit.test.delete": "刪除測試帳號 {key}",
-  "audit.user.test": "使用者 {key} 測試標記"
+  "audit.user.test": "使用者 {key} 測試標記",
+  "audit.user.quota_extra": "使用者 {key} 本月額外次數",
+  "extra.label": "本月額外",
+  "extra.help": "這個使用者本月（{month}）多給的次數，加到方案每月的上限（免費：計算機；訂閱：回測）。下個月自動歸零。用在客服補償、邀請測試者。",
+  "extra.saved": "已更新本月額外次數"
 }

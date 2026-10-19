@@ -358,12 +358,87 @@ def default_years() -> int:
     return v if isinstance(v, int) and not isinstance(v, bool) and v in CHOICES else DEFAULT_YEARS
 
 
-def _years() -> int:
-    """The person's own choice -> their plan's default -> the site's (site_config.effective)."""
+def wanted_years() -> int:
+    """The person's own choice -> their plan's default -> the site's (site_config.effective),
+    before the plan's cap (plan_cap)."""
     from backend import site_config as SC
     from backend.engine.wko5expr import datasource
     v = SC.for_current(RETENTION_KEY, personal=datasource.read_setting(RETENTION_KEY, None))
     return v if isinstance(v, int) and not isinstance(v, bool) and v in CHOICES else DEFAULT_YEARS
+
+
+# ---------------------------------------------------------------------------
+# the plan's cap (SP-713): the free tier keeps 1 year at full resolution (the summaries stay),
+# a subscription (scope history:full) chooses 2 / 3 / 5 / 10. Someone whose retention was longer
+# (a choice made before, the site's default 3, a subscription that ended) is told first: the
+# settings page says from which monthly run the 1 year applies — the first 1st of a month at
+# least NOTICE_DAYS after the cap was first seen — and the runs until then keep the old years
+# (SP-317: 先提醒再封存). Upgrading again drops the notice; the person's own choice is kept.
+# ---------------------------------------------------------------------------
+
+FREE_YEARS = 1
+FREE_CHOICES = (FREE_YEARS,)
+NOTICE_DAYS = 28
+
+
+def plan_cap() -> Optional[int]:
+    """The most years the current person's plan keeps at full resolution; None = no cap."""
+    from backend import membership as MS
+    try:
+        return None if MS.has("history:full") else FREE_YEARS
+    except Exception:                              # noqa: BLE001 — no membership to ask: as before
+        return None
+
+
+def choices() -> tuple:
+    """The years the settings page offers the current person."""
+    return CHOICES if plan_cap() is None else FREE_CHOICES
+
+
+def _notice_from(since: dt.date) -> dt.date:
+    """The first 1st of a month at least NOTICE_DAYS after `since`."""
+    d = since + dt.timedelta(days=NOTICE_DAYS)
+    return d if d.day == 1 else (d.replace(day=1) + dt.timedelta(days=32)).replace(day=1)
+
+
+def cap_notice(now: Optional[dt.datetime] = None) -> Optional[dict]:
+    """{years, was, since, from} while the plan's cap is below the retention the person had (first
+    seen `since`, applied from the monthly run on `from`); None otherwise. Recorded in the archive
+    log the first time, cleared once the cap is gone (an upgrade, a shorter choice)."""
+    cap, want = plan_cap(), wanted_years()
+    with _LOG_LOCK:
+        doc = _read_log()
+        cur = doc.get("cap_notice")
+        if cap is None or want <= cap:
+            if cur is not None:
+                doc.pop("cap_notice", None)
+                _write_log(doc)
+            return None
+        if not isinstance(cur, dict) or cur.get("years") != cap or "since" not in cur:
+            today = (now or dt.datetime.now(dt.timezone.utc)).astimezone(_tz()).date()
+            cur = {"years": cap, "since": today.isoformat(), "from": _notice_from(today).isoformat()}
+        if cur.get("was") != want:
+            cur = {**cur, "was": want}
+        if doc.get("cap_notice") != cur:
+            doc["cap_notice"] = cur
+            _write_log(doc)
+        return dict(cur)
+
+
+def _years(now: Optional[dt.datetime] = None) -> int:
+    """The years the monthly run keeps: wanted_years(), within the plan's cap once its notice ran."""
+    want, cap = wanted_years(), plan_cap()
+    if cap is None or want <= cap:
+        if _read_log().get("cap_notice"):
+            cap_notice(now)                        # clears a notice no longer needed
+        return want
+    n = cap_notice(now)
+    today = (now or dt.datetime.now(dt.timezone.utc)).astimezone(_tz()).date()
+    try:
+        applies = today >= dt.date.fromisoformat(n["from"])
+    except (TypeError, KeyError, ValueError):
+        applies = False
+    return cap if applies else want
 
 
 def _tz():

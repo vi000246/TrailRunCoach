@@ -1423,6 +1423,8 @@ def workout_review(i: int, section: Optional[str] = None, parity: Optional[bool]
     w = ds.workouts[i]
     if basis not in BS.BASES:
         raise HTTPException(400, f"basis must be one of {list(BS.BASES)}")
+    from backend import membership as MS
+    MS.require_workout_age(ds, w)            # SP-713: like the charts — 90 days free, 365 / all paid
     if section:
         if section not in WR.SECTIONS + WR.EXTRA_SECTIONS:
             raise HTTPException(400, f"section must be one of {list(WR.SECTIONS + WR.EXTRA_SECTIONS)}")

@@ -3104,7 +3104,13 @@ async function renderBacktest() {
   h += warnList(R.notes);
   $("bt-body").innerHTML = h;
 }
-$("bt-run").onclick = async () => { try { await post(`${API}/backtest/run`, {}); } catch (e) { $("bt-meta").textContent = e.message; } renderBacktest(); };
+// SP-713: one already running or queued → {already: true}, nothing counted: say 「已經在算」
+$("bt-run").onclick = async () => {
+  let r = null;
+  try { r = await post(`${API}/backtest/run`, {}); } catch (e) { $("bt-meta").textContent = e.message; }
+  await renderBacktest();
+  if (r && r.already) $("bt-meta").textContent = `${r.message || "已經在算"}（不另扣次數）　${$("bt-meta").textContent}`;
+};
 
 // ---------------- events: saved inputs + result per event (engine/race_calc_store.py) ----------------
 const ENV_IDS = ["f-alt", "f-t", "f-rh", "t-alt", "t-t", "t-rh"];

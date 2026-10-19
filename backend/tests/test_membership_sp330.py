@@ -270,10 +270,12 @@ def test_the_api_checks_scopes_and_quotas(client, monkeypatch):
     r = client.post("/api/v1/racepower/backtest/run", headers=F)
     assert r.status_code == 403 and r.json()["detail"]["scope"] == "calc:backtest"
     assert client.post("/api/v1/racepower/backtest/run", headers=P).status_code == 200
-    body = {"distance_km": 10}
-    codes = [client.post("/api/v1/racepower/plan", json=body, headers=F).status_code for _ in range(11)]
+    # SP-713: one route a day counts once — 11 different (typed) routes
+    codes = [client.post("/api/v1/racepower/plan", json={"distance_km": 10 + i}, headers=F).status_code
+             for i in range(11)]
     assert codes[:10] == [200] * 10 and codes[10] == 429             # the free tier's 10 a month
-    assert client.post("/api/v1/racepower/plan", json=body, headers=P).status_code == 200
+    assert client.post("/api/v1/racepower/plan", json={"distance_km": 10}, headers=F).status_code == 200   # seen today
+    assert client.post("/api/v1/racepower/plan", json={"distance_km": 10}, headers=P).status_code == 200
     s = client.get("/api/v1/session", headers=F).json()["membership"]
     assert s["role"] == "user" and "calc:backtest" not in s["scopes"]
     assert client.get("/api/v1/session").json()["membership"]["role"] == "owner"

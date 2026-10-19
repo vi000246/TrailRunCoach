@@ -14,7 +14,8 @@ written on sign-in / sign-up.
   shares      public /share/<id> -> the user whose tenant holds it
   waitlist    e-mails waiting for a place once sign-up is capped (SP-58)
   usage       the free tier's counters per user / quota / period (SP-330); usage_items: what
-              was counted, when a distinct item counts once a period (a chart dashboard a day)
+              was counted, when a distinct item counts once a period (a chart dashboard a day, a
+              calculator route a day); quota_extra: an admin's 本月額外次數 per user and month (SP-713)
   api_tokens  service tokens of another project (疊石 Cairn / inReachLiveTrack, SP-329, client
               "cairn"): sha256 only, the link:* scopes they carry, 30 days, one live per user and
               project, deleted when the user unlinks; and the weight API's tokens (SP-472, scope weight:write,
@@ -140,6 +141,12 @@ CREATE TABLE IF NOT EXISTS usage_items (
     period TEXT NOT NULL,
     item TEXT NOT NULL,
     PRIMARY KEY (user_id, key, period, item)
+);
+CREATE TABLE IF NOT EXISTS quota_extra (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    period TEXT NOT NULL,
+    extra INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, period)
 );
 CREATE TABLE IF NOT EXISTS api_tokens (
     token_hash TEXT PRIMARY KEY,
@@ -1117,6 +1124,43 @@ def usage_get_con(con, uid: int, key: str, period: str) -> int:
     return int(r[0]) if r else 0
 
 
+def usage_refund(uid: int, key: str, period: str, item: Optional[str] = None) -> None:
+    """Take back one counted use (a request that counted and then did nothing, e.g. a back-test
+    already started by a concurrent click)."""
+    init()
+    with _LOCK, connect() as con:
+        con.execute("UPDATE usage SET used = max(0, used - 1) WHERE user_id = ? AND key = ? AND period = ?",
+                    (int(uid), key, period))
+        if item is not None:
+            con.execute("DELETE FROM usage_items WHERE user_id = ? AND key = ? AND period = ? AND item = ?",
+                        (int(uid), key, period, item))
+
+
+# 本月額外次數 (SP-713): an admin's extra uses for one user and one month ('YYYY-MM'), added to the
+# limit of that user's monthly quotas (membership.quota_for); another month has none
+QUOTA_EXTRA_MAX = 10000
+
+
+def quota_extra_get(uid: int, period: str) -> int:
+    init()
+    with connect() as con:
+        r = con.execute("SELECT extra FROM quota_extra WHERE user_id = ? AND period = ?",
+                        (int(uid), period)).fetchone()
+        return int(r[0]) if r else 0
+
+
+def quota_extra_set(uid: int, period: str, extra: int) -> None:
+    if isinstance(extra, bool) or not isinstance(extra, int) or not 0 <= extra <= QUOTA_EXTRA_MAX:
+        raise ValueError(f"extra must be 0..{QUOTA_EXTRA_MAX}")
+    init()
+    with _LOCK, connect() as con:
+        if extra:
+            con.execute("INSERT INTO quota_extra(user_id, period, extra) VALUES (?, ?, ?) "
+                        "ON CONFLICT(user_id, period) DO UPDATE SET extra = excluded.extra", (int(uid), period, extra))
+        else:
+            con.execute("DELETE FROM quota_extra WHERE user_id = ? AND period = ?", (int(uid), period))
+
+
 def create_service_token(uid: int, client: str, scopes: list, days: Optional[int] = 365) -> str:
     """A token another project uses to call this API as `uid` with `scopes` (link:*)."""
     init()
@@ -1274,7 +1318,7 @@ def billing_mark_synced(uid: int, at: str) -> None:
 # ---------------------------------------------------------------------------- deleting an account (SP-386)
 
 _USER_TABLES = ("identities", "sessions", "shares", "usage", "usage_items", "api_tokens", "consents",
-                "billing_subscriptions", "test_login_links")
+                "billing_subscriptions", "test_login_links", "quota_extra")
 
 
 def delete_user(uid: int) -> dict:

@@ -9,7 +9,8 @@
  *   p0   總覽 / 課表 pages and their data: status, this week, the calendar of this and the next
  *        weeks / months, the period totals, the PMC of the last 7 / 42 / 90 days, the settings
  *   p1   the activity list (every activity's summary) and the achievements
- *   p2   nothing yet: the FIT files and the 1-year chart data need an API first (SP-325)
+ *   p2   nothing yet: the FIT files and the 1-year chart data need an API first (SP-325);
+ *        only with the scope offline:full (a subscription; SP-713 tiersOf) — the free tier keeps p0–p1
  * The manual (SP-558, api/manual.py: /manual, its chapters, search index and pictures) is the program's
  * too — public, no one's data: kept in the shared program cache, signed in or not, network first; the
  * whole of it (every chapter and picture of /manual/index.json) is fetched at install and when a manual
@@ -154,6 +155,16 @@
     return s.mode === "owner" ? "owner" : null;
   }
 
+  /** SP-713: the tiers a session may keep. The whole copy needs the scope offline:full (a
+   * subscription; the owner's single-user app has no membership = everything, as before); the free
+   * tier's copy saves space: p0 and p1, never p2. */
+  const SPARE_TIERS = ["p0", "p1"];
+  function tiersOf(s) {
+    const ms = s && typeof s === "object" ? s.membership : null;
+    if (!ms || !Array.isArray(ms.scopes)) return TIERS.slice();
+    return ms.scopes.includes("offline:full") ? TIERS.slice() : SPARE_TIERS.slice();
+  }
+
   const userCache = (key, tier) => `${USER_PREFIX}${key}-${tier}`;
   const appCache = (version) => `${PREFIX}app-${version}`;
 
@@ -287,6 +298,7 @@
       const st = await load();
       st.user = null;
       st.tiers = {};
+      delete st.allowed;
       for (const k of Object.keys(st.entries)) if (st.entries[k].kind !== "app") delete st.entries[k];
       await serial(async () => {
         const names = await caches.keys();
@@ -334,6 +346,8 @@
     /** Keep an answer (a 200, not redirected) under its URL; false when it wasn't kept. */
     async function store(cacheName, url, resp, tier, kind, g) {
       if (g !== gen) return false;
+      const st0 = await load();
+      if (kind !== "app" && Array.isArray(st0.allowed) && !st0.allowed.includes(tier)) return false;   // SP-713
       let buf;
       try { buf = await resp.arrayBuffer(); } catch (_) { return false; }
       const st = await load();
@@ -483,7 +497,17 @@
       const g = gen;
       const st = await load();
       const done = [];
+      // SP-713: a tier the plan doesn't keep (p2 without offline:full) is not filled, and a copy of
+      // it from before (a subscription that ended) goes
+      st.allowed = tiersOf(s);
       for (const tier of TIERS) {
+        if (st.allowed.includes(tier)) continue;
+        await dropEntries(Object.values(st.entries).filter((x) => x.tier === tier && x.kind !== "app"));
+        try { await caches.delete(userCache(key, tier)); } catch (_) { /* gone already */ }
+        delete st.tiers[tier];
+      }
+      await save();
+      for (const tier of st.allowed) {
         const name = userCache(key, tier);
         const t = st.tiers[tier];
         const present = await caches.has(name);
@@ -586,7 +610,7 @@
   return {
     BUDGET, TIERS, REFRESH_MS, TIMEOUT_MS, APP_FILES, CDN, PAGES, API, WARM, OFFLINE_PAGE, HDR, NO_NAV, MANUAL, MANUAL_INDEX,
     USER_PREFIX, META_CACHE, STRICT_RANGE,
-    classify, userKeyOf, userCache, appCache, warmDerived, pickFallback, planEviction, markOfflineHtml,
+    classify, userKeyOf, tiersOf, userCache, appCache, warmDerived, pickFallback, planEviction, markOfflineHtml,
     monthGrid, mondayOf, addDays, createEngine,
   };
 });

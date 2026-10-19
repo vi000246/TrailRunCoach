@@ -254,5 +254,9 @@
   "audit.test.create": "Test account {key} created",
   "audit.test.link": "Sign-in link made for test account {key}",
   "audit.test.delete": "Test account {key} deleted",
-  "audit.user.test": "User {key} test mark"
+  "audit.user.test": "User {key} test mark",
+  "audit.user.quota_extra": "User {key} extra uses this month",
+  "extra.label": "Extra this month",
+  "extra.help": "Extra uses for this user this month ({month}), added to the plan's monthly limit (free: the calculator; subscriber: the back-test). Back to none next month. For support credits or invited testers.",
+  "extra.saved": "Extra uses updated"
 }

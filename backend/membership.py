@@ -61,7 +61,6 @@ SCOPES: dict[str, str] = {
     "safety": "安全提示、關門判斷、傷病紅燈、熱與寒冷提醒",
     "import:fit": "手動匯入 FIT（SP-323）",
     "export:data": "下載我的資料（SP-386）",
-    "ai:chat": "AI 對話（自備金鑰，SP-306）",
     "charts:90d": "近 90 天圖表",
     "calc:use": "賽事計算機",
     "plan:auto": "自動調課表（夜間同步後）",
@@ -69,7 +68,7 @@ SCOPES: dict[str, str] = {
     # subscription
     "charts:365d": "365 天圖表",
     "charts:full": "全歷史圖表",
-    "history:full": "全解析度保留 3 年",
+    "history:full": "全解析度保留 2／3／5／10 年（自選）",
     "calc:unlimited": "計算機不限次數",
     "calc:backtest": "回測",
     "plan:auto_realtime": "有新活動就即時調課表",
@@ -104,7 +103,7 @@ SYNC_SOURCE_SCOPE = {"coros": "sync:coros_credential", "garmin": "sync:garmin_tr
 TEST_DENIED = frozenset(SOURCE_SCOPES) | {"sync:auto_nightly", "sync:auto_realtime"}
 LINK_SCOPES = ("link:account", "link:gpx_sync", "link:calc", "link:weather", "link:participant_ability")
 
-_FREE = frozenset({"plan:view", "plan:edit", "safety", "import:fit", "export:data", "ai:chat", "charts:90d",
+_FREE = frozenset({"plan:view", "plan:edit", "safety", "import:fit", "export:data", "charts:90d",
                    "calc:use", "plan:auto", "sync:auto_nightly",
                    "sync:coros_credential", "sync:garmin_trial", "sync:intervals", "sync:coros_mcp"})
 _PAID = _FREE | {"charts:365d", "charts:full", "history:full", "calc:unlimited", "calc:backtest",
@@ -152,11 +151,10 @@ PLAN_TABLE = [
     ("手動匯入 FIT、下載我的資料", "✅", "✅"),
     ("自動同步", "每天夜間一次", "有新活動就處理"),
     ("自動調課表", "夜間同步後", "即時"),
-    ("計算機", "每月 10 次", "無限"),
+    ("計算機", "每月 10 次（同一天同一條路線只算 1 次）", "無限"),
     ("365 天與全歷史圖表", "—", "✅"),
     ("回測", "—", "每月 2 次、全站排隊"),
-    ("AI 對話（自備金鑰）", "✅", "✅"),
-    ("全解析度保留", "1 年（另有 3 年摘要）", "3 年"),
+    ("全解析度保留", "1 年（之後只留摘要）", "自選 2／3／5／10 年"),
     ("離線快取", "省空間", "完整"),
     ("教練、開團", "—", "第二波另議"),
 ]
@@ -313,6 +311,13 @@ def chart_scope(days_back: float) -> str:
     return "charts:full"
 
 
+def require_workout_age(ds, w) -> None:
+    """One activity's own analysis (活動判讀, 活動比較; SP-713) reaches as far back as the charts:
+    403 SCOPE_REQUIRED (with the upgrade hint for the free tier) past the plan's range. The
+    overview's week / month totals are not this: the free tier sees all of them."""
+    require(chart_scope(float(ds.today) - float(w.day)))
+
+
 # ---------------------------------------------------------------------------- quotas
 
 def _period_key(period: str, now: dt.datetime) -> str:
@@ -320,8 +325,9 @@ def _period_key(period: str, now: dt.datetime) -> str:
     return local.strftime("%Y-%m-%d") if period == "day" else local.strftime("%Y-%m")
 
 
-def quota_for(key: str, m: Optional[Member] = None) -> Optional[Quota]:
-    """The plan's quota, its limit as the admin set it (site_config quota.<plan>.<key>, SP-351)."""
+def quota_for(key: str, m: Optional[Member] = None, now: Optional[dt.datetime] = None) -> Optional[Quota]:
+    """The plan's quota, its limit as the admin set it (site_config quota.<plan>.<key>, SP-351),
+    plus this user's 本月額外次數 for a monthly quota (the admin page's user row, SP-713)."""
     m = m or member()
     if m.role in (OWNER, DEMO):
         return None
@@ -334,31 +340,55 @@ def quota_for(key: str, m: Optional[Member] = None) -> Optional[Quota]:
         limit = SC.get(ck)
         if limit != q.limit:
             q = Quota(q.key, int(limit), q.period, q.label)
+    extra = extra_this_month(m.user_id, now) if q.period == "month" else 0
+    if extra:
+        q = Quota(q.key, q.limit + extra, q.period, q.label)
     return q
 
 
+def month_key(now: Optional[dt.datetime] = None) -> str:
+    """This month in Taiwan ('YYYY-MM'): the monthly counters' and the extra uses' period."""
+    return _period_key("month", now or _now())
+
+
+def extra_this_month(user_id: Optional[int], now: Optional[dt.datetime] = None) -> int:
+    """The extra uses an admin gave `user_id` for this month (SP-713; 0 = none). Added to every
+    monthly quota of their plan (calculator for the free tier, back-test for a subscriber)."""
+    if user_id is None:
+        return 0
+    try:
+        from backend.accounts import store
+        return store.quota_extra_get(int(user_id), month_key(now))
+    except Exception:                        # noqa: BLE001 — unreadable accounts.db: no extra
+        return 0
+
+
 def usage(key: str, now: Optional[dt.datetime] = None, m: Optional[Member] = None) -> dict:
-    """{used, limit, period, resets} of this tenant's quota `key` (limit None = unlimited)."""
+    """{used, limit, period, resets} of this tenant's quota `key` (limit None = unlimited); a
+    monthly quota also says `extra` (the admin's 本月額外次數, already inside `limit`)."""
     m = m or member()
-    q = quota_for(key, m)
+    now = now or _now()
+    q = quota_for(key, m, now)
     if q is None or m.user_id is None:
         return {"used": 0, "limit": None, "period": None}
     from backend.accounts import store
-    now = now or _now()
     pk = _period_key(q.period, now)
-    return {"used": store.usage_get(m.user_id, key, pk), "limit": q.limit, "period": q.period, "label": q.label,
-            "resets": pk}
+    out = {"used": store.usage_get(m.user_id, key, pk), "limit": q.limit, "period": q.period, "label": q.label,
+           "resets": pk}
+    if q.period == "month":
+        out["extra"] = extra_this_month(m.user_id, now)
+    return out
 
 
 def consume(key: str, item: Optional[str] = None, now: Optional[dt.datetime] = None) -> dict:
     """Count one use of quota `key` (a distinct `item` counts once per period, e.g. one chart
     dashboard a day); 429 QUOTA_EXCEEDED past the limit. Unlimited roles count nothing."""
     m = member()
-    q = quota_for(key, m)
+    now = now or _now()
+    q = quota_for(key, m, now)
     if q is None or m.user_id is None:
         return {"used": 0, "limit": None}
     from backend.accounts import store
-    now = now or _now()
     pk = _period_key(q.period, now)
     used = store.usage_add(m.user_id, key, pk, q.limit, item)
     if used is None:
@@ -367,12 +397,60 @@ def consume(key: str, item: Optional[str] = None, now: Optional[dt.datetime] = N
     return {"used": used, "limit": q.limit}
 
 
+def refund(key: str, got: Optional[dict] = None, now: Optional[dt.datetime] = None) -> None:
+    """Take back the use consume() just counted (`got` = its answer; nothing counted, nothing back)."""
+    if got is not None and got.get("limit") is None:
+        return
+    m = member()
+    now = now or _now()
+    q = quota_for(key, m, now)
+    if q is None or m.user_id is None:
+        return
+    from backend.accounts import store
+    store.usage_refund(m.user_id, key, _period_key(q.period, now))
+
+
 def use_quota(key: str) -> Callable:
     """A FastAPI dependency: counts one use, 429 QUOTA_EXCEEDED past the plan's limit."""
     def dep() -> None:
         consume(key)
     dep.__name__ = f"quota_{key}"
     return dep
+
+
+# ---------------------------------------------------------------------------- the calculator's count (SP-713)
+#
+# One use of the calculator = one route a day: however often the page recomputes while the inputs
+# change (it re-plans 250 ms after every edit), and whichever entry computes it — /plan, /share,
+# /export/plan, /predict, /estimate — the same route on the same (Taiwan) day counts once. The
+# route is, most stable first: the GPX's sha1 (course_id, also an event's stored GPX), the plan
+# event, else the typed course (type, km, gain, days) hashed.
+
+def calc_route(body) -> str:
+    c = getattr(body, "course", None)
+    if c is not None and getattr(c, "course_id", None):
+        return "gpx:" + str(c.course_id)
+    eid = (getattr(c, "event_id", None) if c is not None else None) or getattr(body, "event_id", None)
+    if eid:
+        return "event:" + str(eid)
+    man = (getattr(c, "manual", None) if c is not None else None) or {}
+
+    def num(v, nd):
+        try:
+            return round(float(v), nd)
+        except (TypeError, ValueError):
+            return None
+    parts = [getattr(body, "type", None), num(man.get("km", getattr(body, "distance_km", None)), 2),
+             num(man.get("gain", getattr(body, "gain_m", None)), 0), getattr(body, "days", None)]
+    import hashlib
+    import json
+    return "typed:" + hashlib.sha1(json.dumps(parts).encode()).hexdigest()[:16]
+
+
+def use_calc(body, now: Optional[dt.datetime] = None) -> dict:
+    """Count the calculator for this request's route (once a route a day); 429 past the limit."""
+    now = now or _now()
+    return consume("calc", item=f"{_period_key('day', now)}/{calc_route(body)}", now=now)
 
 
 # ---------------------------------------------------------------------------- cross-project tokens

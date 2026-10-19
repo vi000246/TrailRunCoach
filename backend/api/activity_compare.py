@@ -91,6 +91,9 @@ def compare(a: int, b: int):
     if a == b:
         raise HTTPException(400, "pick two different activities")
     wa, wb = ds.workouts[a], ds.workouts[b]
+    from backend import membership as MS
+    for w in (wa, wb):
+        MS.require_workout_age(ds, w)        # SP-713: like the charts — 90 days free, 365 / all paid
     ma, mb = _meta(ds, wa), _meta(ds, wb)
     out = AC.compare(_series(ds, a), _series(ds, b), ma, mb)
     out["a"], out["b"] = ma, mb

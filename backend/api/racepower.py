@@ -314,6 +314,7 @@ def _calc(fn, *args):
 
 @router.post("/predict")
 def predict(body: PredictIn):
+    MS.use_calc(body)                        # SP-713: the calculator's count, once a route a day
     return _calc(CALC.predict_response, LIVE, body)
 
 
@@ -330,6 +331,7 @@ def estimate(body: PlanIn):
     from backend.engine import race_results as RR
     from backend.engine.race_feasibility import survey_hours
     from backend.engine.racepower import race_estimate as RX
+    MS.use_calc(body)                        # SP-713: the calculator's count, once a route a day
     if RX.has_cp(inputs(), body):
         return {"available": False, "model": True}
     t = _calc(CALC.resolve_course, LIVE, body)["totals"]
@@ -844,8 +846,10 @@ async def goal_basis():
 
 
 @router.post("/plan")
-def plan(body: PlanIn, _q=Depends(MS.use_quota("calc"))):
-    """One race plan = one use of the calculator (the free tier's monthly count, SP-330)."""
+def plan(body: PlanIn):
+    """One route a day = one use of the calculator (the free tier's monthly count, SP-330 / SP-713:
+    the page re-plans after every edit; the same route the same day counts once)."""
+    MS.use_calc(body)
     return _py(CALC.respond(make_plan(body)))      # SP-482: warnings as hint objects (= calc.plan)
 
 
@@ -855,12 +859,20 @@ def backtest_result():
     return {"state": BT.state(), "result": BT.load()}
 
 
-@router.post("/backtest/run", dependencies=[Depends(MS.require_scope("calc:backtest")),
-                                             Depends(MS.use_quota("backtest"))])
+@router.post("/backtest/run", dependencies=[Depends(MS.require_scope("calc:backtest"))])
 def backtest_run():
+    """Queue this tenant's back-test: one use of the monthly count — none when one is already
+    running or queued (SP-713: {started: False, already: True}, 「已經在算」)."""
     from backend.engine.racepower import backtest as BT
+    st = BT.state()
+    if st.get("running") or st.get("queued"):
+        return {"started": False, "already": True, "message": "已經在算", "state": st}
+    got = MS.consume("backtest")             # 429 past the plan's limit
     run = _backtest_runner()                 # None: workers off — start_background's default, as before
     started = BT.start_background(_dataset, run=run) if run is not None else BT.start_background(_dataset)
+    if not started:                          # a concurrent click queued it first: this one counts nothing
+        MS.refund("backtest", got)
+        return {"started": False, "already": True, "message": "已經在算", "state": BT.state()}
     return {"started": started, "state": BT.state()}
 
 
@@ -984,6 +996,7 @@ class ShareIn(PlanIn):
 @router.post("/share")
 def create_share(body: ShareIn):
     from backend.engine.racepower import share as SH
+    MS.use_calc(body)                        # SP-713: the calculator's count, once a route a day
     p = _py(make_plan(body))
     req = {"date": body.date, "start_time": body.start_time, "stops": [x.model_dump() for x in body.stops]}
     title = body.share_title or p.get("course_name") or \
@@ -1114,6 +1127,7 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
     ev = _event(eid)                        # 404 for an event that is not in the plan
     if not ev.date:
         raise HTTPException(400, "這場賽事沒有日期")
+    await run_in_threadpool(MS.use_calc, body)     # SP-713: the calculator's count (accounts.db: off the loop)
     p = _py(await run_in_threadpool(make_plan, body))      # reads the Dataset: never on the event loop
     why = WE.multi_day(p, body.start_time, max(int(body.days or 1), int(getattr(ev, "days", None) or 1)))
     if why:

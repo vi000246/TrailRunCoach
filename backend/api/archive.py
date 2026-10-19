@@ -2,7 +2,8 @@
 運動紀錄保留 (SP-317, engine/fit_archive.py) on the settings page (資料同步 tab):
 
     GET  /api/v1/archive/status     retention (years, choices), the last cleanup, the next run
-    PUT  /api/v1/archive/settings   {"retention_years": 2 | 3 | 5 | 10}
+    PUT  /api/v1/archive/settings   {"retention_years": 2 | 3 | 5 | 10} (a subscription; the free
+                                    tier's only choice is 1, SP-713 — a longer one: 403 history:full)
     GET  /api/v1/archive/fit.zip    「下載我的全部 FIT」: every FIT of the current tenant, streamed
 
 The zip is written as it is sent (zipfile on a non-seekable sink, one FIT in memory at a time),
@@ -49,8 +50,17 @@ async def _status(repo: SettingsRepository) -> dict:
         nxt = FA.next_run().isoformat(timespec="minutes")
     except Exception:                              # noqa: BLE001 — the page shows no date then
         pass
-    return {"retention_years": years, "choices": list(FA.CHOICES), "default": FA.default_years(),
-            "min_years": FA.MIN_YEARS, "last": _with_local_date(FA.last_run()), "next_run": nxt}
+    out = {"retention_years": years, "choices": list(FA.CHOICES), "default": FA.default_years(),
+           "min_years": FA.MIN_YEARS, "last": _with_local_date(FA.last_run()), "next_run": nxt}
+    # SP-713: the plan's cap — the free tier keeps 1 year (its only choice); a longer retention it
+    # had is cut only from the monthly run named in `cap_notice` (told first, SP-317)
+    cap = FA.plan_cap()
+    if cap is not None:
+        out.update(retention_years=cap, choices=list(FA.FREE_CHOICES), default=cap, min_years=cap, cap=cap)
+        n = FA.cap_notice()
+        if n is not None and n["from"] > dt.datetime.now(FA._tz()).date().isoformat():
+            out["cap_notice"] = n
+    return out
 
 
 def _with_local_date(last):
@@ -80,6 +90,14 @@ class ArchiveSettingsBody(BaseModel):
 async def put_settings(body: ArchiveSettingsBody, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     _tenant()
     repo = SettingsRepository(db, athlete_id)
+    cap = FA.plan_cap()
+    if cap is not None:                            # SP-713: the free tier keeps 1 year, nothing to store
+        if body.retention_years == cap:
+            return await _status(repo)
+        if body.retention_years in FA.CHOICES:
+            from backend import membership as MS
+            raise MS.scope_error("history:full")     # 403 with the upgrade hint
+        raise HTTPException(400, f"{FA.RETENTION_KEY} must be {cap}")
     try:
         await repo.set(FA.RETENTION_KEY, body.retention_years)
     except ValueError as e:

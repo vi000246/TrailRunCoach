@@ -109,6 +109,12 @@ td .rolebox small { color: var(--muted); font-size: 11.5px; white-space: normal;
 .mock-run { color: var(--accent); } .mock-fail { color: var(--bad); }
 .acts { display: flex; flex-wrap: wrap; gap: 6px; }
 .chg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+/* SP-713: 本月額外次數 under the plan */
+label.extra { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+label.extra small { color: var(--muted); }
+label.extra input { width: 4.5em; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.qmark { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line);
+  color: var(--muted); font-size: 11px; cursor: help; }
 @media (max-width: 699px) {
   /* tables become one card per row: each cell with its column's name */
   .tablewrap { overflow: visible; margin: 0; }
@@ -282,10 +288,14 @@ td .rolebox small { color: var(--muted); font-size: 11.5px; white-space: normal;
 
   // ---------------------------------------------------------------- users
   const probText = (p) => (p.code === "FAILED_ACTIVITIES" ? t("prob.FAILED_ACTIVITIES", { n: p.n }) : t("prob." + p.code));
+  // SP-713 本月額外次數: added to the user's monthly limits this month only (api/admin.py _quota_view)
+  const extraCell = (u) => (u.extra_this_month == null ? "" : `<label class="extra"><small>${esc(t("extra.label"))}</small>
+    <input type="number" min="0" max="10000" step="1" inputmode="numeric" data-extra="${u.id}" value="${u.extra_this_month}" aria-label="${esc(t("extra.label"))}">
+    <span class="qmark" tabindex="0" title="${esc(t("extra.help", { month: u.extra_month || "" }))}">?</span></label>`);
   const userRow = (u) => {
     const who = esc(u.email || (u.owner ? t("role.admin") : u.name) || `#${u.id}`);
     const plan = u.owner ? t("never") : `<select data-plan="${u.id}">${["free", "subscriber"].map((p) =>
-      `<option value="${p}"${u.plan === p ? " selected" : ""}>${esc(t("plan_name." + p))}</option>`).join("")}</select>${u.plan_expires_at ? ` <small>${esc(t("plan_until", { date: day(u.plan_expires_at) }))}</small>` : ""}`;
+      `<option value="${p}"${u.plan === p ? " selected" : ""}>${esc(t("plan_name." + p))}</option>`).join("")}</select>${u.plan_expires_at ? ` <small>${esc(t("plan_until", { date: day(u.plan_expires_at) }))}</small>` : ""}${extraCell(u)}`;
     const probs = (u.problems || []).map((p) => `<span class="prob">${esc(probText(p))}</span>`).join("") || t("never");
     const testBtn = u.owner ? "" : `<button type="button" class="btn small" data-test="${u.id}" data-on="${u.test ? "0" : "1"}">${t(u.test ? "tests.unmark" : "tests.mark")}</button>`;
     const act = u.owner ? "" : u.disabled_at
@@ -316,6 +326,10 @@ td .rolebox small { color: var(--muted); font-size: 11.5px; white-space: normal;
     for (const b of panel.querySelectorAll("[data-enable]")) b.addEventListener("click", () => put(b.dataset.enable, { disabled: false }));
     for (const s of panel.querySelectorAll("[data-plan]")) s.addEventListener("change", () => put(s.dataset.plan, { plan: s.value }));
     for (const b of panel.querySelectorAll("[data-test]")) b.addEventListener("click", () => put(b.dataset.test, { test: b.dataset.on === "1" }));
+    for (const el of panel.querySelectorAll("[data-extra]")) el.addEventListener("change", () => {     // SP-713
+      const n = Math.round(Number(el.value));
+      if (Number.isFinite(n) && n >= 0) put(el.dataset.extra, { extra_this_month: n });
+    });
   };
 
   // ---------------------------------------------------------------- test accounts (SP-611)
