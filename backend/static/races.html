@@ -146,6 +146,12 @@ dialog#ed[open] { display: flex; flex-direction: column; }
 .hint { color: var(--warn); font-size: 12px; }
 details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; margin: 2px 0 6px; }
 #cairnres { white-space: pre-line; }
+/* SP-699: 「這是登山社／團排好的時間表」 with the Cairn import (moved here from 賽事計算機) */
+.grp-ask { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; line-height: 1.6; font-size: 13px; }
+.grp-ask label { font-weight: 600; cursor: pointer; display: inline-flex; gap: 6px; align-items: flex-start; }
+.grp-ask label input { width: auto; margin-top: 4px; }
+.grp-ask .meta { display: block; }
+.grp-ask .help .tip { left: auto; right: -8px; }     /* the ? sits at the label's end: open towards the left */
 .gpxrow { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 13px; margin: 4px 0; }
 .toast { position: fixed; right: 16px; bottom: 16px; background: var(--text); color: var(--bg); padding: 8px 14px;
   border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50; }
@@ -293,6 +299,9 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
         <button type="button" id="ci-go" data-i18n="races.cairn.import_go">匯入</button>
       </div>
       <div class="meta" id="ci-msg"></div>
+      <!-- SP-577 / 699: the Cairn trip's timetable — is it the group's? asked here, kept with the race's GPX;
+           the race calculator's 跟團對照 reads the answer -->
+      <div class="grp-ask hidden" id="ed-grp"></div>
       <div id="cp-wrap">
         <h3><span data-i18n="races.cairn.push_h">把路線推到 Cairn</span>
           <span class="help" tabindex="0">?<span class="tip" data-i18n="races.cairn.what"></span></span></h3>
@@ -760,6 +769,7 @@ async function openEditor(row, fromAct) {
   $("ci-go").hidden = !ev;
   $("cp-wrap").hidden = !ev;
   $("cp-msg").textContent = "";
+  renderGroupAsk();
   $("ed").showModal();
   if (ev) { $("cp-body").textContent = T("loading"); $("cp-go").disabled = true; await cairnStatus(); cpRender(); }
 }
@@ -952,6 +962,7 @@ async function importCairnNow() {
       f.climbing_m.value = r.event.climbing_m ?? "";
     }
     $("evcairn").value = ""; syncDayRequired();
+    renderGroupAsk();                                          // SP-699: a timetable came with it → asked here
     $("ci-msg").innerHTML = `<span class="ok">${esc(T("cairn.imported_ev", { name: r.cairn?.name || "", km: num(r.event?.distance_km ?? r.gpx?.km, 1),
       gain: num(r.event?.climbing_m ?? r.gpx?.gain_m), days: r.event_days }))} ✓</span>`
       + (r.cairn?.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join("");
@@ -959,6 +970,39 @@ async function importCairnNow() {
     await cairnStatus(); cpRender();
   } catch (err) { $("ci-msg").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
   $("ci-go").disabled = false;
+}
+// SP-577 / 699: a Cairn trip with times — 「這是登山社／團排好的時間表」, ticked when the data says so (several
+// times typed in a day, or the route recruiting in Cairn; never for a route older than Cairn's 「who wrote
+// it」), the why in the ? only. The answer is kept with the race's GPX; 賽事計算機 shows 跟團對照 from it.
+function groupWhy(sc) {
+  const g = sc.signals || {}, out = [];
+  if (g.user_days?.length) out.push(T("grp.sig_user", { u: g.n_user, n: g.n }));
+  else if (g.n_estimate > g.n_user) out.push(T("grp.sig_estimate", { e: g.n_estimate, n: g.n }));
+  if (g.recruit) out.push(T("grp.sig_recruit"));
+  if (g.legacy) out.push(T("grp.sig_legacy"));
+  return out.join(T("grp.sep"));
+}
+function renderGroupAsk() {
+  const el = $("ed-grp"), sc = S.edit && evGpx?.source?.schedule;
+  el.classList.toggle("hidden", !sc);
+  if (!sc) { el.innerHTML = ""; return; }
+  const pts = sc.points || [], days = Math.max(1, ...pts.map((p) => p.day || 1)), why = groupWhy(sc);
+  el.innerHTML = `<label><input type="checkbox" id="grp-on"${sc.group ? " checked" : ""}><span>${esc(T("grp.ask"))}</span></label>`
+    + ` <span class="help" tabindex="0">?<span class="tip">${esc(why ? T("grp.tip", { why }) : T("grp.tip_none"))}</span></span>`
+    + `<span class="meta">${esc(T("grp.sub", { days, n: pts.length }))}</span><span class="meta" id="grp-msg"></span>`;
+  $("grp-on").onchange = (ev) => setGroup(ev.target);
+}
+async function setGroup(box) {
+  const e = S.edit, on = box.checked;
+  if (!e) return;
+  box.disabled = true;
+  try {
+    const r = await send(`${PLAN}/events/${encodeURIComponent(e.id)}/gpx/group`, "PUT", { group: on });
+    evGpx = r.gpx || evGpx; S.edit = { ...S.edit, gpx: evGpx };
+    if (S.planEv[e.id]) S.planEv[e.id] = { ...S.planEv[e.id], gpx: evGpx };
+    toast(T(on ? "grp.saved_on" : "grp.saved_off"));
+  } catch (err) { box.checked = !on; $("grp-msg").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+  box.disabled = false;
 }
 $("ci-go").onclick = importCairnNow;
 $("evcairn").addEventListener("keydown", (ev) => {

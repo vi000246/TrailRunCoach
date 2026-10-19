@@ -57,20 +57,22 @@ def test_the_signals_and_the_suggestion():
     assert sig(GROUP)["legacy"] is False                                   # no date: not called legacy
 
 
-def test_the_import_asks_with_the_suggestion(cairn, calc_client):  # noqa: F811
+def test_the_import_asks_with_the_suggestion(cairn, plan_client):  # noqa: F811
+    url = "/api/v1/plan/events/jm/gpx/cairn"                            # SP-699: 賽事管理's import only
     cairn.pois = GROUP
     cairn.meta = {**cairn.meta, "uploaded_at": "2026-07-01 08:00:00"}
-    sc = calc_client.post("/api/v1/racepower/course/cairn", json={"url": cairn.link}).json()["cairn"]["schedule"]
+    sc = plan_client.post(url, json={"url": cairn.link}).json()["cairn"]["schedule"]
     assert sc["group"] is False and sc["signals"]["legacy"] is True
     cairn.meta = {**cairn.meta, "uploaded_at": "2026-09-01 08:00:00"}
-    sc = calc_client.post("/api/v1/racepower/course/cairn", json={"url": cairn.link}).json()["cairn"]["schedule"]
+    sc = plan_client.post(url, json={"url": cairn.link}).json()["cairn"]["schedule"]
     assert sc["group"] is True and sc["signals"]["user_days"] == [1, 2]
     assert [round(p["km"], 1) for p in sc["points"]] == [0.0, 4.0, 9.5, 9.5, 15.0, 21.0, 21.0, 30.0]
 
 
-def test_a_trip_without_times_imports_only_the_route(cairn, calc_client):  # noqa: F811
-    j = calc_client.post("/api/v1/racepower/course/cairn", json={"url": cairn.link}).json()   # SP-537's trip
-    assert j["cairn"]["schedule"] is None and j["days"] == 3
+def test_a_trip_without_times_imports_only_the_route(cairn, plan_client):  # noqa: F811
+    j = plan_client.post("/api/v1/plan/events/jm/gpx/cairn", json={"url": cairn.link}).json()   # SP-537's trip
+    assert j["cairn"]["schedule"] is None and j["event_days"] == 3
+    assert "schedule" not in (EG.get("jm")["source"] or {})
 
 
 def test_the_answer_is_kept_with_the_event_and_can_be_changed(cairn, plan_client, store):  # noqa: F811
@@ -107,9 +109,17 @@ def test_the_kept_timetable_is_cleaned():
 
 
 def test_the_page_asks_once_and_keeps_the_answer():
-    html = (ROOT / "backend/static/racepower.html").read_text("utf-8")
-    assert 'id="grp-ask"' in html and "function renderGroupAsk" in html and "/gpx/group" in html
-    assert "group: c.schedule || null" in html and "group: c.cairn?.schedule || null" in html
+    # SP-699: asked in 賽事管理's editor popup with the Cairn import; 賽事計算機 only says what it uses
+    races = (ROOT / "backend/static/races.html").read_text("utf-8")
+    assert 'id="ed-grp"' in races and "function renderGroupAsk" in races and "/gpx/group" in races
+    calc = (ROOT / "backend/static/racepower.html").read_text("utf-8")
+    assert 'id="grp-ask"' not in calc and "function setGroup" not in calc and "/gpx/group" not in calc
+    assert 'id="grp-note"' in calc and "function renderGroupNote" in calc and "group: c.schedule || null" in calc
     for loc in ("zh-TW", "en"):
-        cat = json.loads((ROOT / f"backend/static/i18n/{loc}/racepower.json").read_text("utf-8"))
-        assert all(cat[f"grp.{k}"] for k in ("ask", "ask_sub", "sig_user", "sig_estimate", "sig_recruit", "sig_legacy"))
+        cat = json.loads((ROOT / f"backend/static/i18n/{loc}/races.json").read_text("utf-8"))
+        assert all(cat[f"grp.{k}"] for k in ("ask", "sub", "tip", "sig_user", "sig_estimate", "sig_recruit", "sig_legacy"))
+        rp = json.loads((ROOT / f"backend/static/i18n/{loc}/racepower.json").read_text("utf-8"))
+        assert all(rp[f"grp.{k}"] for k in ("note_on", "note_off", "manage"))
+    # the words are plain: no 「這是團的時刻表（跟團對照）」 any more
+    zh = json.loads((ROOT / "backend/static/i18n/zh-TW/races.json").read_text("utf-8"))
+    assert "登山社" in zh["grp.ask"] and "跟不跟得上" in zh["grp.ask"] and "時刻表" not in zh["grp.ask"]

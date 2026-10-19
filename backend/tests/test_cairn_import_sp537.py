@@ -199,58 +199,6 @@ def calc_client(monkeypatch):
     return TestClient(app)
 
 
-def test_the_calculator_imports_the_trip_with_its_day_ends(cairn, calc_client):
-    r = calc_client.post("/api/v1/racepower/course/cairn", json={"url": cairn.link})
-    assert r.status_code == 200, r.text
-    j = r.json()
-    assert TOKEN not in r.text                                          # never sent back
-    assert j["days"] == 3 and j["name"] == "嘉明湖三天"
-    assert j["day_splits_km"] == [pytest.approx(9.5, abs=0.05), pytest.approx(21.04, abs=0.05)]
-    assert [(n["night"], n["name"]) for n in j["cairn"]["nights"]] == [(1, "向陽山屋"), (2, "嘉明湖避難山屋")]
-    assert j["cairn"]["url"] == f"https://map.yichlin.com/?gpx={GID}" and j["cairn"]["notes"] == []
-    assert j["overnights"] is None                                       # applied, not asked about
-    # Cairn was read with the token, on its three read routes only
-    assert {p for p, _q in cairn.seen} == {f"/api/gpx/{GID}", f"/api/gpx/{GID}/meta", "/api/pois"}
-    # the plan with those day ends: 3 days, each day's numbers from this app's smoothing
-    plan = calc_client.post("/api/v1/racepower/plan", json={"type": "baiyue", "course": {"course_id": j["course_id"]},
-                                                           "start_time": "06:00", "days": 3,
-                                                           "day_splits_km": j["day_splits_km"]}).json()
-    segs = plan["segments"]
-    assert sorted({s["day"] for s in segs}) == [1, 2, 3]
-    d1 = sum(s["dist_m"] for s in segs if s["day"] == 1) / 1000
-    assert d1 == pytest.approx(9.5, abs=0.1)
-    c = CO.build_course(GPX.parse(cairn.gpx, "x.gpx"), split="km")
-    pieces = CO.cut_at(c["segments"], j["day_splits_km"])
-    g1 = sum(p["gain_m"] for p in pieces if p["day"] == 1)
-    assert sum(s["gain_m"] for s in segs if s["day"] == 1) == pytest.approx(g1, rel=0.08)
-
-
-def test_a_dead_link_cairn_down_and_a_bad_link_are_said_plainly(cairn, calc_client):
-    bad = cairn.link.replace(TOKEN, "f" * 32)                           # revoked / regenerated
-    r = calc_client.post("/api/v1/racepower/course/cairn", json={"url": bad})
-    assert r.status_code == 410 and "連結失效" in r.json()["detail"] and "重新複製" in r.json()["detail"]
-    n = len(cairn.seen)
-    r = calc_client.post("/api/v1/racepower/course/cairn", json={"url": "https://example.com/?gpx=a&share=12345678"})
-    assert r.status_code == 400 and "不是疊石 Cairn 的分享連結" in r.json()["detail"]
-    assert len(cairn.seen) == n                                          # no call for a link that isn't Cairn's
-    cairn.down = True
-    r = calc_client.post("/api/v1/racepower/course/cairn", json={"url": cairn.link})
-    assert r.status_code == 502 and "稍後再試" in r.json()["detail"]
-
-
-def test_cairn_unreachable(monkeypatch, calc_client):
-    monkeypatch.setenv(CA.ORIGIN_ENV, "http://127.0.0.1:9")             # nothing listens there
-    r = calc_client.post("/api/v1/racepower/course/cairn", json={"url": f"http://127.0.0.1:9/?gpx={GID}&share={TOKEN}"})
-    assert r.status_code == 502 and "連不上疊石 Cairn" in r.json()["detail"]
-
-
-def test_a_trip_without_nights_imports_the_gpx_and_says_so(cairn, calc_client):
-    cairn.pois = [poi("p0", "登山口", 0.0, [visit(0, 1, "depart")]), poi("p2", "水池", 15.0, [visit(1, 1, "pass")])]
-    j = calc_client.post("/api/v1/racepower/course/cairn", json={"url": cairn.link}).json()
-    assert j["days"] == 1 and j["day_splits_km"] == [] and j["totals"]["km"] == pytest.approx(30, abs=0.1)
-    assert len(j["cairn"]["notes"]) == 1 and "沒有標過夜點" in j["cairn"]["notes"][0] and "☾ 在此過夜" in j["cairn"]["notes"][0]
-
-
 # ---- the season-plan event ----------------------------------------------------------------------
 
 @pytest.fixture
@@ -265,6 +213,68 @@ def plan_client(store, monkeypatch):
     app.include_router(A.router)
     app.include_router(RP.router)
     return TestClient(app)
+
+
+def test_the_calculator_reads_the_imported_trip_with_its_day_ends(cairn, calc_client, plan_client):
+    # SP-699: the import is the race's (賽事管理); the calculator reads it with the race's GPX
+    r = plan_client.post("/api/v1/plan/events/jm/gpx/cairn", json={"url": cairn.link})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert TOKEN not in r.text                                          # never sent back
+    assert j["event_days"] == 3 and j["cairn"]["name"] == "嘉明湖三天"
+    assert j["cairn"]["splits_km"] == [pytest.approx(9.5, abs=0.05), pytest.approx(21.04, abs=0.05)]
+    assert [(n["night"], n["name"]) for n in j["cairn"]["nights"]] == [(1, "向陽山屋"), (2, "嘉明湖避難山屋")]
+    assert j["cairn"]["url"] == f"https://map.yichlin.com/?gpx={GID}"
+    # Cairn was read with the token, on its three read routes only
+    assert {p for p, _q in cairn.seen} == {f"/api/gpx/{GID}", f"/api/gpx/{GID}/meta", "/api/pois"}
+    c = plan_client.post("/api/v1/racepower/course/event/jm", json={}).json()
+    assert c["day_splits_km"] == [pytest.approx(9.5, abs=0.05), pytest.approx(21.04, abs=0.05)]
+    # the plan with those day ends: 3 days, each day's numbers from this app's smoothing
+    plan = plan_client.post("/api/v1/racepower/plan", json={"type": "baiyue", "course": {"course_id": c["course_id"]},
+                                                           "start_time": "06:00", "days": 3,
+                                                           "day_splits_km": c["day_splits_km"]}).json()
+    segs = plan["segments"]
+    assert sorted({s["day"] for s in segs}) == [1, 2, 3]
+    d1 = sum(s["dist_m"] for s in segs if s["day"] == 1) / 1000
+    assert d1 == pytest.approx(9.5, abs=0.1)
+    co = CO.build_course(GPX.parse(cairn.gpx, "x.gpx"), split="km")
+    pieces = CO.cut_at(co["segments"], c["day_splits_km"])
+    g1 = sum(p["gain_m"] for p in pieces if p["day"] == 1)
+    assert sum(s["gain_m"] for s in segs if s["day"] == 1) == pytest.approx(g1, rel=0.08)
+
+
+def test_the_calculator_has_no_import_of_its_own(cairn, calc_client):
+    # SP-699: no Cairn import in 賽事計算機 any more, not even the one without a race
+    assert calc_client.post("/api/v1/racepower/course/cairn", json={"url": cairn.link}).status_code in (404, 405)
+    assert cairn.seen == []
+
+
+def test_a_dead_link_cairn_down_and_a_bad_link_are_said_plainly(cairn, plan_client):
+    url = "/api/v1/plan/events/jm/gpx/cairn"
+    bad = cairn.link.replace(TOKEN, "f" * 32)                           # revoked / regenerated
+    r = plan_client.post(url, json={"url": bad})
+    assert r.status_code == 410 and "連結失效" in r.json()["detail"] and "重新複製" in r.json()["detail"]
+    n = len(cairn.seen)
+    r = plan_client.post(url, json={"url": "https://example.com/?gpx=a&share=12345678"})
+    assert r.status_code == 400 and "不是疊石 Cairn 的分享連結" in r.json()["detail"]
+    assert len(cairn.seen) == n                                          # no call for a link that isn't Cairn's
+    cairn.down = True
+    r = plan_client.post(url, json={"url": cairn.link})
+    assert r.status_code == 502 and "稍後再試" in r.json()["detail"]
+
+
+def test_cairn_unreachable(monkeypatch, plan_client):
+    monkeypatch.setenv(CA.ORIGIN_ENV, "http://127.0.0.1:9")             # nothing listens there
+    r = plan_client.post("/api/v1/plan/events/jm/gpx/cairn", json={"url": f"http://127.0.0.1:9/?gpx={GID}&share={TOKEN}"})
+    assert r.status_code == 502 and "連不上疊石 Cairn" in r.json()["detail"]
+
+
+def test_a_trip_without_nights_imports_the_gpx_and_says_so(cairn, plan_client):
+    cairn.pois = [poi("p0", "登山口", 0.0, [visit(0, 1, "depart")]), poi("p2", "水池", 15.0, [visit(1, 1, "pass")])]
+    j = plan_client.post("/api/v1/plan/events/jm/gpx/cairn", json={"url": cairn.link}).json()
+    assert j["cairn"]["days"] == 1 and j["cairn"]["splits_km"] == [] and j["gpx"]["km"] == pytest.approx(30, abs=0.1)
+    notes = [n for n in j["cairn"]["notes"] if "沒有標過夜點" in n]
+    assert len(notes) == 1 and "☾ 在此過夜" in notes[0]
 
 
 def test_the_event_takes_the_gpx_the_day_ends_and_the_days(cairn, plan_client, store, monkeypatch):
@@ -328,14 +338,16 @@ def test_an_older_event_gpx_table_gets_the_source_column(store):
 # ---- the pages -----------------------------------------------------------------------------------
 
 def test_the_pages_offer_the_import():
+    # SP-699: only 賽事管理 imports; 賽事計算機 has no Cairn link field (with or without a race picked)
     calc = (ROOT / "backend/static/racepower.html").read_text("utf-8")
-    assert 'id="cairn-url"' in calc and "/course/cairn" in calc and "/gpx/cairn" in calc
+    assert 'id="cairn-url"' not in calc and "/course/cairn" not in calc and "/gpx/cairn" not in calc
+    assert "importCairn" not in calc
     # SP-691: the event editor (its Cairn link) moved to 賽事管理; SP-692: its Cairn import / push sit in
     # the editor popup (no separate Cairn button on the race any more)
     plan = (ROOT / "backend/static/races.html").read_text("utf-8")
     assert 'id="evcairn"' in plan and 'id="ed-cairn"' in plan and "/gpx/cairn" in plan
     for loc in ("zh-TW", "en"):
-        rp = json.loads((ROOT / f"backend/static/i18n/{loc}/racepower.json").read_text("utf-8"))
+        rc = json.loads((ROOT / f"backend/static/i18n/{loc}/races.json").read_text("utf-8"))
         pl = json.loads((ROOT / f"backend/static/i18n/{loc}/plan.json").read_text("utf-8"))
-        assert all(rp[f"cairn.{k}"] for k in ("label", "go", "done", "night", "how", "empty", "busy", "fail"))
+        assert all(rc[f"cairn.{k}"] for k in ("import_h", "import_how", "url_ph", "import_go", "need_url", "imported_ev"))
         assert all(pl[f"ev.cairn_{k}"] for k in ("attach", "btn", "again", "use", "prompt", "done", "fail", "night", "day"))

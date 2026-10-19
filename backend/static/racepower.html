@@ -236,13 +236,6 @@ td input.lock { width: 72px; padding: 2px 5px; }
 td select.terr { width: 80px; padding: 2px 5px; }
 .drop { border: 1px dashed var(--line); border-radius: 8px; padding: 10px; text-align: center; color: var(--muted); font-size: 13px; }
 .drop.over { border-color: var(--accent); background: var(--soft); }
-.cairn-imp { margin-top: 8px; font-size: 13px; }
-.cairn-imp > label { color: var(--muted); }
-.cairn-row { display: flex; gap: 6px; margin-top: 4px; }
-.cairn-row input { flex: 1; min-width: 0; }
-#cairn-msg:empty { display: none; }
-#cairn-msg { margin-top: 4px; line-height: 1.6; }
-#cairn-msg .warn-t { color: var(--watch); }
 /* SP-579: 跟團對照 — the group's timetable leg by leg, the tiers in colour */
 #group-sec .head { font-size: 14.5px; line-height: 1.6; margin: 4px 0 8px; }
 #group-sec .gnotes { margin: 6px 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
@@ -265,9 +258,10 @@ td select.terr { width: 80px; padding: 2px 5px; }
 .daystarts > span { color: var(--muted); width: 100%; }
 .daystarts label { display: flex; flex-direction: column; gap: 2px; }
 .daystarts input { width: 140px; }
-.grp-ask { margin-top: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; line-height: 1.6; }
-.grp-ask label { font-weight: 600; cursor: pointer; }
-.grp-ask .meta { display: block; }
+/* SP-699: the event's group timetable (set in 賽事管理), one read-only line */
+.grp-note { margin-top: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; line-height: 1.6; font-size: 13px; }
+.grp-note .warn-t { color: var(--watch); }
+#to-races { font-size: 13px; white-space: nowrap; }
 .tabs { display: inline-flex; margin-left: auto; }
 #sticky { position: sticky; top: 0; z-index: 4; }
 /* required inputs: a red * and a highlighted field until filled */
@@ -343,8 +337,6 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
 <header>
   <h1 data-i18n="racepower.title">賽事計算機</h1>
   <span class="meta" id="asof"></span>
-  <!-- SP-675: back to the race manager (on the chosen event: ?event=<id>) -->
-  <a id="to-races" href="/api/v1/app/races/page" data-i18n="racepower.to_races">賽事管理 →</a>
   <div class="seg tabs" id="tabs"><button data-tab="calc" class="on">計算</button><button data-tab="acc">準確度</button></div>
   <!-- SP-450: 專項 (主要訓練項目, static/sportchip.js) — road hides the 越野／百岳 types and presets
        (applySport); changing it saves the setting and reloads, and init() reads it again -->
@@ -357,6 +349,9 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <h2>目標 <span class="meta">從賽季計畫帶入，或自己輸入</span></h2>
     <div class="toolbar">
       <label class="meta">目標賽事 <select id="event" style="width:auto;max-width:320px"></select></label>
+      <!-- SP-675 / 699: races are added and changed in the race manager only (on the chosen event: ?event=<id>) -->
+      <a id="to-races" href="/api/v1/app/races/page" data-i18n="racepower.to_races" data-i18n-attr="title:racepower.to_races_tip"
+        title="新增賽事、換 GPX、從 Cairn 匯入、設定團的時間表，都在賽事管理">管理賽事 →</a>
       <div class="seg" id="type"><button data-t="road">路跑</button><button data-t="trail">越野</button><button data-t="baiyue" data-intl-text="多日登山">百岳</button></div>
       <span class="meta">快速：</span>
       <button class="btn" data-preset="10k">10K</button><button class="btn" data-preset="half">半馬</button>
@@ -420,14 +415,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     </div>
     <div id="course-gpx" class="hidden">
       <div class="drop" id="drop"><b class="req">*</b> 把 .gpx / .fit 拖到這裡，或 <label class="btn" style="display:inline-block">選擇檔案<input id="gpxfile" type="file" accept=".gpx,.fit,application/gpx+xml" hidden></label></div>
-      <!-- SP-537: a trip planned in 疊石 Cairn, by its share link: its GPX + the nights marked there as the day ends -->
-      <div class="cairn-imp"><label for="cairn-url" data-i18n="racepower.cairn.label">或貼疊石 Cairn 的分享連結（過夜點直接當分日點）</label>
-        <div class="cairn-row"><input id="cairn-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"
-          data-i18n-attr="placeholder:racepower.cairn.ph" placeholder="https://…/?gpx=…&amp;share=…">
-          <button class="btn" id="cairn-go" type="button" data-i18n="racepower.cairn.go">匯入</button></div>
-        <div class="meta" id="cairn-msg" aria-live="polite"></div>
-        <!-- SP-577: the Cairn trip's timetable — 「這是團的時刻表」, asked once, kept with the trip -->
-        <div class="grp-ask hidden" id="grp-ask"></div></div>
+      <!-- SP-699: the Cairn import and 「團的時間表」 moved to 賽事管理; here only what the event keeps -->
+      <div class="grp-note hidden" id="grp-note"></div>
       <div class="form" style="margin-top:8px">
         <label>官方爬升 (m，選填)<input id="ogain" type="number" step="10" min="0" placeholder="用來校正 GPS 海拔"></label>
         <label class="bf">天數<input id="tripdays" type="number" min="1" max="10" step="1" value="3"></label>
@@ -552,8 +541,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <span class="meta bf" id="splits-line"></span>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
       <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">📅 匯出至課表</button><span class="meta" id="coros-why" hidden></span>
-      <button class="btn" id="share">🔗 分享</button>
-      <button class="btn hidden" id="cairn-push" type="button" data-i18n="racepower.cpush.btn">⛰ 推到 Cairn</button></div>
+      <button class="btn" id="share">🔗 分享</button></div>
     <!-- SP-533: camp / hut waypoints (every pass) as day-end candidates; a mismatch of day ends and days -->
     <div class="note hidden" id="split-cands"></div>
     <dialog id="coros-dlg" class="dlg">
@@ -565,15 +553,6 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <div id="cx-body" class="meta"></div>
       <div class="toolbar" style="justify-content:flex-end;margin-top:10px"><span class="meta" id="cx-msg"></span>
         <button class="btn primary" id="cx-go" data-i18n="racepower.coros.go">確認匯出</button><button class="btn" id="cx-close" autofocus data-i18n="racepower.close">關閉</button></div>
-    </dialog>
-    <!-- SP-655: 推到 Cairn — the event's route, nights and pace curve as a Cairn trip (created once, then updated) -->
-    <dialog id="cp-dlg" class="dlg">
-      <h2><span data-i18n="racepower.cpush.title">推到疊石 Cairn</span>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.cpush.tip">把這場賽事存的 GPX、分日的過夜點和這次計算的腳程曲線推到疊石 Cairn，建立一條行程。抵達時刻由 Cairn 用這條曲線自己推估，TrailRunCoach 不寫時刻。第一次推會建立行程，之後再推都是更新同一條，不會多建。</span></span></h2>
-      <div id="cp-body" class="meta"></div>
-      <label class="f hidden" id="cp-consent-row"><span><input type="checkbox" id="cp-consent"> <span id="cp-consent-text"></span></span></label>
-      <div class="toolbar" style="justify-content:flex-end;margin-top:10px"><span class="meta" id="cp-msg" aria-live="polite"></span>
-        <button class="btn primary" id="cp-go" type="button" data-i18n="racepower.cpush.go">推送</button><button class="btn" id="cp-close" type="button" autofocus data-i18n="racepower.close">關閉</button></div>
     </dialog>
     <dialog id="share-dlg">
       <h2>🔗 分享計算結果 <span class="meta">唯讀，不會重新計算</span>
@@ -942,50 +921,46 @@ async function loadHeat() {
 }
 function heatAcclBody() { return { mode: "auto" }; }
 function courseLine() {
-  const evId = $("event").value, ev = (INP?.events || []).find((e) => e.id === evId);
   if (S.csrc === "gpx" && COURSE) {
+    // SP-699: an uploaded file is for this calculation only; a race's GPX is set in 賽事管理
     $("course-line").innerHTML = esc(`${COURSE.name || "GPX"} · ${f1(COURSE.km)} km ↑${n0(COURSE.gain_m)} m · ${COURSE.segments ?? "?"} 段`) +
-      (COURSE.event_id ? ` <span class="badge good" title="存在賽季計畫的這場賽事，下次選這場賽事會自動載入；在賽季計畫頁可以換檔或刪除">已存在賽事</span>`
-        : ev ? ` <button class="btn" id="gpx-attach" title="把這個 GPX 存到賽季計畫的「${esc(ev.name)}」，之後不用再上傳">存到「${esc(ev.name)}」</button>` : "");
-    const b = $("gpx-attach"); if (b) b.onclick = () => attachGpx(evId);
+      (COURSE.event_id ? ` <span class="badge good" title="${esc(T("course.event_tip"))}">已存在賽事</span>` : "");
   }
   else if (S.csrc === "gpx") $("course-line").textContent = "尚未上傳";
   else $("course-line").textContent = "";
-  renderGroupAsk();
+  renderGroupNote();
   loadGround();
 }
-// SP-577: a Cairn trip with a timetable — 「這是團的時刻表」, ticked when the data says so (several typed
-// times a day, or the route recruiting in Cairn; never for a route older than Cairn's 「who wrote it」).
-// The answer is kept with the trip (COURSE.group; with the event's GPX on the server). Read only.
-function groupSigText(sc) {
-  const g = sc.signals || {}, out = [];
-  if (g.user_days?.length) out.push(T("grp.sig_user", { u: g.n_user, n: g.n }));
-  else if (g.n_estimate > g.n_user) out.push(T("grp.sig_estimate", { e: g.n_estimate, n: g.n }));
-  if (g.recruit) out.push(T("grp.sig_recruit"));
-  if (g.legacy) out.push(T("grp.sig_legacy"));
-  return out.join(T("grp.sep"));
-}
-function renderGroupAsk() {
-  const el = $("grp-ask"), sc = S.csrc === "gpx" ? COURSE?.group : null;
+// SP-577 / 699: the event's Cairn timetable and the answer to 「這是登山社／團排好的時間表」 are set in
+// 賽事管理 (the import and the tick live there); here one read-only line says what the 跟團對照 uses,
+// with the way to change it. COURSE.group is the event course's `schedule` (legs, the group's time).
+function renderGroupNote() {
+  const el = $("grp-note"), sc = S.csrc === "gpx" && COURSE?.event_id ? COURSE.group : null;
   el.classList.toggle("hidden", !sc);
   if (!sc) { el.innerHTML = ""; return; }
-  const sig = groupSigText(sc);
-  el.innerHTML = `<label><input type="checkbox" id="grp-on"${sc.group ? " checked" : ""}> ${esc(T("grp.ask"))}</label>`
-    + `<span class="meta">${esc(T("grp.ask_sub", { legs: sc.legs?.length ?? 0, days: sc.days?.length ?? 0 }))}${sig ? " · " + esc(sig) : ""}</span>`;
-  $("grp-on").onchange = (ev) => setGroup(ev.target.checked);
+  const manage = `<a href="${esc($("to-races").href)}">${esc(T("grp.manage"))}</a>`;
+  if (!sc.group) { el.innerHTML = `${esc(T("grp.note_off"))} ${manage}`; return; }
+  let h = `${esc(T("grp.note_on"))} ${manage}`;
+  if (type === "baiyue" && sc.moving_s) {
+    if (!sc.prefill) h += `<br><span class="warn-t">${esc(T("cairn.sched_partial", { km: f1(sc.km), pct: Math.round(sc.cover * 100) }))}</span>`;
+    else {
+      h += `<br>${esc(T("cairn.sched_line", { t: hm(sc.moving_s), clock: hm(sc.clock_s) }))}${help(esc(schedHow(sc)))}`;
+      if (!(mode() === "time" && $("target").value === hms(sc.moving_s))) h += ` <button class="btn" type="button" id="sched-go">${esc(T("cairn.sched_go"))}</button>`;
+    }
+  }
+  el.innerHTML = h;
+  wireSchedGo(sc);
 }
-function setGroup(on) {
-  if (!COURSE?.group) return;
-  COURSE.group.group = on; ls.set("course", COURSE);
-  if (COURSE.event_id) fetch(`/api/v1/plan/events/${encodeURIComponent(COURSE.event_id)}/gpx/group`,
-    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ group: on }) }).catch(() => {});
-  if (on && COURSE.group.prefill && type === "baiyue") { $("target").value = hms(COURSE.group.moving_s); saveForm(); }
-  if (on && type === "baiyue" && !S.trip) { S.trip = "group"; saveUI(); syncForm(); }
-  if (on) fillDayStarts(COURSE.group);                                // SP-580
-  schedule();
+// a first look at an event whose timetable is the group's (no saved calculation yet): as the import did
+// (SP-576 / 580) — the group's moving time in 「目標時間」 (the field only), 跟團, each day's start
+function applyGroupDefaults() {
+  const sc = COURSE?.event_id ? COURSE.group : null;
+  if (!sc?.group || type !== "baiyue") return;
+  schedPrefill(sc);
+  if (!S.trip) { S.trip = "group"; saveUI(); syncForm(); }
+  fillDayStarts(sc);                                                  // SP-580
 }
 // ---------------- the plan event's stored GPX (engine/event_gpx.py) ----------------
-let LAST_FILE = null;                      // the last uploaded file, so it can be attached to the event
 async function loadEventGpx(eid, keep = false) {          // keep: the restored locks / terrain / splits stay
   try {
     const c = await post(`${API}/course/event/${encodeURIComponent(eid)}`, { split: S.split, ...Object.fromEntries(courseOpts(false)) });
@@ -1002,16 +977,6 @@ async function loadEventGpx(eid, keep = false) {          // keep: the restored 
     if (COURSE?.event_id) { COURSE = null; ls.set("course", null); }
     return false;                          // 404: the event has no GPX — the manual numbers stay
   }
-}
-async function attachGpx(eid) {
-  if (!LAST_FILE && COURSE?.cairn && $("cairn-url").value.trim()) { await importCairn(); return; }   // SP-537
-  if (!LAST_FILE) { alert("請重新選一次 GPX 檔案"); return; }
-  const fd = new FormData(); fd.append("file", LAST_FILE);
-  try {
-    const r = await fetch(`/api/v1/plan/events/${encodeURIComponent(eid)}/gpx`, { method: "POST", body: fd });
-    if (!r.ok) throw new Error((await r.text()).slice(0, 300));
-    if (await loadEventGpx(eid)) schedule();
-  } catch (e) { $("course-line").insertAdjacentHTML("beforeend", ` <span class="err">${esc(e.message)}</span>`); }
 }
 let splitTimer = null;
 function saveEventSplits() {
@@ -1173,7 +1138,6 @@ async function uploadGpx(file) {
     const r = await fetch(`${API}/course`, { method: "POST", body: fd });
     if (!r.ok) throw new Error((await r.text()).slice(0, 300));
     const c = await r.json();
-    LAST_FILE = file;
     COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null };
     // SP-533: the camp / hut waypoints are candidates (renderSplitCands), never day ends by themselves
     ls.set("course", COURSE); LOCKS = {}; LOCK_AT = {}; SPLITS = []; TERRAIN = {}; NIGHTS = c.overnights || null; CAIRN_NIGHTS = null;
@@ -1181,53 +1145,6 @@ async function uploadGpx(file) {
     STOP_SUGG = c.stop_suggestions || [];
     S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); renderNightsAsk(); schedule(); autoWeather();
   } catch (e) { $("course-line").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
-}
-// SP-537: a trip from 疊石 Cairn by its share link (one way): its GPX, and the nights marked there
-// (「☾ 在此過夜」) applied at once as the day ends — they can still be changed on the profile. With a
-// season-plan event picked, the GPX and day ends are stored with the event (its days follow the nights).
-// The link's token reads Cairn once on the server and is not kept.
-async function importCairn() {
-  const url = $("cairn-url").value.trim(), msg = $("cairn-msg"), evId = $("event").value;
-  if (!url) { msg.innerHTML = `<span class="err">${esc(T("cairn.empty"))}</span>`; return; }
-  msg.textContent = T("cairn.busy");
-  const postJson = async (u, body) => {
-    const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : T("cairn.fail", { s: r.status }));
-    return j;
-  };
-  try {
-    let info, days;
-    if (evId) {
-      const j = await postJson(`/api/v1/plan/events/${encodeURIComponent(evId)}/gpx/cairn`, { url });
-      info = j.cairn; days = j.event_days;
-      const ev = (INP?.events || []).find((e) => e.id === evId);
-      if (ev) ev.days = days;
-      if (!(await loadEventGpx(evId))) throw new Error(T("cairn.fail", { s: "" }));
-      COURSE.cairn = true; ls.set("course", COURSE);
-    } else {
-      const c = await postJson(`${API}/course/cairn`, { url, split: S.split, ...Object.fromEntries(courseOpts(false)) });
-      info = c.cairn; days = c.days; LAST_FILE = null;
-      COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null, cairn: true,
-        group: c.cairn?.schedule || null };
-      ls.set("course", COURSE); LOCKS = {}; LOCK_AT = {}; TERRAIN = {}; NIGHTS = null; SPLITS = [...(c.day_splits_km || [])];
-      $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
-      STOP_SUGG = c.stop_suggestions || [];
-      S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); renderNightsAsk();
-    }
-    if ((days > 1 || info.schedule) && type !== "baiyue") setType("baiyue");
-    SPLITS = [...(info.splits_km || [])]; $("tripdays").value = days;
-    CAIRN_NIGHTS = (info.nights || []).map((x) => ({ night: x.night, km: x.km, name: x.name || "" }));   // SP-535
-    const list = (info.nights || []).map((x) => T("cairn.night", { n: x.night, name: x.name || "", km: f1(x.km) })).join(T("overnight.sep"));
-    msg.innerHTML = `<b>${esc(T("cairn.done", { name: info.name, days }))}</b>${list ? " " + esc(list) : ""}`
-      + (info.nights?.length ? `<br>${esc(T("cairn.how"))}` : "")
-      + (info.notes || []).map((n) => `<br><span class="warn-t">${esc(n)}</span>`).join("")
-      + (info.schedule?.group ? schedPrefill(info.schedule) : "");
-    if (info.schedule?.group && !S.trip) { S.trip = "group"; saveUI(); syncForm(); }
-    if (info.schedule?.group) fillDayStarts(info.schedule);          // SP-580
-    wireSchedGo(); courseLine();
-    schedule(); autoWeather();
-  } catch (e) { msg.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 }
 // SP-576: a Cairn timetable — the group's total moving time (its stops taken off: the ones written in
 // Cairn, else × the past group days' moving ratio, 80 % without records) fills 「目標時間」. Only the
@@ -1238,15 +1155,12 @@ function schedHow(sc) {
   return sc.ratio_used ? T("cairn.sched_ratio", ratio) : T("cairn.sched_rest", { m: Math.round(sc.rest_s / 60) });
 }
 function schedPrefill(sc) {
-  if (!sc) return "";
-  if (!sc.prefill) return `<br><span class="warn-t">${esc(T("cairn.sched_partial", { km: f1(sc.km), pct: Math.round(sc.cover * 100) }))}</span>`;
+  if (!sc?.prefill) return;
   $("target").value = hms(sc.moving_s); saveForm();
-  return `<br>${esc(T("cairn.sched_line", { t: hm(sc.moving_s), clock: hm(sc.clock_s), how: schedHow(sc) }))}`
-    + (mode() !== "time" ? ` <button class="btn" type="button" id="sched-go">${esc(T("cairn.sched_go"))}</button>` : "");
 }
-function wireSchedGo() {
+function wireSchedGo(sc) {
   const b = $("sched-go");
-  if (b) b.onclick = () => { S.mode = "time"; saveUI(); syncForm(); b.remove(); schedule(); };
+  if (b) b.onclick = () => { schedPrefill(sc); S.mode = "time"; saveUI(); syncForm(); schedule(); };
 }
 function courseOpts(asForm) {
   const o = [["sigma_m", num("sigma")], ["eps_m", num("eps")], ["min_len_m", num("minlen")], ["flat_pct", num("flatpct")], ["official_gain_m", num("ogain")]]
@@ -2744,59 +2658,6 @@ $("cx-close").onclick = () => $("coros-dlg").close();
 $("cx-go").onclick = corosPush;
 document.querySelectorAll("#cx-mode button").forEach((b) => b.onclick = () => { CX_MODE = b.dataset.x; corosPreview(); });
 
-// ---------------- SP-655: 推到 Cairn ----------------
-// shown only where it can be used: sign-in on (404 otherwise), Cairn configured, a paid plan here
-const CPUSH = "/api/v1/account/links/cairn/events/";
-let CP_ST = null;
-async function cpushRefresh() {
-  const eid = $("event").value, b = $("cairn-push");
-  CP_ST = null;
-  if (!eid) { b.classList.add("hidden"); return; }
-  try { CP_ST = await j(CPUSH + encodeURIComponent(eid)); } catch { CP_ST = null; }
-  if ($("event").value !== eid) return;
-  b.classList.toggle("hidden", !(CP_ST && CP_ST.available && CP_ST.plan_ok));
-  b.textContent = CP_ST?.pushed ? T("cpush.btn_again") : T("cpush.btn");
-}
-function cpRender() {
-  const st = CP_ST, go = $("cp-go");
-  $("cp-consent-row").classList.add("hidden"); $("cp-consent").checked = false;
-  go.hidden = !!st && !st.linked;            // not linked: only the way to link
-  if (!st) { $("cp-body").innerHTML = `<div class="err">${esc(T("cpush.fail"))}</div>`; go.disabled = true; return; }
-  if (!st.linked) {
-    $("cp-body").innerHTML = `<p>${esc(T("cpush.link_first"))}</p><p><a href="${esc(st.link_url)}">${esc(T("cpush.link_go"))}</a></p>`;
-    go.disabled = true; return;
-  }
-  let h = `<p>${esc(T("cpush.what"))}</p>`;
-  h += st.pushed ? `<p>${esc(T("cpush.pushed", { at: String(st.pushed.at || "").slice(0, 16) }))} <a href="${esc(st.pushed.url)}" target="_blank" rel="noopener noreferrer">${esc(T("cpush.open"))}</a><br>${esc(T("cpush.again"))}</p>`
-    : `<p>${esc(T("cpush.first"))}</p>`;
-  if (!st.ready) h += `<p class="err">${esc(st.why || T("cpush.not_ready"))}</p>`;
-  $("cp-body").innerHTML = h;
-  if (!st.allowed) {
-    $("cp-consent-text").textContent = T("cpush.consent", { text: st.consent_text });
-    $("cp-consent-row").classList.remove("hidden");
-  }
-  go.textContent = st.allowed ? (st.pushed ? T("cpush.go_again") : T("cpush.go")) : T("cpush.go_consent");
-  go.disabled = !st.ready || !st.allowed;
-}
-$("cp-consent").onchange = () => { $("cp-go").disabled = !(CP_ST?.ready && $("cp-consent").checked); };
-$("cairn-push").onclick = async () => {
-  $("cp-msg").textContent = ""; $("cp-body").textContent = T("cpush.loading"); $("cp-dlg").showModal();
-  await cpushRefresh(); cpRender();
-};
-$("cp-close").onclick = () => $("cp-dlg").close();
-$("cp-go").onclick = async () => {
-  const eid = $("event").value; if (!eid) return;
-  $("cp-go").disabled = true; $("cp-msg").textContent = T("cpush.sending");
-  try {
-    const r = await post(CPUSH + encodeURIComponent(eid) + "/push", { consent: !CP_ST?.allowed && $("cp-consent").checked });
-    await cpushRefresh(); cpRender();
-    $("cp-msg").innerHTML = `<span class="ok">${esc(T(r.action === "updated" ? "cpush.done_updated" : "cpush.done_created"))} ✓</span> <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(T("cpush.open"))}</a>`;
-  } catch (e) {
-    $("cp-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`;
-    await cpushRefresh(); cpRender();
-  }
-};
-
 // ---------------- read-only share links ----------------
 const shareUrl = (u) => location.origin + u;
 async function loadShares() {
@@ -3214,7 +3075,7 @@ function saveEvent() {
     try {
       const r = await j(`${API}/saved/${encodeURIComponent(eid)}`, { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inputs, result }) });
-      if ($("event").value === eid) { $("saved-line").textContent = "✓ " + T("saved", { at: (r.saved_at || "").slice(5, 16) }); cpushRefresh(); }
+      if ($("event").value === eid) { $("saved-line").textContent = "✓ " + T("saved", { at: (r.saved_at || "").slice(5, 16) }); }
     } catch (e) { $("saved-line").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
   }, 800);
 }
@@ -3240,7 +3101,6 @@ async function chooseEvent(eid) {
   ls.set("event", eid || "");
   $("to-races").href = "/api/v1/app/races/page" + (eid ? "?event=" + encodeURIComponent(eid) : "");
   $("saved-line").textContent = "";
-  cpushRefresh();                           // SP-655: 推到 Cairn for this event (or hidden)
   const e = (INP.events || []).find((x) => x.id === eid);
   if (!e) { await run(); return; }
   let saved = null;
@@ -3258,7 +3118,8 @@ async function chooseEvent(eid) {
     return;
   }
   applyEventDefaults(e);
-  if (!(await loadEventGpx(e.id)) && S.csrc === "gpx") {
+  if (await loadEventGpx(e.id)) applyGroupDefaults();               // SP-699: the timetable set in 賽事管理
+  else if (S.csrc === "gpx") {
     // no GPX stored with this event: its distance / climb (just filled in) are the course
     COURSE = null; ls.set("course", null); S.csrc = "manual"; saveUI(); syncForm();
   }
@@ -3413,8 +3274,6 @@ $("peak").addEventListener("change", () => { const l = getLoc(); if (l?.elevatio
 $("wx").onclick = () => { ["t-t", "t-rh"].forEach((id) => $(id).classList.remove("ovr")); getWeather(); };
 $("env-edit").onclick = () => { const d = $("env-adv"); d.open = !d.open; if (d.open) d.scrollIntoView({ block: "nearest" }); };
 $("gpxfile").addEventListener("change", (e) => uploadGpx(e.target.files[0]));
-$("cairn-go").addEventListener("click", importCairn);
-$("cairn-url").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); importCairn(); } });
 const drop = $("drop");
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));

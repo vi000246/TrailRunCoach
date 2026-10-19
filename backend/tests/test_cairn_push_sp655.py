@@ -497,12 +497,15 @@ def test_owner_mode_has_none_of_it(monkeypatch, tmp_path):
         assert cl.post(push_url("race-1"), json={}).status_code in (403, 404)
 
 
-def test_the_race_page_has_the_button_and_both_languages():
+def test_the_push_is_in_the_race_manager_only_in_both_languages():
+    # SP-699: 推到 Cairn left 賽事計算機; 賽事管理's editor popup has it (SP-692)
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "static"
     html = (root / "racepower.html").read_text("utf-8")
-    assert 'id="cairn-push"' in html and 'id="cp-dlg"' in html
-    zh = json.loads((root / "i18n" / "zh-TW" / "racepower.json").read_text("utf-8"))
-    en = json.loads((root / "i18n" / "en" / "racepower.json").read_text("utf-8"))
-    keys = [k for k in zh if k.startswith("cpush.")]
+    assert 'id="cairn-push"' not in html and 'id="cp-dlg"' not in html and "/account/links/cairn/events/" not in html
+    races = (root / "races.html").read_text("utf-8")
+    assert 'id="cp-go"' in races and "/account/links/cairn/events/" in races
+    zh = json.loads((root / "i18n" / "zh-TW" / "races.json").read_text("utf-8"))
+    en = json.loads((root / "i18n" / "en" / "races.json").read_text("utf-8"))
+    keys = [k for k in zh if k.startswith("cairn.")]
     assert len(keys) >= 10 and all(k in en for k in keys)

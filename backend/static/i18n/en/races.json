@@ -154,5 +154,16 @@
   "cairn.imported_ev": "Imported {name}: this race is now {km} km, +{gain} m, {days} days",
   "result_line": "Placing or result: {v}",
   "why_paren": "({why})",
-  "ready.why": "Race readiness: {why}"
+  "ready.why": "Race readiness: {why}",
+  "grp.ask": "This is the timetable my club / group planned: check whether I can keep up",
+  "grp.sub": "The Cairn trip has {n} times over {days} days. Ticked, the race calculator compares the group's pace with yours leg by leg (Keeping up with the group).",
+  "grp.tip": "Only reads the times in Cairn; nothing is changed there. The first guess: {why}",
+  "grp.tip_none": "Only reads the times in Cairn; nothing is changed there.",
+  "grp.sig_user": "{u} of {n} times were typed in by someone, like a group's itinerary",
+  "grp.sig_estimate": "{e} of {n} times are Cairn's own pace estimates, not like a group's plan",
+  "grp.sig_recruit": "this route is recruiting a group in Cairn",
+  "grp.sig_legacy": "this route is older than Cairn's record of who wrote each time, so it isn't ticked by itself",
+  "grp.sep": "; ",
+  "grp.saved_on": "Set as the group's timetable: the race calculator will compare you with it",
+  "grp.saved_off": "No longer the group's timetable"
 }

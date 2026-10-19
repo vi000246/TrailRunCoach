@@ -99,6 +99,8 @@ def test_the_fuel_schedule_starts_each_day_at_its_hour():
 def test_the_page_has_the_day_starts_and_fills_them_from_a_timetable():
     html = (ROOT / "backend/static/racepower.html").read_text("utf-8")
     assert 'id="daystarts"' in html and "function renderDayStarts" in html and "body.day_starts = dayStartsBody()" in html
-    assert "fillDayStarts(info.schedule)" in html
+    # SP-699: the race's timetable (set in 賽事管理) fills them on a first look at the race
+    fn = html[html.index("function applyGroupDefaults"):html.index("// ---------------- the plan event's stored GPX")]
+    assert "fillDayStarts(sc)" in fn
     from backend.engine.racepower import calc as CALC
     assert "day_starts" in CALC.PlanIn.model_fields

@@ -96,7 +96,7 @@ def test_api_results_only_results_and_cp_and_neither(monkeypatch):
 def test_page_falls_back_to_the_estimate_only_without_a_model():
     from pathlib import Path
     page = (Path(__file__).resolve().parents[1] / "static" / "racepower.html").read_text("utf-8")
-    assert "post(`${API}/estimate`, b)" in page and "function renderEstimate(est)" in page
+    assert "post(`${API}/estimate`, b, ctl?.signal)" in page and "function renderEstimate(est)" in page
     assert 'e.status === 400 && b.type !== "baiyue"' in page
 
 

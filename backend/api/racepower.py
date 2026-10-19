@@ -390,41 +390,9 @@ async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] =
                              "overnights": nights}))
 
 
-class CairnCourseIn(BaseModel):
-    url: str = Field("", max_length=2000)
-    split: Optional[str] = None
-    sigma_m: Optional[float] = None
-    eps_m: Optional[float] = None
-    min_len_m: Optional[float] = None
-    flat_pct: Optional[float] = None
-    official_gain_m: Optional[float] = None
-
-
-@router.post("/course/cairn")
-async def cairn_course(body: CairnCourseIn):
-    """SP-537: a course from a 疊石 Cairn share link — the upload's answer for Cairn's GPX, + the nights
-    marked in Cairn as the day ends (`day_splits_km`, applied at once; the page can still change them)
-    and the days. The token reads Cairn once and is not kept."""
-    from starlette.concurrency import run_in_threadpool
-    from backend.api.plan import _CAIRN_STATUS, _cairn_out
-    from backend.engine import cairn as CA
-    from backend.engine.racepower import fuel as FU
-    from backend.engine.racepower import gpx as GPX
-    try:
-        imp = await run_in_threadpool(CA.import_link, body.url)
-        track = await run_in_threadpool(GPX.parse, imp["data"], imp["filename"])
-    except CA.CairnError as e:
-        raise HTTPException(_CAIRN_STATUS.get(e.kind, 400), str(e))
-    except GPX.GpxError as e:
-        raise HTTPException(502, str(e))
-    cid = hashlib.sha1(imp["data"]).hexdigest()
-    _cache_course(cid, track)
-    c = await run_in_threadpool(_build, track, _course_opts(body.model_dump(exclude={"url"})))
-    sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
-    out = _cairn_out(imp, route_km=c["totals"]["km"], ratio_rows=group_ratio_rows())
-    return _py(CALC.respond({"course_id": cid, "name": imp["name"], **c, "stop_suggestions": sug,
-                             "day_splits_km": imp["splits_km"], "days": imp["days"], "cairn": out,
-                             "overnights": None}))
+# SP-699: the calculator's own Cairn import (POST /course/cairn, a course from a share link without a race)
+# is gone — a Cairn trip is imported into a race in 賽事管理 (POST /api/v1/plan/events/{id}/gpx/cairn) and
+# the calculator reads it with the race's GPX (/course/event/{id}).
 
 
 def group_ratio_rows() -> list:

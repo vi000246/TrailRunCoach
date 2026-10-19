@@ -82,29 +82,30 @@ def test_the_ratio_is_the_past_group_days_else_80():
     assert GR.moving_ratio(rows) == {"ratio": 0.7, "n": 3}
 
 
-def test_the_calculator_import_gives_the_group_moving_time(cairn, calc_client):  # noqa: F811
+def test_the_calculator_gives_the_group_moving_time(cairn, calc_client, plan_client):  # noqa: F811
+    # SP-699: imported into the race (賽事管理); the calculator reads it with the race's GPX
     cairn.pois = GROUP
-    r = calc_client.post("/api/v1/racepower/course/cairn", json={"url": cairn.link})
+    r = plan_client.post("/api/v1/plan/events/jm/gpx/cairn", json={"url": cairn.link})
     assert r.status_code == 200, r.text
     assert TOKEN not in r.text
-    j = r.json()
-    sc = j["cairn"]["schedule"]
+    j = plan_client.post("/api/v1/racepower/course/event/jm", json={}).json()
+    sc = j["schedule"]
     assert sc["prefill"] is True and sc["cover"] == pytest.approx(1.0, abs=0.01)
     assert sc["moving_s"] == pytest.approx(MOVING, rel=1e-6) and sc["ratio"] == 0.8 and sc["ratio_n"] is None
     assert sc["ratio_used"] is True and sc["rest_s"] == pytest.approx(1200)
     # the target-time mode with it: the existing λ and effort bar; the auto plan is the same as before
     base = {"type": "baiyue", "course": {"course_id": j["course_id"]}, "start_time": "07:00", "days": 3,
             "day_splits_km": j["day_splits_km"]}
-    auto = calc_client.post("/api/v1/racepower/plan", json=base).json()
-    tm = calc_client.post("/api/v1/racepower/plan", json={**base, "mode": "time", "target_time_s": sc["moving_s"]}).json()
+    auto = plan_client.post("/api/v1/racepower/plan", json=base).json()
+    tm = plan_client.post("/api/v1/racepower/plan", json={**base, "mode": "time", "target_time_s": sc["moving_s"]}).json()
     assert tm["summary"]["time_s"] == pytest.approx(MOVING, rel=1e-6)
     assert tm["effort"]["r"] == pytest.approx(auto["summary"]["time_s"] / MOVING, rel=1e-6)
     assert tm["effort"]["label"]
 
 
-def test_a_partial_timetable_does_not_fill_the_target(cairn, calc_client):  # noqa: F811
+def test_a_partial_timetable_does_not_fill_the_target(cairn, plan_client):  # noqa: F811
     cairn.pois = GROUP[:3]                                                # day 1 only: 9.5 of 30 km
-    sc = calc_client.post("/api/v1/racepower/course/cairn", json={"url": cairn.link}).json()["cairn"]["schedule"]
+    sc = plan_client.post("/api/v1/plan/events/jm/gpx/cairn", json={"url": cairn.link}).json()["cairn"]["schedule"]
     assert sc["prefill"] is False and sc["km"] == pytest.approx(9.5, abs=0.05)
 
 
