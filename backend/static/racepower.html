@@ -1970,13 +1970,22 @@ function wireEffortBar() {
 
 // SP-414: [lo, hi] ml → "1.2–1.4 L"; null (no body weight) → "–"
 const waterL = (w) => w ? `${(w[0] / 1000).toFixed(1)}–${(w[1] / 1000).toFixed(1)} L` : "–";
+// SP-732: the 百岳 total = moving + each day's predicted stops — one number, the p25–p75 range small beside it
+// (as the trail 含停留總時間, SP-721); a plan without a stop profile keeps the old 「移動 ÷ 比例」 clock
+function hikeTotalTile(s) {
+  const r = s.rest, rg = s.clock_range_s;
+  if (!r) return tile("時鐘時間", hm(s.clock_s), `移動 ÷ ${s.moving_ratio.toFixed(2)}${s.clock_s > s.time_s / s.moving_ratio + 1 ? " + 補給" : ""}`);
+  return tile(`${esc(T("nm.k"))}${est("results", T("est.w.total"), "推估")}${help(esc(T("nm.tip_hike", { why: r.why || "", range: r.range_why || T("nm.range_t") })))}`,
+    `<span id="nm-total">${hm(s.clock_s)}</span>${rg ? ` <small class="meta" id="nm-range" title="${esc(T("nm.range_t"))}">${hm(rg[0])}–${hm(rg[1])}</small>` : ""}`,
+    esc(T("nm.s", { min: Math.round(r.total_s / 60), kind: r.kind_label || "" }).replace(/ · $/, "")));
+}
 function renderBaiyue() {
   if (PLAN.capacity) return renderBaiyueCapacity();
   const P = PLAN, s = P.summary, e = P.effort;
   EST.results = [];
   let h =`<h2>預估結果 <span class="meta">百岳步行模型 · ${{ time: "目標時間", power: "目標速度", auto: "你平常的速度" }[s.mode]}${s.total_method === "v1" ? " · 整趟用 EP/h 模型，分段是推估" : ""}</span>%%EST%%</h2>%%BOX%%<div class="tiles">`;
   h += tile("總移動時間", hm(s.time_s), `${P.days.length} 天，不含休息`, true);
-  h += tile("時鐘時間", hm(s.clock_s), `移動 ÷ ${s.moving_ratio.toFixed(2)}${s.clock_s > s.time_s / s.moving_ratio + 1 ? " + 補給" : ""}`);
+  h += hikeTotalTile(s);
   h += tile("速度倍率", pct(s.speed_factor), "100% = 你平常的速度", true);
   h += tile("EP/h", s.ep_per_h.toFixed(2), `你的 ${s.eph_personal.toFixed(2)}`);
   h += tile("熱量", ok(s.kcal) ? n0(s.kcal) + " kcal" : "–", "Yamamoto");
@@ -2067,10 +2076,11 @@ function renderBaiyueCapacity() {
   EST.results = [];
   let h = `<h2>預估結果 <span class="meta">百岳 · ${s.trip_kind === "group" ? "跟團" : "自己走"} · ${s.hr_band === "cap" ? "能力上限" : "AeT"}</span>${est("results", T("est.w.capacity"), s.badge)}%%EST%%</h2>%%BOX%%<div class="tiles">`;
   const capTile = tile(`能力時間（你的能力，${s.hr_band === "cap" ? "上限" : "AeT"}）${est("results", T("est.w.capacity"), s.badge)}`, hm(s.capacity_time_s),
-    `p10–p90 ${hm(b.p10_s)}–${hm(b.p90_s)} · 時鐘 ${hm(s.clock_s)}`, !grpMain);
+    `p10–p90 ${hm(b.p10_s)}–${hm(b.p90_s)}${s.rest ? "" : ` · 時鐘 ${hm(s.clock_s)}`}`, !grpMain);
   const grpTile = g ? tile("跟團時間（過去跟團日，不是能力）", hm(g.p50), `p25–p75 ${hm(g.p25)}–${hm(g.p75)} · ${g.n} 天 · EP/h ${g.eph[1].toFixed(2)}`, grpMain)
     : tile("跟團時間", "–", "需要 ≥ 3 天跟團紀錄");
   h += grpMain ? grpTile + capTile : capTile + grpTile;
+  if (s.rest) h += hikeTotalTile(s);          // SP-732: moving + each day's stops, with its range
   h += tile("天數", `${P.days.length} 天`, `背負 ${s.pack_by_day.map((x) => f1(x)).join(" / ")} kg${s.pack_src?.startsWith("預設") ? "（預設）" : ""}`);
   h += tile("熱量", ok(s.kcal) ? n0(s.kcal) + " kcal" : "–", "Yamamoto");
   h += tile("飲水", waterL(s.water_ml), "0.7–0.8 ml / kcal");

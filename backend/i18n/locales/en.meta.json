@@ -11471,6 +11471,34 @@
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"
   },
+  "百岳（跟團）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "百岳（自己走）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "{label}：你還沒有標成這一類的健行日，用你所有健行日估，停留約移動時間的 {s:.0%}": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "（次數少，往你所有健行日的 {p:.0%} 收縮）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "範圍是你所有健行日停留的 25–75 百分位（這一類次數少）": {
+    "draft": true,
+    "src": "backend/engine/racepower/nonmoving.py"
+  },
+  "時鐘時間 = 移動時間 + 每天的停留預測（{label}：{why}；推估）": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "分段時間照你自己的坡度成本分配（推估）：同一筆活動裡，陡下 ×{a:.2f}、下 ×{b:.2f}、平 ×{c:.2f}、上 ×{d:.2f}、陡上 ×{e:.2f}（相對努力距離的平均時間；{n} 次自己步調的越野跑，資料少時往預設收縮）。整場時間不變，只改各段怎麼分：下坡段變長、陡上段變短": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
   "沒有補給站資料：你過去比賽每移動小時停 {m:.1f} 分（≥ 60 秒的停留）": {
     "draft": true,
     "src": "backend/engine/racepower/nonmoving.py"

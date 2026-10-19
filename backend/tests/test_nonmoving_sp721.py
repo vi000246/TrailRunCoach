@@ -139,7 +139,9 @@ def test_plan_kind_rules():
     assert NM.plan_kind("trail", "race") == "race"           # 越野賽
     assert NM.plan_kind("trail", "other") == "solo"          # 其他
     assert NM.plan_kind("trail", None) == "solo"             # no event
-    assert NM.plan_kind("baiyue", "baiyue", "group") == "hike"
+    # SP-732: 百岳 is split by the trip kind (跟團 → hike_group), as SP-721 left the interface for
+    assert NM.plan_kind("baiyue", "baiyue", "group") == "hike_group"
+    assert NM.plan_kind("baiyue", "baiyue") == "hike"
 
 
 def test_calc_stop_kind_reads_the_event_kind():

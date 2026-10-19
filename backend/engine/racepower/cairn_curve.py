@@ -22,7 +22,8 @@ up/down ratio by least squares over the segments.
 
 `rest_hint` is a suggestion per day (Cairn shows it, never writes it): the non-moving
 prediction (nonmoving.py: by the plan's stop kind and moving time, SP-721) of a race, or
-the moving-ratio rest of a 百岳 trip.
+each day's stop prediction of a 百岳 trip (its 跟團 / 自己 hike kind, SP-732; the old
+moving-ratio rest for a plan without a stop profile).
 
 No coordinates, no stops, no ids or tokens leave in the curve.
 
@@ -275,7 +276,8 @@ def start_times_of(result: dict, start_time: Optional[str]) -> list:
 def rest_hint(result: dict) -> Optional[dict]:
     """Suggested non-moving seconds per day — shown by Cairn, never written to its stops.
     A race: the non-moving prediction (nonmoving.py) with its p25–p75 range, on one day.
-    A 百岳 trip: each day's clock minus moving time (the moving ratio). None without either."""
+    A 百岳 trip: each day's stop prediction with its p25–p75 (summary.rest, SP-732), else each day's
+    clock minus moving time (the moving ratio). None without either."""
     s = (result or {}).get("summary") or {}
     nm = s.get("nonmoving")
     if isinstance(nm, dict) and nm.get("total_s") is not None:
@@ -284,6 +286,12 @@ def rest_hint(result: dict) -> Optional[dict]:
         # SP-721: the prediction by the plan's stop kind (race / solo), share growing with the moving time
         return {"basis": f"nonmoving:{nm.get('method') or 'rate'}", "kind": nm.get("kind"),
                 "days": [{"day": 1, "rest_s": round(nm["total_s"]), "range_s": rng}]}
+    rest = s.get("rest")
+    if isinstance(rest, dict) and rest.get("days"):
+        # SP-732: a 百岳 trip — each day's stops from the stop model of its trip kind, with p25–p75
+        return {"basis": "nonmoving:hike", "kind": rest.get("kind"),
+                "days": [{"day": int(d["day"]), "rest_s": round(d["rest_s"]),
+                          "range_s": [round(d["p25_s"]), round(d["p75_s"])]} for d in rest["days"]]}
     days = [d for d in (result or {}).get("days") or [] if d.get("moving_h") is not None and d.get("clock_h") is not None]
     if days and s.get("moving_ratio"):
         return {"basis": "moving_ratio",

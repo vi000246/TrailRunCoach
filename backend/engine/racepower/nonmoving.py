@@ -26,8 +26,8 @@ power law (stop ∝ T^1.4–1.7) extrapolates wildly past the data, so:
   (athlete.nonmoving_history): "race" 比賽 (activity type 比賽 or 全力 —
   trail_hr_model's race_idx), "solo" 自主長程 (the other trail runs), "hike"
   健行／百岳 (hikes that are not runs, each day of a multi-day trip apart;
-  SP-724 will narrow it to 跟團 once that mark exists — athlete.nonmoving_kind
-  is the one place to change);
+  split by 跟團 / 自己 since SP-732, below — athlete.nonmoving_kind /
+  nonmoving_history are the places that classify);
 * per kind, the stop share at moving time T (hours):
 
       share(T) = min(SHARE_MAX, c × clip(T, T_LO, T_CAP) ^ b)
@@ -44,6 +44,15 @@ power law (stop ∝ T^1.4–1.7) extrapolates wildly past the data, so:
   K_LEVEL (5) pseudo-activities — a kind with no activities is its prior;
 * the range = the 25th / 75th percentile of the kind's own share ÷ fit
   ratios (all kinds pooled while the kind has fewer than RANGE_MIN_N).
+
+SP-732 — the hike kind is split by the user's 跟團 / 自己 mark (SP-731,
+athlete.own_paced: a row's "trip" "group" / "solo"): two sub-kinds
+"hike_group" and "hike_solo", each fitted like a kind but shrunk to the HIKE
+fit (its c and b, K_LEVEL / K_SLOPE pseudo-days) instead of a fixed prior, so
+a sub-kind with few marked days is the hike kind as a whole; its range falls
+back to the hike kind's while it has fewer than RANGE_MIN_N days. The 百岳
+calculator predicts each day of a trip apart (planner.hike_rest) with the
+sub-kind of its trip kind (PlanIn.trip_kind; plan_kind).
 
 All of these numbers are 推估: no literature has aid-station or stop numbers
 (Kerhervé 2015 only reports that faster runners stop less, §0.8 "未找到來源");
@@ -96,7 +105,9 @@ NONMOVING = {
     "range_min_n": 8,          # fewer activities of the kind → the range from all kinds pooled
     "long_frac_default": 0.5,  # long ÷ all stops with no stops to read it from
 }
-KIND_LABEL = {"race": N_("比賽"), "solo": N_("自主長程"), "hike": N_("健行／百岳")}
+KIND_LABEL = {"race": N_("比賽"), "solo": N_("自主長程"), "hike": N_("健行／百岳"),
+              "hike_group": N_("百岳（跟團）"), "hike_solo": N_("百岳（自己走）")}
+HIKE_SUB = {"group": "hike_group", "solo": "hike_solo"}     # SP-732: a hike row's "trip" → its sub-kind
 SOURCE = N_("非移動時間：依活動類型（比賽／自主長程／健行百岳）用你之前同類活動的停留比例，隨移動時間增加、"
             "2.5 小時後不再增加，資料少時收縮到先驗；≥ 60 秒算補給站／排隊，其餘算零碎停頓，"
             "移動定義和心率配速模型一樣（> 1 km/h）；補給站停留沒有文獻數字（Kerhervé 2015 只說快的人停得少）；推估")
@@ -148,10 +159,12 @@ def share_at(kp: dict, moving_s: float) -> float:
     return min(NONMOVING["share_max"], kp["c"] * _clip_h(moving_s / 3600.0) ** kp["b"])
 
 
-def _fit_kind(rs: list[dict], kind: str) -> dict:
-    """c, b (and the residual ratios) of one kind's rows; the prior with no rows."""
+def _fit_kind(rs: list[dict], kind: str, parent: Optional[dict] = None) -> dict:
+    """c, b (and the residual ratios) of one kind's rows; the prior with no rows. `parent` (SP-732,
+    a hike sub-kind): shrunk to that fit's c and b instead of the fixed priors."""
     P = NONMOVING
-    b = P["b_prior"]
+    b_prior = parent["b"] if parent else P["b_prior"]
+    b = b_prior
     T = [r["moving_s"] / 3600.0 for r in rs]
     sh = [r["stopped_s"] / r["moving_s"] for r in rs]
     n_ev = sum(1 for x in T if x > P["t_lo_h"])
@@ -161,9 +174,9 @@ def _fit_kind(rs: list[dict], kind: str) -> dict:
         y = np.log(np.asarray(sh) + P["log_eps"])
         if float(np.ptp(x)) > 0:
             b_data = float(np.polyfit(x, y, 1)[0])
-            b = (n_ev * b_data + P["k_slope"] * P["b_prior"]) / (n_ev + P["k_slope"])
+            b = (n_ev * b_data + P["k_slope"] * b_prior) / (n_ev + P["k_slope"])
     b = float(min(P["b_max"], max(0.0, b)))
-    prior = P["prior"][kind]
+    prior = parent["c"] if parent else P["prior"][kind]
     q = [s / _clip_h(v) ** b for s, v in zip(sh, T)]
     c_data = float(median(q)) if q else None
     c = ((len(q) * c_data if q else 0.0) + P["k_level"] * prior) / (len(q) + P["k_level"])
@@ -191,17 +204,34 @@ def profile(rows) -> Optional[dict]:
     pooled_resid = [x for kp in kinds.values() for x in kp["resid"]]
     pooled_frac = [r["long_s"] / r["stopped_s"] for r in rs if r["stopped_s"] > 0]
     pooled_len = [x for r in rs for x in r.get("long_lengths") or []]
-    for k, kp in kinds.items():
+
+    def finish(kp: dict, res_fallback: list, from_label: str, frac_fallback, len_fallback) -> None:
         mine = kp.pop("resid")
         own = len(mine) >= P["range_min_n"]
-        res = mine if own else pooled_resid
+        res = mine if own else res_fallback
         q = np.percentile(res, [25, 75]) if len(res) >= 2 else [1.0, 1.0]
         kp["q25"], kp["q75"] = float(min(1.0, q[0])), float(max(1.0, q[1]))
-        kp["range_from"] = "kind" if own else "pooled"
+        kp["range_from"] = "kind" if own else from_label
         if kp["long_frac"] is None:
-            kp["long_frac"] = float(median(pooled_frac)) if pooled_frac else P["long_frac_default"]
-        if kp["stop_len_s"] is None and pooled_len:
-            kp["stop_len_s"] = float(median(pooled_len))
+            kp["long_frac"] = frac_fallback
+        if kp["stop_len_s"] is None and len_fallback:
+            kp["stop_len_s"] = len_fallback
+    # SP-732: the hike sub-kinds (跟團 / 自己) shrunk to the hike fit, before the hike fit loses its residuals
+    hike = kinds["hike"]
+    hike_rows = [r for r in rs if (r.get("kind") or "race") == "hike"]
+    subs = {sub: _fit_kind([r for r in hike_rows if r.get("trip") == trip], sub, parent=hike)
+            for trip, sub in HIKE_SUB.items()}
+    hike_resid = list(hike["resid"])
+    for k, kp in kinds.items():
+        finish(kp, pooled_resid, "pooled",
+               float(median(pooled_frac)) if pooled_frac else P["long_frac_default"],
+               float(median(pooled_len)) if pooled_len else None)
+    for sub, kp in subs.items():
+        own_hike = len(hike_resid) >= P["range_min_n"]
+        finish(kp, hike_resid if own_hike else pooled_resid, "hike" if own_hike else "pooled",
+               hike["long_frac"], hike.get("stop_len_s"))
+        kp["parent"] = "hike"
+        kinds[sub] = kp
     return {"v": 2, "n": len(rs), "kinds": kinds,
             "params": {k: P[k] for k in ("t_lo_h", "t_cap_h", "share_max", "b_prior", "k_level", "k_slope")},
             "source": SOURCE, "label": "推估"}
@@ -240,7 +270,9 @@ def predict(prof: Optional[dict], moving_s: Optional[float], stops=None, kind: s
         return None
     if "kinds" not in prof:
         return predict_legacy(prof, moving_s, stops)
-    kind = kind if kind in prof["kinds"] else "race"
+    if kind not in prof["kinds"]:
+        # a hike sub-kind on a profile stored before SP-732 → the hike kind; anything else → race
+        kind = "hike" if str(kind).startswith("hike") and "hike" in prof["kinds"] else "race"
     kp = prof["kinds"][kind]
     share = share_at(kp, moving_s)
     s_model = share * moving_s
@@ -260,15 +292,22 @@ def predict(prof: Optional[dict], moving_s: Optional[float], stops=None, kind: s
     lo = max(0.0, total + part * (kp["q25"] - 1.0))
     hi = max(total, total + part * (kp["q75"] - 1.0))
     capped = moving_s / 3600.0 > NONMOVING["t_cap_h"]
-    basis = (_("{label}：用你之前 {n} 次同類活動估，停留約移動時間的 {s:.0%}", label=_(KIND_LABEL[kind]), n=kp["n"], s=share)
-             if kp["n"] else
-             _("{label}：你還沒有同類活動，停留用先驗的移動時間 {s:.0%}", label=_(KIND_LABEL[kind]), s=share))
+    sub = kp.get("parent") == "hike"
+    if sub and not kp["n"]:
+        basis = _("{label}：你還沒有標成這一類的健行日，用你所有健行日估，停留約移動時間的 {s:.0%}",
+                  label=_(KIND_LABEL[kind]), s=share)
+    elif kp["n"]:
+        basis = _("{label}：用你之前 {n} 次同類活動估，停留約移動時間的 {s:.0%}", label=_(KIND_LABEL[kind]), n=kp["n"], s=share)
+    else:
+        basis = _("{label}：你還沒有同類活動，停留用先驗的移動時間 {s:.0%}", label=_(KIND_LABEL[kind]), s=share)
     if kp["n"] and kp["n"] < 2 * NONMOVING["k_level"]:
-        basis += _("（次數少，往先驗 {p:.0%} 收縮）", p=kp["prior"])
+        basis += (_("（次數少，往你所有健行日的 {p:.0%} 收縮）", p=kp["prior"]) if sub else
+                  _("（次數少，往先驗 {p:.0%} 收縮）", p=kp["prior"]))
     if capped:
         basis += _("；移動超過 {h:g} 小時後比例不再增加", h=NONMOVING["t_cap_h"])
-    rng = _("範圍是你同類活動停留的 25–75 百分位") if kp.get("range_from") == "kind" else \
-        _("範圍是你所有活動停留的 25–75 百分位（同類次數少）")
+    rng = {"kind": _("範圍是你同類活動停留的 25–75 百分位"),
+           "hike": _("範圍是你所有健行日停留的 25–75 百分位（這一類次數少）")}.get(
+        kp.get("range_from"), _("範圍是你所有活動停留的 25–75 百分位（同類次數少）"))
     return {"total_s": total, "long_s": long_, "short_s": short, "p25_s": lo, "p75_s": hi, "method": method,
             "kind": kind, "kind_label": _(KIND_LABEL[kind]), "share": share, "n_kind": kp["n"], "capped": capped,
             "why": basis + "；" + why, "range_why": rng, "n_runs": prof["n"],
@@ -302,11 +341,12 @@ def predict_legacy(prof: dict, moving_s: float, stops=None) -> dict:
 
 
 def plan_kind(plan_type: Optional[str], event_kind: Optional[str] = None, trip_kind: Optional[str] = None) -> str:
-    """SP-721: which kind's stops a calculator plan uses. 百岳 (type baiyue) → hike (SP-724 will
-    split 跟團 by trip_kind); a trail plan whose plan event is a 越野賽 (planning kind "race") →
-    race; any other trail plan (no event, or an event of kind 其他) → solo (自主長程)."""
+    """SP-721: which kind's stops a calculator plan uses. 百岳 (type baiyue) → hike, split by the
+    trip kind (SP-732: 跟團 → hike_group, 自己 → hike_solo; none → the hike kind as a whole); a
+    trail plan whose plan event is a 越野賽 (planning kind "race") → race; any other trail plan (no
+    event, or an event of kind 其他) → solo (自主長程)."""
     if plan_type == "baiyue":
-        return "hike"
+        return HIKE_SUB.get(trip_kind or "", "hike")
     if event_kind == "race":
         return "race"
     return "solo"

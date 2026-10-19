@@ -1049,3 +1049,103 @@ def fade_times(ts, shape: Optional[dict], tol_s: float = 0.01) -> Optional[list[
         if done:
             break
     return out
+
+
+# ---- SP-723: the segment split by the athlete's own slope cost (downhill included) -----------------
+# The effort km (km + climb ÷ divisor) has no downhill term, so splitting a race time by it puts too
+# little time on the descents and too much on the steep climbs. Inside one activity, the athlete's
+# moving time of a segment ÷ (its effort km × the activity's mean time per effort km) by grade
+# (SP-701 on this athlete's trail runs: steep down 1.61, down 1.13, flat 1.06, up 0.94, steep up 0.74)
+# is the cost curve; the plan keeps its whole-race time (the HR model) and only re-splits it by
+# effort km × cost(grade). Per grade bin the athlete's own ratio (moving-time weighted over the
+# own-paced trail runs) is shrunk to the default with K_MIN minutes of evidence; between the bin
+# centres the cost is linear, flat outside. Leave-one-run-out (SP-723, 107 runs, total known): the
+# cumulative-time error at the segment ends 2.60 % → 2.10 % of the run (median 2.29 → 1.77 %; the
+# power model's split at one power → this one, with the athlete's own effort divisor). The
+# default curve and K are 推估 (one athlete's data; no literature for a within-run descent cost on
+# trail); 鋪面 (trail vs road descents) waits for the SP-709 dictionary.
+SLOPE = {
+    "centers": (-0.20, -0.10, 0.0, 0.10, 0.20),
+    "default": (1.61, 1.13, 1.06, 0.94, 0.74),     # 推估: SP-701 (this athlete, within-activity)
+    "k_min": 60.0,                                # 推估: pseudo-minutes of the default per bin
+    "min_runs": 3,                                # fewer own runs → the default alone
+}
+SLOPE_SOURCE = ("分段時間：整場時間照心率配速模型，只依你自己的坡度成本重新分配（同一筆活動裡各坡度的實際時間 ÷ 努力距離的平均時間，"
+                "含下坡；陡下、下、平、上、陡上五段之間線性內插，資料少時往預設收縮）；預設值來自一位跑者的越野紀錄（SP-701），推估")
+
+
+def slope_weights(g: float) -> list[float]:
+    """Grade g on the five bin centres (linear between neighbours, flat outside)."""
+    c = SLOPE["centers"]
+    g = min(max(float(g), c[0]), c[-1])
+    w = [0.0] * len(c)
+    for i in range(len(c) - 1):
+        if c[i] <= g <= c[i + 1]:
+            f = (g - c[i]) / (c[i + 1] - c[i])
+            w[i], w[i + 1] = 1.0 - f, f
+            return w
+    w[-1] = 1.0
+    return w
+
+
+def slope_row(segs: list[dict], times: list[float], divisor: Optional[float] = None) -> Optional[dict]:
+    """One run's evidence: per bin Σ (weight × actual moving s) and Σ (weight × effort km × the run's
+    mean s per effort km). `segs` = course segments (grade, dist_m, gain_m), `times` their actual
+    moving seconds. None without time or effort."""
+    div = divisor or effort_divisor()
+    e = [s["dist_m"] / 1000.0 + (s.get("gain_m") or 0.0) / div for s in segs]
+    T, E = float(sum(times)), float(sum(e))
+    if T <= 0 or E <= 0:
+        return None
+    pace = T / E
+    n = len(SLOPE["centers"])
+    num, den = [0.0] * n, [0.0] * n
+    for s, t, ei in zip(segs, times, e):
+        for i, x in enumerate(slope_weights(s["grade"])):
+            num[i] += x * float(t)
+            den[i] += x * ei * pace
+    return {"num": num, "den": den, "T": T}
+
+
+def fit_slope_cost(rows) -> dict:
+    """{cost: [5], own: [5 | None], minutes: [5], n_runs, applied, source, label} from slope_row()s;
+    fewer than min_runs runs → the default curve (applied too: the default is the athlete's own
+    SP-701 curve, 推估)."""
+    rs = [r for r in rows or [] if r]
+    n = len(SLOPE["centers"])
+    d = list(SLOPE["default"])
+    if len(rs) < SLOPE["min_runs"]:
+        return {"cost": d, "own": [None] * n, "minutes": [0.0] * n, "n_runs": len(rs), "applied": True,
+                "source": SLOPE_SOURCE, "label": "推估"}
+    num = [sum(r["num"][i] for r in rs) for i in range(n)]
+    den = [sum(r["den"][i] for r in rs) for i in range(n)]
+    own = [num[i] / den[i] if den[i] > 0 else None for i in range(n)]
+    mins = [x / 60.0 for x in den]
+    k = SLOPE["k_min"]
+    cost = [(mins[i] * own[i] + k * d[i]) / (mins[i] + k) if own[i] is not None else d[i] for i in range(n)]
+    return {"cost": cost, "own": own, "minutes": mins, "n_runs": len(rs), "applied": True,
+            "source": SLOPE_SOURCE, "label": "推估"}
+
+
+def slope_cost(fit: Optional[dict], g: float) -> float:
+    """The cost multiplier at grade g (the default curve without a fit)."""
+    c = (fit or {}).get("cost") or SLOPE["default"]
+    return float(sum(w * x for w, x in zip(slope_weights(g), c)))
+
+
+def slope_times(segs: list[dict], ts, fit: Optional[dict], divisor: Optional[float] = None) -> Optional[list[float]]:
+    """SP-723: segment times `ts` re-split by effort km × cost(grade) × the segment's environment
+    factor relative to the race (segment "M_rel" = M̄ ÷ Mᵢ, set by the planner: altitude / heat keep
+    slowing their own segments); the sum is unchanged. None when not applied."""
+    if not fit or not fit.get("applied") or not ts or len(ts) != len(segs):
+        return None
+    div = divisor or effort_divisor()
+    total = float(sum(ts))
+    if total <= 0:
+        return None
+    e = [s["dist_m"] / 1000.0 + (s.get("gain_m") or 0.0) / div for s in segs]
+    raw = [ei * slope_cost(fit, s["grade"]) * float(s.get("M_rel") or 1.0) for s, ei in zip(segs, e)]
+    sr = sum(raw)
+    if sr <= 0:
+        return None
+    return [x * total / sr for x in raw]

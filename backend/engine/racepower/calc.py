@@ -636,7 +636,7 @@ def course_ground(ctx: Context, body: PlanIn) -> Optional[dict]:
 def stop_kind(ctx: Context, body: PlanIn) -> str:
     """SP-721: the stop kind (nonmoving.plan_kind) of a plan: its plan event — the one picked on the
     page (`event_id`), else the course's — of kind 越野賽 → race; anything else (no event, an unknown
-    one, kind 其他) → solo (自主長程); 百岳 → hike."""
+    one, kind 其他) → solo (自主長程); 百岳 → hike_group / hike_solo by the trip kind (SP-732)."""
     from backend.engine.racepower import nonmoving as NM
     eid = body.event_id or (body.course.event_id if body.course else None)
     ek = None
@@ -645,7 +645,11 @@ def stop_kind(ctx: Context, body: PlanIn) -> str:
             ek = getattr(ctx.event(eid), "kind", None)
         except Exception:                   # noqa: BLE001 — a deleted / unknown event: no event
             ek = None
-    return NM.plan_kind(body.type, ek, body.trip_kind)
+    tk = body.trip_kind
+    if body.type == "baiyue" and tk is None:
+        from backend.engine.racepower import capacity as CAP
+        tk = CAP.TRIP_KIND_DEFAULT              # as plan_hike: no trip kind = 跟團
+    return NM.plan_kind(body.type, ek, tk)
 
 
 def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
@@ -680,6 +684,13 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
         if body.type == "baiyue":
             opts["moving_rows"] = gm.get("moving_rows") or []
             opts["moving_rows_group"] = gm.get("moving_rows_group") or []
+            # SP-732: each day's stops from the stop model (the trail HR model carries the profile)
+            try:
+                th = ctx.trail_hr()
+            except Exception:               # noqa: BLE001 — no model: the old moving ratio
+                th = None
+            opts["nonmoving"] = (th or {}).get("nonmoving")
+            opts["stop_kind"] = stop_kind(ctx, body)
             out = night(PL.plan_hike(v1=v1, course=course, hike_speed=gm["hike_speed"], inp=ctx.inputs(), opts=opts,
                                      validated=validated, capacity=gm.get("walk_capacity")), body.mode)
         else:

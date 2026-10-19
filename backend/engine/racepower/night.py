@@ -91,6 +91,7 @@ def _rescale(plan: dict, factors: list[float], start_time: Optional[str], stops)
         s["t"] = base * f
         if hike and int(s.get("day") or 1) != day:
             day, day_start = int(s.get("day") or 1), cum
+            ratio = PL.day_ratio(plan, day)          # SP-732: that day's moving ÷ clock (its predicted stops)
         cum += s["t"]
         s["cum_s"] = cum
         k = old / s["t"] if s["t"] else 1.0              # speed scale
@@ -111,12 +112,15 @@ def _rescale(plan: dict, factors: list[float], start_time: Optional[str], stops)
         sm["pace_s_per_km"] = T / km
     if hike:
         sm["capacity_time_s"] = T
-        sm["clock_s"] = plan["_night_clock0"] + added / ratio
         if plan.get("_night_ep") and T:
             sm["ep_per_h"] = sm["eph_personal"] = plan["_night_ep"] / (T / 3600.0)
         for d in plan.get("days") or []:
             hh = sum(s["t"] for s in segs if int(s.get("day") or 1) == d["day"]) / 3600.0
-            d["moving_h"], d["clock_h"] = hh, hh / ratio
+            d["moving_h"], d["clock_h"] = hh, hh / PL.day_ratio(plan, d["day"])
+        if sm.get("rest"):
+            PL.hike_clock(plan, stops)                # SP-732: each day's stops grow with its moving time
+        else:
+            sm["clock_s"] = plan["_night_clock0"] + added / ratio
     else:
         sm["finish_eta"] = PL._clock(start_time, T + PL._stops_before(stops, km + 1))
         if sm.get("time_total_s") is not None:

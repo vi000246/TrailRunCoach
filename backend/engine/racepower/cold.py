@@ -97,13 +97,13 @@ def points(plan: dict, date: Optional[str], start_time: Optional[str], stops=Non
     if t0 is not None and segs:
         out = []
         if plan.get("type") == "baiyue":
-            ratio = float((plan.get("summary") or {}).get("moving_ratio") or 1.0) or 1.0
             day, day_start, prev = None, 0.0, 0.0
             from backend.engine.racepower import planner as PL
             for s in segs:
                 n = int(s.get("day") or 1)
                 if n != day:
                     day, day_start = n, prev
+                    ratio = PL.day_ratio(plan, n)    # SP-732: that day's moving ÷ clock (its predicted stops)
                 # SP-580: each day from its own start time (summary.day_starts), else the race's
                 base = (_start(date, PL.start_of(plan, n, start_time)) or t0) + dt.timedelta(days=n - 1)
                 b = base + dt.timedelta(seconds=(s["cum_s"] - s["t"] - day_start) / ratio

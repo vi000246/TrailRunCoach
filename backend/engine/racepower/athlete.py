@@ -2233,6 +2233,47 @@ def xstar_points(ds, runs, exclude: Optional[set] = None) -> list[dict]:
     return out
 
 
+SLOPE_KEY = "racepower_slope_cost_v1"
+
+
+def _slope_row(ds, w) -> Optional[dict]:
+    """SP-723: trailhr.slope_row of one run — its own GPS track cut into course segments, the
+    actual moving time in each (backtest.actual_segments, moving > RUN_MOVING_KMH)."""
+    from backend.engine.racepower import backtest as BT
+    from backend.engine.racepower import course as CO
+    from backend.engine.racepower import trailhr as TH
+    a = activity_arrays(ds, w)
+    if a is None:
+        return None
+    tk = BT.track_of(a)
+    if tk is None:
+        return None
+    track, idx = tk
+    try:
+        segs = CO.build_course(track)["segments"]
+    except Exception:                       # noqa: BLE001 — a track the course builder can't cut
+        return None
+    if len(segs) < 2:
+        return None
+    d = BT._dt(a["t"])
+    moving = (np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH) & (d > 0)
+    act = BT.actual_segments(a, idx, track, segs, moving)
+    return TH.slope_row(segs, [x["t"] for x in act])
+
+
+def slope_rows(ds, runs, tags: Optional[list] = None, solo=None) -> list[dict]:
+    """SP-723: the slope-cost evidence of the own-paced runs among `runs` (disk-memoised per run)."""
+    out = []
+    for w in runs:
+        if not own_paced(w, tags, solo):
+            continue
+        r = ds.cached_series(SLOPE_KEY, w, lambda w=w: _slope_row(ds, w))
+        if r:
+            out.append(r)
+    ds.flush_series()
+    return out
+
+
 NONMOVING_KEY = "racepower_nonmoving_v1"
 
 
@@ -2276,7 +2317,7 @@ def nonmoving_day_rows(ds, w) -> list:
 def nonmoving_kind(w, race_idx) -> Optional[str]:
     """SP-721: the stop kind of one activity (nonmoving.py): "race" 比賽／全力 (in `race_idx`, the
     trail_hr_model races), "solo" 自主長程 (any other outdoor trail run), "hike" 健行／百岳 (a hike
-    that is not a run — SP-724 will narrow this to the 跟團 mark); None = not used."""
+    that is not a run; nonmoving_history adds its 跟團 / 自己 "trip", SP-732); None = not used."""
     if outdoor(w) and is_trail(w):
         return "race" if w.idx in race_idx else "solo"
     if w.sport != "run" and is_hike(w):
@@ -2284,12 +2325,21 @@ def nonmoving_kind(w, race_idx) -> Optional[str]:
     return None
 
 
-def nonmoving_history(ds, tday: int, race_idx, exclude=None) -> list[dict]:
+def nonmoving_history(ds, tday: int, race_idx, exclude=None, tags: Optional[list] = None) -> list[dict]:
     """SP-721: the stop rows of every activity before day `tday` (all years; `exclude` left out),
-    each with its "kind" (nonmoving_kind); a hike gives one row per day. Rows with less than
-    nonmoving.NONMOVING["min_s"] moving are dropped."""
+    each with its "kind" (nonmoving_kind); a hike gives one row per day, with its "trip" (SP-732:
+    "solo" when the athlete set the pace — own_paced, the user's 跟團 / 自己 mark first — else
+    "group"). Rows with less than nonmoving.NONMOVING["min_s"] moving are dropped. `tags` =
+    activity_tags rows (default: activity_tags.load())."""
     from backend.engine.racepower import nonmoving as NM
     exclude = exclude or set()
+    if tags is None:
+        try:
+            from backend.engine import activity_tags as AT
+            tags = AT.load()
+        except Exception:                   # noqa: BLE001 — no tag store: the solo-hike file alone
+            tags = []
+    solo = None
     out = []
     for w in ds.workouts:
         if w.day >= tday or w.idx in exclude:
@@ -2298,9 +2348,17 @@ def nonmoving_history(ds, tday: int, race_idx, exclude=None) -> list[dict]:
         if k is None:
             continue
         rows = nonmoving_day_rows(ds, w) if k == "hike" else [nonmoving_row(ds, w)]
+        extra = {"kind": k}
+        if k == "hike":
+            own = False
+            if getattr(w, "entry", None) is not None:          # no file to look the mark up by → 跟團
+                if solo is None:
+                    solo = solo_hikes(tags=tags)
+                own = own_paced(w, tags, solo)
+            extra["trip"] = "solo" if own else "group"
         for r in rows:
             if r and r.get("moving_s") and r["moving_s"] >= NM.NONMOVING["min_s"]:
-                out.append({**r, "kind": k})
+                out.append({**r, **extra})
     ds.flush_series()
     return out
 
@@ -2408,6 +2466,11 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
     m["delta_info"] = dinfo
     m["n_durability"] = len(drows)
     m["fade"] = TH.fade_shape(frows, n_long)
+    # SP-723: the segment split by the athlete's own slope cost (downhill included)
+    try:
+        m["slope_cost"] = TH.fit_slope_cost(slope_rows(ds, runs, tags, solo))
+    except Exception:                       # noqa: BLE001 — never fails the model: the default curve
+        m["slope_cost"] = TH.fit_slope_cost([])
     if race_idx is None:
         caps = capacity_samples(ds, [w for w in ds.workouts if outdoor(w) and w.day < tday], tags=tags)
         race_idx = {i for i, c in caps.items() if c["tags"]["activity_type"] == "race" or c.get("ok")}
@@ -2423,7 +2486,7 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
     m["x_race_source"] = (f"全力心率曲線 x*(T)（{m['xstar']['n']} 次比賽／全力跑，收縮到文獻先驗）"
                           if m["xstar"]["n"] else "沒有之前的比賽／全力跑：用文獻先驗 x*(T)")
     # SP-721: the stop profile per kind (race / solo / hike) from every earlier activity
-    m["nonmoving"] = NM.profile(nonmoving_history(ds, tday, race_idx, exclude))
+    m["nonmoving"] = NM.profile(nonmoving_history(ds, tday, race_idx, exclude, tags=tags))
     m["today"] = today.isoformat()
     m["points"] = pts
     return m

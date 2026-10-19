@@ -186,6 +186,19 @@ def _fade(res: dict, shape: Optional[dict]) -> dict:
     return {**res, "rows": rows, "faded": True, "p_alloc": p_alloc}
 
 
+def _slope_split(res: dict, segs: list, fit: Optional[dict], mbar: float) -> dict:
+    """SP-723: the whole-race time re-split by effort km × the athlete's own slope cost (downhill
+    included; trailhr.slope_times), each segment's environment factor M kept relative to the race;
+    speeds follow the times, powers stay the allocation's. Unchanged without a fit."""
+    from backend.engine.racepower import trailhr as TH
+    rel = [dict(s, M_rel=(mbar / s["M"]) if s.get("M") else 1.0) for s in segs]
+    ts = TH.slope_times(rel, [r["t"] for r in res["rows"]], fit)
+    if ts is None:
+        return res
+    rows = [{**r, "t": t, "v": r["v"] * r["t"] / t if t > 0 else r["v"]} for r, t in zip(res["rows"], ts)]
+    return {**res, "rows": rows, "slope_split": True}
+
+
 def _merge_for_export(segs: list[dict], limit: int = MAX_COROS_STEPS) -> list[dict]:
     s = [dict(x) for x in segs]
     while len(s) > limit:
@@ -499,6 +512,8 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
             "nonmoving": nm, "time_total_s": t + nm["total_s"] if nm else None,
             # SP-222: the athlete's own fade by moving hour (trailhr.fade_shape) for the segment times
             "fade": model.get("fade"),
+            # SP-723: the athlete's own slope cost for the segment split (None: an older stored model)
+            "slope_cost": model.get("slope_cost"),
             "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": "推估"}
 
 
@@ -719,6 +734,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         if not v2_primary:
             res = _scale(res, t_whole)
             if hr_est is not None:
+                # SP-723: the HR model's total split by the athlete's own slope cost (downhill included)
+                if gpx:
+                    res = _slope_split(res, segs, hr_est.get("slope_cost"), mbar)
                 # SP-222: the HR model's total spread by the athlete's own fade, not evenly
                 res = _fade(res, hr_est.get("fade"))
         return {"res": res, "alpha_used": alpha_used, "runs": runs, "t_whole": t_whole, "p_whole": p_whole,
@@ -941,7 +959,18 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                 warnings.append(H.tag("RC8", _("分段維持平均分配：後段變慢要用你自己至少 {m} 次 ≥ {h:g} 小時的越野跑來估"
                                   "（目前 {n} 次能用，共 {a} 次 ≥ {h:g} 小時）",
                                   m=fd["min_runs"], h=fd["min_run_h"], n=fd["n_runs"], a=fd["n_long"])))
+            sc = hr_est.get("slope_cost")
+            if sc and res.get("slope_split"):
+                c = sc["cost"]
+                warnings.append(H.tag("RC8", _("分段時間照你自己的坡度成本分配（推估）：同一筆活動裡，陡下 ×{a:.2f}、下 ×{b:.2f}、平 ×{c:.2f}、"
+                                  "上 ×{d:.2f}、陡上 ×{e:.2f}（相對努力距離的平均時間；{n} 次自己步調的越野跑，資料少時往預設收縮）。"
+                                  "整場時間不變，只改各段怎麼分：下坡段變長、陡上段變短",
+                                  a=c[0], b=c[1], c=c[2], d=c[3], e=c[4], n=sc.get("n_runs") or 0)))
     summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp,
+               # SP-723: whether the segment times carry the athlete's own slope cost
+               "slope_split": ({"applied": True, "cost": (hr_est.get("slope_cost") or {}).get("cost"),
+                                "n_runs": (hr_est.get("slope_cost") or {}).get("n_runs"), "badge": "推估"}
+                               if hr_est is not None and res.get("slope_split") else None),
                "w_per_kg": p_bar / body_w if body_w else None,
                "pace_s_per_km": T / km, "km": km, "gain_m": course["totals"].get("gain_m"),
                "loss_m": course["totals"].get("loss_m"), "M": mbar,
@@ -1062,6 +1091,20 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
     T = t1 / lam
     he = DF.hike_effort(lam, cuts)
     he["badge"] = "推估"
+    # SP-732: each day's moving time → its predicted stops (the stop model of the trip kind)
+    day_mv: dict[int, float] = {}
+    if gpx:
+        for s, r in zip(segs, rows1):
+            n = int(s.get("day") or 1)
+            day_mv[n] = day_mv.get(n, 0.0) + r["t"] * c / lam
+    else:
+        for d in r1["days"]:
+            day_mv[int(d["day"])] = (d["moving_h"] * t1 / r1["time_s"] / lam if r1["time_s"] else d["moving_h"]) * 3600.0
+    tk = opts.get("trip_kind") if opts.get("trip_kind") in TRIP_KINDS else None
+    rest, day_ratios, ratio_eff, clock_line = _hike_timeline(opts, tk, day_mv, ratio, ratio_src)
+
+    def rat(n: int) -> float:
+        return day_ratios[n - 1] if day_ratios and 1 <= n <= len(day_ratios) else ratio
     out = []
     cum = 0.0
     day = 1
@@ -1074,7 +1117,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
             day, day_start = s["day"], cum
         cum += t
         v = s["dist_m"] / t
-        clock = _clock(starts[min(day, len(starts)) - 1], (cum - day_start) / ratio + _stops_before(stops, s["end_km"]))
+        clock = _clock(starts[min(day, len(starts)) - 1], (cum - day_start) / rat(day) + _stops_before(stops, s["end_km"]))
         out.append({**{x: s.get(x) for x in ("i", "start_km", "end_km", "dist_m", "gain_m", "loss_m", "grade",
                                              "max_grade", "z_mean", "z_max", "cls", "cls_label", "walk", "day")},
                     "terrain": s["terrain"], "eta_factor": r["eta"], "f_day": r["f_day"], "A": a,
@@ -1092,7 +1135,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
             # SP-414: no body weight → no energy / water (CC × (W + pack) needs it)
             kcal = PR.yamamoto_cc(h, km, gain, loss) * (weight + r1["pack_kg"]) if weight else None
             days.append({"day": n, "km": km, "gain_m": gain, "loss_m": loss, "moving_h": h,
-                         "clock_h": h / ratio, "kcal": kcal,
+                         "clock_h": h / rat(n), "kcal": kcal,
                          "water_ml": [0.7 * kcal, 0.8 * kcal] if kcal is not None else None})
     else:
         for d in r1["days"]:
@@ -1100,7 +1143,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
                          "moving_h": d["moving_h"] * t1 / r1["time_s"] / lam if r1["time_s"] else d["moving_h"],
                          "clock_h": None, "kcal": d["kcal"], "water_ml": d["water_ml"]})
         for d in days:
-            d["clock_h"] = d["moving_h"] / ratio
+            d["clock_h"] = d["moving_h"] / rat(int(d["day"]))
     km = course["totals"]["km"]
     gain = course["totals"]["gain_m"]
     kcal = sum(d["kcal"] for d in days) if all(d["kcal"] is not None for d in days) else None
@@ -1120,7 +1163,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
     if not hk.get("solo_n"):
         warnings.append(H.tag("RC1", (hk.get("note") or "百岳多為跟團，速度不代表個人能力，不列入目標時間推算") +
                         "：步行速度用 Tobler 先驗加上你心率 ≥ AeT 的陡坡爬升窗（推估）"))
-    warnings.append(H.tag("RC8", f"時鐘時間 = 移動時間 ÷ {ratio:.2f}（{ratio_src}）"))
+    warnings.append(H.tag("RC8", clock_line))
     if weight:
         warnings.append(H.tag("RC1", "背負係數是 v1 的線性假設（(體重 + 5 kg) ÷ (體重 + 背負)）；Pandolf 公式尚未對過原文"))
     else:
@@ -1131,11 +1174,13 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
                "water_ml": [0.7 * kcal, 0.8 * kcal] if kcal is not None else None,
                "hr_cap": used.get("aet", {}).get("value"),
                "total_method": "v2" if v2_primary else "v1", "category": "hike", "mode": mode,
-               "acclimatisation": accl, "moving_ratio": ratio, "badge": None if v2_primary else "推估", "day_starts": starts,
+               "acclimatisation": accl, "moving_ratio": ratio_eff, "rest": rest, "day_ratios": day_ratios,
+               "badge": None if v2_primary else "推估", "day_starts": starts,
                # racepower-v2.md §8: Hadley only on running segments → 百岳 keeps one heat value
                "heat": {"mode": "single", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
                         "reason": "百岳用單一溫度（逐時熱修正只用在跑步）", "badge": None}}
-    summary["snow"] = _snow_summary(opts.get("snow"), snow, t1, t1_base, t1_hi, lam, ratio, stops, km)
+    hike_clock({"summary": summary, "days": days}, stops)          # SP-732: clock = moving + each day's stops
+    summary["snow"] = _snow_summary(opts.get("snow"), snow, t1, t1_base, t1_hi, lam, ratio_eff, stops, km)
     group = _group_compare_v1(opts, out, lam) if gpx else None
     summary["biggest_day"] = day_load(days, hdays, group, warnings)
     return {"type": "baiyue", "summary": summary, "effort": he, "segments": out, "days": days,
@@ -1154,6 +1199,91 @@ LIMITS_NOTE = ("沒有背 10–15 kg、每天 6–10 h、連走多天的跑步�
 AMS_NOTE = "高山症會讓速度與行程失準，出現症狀以下撤為先"
 # SP-260 (altitude-training.md §4.1): the page and the result say what 「部分」 is
 PARTIAL_NOTE = "部分適應＝已適應與未適應兩條曲線的中點（推估；沒有研究量過部分適應）"
+
+
+# ---- SP-732: the 百岳 clock = moving time + each day's predicted stops ------------------------------
+# The stops of a 百岳 day come from the stop model (nonmoving.py, SP-721) of the trip kind's hike
+# sub-kind (跟團 / 自己, SP-732), predicted for each day's own moving time; inside a day they are spread
+# in proportion to the moving time (the day's moving ÷ clock ratio), so every clock read off the plan —
+# the segment ETAs, night, cold, rain, 補給 — sits on the same timeline. The stops the user typed in the
+# stop editor are added at their km on top, as before. No stop profile (no history) → the old moving
+# ratio (hike.moving_ratio) for every day.
+
+def hike_rest(prof: Optional[dict], kind: str, day_moving: dict) -> Optional[dict]:
+    """Each day's predicted stops: {kind, kind_label, days: [{day, moving_s, rest_s, p25_s, p75_s,
+    ratio}], total_s, p25_s, p75_s, why, range_why, source, badge}; None without a profile."""
+    from backend.engine.racepower import nonmoving as NM
+    if not prof or not day_moving:
+        return None
+    days, ref = [], None
+    for n, mv in sorted(day_moving.items()):
+        nm = NM.predict(prof, mv, None, kind=kind) if mv and mv > 0 else None
+        if nm is None:
+            days.append({"day": int(n), "moving_s": float(mv or 0.0), "rest_s": 0.0, "p25_s": 0.0, "p75_s": 0.0,
+                         "ratio": 1.0})
+            continue
+        if ref is None or mv > ref[0]:
+            ref = (mv, nm)
+        days.append({"day": int(n), "moving_s": float(mv), "rest_s": nm["total_s"], "p25_s": nm["p25_s"],
+                     "p75_s": nm["p75_s"], "ratio": mv / (mv + nm["total_s"])})
+    if ref is None:
+        return None
+    nm = ref[1]
+    return {"kind": nm["kind"], "kind_label": nm["kind_label"], "days": days,
+            "total_s": sum(d["rest_s"] for d in days), "p25_s": sum(d["p25_s"] for d in days),
+            "p75_s": sum(d["p75_s"] for d in days), "why": nm["why"], "range_why": nm["range_why"],
+            "n_kind": nm.get("n_kind"), "source": nm["source"], "badge": "推估"}
+
+
+def day_ratio(plan: dict, day: int) -> float:
+    """The moving ÷ clock ratio of day `day` of a 百岳 plan (SP-732: summary.day_ratios from the stop
+    model, else the one moving ratio)."""
+    sm = (plan or {}).get("summary") or {}
+    dr = sm.get("day_ratios") or []
+    if 1 <= int(day or 1) <= len(dr) and dr[int(day or 1) - 1]:
+        return float(dr[int(day or 1) - 1])
+    return float(sm.get("moving_ratio") or 1.0) or 1.0
+
+
+def hike_clock(plan: dict, stops) -> None:
+    """SP-732: the days' clock hours, summary.clock_s / clock_range_s and summary.rest rebuilt from the
+    days' moving hours (after the night slow-down lengthened them): each day keeps its ratio, its range
+    scales with its moving time. No summary.rest → nothing (the old moving-ratio clock)."""
+    sm = plan.get("summary") or {}
+    rest = sm.get("rest")
+    if not rest:
+        return
+    by = {int(d.get("day") or 1): d for d in plan.get("days") or []}
+    for rd in rest["days"]:
+        d = by.get(rd["day"])
+        mv = float(d["moving_h"]) * 3600.0 if d and d.get("moving_h") is not None else rd["moving_s"]
+        k = mv / rd["moving_s"] if rd["moving_s"] else 1.0
+        rd.update(moving_s=mv, rest_s=mv / rd["ratio"] - mv, p25_s=rd["p25_s"] * k, p75_s=rd["p75_s"] * k)
+        if d is not None:
+            d["clock_h"] = (mv + rd["rest_s"]) / 3600.0
+            d["rest_h"] = rd["rest_s"] / 3600.0
+    for k in ("total_s", "p25_s", "p75_s"):
+        rest[k] = sum(rd[k if k != "total_s" else "rest_s"] for rd in rest["days"])
+    T = float(sm.get("time_s") or 0.0)
+    st = _stops_before(stops, (sm.get("km") or 0.0) + 1)
+    sm["clock_s"] = T + rest["total_s"] + st
+    sm["clock_range_s"] = [T + rest["p25_s"] + st, T + rest["p75_s"] + st]
+    sm["moving_ratio"] = T / (T + rest["total_s"]) if T + rest["total_s"] > 0 else 1.0
+
+
+def _hike_timeline(opts: dict, trip_kind: Optional[str], day_moving: dict, ratio: float, ratio_src: str):
+    """(rest, day_ratios, the trip's effective ratio, the clock line for the warnings) of a 百岳 plan:
+    the stop model's prediction per day (hike_rest) when the plan has a stop profile, else the old
+    moving ratio for every day (rest None)."""
+    from backend.engine.racepower import nonmoving as NM
+    kind = opts.get("stop_kind") or NM.plan_kind("baiyue", trip_kind=trip_kind)
+    rest = hike_rest(opts.get("nonmoving"), kind, day_moving)
+    if rest is None:
+        return None, None, ratio, f"時鐘時間 = 移動時間 ÷ {ratio:.2f}（{ratio_src}）"
+    T = sum(d["moving_s"] for d in rest["days"])
+    eff = T / (T + rest["total_s"]) if T + rest["total_s"] > 0 else 1.0
+    line = _("時鐘時間 = 移動時間 + 每天的停留預測（{label}：{why}；推估）", label=rest["kind_label"], why=rest["why"])
+    return rest, [d["ratio"] for d in rest["days"]], eff, line
 
 
 def _snow_summary(key, snow, t1, t1_base, t1_hi, lam, ratio, stops, km) -> Optional[dict]:
@@ -1312,6 +1442,19 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     if grp and snow:
         # past group days were walked without snow: their time gets the same climbing-leg factor (推估)
         grp = {**grp, **{k: grp[k] * snow_f for k in ("p25_s", "p50_s", "p75_s")}}
+    # SP-732: each day's moving time → its predicted stops (the stop model of the trip kind)
+    day_mv: dict[int, float] = {}
+    if gpx:
+        for r in rows:
+            n = int(r["s"].get("day") or 1)
+            day_mv[n] = day_mv.get(n, 0.0) + r["t"] / lam
+    else:
+        for d in r1["days"]:
+            day_mv[int(d["day"])] = d["moving_h"] * snow_f / lam * 3600.0
+    rest, day_ratios, ratio_eff, clock_line = _hike_timeline(opts, kind, day_mv, ratio, ratio_src)
+
+    def rat(n: int) -> float:
+        return day_ratios[n - 1] if day_ratios and 1 <= n <= len(day_ratios) else ratio
     out = []
     cum = 0.0
     day, day_start = 1, 0.0
@@ -1323,7 +1466,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
             day, day_start = s["day"], cum
         cum += t
         v = s["dist_m"] / t
-        clock = _clock(starts[min(day, len(starts)) - 1], (cum - day_start) / ratio + _stops_before(stops, s["end_km"]))
+        clock = _clock(starts[min(day, len(starts)) - 1], (cum - day_start) / rat(day) + _stops_before(stops, s["end_km"]))
         sig = math.sqrt(cap.sigma_loo ** 2 + sum(x * x for x in r["sigma"].values()))
         out.append({**{x: s.get(x) for x in ("i", "start_km", "end_km", "dist_m", "gain_m", "loss_m", "grade",
                                              "max_grade", "z_mean", "z_max", "cls", "cls_label", "walk", "day")},
@@ -1349,14 +1492,14 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                 f_d = sum(r["t"] for r in rr) / (sum(r["t0"] for r in rr) or 1.0)
                 g_day = {**g_day, **{k: g_day[k] * f_d for k in ("p25_s", "p50_s", "p75_s")}}
             days.append({"day": n, "km": km, "gain_m": gain, "loss_m": loss, "moving_h": hh,
-                         "clock_h": hh / ratio, "kcal": kcal, "water_ml": [0.7 * kcal, 0.8 * kcal], "pack_kg": L,
+                         "clock_h": hh / rat(n), "kcal": kcal, "water_ml": [0.7 * kcal, 0.8 * kcal], "pack_kg": L,
                          "group_h": g_day["p50_s"] / 3600.0 if g_day else None,
                          "group_h_range": [g_day["p25_s"] / 3600.0, g_day["p75_s"] / 3600.0] if g_day else None})
     else:
         for d in r1["days"]:
             mh = d["moving_h"] * snow_f / lam
             days.append({"day": d["day"], "km": d["km"], "gain_m": d["gain_m"], "loss_m": d["loss_m"],
-                         "moving_h": mh, "clock_h": mh / ratio, "kcal": d["kcal"], "water_ml": d["water_ml"],
+                         "moving_h": mh, "clock_h": mh / rat(int(d["day"])), "kcal": d["kcal"], "water_ml": d["water_ml"],
                          "pack_kg": load_of(d["day"]), "group_h": None, "group_h_range": None})
     km = course["totals"]["km"]
     gain = course["totals"]["gain_m"]
@@ -1395,7 +1538,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         warnings.append(H.tag("RC1", "心率帶只有「AeT」與「能力上限」兩檔：處理心率落後後，陡坡速度仍不隨心率帶改變（β ≈ 0）"))
     if grp is None:
         warnings.append(H.tag("RC1", f"跟團時間需要 ≥ 3 天過去的跟團紀錄（目前 {len(group_days)} 天）"))
-    warnings.append(H.tag("RC8", f"時鐘時間 = 移動時間 ÷ {ratio:.2f}（{ratio_src}）"))
+    warnings.append(H.tag("RC8", clock_line))
     if hacc:
         warnings.append(H.tag("RC11", f"熱：每段溫度由 {to['temp_c']:.1f} °C（{z0:.0f} m）以 0.0065 K/m 遞減率推算；"
                         f"熱適應 S {hacc['s']:.0%}（{hacc['source']}，推估）"))
@@ -1403,6 +1546,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         warnings.append(H.tag("RC1", f"背負{pack_src}，之後每天 −{CAP.daily_drop():g} kg（糧食，推估）"))
     main = "group" if (kind == "group" and grp) else "capacity"
     summary = {"time_s": T, "capacity_time_s": T, "clock_s": T / ratio + _stops_before(stops, km + 1),
+               "rest": rest, "day_ratios": day_ratios,
                "group_time_s": ({"p25": grp["p25_s"], "p50": grp["p50_s"], "p75": grp["p75_s"], "n": grp["n"],
                                  "eph": grp["eph"], "clock_p50": grp["p50_s"] / ratio_grp} if grp else None),
                "main": main, "trip_kind": kind, "hr_band": band_id, "band": bnd,
@@ -1412,13 +1556,14 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                "eph_personal": ep / (T / 3600.0) if T else None, "ep_per_h": ep / (T / 3600.0) if T else None,
                "kcal": kcal, "water_ml": [0.7 * kcal, 0.8 * kcal], "hr_cap": used.get("aet", {}).get("value"),
                "total_method": "capacity", "category": "hike", "mode": mode, "acclimatisation": accl,
-               "moving_ratio": ratio, "moving_ratio_group": ratio_grp, "moving_ratio_solo": ratio_solo,
+               "moving_ratio": ratio_eff, "moving_ratio_group": ratio_grp, "moving_ratio_solo": ratio_solo,
                "badge": None if v2_primary else "推估", "days": n_days, "day_starts": starts,
                "heat": {"mode": "lapse", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
                         "reason": "百岳：登山口／測站溫度依遞減率推算到每段", "badge": "推估", "ref_alt_m": z0},
                "heat_accl": ({k: hacc[k] for k in ("mode", "s", "s_from", "a", "source", "badge", "a_literature",
                                                    "a_reason", "a_supported")} if hacc else None)}
-    summary["snow"] = _snow_summary(opts.get("snow"), snow, t1, t1_base, t1_hi, lam, ratio, stops, km)
+    hike_clock({"summary": summary, "days": days}, stops)          # SP-732: clock = moving + each day's stops
+    summary["snow"] = _snow_summary(opts.get("snow"), snow, t1, t1_base, t1_hi, lam, ratio_eff, stops, km)
     group = _group_compare(opts, rows, cap, band_f, ratio_grp) if gpx else None
     summary["biggest_day"] = day_load(days, hdays, group, warnings)
     capj = cap.to_json()

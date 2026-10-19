@@ -774,7 +774,7 @@ def _hike_fuel(plan: dict, segs: list, weight: float, cls: str, body: dict, body
             continue
         start_time = PL.start_of(plan, n, day0)          # SP-580: that day's own start time
         t0 = ds[0]["cum_s"] - ds[0]["t"]
-        ratio = float(s.get("moving_ratio") or 1.0)
+        ratio = PL.day_ratio(plan, n)          # SP-732: that day's moving ÷ clock (its predicted stops)
         for tau, _ in fuel_points(ds, ev_s, t0=t0):
             k_ = _km_at(ds, tau, t0)
             events.append({"t_s": tau, "day": n, "km": k_, "seg": ds[_seg_at(ds, tau)]["i"], "kind": "fuel",
