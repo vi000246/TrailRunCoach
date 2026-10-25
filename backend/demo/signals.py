@@ -46,6 +46,41 @@ DESC_K = 1.6          # trail descents: power x (1 + DESC_K * grade), floored at
 DESC_MIN = 0.5
 DESC_CAP_A, DESC_CAP_K = 1.4, 2.0   # the technical speed cap: down_cap x (A + K * grade)
 TRAIL_DRIFT_MAX = 8.0  # bpm: a trail run's cardiac drift levels off towards this
+# SP-850: hard running raises the heart rate beyond its steady state and keeps it up after — the HR slow
+# component above the lactate threshold and the elevated HR of the recovery jogs / cool-down after it (Jones
+# et al. 2011, slow component; Coyle & González-Alonso 2001, cardiovascular drift). Invented curve: an EMA
+# of the power above SLOW_FROM × CP (rises with τ SLOW_UP_S, falls with τ SLOW_DOWN_S) × SLOW_BPM bpm;
+# ~+8 bpm after 2×12′ at 0.92 CP, still ~+5 after a 10′ cool-down. Easy runs (≤ 0.80 CP) get nothing.
+SLOW_FROM, SLOW_UP_S, SLOW_DOWN_S, SLOW_BPM = 0.82, 600.0, 1200.0, 90.0
+# SP-850 Q1-2: a hard session's steady-state HR (with its slow component) stays under a peak, so the demo's
+# max-HR evidence is unchanged — threshold_confidence.hrmax_check reads the highest HR held 120 s (the CP test
+# is the lone top, the next run decides: > 8 bpm under HRMAX → the 最大心率 card). HARD_PEAK for long reps
+# (tempo 2×12′, 6×4′): their 120-s holds stay at most where they were before SP-850 (≈ 174–175 bpm over 52
+# weeks; HRMAX − 6 took them to ~180 and the card went). SHORT_PEAK for reps of 2′ or less (8×2′, hills):
+# the HR lag keeps their 120-s holds low anyway, and the lower cap pulled a hill run under the easy line.
+HARD_PEAK = A.HRMAX - 12.0
+SHORT_PEAK = A.HRMAX - 6.0
+
+
+def _lagged(ss: np.ndarray, h0: float) -> np.ndarray:
+    """The heart rate following its steady state `ss` from `h0`: τ 35 s up, 55 s down."""
+    out = np.empty(len(ss))
+    h = h0
+    for i, s in enumerate(ss.tolist()):
+        h += (s - h) / (35.0 if s > h else 55.0)
+        out[i] = h
+    return out
+
+
+def slow_hr(fs: np.ndarray) -> np.ndarray:
+    """The extra bpm of hard running (SLOW_* above) for the smoothed power fraction `fs`."""
+    x = np.maximum(0.0, fs - SLOW_FROM).tolist()
+    out = np.empty(len(x))
+    s = 0.0
+    for i, e in enumerate(x):
+        s += (e - s) / (SLOW_UP_S if e > s else SLOW_DOWN_S)
+        out[i] = s
+    return SLOW_BPM * out
 
 
 def descent_frac(grade: float) -> float:
@@ -131,9 +166,10 @@ def _measure(rng, *, course: Course, d: np.ndarray, v: np.ndarray, p_true: np.nd
              frac: np.ndarray, walking: np.ndarray, stryd: bool, has_power: bool, drift: float,
              doy: int, hour: float, artifacts: bool, alt_hr: bool, laps: list, temp_warm: float = 0.0,
              fatigue_hr: float = 0.0, lock_ok: bool = True, power_sd: float = 0.04,
-             drift_max: Optional[float] = None) -> Signals:
+             drift_max: Optional[float] = None, slow: bool = False, peak: float = HARD_PEAK) -> Signals:
     """`drift_max` (bpm): the cardiac drift levels off towards it (a long easy run,
-    fed and drinking) instead of climbing linearly all the way."""
+    fed and drinking) instead of climbing linearly all the way. `slow`: add slow_hr (runs), the steady
+    state kept under `peak` (HARD_PEAK / SHORT_PEAK)."""
     n = len(d)
     ele, lat, lon = _course_at(course, d)
     # ---- heart rate (wrist optical) ----
@@ -148,14 +184,14 @@ def _measure(rng, *, course: Course, d: np.ndarray, v: np.ndarray, p_true: np.nd
     ss = ss + dr * np.clip(fs, 0.3, 1.2) + fatigue_hr
     if alt_hr:
         ss = ss + np.maximum(0.0, ele - 1500.0) * 0.008
-    ss = np.clip(ss, 88.0 + (np.maximum(0.0, ele - 1500.0) * 0.006 if alt_hr else 0.0), A.HRMAX - 1.0)
-    hr = np.empty(n)
-    h = 92.0 + rng.uniform(0, 8)
-    ssl = ss.tolist()
-    for i in range(n):
-        s = ssl[i]
-        h += (s - h) / (35.0 if s > h else 55.0)
-        hr[i] = h
+    floor = 88.0 + (np.maximum(0.0, ele - 1500.0) * 0.006 if alt_hr else 0.0)
+    h0 = 92.0 + rng.uniform(0, 8)
+    if slow:
+        # SP-850 Q1-2: the slow component lifts the reps' later part, the jogs and the cool-down; the steady
+        # state stays under `peak` (the demo's max-HR evidence unchanged)
+        hr = _lagged(np.clip(ss + slow_hr(fs), floor, peak), h0)
+    else:
+        hr = _lagged(np.clip(ss, floor, A.HRMAX - 1.0), h0)
     meas = hr + _ar1_fast(rng, n, 1.2, 0.85)
     cad_spm = None
     # ---- cadence (strides/min) ----
@@ -247,9 +283,10 @@ def simulate_run(rng, course: Course, segs: list[Segment], *, cp: float, stryd: 
                  doy: int, hour: float, drift: float = 0.06, push: float = 0.0,
                  down_cap: float = 3.2, has_power: bool = True, mass: float = A.WEIGHT_KG,
                  temp_warm: float = 0.0, lock_ok: bool = True, pace_sd: float = 0.025,
-                 power_sd: float = 0.04) -> Signals:
+                 power_sd: float = 0.04, slow: bool = False, peak: float = HARD_PEAK) -> Signals:
     """`pace_sd`: how far the runner wanders off the target power (AR(1)); `power_sd`:
-    the Stryd's own noise. A run to the watch's step targets wanders less."""
+    the Stryd's own noise. A run to the watch's step targets wanders less. `slow`: a hard
+    structured session (intervals, tempo, hills) — its HR slow component (slow_hr), under `peak`."""
     durs = [s.dur_s for s in segs]
     n = int(sum(durs))
     target = np.empty(n)
@@ -309,7 +346,7 @@ def simulate_run(rng, course: Course, segs: list[Segment], *, cp: float, stryd: 
     return _measure(rng, course=course, d=dist, v=spd, p_true=p_true, frac=frac, walking=walking,
                     stryd=stryd, has_power=has_power, drift=drift, doy=doy, hour=hour, artifacts=True,
                     alt_hr=False, laps=laps, temp_warm=temp_warm, lock_ok=lock_ok, power_sd=power_sd,
-                    drift_max=TRAIL_DRIFT_MAX if trail else None)
+                    drift_max=TRAIL_DRIFT_MAX if trail else None, slow=slow, peak=peak)
 
 
 def simulate_hike(rng, course: Course, *, cp: float, stryd: bool, doy: int, hour: float,

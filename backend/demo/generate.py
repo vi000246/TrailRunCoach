@@ -26,7 +26,7 @@ from backend.demo import athlete as A
 from backend.demo import course as C
 from backend.demo import fitwrite as FW
 from backend.demo import season as S
-from backend.demo.signals import Segment, simulate_hike, simulate_run
+from backend.demo.signals import HARD_PEAK, SHORT_PEAK, Segment, simulate_hike, simulate_run
 
 VERSION = 1
 COURSES = {"路跑半馬": "half_marathon.gpx", "越野 50K": "trail_50k.gpx", "百岳 3 日": "baiyue_3day.gpx"}
@@ -41,27 +41,37 @@ def _rng(seed: int, *key: int) -> np.random.Generator:
     return np.random.Generator(np.random.PCG64([seed, *key]))
 
 
+# SP-850: the hard sessions — HR slow component (signals.slow_hr), a 10′ warm-up and a ~10′ cool-down
+# (season.MINUTES), and in the small build their main set kept whole (_shrink)
+HARD_KINDS = ("interval", "interval_short", "tempo", "hill")
+SHORT_REPS = ("interval_short", "hill")                # reps of 2′ or less: signals.SHORT_PEAK
+WARM_MIN = 10
+
+
 def _segments(kind: str, minutes: float) -> list[Segment]:
     """The program of a run: (duration, power fraction of CP) segments."""
     m = lambda x: int(round(x * 60))          # noqa: E731
+    w = WARM_MIN
     if kind == "interval":
-        segs = [Segment(m(15), 0.68)]
+        segs = [Segment(m(w), 0.68, label="warm")]
         for r in range(6):
             segs += [Segment(m(4), 1.05, label=f"rep {r + 1}"), Segment(m(2), 0.52, label="rest")]
-        return segs + [Segment(m(minutes - 15 - 36), 0.62)]
+        return segs + [Segment(m(max(5, minutes - w - 36)), 0.62, label="cool")]
     if kind == "interval_short":
-        segs = [Segment(m(15), 0.68)]
+        segs = [Segment(m(w), 0.68, label="warm")]
         for r in range(8):
             segs += [Segment(m(2), 1.10, label=f"rep {r + 1}"), Segment(m(1.5), 0.52, label="rest")]
-        return segs + [Segment(m(max(5, minutes - 15 - 28)), 0.62)]
+        return segs + [Segment(m(max(5, minutes - w - 28)), 0.62, label="cool")]
     if kind == "tempo":
-        return [Segment(m(15), 0.68), Segment(m(12), 0.92), Segment(m(3), 0.60), Segment(m(12), 0.92),
-                Segment(m(max(5, minutes - 42)), 0.62)]
+        # threshold (Daniels T ≈ the 1-hour race pace; Palladino 3B): 0.95 CP (was 0.92, SP-850)
+        return [Segment(m(w), 0.68, label="warm"), Segment(m(12), 0.95), Segment(m(3), 0.60), Segment(m(12), 0.95),
+                Segment(m(max(5, minutes - w - 27)), 0.62, label="cool")]
     if kind == "hill":
-        segs = [Segment(m(15), 0.68)]
+        segs = [Segment(m(w), 0.68, label="warm")]
         for r in range(8):
-            segs += [Segment(m(1.5), 1.12), Segment(m(2.0), 0.50)]
-        return segs + [Segment(m(max(5, minutes - 15 - 28)), 0.62)]
+            # 2′ hard uphill (~115 % CP, harder than 5K effort), jog back down (SP-850: was 90″ at 1.12 / 0.50)
+            segs += [Segment(m(2.0), 1.15), Segment(m(2.0), 0.55)]
+        return segs + [Segment(m(max(5, minutes - w - 32)), 0.62, label="cool")]
     if kind == "cp_test":
         # cp_protocols "standard": 12′ all-out, 30′ easy, 3′ all-out (long bout first)
         return [Segment(m(15), 0.66), Segment(m(12), 1.055, fade=0.05, label="12′ all-out"),
@@ -74,8 +84,12 @@ def _segments(kind: str, minutes: float) -> list[Segment]:
     return [Segment(m(minutes), frac, lap=False)]
 
 
-def _shrink(segs: list[Segment], k: float) -> list[Segment]:
-    return [Segment(max(30, int(s.dur_s * k)), s.frac, s.lap, s.fade, s.label) for s in segs]
+def _shrink(segs: list[Segment], k: float, keep_main: bool = False) -> list[Segment]:
+    """Each segment × `k` (≥ 30 s); with `keep_main` (a hard session, SP-850) only the warm-up and the
+    cool-down — a quartered 6×4′ (6×1′) or 2×12′ (2×3′) is no hard session any more (as linked.segments
+    keeps the planned interval run's main set, SP-530)."""
+    return [s if keep_main and s.label not in ("warm", "cool") else
+            Segment(max(30, int(s.dur_s * k)), s.frac, s.lap, s.fade, s.label) for s in segs]
 
 
 TRAIL_KINDS = ("trail", "trail_long")
@@ -232,7 +246,7 @@ def build_activity(seed: int, idx: int, p: S.Planned, season: S.Season, small: b
     else:
         segs = _segments(p.kind, p.minutes)
         if small:
-            segs = _shrink(segs, 0.25)
+            segs = _shrink(segs, 0.25, keep_main=p.kind in HARD_KINDS)
         if p.kind in TRAIL_KINDS:
             drift = float(rng.uniform(0.04, 0.12)) * TRAIL_DRIFT
             c, sig = trail_run(rng, p, segs, small, cp=cp, stryd=p.stryd, doy=doy, hour=p.hour, drift=drift,
@@ -242,7 +256,9 @@ def build_activity(seed: int, idx: int, p: S.Planned, season: S.Season, small: b
             drift = 0.17 if p.kind == "aet_test" else float(rng.uniform(0.04, 0.12))
             sig = simulate_run(rng, c, segs, cp=cp, stryd=p.stryd, doy=doy, hour=p.hour, drift=drift,
                                push=0.12 if c.trail else 0.0, down_cap=float(rng.uniform(2.8, 3.6)),
-                               has_power=True, lock_ok=p.kind not in ("cp_test", "aet_test", "interval"))
+                               has_power=True, lock_ok=p.kind not in ("cp_test", "aet_test", "interval"),
+                               slow=p.kind in HARD_KINDS,
+                               peak=SHORT_PEAK if p.kind in SHORT_REPS else HARD_PEAK)
         sport, sub = FW.SPORT_RUNNING, (FW.SUB_TRAIL if c.trail else FW.SUB_GENERIC)
     raw = FW.encode_activity(start=start, lat=sig.lat, lon=sig.lon, alt=sig.alt, dist=sig.dist,
                              speed=sig.speed, hr=sig.hr, cadence=sig.cadence, power=sig.power, temp=sig.temp,
@@ -255,6 +271,7 @@ def build_activity(seed: int, idx: int, p: S.Planned, season: S.Season, small: b
             "elevation_gain_m": round(sig.ascent, 1), "sport": p.sport, "kind": p.kind, "name": p.name,
             "showcase": p.showcase, "stryd": p.stryd, "date": p.date.isoformat(),
             "hr_min": float(hr.min()) if len(hr) else None, "hr_max": float(hr.max()) if len(hr) else None,
+            "hr_avg": round(float(hr.mean()), 1) if len(hr) else None,
             "avg_power": round(float(np.mean(sig.power)), 1) if sig.power is not None else None,
             "trip": p.trip, "day": p.day}
     return raw, info

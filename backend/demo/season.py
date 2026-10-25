@@ -61,10 +61,16 @@ NAMES = {
     "trail": "越野跑", "trail_long": "越野長跑", "hike": "負重健行", "race_half": "半程馬拉松（賽事）",
     "cp_test": "CP 測試 12 分 + 3 分", "aet_test": "AeT 測試",
 }
-MINUTES = {"easy": (40, 60), "recovery": (30, 40), "tempo": (55, 58), "interval": (61, 63),
-           "interval_short": (50, 52), "hill": (55, 65), "long": (90, 120), "lsd": (120, 150),
+# SP-850: the hard sessions' 10′ warm-up and ~10′ cool-down (generate._segments): tempo 10 + 27 + 10,
+# interval 10 + 36 + 10, interval_short 10 + 28 + 9, hill 10 + 32 + 8–12
+MINUTES = {"easy": (40, 60), "recovery": (30, 40), "tempo": (46, 48), "interval": (56, 58),
+           "interval_short": (47, 49), "hill": (50, 54), "long": (90, 120), "lsd": (120, 150),
            "trail": (70, 100), "trail_long": (150, 230), "hike": (240, 330), "cp_test": (70, 70),
            "aet_test": (80, 80), "race_half": (90, 90), "baiyue": (420, 420)}
+# What _share counts the hard sessions as when it fills a week: their length before SP-850, so the easy, long
+# and trail runs that stretch to the week's hours stay exactly as they were (the week is 5–10′ shorter instead;
+# the hard sessions themselves get MINUTES)
+SHARE_MINUTES = {**MINUTES, "tempo": (55, 58), "interval": (61, 63), "interval_short": (50, 52), "hill": (55, 65)}
 
 
 def _wd(d: dt.date, weekday: int) -> dt.date:
@@ -234,7 +240,7 @@ def _share(kinds: list, hours: float) -> list:
         if k not in FLEX:
             lo, hi = MINUTES[k]
             mins[i] = (lo + hi) / 2.0
-            fixed += mins[i]
+            fixed += sum(SHARE_MINUTES[k]) / 2.0
     flex = [i for i, k in enumerate(kinds) if k in FLEX]
     left = hours * 60.0 - fixed
     free = list(flex)
