@@ -4,6 +4,7 @@ import pathlib
 
 from backend.engine import base_check as BC
 from backend.engine import quality_gate as QG
+from backend.engine import stored_text as ST
 from backend.i18n import use_locale
 from backend.tests.test_quality_gate import TODAY, _ds
 
@@ -88,8 +89,9 @@ def test_evoke_early_abort_keeps_evoke_rule_but_5_bpm_is_an_estimate():
 
 
 def test_lower_line_in_english():
+    d = AT.session({}, 140.0, 250.0, protocol="ua60")["detail"]   # SP-905: stored in zh-TW, shown in English
     with use_locale("en"):
         ln = AT.lines(_r("ua", "above", 0.06))
-        d = AT.session({}, 140.0, 250.0, protocol="ua60")["detail"]
+        d = ST.shown(d)
     assert ln[-1] == "Next time start 5 bpm lower (about 135; the 5 bpm is an estimate) and test again"
     assert "retest another day at a slower pace (Evoke); start about 5 bpm lower (estimate)" in d
