@@ -1,6 +1,6 @@
 # Module Spec: coaching (教練與學員：授權、教練看板、代看、教練代改)
 
-> **Last Updated**: 2026-10-24
+> **Last Updated**: 2026-10-25
 > **Status**: Active（SP-789～793 已上線；SP-821、SP-823、SP-826、SP-827 在驗收）
 > **Domain Layer**: Supporting
 > **Source**: SP-56 `## 結論`（C 混合：看板是唯讀彙總、點進學員用代看、預設全擋＋白名單、學員接受才生效、隨時可撤回、先不收費）
@@ -95,7 +95,7 @@
 
 | 請求 | 規則 |
 |---|---|
-| 讀（GET／HEAD） | 只開 `READ_OPEN`（`backend/accounts/viewing.py:70`）：總覽、課表、圖表、活動、路線、賽事、賽事計算機、設定的生理數據、手冊；扣掉 `READ_BLOCK`（`backend/accounts/viewing.py:91`）：單檔下載與 zip、傷病紀錄與單次活動的疼痛、天氣金鑰、分享、Cairn 曲線、課表訂閱網址。其他一律 403 `COACH_VIEW_BLOCKED`（帳號、平台連線與密碼、刪除、下載我的資料、付款、疊石 Cairn、管理頁、debug API、備份） |
+| 讀（GET／HEAD） | 只開 `READ_OPEN`（`backend/accounts/viewing.py:71`）：總覽、課表、圖表、活動、路線、賽事、賽事計算機、設定的生理數據、手冊；扣掉 `READ_BLOCK`（`backend/accounts/viewing.py:92`）：單檔下載與 zip、天氣金鑰、分享、Cairn 曲線、課表訂閱網址。傷病紀錄與單次活動的疼痛在 `READ_PERM`（`backend/accounts/viewing.py:101`），跟著學員的「看傷病紀錄」開關（預設關，見「教練代改」一節）。其他一律 403 `COACH_VIEW_BLOCKED`（帳號、平台連線與密碼、刪除、下載我的資料、付款、疊石 Cairn、管理頁、debug API、備份） |
 | 不存東西的寫入 | `CALC`（`backend/accounts/viewing.py:97`：賽事計算機的預測、課表編輯器的預覽與步驟推導等）、停止代看、登出：放行 |
 | 學員允許的寫入 | `WRITE_OPEN`（`backend/accounts/viewing.py:104`），各掛一個開關；開關關著 403 `COACH_PERM_OFF`（見下節） |
 | 其他寫入 | 403 `COACH_VIEW_READONLY` |
@@ -103,20 +103,23 @@
 - **新路由預設是關的**：沒列進白名單的路由代看時打不開（`test_coach_view_sp791.py::test_every_read_but_the_open_ones_is_refused_while_viewing`、`::test_every_write_but_the_open_ones_is_refused_while_viewing` 走過 app 的每一條路由）。
 - **站主（user 1）的資料不開放代看**：開始時 403 `COACH_VIEW_OWNER`（`backend/api/viewing.py:54`），`resolve` 也當 `ENDED`（站主租戶有站主專屬資源）。
 - **方案與次數用教練的**：`membership.member()` 在代看時改用 `coach_member`（`backend/membership.py:243`、`backend/membership.py:272`）；站主或管理員當教練時用訂閱者的範圍，拿不到站主專屬與管理 scope。
-- **頁面**：每頁導覽列下一條藍色橫幅「正在看 X 的資料」＋教練能改什麼＋「回到我自己」（POST `/api/v1/coach/view/stop`，寫 `view_end`，回到 `/api/v1/app/settings#coach`；`backend/static/shell.js:295`）；傷病紀錄與管理頁從選單拿掉（`backend/static/shell.js:61`）；開關沒給的控制項照示範站的方式鎖住（`backend/static/shell.js:989`）；被擋的寫入跳提示、`COACH_VIEW_ENDED` 自動重新整理（`backend/static/shell.js:426-432`）；不自動同步、不掃 FIT 資料夾、不送時區、不跑首次設定精靈（`backend/static/shell.js:1265`）；設定頁只剩生理數據分頁（`backend/static/settings.html:262`）。
+- **頁面**：每頁導覽列下一條藍色橫幅「正在看 X 的資料」＋教練能改什麼＋「回到我自己」（POST `/api/v1/coach/view/stop`，寫 `view_end`，回到 `/api/v1/app/settings#coach`；`backend/static/shell.js:295`）；傷病紀錄與管理頁從選單拿掉（學員打開「看傷病紀錄」時傷病紀錄留著、頁上的新增與修改鎖住；`backend/static/shell.js:61`、`backend/static/shell.js:1001`）；開關沒給的控制項照示範站的方式鎖住（`backend/static/shell.js:989`）；被擋的寫入跳提示、`COACH_VIEW_ENDED` 自動重新整理（`backend/static/shell.js:426-432`）；不自動同步、不掃 FIT 資料夾、不送時區、不跑首次設定精靈（`backend/static/shell.js:1265`）；設定頁只剩生理數據分頁（`backend/static/settings.html:262`）。
 - **課表頁的 COROS 提示**（SP-821，`VIEWING`，`backend/static/schedule.html:1646`）：代看時不顯示「COROS 未登入 · 到設定頁登入 →」與「抓活動」和它的設定連結（`backend/static/schedule.html:1660`、`backend/static/schedule.html:1876`），狀態列寫「學員的 COROS 未登入，要學員自己登入後才能推送到手錶」（`st.view_login`），推送遇到學員登入過期寫「要學員自己到設定頁重新登入」、沒有連結（`err.view_relogin`，`backend/static/schedule.html:1696`）。學員自己的頁面不變。
 - **離線快取**：代看時 service worker 不存、不用教練自己的離線副本回答，帶 `X-TRC-Viewing` 的回答不進快取（`backend/static/offline_core.js:376`、`backend/static/offline_core.js:482`）。
 
-## 教練代改（SP-792）
+## 教練代改與看傷病紀錄（SP-792、SP-822）
 
-學員在設定 › 教練 › 我的教練對每條有效關係有兩個開關（`PERMS`，`backend/accounts/coaching.py:60`），存在 `coach_links.perms`。從沒設過的關係＝兩個都開（`PERMS_DEFAULT`；`perms_of`，`backend/accounts/coaching.py:124`）。關掉從教練的下一個請求就生效。
+學員在設定 › 教練 › 我的教練對每條有效關係有三個開關（`PERMS`，`backend/accounts/coaching.py:64`），存在 `coach_links.perms`。從沒設過的關係＝兩個「改」的開、「看傷病紀錄」關（`PERMS_DEFAULT`；`perms_of`，`backend/accounts/coaching.py:129`）。改開關從教練的下一個請求就生效；關係結束後再加入是新的一條關係，開關回到預設（看傷病紀錄是關的）。
 
-| 開關 | 開放的寫入（`WRITE_OPEN`） | 給代看的 caps（`CAPS`，`backend/accounts/viewing.py:135`） |
+| 開關 | 開放的寫入（`WRITE_OPEN`） | 給代看的 caps（`CAPS`，`backend/accounts/viewing.py:147`） |
 |---|---|---|
 | `plan` 改課表、賽事與不排課日 | 課表的新增／修改／刪除／對調／改回自動／對應活動、刪過期、排測試、處理建議、reconcile、排課偏好、推到手錶與從手錶移除、不排課日、休息日、賽事（含 GPX、分段）、周期 | `plan.write`、`push`、`upload.gpx` |
 | `training` 改門檻與訓練設定 | 門檻紀錄與套用估計、心率設定、功率區間、起始長短期負荷、比賽配速 | `thresholds.write` |
+| `injury` 看傷病紀錄與每次活動的疼痛（只能看，SP-822） | 無：開的是讀（`READ_PERM`：傷病紀錄頁、清單、meta、分析、時間軸、單筆的每日、單次活動的疼痛）；傷病紀錄與疼痛的寫入照樣 403 `COACH_VIEW_READONLY` | 無 |
 
 不含：課表範本庫、路線庫、自動調整的設定與核准、賽事計算機存檔、基本資料（體重、性別、年齡）、功率來源。
+
+**看傷病紀錄關著時**，活動的回答也不帶疼痛標記：活動列表的 `pain`／`pain_area`／`injury_id`／`pain_score`、單次活動的同名欄位與 `pain_state`（`viewing.hides_injury`，`backend/accounts/viewing.py:187`；`backend/api/wko5views.py` 的 `_pain_part`、`_pain_state`、`_activity_json`），跟示範站一樣頁面不顯示疼痛欄。課表與建議裡由傷病紀錄推出來的說明（例如「右膝進行中」、傷後恢復期）不在這個開關裡（Known limits）。
 
 **修改紀錄**：每筆成功（2xx）的代改，登入閘讀一次請求與回答，摘幾個短欄位（日期、名稱、門檻數值、改了哪些欄位，不存整個請求；`summary`，`backend/accounts/viewing.py:269`）寫進 accounts.db `coach_audit`（`record`，`backend/accounts/viewing.py:294`；`coach_audit_add`，`backend/accounts/store.py:2047`）；開始／結束代看也記。每位學員留最近 500 筆（`COACH_AUDIT_KEEP`，`backend/accounts/store.py:2011`）；教練帳號刪掉時名字拿掉、紀錄留著。學員在設定 › 教練看最近 50 筆（`GET /api/v1/account/coach/edits`；`backend/static/coach_settings.js:106`）；總覽與課表頁導覽列下一行「教練 X 於 … 修改」：最近 14 天內最後一筆修改（不含開始／結束代看；`COACH_EDIT_DAYS`，`backend/api/session.py:125`），可關閉，關掉記在這台瀏覽器（`backend/static/shell.js:358`）。
 
@@ -150,7 +153,7 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 | POST | `/api/v1/account/coach/invite` | `{token}` → 邀請連結是誰發的（404 `INVITE_INVALID`） |
 | POST | `/api/v1/account/coach/invite/accept` | `{token}` → 接受，立刻 active（409 `HAS_COACH`／`REQUEST_PENDING`／`COACH_FULL`／`SELF`） |
 | POST | `/api/v1/account/coach/{link}/end` | 撤回（active）或取消申請（pending） |
-| PUT | `/api/v1/account/coach/{link}/perms` | `{plan?, training?}` 改開關（400 `BAD_PERM`） |
+| PUT | `/api/v1/account/coach/{link}/perms` | `{plan?, training?, injury?}` 改開關（400 `BAD_PERM`） |
 | GET | `/api/v1/account/coach/edits` | 教練在我的資料做了什麼，新的在前（`?limit` ≤ 200） |
 | GET | `/api/v1/coach` | 我的代碼、邀請連結到期日（不回 token）、學員與申請、上限與已用 |
 | POST／DELETE | `/api/v1/coach/invite` | 產生新的邀請連結 `{url, expires_at}`（URL 只在這次回答裡）／停用 |
@@ -188,7 +191,7 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 | 彙總 | 一位學員預先算好的看板資料，存在學員租戶 | `build`，`backend/coach_board.py:239` |
 | 更新中 | 彙總被學員的修改標成過期、重算中 | `stale_at`、`refreshing` |
 | 代看 | 教練的 session 用學員的租戶看資料，登入者仍是教練 | `View`，`backend/accounts/viewing.py:143` |
-| 開關（權限） | 學員允許教練改的範圍：`plan`、`training` | `PERMS`，`backend/accounts/coaching.py:60` |
+| 開關（權限） | 學員允許教練改的範圍 `plan`、`training`，與看傷病紀錄 `injury`（SP-822，只能看） | `PERMS`，`backend/accounts/coaching.py:64` |
 | 修改紀錄 | 教練在學員資料裡的動作，學員看得到 | `coach_audit` |
 
 ### Domain Events
@@ -215,6 +218,7 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 | 站主的資料不開放代看 | 站主租戶有站主專屬資源（SP-791，回應 SP-789 建議另開） |
 | 代看的方案與次數算教練的 | 不用學員的額度做教練的事（SP-56 Q5、SP-791） |
 | 開關兩個、預設開、推到手錶算在課表 | 學員好懂；SP-56「教練可改、學員可關」（SP-792） |
+| 看傷病紀錄是同一排的第三個開關、預設關、只開讀 | 接受教練時「教練可以看」沒寫傷病紀錄，要學員自己打開；不改資料表（`coach_links.perms` 本來就是 JSON）；新的關係從預設開始，回來的教練要學員再開一次（SP-822） |
 | 上限只算 active、擋在生效那一下、同一個交易 | 名額給真的在帶的學員；兩人同時按不會超額（SP-793） |
 | 代看時課表頁的 COROS 提示改寫而不是藏起 | 教練要知道學員手錶沒連上才能提醒學員（SP-821） |
 | 學員申請用站內提示、每頁一行 | 寄信或推播是對外送出，要另外拍板（SP-823） |
@@ -231,8 +235,9 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 | `backend/tests/test_coach_board_refresh_sp826.py` | `stale_at`、重算中又改、每支賽季與課表寫入路由都在 `PLAN_WRITES` 的某一邊（`test_every_plan_write_route_is_on_one_side`） |
 | `backend/tests/test_coach_view_sp791.py` | 代看的讀寫白名單（走過每一條路由）、撤回、站主、方案、稽核 |
 | `backend/tests/test_coach_edits_sp792.py` | 開關、代改的路由、修改紀錄、推到手錶 |
+| `backend/tests/test_coach_injury_sp822.py` | 看傷病紀錄：預設關、打開後只開讀（讀與寫各走一次全部路由）、關掉／撤回／解除後又看不到、回來的教練是關的、只影響那一條關係、活動回答的疼痛欄位跟著開關 |
 | `backend/tests/test_coach_requests_sp823.py` | `coach_requests` |
-| e2e（`backend/tests/e2e/`） | `test_settings_coach_tab_sp789_e2e.py`、`test_coach_board_sp790_e2e.py`、`test_coach_view_sp791_e2e.py`、`test_schedule_coros_login_view_sp821_e2e.py`、`test_coach_requests_sp823_e2e.py`、`test_coach_board_sp826_e2e.py`、`test_coach_board_sort_sp827_e2e.py` |
+| e2e（`backend/tests/e2e/`） | `test_settings_coach_tab_sp789_e2e.py`、`test_coach_board_sp790_e2e.py`、`test_coach_view_sp791_e2e.py`、`test_coach_injury_sp822_e2e.py`、`test_schedule_coros_login_view_sp821_e2e.py`、`test_coach_requests_sp823_e2e.py`、`test_coach_board_sp826_e2e.py`、`test_coach_board_sort_sp827_e2e.py` |
 
 ## Known limits
 
@@ -240,10 +245,11 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 - 彙總只在賽事、周期、課表改變時馬上重算；改門檻、心率／功率區間後，以及同步後自動調整在背景改了課表時，要等下次暖機或夜間（SP-826 建議另開，未開單）。
 - 學員申請的提示跟著頁面載入的 session，不輪詢。
 - 看板、代看都只有登入模式；擁有者模式與示範站沒有。
+- 看傷病紀錄關著時，課表與建議裡由傷病紀錄推出來的說明（「右膝進行中（第 5 天）」、傷後恢復期、傷病建議）代看時照樣看得到；這個開關只管傷病紀錄本身與活動上的疼痛標記（SP-822；SP-947 追蹤）。
 
 ## Open Questions
 
-- [ ] 學員可另外允許教練看傷病紀錄——現在 `READ_BLOCK` 一律擋（SP-822，Todo，尚未實作）
+- [ ] 看傷病紀錄關著時，課表與建議裡由傷病紀錄推出來的說明要不要也藏；代看時接受「看起來好了？」建議會改到傷病紀錄（SP-947，Bug，Backlog）
 - [ ] 學員也是站主（user 1）時的代看範圍——程式現在一律擋（`COACH_VIEW_OWNER`，SP-791 的決定）；單還開著（SP-824，Todo）
 - [ ] 量正式站夜間重算的負載，再決定要不要只在同步過的日子算（SP-828，Todo，尚未實作）
 - [ ] 教練代管、沒有自己帳號的學員（SP-794，Backlog，尚未實作）
@@ -263,3 +269,4 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 | 2026-10-24 | feature | SP-826 | 改賽事、周期、課表後彙總立即標成更新中並排重算（`PLAN_WRITES`、`mark_stale`、`stale_at`），看板顯示更新中。commit `efeadbd6` |
 | 2026-10-24 | feature | SP-827 | 看板排序（警示／賽事日期／課表完成度）與「只看有紅燈的」，在頁面上做、存 localStorage。commit `21affb3b` |
 | 2026-10-24 | maintenance | SP-943 | 新增 module spec：照程式反推，整理上面各張單的規則；overview.spec.md 的代看段落改成指到這裡 |
+| 2026-10-25 | feature | SP-822 | 學員可另外允許教練看傷病紀錄：`PERMS` 第三個開關 `injury`（預設關、只開讀，`READ_PERM`），關著時活動回答不帶疼痛欄位；代看時的選單與傷病紀錄頁唯讀鎖。不改資料表 |

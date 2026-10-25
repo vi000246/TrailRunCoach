@@ -21,8 +21,9 @@ from backend.tests.test_login_sp58 import (  # noqa: F401 — fixtures
 
 HTML = {"Accept": "text/html,application/xhtml+xml"}
 _IP = iter(f"198.51.100.{i}" for i in range(10, 250))
-OFF = {"plan": False, "training": False}
-ON = {"plan": True, "training": True}
+# SP-822: "injury" (seeing the injury log) is off in both: ON = SP-792's two change switches on
+OFF = {"plan": False, "training": False, "injury": False}
+ON = {"plan": True, "training": True, "injury": False}
 
 # ---------------------------------------------------------------------------- what 代看 lets through (written out:
 # widening accounts/viewing.py without changing these fails the walk below)

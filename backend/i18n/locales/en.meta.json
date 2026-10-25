@@ -12187,6 +12187,10 @@
     "draft": false,
     "src": "backend/accounts/coaching.py:62"
   },
+  "看傷病紀錄與每次活動的疼痛（只能看）": {
+    "draft": false,
+    "src": "backend/accounts/coaching.py:67"
+  },
   "這個設定不存在": {
     "draft": false,
     "src": "backend/accounts/coaching.py:177"

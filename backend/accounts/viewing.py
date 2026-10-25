@@ -4,11 +4,12 @@ sees it — the login gate (tenancy_mw) puts the student's tenant on the request
 the signed-in user (login.current_user) — but only through these rules, default deny both ways:
 
   reads (GET / HEAD)   READ_OPEN only (the pages and data of 總覽, 課表, 圖表, 活動, 路線, 賽事, 賽事計算機
-                       and 設定's 生理數據 tab), never READ_BLOCK. Everything else — the account, the
-                       platform connections and their passwords, deleting, 下載我的資料 and every file
-                       download, payment, 疊石 Cairn, the injury log, the admin page, the debug API, the
-                       backups, the calendar feed's address — 403 COACH_VIEW_BLOCKED (a page: back to the
-                       overview, which says why)
+                       and 設定's 生理數據 tab), never READ_BLOCK; READ_PERM under the student's switch
+                       (SP-822: "injury", the injury log and a run's pain, off unless turned on). Everything
+                       else — the account, the platform connections and their passwords, deleting,
+                       下載我的資料 and every file download, payment, 疊石 Cairn, the admin page, the debug
+                       API, the backups, the calendar feed's address — 403 COACH_VIEW_BLOCKED (a page: back
+                       to the overview, which says why)
   writes               CALC (computations that store nothing: the race calculator, the step editor's
                        previews), STOP and signing out; SP-792's WRITE_OPEN, each under the student's
                        switch (coaching.PERMS: "plan" 課表／賽事／不排課日, "training" 門檻與訓練設定) —
@@ -86,12 +87,23 @@ READ_OPEN = _rx(
     r"/api/v1/intro/.+",
     r"/api/v1/wko5/.+",                 # the old prefix: a 308 to /api/v1/app/…, checked again there
 )
-# closed even where READ_OPEN would let it through: file downloads (下載資料), the injury log and a run's
-# pain (health records the student never shared: SP-789's 「教練可以看」 lists training, plan and races)
+# closed even where READ_OPEN would let it through: file downloads (下載資料), the weather key, the shares,
+# Cairn's curve, the calendar feed's address
 READ_BLOCK = _rx(
-    r".*/file", r".*\.zip", r"/api/v1/app/injuries.*", r"/api/v1/app/workouts/[^/]+/pain",
+    r".*/file", r".*\.zip",
     r"/api/v1/racepower/(?:weather/key|shares.*|saved/[^/]+/cairn-curve)", r"/api/v1/plan/calendar.*",
 )
+# SP-822: reads opened by a switch of the student's (coaching.PERMS) — closed (COACH_VIEW_BLOCKED) while it
+# is off. "injury": the injury log (its page, list, analysis, timeline, days) and a run's pain — health
+# records SP-789's 「教練可以看」 never listed, so off until the student turns it on. Read only: every
+# write of theirs stays COACH_VIEW_READONLY. The pain marks inside the activity answers follow the same
+# switch (hides_injury, api/wko5views.py).
+READ_PERM: list[tuple[str, re.Pattern]] = [
+    ("injury", _rx(r"/api/v1/app/injuries(?:/meta|/analysis|/timeline|/page|/[^/]+/days)?",
+                   r"/api/v1/app/workouts/[^/]+/pain")),
+]
+# the fields of an activity that carry its pain mark (activity_tags: pain, area, side, score, the event)
+INJURY_FIELDS = ("pain", "pain_area", "pain_side", "pain_score", "injury_id", "pain_state")
 # writes that store nothing (the demo's NO_SANDBOX and the editor's helpers): open to any viewer;
 # the calculator's count is the coach's (membership)
 CALC = _rx(
@@ -172,6 +184,13 @@ def reset(tok) -> None:
     _VIEW.reset(tok)
 
 
+def hides_injury() -> bool:
+    """SP-822: this request views a student who has not let their coach see the injury log — the answers
+    that carry a run's pain mark (the activity list, an activity's card) leave INJURY_FIELDS out."""
+    v = current()
+    return v is not None and v.perms.get("injury") is not True
+
+
 def caps_for(perms: dict) -> frozenset:
     return frozenset(cap for perm, caps in CAPS.items() if perms.get(perm) for cap in caps)
 
@@ -209,6 +228,9 @@ class Verdict:
 def check(method: str, path: str, perms: dict) -> Verdict:
     method = method.upper()
     if method in READS:
+        for perm, rx in READ_PERM:
+            if rx.fullmatch(path):
+                return Verdict(True) if perms.get(perm) is True else Verdict(False, "COACH_VIEW_BLOCKED")
         if READ_BLOCK.fullmatch(path) or not READ_OPEN.fullmatch(path):
             return Verdict(False, "COACH_VIEW_BLOCKED")
         return Verdict(True)

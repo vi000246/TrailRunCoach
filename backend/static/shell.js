@@ -59,10 +59,11 @@
     }
   }
   // 代看 (SP-791, accounts/viewing.py): a coach viewing a student — the injury log and the admin page are
-  // closed (the server refuses them too); the banner and 回到我自己 below; the controls locked by caps
+  // closed (the server refuses them too); the banner and 回到我自己 below; the controls locked by caps.
+  // SP-822: the injury log stays when the student turned on 「看傷病紀錄」 (read only: its writes locked below)
   const VIEW = (!PUBLIC && !DEMO && SESSION.login && SESSION.viewing) || null;
   if (VIEW) {
-    for (const id of ["injuries", "admin"]) {
+    for (const id of (VIEW.perms && VIEW.perms.injury === true) ? ["admin"] : ["injuries", "admin"]) {
       const i = PAGES.findIndex((p) => p.id === id);
       if (i >= 0) PAGES.splice(i, 1);
     }
@@ -997,6 +998,11 @@
         + ".sg-item [data-act=decline], #pull-btn, #rec-btn, #sd-del, #sd-swap, #sd-climb, #pf-reset, [data-act=\"del-expired\"], "
         + "[data-add], [data-ctx=\"add\"], [data-ctx=\"del\"]"],
       ["upload.gpx", "input[type=file][accept*='.gpx' i]"],
+      // SP-822: the injury log and a run's pain are read only to a coach (no cap ever gives "injury.write");
+      // the ids below are the injury page's own (races.html has an #add of its own: the 課表 switch's)
+      ["injury.write", (location.pathname.startsWith("/api/v1/app/injuries")
+        ? "#add, #f-save, #f-del, #f-today, #f-area-new, [data-a=resolve], [data-a=walkrun], #set-pat, #set-up, #f-area [data-rm], "
+        : "") + "#pain-chip"],
     ], T("view.locked"));
   }
 

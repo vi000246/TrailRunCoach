@@ -29,7 +29,8 @@ They read accounts.db again each time (store.active_coach_link: the link active,
 enabled, the coach still a coach), so a withdrawal counts from the very next request — 403
 NOT_YOUR_STUDENT, the same answer whether the id is someone else's student, nobody's, pending, ended
 or no account at all. Never `tenants.tenant_of(store.get_user(<an id from the request>))`.
-`perms` on the link is where SP-792's switches go (PERMS; the student turns each on or off), read with
+`perms` on the link is where SP-792's switches go (PERMS; the student turns each on or off; SP-822's
+"injury" lets the coach read the injury log, off by default), read with
 allows() / perms_of(). 代看 (SP-791, accounts/viewing.py) binds the login gate's tenant to the student's
 with the coach still the signed-in user (login.current_user), so the audit sees who did it.
 """
@@ -57,11 +58,15 @@ CODE_LEN = 8
 # SP-792: what a student allows on top of reading, each a switch of their own (SP-56 Q3: the coach may,
 # the student turns it off). A link that never had its switches set (perms '{}') has PERMS_DEFAULT.
 # The routes each switch opens are accounts/viewing.WRITE_OPEN's.
+# SP-822: "injury" opens a READ instead — the injury log and each run's pain (viewing.READ_PERM), read
+# only; off until the student turns it on (accepting a coach never said the coach would see it). A new
+# link starts with perms '{}', so a coach who leaves and comes back sees it off again.
 PERMS: dict[str, str] = {
     "plan": N_("改課表、賽事與不排課日"),
     "training": N_("改門檻與訓練設定（LTHR、CP、區間）"),
+    "injury": N_("看傷病紀錄與每次活動的疼痛（只能看）"),
 }
-PERMS_DEFAULT: dict[str, bool] = {"plan": True, "training": True}
+PERMS_DEFAULT: dict[str, bool] = {"plan": True, "training": True, "injury": False}
 
 # a student typing codes that are nobody's (guessing): this many a user in 10 minutes
 CODE_FAILS = RL.Buckets(rate=10, per=600)

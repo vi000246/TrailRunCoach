@@ -63,8 +63,8 @@ def test_switching_off_stops_the_coach_from_the_next_request(app):
     r = _perms(stu, link["id"], plan=False)
     assert r.status_code == 200, r.text
     me = r.json()["coaches"][0]
-    assert me["perms"] == {"plan": False, "training": True}
-    assert set(r.json()["perm_labels"]) == {"plan", "training"}
+    assert me["perms"] == {"plan": False, "training": True, "injury": False}      # SP-822's switch: off
+    assert set(r.json()["perm_labels"]) == {"plan", "training", "injury"}
     w = coach.put("/api/v1/plan/events", json=EVENT, headers=coach.tok)
     assert w.status_code == 403 and _code(w) == "COACH_PERM_OFF"
     assert "改課表、賽事與不排課日" in w.json()["detail"]["message"]

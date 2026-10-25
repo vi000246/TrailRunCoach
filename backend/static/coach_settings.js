@@ -94,7 +94,9 @@
         try {
           mine = await call("PUT", `${ACCT}/${c.link_id}/perms`, { [k]: cb.checked });
           renderMine();
-          say(T(cb.checked ? "perm_on" : "perm_off", { what: labels[k] || k }), true);
+          // SP-822: 「看傷病紀錄」 opens a read, not a change
+          const see = k === "injury" ? "_see" : "";
+          say(T((cb.checked ? "perm_on" : "perm_off") + see, { what: labels[k] || k }), true);
         } catch (err) { cb.checked = !cb.checked; cb.disabled = false; say(err.message, false); }
       };
       lab.append(cb, el("span", null, labels[k] || k));

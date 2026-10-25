@@ -1551,6 +1551,9 @@ def _activity_json(ds, w) -> dict:
     from backend.engine.racepower import athlete as A
     from backend.engine import power_source as PS
     t = A.auto_tags(ds, w)
+    if _hides_injury():                     # SP-822: a coach the student has not let see the injury log
+        from backend.accounts.viewing import INJURY_FIELDS
+        t = {k: v for k, v in t.items() if k not in INJURY_FIELDS}
     src = A.power_source(ds, w)
     kept = next((x for x in getattr(ds, "exclusion_kept", []) if x["file"] == w.entry.file), None)
     title = getattr(w.entry, "title", "") or ""
@@ -1582,10 +1585,18 @@ def _activity_json(ds, w) -> dict:
             "pain_state": _pain_state(ds, w, t)}
 
 
+def _hides_injury() -> bool:
+    """SP-822 (accounts/viewing.hides_injury): a coach viewing a student who keeps the injury log to
+    themselves — no pain mark in the answer, the way the demo mode has none."""
+    from backend.accounts import viewing as VW
+    return VW.hides_injury()
+
+
 def _pain_part(u: Optional[dict]) -> dict:
-    """The pain mark of a stored tag (the 活動編輯 list); nothing in the demo mode."""
+    """The pain mark of a stored tag (the 活動編輯 list); nothing in the demo mode or to a coach the
+    student has not let see the injury log (SP-822)."""
     from backend.engine import injuries as INJ
-    if INJ.demo_mode():
+    if INJ.demo_mode() or _hides_injury():
         return {}
     return {"pain": (u or {}).get("pain"), "pain_area": (u or {}).get("pain_area"),
             "injury_id": (u or {}).get("injury_id"), "pain_score": (u or {}).get("pain_score")}
@@ -1594,7 +1605,7 @@ def _pain_part(u: Optional[dict]) -> dict:
 def _pain_state(ds, w, t: dict) -> Optional[dict]:
     from backend.engine import injuries as INJ
     from backend.engine import activity_tags as AT
-    if INJ.demo_mode():
+    if INJ.demo_mode() or _hides_injury():
         return None
     t = AT.user_of(w) or {}                 # the stored mark (auto_tags may be memoised)
     try:
