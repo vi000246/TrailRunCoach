@@ -4,8 +4,11 @@ Race-day and training weather for the environment multiplier
 
 Provider chain for race day (first success wins; every value stays editable).
 SP-552: every tenant starts with CWA (its open data may be used commercially,
-with the source named); Open-Meteo fills only what CWA has not got — past 7
-days, outside Taiwan, the climatology, heights:
+with the source named); the rest fills only what CWA has not got — past 7
+days, outside Taiwan, the climatology, heights. SP-797: Open-Meteo's free API
+is non-commercial only (open-meteo.com/en/terms), so its forecast is replaced
+by MET Norway's (step 3); its archive (climatology) and elevation API are still
+used until their replacements land (ERA5 download, DEM files: SP-797 ticket):
   1. CWA 中央氣象署 mountain forecasts (needs a free 授權碼):
        F-B0053-035 登山三天3小時 (hourly day 1, 3-hourly to day 3)
        F-B0053-033 登山一週日夜 (06–18 / 18–06 blocks, 7 days)
@@ -24,7 +27,15 @@ days, outside Taiwan, the climatology, heights:
      by −0.65 °C / 100 m to the race elevation, RH kept (as SP-210).
      Was after Open-Meteo (owner decision 2026-10-06, until a station
      comparison); SP-552 puts it first (CWA_TOWN_FIRST, one switch back).
-  3. Open-Meteo forecast (no key, ≤ 16 days).
+  3. MET Norway Locationforecast 2.0 `complete` (SP-797; no key, free for
+     commercial use under CC BY 4.0 / NLOD with 「Data from MET Norway」 named;
+     api.met.no/doc/TermsOfService: an identifying User-Agent, ≤ 20 requests
+     a second for the whole app, coordinates ≤ 4 decimals, Expires /
+     If-Modified-Since honoured — met_forecast()). About 9½ days: hourly to
+     ~64 h, then 6-hourly; temperature, RH, dew point, wind and precipitation
+     amount, no gusts outside the Nordic model, no sunrise (NOAA's formula).
+     Races 10–16 days out, which Open-Meteo used to forecast, now take the
+     climatology (step 4).
   4. Open-Meteo archive climatology (SP-210): the month centred on the race
      date (±15 days) in each of the last 10 years, at the target elevation
      (Open-Meteo downscales; −6.5 °C/km from the answer's elevation when it
@@ -40,24 +51,30 @@ Shared (SP-552): the CWA files and the town heights are one copy for the whole
 site (site_dir(): the server root, not a tenant folder), fetched with the
 site's 授權碼 (site_key(): env CWA_API_KEY, else the owner's weather.json),
 one download at a time per file (_CWA_LOCKS) and parsed once per process
-(cwa_doc()); a tenant never sees the key itself.
+(cwa_doc()); a tenant never sees the key itself. The climatology files too
+(SP-552 Q1, owner 2026-10-20: the same place and day are the same for
+everyone): site_dir()/climatology/, one fetch at a time per file; a file a
+tenant fetched before (its own folder) is read once and copied there.
 
 Rain (SP-249): the forecasts' probability of precipitation (CWA 3- / 12-hour
-PoP, Open-Meteo's hourly PoP and amount) go out as `rain` rows; rain_alert()
+PoP, MET Norway's hourly / 6-hourly amount and PoP when it has one) go out as `rain` rows; rain_alert()
 turns the rows in the race window into a reminder. It never changes the
 predicted time (docs/research/wet-muddy-terrain.md §4: no study gives a
 wet-trail slowdown to apply).
 
-Wind (SP-251): Open-Meteo's hourly wind_speed_10m / wind_gusts_10m /
-apparent_temperature and the CWA mountain 3-day product's 風速 (m/s, 3-hourly)
+Wind (SP-251): MET Norway's wind_speed (and wind_speed_of_gust where its Nordic
+model gives one — never in Taiwan, so the 冷風 reminder there rests on the wind
+speed alone, SP-797) and the CWA mountain 3-day product's 風速 (m/s, 3-hourly)
 go out as `wind` rows; cold.py turns them into the wind chill at each segment
 and the 冷風 reminder. The 鄉鎮 product's wind is left out on purpose: its point
-is the 公所 in the valley, not the ridge; the weekly products give only 12-hour
-spans and the climatology none. Never changes the predicted time.
+is the 公所 in the valley, not the ridge — so a 鄉鎮 answer takes its wind rows
+from MET Norway's forecast at the race point (SP-552 Q1, owner 2026-10-20; the
+temperature in them stays the lapsed 鄉鎮 one); the weekly products give only
+12-hour spans and the climatology none. Never changes the predicted time.
 
 Sun (SP-254): `sun` = sunrise / sunset of the event days and the day after,
-from Open-Meteo's `daily=sunrise,sunset` when the forecast answered, else
-NOAA's solar formula (sun_times; no network). night.py marks the segments run
+from NOAA's solar formula (sun_times; no network) — an Open-Meteo answer's
+`daily=sunrise,sunset` is still read when one is passed. night.py marks the segments run
 in the dark.
 
 Why three models (SP-210, checked 2026-10-06 against CWA 1991–2020 station
@@ -82,6 +99,7 @@ import json
 import math
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from statistics import mean
@@ -123,13 +141,26 @@ PEAKS_PATH = Path(__file__).resolve().parents[2] / "data" / "baiyue.json"
 CWA_URL = "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/{id}"
 CWA_HOURLY, CWA_WEEKLY = "F-B0053-035", "F-B0053-033"
 CWA_MAX_AGE_H = 3.0               # a file this old is downloaded again (SP-552: once for the whole site)
-CWA_TOWN_FIRST = True             # SP-552: 鄉鎮 before the Open-Meteo forecast (False: the 2026-10-06 order)
+CWA_TOWN_FIRST = True             # SP-552: 鄉鎮 before the global forecast (MET Norway since SP-797; False: the 2026-10-06 order)
 CWA_MATCH_KM = 5.0
 CWA_TOWN_HOURLY, CWA_TOWN_WEEKLY = "F-D0047-089", "F-D0047-091"   # 鄉鎮預報 全臺 3 天 / 1 週 (SP-234)
 CWA_TOWN_MATCH_KM = 20.0          # 推估: beyond this the nearest 鄉鎮公所 is another valley / coast;
                                   # also keeps races outside Taiwan off the product
 ELEV_CACHE = "cwa_town_elevation.json"
-OM_FORECAST = "https://api.open-meteo.com/v1/forecast"
+# SP-797: MET Norway Locationforecast 2.0 (api.met.no/weatherapi/locationforecast/2.0/documentation; terms
+# api.met.no/doc/TermsOfService). `complete` = compact + dew point, PoP, gusts where the model has them.
+MET_FORECAST = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
+MET_HORIZON_DAYS = 9              # its timeseries runs ~9½ days from now (UTC); a race ending later → climatology
+MET_MIN_INTERVAL_S = 1.0 / 20.0   # terms: over 20 requests / s for the whole app needs an agreement
+MET_DEFAULT_TTL_S = 1800.0        # no Expires header → keep the answer this long (推估: its updates are ~hourly)
+MET_MIN_TTL_S = 60.0              # an Expires already past (clock skew) → still not asked again for a minute
+MET_STALE_MAX_S = 6 * 3600.0      # MET down / 429: an expired answer up to this old is used instead of nothing
+MET_CACHE_MAX = 256               # remembered answers (one per point; a few hundred kB each at most)
+MET_ATTRIBUTION = "Weather data from MET Norway (CC BY 4.0)"
+# SP-797: who is calling — MET requires an identifying User-Agent with a contact (an e-mail address or a site);
+# the project's public page, never a person's address. TRC_USER_AGENT overrides it (a self-hosted copy names
+# its own operator).
+USER_AGENT_URL = "https://github.com/vi000246/TrailRunCoach"
 OM_ELEVATION = "https://api.open-meteo.com/v1/elevation"   # Copernicus GLO-90 DEM, ≤ 100 points per call
 # SP-249 rain reminder: docs/research/wet-muddy-terrain.md §5 #1 (thresholds 推估; kept as proposed, owner 2026-10-06)
 RAIN_POP_PCT = 50.0               # any hour of the race window with this probability of precipitation
@@ -141,14 +172,16 @@ RAIN_TOP_MM = 5.0
 RAIN_TOP_MM_ALONE = 10.0
 RAIN_ROAD_FACTOR = 2.0
 OM_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
-OM_HORIZON_DAYS = 16
 LAPSE_C_PER_M = -0.0065
 DAY_HOURS = range(6, 18)          # daytime 06:00–17:59 local
-TZ = dt.timezone(dt.timedelta(hours=8))    # CWA (Taiwan) timestamps; Open-Meteo answers in the location's zone ("auto")
+TZ = dt.timezone(dt.timedelta(hours=8))    # CWA (Taiwan) timestamps; Open-Meteo answers in the location's zone ("auto"),
+                                           # MET Norway in UTC (met_zone)
 ATTRIBUTION = "Weather data by Open-Meteo.com (CC BY 4.0)"
 # SP-552: CWA open data (政府資料開放授權條款) may be used commercially when the source is named
 CWA_ATTRIBUTION = N_("天氣資料來源：中央氣象署")
 CWA_TOWN_ATTRIBUTION = N_("天氣資料來源：中央氣象署；海拔：Open-Meteo.com（CC BY 4.0）")
+# SP-552 (Q1, 2026-10-20): a 鄉鎮 answer takes its wind from MET Norway's forecast (its terms: name MET Norway)
+CWA_TOWN_WIND_ATTRIBUTION = N_("天氣資料來源：中央氣象署；風：MET Norway（CC BY 4.0）；海拔：Open-Meteo.com（CC BY 4.0）")
 # climatology (SP-210; the numbers in the module docstring)
 CLIM_YEARS = 10                   # 推估: 10 years halve the year-to-year noise of 5, warming bias ≈ −0.15 °C
 CLIM_HALF_DAYS = 15               # ±15 days = the month centred on the race date, not the calendar month:
@@ -161,6 +194,7 @@ ARCHIVE_LAG_DAYS = 6              # the archive's newest days are still missing
 
 PROVIDER_LABEL = {"cwa_hourly": N_("中央氣象署 登山三天預報"), "cwa_weekly": N_("中央氣象署 登山一週預報"),
                   "cwa_town_hourly": N_("中央氣象署 鄉鎮三天預報"), "cwa_town_weekly": N_("中央氣象署 鄉鎮一週預報"),
+                  "met_norway": N_("挪威氣象局預報"),
                   "open_meteo": N_("Open-Meteo 預報"), "climatology": N_("近 10 年同月平均（Open-Meteo 歷史資料）"),
                   "manual": N_("手動 / 預設")}
 
@@ -171,7 +205,7 @@ PROVIDER_LABEL = {"cwa_hourly": N_("中央氣象署 登山三天預報"), "cwa_w
 
 def load_key(path: Optional[Path] = None) -> Optional[str]:
     """The CWA authorisation code: the owner's (env CWA_API_KEY or weather.json). Every other
-    tenant has none (SP-384, auth-and-demo plan §5): its forecasts fall back to Open-Meteo."""
+    tenant has none (SP-384, auth-and-demo plan §5): its forecasts fall back to MET Norway (SP-797)."""
     from backend import tenancy
     if path is None and not tenancy.is_owner():
         return None
@@ -519,16 +553,6 @@ def cwa_hourly_rows(loc: dict, dates: set[dt.date]) -> list[dict]:
                        for r in loc.get("hourly") or []], dates)
 
 
-def open_meteo_hourly_rows(js: dict, dates: set[dt.date]) -> list[dict]:
-    h = js.get("hourly") or {}
-
-    def at(key, i):
-        v = h.get(key) or []
-        return float(v[i]) if i < len(v) and v[i] is not None else None
-    return _in_window([_hour_row(t, at("temperature_2m", i), at("relative_humidity_2m", i), at("dew_point_2m", i))
-                       for i, t in enumerate(h.get("time") or [])], dates)
-
-
 # ---------------------------------------------------------------------------
 # rain (SP-249): rows {start, end, pop_pct, mm} in naive local time
 # ---------------------------------------------------------------------------
@@ -547,24 +571,6 @@ def cwa_rain_rows(loc: dict, dates: set[dt.date]) -> list[dict]:
         a, b = _local_key(p.get("start")), _local_key(p.get("end"))
         if a and b:
             rows.append({"start": a, "end": b, "pop_pct": p.get("pop"), "mm": None})
-    return _rain_window(rows, dates)
-
-
-def open_meteo_rain_rows(js: dict, dates: set[dt.date]) -> list[dict]:
-    """Open-Meteo's hourly `precipitation` / `precipitation_probability` are
-    of the preceding hour, so the row at t covers t − 1 h … t."""
-    h = js.get("hourly") or {}
-    P, PP = h.get("precipitation") or [], h.get("precipitation_probability") or []
-    rows = []
-    for i, t in enumerate(h.get("time") or []):
-        key = _local_key(t)
-        if key is None:
-            continue
-        end = dt.datetime.fromisoformat(key)
-        mm = _num(P[i]) if i < len(P) else None
-        pop = _num(PP[i]) if i < len(PP) else None
-        rows.append({"start": (end - dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
-                     "end": key, "pop_pct": pop, "mm": mm})
     return _rain_window(rows, dates)
 
 
@@ -588,23 +594,132 @@ def cwa_wind_rows(loc: dict, dates: set[dt.date]) -> list[dict]:
     return _in_window(rows, dates)
 
 
-def open_meteo_wind_rows(js: dict, dates: set[dt.date]) -> list[dict]:
-    """Open-Meteo's hourly wind_speed_10m / wind_gusts_10m (km/h, the API's default unit) with
-    temperature_2m and apparent_temperature of the same hour; hours without a wind speed are
-    left out (no wind columns → [])."""
-    h = js.get("hourly") or {}
+# ---------------------------------------------------------------------------
+# MET Norway parsing (SP-797): Locationforecast 2.0 GeoJSON, times in UTC
+# ---------------------------------------------------------------------------
 
-    def at(key, i):
-        v = h.get(key) or []
-        return _num(v[i]) if i < len(v) else None
-    rows = []
-    for i, t in enumerate(h.get("time") or []):
-        key, w = _local_key(t), at("wind_speed_10m", i)
-        if key is None or w is None:
+MET_HOME_KM = 800.0               # 推估: a race this close to the athlete's home cell is in the athlete's zone
+
+
+def met_zone(lat: float, lon: float, date: dt.date, athlete_zone: Optional[dt.tzinfo] = None,
+             home: Optional[tuple[float, float]] = None) -> dt.tzinfo:
+    """The clock MET's UTC times are shown in (Open-Meteo answered in the place's own zone, MET does not;
+    there is no time-zone-by-coordinates table in the image):
+      * UTC+8 in Taiwan (region.TW_BBOX);
+      * the athlete's zone when the race is within MET_HOME_KM of their home weather cell
+        (region.home_cell) — a race near home, its DST right — or when that zone's offset on the race
+        date equals the place's solar zone;
+      * else the solar zone, round(lon / 15) h (推估: an hour or two off where a country's zone is far
+        from its longitude, e.g. western Europe in summer for a runner from elsewhere)."""
+    from backend.engine.region import in_taiwan
+    if in_taiwan(lat, lon):
+        return TZ
+    solar = max(-12, min(14, round(float(lon) / 15.0)))
+    if athlete_zone is not None:
+        if home is not None and haversine_km(home[0], home[1], lat, lon) <= MET_HOME_KM:
+            return athlete_zone
+        try:
+            off = dt.datetime(date.year, date.month, date.day, 12, tzinfo=dt.timezone.utc).astimezone(athlete_zone).utcoffset()
+        except Exception:                    # noqa: BLE001 — a broken zone: the solar one
+            off = None
+        if off is not None and off == dt.timedelta(hours=solar):
+            return athlete_zone
+    return dt.timezone(dt.timedelta(hours=solar))
+
+
+def _athlete_clock() -> tuple[Optional[dt.tzinfo], Optional[tuple[float, float]]]:
+    """(the athlete's zone, their home weather cell) for met_zone; (None, None) when unknown."""
+    try:
+        from backend.engine.localtime import zone
+        z = zone()
+    except Exception:                        # noqa: BLE001 — no settings → the solar zone
+        return None, None
+    try:
+        from backend.engine.region import home_cell
+        return z, home_cell()
+    except Exception:                        # noqa: BLE001
+        return z, None
+
+
+def met_params(lat: float, lon: float, elevation_m: Optional[float]) -> dict:
+    """The query: coordinates to 4 decimals (terms: more is refused and defeats its cache), the height in
+    whole metres when known (the temperature is moved to it; documentation: strongly recommended)."""
+    def four(x) -> str:
+        return f"{float(x):.4f}".rstrip("0").rstrip(".")
+    p = {"lat": four(lat), "lon": four(lon)}
+    if elevation_m is not None:
+        p["altitude"] = int(round(float(elevation_m)))
+    return p
+
+
+def met_rows(js: dict, tz: dt.tzinfo) -> list[dict]:
+    """The timeseries as rows {t (naive local 'YYYY-MM-DDTHH:MM' in `tz`), temp_c, rh_pct, dew_c, wind_kmh,
+    gust_kmh, rain: (hours, mm, pop) | None}. `rain` is the step's own period: next_1_hours where the
+    series is hourly, else next_6_hours (MET's precipitation is of the FOLLOWING period, Open-Meteo's of the
+    preceding hour). m/s → km/h."""
+    ts = ((js or {}).get("properties") or {}).get("timeseries") or []
+    out = []
+    for e in ts:
+        try:
+            t = dt.datetime.fromisoformat(str(e["time"]).replace("Z", "+00:00"))
+        except (KeyError, TypeError, ValueError):
             continue
-        rows.append({"t": key, "temp_c": at("temperature_2m", i), "wind_kmh": w,
-                     "gust_kmh": at("wind_gusts_10m", i), "apparent_c": at("apparent_temperature", i)})
-    return _in_window(rows, dates)
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=dt.timezone.utc)
+        data = e.get("data") or {}
+        d = (data.get("instant") or {}).get("details") or {}
+        rain = None
+        for span, k in ((1, "next_1_hours"), (6, "next_6_hours")):
+            n = (data.get(k) or {}).get("details") or {}
+            mm, pop = _num(n.get("precipitation_amount")), _num(n.get("probability_of_precipitation"))
+            if mm is not None or pop is not None:
+                rain = (span, mm, pop)
+                break
+        w, g = _num(d.get("wind_speed")), _num(d.get("wind_speed_of_gust"))
+        out.append({"t": t.astimezone(tz).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M"),
+                    "temp_c": _num(d.get("air_temperature")), "rh_pct": _num(d.get("relative_humidity")),
+                    "dew_c": _num(d.get("dew_point_temperature")),
+                    "wind_kmh": None if w is None else w * 3.6, "gust_kmh": None if g is None else g * 3.6,
+                    "rain": rain})
+    return sorted(out, key=lambda r: r["t"])
+
+
+def met_conditions(rows: list[dict], dates: set[dt.date], grid_elevation_m: Optional[float] = None) -> Optional[dict]:
+    """Daytime (DAY_HOURS) mean over the event days — None unless every event day has a daytime row
+    (the series ends ~9½ days out: a race on its last day must not get a half-day mean)."""
+    day = [r for r in rows if dt.date.fromisoformat(r["t"][:10]) in dates and int(r["t"][11:13]) in DAY_HOURS]
+    if not {dt.date.fromisoformat(r["t"][:10]) for r in day if r["temp_c"] is not None} >= dates:
+        return None
+    c = _conditions([r["temp_c"] for r in day], [r["rh_pct"] for r in day], [r["dew_c"] for r in day])
+    return {**c, "grid_elevation_m": grid_elevation_m, "pressure_hpa": None} if c else None
+
+
+def met_hourly_rows(rows: list[dict], dates: set[dt.date]) -> list[dict]:
+    return _in_window([_hour_row(r["t"], r["temp_c"], r["rh_pct"], r["dew_c"]) for r in rows], dates)
+
+
+def met_rain_rows(rows: list[dict], dates: set[dt.date]) -> list[dict]:
+    """{start, end, pop_pct, mm}: each step's following period (1 h, else 6 h); a period that would overlap
+    the one before (where the series turns 6-hourly) is left out, so rain_alert never sums an hour twice."""
+    out, last_end = [], None
+    for r in rows:
+        if not r.get("rain"):
+            continue
+        span, mm, pop = r["rain"]
+        a = dt.datetime.fromisoformat(r["t"])
+        if last_end is not None and a < last_end:
+            continue
+        b = a + dt.timedelta(hours=span)
+        out.append({"start": r["t"], "end": b.strftime("%Y-%m-%dT%H:%M"), "pop_pct": pop, "mm": mm})
+        last_end = b
+    return _rain_window(out, dates)
+
+
+def met_wind_rows(rows: list[dict], dates: set[dt.date]) -> list[dict]:
+    """The SP-251 wind rows; gust_kmh None where MET has no gusts (outside its Nordic model, i.e. Taiwan),
+    apparent_c None (MET gives none). Hours without a wind speed are left out."""
+    return _in_window([{"t": r["t"], "temp_c": r["temp_c"], "wind_kmh": r["wind_kmh"], "gust_kmh": r["gust_kmh"],
+                        "apparent_c": None} for r in rows if r["wind_kmh"] is not None], dates)
 
 
 # ---------------------------------------------------------------------------
@@ -787,14 +902,112 @@ def climatology_from(years: list[dict], elevation_m: Optional[float]) -> Optiona
 # fetching (httpx) + cache
 # ---------------------------------------------------------------------------
 
+def user_agent() -> str:
+    """SP-797: 'TrailRunCoach/<version> (+<project page>)' on every weather call (MET Norway refuses
+    anonymous clients; for the others it is good manners), or env TRC_USER_AGENT."""
+    env = (os.getenv("TRC_USER_AGENT") or "").strip()
+    if env:
+        return env
+    from backend import __version__
+    return f"TrailRunCoach/{__version__} (+{USER_AGENT_URL})"
+
+
 def _http_get(url: str, params: dict, timeout: float) -> dict:
     import httpx
-    r = httpx.get(url, params=params, timeout=timeout, follow_redirects=True)
+    r = httpx.get(url, params=params, timeout=timeout, follow_redirects=True, headers={"User-Agent": user_agent()})
     if r.status_code in (401, 403):
         raise RuntimeError(f"HTTP {r.status_code}（授權碼無效）")
     if r.status_code != 200:
         raise RuntimeError(f"HTTP {r.status_code}")
     return r.json()
+
+
+def _http_fetch(url: str, params: dict, timeout: float, headers: Optional[dict] = None) -> tuple[int, Optional[dict], dict]:
+    """(status, JSON body or None, response headers with lower-case names) — for MET's conditional requests
+    (304 has no body). 203 = a deprecated product version, still a good answer."""
+    import httpx
+    r = httpx.get(url, params=params, timeout=timeout, follow_redirects=True,
+                  headers={"User-Agent": user_agent(), **(headers or {})})
+    js = r.json() if r.status_code in (200, 203) else None
+    return r.status_code, js, {k.lower(): v for k, v in r.headers.items()}
+
+
+def _http_date(v: Optional[str]) -> Optional[float]:
+    """An HTTP date header ('Tue, 20 Oct 2026 06:30:00 GMT') → epoch seconds; None when missing or bad."""
+    if not v:
+        return None
+    from email.utils import parsedate_to_datetime
+    try:
+        t = parsedate_to_datetime(v)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if t is None:
+        return None
+    return (t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)).timestamp()
+
+
+_MET_CACHE: dict = {}             # params key -> {"expires", "last_modified", "js"} (epoch seconds)
+_MET_LOCK = threading.Lock()
+_MET_NEXT = [0.0]                 # monotonic time the next MET request may go out (MET_MIN_INTERVAL_S apart)
+
+
+def _met_wait(clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep) -> float:
+    """Space the MET requests of this process MET_MIN_INTERVAL_S apart (terms: ≤ 20 / s for the whole app;
+    one process serves the site). Returns the seconds slept."""
+    with _MET_LOCK:
+        now = clock()
+        at = max(now, _MET_NEXT[0])
+        _MET_NEXT[0] = at + MET_MIN_INTERVAL_S
+    wait = at - now
+    if wait > 0:
+        sleep(wait)
+    return max(0.0, wait)
+
+
+def met_forecast(params: dict, get: Callable = _http_get, *, fetch: Optional[Callable] = None,
+                 now: Optional[float] = None) -> dict:
+    """MET Norway's answer for `params` (met_params) under its terms: an answer is reused until its
+    `Expires` (else MET_DEFAULT_TTL_S); after that the request carries `If-Modified-Since` (its
+    `Last-Modified`) and a 304 keeps the old body; requests are spaced by _met_wait. When MET fails
+    (429, 5xx, timeout) an answer expired less than MET_STALE_MAX_S ago is used, else the error goes up.
+    A test's fake `get` (anything but the real client, and no `fetch`) gets the plain call."""
+    if fetch is None:
+        if get is not _http_get:
+            return get(MET_FORECAST, params, 10.0)
+        fetch = _http_fetch
+    key = tuple(sorted((k, str(v)) for k, v in params.items()))
+    t = time.time() if now is None else now
+    with _MET_LOCK:
+        hit = _MET_CACHE.get(key)
+    if hit is not None and t < hit["expires"]:
+        return hit["js"]
+    stale_ok = hit is not None and t - hit["expires"] < MET_STALE_MAX_S
+    hdr = {"If-Modified-Since": hit["last_modified"]} if hit is not None and hit.get("last_modified") else {}
+    _met_wait()
+    try:
+        status, js, h = fetch(MET_FORECAST, params, 10.0, hdr)
+    except Exception:                    # noqa: BLE001 — network: the old answer if it is recent enough
+        if stale_ok:
+            return hit["js"]
+        raise
+    if status == 304 and hit is not None:
+        js = hit["js"]
+    elif status not in (200, 203) or not isinstance(js, dict):
+        if stale_ok:
+            return hit["js"]
+        raise RuntimeError(f"MET Norway HTTP {status}")
+    exp = _http_date((h or {}).get("expires"))
+    if exp is None:
+        exp = t + MET_DEFAULT_TTL_S
+    elif exp <= t:
+        exp = t + MET_MIN_TTL_S
+    with _MET_LOCK:
+        _MET_CACHE.pop(key, None)
+        _MET_CACHE[key] = {"expires": exp, "js": js,
+                           "last_modified": (h or {}).get("last-modified") or (hit or {}).get("last_modified")}
+        while len(_MET_CACHE) > MET_CACHE_MAX:
+            _MET_CACHE.pop(next(iter(_MET_CACHE)))
+    return js
 
 
 _CWA_LOCKS: dict[str, threading.Lock] = {}     # one download at a time per file (SP-552)
@@ -1066,25 +1279,53 @@ def clim_cache_path(cache_dir: Path, point: tuple, date: dt.date, days: int) -> 
     return cache_dir / "climatology" / f"{point[0]:.2f}_{point[1]:.2f}_{z}_{date.isoformat()}_{max(1, days)}d.json"
 
 
+def _clim_read(path: Path) -> Optional[dict]:
+    """The saved result at `path` when it is the current CLIM_VERSION, else None."""
+    try:
+        doc = json.loads(path.read_text("utf-8"))
+        if doc.get("version") == CLIM_VERSION and isinstance(doc.get("result"), dict):
+            return doc
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return None
+
+
 def fetch_climatology(lat: float, lon: float, elevation_m: Optional[float], date: dt.date, days: int = 1, *,
                       today: Optional[dt.date] = None, get: Callable = _http_get,
-                      cache_dir: Optional[Path] = None) -> dict:
+                      cache_dir: Optional[Path] = None, legacy_dir: Optional[Path] = None) -> dict:
     """Climatology of the race days at a place: climatology_from's fields plus
     `profile` (diurnal_profile), `offset_c` (its lapse shift), `failed` (years
     that did not answer) and `cache`. From the disk cache, else one archive
     call per year (CLIM_WORKERS in parallel, the three models in each call).
     Saved only when every year answered over its whole window; past years do
     not change, so the file never expires. Raises RuntimeError when no year
-    answered."""
-    cache_dir = cache_dir or home()
+    answered. SP-552: one file for the whole site (cache_dir default site_dir()),
+    one fetch at a time per file; `legacy_dir` (the tenant folder it used to live
+    in) is read when the site has none and its file copied to the site (left in place)."""
+    cache_dir = cache_dir or site_dir()
     pt = clim_point(lat, lon, elevation_m)
     path = clim_cache_path(cache_dir, pt, date, days)
-    try:
-        doc = json.loads(path.read_text("utf-8"))
-        if doc.get("version") == CLIM_VERSION:
+    doc = _clim_read(path)
+    if doc is not None:
+        return {**doc["result"], "cache": "hit"}
+    with _cwa_lock(path):
+        return _fetch_climatology(path, pt, lat, lon, elevation_m, date, days, today, get, legacy_dir)
+
+
+def _fetch_climatology(path: Path, pt: tuple, lat, lon, elevation_m, date, days, today, get,
+                       legacy_dir: Optional[Path]) -> dict:
+    doc = _clim_read(path)                                 # fetched while this one waited
+    if doc is not None:
+        return {**doc["result"], "cache": "hit"}
+    if legacy_dir is not None and Path(legacy_dir) != path.parent.parent:
+        old = clim_cache_path(Path(legacy_dir), pt, date, days)
+        doc = _clim_read(old)
+        if doc is not None:
+            try:
+                _write_atomic(path, old.read_text("utf-8"))
+            except OSError:
+                pass
             return {**doc["result"], "cache": "hit"}
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        pass
     wins = clim_windows(date, days, today)
     if not wins:
         raise RuntimeError(_("沒有可用的歷史年份"))
@@ -1117,8 +1358,7 @@ def fetch_climatology(lat: float, lon: float, elevation_m: Optional[float], date
     result = {**c, "profile": diurnal_profile(answers), "offset_c": lapse(0.0, c["grid_elevation_m"], elevation_m),
               "failed": len(errs)}
     if not errs and all(w[2] for w in wins):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"version": CLIM_VERSION, "models": list(CLIM_MODELS), "result": result}), "utf-8")
+        _write_atomic(path, json.dumps({"version": CLIM_VERSION, "models": list(CLIM_MODELS), "result": result}))
     return {**result, "cache": "miss"}
 
 
@@ -1129,11 +1369,11 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                     cache_dir: Optional[Path] = None, use_cwa: bool = True, forecast_only: bool = False) -> dict:
     """Run the provider chain. Returns {provider, label, values|None, tried,
     location, fetched_at}. `cache_dir` (tests) holds every file; else the CWA files and
-    heights are the site's (site_dir(), SP-552) and the climatology the tenant's (home()).
+    heights are the site's (site_dir(), SP-552), the climatology too (SP-552 Q1; a tenant's own older
+    file in home() is still read once).
     `forecast_only` (SP-553, the points along a course): no climatology step — its ten archive
     calls per point are what the call cap is for; such a point is `manual` (no rows)."""
     cwa_dir = cache_dir or site_dir()
-    clim_dir = cache_dir or home()
     from backend.engine.localtime import today_local
     today = today or today_local()
     lead = (date - today).days
@@ -1146,13 +1386,13 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
     def done(provider, values, extra=None, hourly=None, rain=None, wind=None, sun_js=None, at=None, fetched=None):
         v = {"altitude_m": values.get("altitude_m", elevation_m), "temp_c": values["temp_c"], "rh_pct": values["rh_pct"],
              "dew_c": values.get("dew_c", dew_point(values["temp_c"], values["rh_pct"])["dew_c"])}
-        # hourly rows from an hourly forecast (CWA 3-day, Open-Meteo) or the
+        # hourly rows from an hourly forecast (CWA 3-day, MET Norway) or the
         # climatology's 24-hour profile; weekly blocks have none → one heat value
         return {"provider": provider, "label": _(PROVIDER_LABEL[provider]), "values": v, "tried": tried,
                 "location": loc, "fetched_at": fetched or now, "detail": extra or {}, "lead_days": lead,
                 "hourly": hourly or None, "rain": rain or None,   # rain: SP-249 rows (forecasts only)
-                "wind": wind or None,   # wind: SP-251 rows (CWA mountain 3-day, Open-Meteo forecast)
-                # SP-254: sunrise / sunset of the event days (Open-Meteo's daily, else NOAA's formula)
+                "wind": wind or None,   # wind: SP-251 rows (CWA mountain 3-day, MET Norway)
+                # SP-254: sunrise / sunset of the event days (NOAA's formula at `sun_js`'s UTC offset)
                 "sun": sun_rows(*(at or (lat, lon)), want, sun_js)}
 
     cwa_key = []                       # the key, read once (only when a CWA step runs)
@@ -1202,39 +1442,41 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                 except Exception as e:          # noqa: BLE001 — fall through to the next provider
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
     if lat is None or lon is None:
-        tried.append({"provider": "open_meteo", "ok": False, "reason": "沒有座標"})
+        tried.append({"provider": "met_norway", "ok": False, "reason": _("沒有座標")})
         tried.append({"provider": "cwa_town", "ok": False, "reason": _("沒有座標")})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
                 "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None, "sun": None}
     end = date + dt.timedelta(days=max(1, days) - 1)
+    from backend.engine.region import in_taiwan
+    in_tw = in_taiwan(lat, lon)
 
-    def open_meteo() -> Optional[dict]:
-        """Open-Meteo forecast: what CWA has not got (8–16 days out, outside Taiwan, CWA down)."""
-        if not (0 <= lead and (end - today).days < OM_HORIZON_DAYS):
-            tried.append({"provider": "open_meteo", "ok": False, "reason": f"超出 {OM_HORIZON_DAYS} 天預報範圍"})
+    def met() -> Optional[dict]:
+        """MET Norway forecast (SP-797, in place of Open-Meteo's): what CWA has not got — 7–9 days out,
+        outside Taiwan, CWA down or no key. Further out → the climatology."""
+        if not (0 <= lead and (end - today).days <= MET_HORIZON_DAYS):
+            tried.append({"provider": "met_norway", "ok": False,
+                          "reason": _("超出 {n} 天預報範圍，改用歷史平均", n=MET_HORIZON_DAYS)})
             return None
         try:
-            # one extra day when the horizon allows: the hourly rows for a race
-            # that runs past midnight (the daytime mean still uses `want` only)
-            q_end = end + dt.timedelta(days=1) if (end - today).days + 1 < OM_HORIZON_DAYS else end
-            params = {"latitude": lat, "longitude": lon,
-                      "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure,"
-                                "precipitation,precipitation_probability,"          # SP-249
-                                "wind_speed_10m,wind_gusts_10m,apparent_temperature",   # SP-251
-                      "daily": "sunrise,sunset",                                     # SP-254
-                      "timezone": "auto", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
-            if elevation_m is not None:
-                params["elevation"] = elevation_m
-            js = om_forecast(params, get)
-            c = parse_open_meteo(js, want)
+            tz = TZ if in_tw else met_zone(lat, lon, date, *_athlete_clock())
+            js = met_forecast(met_params(lat, lon, elevation_m), get)
+            geo = ((js.get("geometry") or {}).get("coordinates") or []) if isinstance(js, dict) else []
+            rows = met_rows(js, tz)
+            c = met_conditions(rows, want, _num(geo[2]) if len(geo) > 2 else None)
             if c:
-                tried.append({"provider": "open_meteo", "ok": True})
-                return done("open_meteo", c, {"grid_elevation_m": c.get("grid_elevation_m"),
-                                              "attribution": ATTRIBUTION}, open_meteo_hourly_rows(js, want),
-                            open_meteo_rain_rows(js, want), open_meteo_wind_rows(js, want), js)
-            tried.append({"provider": "open_meteo", "ok": False, "reason": "回應沒有這些日期"})
+                tried.append({"provider": "met_norway", "ok": True})
+                wind = met_wind_rows(rows, want)
+                noon = dt.datetime(date.year, date.month, date.day, 12, tzinfo=dt.timezone.utc)
+                off = noon.astimezone(tz).utcoffset() or dt.timedelta(hours=8)
+                return done("met_norway", c, {"grid_elevation_m": c.get("grid_elevation_m"),
+                                              "attribution": MET_ATTRIBUTION,
+                                              # SP-797: no gusts (MET has them only in its Nordic model)
+                                              "gusts": any(w["gust_kmh"] is not None for w in wind)},
+                            met_hourly_rows(rows, want), met_rain_rows(rows, want), wind,
+                            {"utc_offset_seconds": off.total_seconds()})    # sunrise: NOAA at the place's clock
+            tried.append({"provider": "met_norway", "ok": False, "reason": _("回應沒有這些日期")})
         except Exception as e:               # noqa: BLE001
-            tried.append({"provider": "open_meteo", "ok": False, "reason": str(e)[:120]})
+            tried.append({"provider": "met_norway", "ok": False, "reason": str(e)[:120]})
         return None
 
     def town() -> Optional[dict]:
@@ -1274,19 +1516,48 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                 rows = cwa_hourly_rows(m, want) if c.get("product") == "hourly" else []
                 vals, rows = town_lapsed(m, c, rows, to_m)
                 tried.append({"provider": prov, "ok": True})
-                return done(prov, vals, {"cwa_location": m["name"], "cwa_id": m.get("id"), "town": True,
+                return town_wind(done(prov, vals, {"cwa_location": m["name"], "cwa_id": m.get("id"), "town": True,
                                          "match": m["match"], "distance_km": m["distance_km"],
                                          "town_elevation_m": zs[0], "target_elevation_m": to_m,
                                          "lapse_m": to_m - zs[0], "offset_c": lapse(0.0, zs[0], to_m),
                                          "issued": doc.get("issued"), "cache": doc.get("cache"),
                                          "attribution": _(CWA_TOWN_ATTRIBUTION)}, rows or None,
-                            cwa_rain_rows(m, want), fetched=doc.get("fetched_at"))
+                                 cwa_rain_rows(m, want), fetched=doc.get("fetched_at")), to_m)
             except Exception as e:          # noqa: BLE001 — the weekly file, then the next provider
                 tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
         return None
 
-    # 2.–3. SP-552: the 鄉鎮 forecast before Open-Meteo (CWA_TOWN_FIRST); the 2026-10-06 order the other way
-    for step in ((town, open_meteo) if CWA_TOWN_FIRST else (open_meteo, town)):
+    def town_wind(r: dict, to_m: Optional[float]) -> dict:
+        """SP-552 (Q1, owner 2026-10-20): the 鄉鎮 product's wind is left out (its point is the 公所 in
+        the valley), so a 鄉鎮 answer takes only its wind from the MET Norway forecast at the race point
+        (met_forecast's cache: one call per point and Expires) — the temperature stays CWA's: each wind
+        row's temp_c is the lapsed 鄉鎮 hour when there is one. MET down / out of range → no wind, as before."""
+        if (end - today).days > MET_HORIZON_DAYS:
+            tried.append({"provider": "met_norway_wind", "ok": False,
+                          "reason": _("超出 {n} 天預報範圍", n=MET_HORIZON_DAYS)})
+            return r
+        try:
+            tz = TZ if in_tw else met_zone(lat, lon, date, *_athlete_clock())
+            wind = met_wind_rows(met_rows(met_forecast(met_params(lat, lon, to_m), get), tz), want)
+        except Exception as e:               # noqa: BLE001 — the 鄉鎮 answer stands without wind
+            tried.append({"provider": "met_norway_wind", "ok": False, "reason": str(e)[:120]})
+            return r
+        if not wind:
+            tried.append({"provider": "met_norway_wind", "ok": False, "reason": _("回應沒有這些日期")})
+            return r
+        town_rows = r.get("hourly") or []
+        for w in wind:
+            h = hourly_at(town_rows, dt.datetime.fromisoformat(w["t"])) if town_rows else None
+            if h is not None:
+                w["temp_c"] = h["temp_c"]
+        tried.append({"provider": "met_norway_wind", "ok": True})
+        r["wind"] = wind
+        r["detail"] = {**r["detail"], "wind_from": "met_norway", "gusts": any(w["gust_kmh"] is not None for w in wind),
+                       "attribution": _(CWA_TOWN_WIND_ATTRIBUTION)}
+        return r
+
+    # 2.–3. SP-552: the 鄉鎮 forecast before the global one (CWA_TOWN_FIRST); the 2026-10-06 order the other way
+    for step in ((town, met) if CWA_TOWN_FIRST else (met, town)):
         r = step()
         if r is not None:
             return r
@@ -1297,7 +1568,8 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                 "sun": None}
     # 4. climatology: the month around the race date, 10 years, 3 models (fetch_climatology)
     try:
-        c = fetch_climatology(lat, lon, elevation_m, date, days, today=today, get=get, cache_dir=clim_dir)
+        c = fetch_climatology(lat, lon, elevation_m, date, days, today=today, get=get, cache_dir=cwa_dir,
+                              legacy_dir=None if cache_dir else home())
     except Exception as e:                   # noqa: BLE001
         tried.append({"provider": "climatology", "ok": False, "reason": str(e)[:120] or "沒有資料"})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
@@ -1312,44 +1584,16 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
-# Open-Meteo forecast memo (SP-553): the same point and days within an hour → no new call
-# ---------------------------------------------------------------------------
-
-OM_MEMO_TTL_S = 3600.0            # 推估: Open-Meteo's models update hourly at most
-OM_MEMO_MAX = 256                 # entries (one per point × days; a few kB each)
-_OM_MEMO: dict = {}
-_OM_MEMO_LOCK = threading.Lock()
-
-
-def om_forecast(params: dict, get: Callable = _http_get) -> dict:
-    """The Open-Meteo forecast answer for `params`, from a per-process memo for OM_MEMO_TTL_S when
-    the real client asks (a test's fake `get` always gets the call)."""
-    if get is not _http_get:
-        return get(OM_FORECAST, params, 10.0)
-    key = tuple(sorted((k, str(v)) for k, v in params.items()))
-    now = dt.datetime.now().timestamp()
-    with _OM_MEMO_LOCK:
-        hit = _OM_MEMO.get(key)
-        if hit is not None and now - hit[0] < OM_MEMO_TTL_S:
-            return hit[1]
-    js = get(OM_FORECAST, params, 10.0)
-    with _OM_MEMO_LOCK:
-        _OM_MEMO[key] = (now, js)
-        while len(_OM_MEMO) > OM_MEMO_MAX:
-            _OM_MEMO.pop(next(iter(_OM_MEMO)))
-    return js
-
-
-# ---------------------------------------------------------------------------
 # along the course (SP-553): a long course's weather at several points, each section's
 # rows read at the clock the plan reaches it (planner / calc / cold pick the rows)
 # ---------------------------------------------------------------------------
 
 ROUTE_POINT_KM = 10.0             # 推估: one point per 10 km of course
 ROUTE_MIN_KM = 8.0                # 推估: a shorter course keeps its one point
-ROUTE_MAX_POINTS = 6              # the cap per race: ≤ 6 Open-Meteo forecast calls (memo above), the CWA
+ROUTE_MAX_POINTS = 6              # the cap per race: ≤ 6 MET Norway forecast calls (met_forecast's cache), the CWA
                                   # files shared (SP-552: no call), no climatology (forecast_only)
-FORECAST_PROVIDERS = ("cwa_hourly", "cwa_weekly", "cwa_town_hourly", "cwa_town_weekly", "open_meteo")
+FORECAST_PROVIDERS = ("cwa_hourly", "cwa_weekly", "cwa_town_hourly", "cwa_town_weekly", "met_norway",
+                      "open_meteo")   # open_meteo: results saved before SP-797
 
 
 def route_sections(lat: list, lon: list, ele: list, *, every_km: float = ROUTE_POINT_KM,

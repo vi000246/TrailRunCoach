@@ -1,7 +1,10 @@
-"""SP-412 in the browser: editing the demo's 「示範百岳 3 日縱走」 (a 3-day 百岳 saved without its
-per-day numbers, like an event from before SP-114) — the day rows are optional and a hint asks for
+"""SP-412 in the browser: editing the demo's 「百岳 3 日（訓練行程）」 (a 3-day 百岳 saved without its
+per-day numbers and without a GPX, like an event from before SP-114) — the day rows are optional and a hint asks for
 them; ticking 會用登山杖 and 儲存 saves it (SP-691: in 賽事管理). Filling one cell makes every day required again, and
 emptying it puts the trip's own totals back.
+
+Not 「示範百岳 3 日縱走」 any more: the demo uploads a GPX to it, and since SP-533 a trip with a GPX takes its
+days from the GPX — it is not an old trip, no hint (races.html openEditor: dayPlanLenient needs !e.gpx).
 
 Run: ./e2e.sh -k sp412 (see conftest.py)."""
 from __future__ import annotations
@@ -16,7 +19,7 @@ from backend.tests.e2e._browser import open_page  # noqa: E402
 
 pytestmark = pytest.mark.e2e
 
-EID = "demo-baiyue"
+EID = "demo-trip"          # 3 days, no day_plan, no GPX (backend/demo/season.py make_events)
 ROWS = "#dayplanrows input"
 
 
@@ -46,7 +49,7 @@ def _event(page) -> dict:
 def test_an_old_trip_without_day_numbers_is_hinted_and_saves(app):
     page, _ = app
     before = _event(page)
-    assert before["day_plan_missing"] and not before["day_plan"]
+    assert before["day_plan_missing"] and not before["day_plan"] and not before.get("gpx")
     _edit_old_trip(page)
     expect(page.locator("#dayplanold")).to_be_visible()
     assert page.locator(f"{ROWS}[required]").count() == 0

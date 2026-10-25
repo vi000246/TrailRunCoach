@@ -27,7 +27,7 @@ from urllib.parse import urlencode
 from backend.engine.localtime import today_local
 from backend.i18n import N_
 from backend.i18n.pages import render_page
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -452,6 +452,45 @@ def _warm_readiness(ds) -> bool:
         return False
 
 
+REVIEW_WARM_LOOKBACK = 20      # how many of the newest activities _warm_review looks through
+
+
+def _warm_review(ds) -> bool:
+    """The single-activity review cards' per-process work, before anyone opens one (SP-774): the
+    code hashes of their disk caches (codehash: ~0.5 s local to walk the code, once per process —
+    the per-activity measurements, the TIS built-ins, the 門檻信心 runs and watch temperatures) and
+    the 門檻信心 check on this Dataset (threshold_confidence.check: its memo; it reads every run of
+    the last year). On the newest run with HR and the newest activity with power; their values come
+    from the disk caches (SP-773 keeps those across restarts). Never fails the warm-up."""
+    import logging
+    if ds is None:                       # the Dataset went meanwhile: the next warm-up does it
+        return False
+    try:
+        from backend.engine import threshold_confidence as TC
+        from backend.engine import workout_review as WR
+        from backend.engine.wko5expr.dataset import day_to_date
+        run = power = None
+        for w in list(ds.workouts)[::-1][:REVIEW_WARM_LOOKBACK]:
+            if run is None and w.sport == "run" and ds.channel(w.idx, "heartrate") is not None:
+                run = w
+            if power is None and ds.channel(w.idx, "power") is not None:
+                power = w
+            if run is not None and power is not None:
+                break
+        if run is not None:
+            WR.measure(ds, run)
+        if power is not None:
+            WR.tis_scores(ds, power)
+        today = day_to_date(int(ds.today)) if getattr(ds, "today", None) is not None else today_local()
+        TC.auto_choice(ds, getattr(ds, "plan", None), today)      # the key 生效區間 asks it with (hr_profile)
+        if hasattr(ds, "flush_series"):
+            ds.flush_series()            # a new activity's rows, measured here, go to disk
+        return True
+    except Exception as e:               # noqa: BLE001 — the card computes it on its first view then
+        logging.getLogger(__name__).warning("review cards warm-up failed: %s", type(e).__name__)
+        return False
+
+
 def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
     """The warm-up's lowest-priority part, in its own thread (review SP-362 #4): wait for an
     automatic plan run to end, then queue each step in the server's job queue at `warm`
@@ -462,7 +501,8 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
     changed; after a version change in age tiers, the hot one at the warm-up's priority —
     _hot_priority, SP-394 第 3 條 — and once its last tier is done the old series rows of this
     tenant go, _sweep_when_done, and then the cold-data sweep is queued at `cold`,
-    coldstore.schedule_sweep, SP-340), the 賽前完備程度 專項期 card once (`single`, _warm_readiness: its
+    coldstore.schedule_sweep, SP-340), the single-activity review cards' code hashes and 門檻信心
+    (`single`, _warm_review, SP-774), the 賽前完備程度 專項期 card once (`single`, _warm_readiness: its
     per-file caches, SP-677 Q3) and, owner only, the race calculator's charts
     (racepower.warm_charts, `full`, after the classification's warm tier). A warm-up asked for
     while this waits only marks it to run once more (`low_again`)."""
@@ -478,9 +518,12 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
             # cold-data sweep is queued (SP-340)
             job = AA.job_for(ds, priority=_hot_priority(reason))
             _sweep_when_done(job, ds)
-            # SP-677 Q3: the 賽前完備程度 專項期 card's per-file caches, before anyone opens it
             # (the Dataset held weakly: a finished job must not keep one alive, SP-394 第 6 條)
             ref = _weak(ds)
+            # SP-774: the single-activity review cards' code hashes and 門檻信心, before anyone opens one
+            jobs.call(lambda: _warm_review(ref()), cls="single", priority="warm",
+                      label=f"warm-up review cards ({reason})")
+            # SP-677 Q3: the 賽前完備程度 專項期 card's per-file caches, before anyone opens it
             jobs.call(lambda: _warm_readiness(ref()), cls="single", priority="warm",
                       label=f"warm-up readiness ({reason})")
             ref = None
@@ -627,6 +670,10 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__,
                                                 exc_info=True)
             return
+        # SP-790: a coached student's coach-dashboard summary, from the Dataset and status just built
+        # (a few sums; the board never builds a student's Dataset)
+        from backend import coach_board
+        coach_board.after_warm_up(ds, reason)
         _warm_chart_code(ds)             # after what the first page waits for (review SP-336 #5)
         # the old series rows go once the classification's last tier is done (_low_priority, SP-394)
         # lowest priority from here, in its own thread: after the sync's automatic plan run (it
@@ -849,10 +896,26 @@ def _range(ds: Dataset, begin: Optional[str], end: Optional[str]) -> tuple[float
     return b, e
 
 
+ACT_HEADER = "X-TRC-Activity"
+
+
+def act_header(response: Optional[Response], w) -> Optional[str]:
+    """SP-758: which activity a single-activity answer is about — its start minute
+    (activity_tags.key_of), in the X-TRC-Activity header. The service worker
+    (static/offline_core.js) keeps such an answer offline only with it (the activity's day: the
+    last 30 days only) and the viewer checks a chart's `act_key` against the activity it shows:
+    an activity's index shifts when an older one comes in or one is excluded. Returns the key."""
+    from backend.engine import activity_tags as AT
+    k = AT.key_of(w.entry.start)
+    if k and response is not None:
+        response.headers[ACT_HEADER] = k
+    return k
+
+
 @router.get("/views/{view}/dashboards/{d}/charts/{c}")
 def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = None,
           end: Optional[str] = None, sports: Optional[str] = None, workout: Optional[int] = None,
-          parity: Optional[bool] = None):
+          parity: Optional[bool] = None, response: Response = None):
     """Athlete charts use begin/end/sports (the RHE); workout charts need `workout`.
 
     Served from the render cache (render_cache.py): the key covers the chart
@@ -1043,6 +1106,9 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     res, stale = RENDER_CACHE.serve(key, compute, slot=None if demo else _slot(view, ch, req, asked, ds),
                                     stale_ok=request.query_params.get("stale") == "1" and not demo,
                                     replay=None if demo or needs_workout else _replay(view, d, c, request, asked, ds))
+    if needs_workout:
+        # SP-758: the activity this answer is about (never in the render cache: an index can shift)
+        res = {**res, "act_key": act_header(response, ds.workouts[workout])}
     return {**res, "stale": stale} if stale else res
 
 
@@ -1291,9 +1357,12 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
         return render_pole_compare(ds, ch, b, e, params or {}, today=today_local())
     if ch.get("kind") == "review":
         from backend.engine.workout_review import review
-        return {**review(ds, w, ch.get("section") or "summary", basis=ch.get("basis_chosen") or "pace"),
-                "title": ch.get("title"),
-                "description": ch.get("description")}
+        res = review(ds, w, ch.get("section") or "summary", basis=ch.get("basis_chosen") or "pace")
+        # the view's fixed (translated) title / ? text win over the card's; SP-920: a card that says where its
+        # numbers come from (`text_source`, e.g. "detected" reps without a 課表) gets the view's `by_source` texts
+        alt = (ch.get("by_source") or {}).get(res.get("text_source")) or {}
+        return {**res, "title": alt.get("title") or ch.get("title"),
+                "description": alt.get("description") or ch.get("description")}
     if ch.get("kind") == "activity":
         from backend.engine.panels.activity_charts import render as render_activity
         return render_activity(ds, w, ch)
@@ -1577,7 +1646,7 @@ def get_activity(i: int):
 
 
 @router.get("/workouts/{i}/kind")
-def get_kind(i: int, parity: Optional[bool] = None):
+def get_kind(i: int, parity: Optional[bool] = None, response: Response = None):
     """The activity type of one dataset workout as the viewer's filter reads it
     (engine/sport_map.kind_of: the user's 爬山 / 百岳跟團 mark, the trail / road
     classification with its override, the platform code) and `chart_sport`: which
@@ -1590,11 +1659,12 @@ def get_kind(i: int, parity: Optional[bool] = None):
     if not 0 <= i < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     kind = SM.KindFilter(SM.RUN_TYPES, ds, AT.load()).kind(ds.workouts[i])
+    act_header(response, ds.workouts[i])
     return {"workout": i, "kind": kind, "chart_sport": SM.chart_sport(kind)}
 
 
 @router.get("/workouts/{i}/pain")
-def get_pain(i: int):
+def get_pain(i: int, response: Response = None):
     """The 疼痛 mark of one dataset workout (the chart page's chip; light: no
     auto tags). 404 in the demo mode (傷病紀錄 hidden)."""
     from backend.engine import injuries as INJ
@@ -1604,6 +1674,7 @@ def get_pain(i: int):
     if not 0 <= i < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     w = ds.workouts[i]
+    act_header(response, w)
     return {"workout": i, "sport": w.sport, **(_pain_state(ds, w, {}) or {})}
 
 
@@ -2224,7 +2295,7 @@ def undo_correction(correction_id: str):
 # ---------------------------------------------------------------------------
 
 @router.get("/workouts/{idx}/samples")
-def workout_samples(idx: int, parity: Optional[bool] = None):
+def workout_samples(idx: int, parity: Optional[bool] = None, response: Response = None):
     """Per-sample elapsed time (s), distance (km), lat/lng, elevation (m),
     HR, power and grade (%) of one workout, downsampled once. Every array has
     the same length and the same step as the workout charts' points
@@ -2241,6 +2312,7 @@ def workout_samples(idx: int, parity: Optional[bool] = None):
     w = ds.workouts[idx]
     from backend import membership as MS
     MS.require_workout_age(ds, w)            # SP-756: per-point data reaches only as far back as the charts
+    act_header(response, w)
     t = ds.channel(idx, "elapsedtime")
     n = 0 if t is None else len(t)
     step = max(1, int(math.ceil(n / MAX_POINTS))) if n else 1
@@ -2280,13 +2352,14 @@ def workout_samples(idx: int, parity: Optional[bool] = None):
 
 
 @router.get("/workouts/{idx}/zone-sets")
-def workout_zone_sets(idx: int, parity: Optional[bool] = None):
+def workout_zone_sets(idx: int, parity: Optional[bool] = None, response: Response = None):
     """The zone sets the route map's HR / power / pace lines can be coloured by (SP-660,
     panels/activity_charts.zone_sets): every model's edges for this activity and the settings' default."""
     from backend.engine.panels.activity_charts import zone_sets
     ds = _dataset(parity)
     if not 0 <= idx < len(ds.workouts):
         raise HTTPException(404, "workout not found")
+    act_header(response, ds.workouts[idx])
     return zone_sets(ds, ds.workouts[idx])
 
 

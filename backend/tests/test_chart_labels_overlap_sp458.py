@@ -32,7 +32,8 @@ def test_the_overlay_names_the_pace_axis_at_the_top():
 
 
 def test_the_calculators_pace_axis_names_itself_at_the_top():
-    src = (STATIC / "racepower.html").read_text("utf-8")
+    # SP-784: the profile chart is static/seg_profile.js, which racepower.html loads
+    src = (STATIC / "racepower.html").read_text("utf-8") + (STATIC / "seg_profile.js").read_text("utf-8")
     m = re.search(r"const yMain = \{[^\n]*\n", src)
     assert m, "the profile chart's main y axis not found"
     assert 'nameLocation: M.inverse ? "start" : "end"' in m.group(0) and "inverse: M.inverse" in m.group(0)

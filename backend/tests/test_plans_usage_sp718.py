@@ -56,13 +56,14 @@ def test_the_billing_view_carries_this_periods_use_and_a_subscription_reads_unli
         MS.consume("calc", item="r1")
         MS.consume("calc", item="r2")
     v = SV.view(server.get_user(int(free.id[1:])))
-    assert v["role"] == "user" and set(v["quotas"]) == {"calc", "charts"}
+    # participants: SP-805's 團員腳程估算 (疊石 Cairn 揪團), a free-tier monthly quota like the calculator
+    assert v["role"] == "user" and set(v["quotas"]) == {"calc", "charts", "participants"}
     assert v["quotas"]["calc"]["used"] == 2 and v["quotas"]["calc"]["limit"] == 10
     assert v["quotas"]["calc"]["resets_on"] and v["quotas"]["calc"]["extra"] == 0
     p = SV.view(server.get_user(int(paid.id[1:])))
     # a subscriber: only the back-test counts; the free tier's calculator and charts are lifted (unlimited)
     assert p["role"] == "subscriber" and set(p["quotas"]) == {"backtest"}
-    assert set(p["limits"]["free"]) == {"calc", "charts"}
+    assert set(p["limits"]["free"]) == {"calc", "charts", "participants"}
 
 
 def test_extra_uses_show_inside_the_limit_on_the_plans_page(server):  # noqa: F811
@@ -91,7 +92,8 @@ def test_the_plans_page_draws_a_bar_per_quota_and_says_unlimited():
 
 def test_the_plan_limits_follow_the_admin_page(server):  # noqa: F811
     assert MS.plan_limits() == {"free": {"calc": {"limit": 10, "period": "month"},
-                                         "charts": {"limit": 5, "period": "day"}},
+                                         "charts": {"limit": 5, "period": "day"},
+                                         "participants": {"limit": 10, "period": "month"}},     # SP-805
                                 "subscriber": {"backtest": {"limit": 2, "period": "month"}}}
     SC.set_values({"quota.free.calc": 20, "quota.free.charts": 8, "quota.subscriber.backtest": 4}, actor=1)
     lim = MS.plan_limits()
@@ -105,9 +107,14 @@ def test_the_plan_limits_follow_the_admin_page(server):  # noqa: F811
 
 
 def test_the_comparison_cells_take_their_numbers_from_the_limits():
+    # SP-846: the rows are written into the page from membership.PLAN_ROWS (billing/plan_table.py)
+    from backend.billing import plan_table as PT
     html = (STATIC / "plans.html").read_text("utf-8")
+    assert "<!--fill:plan_rows-->" in html
+    html += PT.rows_html("plans", "zh-TW", limits={})
     cells = dict(re.findall(r'data-limit="([a-z]+\.[a-z]+)" data-tpl="([\w.]+)"', html))
     assert cells == {"free.charts": "row.view.free_n", "free.calc": "row.calc.free_n",
+                     "free.participants": "row.participants.free_n",      # SP-892
                      "subscriber.backtest": "row.backtest.paid_n"}
     assert "renderLimits(s.limits)" in html
     for lang in ("zh-TW", "en"):

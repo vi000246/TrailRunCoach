@@ -10,8 +10,8 @@ predicted time never changes (no study gives a cold slowdown to apply).
     time or without segments (a manual 百岳 course) the race window's hours
     are used instead (weather.race_window: 06–18 of each event day), with no km.
   * The wind (and the forecast's own temperature) at the segment's midpoint
-    comes from the /weather `wind` rows (Open-Meteo forecast, CWA mountain
-    3-day product), linear between rows. The temperature is moved from the
+    comes from the /weather `wind` rows (MET Norway forecast since SP-797, CWA
+    mountain 3-day product), linear between rows. The temperature is moved from the
     weather point (heat_ref_alt_m) to the segment's mean height by
     −0.65 °C / 100 m, as the heat model does; a row without a temperature
     uses the segment's own plan temperature.
@@ -21,7 +21,10 @@ predicted time never changes (no study gives a cold slowdown to apply).
   * Reminder: any point with wind chill ≤ −10 °C (Environment and Climate
     Change Canada's 「risk of hypothermia and frostbite if outdoors for long
     periods」 band, owner 2026-10-06) or gusts ≥ 50 km/h (ECCC: wind over
-    50 km/h makes frostbite faster; the gust reading of it is 推估). Wind
+    50 km/h makes frostbite faster; the gust reading of it is 推估) — only
+    where the forecast has gusts: neither CWA nor MET Norway gives them in
+    Taiwan (SP-797), so there the reminder is the wind chill alone and the
+    details say so. Wind
     chill ≤ −28 °C says 「exposed skin can freeze in 10–30 minutes」 (ECCC).
   * No wind data → None: nothing shown, no error.
 
@@ -363,7 +366,10 @@ def attention(cold: Optional[dict] = None, hypo: Optional[dict] = None, night: O
         details += [_("冷風：") + _range_text(r) for r in rs]
         details.append(_("風寒用美國國家氣象局的公式，只在氣溫 ≤ 10 °C、風速 > 4.8 km/h 時算；"
                          "≤ −10 °C 是加拿大環境部「長時間在外有失溫和凍傷風險」那一級，≤ −28 °C 外露皮膚 10–30 分鐘可能凍傷；"
-                         "陣風 ≥ 50 km/h 也提醒（推估）。氣溫依各段海拔換算。只是提醒，預估時間不變"))
+                         "{gust}氣溫依各段海拔換算。只是提醒，預估時間不變",
+                         # SP-797: CWA and MET Norway give no gusts in Taiwan — say the reminder rests on the wind speed
+                         gust=_("陣風 ≥ 50 km/h 也提醒（推估）。") if cold.get("max_gust_kmh") is not None
+                         else _("這份預報沒有陣風，只用平均風速判斷。")))
     tail = ""
     if hypo and hypo.get("alert"):
         kinds.append("hypothermia")

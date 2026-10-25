@@ -471,7 +471,10 @@ def test_undated_turns_the_race_day_into_weeks_before():
 
 def test_the_share_page_shows_weeks_before_for_an_example():
     html = (STATIC / "share.html").read_text("utf-8")
-    assert "I.weeks_before" in html and "賽前" in html and "S.created &&" in html
+    # SP-460: the words are the share catalog's (share.weeks_before: 「賽前 {n} 週」)
+    zh = json.loads((STATIC / "i18n" / "zh-TW" / "share.json").read_text("utf-8"))["weeks_before"]
+    assert "I.weeks_before" in html and 'JT("weeks_before"' in html and "S.created &&" in html
+    assert all("賽前" in v for v in (zh.values() if isinstance(zh, dict) else [zh]))
 
 
 def test_the_try_link_follows_the_kind_to_an_existing_example():

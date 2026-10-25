@@ -14,7 +14,8 @@
 // check cards (強度分配 with a donut and one stacked 100 % bar a week, 每週增量, 恢復週節奏).
 //   Readiness.unlock(box, res): the 強度課表解鎖條件 card (kind z5gate, phase_checks.unlock) — two tiles, 3 區 / 5 區;
 //   the selected one's checks and 「什麼時候會重新上鎖」 folded (a click opens it).
-// SP-672: a cell shows the board's `show` as is (a later / taper cell: its target, set by race_readiness).
+// SP-672 R2: a cell is a bar of how much of that week's target was reached (`ratio`, the same scale for every
+// item; bar() below); the target and actual are in the detail a click opens.
 // Every non-count item has 「看圖」: an existing chart (it.chart.href: that page, card and weeks) or the
 // card's own small chart under the calendar (it.chart.own: "repeat" = each session's best of the last 6 weeks
 // with the best and the pass line, the top 5 marked; "long_climb" = each week's longest continuous climb).
@@ -104,8 +105,20 @@
 .rd-c.s-fut { border: 1.5px dashed color-mix(in srgb, var(--muted) 60%, transparent); color: var(--muted); font-weight: 500; background: transparent; }
 .rd-c.s-tap { background: color-mix(in srgb, var(--rd-tap) 16%, transparent); color: var(--rd-tap-ink); }
 .rd-c.s-unk { background: color-mix(in srgb, var(--muted) 20%, transparent); color: var(--muted); }
+.rd-c.rd-b { position: relative; width: 56px; min-width: 56px; height: 18px; padding: 0; border-radius: 5px; overflow: hidden;
+  background: color-mix(in srgb, var(--muted) 14%, transparent); }
+.rd-b i { position: absolute; left: 0; top: 0; bottom: 0; }
+.rd-b em { position: relative; font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--text); }
+.rd-b.s-done i { background: var(--rd-good); } .rd-b.s-done em { color: var(--rd-on); }
+.rd-b.s-miss { background: color-mix(in srgb, var(--rd-bad) 10%, transparent); }
+.rd-b.s-miss i { background: color-mix(in srgb, var(--rd-bad) 42%, transparent); }
+.rd-b.s-due i { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.rd-b.s-fut { background: transparent; }
+.rd-b.s-tap { width: auto; padding: 0 6px; } .rd-b.s-tap em { color: var(--rd-tap-ink); font-weight: 500; }
+.rd-b.s-unk { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--muted) 18%, transparent) 0 4px, transparent 4px 8px); }
 .rd-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11.5px; color: var(--muted); margin-top: 8px; align-items: center; }
 .rd-legend .rd-c { min-width: 20px; height: 16px; font-size: 9px; cursor: default; }
+.rd-legend .rd-c.rd-b { width: 34px; min-width: 34px; height: 14px; } .rd-legend .rd-b em { font-size: 8.5px; }
 .rd-detail { margin-top: 8px; background: color-mix(in srgb, var(--line) 18%, var(--panel)); border: 1px solid var(--line);
   border-radius: 8px; padding: 6px 12px; min-height: 34px; }
 .rd-detail .dk { color: var(--muted); font-size: 12px; }
@@ -164,10 +177,20 @@
   }
 
   const pct = (x) => `${Math.round(x * 100)}%`;
-  // the board sets what a cell shows (a later / taper cell: its target)
-  function shown(c) {
-    if (c.state === "done" && !c.show) return "✓";
-    return c.show || "·";
+  // SP-672 R2 (Q2 = B): a cell is a bar of how much of that week's target was reached (the board's `ratio`, one
+  // scale for every item): done = full with ✓, missed / this week = filled that far with the %, later = empty
+  // dashed, not enough data = hatched; a locked (taper) cell keeps the board's `show`. The numbers are in the
+  // detail a click opens.
+  function bar(c, attrs) {
+    const r = c.ratio == null ? 0 : Math.max(0, Math.min(1, +c.ratio));
+    let fill = "", txt = "";
+    if (c.state === "done") { fill = "100"; txt = "✓"; }
+    else if (c.state === "miss" || c.state === "due") {
+      fill = c.ratio == null ? "" : String(Math.max(r * 100, c.state === "miss" ? 4 : 0));
+      txt = c.ratio == null ? "" : pct(r);
+    } else if (c.state === "tap") txt = c.show || "";
+    const tag = attrs == null ? "span" : "button";
+    return `<${tag}${attrs == null ? "" : ` type="button" ${attrs}`} class="rd-c rd-b s-${esc(c.state)}">${fill ? `<i style="width:${fill}%"></i>` : ""}<em>${esc(txt)}</em></${tag}>`;
   }
 
   // ---- the card's own small charts (SP-672) ----
@@ -495,14 +518,14 @@ details.ru-re summary .tag.warn { background: color-mix(in srgb, var(--rd-warn) 
           h += `<tr class="${lock ? "locked" : ""}${dim}" data-stage="${esc(s.id)}"><td class="lab">${it.met ? '<span class="rd-ok">✓</span> ' : ""}${esc(it.name)}${gr(it, si, ii)}${sub ? `<small>${sub}</small>` : ""}</td>`;
           weeks.forEach((w) => {
             const c = cellOf(it, w.week);
-            h += `<td class="${w.current ? "cw" : ""}">${c ? `<button type="button" class="rd-c s-${esc(c.state)}" data-s="${si}" data-i="${ii}" data-w="${w.week}">${esc(shown(c))}</button>` : ""}</td>`;
+            h += `<td class="${w.current ? "cw" : ""}">${c ? bar(c, `data-s="${si}" data-i="${ii}" data-w="${w.week}"`) : ""}</td>`;
           });
           h += "</tr>";
         });
       });
       h += "</tbody></table>";
-      const lg = [["done", "✓", "lg_done"], ["due", "1", "lg_due"], ["miss", "1", "lg_miss"], ["fut", "1", "lg_fut"], ["unk", "·", "lg_unk"]]
-        .map(([s, x, k]) => `<span><span class="rd-c s-${s}">${x}</span> ${esc(T(k))}</span>`).join("");
+      const lg = [["done", null, "lg_done"], ["miss", 0.6, "lg_miss"], ["due", 0.75, "lg_due"], ["fut", null, "lg_fut"], ["unk", null, "lg_unk"]]
+        .map(([s, r, k]) => `<span>${bar({ state: s, ratio: r })} ${esc(T(k))}</span>`).join("");
       return `${h}<div class="rd-legend">${lg}<span>· ${esc(T("lg_hint"))}</span></div><div class="rd-detail">${detail()}</div>`;
     }
     // 「看圖」: a link to the item's chart, or a toggle of the card's own small chart
@@ -546,7 +569,7 @@ details.ru-re summary .tag.warn { background: color-mix(in srgb, var(--rd-warn) 
         h += `<div class="mg">${NUM[si] || ""} ${esc(s.name)} · ${esc(wk === cur ? T("this_week_short") : T("week_n", { n: wk, from: md(mon[wk]) }))}</div>`;
         rs.forEach((it) => {
           const c = cellOf(it, wk);
-          h += `<div class="mr"><span class="rd-c s-${esc(c.state)}">${esc(shown(c))}</span><span>${esc(it.name)}${gr(it, si, s.items.indexOf(it))}<br><small>${esc(c.detail || it.crit || T("st_" + c.state))}</small></span></div>`;
+          h += `<div class="mr">${bar(c)}<span>${esc(it.name)}${gr(it, si, s.items.indexOf(it))}<br><small>${esc(c.detail || it.crit || T("st_" + c.state))}</small></span></div>`;
         });
       });
       return `<div class="rd-mlist">${h || `<div class="empty">${esc(T("week_empty"))}</div>`}</div><p class="rd-mhint">${esc(T("mob_hint"))}</p>`;

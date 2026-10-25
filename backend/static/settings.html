@@ -44,6 +44,16 @@ a.button { color: var(--text); background: var(--panel); border: 1px solid var(-
   padding: 4px 10px; text-decoration: none; }
 button:disabled { opacity: .5; cursor: default; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+/* SP-748: the TL / RPE lines take the room left and keep their ? beside them (it used to wrap onto a line of
+   its own); with nothing to say the row is hidden (showTl / showRpe), not a lone ? */
+#s-tl, #s-rpe { flex: 1 1 0; min-width: 0; }
+/* SP-875: a select's label keeps the ? after it on its line on a phone — the label is held to the row's width
+   minus the ? (flex wraps by that size), and the select narrows inside it instead of the ? wrapping */
+@media (max-width: 600px) {
+  .row > label.sel-q { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: calc(100% - 30px); }
+  .row > label.sel-q > span { flex: none; white-space: nowrap; }
+  .row > label.sel-q > select { flex: 0 1 auto; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+}
 input, select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
   border-radius: 6px; padding: 3px 6px; }
 label { font-size: 13px; }
@@ -52,6 +62,21 @@ table.wt th, table.wt td { padding: 4px 8px; border-bottom: 1px solid var(--line
 table.wt th { color: var(--muted); font-weight: 600; font-size: 12px; }
 /* Debug API tokens (SP-373 Q2 ②): the headers and the 撤銷 button stay on one line; the scopes wrap */
 #dbg-tokens th, #dbg-tokens td:last-child { white-space: nowrap; }
+/* SP-804: on a phone the five columns did not fit and the 撤銷 button was cut off at the right edge —
+   each token is a card there: name + 撤銷 on the first line, then 範圍／到期／最後使用 with their names */
+@media (max-width: 560px) {
+  table.wt.dbg-tok-t { width: 100%; min-width: 0; }
+  #dbg-tokens tr.hd { display: none; }
+  #dbg-tokens tr.tok { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px;
+    padding: 6px 0; border-bottom: 1px solid var(--line); }
+  #dbg-tokens tr.tok td { border-bottom: 0; padding: 2px 0; overflow-wrap: anywhere; }
+  #dbg-tokens tr.tok td span.meta { white-space: nowrap; }      /* 「⚠ 新 IP」 in one piece */
+  #dbg-tokens tr.tok td:first-child { grid-column: 1; grid-row: 1; }
+  #dbg-tokens tr.tok td:last-child { grid-column: 2; grid-row: 1; align-self: start; }
+  #dbg-tokens tr.tok td[data-l] { grid-column: 1 / -1; }
+  #dbg-tokens tr.tok td[data-l]::before { content: attr(data-l); display: inline-block; min-width: 5em;
+    margin-right: 6px; color: var(--muted); }
+}
 /* 閾值測試紀錄: the table scrolls sideways on a phone; the estimate cards (LTHR / AeT 自動估算) */
 .tw { overflow-x: auto; }
 .tw table.wt { width: 100%; }
@@ -202,7 +227,7 @@ main > section { min-width: 0; }
 .ds-bar.over i { background: var(--warn); }
 .ds-warn { color: var(--warn); }
 .ds-st { font-weight: 600; }
-.ds-ok { color: var(--ok); }
+.ds-ok, .ds-acts { color: var(--ok); }
 .ds-partial, .ds-evicted, .ds-failed { color: var(--warn); }
 .ds-none, .ds-empty, .ds-na { color: var(--muted); }
 .ds-st.ds-na { font-weight: 400; }
@@ -212,6 +237,9 @@ main > section { min-width: 0; }
 @media (max-width: 480px) { .ds-kv { grid-template-columns: 1fr; gap: 0; } .ds-kv dt { margin-top: 8px; font-size: 12px; } }
 /* SP-480: the sentences about 計算模式 (我的算式 / 對照模式), hidden for whoever cannot switch it */
 html.nomode .mode-note { display: none; }
+/* SP-746: nor the Debug API (the owner's only in sign-in mode, SP-373: 403 for anyone else) and the threshold
+   card's 「對照資料夾裡的設定」 line (no comparison folder of theirs: a row of –) — from the first paint, like the above */
+html.nomode #debugapi, html.nomode #thr-wko5, html.nomode #thr-more-wko5 { display: none !important; }
 /* SP-488 (提示多寡): a check that agrees is one line — 可信度 chips, the folded app-vs-watch card and estimates */
 .conf { white-space: nowrap; }
 .conf.ok { color: var(--ok); }
@@ -231,8 +259,14 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 (() => {
   const s = window.TRC_SESSION, scopes = (s && s.membership && s.membership.scopes) || [];
   document.documentElement.classList.toggle("nomode", !!(s && s.login) && !scopes.includes("admin"));
+  // SP-791 / SP-792 (代看): a coach viewing a student sees 生理數據 only — the student's 門檻與區間 (changed
+  // only when the student allows it); every other tab is the student's own (the server refuses its routes)
+  document.documentElement.classList.toggle("viewing", !!(s && s.login && s.viewing));
 })();
 </script>
+<style>
+html.viewing #plan-sum, html.viewing #power, html.viewing .tabs [role="tab"]:not([data-tab="body"]) { display: none !important; }
+</style>
 </head>
 <body>
 <script src="/api/v1/static/shell.js" data-page="settings"></script>
@@ -278,10 +312,11 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     <button type="button" role="tab" id="tab-data" data-tab="data" data-i18n="settings.tabs.data">資料同步</button>
     <button type="button" role="tab" id="tab-advanced" data-tab="advanced" data-i18n="settings.tabs.advanced">進階設定</button>
     <button type="button" role="tab" id="tab-cairn" data-tab="cairn" data-i18n="settings.tabs.cairn" hidden>疊石 Cairn</button>
+    <button type="button" role="tab" id="tab-coach" data-tab="coach" data-i18n="settings.tabs.coach" hidden>教練</button>
   </nav>
   <p class="meta tab-note" id="tab-note"></p>
   <section id="general">
-    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" data-manual="start#weight" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；每一天用當天或之前最近的一筆體重紀錄。這裡改的是最新一筆（儲存時用你填的量測日期；同一天的那筆會被取代，之前的紀錄留著）。手動填的優先：體重同步（資料同步分頁）不會改它，也不會用那天和之前的量測蓋掉它。性別決定無氧容量（Anaerobic capacity）的先驗值（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
+    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" data-manual="start#weight" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機；每一天用當天或之前最近的一筆體重紀錄。這裡改的是最新一筆（儲存時用你填的量測日期；同一天的那筆會被取代，之前的紀錄留著）。手動填的優先：體重同步（資料同步分頁）不會改它，也不會用那天和之前的量測蓋掉它。性別決定無氧容量（Anaerobic capacity）的先驗值（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
     <div class="row">
       <label><span data-i18n="settings.general.sex">性別</span> <select id="p-sex"><option value="" data-i18n="settings.general.sex_unset">（未填）</option><option value="male" data-i18n="settings.general.male">男</option><option value="female" data-i18n="settings.general.female">女</option></select></label>
       <label><span data-i18n="settings.general.height">身高</span> <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
@@ -348,6 +383,11 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
       <p class="meta" id="hint-suggest" hidden><span data-i18n="settings.hints.suggest">你有跑步紀錄、近一年有比賽成績，也跑過 2 小時以上：提示好像比較多，要改成精簡嗎？</span>
         <button type="button" id="hint-suggest-yes" data-i18n="settings.hints.suggest_yes">改成精簡</button>
         <button type="button" id="hint-suggest-no" data-i18n="settings.hints.suggest_no">不要</button></p>
+      <!-- SP-763: the Cairn card (static/xp_card.js; GET / PUT /api/v1/app/xp/cairn) turned off or on again.
+           Hidden where the route is not there (the demo) -->
+      <p class="row" id="xp-cairn-row" hidden><span data-i18n="settings.xp.cairn">疊石 Cairn 的介紹：</span>
+        <span class="meta" id="xp-cairn-now"></span>
+        <button type="button" id="xp-cairn-btn" hidden></button></p>
       <!-- SP-515: the tests a "no" took out of the suggestion box for every week (engine/suggestions.declined_tests);
            restore = POST /api/v1/overview/plan/suggestions/restore. Hidden when there is none -->
       <div id="sugg-declined" hidden>
@@ -389,21 +429,21 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
   <section id="sport">
     <h2>主要訓練項目</h2>
     <div class="row" style="margin-top:4px">
-      <label>主要訓練項目 <select id="u-sport"><option value="auto">自動</option><option value="trail">越野跑</option><option value="road">路跑／馬拉松</option></select></label>
+      <label class="sel-q"><span>主要訓練項目</span> <select id="u-sport"><option value="auto">自動</option><option value="trail">越野跑</option><option value="road">路跑／馬拉松</option></select></label>
       <button type="button" class="q" aria-label="說明" title="決定圖表分析顯示哪些圖、自動課表怎麼排、比賽計算機預設什麼。越野跑：爬升、下坡、コース定数、陡坡健走、B2B 都會出現。路跑／馬拉松：藏起爬坡和下坡的圖，改看平路的有氧效率、心率飄移、長跑距離和馬拉松配速的量；課表不排陡坡健走和 B2B，專項期的長跑加一段馬拉松配速。自動 = 先看之後的 A 賽：只有越野賽或百岳就算越野，只有路跑賽就算路跑；兩種都有就看哪一場比較吃力（先比賽事大小，再比預估時間，再比 EP），一樣或比不出來就算越野；沒有 A 賽才照同樣方式看 B 賽；都沒有就看近 12 週越野＋登山的時間比例（≥ 25% 算越野，推估）。C 賽不算。">?</button>
       <span class="meta" id="u-sport-note"></span>
     </div>
   </section>
 
   <section id="power">
-    <h2>功率</h2>
+    <h2 data-i18n="settings.power.title">功率</h2>
     <div class="row" style="margin-top:4px">
-      <label><input type="checkbox" id="u-power"> 使用功率</label>
-      <button type="button" class="q" aria-label="說明" title="預設跟著「基本資料」的功率來源：Stryd 才打開，沒有功率計或只有手錶推估功率就用心率。只用心率訓練就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、無氧儲備（Anaerobic reserve）、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
+      <label><input type="checkbox" id="u-power"> <span data-i18n="settings.power.use">使用功率</span></label>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.power.use_help" title="預設跟著「基本資料」的功率來源：Stryd 才打開，沒有功率計或只有手錶推估功率就用心率。只用心率訓練就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、無氧儲備（Anaerobic reserve）、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
       <span class="meta" id="u-power-note"></span>
-      <button type="button" id="u-power-auto" hidden>改回自動</button>
+      <button type="button" id="u-power-auto" hidden data-i18n="settings.power.auto">改回自動</button>
     </div>
-    <details style="margin-top:6px"><summary class="meta">進階設定</summary>
+    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.power.advanced">進階設定</summary>
       <div class="row"><label><input type="checkbox" id="u-watch"> <span data-i18n="settings.power.watch">功率模型也採用手錶推估功率</span></label>
         <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.power.watch_help" title="預設只有 Stryd 的功率會進功率模型，沒有 Stryd 的人用心率。打開後，手錶推估功率也會用在：賽事功率的模型（功率曲線、PD 模型）、功率負荷（Power load）、間歇的功率判讀，還有從跑步估 LTHR 時判斷哪幾次跑得夠硬。課表和圖表的 CP 不會因此改變：還是只用 Stryd 功率擬合，或用你輸入的 CP 測試。手錶功率的量尺跟 Stryd 不同，用它擬合的 CP 可能高很多，課表的功率目標會跟著錯。手錶功率的跑步算功率負荷時也是除以這個 CP；沒有 CP 就照舊用配速或心率算。想用手錶功率練：在「閾值測試紀錄」新增一列，CP 填一次用手錶功率做的 CP 測試，課表和測試就是同一種功率。手錶功率的準度沒驗證過，數字都當推估。">?</button></div>
     </details>
@@ -421,11 +461,11 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
   </section>
 
   <section id="hr">
-    <h2><span data-i18n="settings.hr.title">心率</span> <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.help" title="最大心率依序用：你填的值 → 手錶（COROS 帳號）的值 → 近 365 天跑步裡持續 5 秒以上的最高心率（濾掉光學心率的尖刺）→ 年齡公式 208 − 0.7 × 年齡（推估）。靜息心率：你填的值，沒有就用手錶（COROS 帳號）的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
+    <h2><span data-i18n="settings.hr.title">心率</span> <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.help" title="最大心率依序用：你填的值 → 手錶（COROS 帳號）的值 → 近 365 天跑步裡 10 秒平均心率的最高值（先濾掉光學心率的尖刺）→ 年齡公式 208 − 0.7 × 年齡（推估）。靜息心率：你填的值，沒有就用手錶（COROS 帳號）的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
     <dl class="kv" id="hr-kv"><dt data-i18n="settings.hr.max">最大心率</dt><dd class="meta" data-i18n="settings.pmc.loading">載入中…</dd></dl>
     <div class="est" id="hr-check" hidden></div>
     <div class="row">
-      <label><span data-i18n="settings.hr.model">課表心率區間</span> <select id="hr-model"></select></label>
+      <label class="sel-q"><span data-i18n="settings.hr.model">課表心率區間</span> <select id="hr-model"></select></label>
       <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" id="hr-model-q" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.model_help" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。「自動」看哪個數字可信：LTHR 可信用乳酸閾值區間，否則最大心率和靜息心率可信用儲備心率區間，都不可信用最大心率區間；換了會通知一次。選其中一種就固定用那種。量過的 AeT（AeT 測試）一定當輕鬆跑上限。活動判讀（輕鬆跑／中強度）和自動調整（輕鬆跑偏強）也用同一個輕鬆跑上限：平均心率不超過上限 +3 算輕鬆。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
       <span class="meta" id="hr-model-note" role="status"></span>
     </div>
@@ -467,7 +507,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     </details>
     <!-- SP-363 R2: 課表功率區間 — which set the 課表's power targets (texts, the push) and the power charts' default use -->
     <div class="row">
-      <label><span data-i18n="settings.thr.pz_model">課表功率區間</span> <select id="pz-model"></select></label>
+      <label class="sel-q"><span data-i18n="settings.thr.pz_model">課表功率區間</span> <select id="pz-model"></select></label>
       <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.pz_model_help" title="課表（自動排課、課表步驟、推到手錶）的功率目標用哪一套區間，圖表的功率區間預設也跟著它。每種課照原本的強度對到這套最接近的一級：輕鬆跑、長跑、山路長天用這套的輕鬆級，恢復跑用含 75% CP 那一級的上緣當上限，間歇和爬坡用跟原本功率帶重疊最多的那一級。換了之後，接下來的課會重新排、已推到手錶的課照課表的規則重新推送；你在結構裡自己設的功率目標（% CP、區間、瓦數）不變，設成「自動」的段跟著新區間。個人化區間要有近 90 天的 Stryd 跑步算出功率–時間模型，沒有時先用 Palladino。">?</button>
       <span class="meta" id="pz-model-note" role="status"></span>
     </div>
@@ -562,11 +602,11 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
         <datalist id="s-tz-list"><option value="Asia/Taipei"><option value="Asia/Tokyo"><option value="Asia/Hong_Kong"><option value="Europe/London"><option value="Europe/Berlin"><option value="America/New_York"><option value="America/Los_Angeles"></datalist>
         <label>地區 <select id="s-region"><option value="">自動</option><option value="tw">台灣</option><option value="intl">台灣以外</option></select></label>
         <span class="meta" id="s-tz-eff"></span></div>
-      <div class="row"><label>課表推送到 <select id="s-push"></select></label>
+      <div class="row"><label class="sel-q"><span>課表推送到</span> <select id="s-push"></select></label>
         <button type="button" class="q" data-manual="schedule#push" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
-      <div class="row"><span class="meta" id="s-tl"></span>
-        <button type="button" class="q" data-manual="glossary#training-load" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.tl.help" title="課表的「訓練負荷（Training load）」結束條件填的是本 app 算的負荷，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；每次同步後用你自己有 TL 的 COROS 活動重新擬合：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
-      <div class="row"><span class="meta" id="s-rpe"></span>
+      <div class="row" hidden><span class="meta" id="s-tl"></span>
+        <button type="button" class="q" data-manual="glossary#training-load" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.tl.help" title="課表的「訓練負荷（Training load）」結束條件填的是本 app 算的負荷，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；同步到新活動後，距離上次估算滿 7 天才用你自己有 TL 的 COROS 活動重新擬合（最多每週一次，跟「進階設定 › 自動估算的參數」一起；要馬上重算按那裡的「現在重新估算」）：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
+      <div class="row" hidden><span class="meta" id="s-rpe"></span>
         <button type="button" class="q" data-manual="glossary#rpe" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.rpe_load.help" title="課表的「訓練負荷（Training load）」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數。每一檔的預設是通用規則，用 Coggan 公開的公式：每小時負荷 ＝ 強度比² × 100，強度比（Intensity）是這一檔的強度（範圍參考 Seiler 用 session RPE 分的三區、Coggan 功率等級，取點是推估），不是照哪個人調的。每個人的值只從他自己有自評的活動（手錶記錄的 RPE 或 COROS 跑後自評）和實際負荷逐檔擬合：每檔滿 3 筆才開始，資料少、或是很久以前的資料時向預設靠攏；高一檔不會比低一檔少，沒有自己資料、只為了這個被調整的檔標「依相鄰檔調整」。只用來排課填目標：總覽、訓練負荷圖（Training load chart）的負荷一律用手錶記錄，不會用 RPE 修正。">?</button></div>
       <div id="s-failed-wrap" hidden><div class="row"><b data-i18n="settings.syncfail.title">下載失敗的活動</b>
         <button type="button" class="q" data-manual="faq#missing-activity" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.syncfail.help" title="同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或試滿 7 天，之後停止，可以按「重試」再試。沒有 FIT 檔的手動紀錄也列在這裡，之後有檔案了可以按「重試」。">?</button></div>
@@ -747,31 +787,30 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 
   <!-- SP-711: the server-side backup is the owner's alone (OWNER_ONLY_CAPS backup): hidden until CAN_BACKUP -->
   <section id="backup" hidden>
-    <h2>備份 <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.help" title="把資料庫（活動紀錄、課表、設定、傷病紀錄等）和你改過的檔案（賽季計畫、校正、標註、圖表檢視、路線名稱、上傳的 GPX）打包成一個 zip，存到下面設定的備份資料夾。這個資料夾在伺服器（執行 App 的那台機器）上，備份不會下載到你的手機或電腦。資料來源（COROS、Garmin、TrainingPeaks、intervals.icu）的登入憑證和記住的密碼不放進備份。伺服器上如果有雲端硬碟（iCloud Drive／OneDrive／Google 雲端硬碟／Dropbox）的資料夾，選它就由它們的同步程式自動上傳；App 不會登入任何雲端帳號。保留最近 7 天每天一份、加上最近 4 週每週一份，更舊的自動刪除——只會刪這個功能建立的備份檔，資料夾裡的其他檔案不會動。">?</button>
+    <h2><span data-i18n="settings.backup.title">備份</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.help" title="把資料庫（活動紀錄、課表、設定、傷病紀錄等）和你改過的檔案（賽季計畫、校正、標註、圖表檢視、路線名稱、上傳的 GPX）打包成一個 zip，存到下面設定的備份資料夾。這個資料夾在伺服器（執行 App 的那台機器）上，備份不會下載到你的手機或電腦。資料來源（COROS、Garmin、TrainingPeaks、intervals.icu）的登入憑證和記住的密碼不放進備份。伺服器上如果有雲端硬碟（iCloud Drive／OneDrive／Google 雲端硬碟／Dropbox）的資料夾，選它就由它們的同步程式自動上傳；App 不會登入任何雲端帳號。保留最近 7 天每天一份、加上最近 4 週每週一份，更舊的自動刪除——只會刪這個功能建立的備份檔，資料夾裡的其他檔案不會動。">?</button>
       <span class="pill" id="b-pill" hidden></span></h2>
     <div class="row" id="b-cloud"></div>
     <div class="row">
-      <input type="text" id="b-dir" placeholder="備份資料夾的完整路徑" autocomplete="off" style="flex:1;min-width:240px">
-      <button id="b-dir-save">使用這個資料夾</button>
+      <input type="text" id="b-dir" placeholder="備份資料夾的完整路徑" data-i18n-attr="placeholder:settings.backup.dir_ph" autocomplete="off" style="flex:1;min-width:240px">
+      <button id="b-dir-save" data-i18n="settings.backup.dir_use">使用這個資料夾</button>
     </div>
     <div class="row">
-      <label><input type="checkbox" id="b-auto"> 每天自動備份</label>
-      <button type="button" class="q" aria-label="說明" title="App 開著時，距離上次成功備份超過 24 小時就自動備份一次（開啟 App 時也會檢查）。失敗的話一小時後再試。">?</button>
+      <label><input type="checkbox" id="b-auto"> <span data-i18n="settings.backup.auto">每天自動備份</span></label>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.auto_help" title="App 開著時，距離上次成功備份超過 24 小時就自動備份一次（開啟 App 時也會檢查）。失敗的話一小時後再試。">?</button>
     </div>
     <dl class="kv" id="b-kv"></dl>
     <div class="row">
-      <button class="primary" id="b-run">立即備份</button>
-      <button id="b-restore">還原…</button>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.restore_help" title="選備份資料夾裡的一份備份，或從你的裝置上傳一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫和檔案另存一份到伺服器上 app 資料夾的 backups（也列在清單裡，可以還原回去），然後換成備份裡的資料；備份裡沒有的檔案不會動，分享連結不會還原。完成後請重新啟動 App。不會被覆蓋的：伺服器上的備份設定（資料夾、每天自動備份）、課表訂閱網址、Debug API，以及資料來源（COROS、Garmin、TrainingPeaks、intervals.icu）的登入——登入不在備份裡，在另一台伺服器還原後要登入一次。舊版的加密備份（.zip.enc）不能還原。">?</button>
+      <button class="primary" id="b-run" data-i18n="settings.backup.run">立即備份</button>
+      <button id="b-restore" data-i18n="settings.backup.restore_btn">還原…</button>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.restore_help" title="選備份資料夾裡的一份備份，或從你的裝置上傳一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫和檔案另存一份到伺服器上 app 資料夾的 backups（也列在清單裡，可以還原回去），然後換成備份裡的資料；備份裡沒有的檔案不會動，分享連結不會還原。完成後重新整理頁面就會看到還原的資料（伺服器不用重新啟動；圖表會重算，第一次打開會比較慢）。不會被覆蓋的：伺服器上的備份設定（資料夾、每天自動備份）、課表訂閱網址、Debug API，以及資料來源（COROS、Garmin、TrainingPeaks、intervals.icu）的登入——登入不在備份裡，在另一台伺服器還原後要登入一次。舊版的加密備份（.zip.enc）不能還原。">?</button>
       <span class="meta" id="b-msg" role="status"></span>
     </div>
-    <details style="margin-top:6px"><summary class="meta">進階設定</summary>
+    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.backup.advanced">進階設定</summary>
       <div class="row">
-        <label><input type="checkbox" id="b-fit"> 同時備份 FIT 原始檔</label>
+        <label><input type="checkbox" id="b-fit"> <span data-i18n="settings.backup.fit">同時備份 FIT 原始檔</span></label>
         <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.fit_help" title="同步下來的 FIT 檔（伺服器上 app 資料夾的 fit）以 gzip 壓縮放進備份，備份檔會大很多。不勾也沒關係：FIT 檔之後可以從 COROS／TrainingPeaks 重新同步。還原時只補回伺服器上還沒有的 FIT 檔，已經有的不會覆蓋。">?</button>
       </div>
     </details>
-    <p class="meta" id="b-note"></p>
   </section>
 
   <!-- SP-317: 運動紀錄保留 (api/archive.py, engine/fit_archive.py) -->
@@ -791,27 +830,25 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
       <a class="button" id="ar-dl" href="/api/v1/archive/fit.zip" download data-i18n="settings.arch.download">下載我的全部 FIT</a>
       <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.arch.download_help" title="把你所有同步、匯入的 FIT 原始檔打包成一個 zip 下載，隨時都能用，跟清理無關。檔案多的話要等一下才會開始。">?</button>
     </div>
-    <p class="meta" id="ar-note" role="status"></p>
   </section>
 
   <!-- SP-322: 這台裝置的離線資料 (device_storage.js; the copy itself: SP-314, offline_core.js) -->
   <section id="device">
-    <h2><span data-i18n="settings.device.title">這台裝置的離線資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.device.help" title="沒訊號時，總覽、課表和活動列表從這台裝置存的資料打開（只能看、不能改）。存的內容分三層：P0 一定要有（總覽、課表）、P1 應該要有（活動列表、成就）、P2 有空間再存；全部加起來最多 20 MB，超過時先清 P2、再清 P1。連上網路時會自動更新。每台裝置、每個瀏覽器各存一份，登出就刪掉。">?</button></h2>
+    <h2><span data-i18n="settings.device.title">這台裝置的離線資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.device.help" title="沒訊號時，總覽、課表和活動列表從這台裝置存的資料打開（只能看、不能改）。存的內容分三層：P0 一定要有（總覽、課表）、P1 應該要有（活動列表、成就）、P2 有空間再存（近 30 天打開過的單次活動）；全部加起來最多 20 MB，超過時先清 P2、再清 P1。連上網路時會自動更新。每台裝置、每個瀏覽器各存一份，登出就刪掉。">?</button></h2>
     <p class="meta" data-i18n="settings.device.intro">沒訊號時從這裡打開總覽和課表。這裡看存了多少、會不會被瀏覽器清掉。</p>
     <div id="ds-body" aria-live="polite"><span class="meta" data-i18n="settings.device.loading">讀取中…</span></div>
-    <p class="meta" id="ds-note" role="status"></p>
   </section>
 
   <dialog id="restore-dlg">
-    <h2>還原備份</h2>
-    <p class="meta">目前的資料會被備份裡的資料取代（還原前會先自動另存一份）。</p>
-    <div class="row"><label>備份資料夾裡的檔案 <select id="r-list"></select></label></div>
-    <div class="row"><label>或選其他檔案 <input type="file" id="r-file" accept=".zip"></label></div>
-    <div class="row"><button id="r-check">檢查備份</button></div>
+    <h2 data-i18n="settings.backup.dlg_title">還原備份</h2>
+    <p class="meta" data-i18n="settings.backup.dlg_intro">目前的資料會被備份裡的資料取代（還原前會先自動另存一份）。</p>
+    <div class="row"><label><span data-i18n="settings.backup.dlg_list">備份資料夾裡的檔案</span> <select id="r-list"></select></label></div>
+    <div class="row"><label><span data-i18n="settings.backup.dlg_file">或選其他檔案</span> <input type="file" id="r-file" accept=".zip"></label></div>
+    <div class="row"><button id="r-check" data-i18n="settings.backup.dlg_check">檢查備份</button></div>
     <div class="meta" id="r-info"></div>
-    <p class="meta">確認無誤後請輸入 <b>還原</b>：</p>
+    <p class="meta"><span data-i18n="settings.backup.dlg_type">確認無誤後請輸入</span> <b data-i18n="settings.backup.confirm_word">還原</b><span data-i18n="settings.backup.dlg_colon">：</span></p>
     <div class="row"><input type="text" id="r-confirm" autocomplete="off">
-      <button class="danger primary" id="r-ok" disabled>還原</button><button id="r-cancel">取消</button></div>
+      <button class="danger primary" id="r-ok" disabled data-i18n="settings.backup.dlg_ok">還原</button><button id="r-cancel" data-i18n="settings.backup.dlg_cancel">取消</button></div>
   </dialog>
 
   <dialog id="src-dlg">
@@ -884,6 +921,19 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
   <section id="account" hidden>
     <h2 data-i18n="settings.acct.title">帳號</h2>
     <p class="meta" id="acct-who"></p>
+    <!-- SP-858: 改密碼 — an e-mail account only (me.sign_in === "email"); POST …/email/password -->
+    <div id="acct-pwc" hidden>
+      <h3 data-i18n="settings.acct.pwc_title">密碼</h3>
+      <p class="meta" data-i18n="settings.acct.pwc_intro">改密碼要先輸入目前的密碼。新密碼至少 10 個字元，不要用 email 或常見密碼。改好之後，其他已登入的裝置都會登出，這台不會。</p>
+      <div class="row"><label><span data-i18n="settings.acct.pwc_current">目前的密碼</span>
+        <input type="password" id="acct-pwc-cur" autocomplete="current-password" maxlength="128"></label></div>
+      <div class="row"><label><span data-i18n="settings.acct.pwc_new">新密碼</span>
+        <input type="password" id="acct-pwc-new" autocomplete="new-password" maxlength="128"></label></div>
+      <div class="row"><label><span data-i18n="settings.acct.pwc_again">再輸入一次新密碼</span>
+        <input type="password" id="acct-pwc-new2" autocomplete="new-password" maxlength="128"></label></div>
+      <div class="row"><button type="button" class="primary" id="acct-pwc-go" data-i18n="settings.acct.pwc_go">改密碼</button>
+        <span class="meta" id="acct-pwc-msg" role="status"></span></div>
+    </div>
     <h3 data-i18n="settings.acct.export_title">下載我的資料</h3>
     <p class="meta" data-i18n="settings.acct.export_intro">把你輸入的資料（設定、賽季計畫、課表、標註、傷病紀錄、上傳的 GPX）和同步、匯入的活動與 FIT 原始檔打包成一個 zip，也附上帳號資料與同意紀錄。登入憑證、記住的密碼不會放進去。檔案多的話要等一下才會開始下載。</p>
     <div class="row"><a class="button" id="acct-export" href="/api/v1/account/export.zip" download data-i18n="settings.acct.export">下載我的資料</a></div>
@@ -929,12 +979,47 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     <p class="meta" id="cairn-msg" role="status"></p>
   </section>
 
+  <!-- SP-789: 教練 — a coach and their students (api/coach.py, accounts/coaching.py), sign-in mode only
+       (GET /api/v1/account/coach answers). 我的教練 for everyone; 我的學員 for a coach (the admin page
+       makes one). ?coach_token=<invite> (a coach's invite link) opens this tab and asks; static/coach_settings.js -->
+  <section id="coach" hidden>
+    <h2 data-i18n="settings.coach.title">教練</h2>
+    <p class="meta" data-i18n="settings.coach.intro">教練要你按「接受」才能看你的訓練資料，也能改你的課表與訓練設定——可以在「我的教練」下面個別關掉，每次修改都會記下來。你隨時可以在這裡解除，解除後教練立刻就看不到了。一次只能有一位教練。</p>
+    <div class="sub coach-ask" id="coach-ask" hidden></div>
+    <h3 data-i18n="settings.coach.mine_title">我的教練</h3>
+    <div id="coach-mine"></div>
+    <div id="coach-edits" hidden></div>
+    <div id="coach-find">
+      <p class="meta" data-i18n="settings.coach.find_intro">有教練代碼的話，輸入後送出邀請，教練確認後就生效。</p>
+      <div class="row"><label><span data-i18n="settings.coach.code_label">教練代碼</span>
+        <input type="text" id="coach-code" maxlength="20" autocomplete="off" spellcheck="false" autocapitalize="characters" style="width:9em"></label>
+        <button type="button" id="coach-code-go" data-i18n="settings.coach.code_go">查詢</button></div>
+      <div class="row" id="coach-found" hidden></div>
+    </div>
+    <div id="coach-side" hidden>
+      <h3 data-i18n="settings.coach.side_title">我的學員</h3>
+      <!-- SP-790: every active student's summary at a glance (api/coach_board.py) -->
+      <p><a class="button" href="/api/v1/coach/board/page" data-i18n="settings.coach.board_link">打開教練看板</a></p>
+      <div id="coach-side-head"></div>
+      <div id="coach-students"></div>
+    </div>
+    <p class="meta" id="coach-msg" role="status"></p>
+  </section>
+
   <dialog id="acct-dlg" aria-labelledby="acct-dlg-title">
     <h2 id="acct-dlg-title" data-i18n="settings.acct.dlg_title">刪除帳號</h2>
     <div id="acct-step1">
       <p class="meta" data-i18n="settings.acct.step1">為了確認是你本人，請先用 Google 再登入一次（用目前這個帳號）。確認後 10 分鐘內可以刪除。</p>
       <div class="row"><a class="button primary" id="acct-reauth" href="/api/v1/account/reauth" data-i18n="settings.acct.reauth">用 Google 確認身分</a>
         <button type="button" class="acct-cancel" data-i18n="settings.acct.cancel">取消</button></div>
+    </div>
+    <!-- an e-mail account (SP-610): its password confirms who it is, not Google -->
+    <div id="acct-step1-pw" hidden>
+      <p class="meta" data-i18n="settings.acct.step1_pw">為了確認是你本人，請輸入這個帳號的密碼。確認後 10 分鐘內可以刪除。</p>
+      <div class="row"><input type="password" id="acct-pw" autocomplete="current-password" maxlength="128" aria-label="密碼" data-i18n-attr="aria-label:settings.acct.pw_label">
+        <button type="button" class="primary" id="acct-pw-go" data-i18n="settings.acct.reauth_pw">確認身分</button>
+        <button type="button" class="acct-cancel" data-i18n="settings.acct.cancel">取消</button></div>
+      <p class="meta err-text" id="acct-pw-msg" role="status"></p>
     </div>
     <div id="acct-step2" hidden>
       <p class="meta" data-i18n="settings.acct.step2">已確認身分。刪除後無法復原：你的活動、課表、設定和上傳的檔案都會立即刪除，所有裝置都會登出。</p>
@@ -947,8 +1032,8 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
   </dialog>
 
   <section id="calib" hidden>
-    <details><summary class="meta">進階設定：自動估算的參數</summary>
-      <p class="meta">這些數字會用你的資料自動估算（每次同步到新活動後重算），資料不夠時用文獻或推估的預設值。點標籤（或滑過去）看說明；只有確定時才手動指定。</p>
+    <details><summary class="meta" data-i18n="settings.calib.summary">進階設定：自動估算的參數</summary>
+      <p class="meta" data-i18n="settings.calib.intro">這些數字會用你的資料自動估算：同步到新活動後，距離上次估算滿 7 天才重算（最多每週一次），要馬上重算按下面的「現在重新估算」。資料不夠時用文獻或推估的預設值。點標籤（或滑過去）看說明；只有確定時才手動指定。</p>
       <p class="meta" id="calib-tip" hidden></p>
       <table class="wt"><tbody id="calib-rows"></tbody></table>
       <p class="meta" id="calib-rpe-title" data-i18n="settings.rpe_load.calib_title" data-i18n-attr="title:settings.rpe_load.calib_tip" title="預設是通用規則（Coggan 公開的公式：每小時負荷＝強度比² × 100，強度的取點是推估），不是照哪個人調的；每個人的值只從他自己有自評的活動擬合。標籤：本人 n＝自己的資料、預設（推估）＝通用規則、依相鄰檔調整＝沒有自己的資料，為了讓高一檔不會比低一檔少而調整。" hidden>「負荷」用 RPE 填：每一檔的每小時負荷</p>
@@ -982,7 +1067,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 
   <!-- Debug API for AI agents (SP-371, docs/debug-api.md; logic: static/debug_api.js) -->
   <section id="debugapi">
-    <h2><span data-i18n="settings.debug.title">Debug API（給 AI agent）</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.help" title="讓 AI agent 或你自己的本機用個人 token 透過 HTTPS 唯讀查詢活動、課表、門檻、同步狀態，或匯出設定和課表。只能讀，不能改任何東西；token 只在產生時顯示一次，伺服器只存雜湊。">?</button></h2>
+    <h2><span data-i18n="settings.debug.title">Debug API（給 AI agent）</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.help" title="讓 AI agent 或你自己的本機用個人 token 透過 HTTPS 查詢活動、課表、門檻、同步狀態，或匯出設定和課表。勾了「改設定」（write:config）的 token 還能改門檻、賽事、課表偏好：先預覽再套用，每次都記下改了什麼、可以復原；其他都只能讀。token 只在產生時顯示一次，伺服器只存雜湊。">?</button></h2>
     <div class="row"><label><input type="checkbox" id="dbg-on"> <span data-i18n="settings.debug.enable">開啟 Debug API</span></label>
       <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.enable_help" title="關閉時 /api/v1/debug/ 底下的網址一律回 404。只認專用的 token，網頁登入的 cookie 叫不動；每個 token 每分鐘最多 60 次。">?</button></div>
     <div id="dbg-body" hidden>
@@ -991,12 +1076,29 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
       <div class="row" id="dbg-made" hidden><input type="text" id="dbg-token" readonly style="flex:1;min-width:240px">
         <button id="dbg-copy" data-i18n="settings.cal.copy">複製</button>
         <span class="meta" data-i18n="settings.debug.once">只顯示這一次，關掉就看不到了</span></div>
-      <table class="wt"><tbody id="dbg-tokens"></tbody></table>
+      <table class="wt dbg-tok-t"><tbody id="dbg-tokens"></tbody></table>
+      <!-- SP-802: the writes through /api/v1/debug/write/* (engine/debug_write.py) -->
+      <h3 style="margin:10px 0 4px;font-size:14px" data-i18n="settings.debug.writes">最近 AI 改了什麼</h3>
+      <table class="wt"><tbody id="dbg-writes"></tbody></table>
       <details style="margin-top:6px"><summary class="meta" data-i18n="settings.debug.audit">最近 100 次呼叫</summary>
         <table class="wt"><tbody id="dbg-audit"></tbody></table>
         <p class="meta" id="dbg-stats"></p>
         <table class="wt"><tbody id="dbg-fails"></tbody></table></details>
     </div>
+  </section>
+
+  <!-- AI 問答 (SP-785 / SP-786, backend/ai; logic: static/ai_settings.js): the owner only — shown when
+       GET /api/v1/ai/settings answers (403 for anyone else) -->
+  <section id="askai" hidden>
+    <h2><span data-i18n="settings.askai.title">AI 問答</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.askai.help" title="用「問 AI」問你正在看的卡、圖、課或計算結果。回答只用 app 自己的數字和規則，每一段標出是 App 規則還是 AI 推論。送給模型的只有彙總（狀態卡的規則判斷、近 8 週訓練量、那張卡的文字），不送 GPS 軌跡。目前只給站主用，用站主自己的 API key；呼叫模型會產生費用，每天有次數上限，同樣的問題會用存下來的回答。">?</button></h2>
+    <div class="row"><label><input type="checkbox" id="ai-on"> <span data-i18n="settings.askai.enable">開啟 AI 問答（每頁右下角的「問 AI」）</span></label></div>
+    <div class="row"><span data-i18n="settings.askai.key">API key（Anthropic）</span>
+      <span class="meta" id="ai-key-state"></span>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.askai.key_help" title="存起來會加密，畫面只顯示最後 4 碼，log 不會印出。伺服器設了 TRC_ANTHROPIC_API_KEY（或 _FILE）時用它。">?</button></div>
+    <div class="row" id="ai-key-row"><input type="password" id="ai-key" autocomplete="off" spellcheck="false" style="flex:1;min-width:220px" placeholder="貼上 API key" data-i18n-attr="placeholder:settings.askai.key_placeholder">
+      <button class="primary" id="ai-key-save" data-i18n="settings.askai.key_save">儲存</button>
+      <button id="ai-key-clear" data-i18n="settings.askai.key_clear">清除</button></div>
+    <p class="meta" id="ai-model"></p>
   </section>
 
   <!-- a local copy pulls from production (SP-373, engine/upstream.py; logic: static/debug_api.js).
@@ -1237,6 +1339,26 @@ $("hint-suggest-no").onclick = async () => {           // 「不要」: never as
   } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
 };
 loadHintLevel();
+// ---- 疊石 Cairn 的介紹 (SP-763; GET / PUT /api/v1/app/xp/cairn): 「不用了」 on the card turns it off for both
+// places; here it comes back (or goes again). Linked with Cairn: no introduction, nothing to switch ----------------
+const XP_API = "/api/v1/app/xp/cairn";
+function renderXpCairn(s) {
+  const row = $("xp-cairn-row"), btn = $("xp-cairn-btn");
+  row.hidden = false;
+  if (s.linked) { $("xp-cairn-now").textContent = t("settings.xp.cairn_linked"); btn.hidden = true; return; }
+  $("xp-cairn-now").textContent = s.off ? t("settings.xp.cairn_off")
+    : t("settings.xp.cairn_on") + (s.why === "lean" ? t("settings.xp.cairn_lean") : "");   // the brackets are in the catalog
+  btn.textContent = t(s.off ? "settings.xp.cairn_show" : "settings.xp.cairn_hide");
+  btn.hidden = false;
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try {
+      renderXpCairn(await j(XP_API, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ off: !s.off }) }));
+    } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
+    btn.disabled = false;
+  };
+}
+j(XP_API).then(renderXpCairn).catch(() => {});      // 404 in the demo: the row stays hidden
 // ---- 不再建議的測試 (SP-515; GET …/suggestions/declined-tests, POST …/suggestions/restore {key}) ----------
 const SUGG_API = "/api/v1/overview/plan/suggestions";
 const sdKind = (k) => ({ cp: t("settings.sugg_declined.kind_cp"), aet: t("settings.sugg_declined.kind_aet") })[k] || k.toUpperCase();
@@ -1322,7 +1444,7 @@ function renderHr(r) {
   const e = r.estimate || {};
   $("hr-est").textContent = [
     e.value ? t("settings.hr.est", { v: e.value, reason: e.reason }) : e.reason ? t("settings.hr.est_reason", { reason: e.reason }) : "",
-    e.peaks && e.peaks.length ? t("settings.hr.peaks", { list: e.peaks.map((p) => `${p[0]} ${p[1]}`).join("、") }) : "",
+    e.peaks && e.peaks.length ? t("settings.hr.peaks", { list: e.peaks.map((p) => `${p[0]} ${p[1]}`).join(t("settings.upstream.list_sep")) }) : "",
     r.account ? t("settings.hr.watch", { max: r.account.max_hr ?? "–", rest: r.account.rest_hr ?? "–" }) : t("settings.hr.watch_none"),
   ].filter(Boolean).join("　");
   renderHrCompare(r.compare);
@@ -1638,8 +1760,10 @@ function renderThrCheck() {
   const why = (v) => (v.signals || []).filter((s) => s.level !== "hint").map((s) => `<li>${esc(s.text)}</li>`).join("");
   const res = (kind) => (TC.test_results || []).filter((r) => r.kind === kind);
   const btn = (body, label) => `<button class="primary" data-tcapply='${esc(JSON.stringify(body))}'>${esc(label)}</button>`;
-  const card = (name, v, extra) => !v || v.value == null ? "" : `<div class="card"><div class="k">${esc(t("settings.thr.chk_k", { name }))}</div>
-    <div class="v">${esc(conf(v.confidence))} <small>${esc(t("settings.thr.chk_now", { v: Math.round(v.value), src: v.label || "" }))}</small></div>
+  // SP-806: the max-HR card sits right under the 最大心率 row, which already shows the full source — only the number here
+  const card = (name, v, extra, src = true) => !v || v.value == null ? "" : `<div class="card"><div class="k">${esc(t("settings.thr.chk_k", { name }))}</div>
+    <div class="v">${esc(conf(v.confidence))} <small>${esc(src ? t("settings.thr.chk_now", { v: Math.round(v.value), src: v.label || "" })
+      : t("settings.thr.chk_now_v", { v: Math.round(v.value) }))}</small></div>
     ${why(v) ? `<ul class="s" style="margin:4px 0;padding-left:16px">${why(v)}</ul>` : ""}${extra || ""}</div>`;
   const dg = TC.diagnosis && TC.diagnosis.text ? `<div class="s">${esc(TC.diagnosis.text)}</div>` : "";
   const tests = (kind) => res(kind).map((r) => `<div class="s">${esc(t(kind === "tt30" ? "settings.thr.chk_tt30" : "settings.thr.chk_hrmax_test", {
@@ -1666,7 +1790,7 @@ function renderThrCheck() {
   CONF.hrmax = asCard(hm, !!cand || res("hrmax").some((r) => r.apply)) ? null : hm;
   box("thr-check", CONF.lthr || !lt ? "" : mark(card("LTHR", lt, lnote + dg + tests("tt30")), "ST8", { ...lt, confidence: "" }));
   box("hr-check", CONF.hrmax || !hm ? "" : mark(card(t("settings.thr.chk_hrmax"), hm,
-    (TC.diagnosis && TC.diagnosis.outlier === "hrmax" ? dg : "") + candHtml + tests("hrmax")), "ST7", hm));
+    (TC.diagnosis && TC.diagnosis.outlier === "hrmax" ? dg : "") + candHtml + tests("hrmax"), false), "ST7", hm));
   CONF.why = { lthr: [...(lt && lt.signals || []).filter((x) => x.level !== "hint").map((x) => x.text), TC.warn && TC.warn.lthr && TC.warn.lthr.note,
     TC.diagnosis && TC.diagnosis.outlier !== "hrmax" ? TC.diagnosis.text : ""].filter(Boolean),
     hrmax: [...(hm && hm.signals || []).filter((x) => x.level !== "hint").map((x) => x.text),
@@ -1892,6 +2016,7 @@ let SS = null, SOURCES = null;
 function showTl(t) {
   const el = $("s-tl");
   if (!el) return;
+  el.parentElement.hidden = !(t && t.groups);           // SP-748: no lone ?
   if (!t || !t.groups) { el.textContent = ""; return; }
   const pct = (x) => x == null ? "–" : `${Math.round(x * 100)}%`;
   const g = t.groups.map((r) => `${r.label}：${r.text}` + (r.fitted
@@ -1912,6 +2037,7 @@ function showRpe(r) {
       <td>${esc(t("settings.rpe_load.value", { tss_h: x.tss_h, if: Number(x.if).toFixed(2) }))} ${calibChip(x.chip, x.source)}</td>
       <td class="meta">n=${esc(x.n)}</td></tr>`).join(""); }
   if (!el) return;
+  el.parentElement.hidden = !lv.length;                  // SP-748: no lone ?
   if (!lv.length) { el.textContent = ""; return; }
   const pct = (x) => x == null ? "–" : `${Math.round(x * 100)}%`;
   el.textContent = t("settings.rpe_load.summary", { levels: lv.map((x) => `${x.label} ${x.tss_h}`).join(" · "),
@@ -1945,10 +2071,11 @@ async function loadSyncSettings() {
   showRpe(SS.rpe_load);
   $("m-base").value = SS.map_basemap || "rudy";
   $("u-power").checked = SS.use_power !== false;
-  const PSL = { stryd: "Stryd", watch: "手錶推估功率", none: "沒有功率計" };
+  // SP-748: the power source's name and the note in the page's language (power_source_how is the server's)
+  const PSL = { stryd: "Stryd", watch: t("settings.power.src_watch"), none: t("settings.power.src_none") };
   $("u-power-note").textContent = SS.use_power_stored == null
-    ? `自動：功率來源 ${PSL[SS.power_source] || "–"}（${SS.power_source_how || "–"}）`
-    : (SS.use_power === false ? "已關閉：只顯示心率／配速的圖" : "");
+    ? t("settings.power.auto_note", { src: PSL[SS.power_source] || "–", how: SS.power_source_how || "–" })
+    : (SS.use_power === false ? t("settings.power.off_note") : "");
   $("u-power-auto").hidden = SS.use_power_stored == null;
   $("u-watch").checked = !!SS.accept_watch_power;
   document.querySelectorAll('input[name="m-ovl"]').forEach((c) => c.checked = (SS.map_overlays || []).includes(c.value));
@@ -2185,26 +2312,23 @@ $("u-sport").onchange = async (e) => {
   try { await putSetting({ primary_sport: e.target.value }); toast("已更新主要訓練項目：重新整理其他頁面就會套用"); loadSport(); }
   catch (err) { toast("失敗：" + err.message.slice(0, 80)); loadSport(); }
 };
-document.querySelector("#sport button.q").onclick = (e) => { $("u-sport-note").textContent = e.currentTarget.title; };
 loadSport();
 
 async function putSetting(body) {
   await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
-// ? on touch (no hover): show the explanation under the switch
-document.querySelector("#power button.q").onclick = (e) => { $("u-power-note").textContent = e.currentTarget.title; };
 $("u-power").onchange = async (e) => {
   try { await putSetting({ use_power: e.target.checked });
-    toast(e.target.checked ? "已開啟功率：重新整理其他頁面就會顯示功率的圖" : "已關閉功率：其他頁面重新整理後只顯示心率／配速"); loadSyncSettings(); }
-  catch (err) { toast("失敗：" + err.message.slice(0, 80)); e.target.checked = !e.target.checked; }
+    toast(t(e.target.checked ? "settings.power.on_toast" : "settings.power.off_toast")); loadSyncSettings(); }
+  catch (err) { toast(t("settings.power.fail", { msg: err.message.slice(0, 80) })); e.target.checked = !e.target.checked; }
 };
 $("u-power-auto").onclick = async () => {
-  try { await putSetting({ use_power: null }); toast("已改回自動"); loadSyncSettings(); }
-  catch (err) { toast("失敗：" + err.message.slice(0, 80)); }
+  try { await putSetting({ use_power: null }); toast(t("settings.power.auto_toast")); loadSyncSettings(); }
+  catch (err) { toast(t("settings.power.fail", { msg: err.message.slice(0, 80) })); }
 };
 $("u-watch").onchange = async (e) => {
-  try { await putSetting({ accept_watch_power: e.target.checked }); toast("已更新：圖表會重算"); loadSyncSettings(); }
-  catch (err) { toast("失敗：" + err.message.slice(0, 80)); e.target.checked = !e.target.checked; }
+  try { await putSetting({ accept_watch_power: e.target.checked }); toast(t("settings.power.watch_toast")); loadSyncSettings(); }
+  catch (err) { toast(t("settings.power.fail", { msg: err.message.slice(0, 80) })); e.target.checked = !e.target.checked; }
 };
 f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.checked }).then(() => toast(tSy("updated")));
 f("tp", "enabled").onchange = (e) => putSetting({ trainingpeaks_enabled: e.target.checked }).then(() => toast(tSy("updated")));
@@ -2564,52 +2688,51 @@ function renderBackup(s) {
   BS = s;
   $("b-dir").value = s.dir || "";
   $("b-auto").checked = !!s.auto; $("b-fit").checked = !!s.include_fit;
-  $("b-cloud").innerHTML = (s.cloud.length ? `<span class="meta">偵測到：</span>` : `<span class="meta">沒偵測到雲端硬碟資料夾，可以直接輸入路徑。</span>`)
+  $("b-cloud").innerHTML = `<span class="meta">${esc(tBk(s.cloud.length ? "cloud_found" : "cloud_none"))}</span>`
     + s.cloud.map((c, i) => `<button data-i="${i}" class="${s.dir === c.path ? "primary" : ""}" title="${esc(c.path)}">${esc(c.label)}</button>`).join("");
   const r = s.last_result, ok = s.last_ok;
   const pill = $("b-pill");
   pill.hidden = !s.dir;
   pill.className = "pill " + (!r ? "" : r.status === "ok" ? "ok" : "err");
-  pill.textContent = !r ? "還沒備份" : r.status === "ok" ? "正常" : "上次失敗";
-  $("b-kv").innerHTML = !s.dir ? `<dt>狀態</dt><dd>還沒選備份資料夾</dd>` :
-    `<dt>上次成功</dt><dd>${ok ? `${fmtTime(ok.at)}・${bytes(ok.size)}` : "–"}</dd>`
-    + (r && r.status !== "ok" ? `<dt>上次嘗試</dt><dd class="err-text">${fmtTime(r.at)} 失敗：${esc(r.error || "")}</dd>` : "")
-    + `<dt>資料夾裡</dt><dd>${s.backups.length} 份備份（${bytes(s.backups.reduce((a, b) => a + b.size, 0))}）</dd>`;
+  pill.textContent = tBk(!r ? "pill_none" : r.status === "ok" ? "pill_ok" : "pill_failed");
+  $("b-kv").innerHTML = !s.dir ? `<dt>${esc(tBk("kv_state"))}</dt><dd>${esc(tBk("kv_no_dir"))}</dd>` :
+    `<dt>${esc(tBk("kv_last_ok"))}</dt><dd>${ok ? `${fmtTime(ok.at)}・${bytes(ok.size)}` : "–"}</dd>`
+    + (r && r.status !== "ok" ? `<dt>${esc(tBk("kv_last_try"))}</dt><dd class="err-text">${esc(tBk("kv_failed", { when: fmtTime(r.at), err: r.error || "" }))}</dd>` : "")
+    + `<dt>${esc(tBk("kv_in_dir"))}</dt><dd>${esc(tBk("kv_count", { n: s.backups.length, size: bytes(s.backups.reduce((a, b) => a + b.size, 0)) }))}</dd>`;
   $("b-run").disabled = !s.dir;
 }
 async function loadBackup() {
   try { renderBackup(await j(`${BK}/status`)); }
-  catch (e) { $("b-msg").textContent = "備份狀態載入失敗：" + reason(e); }
+  catch (e) { $("b-msg").textContent = tBk("load_failed", { err: reason(e) }); }
 }
 async function setBackupDir(path) {
-  try { renderBackup(await jput(`${BK}/settings`, { dir: path })); toast(path ? "已設定備份資料夾" : "已取消備份資料夾"); $("b-msg").className = "meta"; $("b-msg").textContent = ""; }
-  catch (e) { $("b-msg").textContent = "不能用這個資料夾：" + reason(e); $("b-msg").className = "meta err-text"; }
+  try { renderBackup(await jput(`${BK}/settings`, { dir: path })); toast(tBk(path ? "dir_set" : "dir_unset")); $("b-msg").className = "meta"; $("b-msg").textContent = ""; }
+  catch (e) { $("b-msg").textContent = tBk("dir_bad", { err: reason(e) }); $("b-msg").className = "meta err-text"; }
 }
 $("b-cloud").onclick = (e) => { const i = e.target.dataset.i; if (i != null) setBackupDir(BS.cloud[+i].path); };
 $("b-dir-save").onclick = () => setBackupDir($("b-dir").value.trim() || null);
-$("b-auto").onchange = (e) => jput(`${BK}/settings`, { auto: e.target.checked }).then(renderBackup).then(() => toast("已更新"));
-$("b-fit").onchange = (e) => jput(`${BK}/settings`, { include_fit: e.target.checked }).then(renderBackup).then(() => toast("已更新"));
+$("b-auto").onchange = (e) => jput(`${BK}/settings`, { auto: e.target.checked }).then(renderBackup).then(() => toast(tBk("updated")));
+$("b-fit").onchange = (e) => jput(`${BK}/settings`, { include_fit: e.target.checked }).then(renderBackup).then(() => toast(tBk("updated")));
 $("b-run").onclick = async (e) => {
-  const msg = $("b-msg"); msg.className = "meta"; msg.textContent = "備份中…";
+  const msg = $("b-msg"); msg.className = "meta"; msg.textContent = tBk("running");
   try {
-    const r = await busy(e.currentTarget, "備份中…", () => j(`${BK}/run`, { method: "POST" }));
+    const r = await busy(e.currentTarget, tBk("running"), () => j(`${BK}/run`, { method: "POST" }));
     renderBackup(r.status_all);
-    if (r.status === "ok") { msg.className = "meta ok-text"; msg.textContent = `已備份 ${r.name}（${bytes(r.size)}）`; toast("備份完成"); }
-    else { msg.className = "meta err-text"; msg.textContent = "備份失敗：" + (r.error || ""); }
-  } catch (err) { msg.className = "meta err-text"; msg.textContent = "備份失敗：" + reason(err); }
+    if (r.status === "ok") { msg.className = "meta ok-text"; msg.textContent = tBk("done_msg", { name: r.name, size: bytes(r.size) }); toast(tBk("done_toast")); }
+    else { msg.className = "meta err-text"; msg.textContent = tBk("run_failed", { err: r.error || "" }); }
+  } catch (err) { msg.className = "meta err-text"; msg.textContent = tBk("run_failed", { err: reason(err) }); }
 };
-// ? on touch (no hover): show the explanation under the section
-$("backup").addEventListener("click", (e) => { const q = e.target.closest("button.q"); if (q) $("b-note").textContent = q.title; });
 
 // restore: pick -> 檢查 (upload, inspect) -> type 還原 -> restore
 let RSRC = null, RINFO = null;
-function restoreReady() { $("r-ok").disabled = !(RINFO && $("r-confirm").value.trim() === "還原"); }
+// the word to type is the page's (還原 / restore), the same the dialog asks for
+function restoreReady() { $("r-ok").disabled = !(RINFO && $("r-confirm").value.trim() === tBk("confirm_word")); }
 function resetRestoreInfo() { RSRC = null; RINFO = null; $("r-info").textContent = ""; restoreReady(); }
 $("b-restore").onclick = () => {
   const list = (BS && BS.backups) || [], pre = (BS && BS.pre_restores) || [];
   const opt = (b) => `<option value="${esc(b.name)}">${esc(b.created_local.replace("T", " "))}・${bytes(b.size)}</option>`;
-  $("r-list").innerHTML = `<option value="">（選一個）</option>` + list.map(opt).join("")
-    + (pre.length ? `<optgroup label="還原前自動另存的">${pre.map(opt).join("")}</optgroup>` : "");
+  $("r-list").innerHTML = `<option value="">${esc(tBk("dlg_pick"))}</option>` + list.map(opt).join("")
+    + (pre.length ? `<optgroup label="${esc(tBk("dlg_pre"))}">${pre.map(opt).join("")}</optgroup>` : "");
   $("r-file").value = ""; $("r-confirm").value = "";
   resetRestoreInfo(); $("restore-dlg").showModal();
 };
@@ -2620,33 +2743,34 @@ $("r-cancel").onclick = () => $("restore-dlg").close();
 $("r-check").onclick = async (e) => {
   const info = $("r-info"); RINFO = null; restoreReady();
   try {
-    await busy(e.currentTarget, "檢查中…", async () => {
+    await busy(e.currentTarget, tBk("checking"), async () => {
       if (!RSRC) {
         const file = $("r-file").files[0], name = $("r-list").value;
         if (file) {
-          info.textContent = "上傳中…";
+          info.textContent = tBk("uploading");
           const r = await fetch(`${BK}/upload`, { method: "POST", body: file });
           if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
           RSRC = { upload_id: (await r.json()).upload_id };
         } else if (name) RSRC = { name };
-        else { info.textContent = "請先選一個備份檔"; return; }
+        else { info.textContent = tBk("pick_first"); return; }
       }
-      info.textContent = "檢查中…";
+      info.textContent = tBk("checking");
       const r = await jput(`${BK}/inspect`, RSRC, "POST");
       RINFO = r;
       const c = r.row_counts || {};
-      info.innerHTML = `<span class="ok-text">檢查通過</span>：建立於 ${fmtTime(r.created_at)}（App ${esc(r.app_version || "?")}）`
-        + `・活動 ${c.workout_files ?? "–"} 筆・課表 ${c.plan_sessions ?? "–"} 筆`
-        + (r.files && r.files.count ? `・含 ${r.files.count} 個你改過的檔案` : "")
-        + (r.fit && r.fit.included ? `・含 ${r.fit.files} 個 FIT 檔` : "");
+      info.innerHTML = `<span class="ok-text">${esc(tBk("check_ok"))}</span>`
+        + esc(tBk("check_info", { when: fmtTime(r.created_at), ver: r.app_version || "?",
+          acts: c.workout_files ?? "–", sess: c.plan_sessions ?? "–" }))
+        + (r.files && r.files.count ? esc(tBk("check_files", { n: r.files.count })) : "")
+        + (r.fit && r.fit.included ? esc(tBk("check_fit", { n: r.fit.files })) : "");
     });
-  } catch (err) { info.innerHTML = `<span class="err-text">不能還原：${esc(reason(err))}</span>`; }
+  } catch (err) { info.innerHTML = `<span class="err-text">${esc(tBk("cant_restore", { err: reason(err) }))}</span>`; }
   restoreReady();
 };
 $("r-ok").onclick = async (e) => {
   const info = $("r-info");
   try {
-    const r = await busy(e.currentTarget, "還原中…", () => jput(`${BK}/restore`, RSRC, "POST"));
+    const r = await busy(e.currentTarget, tBk("restoring"), () => jput(`${BK}/restore`, RSRC, "POST"));
     $("restore-dlg").close();
     $("b-msg").className = "meta ok-text";
     $("b-msg").textContent = tBk("restored", { when: fmtTime(r.created_at) })
@@ -2654,8 +2778,8 @@ $("r-ok").onclick = async (e) => {
       + (r.files_not_restored ? tBk("restored_shares", { n: r.files_not_restored }) : "")
       + (r.fit_restored ? tBk("restored_fit", { n: r.fit_restored }) : "")
       + tBk("restored_tail", { pre: r.pre_restore || "–" });
-    toast("已還原，請重新啟動 App"); loadBackup();
-  } catch (err) { info.innerHTML = `<span class="err-text">還原失敗：${esc(reason(err))}</span>`; }
+    toast(tBk("restored_toast")); loadBackup();
+  } catch (err) { info.innerHTML = `<span class="err-text">${esc(tBk("restore_failed", { err: reason(err) }))}</span>`; }
 };
 
 // 自動估算的參數 (engine/calibrate.py, api/calib.py)
@@ -2781,13 +2905,11 @@ async function loadArchive() {
   catch (e) { $("ar-last").textContent = t("settings.arch.failed", { msg: e.message.slice(0, 80) }); }
 }
 // the ? buttons: their text under the block on a tap too (a phone has no hover title), as 備份 does
-$("archive").addEventListener("click", (e) => { const q = e.target.closest("button.q"); if (q) $("ar-note").textContent = q.title; });
 $("ar-years").onchange = async (e) => {
   try { showArchive(await jput(`${ARCH}/settings`, { retention_years: +e.target.value })); $("ar-msg").textContent = t("settings.arch.saved"); }
   catch (err) { $("ar-msg").textContent = t("settings.arch.failed", { msg: err.message.slice(0, 80) }); loadArchive(); }
 };
 // ---- 這台裝置的離線資料 (SP-322, device_storage.js) ----------------------------------------
-$("device").addEventListener("click", (e) => { const q = e.target.closest("button.q"); if (q) $("ds-note").textContent = q.title; });
 if (window.DeviceStorage) DeviceStorage.mount($("ds-body"), { t });
 
 // ---- 帳號 (SP-386, api/account.py): only in sign-in mode (/account/me answers 404 otherwise) ---
@@ -2803,6 +2925,7 @@ function showAccount(me) {
     $("acct-analysis-state").textContent = t(an ? "settings.acct.analysis_on" : "settings.acct.analysis_off");
     $("acct-analysis-btn").textContent = t(an ? "settings.acct.withdraw" : "settings.acct.give");
   }
+  $("acct-pwc").hidden = me.sign_in !== "email";            // SP-858: a Google account has no password here
   $("acct-owner").hidden = me.can_delete;
   $("acct-del-intro").hidden = !me.can_delete;
   $("acct-del-row").hidden = !me.can_delete;
@@ -2825,8 +2948,9 @@ async function loadAccount() {
   }
 }
 function openAcctDialog() {
-  const ok = !!(acctMe && acctMe.reauth_ok);
-  $("acct-step1").hidden = ok; $("acct-step2").hidden = !ok;
+  const ok = !!(acctMe && acctMe.reauth_ok), pw = !!(acctMe && acctMe.sign_in === "email");
+  $("acct-step1").hidden = ok || pw; $("acct-step1-pw").hidden = ok || !pw; $("acct-step2").hidden = !ok;
+  $("acct-pw").value = ""; $("acct-pw-msg").textContent = "";
   $("acct-word").textContent = t("settings.acct.word");
   $("acct-confirm").value = ""; $("acct-ok").disabled = true; $("acct-dlg-msg").textContent = "";
   $("acct-dlg").showModal();
@@ -2836,6 +2960,44 @@ $("acct-delete").onclick = async () => {
   openAcctDialog();
 };
 document.querySelectorAll(".acct-cancel").forEach((b) => b.onclick = () => $("acct-dlg").close());
+// SP-610: an e-mail account confirms with its password (POST …/email/reauth marks this session)
+$("acct-pw-go").onclick = async () => {
+  const b = $("acct-pw-go");
+  b.disabled = true;
+  try {
+    const r = await fetch(`${ACCT}/email/reauth`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ password: $("acct-pw").value }) });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { acctMe = { ...acctMe, reauth_ok: true }; openAcctDialog(); return; }
+    $("acct-pw-msg").textContent = (body.detail && body.detail.message) || t("settings.acct.failed", { status: r.status });
+  } catch (e) {
+    $("acct-pw-msg").textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) });
+  } finally { b.disabled = false; }
+};
+// SP-858: 改密碼 — the current password, the new one twice (compared here; the server checks the rules)
+$("acct-pwc-go").onclick = async () => {
+  const b = $("acct-pwc-go"), msg = $("acct-pwc-msg");
+  const cur = $("acct-pwc-cur").value, pw = $("acct-pwc-new").value;
+  msg.classList.remove("err-text");
+  if (!cur || !pw) { msg.textContent = t("settings.acct.pwc_fill"); msg.classList.add("err-text"); return; }
+  if (pw !== $("acct-pwc-new2").value) { msg.textContent = t("settings.acct.pwc_mismatch"); msg.classList.add("err-text"); return; }
+  b.disabled = true; msg.textContent = "";
+  try {
+    const r = await fetch(`${ACCT}/email/password`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                      body: JSON.stringify({ current: cur, password: pw }) });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) {
+      ["acct-pwc-cur", "acct-pwc-new", "acct-pwc-new2"].forEach((id) => { $(id).value = ""; });
+      msg.textContent = t(body.signed_out ? "settings.acct.pwc_done_out" : "settings.acct.pwc_done", { n: body.signed_out || 0 });
+      return;
+    }
+    msg.textContent = (body.detail && body.detail.message) || t("settings.acct.failed", { status: r.status });
+    msg.classList.add("err-text");
+  } catch (e) {
+    msg.textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) });
+    msg.classList.add("err-text");
+  } finally { b.disabled = false; }
+};
 $("acct-confirm").oninput = (e) => {
   const v = e.target.value.trim();
   $("acct-ok").disabled = !(v === t("settings.acct.word") || v.toUpperCase() === "DELETE");
@@ -2904,7 +3066,7 @@ function linkButton(c) {
   if (c.linked) { b.textContent = t("settings.acct.unlink_btn"); }
   else if (c.available) { b.textContent = t("settings.acct.link_btn"); b.className = "primary"; }
   else { b.textContent = t("settings.acct.link_btn"); b.disabled = true;
-         const na = document.createElement("span"); na.className = "meta"; na.textContent = t("settings.acct.link_unavailable");
+         const na = document.createElement("span"); na.className = "meta"; na.textContent = t(c.reason === "no_google" ? "settings.acct.link_no_google" : "settings.acct.link_unavailable", { name: c.name });
          return [b, na]; }
   b.onclick = () => setLink(c, !c.linked, b);
   return [b];
@@ -2996,7 +3158,10 @@ function drawCairn() {
               cel("span", c.linked ? "ok-text" : "meta",
                   c.linked ? t("settings.acct.link_on", { at: (c.at || "").slice(0, 10) }) : t("settings.acct.link_off")),
               ...linkButton(c));
-  $("cairn-status").replaceChildren(head, cel("p", "meta", t(c.linked ? "settings.cairn.linked_note" : "settings.cairn.unlinked_note")));
+  // SP-329 R2: the site has no Cairn secret yet — say it is not the person's account that is wrong
+  const note = c.linked ? "settings.cairn.linked_note"
+    : c.reason === "not_open" ? "settings.cairn.not_open_note" : "settings.cairn.unlinked_note";
+  $("cairn-status").replaceChildren(head, cel("p", "meta", t(note)));
   // what linking gives (account, weather) first, then the features asked one by one
   const items = [...(c.scopes || []).map((s) => ({ ...s, byLink: true })), ...(c.features || [])];
   $("cairn-features-note").textContent = t(c.linked ? "settings.cairn.features_note" : "settings.cairn.features_note_off");
@@ -3115,8 +3280,9 @@ const TABS = {
   personal: ["general", "sport", "map", "account"],
   body: ["physio", "hr", "thresholds", "power"],
   data: ["sync", "weightsync", "backup", "archive", "device", "calendar"],
-  advanced: ["mode", "calib", "fixes", "debugapi", "upstream"],
+  advanced: ["mode", "calib", "fixes", "debugapi", "askai", "upstream"],
   cairn: ["cairn"],
+  coach: ["coach"],
 };
 const TAB_OF = Object.fromEntries(Object.entries(TABS).flatMap(([k, ids]) => ids.map((id) => [id, k])));
 const tabOf = (sec) => TAB_OF[sec.id] || "advanced";
@@ -3126,9 +3292,11 @@ document.querySelectorAll("main > section").forEach((sec) => {
 });
 tabBtns().forEach((b) => b.setAttribute("aria-controls",
   [...document.querySelectorAll("main > section")].filter((sec) => tabOf(sec) === b.dataset.tab && sec.id).map((sec) => sec.id).join(" ")));
-const tabHidden = (tab) => { const b = $(`tab-${tab}`); return !b || b.hidden; };
+// 代看 (SP-791): 生理數據 only
+const VIEWING = document.documentElement.classList.contains("viewing");
+const tabHidden = (tab) => { const b = $(`tab-${tab}`); return !b || b.hidden || (VIEWING && tab !== "body"); };
 function showTab(tab, focus) {
-  if (!TABS[tab] || tabHidden(tab)) tab = "personal";
+  if (!TABS[tab] || tabHidden(tab)) tab = VIEWING ? "body" : "personal";
   document.querySelectorAll("main > section").forEach((sec) => sec.classList.toggle("tab-off", tabOf(sec) !== tab));
   tabBtns().forEach((b) => {
     const on = b.dataset.tab === tab;
@@ -3194,6 +3362,7 @@ function applyLevel() {
 function hashTab() {
   const h = decodeURIComponent(location.hash.slice(1));
   if (new URLSearchParams(location.search).get("link") === "cairn") return { tab: "cairn", el: $("links") };
+  if (new URLSearchParams(location.search).get("coach_token")) return { tab: "coach", el: null };   // SP-789: a coach's invite link
   if (TABS[h]) return { tab: h, el: null };
   const el = h ? document.getElementById(h) : null;
   const sec = el && el.closest("main > section");
@@ -3223,10 +3392,14 @@ document.querySelector(".tabs").addEventListener("keydown", (e) => {
 window.addEventListener("hashchange", tabFromHash);
 // sign-in mode (the inlined session's `login`; never the owner's app or the demo): the Cairn tab is
 // shown before GET /account/links answers, so a link_url lands on it at once (cairnTab confirms)
-if (window.TRC_SESSION && TRC_SESSION.login && TRC_SESSION.login.signed_in) $("tab-cairn").hidden = false;
+if (window.TRC_SESSION && TRC_SESSION.login && TRC_SESSION.login.signed_in && !VIEWING) { $("tab-cairn").hidden = false; $("tab-coach").hidden = false; }
 tabFromHash();
 foldQ();
 
+if (VIEWING) {
+  // 代看 (SP-791): only what 生理數據 shows (the rest is the student's own and the server refuses it)
+  loadHr(); loadThr(); loadPz();
+} else {
 loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadPz(); loadExclusions(); if (CAN_BACKUP) loadBackup();
 loadArchive(); loadCalib(); loadCal();
 loadAccount();
@@ -3237,8 +3410,11 @@ if (window.FitImport) FitImport.mount($("fit-import"), { listLink: true, onDone:
 if (window.ExportImport) ExportImport.mount($("export-import"), { onDone: (st) => { if (st.added || st.duplicate) loadSources(); } });
 // 自動匯入資料夾 (SP-324): only desktop Chrome / Edge show it (FitFolder.mount hides it elsewhere)
 if (window.FitFolder) FitFolder.mount($("fit-folder"), { onDone: (r) => { if (r.added || r.duplicate) loadSources(); } });
+}
 </script>
 <script src="/api/v1/static/debug_api.js"></script>
+<script src="/api/v1/static/ai_settings.js"></script>
+<script src="/api/v1/static/coach_settings.js"></script>
 <script src="/api/v1/static/weight_sync.js"></script>
 <script src="/api/v1/static/weight_hint.js"></script>
 </body>

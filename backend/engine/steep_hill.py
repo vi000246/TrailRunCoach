@@ -36,6 +36,8 @@ import datetime as dt
 from typing import Optional
 
 from backend.engine import load_guard as LG
+from backend.i18n import N_
+from backend.i18n import _ as _t        # (`_` is a throwaway name in this module's functions)
 
 STAGE_PCT = (0.05, 0.10)          # UA trekking: 5 %, 10 % of body weight; stage 3 = the trip pack
 STAGE_WEEKS = ((9, 1), (7, 2), (0, 3))   # w ≥ 9 → 1, 7–8 → 2, else 3 (推估)
@@ -48,9 +50,18 @@ FLOOR = 30                        # 推估: a weekday cap below 30 min → none
 TSB_MIN = LG.TSB_HOLD             # week_plan's 維持量 line: −20 % of CTL (SP-670; was −20 points)
 NO_DAYS = 7                       # nothing in the last 7 days (doc §2.5, 推估)
 DEFAULT_PCT = 0.13                # ≈ 9 kg / 70 kg (the doc's example) when there is no body weight
-SRC = ("Pandolf 1977（同代謝率的坡度）；Ludlow & Weyand 2017（代謝量和總重成正比）；"
-       "UA trekking：跑步機坡度可以替代、5 → 10% 體重 → 行程背包")
-SRC_WALK = "心率上限：萩原・山本 2011（75% 最大心率或 RPE ≤ 13）；長野縣 Safety Book（(220 − 年齡) × 0.75）"
+# SP-905: a session's 出處 is read part by part (engine/stored_text) — the parts are msgids
+SRC_PARTS = (N_("Pandolf 1977（同代謝率的坡度）"), N_("Ludlow & Weyand 2017（代謝量和總重成正比）"),
+             N_("UA trekking：跑步機坡度可以替代、5 → 10% 體重 → 行程背包"))
+SRC = "；".join(SRC_PARTS)
+SRC_WALK_PARTS = (N_("心率上限：萩原・山本 2011（75% 最大心率或 RPE ≤ 13）"), N_("長野縣 Safety Book（(220 − 年齡) × 0.75）"))
+SRC_WALK = "；".join(SRC_WALK_PARTS)
+# hr_profile.WALK_WHY + 「（{src}）」 (WALK_SRC) as one msgid: a bracket after a text can't be read back on its own
+WALK_WHY_SRC = N_("這比一般輕鬆跑的上限高，因為是爬坡步行（{src}）")
+
+
+def _src(*parts) -> str:
+    return "；".join(_t(p) for p in parts)
 
 
 def _d(x) -> Optional[dt.date]:
@@ -123,25 +134,27 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
                  tsb: Optional[float] = None, injury: Optional[dict] = None, ctl: Optional[float] = None) -> dict:
     """`injury`: injuries.condition_week's rule (SP-270) — 跟腱進行中 = no steep walk this week.
     `tsb` / `ctl`: TSB at the start of the week and the CTL it is taken from (the line is a share)."""
-    info = {"active": False, "event": event, "weight": weight, "monday": monday.isoformat(), "why": [], "src": SRC}
+    info = {"active": False, "event": event, "weight": weight, "monday": monday.isoformat(), "why": [],
+            "src": _src(*SRC_PARTS)}
     if not qualifies(event):
-        info["why"].append("下一場 A 賽事不是百岳或多日行程" if event else "沒有下一場 A 賽事")
+        info["why"].append(_t("下一場 A 賽事不是百岳或多日行程") if event else _t("沒有下一場 A 賽事"))
         return info
     start = _d(event["start"])
     w = weeks_out(start, monday)
     info.update(weeks_out=w, days_to=(start - monday).days)
     if kind != "specific" or not WEEKS[0] <= w <= WEEKS[1]:
-        info["why"].append("只在專項期（賽前第 10–3 週）排")
+        info["why"].append(_t("只在專項期（賽前第 10–3 週）排"))
         return info
     if mode in ("recovery_week", "reentry"):
-        info["why"].append("恢復週／停訓後恢復期：不排")
+        info["why"].append(_t("恢復週／停訓後恢復期：不排"))
         return info
     from backend.engine import injuries as INJ
     if INJ.avoids(injury, "steep"):
         info["why"].extend(injury["notes"])
         return info
     if LG.tsb_below(tsb, ctl, TSB_MIN):
-        info["why"].append(f"週初負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, ctl)} < −20%：這週不排")
+        info["why"].append(_t("週初負荷平衡（Load balance）{tsb:+.0f}＝{pct} < −20%：這週不排", tsb=tsb,
+                              pct=LG.tsb_pct_text(tsb, ctl)))
         return info
     trip = trip_kg(event, weight)
     st = stage_of(w)
@@ -204,17 +217,27 @@ def session_text(info: dict, minutes: int, aet: Optional[float], aet_measured: b
     from backend.engine import hr_profile as HP
     sim, pct = info["sim"], info["pct"]
     kg = info.get("kg")
-    what = f"{kg:g} kg（體重的 {pct * 100:.0f}%）" if kg else f"體重的 {pct * 100:.0f}%"
-    hr = HP.walk_cap_hr(walk, aet, aet_measured)
+    # SP-905: the detail's parts (「。」「；」) are msgids, each read on its own (engine/stored_text); the zh-TW
+    # text is as before (「暖身 10 分」 stays a field: warmup tops it up in place)
+    what = (_("{kg} kg（體重的 {pct:.0f}%）", kg=f"{kg:g}", pct=pct * 100) if kg else
+            _("體重的 {pct:.0f}%", pct=pct * 100))
     main = max(10, minutes - 15)
-    speed = f"{sim['kmh']:g} km/h" + ("（坡度到上限，改加速度）" if sim["grade"] >= TREADMILL_MAX and sim["kmh"] > BASE_KMH else "")
+    g, kmh = f"{sim['grade']:g}", f"{sim['kmh']:g}"
     title = f"陡坡健走 {sim['grade']:g}%（模擬負重 {kg:g} kg）" if kg else f"陡坡健走 {sim['grade']:g}%（模擬負重）"
-    why = (_(HP.WALK_WHY) + "（" + _(HP.WALK_SRC) + "）。") if walk and not walk.get("floor") else ""
-    detail = (f"不背包：跑步機坡度 {sim['grade']:g}%、{speed}，或戶外 ≥ {sim['grade']:g}% 的坡用走的。"
-              f"暖身 10 分平路 → 陡坡 {main} 分 → 緩和 5 分；上坡{hr}，到上限就放慢、不降坡度；"
-              f"{_(HP.WALK_DOWN)}。{why}"
-              f"這個坡度的代謝量 ≈ 在 {BASE_GRADE:g}% 坡、{BASE_KMH:g} km/h 背 {what}（Pandolf 1977，推估）；"
-              f"背包另外練到的髖、軀幹、腳底和背著下坡這裡練不到。")
+    why = (_(WALK_WHY_SRC, src=_(HP.WALK_SRC)) + "。") if walk and not walk.get("floor") else ""
+    first = (_("不背包：跑步機坡度 {g}%、{kmh} km/h（坡度到上限，改加速度），或戶外 ≥ {g}% 的坡用走的", g=g, kmh=kmh)
+             if sim["grade"] >= TREADMILL_MAX and sim["kmh"] > BASE_KMH else
+             _("不背包：跑步機坡度 {g}%、{kmh} km/h，或戶外 ≥ {g}% 的坡用走的", g=g, kmh=kmh))
+    detail = (first + "。"
+              + _("暖身 {w} 分平路 → 陡坡 {main} 分 → 緩和 5 分", w=10, main=main) + "；"
+              # (hr_profile.walk_cap_hr's text spelled out: a msgid three fields deep is not read back)
+              + _("上坡心率 ≤ {cap} 或 RPE ≤ {rpe}，先到的為準，到上限就放慢、不降坡度",
+                  cap=HP.walk_cap_label(walk) if walk else HP.easy_cap_label(None, aet, aet_measured),
+                  rpe=HP.WALK_RPE) + "；"
+              + _(HP.WALK_DOWN) + "。" + why
+              + _("這個坡度的代謝量 ≈ 在 {g}% 坡、{kmh} km/h 背 {what}（Pandolf 1977，推估）", g=f"{BASE_GRADE:g}",
+                  kmh=f"{BASE_KMH:g}", what=what) + "；"
+              + _("背包另外練到的髖、軀幹、腳底和背著下坡這裡練不到") + "。")
     return title, detail
 
 
@@ -252,7 +275,8 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
         cands.append((d.weekday() >= 5, d, s, max(min(m, MINUTES[1]), min(MINUTES[0], m))))
     if not cands:
         if notes is not None:
-            notes.append({"level": "info", "src": "steep", "text": "這週沒有可以放陡坡健走的輕鬆日（長天、強度課的前後一天都不放）"})
+            notes.append({"level": "info", "src": "steep",
+                          "text": _t("這週沒有可以放陡坡健走的輕鬆日（長天、強度課的前後一天都不放）")})
         return ss
     cands.sort(key=lambda c: (c[0], c[1]))
     _, d, s, m = cands[0]
@@ -272,6 +296,7 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
     title, detail = session_text(info, m, aet, aet_measured, walk)
     from backend.engine.hr_profile import walk_cap_hr
     s.update(id="steep", kind="easy", terrain="trail", minutes=int(m), title=title, detail=detail,
-             source=SRC + "；" + SRC_WALK, tss=round(rate * m / 60.0, 1), target=walk_cap_hr(walk, aet, aet_measured))
+             source=_src(*SRC_PARTS, *SRC_WALK_PARTS), tss=round(rate * m / 60.0, 1),
+             target=walk_cap_hr(walk, aet, aet_measured))
     info["planned"].append({"day": s["day"], "minutes": m, "grade": info["sim"]["grade"], "kmh": info["sim"]["kmh"]})
     return ss

@@ -46,6 +46,20 @@ def test_small_other_runs_still_quartered():
     assert [x.dur_s for x in small] == [225, 30, 30, 30, 30, 30, 30, 30, 30, 150]
 
 
+def test_the_b_race_never_falls_in_the_anchors_week():
+    """Every weekday of the anchor (the demo is rebuilt with anchor = today): the 50K is the
+    Saturday four weeks after the anchor's week and 貓空 17K three weeks before it, so 貓空 is in
+    the next week. With race = anchor + 26 days a Monday / Tuesday anchor put 貓空 in its own
+    week, whose 課表 then had no interval session: no linked interval run on those days."""
+    from backend.demo import season as S
+    for k in range(7):
+        anchor = dt.date(2026, 10, 19) + dt.timedelta(days=k)          # Monday … Sunday
+        ev = {e.id: dt.date.fromisoformat(e.date) for e in S.make_events(anchor)}
+        monday = L._monday(anchor)
+        assert ev["demo-50k"] == monday + dt.timedelta(weeks=4, days=5), anchor
+        assert ev[S.MAOKONG_ID] == monday + dt.timedelta(weeks=1, days=5), anchor
+
+
 def test_small_demo_build_matches_the_interval_run(tmp_path):
     """The e2e build (small, anchor today): the linked interval run is matched to the 課表
     session it was run from and is not classified an easy run."""

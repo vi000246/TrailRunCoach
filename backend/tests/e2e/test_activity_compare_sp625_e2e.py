@@ -56,12 +56,13 @@ def test_compare_page_draws_the_different_course_charts(app):
 def test_race_filter_keeps_only_races(app):
     page, _ = app
     open_page(page, PAGE)
-    n_all = page.locator("#sa option").count()
+    # the list is loaded after the page: count it once it is there (+ 1: 「選一個活動…」), not the bare placeholder
+    every = page.request.get("/api/v1/app/activity-compare/activities").json()
+    expect(page.locator("#sa option")).to_have_count(len(every) + 1)
     page.check("#race")
-    page.wait_for_function(f"document.querySelectorAll('#sa option').length !== {n_all}")
-    n_race = page.locator("#sa option").count() - 1          # minus 「選一個活動…」
     races = [a for a in page.request.get("/api/v1/app/activity-compare/activities?race=1").json()]
-    assert n_race == len(races)
+    assert len(races) < len(every)
+    expect(page.locator("#sa option")).to_have_count(len(races) + 1)
 
 
 def test_activity_list_compare_buttons_open_the_page(app):

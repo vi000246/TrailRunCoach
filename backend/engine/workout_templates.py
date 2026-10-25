@@ -147,20 +147,21 @@ FAMILY_PURPOSE = {("aerobic", "tempo"): "long_tempo", ("aerobic", "cruise"): "cr
                   ("speed", None): "rep"}
 
 
-PAL = "Steve Palladino，Stryd 訓練計畫（Stryd 內建課表）"
+# the sources (a row's `src`, shown through engine/stored_text: msgids, or msgids joined by 「；」 — SP-905)
+PAL = N_("Steve Palladino，Stryd 訓練計畫（Stryd 內建課表）")
 PAL_URL = "https://help.stryd.com/en/articles/7065214-stryd-training-plans-by-steve-palladino"
-PFITZ = "Pfitzinger & Douglas《Advanced Marathoning》3rd ed. 2019"
+PFITZ = N_("Pfitzinger & Douglas《Advanced Marathoning》3rd ed. 2019")
 PFITZ_URL = "https://www.slideshare.net/slideshow/marathon-training-webinar/11191347"
-DANIELS = "Jack Daniels《Daniels' Running Formula》3rd ed. 2013"
+DANIELS = N_("Jack Daniels《Daniels' Running Formula》3rd ed. 2013")
 DANIELS_URL = "https://www.coachray.nz/2023/05/03/jack-daniels-running-intensity/"
-KOOP = "Jason Koop《Training Essentials for Ultrarunning》／TrainRight 2025"
+KOOP = N_("Jason Koop《Training Essentials for Ultrarunning》／TrainRight 2025")
 KOOP_URL = "https://trainright.com/decoding-ultramarathon-interval-workouts/"
-UA = "Uphill Athlete（House／Johnston）"
+UA = N_("Uphill Athlete（House／Johnston）")
 FRIEL_URL = "https://www.trainingpeaks.com/learn/articles/joe-friel-s-quick-guide-to-setting-zones/"
 GARMIN_DSW = "https://www.garmin.com/zh-TW/blog/running/the-climbing-ability-of-trail-running/"
 HRMAX = N_("% LTHR 由來源的 % HRmax ÷ 0.9 換算（推估）")
 HRMAX90 = N_("% LTHR 由來源的 % HRmax ÷ 0.9 換算（推估）（上緣壓在 90%）")
-MAXHR_SRC = "Polar「How to determine your maximum heart rate」上坡測試（2016，2024 更新）；Boudet 2002"
+MAXHR_SRC = "；".join((N_("Polar「How to determine your maximum heart rate」上坡測試（2016，2024 更新）"), "Boudet 2002"))
 MAXHR_URL = "https://www.polar.com/blog/calculate-maximum-heart-rate/"
 MAXHR_NOTE = N_("條件：戴胸帶（手腕光學常有尖峰）、休息充足（前 48 小時沒有硬課）、沒生病、涼爽、找 2–3 分鐘的坡、"
               "最好有人陪。有心血管疾病或風險、胸痛、頭暈的人不要做，先問醫師（ACSM 運動前篩檢，Riebe 2015）；"
@@ -185,10 +186,10 @@ def _steep(pct: float):
 _S5, _S5B = _steep(0.05)
 _S10, _S10B = _steep(0.10)
 _S15, _S15B = _steep(0.15)
-STEEP_SRC = "Pandolf 1977（同代謝率的坡度）；UA trekking（跑步機坡度替代背包）"
+STEEP_SRC = "；".join((N_("Pandolf 1977（同代謝率的坡度）"), N_("UA trekking（跑步機坡度替代背包）")))
 STEEP_URL = "https://doi.org/10.1152/jappl.1977.43.4.577"
 # 技術地形 (SP-62): the structure is the app's (推估); D+ sized for the time
-TECH_SRC = KOOP + "（賽道專項：練和比賽相同的地形）；" + UA
+TECH_SRC = "；".join((N_("Jason Koop《Training Essentials for Ultrarunning》／TrainRight 2025（賽道專項：練和比賽相同的地形）"), UA))
 TECH_CONV = N_("結構是這個 app 的建議（推估）：時間＋爬升＋RPE，不設心率、功率目標；爬升量依你的路線調")
 STEEP_CONV = N_("坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率：陡坡健走、登山的課表用爬坡上限（75% 最大心率或 RPE ≤ 13，萩原・山本 2011），其他課表用輕鬆跑上限")
 
@@ -215,15 +216,15 @@ TEMPLATES: list[Template] = [
     Template("daniels_e", "easy", "Daniels E 輕鬆跑 50′", DANIELS, DANIELS_URL, lambda b: [
         b.warm(10), b.t("work", 35 * 60, hr(0.72, 0.88), "E：65–79% HRmax"), b.cool(5)], conv=HRMAX, purpose=PURPOSE["easy"]),
     Template("xu_e90", "easy", "徐國峰 E 強度 90′（看心率飄移）",
-             "徐國峰 部落格 2015-10-14《E 配速心率飄移》；《全方位的馬拉松科學化訓練》2015",
+             "；".join((N_("徐國峰 部落格 2015-10-14《E 配速心率飄移》"), N_("《全方位的馬拉松科學化訓練》2015"))),
              "http://rocky549.blogspot.com/2015/10/e.html", lambda b: [
         b.warm(10), b.t("work", 80 * 60, hr(0.72, 0.88), "平路 E；記第 10、90 分心率"), b.cool(10)],
         conv=HRMAX, note=N_("飄移 < 10% 有氧很好、< 5% 國手級（徐國峰）"), purpose=PURPOSE["long"]),
-    Template("ua_z2", "easy", "Uphill Athlete 有氧基礎 Z2 60′", UA + "「Zone 2 Heart Rate Training」2026",
+    Template("ua_z2", "easy", "Uphill Athlete 有氧基礎 Z2 60′", N_("Uphill Athlete（House／Johnston）「Zone 2 Heart Rate Training」2026"),
              "https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/", lambda b: [
         b.warm(10, "Z1：AeT −20%～−10%"), b.t("work", 60 * 60, AET, "Z2：AeT −10%～AeT"), b.cool(10)], purpose=PURPOSE["easy"]),
     Template("seiler_z1", "easy", "Seiler 兩極化低強度長課 100′",
-             "Seiler 2010, IJSPP 5(3):276–291（1 區 60–72% HRmax）",
+             N_("Seiler 2010, IJSPP 5(3):276–291（1 區 60–72% HRmax）"),
              "https://www.researchgate.net/publication/46403553_What_is_Best_Practice_for_Training_Intensity_and_Duration_Distribution_in_Endurance_Athletes",
              lambda b: [b.warm(10), b.t("work", 80 * 60, hr(0.67, 0.80), "1 區：60–72% HRmax"), b.cool(10)],
              src_kind="peer", conv=HRMAX, purpose=PURPOSE["long"]),
@@ -256,7 +257,7 @@ TEMPLATES: list[Template] = [
         b.cool(10)], basis="pace", conv=TP, purpose=PURPOSE["cruise"]),
     Template("pfitz_lt", "quality", "Pfitzinger 乳酸閾值節奏 25′", PFITZ, PFITZ_URL, lambda b: [
         b.warm(20), b.t("work", 25 * 60, hr(0.91, 1.00), "82–91% HRmax"), b.cool(15)], conv=HRMAX, purpose=PURPOSE["tempo_t"]),
-    Template("friel_cruise", "quality", "Friel 巡航間歇 4×8′", "Joe Friel《The Triathlete's Training Bible》", FRIEL_URL, lambda b: [
+    Template("friel_cruise", "quality", "Friel 巡航間歇 4×8′", N_("Joe Friel《The Triathlete's Training Bible》"), FRIEL_URL, lambda b: [
         b.warm(15),
         b.rep(4, [b.t("work", 8 * 60, hr(0.95, 1.02), "Friel 4–5a 區"),
                   b.t("rest", 2 * 60, hr(0.70, 0.85), "1 區恢復（工作的 1/4）")], False, "4×8′"),
@@ -267,7 +268,7 @@ TEMPLATES: list[Template] = [
                   b.t("rest", 6 * 60, AET, "輕鬆跑（工休 2:1）")], False, "3×12′"),
         b.cool(10)], conv=N_("來源只有 RPE：心率推估"), purpose=PURPOSE["cruise"]),
     Template("canova_specific", "quality", "Canova 專項間歇 5×3 km（1 km 浮動）",
-             "Arcelli & Canova《Marathon Training – A Scientific Approach》1999",
+             N_("Arcelli & Canova《Marathon Training – A Scientific Approach》1999"),
              "https://runningwritings.com/2023/06/canova-marathon-book.html", lambda b: [
         b.warm(15),
         b.rep(5, [b.d("work", 3000, pace(1.04, 1.08), "100–102% 馬拉松配速"),
@@ -321,7 +322,7 @@ TEMPLATES: list[Template] = [
         b.cool(10)], basis="pace", conv=N_("R 配速 ≈ 閾值配速 × 0.85–0.89（推估）"), purpose=PURPOSE["rep"]),
 
     # ---------------- 測試 ----------------
-    Template("stryd_cp_3_12", "test", "Stryd 內建 CP 測試 3′＋12′", "Stryd 內建課表庫（Palladino）：3′／12′ CP test", PAL_URL, lambda b: [
+    Template("stryd_cp_3_12", "test", "Stryd 內建 CP 測試 3′＋12′", N_("Stryd 內建課表庫（Palladino）：3′／12′ CP test"), PAL_URL, lambda b: [
         b.t("warm", 12 * 60, pw(0.70, 0.80), "EZ ≤ 80% CP"),
         b.rep(2, [b.t("warm", 60, pw(0.99, 1.01), "1′ 99–101% CP"), b.t("warm", 120, pw(0.70, 0.80), "輕鬆跑")], True, "2×1′"),
         b.t("warm", 30, pw(1.03, 1.08), "30″ 103–108% CP"), b.t("warm", 90, pw(0.70, 0.80), "輕鬆跑"),
@@ -331,16 +332,16 @@ TEMPLATES: list[Template] = [
         b.t("work", 12 * 60, OPEN, "12′ 全力、均勻"),
         b.lap("cool", 10 * 60, "走路恢復後輕鬆跑到總量；直到按下計圈", pw(0.65, 0.80))], basis="power",
         note=N_("全力段不設目標（Stryd 留給你填：模型功率 −1%～+5%）"), purpose=PURPOSE["test"]),
-    Template("pal_test3", "test", "Palladino 3′ 測試", PAL + "：3 minute max effort", PAL_URL, lambda b: [
+    Template("pal_test3", "test", "Palladino 3′ 測試", N_("Steve Palladino，Stryd 訓練計畫（Stryd 內建課表）：3 minute max effort"), PAL_URL, lambda b: [
         *b.pal_test_warm(), b.t("work", 3 * 60, OPEN, "3′ 全力：穩穩開始，最後才到極限"),
         b.t("rest", 5 * 60, OPEN, "走路恢復"), b.t("cool", 10 * 60, pw(0.70, 0.80), "EZ 跑到總量")], basis="power", purpose=PURPOSE["test"]),
-    Template("pal_test10", "test", "Palladino 10′ 測試", PAL + "：10 minute max effort", PAL_URL, lambda b: [
+    Template("pal_test10", "test", "Palladino 10′ 測試", N_("Steve Palladino，Stryd 訓練計畫（Stryd 內建課表）：10 minute max effort"), PAL_URL, lambda b: [
         *b.pal_test_warm(), b.t("work", 10 * 60, OPEN, "10′ 全力：前 7′ 照 10′ 模型功率"),
         b.t("rest", 5 * 60, OPEN, "走路恢復"), b.t("cool", 10 * 60, pw(0.70, 0.80), "EZ 跑到總量")], basis="power", purpose=PURPOSE["test"]),
-    Template("pal_test20", "test", "Palladino 20′ 測試", PAL + "：20 minute max effort", PAL_URL, lambda b: [
+    Template("pal_test20", "test", "Palladino 20′ 測試", N_("Steve Palladino，Stryd 訓練計畫（Stryd 內建課表）：20 minute max effort"), PAL_URL, lambda b: [
         *b.pal_test_warm(), b.t("work", 20 * 60, OPEN, "20′ 全力：前 15′ 照 20′ 模型功率"),
         b.t("rest", 5 * 60, OPEN, "走路恢復"), b.t("cool", 10 * 60, pw(0.70, 0.80), "EZ 跑到總量")], basis="power", purpose=PURPOSE["test"]),
-    Template("stryd_9_3", "test", "Stryd 9′＋3′ CP 測試", "Stryd CP 測試（9/3 分鐘）；JSSM 2023 驗證",
+    Template("stryd_9_3", "test", "Stryd 9′＋3′ CP 測試", "；".join((N_("Stryd CP 測試（9/3 分鐘）"), N_("JSSM 2023 驗證"))),
              "https://pmc.ncbi.nlm.nih.gov/articles/PMC10499150/", lambda b: [
         b.t("warm", 10 * 60, pw(0.65, 0.75), "EZ"),
         b.rep(5, [b.d("other", 100, OPEN, "100 m 約 80% 力"), b.t("rest", 60, OPEN, "慢跑")], True, "5×100 m"),
@@ -371,24 +372,24 @@ TEMPLATES: list[Template] = [
         b.t("work", 60 * 60, AET, "固定對話配速、平路；前後半心率比"),
         b.cool(10)],
         note=N_("飄移 3.5–5% 就是 AeT；< 3.5% 下次 +5 bpm、> 5% 降低（來源要胸帶，手腕心率只看趨勢）"), purpose=PURPOSE["test"]),
-    Template("xu_e_drift", "test", "徐國峰 90′ E 配速飄移", "徐國峰 部落格 2015-10-14",
+    Template("xu_e_drift", "test", "徐國峰 90′ E 配速飄移", N_("徐國峰 部落格 2015-10-14"),
              "http://rocky549.blogspot.com/2015/10/e.html", lambda b: [
         b.warm(10), b.t("work", 80 * 60, pace(1.18, 1.29), "固定 E 配速；比第 10、90 分心率"), b.cool(10)],
         basis="pace", conv=N_("E 配速 ≈ 閾值配速 × 1.18–1.29（Friel 2 區配速，推估）"), purpose=PURPOSE["test"]),
 
     # ---------------- 越野跑 ----------------
-    Template("dsw_classic", "trail", "登山王經典 4×7′ 爬升", "江晏慶「如何提升越野跑的爬升能力－登山王課表」Garmin 台灣 2021-01-27",
+    Template("dsw_classic", "trail", "登山王經典 4×7′ 爬升", N_("江晏慶「如何提升越野跑的爬升能力－登山王課表」Garmin 台灣 2021-01-27"),
              GARMIN_DSW, lambda b: [
         b.warm(12, "階梯步道輕鬆跑／走"),
         b.rep(4, [b.t("work", 7 * 60, hr(0.95, 1.02), "上坡 9 成力（快崩但不爆）"),
                   b.t("rest", 7 * 60, OPEN, "慢慢走下來")], False, "4×7′ 上坡"),
         b.t("cool", 5 * 60, OPEN, "收操、補給")], conv=N_("來源是 RPE：心率推估"), purpose=PURPOSE["hill_rep"], trail="climb"),
-    Template("dsw_endurance", "trail", "登山王耐力型 6×快走上坡", "江晏慶 登山王課表（耐力變化）Garmin 台灣 2021", GARMIN_DSW, lambda b: [
+    Template("dsw_endurance", "trail", "登山王耐力型 6×快走上坡", N_("江晏慶 登山王課表（耐力變化）Garmin 台灣 2021"), GARMIN_DSW, lambda b: [
         b.warm(12, "輕鬆跑／走"),
         b.rep(6, [b.t("work", 7 * 60, hr(0.88, 0.93), "快走上坡"),
                   b.t("rest", 5 * 60, AET, "慢跑下來")], False, "6×上坡"),
         b.t("cool", 5 * 60, OPEN, "收操")], conv=N_("來源是 RPE：心率推估"), purpose=PURPOSE["long_tempo"], trail="climb"),
-    Template("ua_hill_sprints", "trail", "陡坡衝刺 8×10″", UA + "《Training for the Uphill Athlete》2019",
+    Template("ua_hill_sprints", "trail", "陡坡衝刺 8×10″", N_("Uphill Athlete（House／Johnston）《Training for the Uphill Athlete》2019"),
              "https://uphillathlete.com/", lambda b: [
         b.warm(15),
         b.rep(8, [b.t("work", 10, OPEN, "≥ 20% 陡坡 10″ 全力"), b.t("rest", 3 * 60, OPEN, "走到完全恢復")], False, "8×10″"),
@@ -398,7 +399,7 @@ TEMPLATES: list[Template] = [
         b.rep(3, [b.t("work", 12 * 60, hr(0.95, 1.00), "上坡 RPE 8–9"),
                   b.t("rest", 6 * 60, AET, "下坡或平路輕鬆")], False, "3×12′ 上坡"),
         b.cool(10)], conv=N_("來源只有 RPE：心率推估"), purpose=PURPOSE["cruise"], trail="climb"),
-    Template("long_climb", "trail", "長爬坡有氧 90′", UA + " Zone 2（AeT −10%～AeT）",
+    Template("long_climb", "trail", "長爬坡有氧 90′", N_("Uphill Athlete（House／Johnston） Zone 2（AeT −10%～AeT）"),
              "https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/", lambda b: [
         b.warm(15), b.t("work", 90 * 60, AET, "持續爬升，跑走混合，心率 ≤ 輕鬆跑上限"),
         b.t("cool", 15 * 60, OPEN, "輕鬆下山")], src_kind="推估", purpose=PURPOSE["long"], trail="climb"),
@@ -674,7 +675,7 @@ def session_family(s: dict, th: Optional[dict] = None, derived=_DERIVE) -> Optio
     return label(own)
 
 
-BASIS_LABEL = {"power": "功率", "hr": "心率", "pace": "配速", "rpe": "RPE"}
+BASIS_LABEL = {"power": N_("功率"), "hr": N_("心率"), "pace": N_("配速"), "rpe": "RPE"}
 
 
 def trail_type_of(items: list) -> str:
@@ -703,7 +704,7 @@ def row(t: Template) -> dict:
     return {"key": f"lib:{t.key}", "label": t.title, "title": t.title, "src": t.src, "url": t.url,
             "src_kind": t.src_kind, "conv": _(t.conv) if t.conv else "", "note": _(t.note) if t.note else "", "items": main_of(full) or full, "full": full,
             "equiv": None, "sub": sub, "family": fam, "purpose": _(t.purpose) if t.purpose else "",
-            "basis": t.basis, "basis_label": BASIS_LABEL[t.basis], "role": WS.rpe_role(full)}
+            "basis": t.basis, "basis_label": _(BASIS_LABEL[t.basis]), "role": WS.rpe_role(full)}
 
 
 def session_role(s: dict) -> Optional[str]:

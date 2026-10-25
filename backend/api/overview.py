@@ -46,11 +46,16 @@ log = logging.getLogger(__name__)
 # the in-memory caches are empty, and a tenant not warmed up ahead (accounts/tenants
 # .active_tenants) still sees it at once. Display only: GET /weekplan, /z5, /b2b, the 課表 and
 # plan_auto compute fresh (they join the same flight). Demo tenants: never kept, never stale.
-_status_last: OrderedDict = OrderedDict()   # tenant id -> {settings, day, at, status} of its newest status
+# SP-809 (SP-361 Q2, Q1 = B, owner 2026-10-21): a switch of 課表心率區間 alone (the settings differ by the
+# HR stamp only) is served stale too, `reason: hr`, with the 測試 card's 最大心率可信度低 warning
+# (thr_check.warn) re-applied under the new model (threshold_confidence.rewarn) — as the 課表 does
+# (api/plan_sessions._stale_view). The HR model stays in the key: the 輕鬆跑上限 (Z2 上緣) decides
+# which runs count as Zone 3 (the gate's dose, the 課表's quality sessions), so it is computed anew.
+_status_last: OrderedDict = OrderedDict()   # tenant id -> {settings, settings_but_hr, day, at, status} of its newest status
 _STATUS_LAST_MAX = 64
 _status_refreshing: dict = {}     # tenant id -> the key computed in the background now
 _status_failed: dict = {}         # tenant id -> a key whose background computation failed (computed in the request next)
-STALE_REASONS = ("data", "day")
+STALE_REASONS = ("data", "day", "hr")
 # _status_key's layout: (tenant, dataset generation, day, then the user's own settings);
 # _SK_HR: the HR stamp (HRP.stamp(), 課表心率區間) among them (status_but_hr, SP-361); last (_SK_LOCALE): the
 # request's language, since the status's words are made in it (SP-502)
@@ -143,6 +148,36 @@ def _settings_sig(key: tuple) -> str:
     return hashlib.sha1(repr(key[_SK_SETTINGS:]).encode("utf-8")).hexdigest()[:16]
 
 
+def _settings_sig_but_hr(key: tuple) -> str:
+    """_settings_sig without the HR stamp (_SK_HR): equal when only 課表心率區間 changed (SP-809)."""
+    rest = key[_SK_SETTINGS:_SK_HR] + key[_SK_HR + 1:]
+    return hashlib.sha1(repr(rest).encode("utf-8")).hexdigest()[:16]
+
+
+def _hr_setting(key: tuple) -> Optional[str]:
+    """The 課表心率區間 setting in a status key's HR stamp (hr_profile.stamp: [account, setting])."""
+    try:
+        return json.loads(key[_SK_HR])[1]
+    except (TypeError, ValueError, IndexError, KeyError):
+        return None
+
+
+def _rewarn(status: dict, setting: Optional[str]) -> Optional[dict]:
+    """SP-809: a stale status of another HR model with the 測試 card's threshold check warning
+    (「最大心率可信度低」, thr_check.warn) re-applied under `setting`; None when it cannot be."""
+    from backend.engine import threshold_confidence as TC
+    inds = []
+    for i in status.get("indicators") or []:
+        x = (i.get("extra") or {}).get("thr_check") if i.get("id") == "testing" else None
+        if x is not None:
+            w = TC.rewarn(x, setting) if setting else None
+            if w is None:
+                return None
+            i = {**i, "extra": {**i["extra"], "thr_check": {**x, "warn": w}}}
+        inds.append(i)
+    return {**status, "indicators": inds}
+
+
 def _last_path() -> Path:
     """This tenant's previous status on disk (data_registry: cache/overview_status.json)."""
     return _tenancy.private_path("cache", "overview_status.json")
@@ -154,8 +189,8 @@ def _remember_status(key: tuple, st: Status) -> None:
     if _tenancy.current().is_demo:
         return
     try:
-        rec = {"settings": _settings_sig(key), "day": key[_SK_DAY].isoformat(), "at": time.time(),
-               "status": st.to_dict()}
+        rec = {"settings": _settings_sig(key), "settings_but_hr": _settings_sig_but_hr(key),
+               "day": key[_SK_DAY].isoformat(), "at": time.time(), "status": st.to_dict()}
     except Exception as e:                     # noqa: BLE001 — only the stale answer is missed
         log.warning("status not kept for a stale answer: %s", type(e).__name__)
         return
@@ -191,7 +226,7 @@ def _previous_status(tid: str) -> Optional[dict]:
         return None
     if not (isinstance(d, dict) and d.get("v") == 1 and isinstance(d.get("status"), dict)):
         return None
-    rec = {k: d.get(k) for k in ("settings", "day", "at", "status")}
+    rec = {k: d.get(k) for k in ("settings", "settings_but_hr", "day", "at", "status")}
     with _lock:
         _status_last.setdefault(tid, rec)
     return rec
@@ -207,9 +242,20 @@ def _stale_status(key: tuple, ds, today: dt.date) -> Optional[dict]:
         if _status_failed.get(tid) == key:
             return None
     prev = _previous_status(tid)
-    if prev is None or prev.get("settings") != _settings_sig(key) or str(prev.get("day")) > key[_SK_DAY].isoformat():
+    if prev is None or str(prev.get("day")) > key[_SK_DAY].isoformat():
         return None
-    reason = "day" if prev.get("day") != key[_SK_DAY].isoformat() else "data"
+    shown = prev["status"]
+    if prev.get("settings") == _settings_sig(key):
+        reason = "day" if prev.get("day") != key[_SK_DAY].isoformat() else "data"
+    elif prev.get("settings_but_hr") == _settings_sig_but_hr(key):
+        # SP-809 (SP-361 Q2, Q1 = B): only 課表心率區間 switched — the previous status, its 最大心率可信度低
+        # warning re-applied under the new model; the rest is the old model's until the new one is in
+        shown = _rewarn(shown, _hr_setting(key))
+        if shown is None:
+            return None
+        reason = "hr"
+    else:
+        return None
     with _lock:
         start = _status_refreshing.get(tid) != key
         if start:
@@ -219,7 +265,7 @@ def _stale_status(key: tuple, ds, today: dt.date) -> Optional[dict]:
         threading.Thread(target=ctx.run, args=(_refresh_status, key, ds, today), name="status-refresh",
                          daemon=True).start()
     at = float(prev.get("at") or 0.0)
-    return {**prev["status"], "stale": {"reason": reason, "age_s": max(0, int(time.time() - at)),
+    return {**shown, "stale": {"reason": reason, "age_s": max(0, int(time.time() - at)),
                                         "since": dt.datetime.fromtimestamp(at, dt.timezone.utc).isoformat()}}
 
 

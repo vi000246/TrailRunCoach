@@ -9,8 +9,15 @@
  *   p0   總覽 / 課表 pages and their data: status, this week, the calendar of this and the next
  *        weeks / months, the period totals, the PMC of the last 7 / 42 / 90 days, the settings
  *   p1   the activity list (every activity's summary) and the achievements
- *   p2   nothing yet: the FIT files and the 1-year chart data need an API first (SP-325);
- *        only with the scope offline:full (a subscription; SP-713 tiersOf) — the free tier keeps p0–p1
+ *   p2   單次活動 (SP-758): the activities of the last 30 days that were opened — the page
+ *        (/api/v1/app/viewer), what it reads to draw itself, and each opened activity's charts and
+ *        judgement cards, per-sample data, kind and pain mark; never fetched ahead (that would make
+ *        the server compute the cards of activities no one opens). An activity's answer is kept only
+ *        with the activity the server says it is about (X-TRC-Activity: its start minute) and only
+ *        when that day is within ACT_DAYS; a drawing still being computed (`stale`, `pending`) is not
+ *        kept. Over the budget the oldest activity goes first; at each refill the ones older than
+ *        ACT_DAYS go. Only with the scope offline:full (a subscription; SP-713 tiersOf) — the free
+ *        tier keeps p0–p1
  * The manual (SP-558, api/manual.py: /manual, its chapters, search index and pictures) is the program's
  * too — public, no one's data: kept in the shared program cache, signed in or not, network first; the
  * whole of it (every chapter and picture of /manual/index.json) is fetched at install and when a manual
@@ -61,6 +68,7 @@
     "/api/v1/static/eptest.js", "/api/v1/static/weight_hint.js", "/api/v1/static/hints.js",
     "/api/v1/static/racehints.js", "/api/v1/static/pmc_chart.js", "/api/v1/static/manual_search.js",
     "/api/v1/static/manual.js", "/api/v1/static/manual_charts.js",
+    "/api/v1/static/askai.js",
   ];
   // 操作手冊 (SP-558): public; /manual/index.json names its chapters and pictures (warmManual)
   const MANUAL = "/manual";
@@ -68,11 +76,19 @@
   const isManual = (p) => p === MANUAL || p.startsWith(MANUAL + "/");
   // the chart library of 總覽 (fetched with CORS, never as an opaque answer)
   const CDN = ["https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"];
+  // 單次活動's libraries (SP-758): the program's too, but kept when that page loads them, not at install
+  // (only a subscription keeps that page; the map's tiles are never kept)
+  const CDN_ON_USE = [
+    "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css",
+  ];
   const PAGES = {
     "/api/v1/overview/page": "p0",
     "/api/v1/overview/plan/schedule/page": "p0",
     [OFFLINE_PAGE]: "p0",
     "/api/v1/app/activities/page": "p1",
+    "/api/v1/app/viewer": "p2",                   // 單次活動 (SP-758)
   };
   const API = {
     "/api/v1/overview/status": "p0",
@@ -91,7 +107,22 @@
     "/api/v1/app/activities": "p1",
     "/api/v1/app/activities/stats": "p1",
     "/api/v1/achievements": "p1",
+    // what 單次活動 reads to draw itself (SP-758; static/charts.html init, the activity list, 疼痛)
+    "/api/v1/app/views": "p2",
+    "/api/v1/app/sports": "p2",
+    "/api/v1/app/config": "p2",
+    "/api/v1/app/athlete": "p2",
+    "/api/v1/app/primary-sport": "p2",
+    "/api/v1/app/plan-range": "p2",
+    "/api/v1/app/workouts": "p2",
+    "/api/v1/app/injuries/meta": "p2",
   };
+  // one activity's answers (SP-758): kept per activity, see the module doc. A chart only with ?workout=
+  const ACT_DAYS = 30;
+  const ACT_HDR = "x-trc-activity";
+  const ACT_CHART = /^\/api\/v1\/app\/views\/[^/]+\/dashboards\/\d+\/charts\/\d+$/;
+  const ACT_OTHER = /^\/api\/v1\/app\/workouts\/\d+\/(samples|kind|pain|zone-sets|segments)$/;
+  const ACT_KEY = /^\d{4}-\d\d-\d\dT\d\d:\d\d$/;
   // a calendar for other days than asked would show an empty week: only a range that covers it
   const STRICT_RANGE = new Set(["/api/v1/overview/plan/calendar"]);
   const DATE_PARAMS = new Set(["start", "end", "begin", "anchor", "day"]);
@@ -111,7 +142,7 @@
     ],
     p1: ["/api/v1/app/activities/page", "/api/v1/app/activities", "/api/v1/app/activities/stats",
       "/api/v1/achievements?include_hidden=true"],
-    p2: [],                       // FIT and the 1-year chart data: no API yet (SP-325)
+    p2: [],                       // nothing ahead: an activity is kept when it is opened (SP-758)
   };
 
   // ---------------------------------------------------------------- dates (UTC: no DST surprises)
@@ -130,11 +161,33 @@
 
   // ---------------------------------------------------------------- pure rules
 
-  /** What a GET is: {kind: app | page | api, tier} or null (never cached). */
+  /** One activity's answer (SP-758): a chart asked with ?workout=, or /workouts/{i}/samples … */
+  function isActivityUrl(u) {
+    return ACT_OTHER.test(u.pathname) || (ACT_CHART.test(u.pathname) && u.searchParams.has("workout"));
+  }
+
+  /** The URL an activity's answer is kept under: without ?stale=1 (the viewer asks with it first, and
+   * offline the kept, finished drawing answers either way). */
+  function activityKey(href) {
+    const u = new URL(href);
+    u.searchParams.delete("stale");
+    return u.href;
+  }
+
+  /** The day ('YYYY-MM-DD') of an activity key (X-TRC-Activity: its start minute), or null. */
+  const activityDay = (key) => (typeof key === "string" && ACT_KEY.test(key) ? key.slice(0, 10) : null);
+
+  /** Whether an activity of that key is kept: its day within the last ACT_DAYS days of `today`. */
+  function keepsActivity(key, today) {
+    const d = activityDay(key);
+    return !!d && isIso(today) && d >= addDays(today, -ACT_DAYS) && d <= addDays(today, 1);
+  }
+
+  /** What a GET is: {kind: app | page | api, tier(, act: one activity's answer)} or null (never cached). */
   function classify(input, origin, navigate) {
     let u;
     try { u = new URL(input, origin); } catch (_) { return null; }
-    if (u.origin !== origin) return CDN.includes(u.href) ? { kind: "app", tier: "p0" } : null;
+    if (u.origin !== origin) return CDN.includes(u.href) || CDN_ON_USE.includes(u.href) ? { kind: "app", tier: "p0" } : null;
     const p = u.pathname;
     if (Object.prototype.hasOwnProperty.call(PAGES, p)) return { kind: "page", tier: PAGES[p] };
     if (isManual(p)) return { kind: "app", tier: "p0", manual: true };
@@ -142,6 +195,7 @@
     // the static files are the program; a page opened by file name carries its reader's session
     if (p.startsWith("/api/v1/static/")) return p.endsWith(".html") ? null : { kind: "app", tier: "p0" };
     if (Object.prototype.hasOwnProperty.call(API, p)) return { kind: "api", tier: API[p] };
+    if (isActivityUrl(u)) return { kind: "api", tier: "p2", act: true };
     return null;
   }
 
@@ -208,6 +262,7 @@
       try { const u = new URL(c.url, origin); if (u.origin === r.origin && u.pathname === r.pathname) same.push({ ...c, u }); } catch (_) { /* skip */ }
     }
     if (!same.length) return null;
+    if (isActivityUrl(r)) return null;          // one activity's answer never stands in for another's (SP-758)
     if (!Object.prototype.hasOwnProperty.call(API, r.pathname)) return newest(same).url;
     const idOf = (u) => [...u.searchParams].filter(([k]) => !DATE_PARAMS.has(k)).map(([k, v]) => k + "=" + v).sort().join("&");
     const want = idOf(r);
@@ -228,13 +283,16 @@
     return top.length ? newest(top).url : newest(pool).url;
   }
 
-  /** Over the budget: which entries to drop. p2 first, then p1, the oldest first in a tier;
-   * p0 and the program are never dropped. entries: [{key, tier, kind, bytes, at}]. */
+  /** Over the budget: which entries to drop. p2 first, then p1, the oldest first in a tier — in p2 the
+   * oldest activity first (its `day`, SP-758), the page and what it reads last; p0 and the program are
+   * never dropped. entries: [{key, tier, kind, bytes, at(, day)}]. */
   function planEviction(entries, budget) {
     let total = (entries || []).reduce((s, e) => s + (e.bytes || 0), 0);
     const drop = [];
+    const order = (a, b) => (a.day ? 0 : 1) - (b.day ? 0 : 1) || String(a.day || "").localeCompare(String(b.day || ""))
+      || (a.at || 0) - (b.at || 0);
     for (const tier of ["p2", "p1"]) {
-      const list = entries.filter((e) => e.tier === tier && e.kind !== "app").sort((a, b) => (a.at || 0) - (b.at || 0));
+      const list = entries.filter((e) => e.tier === tier && e.kind !== "app").sort(order);
       for (const e of list) {
         if (total <= budget) break;
         drop.push(e);
@@ -315,7 +373,13 @@
       if (key) { st.user = key; await save(); }
       return true;
     }
-    const setSession = (session) => setUser(userKeyOf(session));
+    // SP-791: a page of 代看 (a coach viewing a student) — the worker stays out of the way until a page
+    // says otherwise: nothing kept, nothing answered from the coach's own copy, the copy left as it is
+    let viewingNow = false;
+    const setSession = (session) => {
+      viewingNow = !!(session && session.viewing);
+      return viewingNow ? Promise.resolve() : setUser(userKeyOf(session));
+    };
 
     const entryKey = (cacheName, url) => cacheName + " " + url;
     async function bytesOf(resp) { return (await resp.clone().arrayBuffer()).byteLength; }
@@ -343,13 +407,27 @@
       return plan;
     }
 
+    /** One activity's answer (SP-758): {act, day} when it is kept — the server names the activity
+     * (X-TRC-Activity), its day is within ACT_DAYS and the answer is not a drawing still being computed. */
+    function activityOf(resp, buf) {
+      const key = resp.headers.get(ACT_HDR);
+      if (!keepsActivity(key, localToday(now()))) return null;
+      try {
+        const j = JSON.parse(new TextDecoder().decode(buf));
+        if (j && typeof j === "object" && (j.stale === true || j.pending)) return null;
+      } catch (_) { /* not JSON: kept as it is */ }
+      return { act: key, day: activityDay(key) };
+    }
+
     /** Keep an answer (a 200, not redirected) under its URL; false when it wasn't kept. */
-    async function store(cacheName, url, resp, tier, kind, g) {
+    async function store(cacheName, url, resp, tier, kind, g, act) {
       if (g !== gen) return false;
       const st0 = await load();
       if (kind !== "app" && Array.isArray(st0.allowed) && !st0.allowed.includes(tier)) return false;   // SP-713
       let buf;
       try { buf = await resp.arrayBuffer(); } catch (_) { return false; }
+      const which = act ? activityOf(resp, buf) : null;
+      if (act && !which) return false;
       const st = await load();
       for (let i = 0; ; i++) {
         if (g !== gen) return false;
@@ -364,7 +442,7 @@
           await dropEntries(Object.values(st.entries).filter((x) => x.tier === yields[i] && x.kind !== "app"));
         }
       }
-      st.entries[entryKey(cacheName, url)] = { cache: cacheName, url, tier, kind, bytes: buf.byteLength, at: now() };
+      st.entries[entryKey(cacheName, url)] = { cache: cacheName, url, tier, kind, bytes: buf.byteLength, at: now(), ...(which || {}) };
       await enforce();
       save();
       return true;
@@ -401,7 +479,11 @@
       return hit ? served(hit, reason, true) : null;
     }
 
-    const keepable = (r) => r && r.status === 200 && !r.redirected && (r.type === "basic" || r.type === "cors" || r.type === "default");
+    // SP-791: an answer of 代看 (a coach viewing a student: X-TRC-Viewing) is the student's, never the copy
+    // of the person signed in here
+    const viewing = (r) => !!(r && r.headers && typeof r.headers.get === "function" && r.headers.get("x-trc-viewing"));
+    const keepable = (r) => r && r.status === 200 && !r.redirected && (r.type === "basic" || r.type === "cors" || r.type === "default")
+      && !viewing(r);
     const signedOut = (r, c) => c.kind !== "app" && (r.status === 401 || (c.kind === "page" && (r.type === "opaqueredirect" || r.redirected)));
     const delay = (ms) => new Promise((res) => setTimeout(() => res({ timeout: true }), ms));
 
@@ -417,7 +499,7 @@
       const settle = netP.then(async ({ r, copy }) => {
         if (!r) return;
         if (signedOut(r, c)) { await clearUser(); return; }
-        if (copy) await store(cacheName, key, copy, c.tier, c.kind, g);
+        if (copy) await store(cacheName, key, copy, c.tier, c.kind, g, !!c.act);
       }).catch(() => {});
       if (ctx && ctx.waitUntil) ctx.waitUntil(settle);
       const cached = await findCached(cacheName, key);
@@ -440,6 +522,7 @@
     /** The worker's fetch event: a Promise of the answer, or null to leave the request alone. */
     function handleFetch(request, ctx) {
       if (!request || String(request.method || "GET").toUpperCase() !== "GET") return null;     // writes: never
+      if (viewingNow) return null;                                                                // SP-791
       const navigate = request.mode === "navigate";
       let url;
       try { url = new URL(request.url); } catch (_) { return null; }
@@ -449,10 +532,11 @@
         return null;
       }
       if (c.kind === "app") return networkFirst(request, url.href, c, APP, ctx);
+      const key = c.act ? activityKey(url.href) : url.href;
       return (async () => {
         const st = await load();
         if (!st.user) return net(request);                  // nobody known yet: no copy, nothing kept
-        return networkFirst(request, url.href, c, userCache(st.user, c.tier), ctx);
+        return networkFirst(request, key, c, userCache(st.user, c.tier), ctx);
       })();
     }
 
@@ -491,6 +575,8 @@
         if (!r.ok) return { ok: false };
         s = await r.json();
       } catch (_) { return { ok: false, offline: true }; }
+      // SP-791: viewing a student — the signed-in person's copy stays as it is, nothing is refilled
+      if (s && s.viewing) return { ok: true, viewing: true, done: [] };
       const key = userKeyOf(s);
       if (!key) { await clearUser(); return { ok: true, user: null, done: [] }; }
       await setUser(key);
@@ -506,6 +592,9 @@
         try { await caches.delete(userCache(key, tier)); } catch (_) { /* gone already */ }
         delete st.tiers[tier];
       }
+      // SP-758: an opened activity is kept for ACT_DAYS from its day, then it goes
+      const lo = addDays(localToday(now()), -ACT_DAYS);
+      await dropEntries(Object.values(st.entries).filter((x) => x.day && x.day < lo));
       await save();
       for (const tier of st.allowed) {
         const name = userCache(key, tier);
@@ -600,7 +689,9 @@
       for (const tier of TIERS) {
         try { present[tier] = !!st.user && (await caches.has(userCache(st.user, tier))); } catch (_) { present[tier] = false; }
       }
-      return { user: st.user, version, budget, bytes: by, total: by.app + by.p0 + by.p1 + by.p2, tiers: st.tiers, present };
+      // SP-758: how many opened activities p2 keeps
+      const acts = new Set(Object.values(st.entries).filter((e) => e.tier === "p2" && e.act).map((e) => e.act)).size;
+      return { user: st.user, version, budget, bytes: by, total: by.app + by.p0 + by.p1 + by.p2, tiers: st.tiers, present, acts };
     }
 
     return { handleFetch, sync, setUser, setSession, clearUser, install, activate, status, enforce, bytesOf, warmManual,
@@ -608,9 +699,9 @@
   }
 
   return {
-    BUDGET, TIERS, REFRESH_MS, TIMEOUT_MS, APP_FILES, CDN, PAGES, API, WARM, OFFLINE_PAGE, HDR, NO_NAV, MANUAL, MANUAL_INDEX,
-    USER_PREFIX, META_CACHE, STRICT_RANGE,
+    BUDGET, TIERS, REFRESH_MS, TIMEOUT_MS, APP_FILES, CDN, CDN_ON_USE, PAGES, API, WARM, OFFLINE_PAGE, HDR, NO_NAV, MANUAL,
+    MANUAL_INDEX, USER_PREFIX, META_CACHE, STRICT_RANGE, ACT_DAYS, ACT_HDR,
     classify, userKeyOf, tiersOf, userCache, appCache, warmDerived, pickFallback, planEviction, markOfflineHtml,
-    monthGrid, mondayOf, addDays, createEngine,
+    monthGrid, mondayOf, addDays, createEngine, activityKey, activityDay, keepsActivity,
   };
 });

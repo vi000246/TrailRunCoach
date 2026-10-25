@@ -81,7 +81,7 @@ from typing import Callable, Iterable, Optional
 
 from backend.engine import hr_profile as HP
 from backend.engine import load_guard as LG
-from backend.i18n import M_, fmt
+from backend.i18n import M_, N_, _, fmt
 
 FOLLOWERS = ("long2",)         # always 2 days (the 3-day version was dropped, 2026-10-02)
 ACCEPTED_KEY = "plan.b2b.accepted"   # user_settings: [{week, days: [d1, d2], minutes: [m1, m2], uids, at}]
@@ -114,8 +114,10 @@ TREND_STEP = 0.02              # 推估: the day-2 VAM ratio moved ≥ 2 points 
 
 SRC_WHEN = ("UA（專項期、longer races）；Koop（最後 2–3 週不硬塞）；"
             "vert.run 百英里指南（最大的在賽前 4–5 週、最後 3 週不做）；每個 3:1 週期一次、次數為推估")
-SRC_DAYS = ("Koop／CTS〈Block Training〉：第 1 天較硬、總量不加；Jones-Wilkins（CTS）30:20；"
-            "UA：兩天都 ≤ AeT；Burke 2011：補給 30–60 g/h；第 2 天比例 0.67、背負進度對應次數為推估")
+# the B2B days' 出處 (SP-905: msgids joined with 「；」, each read back on its own; _src_days())
+SRC_DAYS_P = (N_("Koop／CTS〈Block Training〉：第 1 天較硬、總量不加"), "Jones-Wilkins（CTS）30:20",
+              N_("UA：兩天都 ≤ AeT"), N_("Burke 2011：補給 30–60 g/h"), N_("第 2 天比例 0.67、背負進度對應次數為推估"))
+SRC_DAYS = "；".join(SRC_DAYS_P)
 SRC_POST = "Gaudette（48–72 小時不排硬課）、Johnston（UA）「three or four light days」：中位數 3 天；不改恢復週為推估"
 SRC_EVAL = ("同 VAM 的心率差（無外部來源，推估）；ΔVAM@AeT（推估）；"
             "2×2 判讀依 UA、Le Meur 2013、Coyle 2001；±3 bpm、±5 % 為推估")
@@ -558,9 +560,13 @@ def followers(long_s: dict, info: dict) -> list[dict]:
     long_s["minutes"] = mins[0]
     long_s["tss"] = round(rate * mins[0], 1)
     return [{"id": f"long{i}", "kind": "long", "title": f"B2B 第 {i} 天", "minutes": m, "target": "",
-             "detail": "", "source": SRC_DAYS, "tss": round(rate * m, 1), "day": None, "done": False,
+             "detail": "", "source": _src_days(), "tss": round(rate * m, 1), "day": None, "done": False,
              "done_by": None, "terrain": long_s.get("terrain")}
             for i, m in enumerate(mins[1:], 2)]
+
+
+def _src_days() -> str:
+    return "；".join(_(p) for p in SRC_DAYS_P)
 
 
 def _rate(s: dict) -> float:
@@ -596,28 +602,32 @@ def decorate(ss: list[dict], info: dict, aet: Optional[float], long_cap: Optiona
         s["terrain"] = long_s.get("terrain")
         s["tss"] = round(rate * s["minutes"], 1)
         s["target"] = hr_t
-    pack = ""                    # no pack in training (engine/steep_hill.py simulates it with grade)
-    fuel = "練比賽補給：每小時 30–60 g 醣，超過 2.5 小時可到 90 g/h；當晚要吃回來，第 2 天才是在練「接續的一天」（Burke 2011）。"
+    # no pack in training (engine/steep_hill.py simulates it with grade). SP-905: the texts are msgids
+    # joined with 「；」「。」 (an English page reads each back on its own)
+    fuel = (_("練比賽補給：每小時 30–60 g 醣，超過 2.5 小時可到 90 g/h") + "；"
+            + _("當晚要吃回來，第 2 天才是在練「接續的一天」（Burke 2011）") + "。")
     if long_s["minutes"] < FUEL_MIN_H * 60:
-        fuel += f"Koop：練補給的長跑至少 {FUEL_MIN_H:.0f} 小時，本週先練到 {long_s['minutes']} 分。"
+        fuel += _("Koop：練補給的長跑至少 {h:.0f} 小時，本週先練到 {m} 分", h=FUEL_MIN_H, m=long_s["minutes"]) + "。"
     base_title = long_s["title"].split("｜", 1)[-1]
     # the generator's / 課表偏好's terrain hint (e.g. 「挑每公里爬升 ≥ 56 m 的路線」) stays a suggestion
     old = long_s.get("detail") or ""
     terrain = "" if old.startswith("B2B") else old.split("；", 1)[0].strip()
-    climb = f"建議挑爬升比較多的路線（{terrain}；建議，不強制）" if terrain else "建議挑爬升比較多的路線（建議，不強制）"
+    climb = (_("建議挑爬升比較多的路線（{terrain}；建議，不強制）", terrain=terrain) if terrain
+             else _("建議挑爬升比較多的路線（建議，不強制）"))
     long_s["title"] = f"B2B 第 1 天｜{base_title}"
     long_s["target"] = hr_t
-    long_s["detail"] = (f"B2B 第 1 天（共 {n} 天）：這週最長的一天，{climb}；全程{hr_t}，爬坡用走的守住上限，"
-                        f"不放間歇。{fuel}{pack}").rstrip()
-    long_s["source"] = SRC_DAYS
+    long_s["detail"] = (_("B2B 第 1 天（共 {n} 天）：這週最長的一天，{climb}", n=n, climb=climb) + "；"
+                        + _("全程{hr}，爬坡用走的守住上限，不放間歇", hr=hr_t) + "。" + fuel).rstrip()
+    long_s["source"] = _src_days()
     for s in fol:
         i = int(s["id"][-1])
-        share = "約第 1 天的 2/3（CTS 30:20）" if not single else "1.5–2.5 小時輕鬆（vert.run）"
+        share = _("約第 1 天的 2/3（CTS 30:20）") if not single else _("1.5–2.5 小時輕鬆（vert.run）")
         s["title"] = f"B2B 第 {i} 天｜{base_title}"
-        s["detail"] = (f"B2B 第 {i} 天：{share}，{s['minutes']} 分；{hr_t}，不加速；建議下坡多一點（不強制），練多日下坡"
-                       f"（Bontemps 2025 重複負荷效應）。"
-                       + "跟第 1 天比同樣爬坡速度的心率、同樣心率的爬坡速度，總覽的 B2B 卡會判讀。")
-        s["source"] = SRC_DAYS
+        s["detail"] = (_("B2B 第 {i} 天：{share}，{m} 分", i=i, share=share, m=s["minutes"]) + "；"
+                       + _("{hr}，不加速", hr=hr_t) + "；"
+                       + _("建議下坡多一點（不強制），練多日下坡（Bontemps 2025 重複負荷效應）") + "。"
+                       + _("跟第 1 天比同樣爬坡速度的心率、同樣心率的爬坡速度，總覽的 B2B 卡會判讀") + "。")
+        s["source"] = _src_days()
 
 
 def done_follow(ss: list, s, day: dt.date) -> bool:

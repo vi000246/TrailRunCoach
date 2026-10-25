@@ -36,13 +36,24 @@ CATALOG_DIR = STATIC / "i18n"
 ALWAYS_NS = ("common", "shell")
 # page file stem -> its catalog namespaces (default: the stem itself)
 # races: the event editor moved there from the season plan page (SP-691) and keeps its plan.ev.* text
-PAGE_NS = {"charts": ("viewer",), "share": ("share", "racepower"), "races": ("races", "plan")}
+# pricing: 方案與價格 (SP-846) shows the plans page's comparison (plans.json row.*, billing/plan_table.py)
+PAGE_NS = {"charts": ("viewer",), "share": ("share", "racepower"), "races": ("races", "plan"),
+           "pricing": ("pricing", "plans")}
 I18N_JS = "/api/v1/static/i18n/i18n.js"
 I18N_JS_FILE = CATALOG_DIR / "i18n.js"
 # pages a visitor opens without signing in, through a gate that lets only their own path through (the
 # share link: Cloudflare Access lets /share/* by, not /api/v1/static/*): i18n.js goes inline, else
 # t() is missing and the page shows its keys — 「join.title」 (SP-698)
-INLINE_I18N_PAGES = frozenset({"share"})
+INLINE_I18N_PAGES = frozenset({"share", "pace"})     # pace: the 腳程試算 (SP-805, /share/pace)
+# the same gate, for a page's own shared scripts (static/<file>): written into the page at its
+# `<!--inline:<file>-->` marker instead of loaded by address — the share page draws its 分段目標 with
+# the calculator's component (SP-784)
+INLINE_SCRIPTS = {"share": ("seg_profile.js",)}
+
+
+def _script_tag(path: Path) -> str:
+    """A file as an inline <script> (a `</script` in it can't close the tag)."""
+    return "<script>" + re.sub(r"</(script)", r"<\\/\1", path.read_text("utf-8"), flags=re.I) + "</script>"
 
 
 class PageResponse(HTMLResponse):
@@ -68,7 +79,9 @@ def _read_ns(loc: str, ns: str) -> dict:
 
 def _flat(t):
     """A catalog entry as one text (markup replaced server side has no {n}: a plural gives its "other")."""
-    return t.get("other") or next(iter(t.values()), None) if isinstance(t, dict) else t
+    t = t.get("other") or next(iter(t.values()), None) if isinstance(t, dict) else t
+    # SP-762: a `{n|day|days}` word with no parameter here reads its plural form
+    return i18n.plural_words(t, {}) if isinstance(t, str) else t
 
 
 def page_catalog(namespaces: Iterable[str], loc: str, debug: bool = False) -> dict[str, str]:
@@ -135,6 +148,8 @@ def render(name: str, loc: Optional[str] = None, debug: Optional[bool] = None) -
     inline = name in INLINE_I18N_PAGES
     if inline:
         stamp.append(I18N_JS_FILE.stat().st_mtime_ns)
+    scripts = [STATIC / f for f in INLINE_SCRIPTS.get(name, ())]
+    stamp += [p.stat().st_mtime_ns for p in scripts]
     for l in {i18n.DEFAULT_LOCALE, loc}:
         for ns in nss:
             try:
@@ -150,6 +165,8 @@ def render(name: str, loc: Optional[str] = None, debug: Optional[bool] = None) -
     cat = page_catalog(nss, loc, bool(debug))
     out = apply_catalog(src, cat)
     out = _HTML_LANG.sub(lambda m: m.group(1) + loc + m.group(2), out, count=1)
+    for p in scripts:
+        out = out.replace(f"<!--inline:{p.name}-->", _script_tag(p))
     boot = json.dumps({"locale": loc, "debug": bool(debug), "catalog": cat}, ensure_ascii=False).replace("</", "<\\/")
     if inline:
         js = re.sub(r"</(script)", r"<\\/\1", I18N_JS_FILE.read_text("utf-8"), flags=re.I)

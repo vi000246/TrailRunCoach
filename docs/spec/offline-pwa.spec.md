@@ -53,7 +53,7 @@ One fixed budget per browser: **20 MB** (`BUDGET`), program included.
 | app | the cached pages' scripts + what shell.js loads, `i18n.js`, ECharts 5.5.0 (CORS) | at install (each new build) and on use | done |
 | **p0** | pages 總覽, 課表, the offline page; `status`, `weekplan`, `z5`, `b2b`, `summary` (week 16 / month 12 / year 6), `pmc` (7 / 42 / 90 days to the server's today), `plan/calendar` (總覽's week, this + next 2 weeks, this + next month grid), `plan/prefs`, `plan/prefs/gate`, `plan/equivalence`, `sync/settings`, `region` | every 15 min, at once when its cache is gone, forced on `online` | done |
 | p1 | 活動列表 page, `wko5/activities` (every activity's summary), `activities/stats`, `achievements?include_hidden=true` | every 6 h / when gone | done (3-year summaries); CTL/TSB for 3 years, the 90-day chart data and tracks wait for SP-325 |
-| p2 | — | daily / when gone | the tier exists (refill order, eviction, quota); FIT and 1-year chart data need an API first |
+| p2 | 單次活動 (SP-758): the page `/api/v1/app/viewer`, what it reads (`views`, `sports`, `config`, `athlete`, `primary-sport`, `plan-range`, `workouts`, `injuries/meta`) and, per opened activity, its charts (`views/…/charts/…?workout=`, kept without `stale`), `workouts/{i}/samples|kind|pain|zone-sets|segments` — only an answer carrying `X-TRC-Activity` (the activity's start minute) whose day is within 30 days, never a `stale` / `pending` drawing; ECharts 5.6.0 and Leaflet 1.9.4 kept on use (`CDN_ON_USE`); map tiles never | when opened (never fetched ahead); entries older than 30 days go at each refill | done; offline:full only (SP-713) |
 
 - **Only GET, only the listed paths** (`classify`): `API`, `PAGES`, the static files (not `*.html`
   under `/api/v1/static/`, which carry their reader's session), the listed CDN file. Everything
@@ -94,8 +94,12 @@ One fixed budget per browser: **20 MB** (`BUDGET`), program included.
 
 ## Over the budget / storage full
 
-- After each store, `planEviction`: total over 20 MB → drop **p2** entries (oldest first), then
-  **p1**; p0 and the program are never dropped.
+- After each store, `planEviction`: total over 20 MB → drop **p2** entries (the oldest activity
+  first by its day, the page and what it reads last; SP-758), then **p1** (oldest first); p0 and
+  the program are never dropped.
+- One activity's answer is never answered for another: no fallback across `?workout=` / `/workouts/{i}/`
+  (`pickFallback`), and the viewer does not draw a chart whose `act_key` is not the activity it
+  shows (an index shifts when an older activity comes in or one is excluded; 「這張圖是另一筆活動的」).
 - `QuotaExceededError` on a put: a p0 entry may push out p2, then p1, retrying after each; a p1
   entry only p2; a p2 entry nothing (it's not kept).
 - Cleared by the browser (Safari's 7 days, storage pressure): the tier whose cache is gone is
@@ -115,7 +119,8 @@ One fixed budget per browser: **20 MB** (`BUDGET`), program included.
 - 課表: `editable()` is false offline — sessions open read-only, nothing drags.
 - 加到主畫面: manifest + icons + `apple-mobile-web-app-*` added to `<head>` by the shell; on an
   iPhone / iPad in Safari (not installed), 總覽 shows the hint once until 「知道了」 (`trc.a2hs`).
-- `AppOffline.status()` → `{user, version, budget, bytes: {app, p0, p1, p2}, total, tiers, present: {p0, p1, p2}}`
+- `AppOffline.status()` → `{user, version, budget, bytes: {app, p0, p1, p2}, total, tiers, present: {p0, p1, p2}, acts}`
+  (`acts`, SP-758: how many opened activities p2 keeps — 設定 shows 「已存 n 筆活動」)
   (`present`: the tier's cache still exists — the browser may delete one while `tiers` still has its record).
 
 ## 設定 › 這台裝置的離線資料 (SP-322)
@@ -126,7 +131,7 @@ One fixed budget per browser: **20 MB** (`BUDGET`), program included.
 | Row | Source | Shown |
 |---|---|---|
 | 用量 | `navigator.storage.estimate().usage` (the whole origin) | `{mb} MB／預算 20 MB` + a bar (capped at 100 %, warn colour and a note over the budget) + the copy's own `status().total` |
-| P0 / P1 / P2 | `AppOffline.status()` (the worker's `tiers`, `bytes`, `present`; never recomputed) | 已存好 · MB / 部分存好（n 項沒存到）/ 沒存到 (ok 0, failed > 0) / 空間不夠，已先清掉 (ok > 0, 0 bytes) / 目前沒有要存的資料 (ok 0, failed 0: P2 until SP-325) / 還沒存 (no record, cache gone, nobody signed in) |
+| P0 / P1 / P2 | `AppOffline.status()` (the worker's `tiers`, `bytes`, `present`; never recomputed) | 已存好 · MB / 部分存好（n 項沒存到）/ 沒存到 (ok 0, failed > 0) / 空間不夠，已先清掉 (ok > 0, 0 bytes) / 目前沒有要存的資料 (ok 0, failed 0; P2: 還沒有：打開一筆近 30 天的活動就會存) / 還沒存 (no record, cache gone, nobody signed in); P2 with bytes kept: 已存 n 筆活動 · MB (`acts`, SP-758) |
 | 持久保存 | `navigator.storage.persisted()` | 是 / 否 + 「要求持久保存」(`persist()`; the answer: 已取得 / 瀏覽器沒有同意 / 不能要求) |
 | 最後更新 | the newest `tiers[*].at` | device-local `YYYY-MM-DD HH:mm`, 還沒存過, + 「重新讀取」 |
 | 加到主畫面 | `isIosTab`: iPhone / iPod / iPad (incl. iPadOS as `MacIntel` + touch), not `navigator.standalone`, not `display-mode: standalone` | a note: Safari clears a tab's storage after 7 days without the site; the home-screen app is exempt and keeps its own copy (sign in again there) |
@@ -191,8 +196,8 @@ None stored server side.
 
 ## Open Questions
 
-- P1's 3-year CTL/TSB, 90-day chart data and tracks, and all of P2 (FIT, 1-year chart data) need
-  device-friendly APIs (SP-325).
+- P1's 3-year CTL/TSB, 90-day chart data and tracks need device-friendly APIs (SP-325); P2 keeps only
+  the activities opened (SP-758), not every activity of the last 90 days (SP-325 單 C, not opened).
 - `Clear-Site-Data` on sign-out was not added (it would also clear the browser's other storage,
   e.g. page preferences); the shell clears the copy itself.
 
@@ -203,3 +208,4 @@ None stored server side.
 | 2026-10-13 | Created (SP-314): service worker, tiers, offline bar, write guard, manifest + icons, multi-tenant clearing |
 | 2026-10-13 | SP-322: 設定 › 這台裝置的離線資料 (`device_storage.js`, `#device` on 資料同步): usage vs 20 MB, P0/P1/P2 state, persistence + ask, last refresh, iPhone-tab home-screen hint, 無法取得 without the APIs; `status()` adds `present` per tier |
 | 2026-10-13 | SP-470: `sesspop.js` (the 課表 card hover) added to `APP_FILES` — the offline 課表 page loads it |
+| 2026-10-19 | SP-758: p2 = 單次活動 of the last 30 days that were opened (page, what it reads, each activity's charts / cards / samples / kind / pain / zone sets / segments; `X-TRC-Activity` from the server, 30-day rule, no `stale` / `pending`, no fallback across activities, oldest activity evicted first, expired at refill; `CDN_ON_USE`); the viewer refuses a chart whose `act_key` is another activity; `status().acts` and 設定's P2 「已存 n 筆活動」 |

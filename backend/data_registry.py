@@ -300,6 +300,11 @@ FILES: tuple = (
          "restart (api/overview.py, SP-394)",
          invalidated_by="rewritten by every status computation; shown only while the user's own settings are "
                         "the same; never for a demo tenant"),
+    File("cache/coach_summary.json", DERIVED, ROOT, "the coach dashboard's summary of this student: the last 7 / 28 "
+         "days' volume, CTL / ATL / TSB, the next race, the plan's completion, the status's red / yellow "
+         "indicators (backend/coach_board.py, SP-790); kept only while the account has an active coach",
+         invalidated_by="rewritten after each Dataset warm-up of a coached student and once a night; read by the "
+                        "coach's board only through coaching.in_student (an active link, checked per request)"),
     File("cache/render/slots/*.json", DERIVED, SHARED, "per chart request (view, chart, range as asked): the key "
          "it was last drawn with, so a changed chart first shows that drawing marked as updating "
          "(wko5expr/render_cache.py, SP-336)",
@@ -353,8 +358,9 @@ FILES: tuple = (
     File("cwa_*.json", DERIVED, ROOT, "CWA forecasts / town elevations (racepower/weather.py): one copy for the "
          "whole site in the server root (SP-552, weather.site_dir()), every tenant reads it",
          scope=INSTANCE, invalidated_by="age (CWA_MAX_AGE_H); refetched"),
-    File("climatology/**", DERIVED, SHARED, "Open-Meteo climatology (racepower/weather.py)",
-         invalidated_by="CLIM_VERSION"),
+    File("climatology/**", DERIVED, ROOT, "Open-Meteo climatology (racepower/weather.py): one copy for the whole "
+         "site in the server root (SP-552, weather.site_dir()); a tenant folder's older copy is read once and "
+         "copied there", scope=INSTANCE, invalidated_by="CLIM_VERSION"),
     File("weather.json", SECRET, SHARED, "the CWA API key (racepower/weather.py save_key)"),
     # -- the server's own files: only in $WKO5COACH_HOME ---------------------
     File("secret.key", SECRET, ROOT, "the key that seals sync_state's secrets (settings/secrets.py)",
@@ -370,11 +376,17 @@ FILES: tuple = (
          "api_tokens (sha256 only: the weight API's, SP-472; 疊石 Cairn's service tokens, SP-329), "
          "the sign-ins in progress (oauth_states: "
          "nonce and PKCE verifier, 10 min; signup_tickets: the Google account at the terms, 30 min), the research "
-         "pool's link user -> random donor id + day 0 and its HMAC key (research_links, research_keys, SP-586: "
+         "pool's link user -> random donor id + day 0, its HMAC key and the splits' epoch (research_links, "
+         "research_keys, SP-586, SP-800: "
          "never next to the pool; withdrawal deletes the link), the subscription (billing_subscriptions: Polar's "
          "customer / subscription ids, status, period end; billing_events: each webhook id applied once, no "
-         "payload, 400 days; SP-328). A user's "
-         "own rows (profile, consents) go into their 下載我的資料 as account.json; deleting the account "
+         "payload, 400 days; SP-328), the e-mail sign-in (email_accounts, SP-610: the address, the password's "
+         "Argon2id hash, when the address was confirmed, the sha256 of its one-time confirm / reset links, "
+         "24 h / 1 h), coaching (SP-789: coach_profiles — who is a coach, their code, their most students; "
+         "coach_links — coach, student, pending / active / ended, who asked and who ended it, consents rows "
+         "coach_accept / coach_end; coach_invites — the sha256 of a coach's invite link, 30 days). A user's "
+         "own rows (profile, consents, the e-mail sign-in's address — never the hash) go into their 下載我的資料 "
+         "as account.json; deleting the account "
          "deletes every row of theirs (store.delete_user, SP-386)",
          scope=INSTANCE, deidentify=("email", "display_name", "google_sub")),
     File("accounts.db-*", SECRET, ROOT, "accounts.db's WAL / shared memory", scope=INSTANCE),
@@ -400,7 +412,8 @@ FILES: tuple = (
     # recomputable as is (the donor ids are random) but disposable: deleting it loses nothing a
     # tenant needs, the next export starts it again. Off unless TRC_RESEARCH_POOL=1
     File("research/pool.db", DERIVED, ROOT, "the research pool's B layer (SP-586, research/pool.py): activity "
-         "summaries and daily load under random donor ids, 1-km splits with no id (export year only), grid "
+         "summaries and daily load under random donor ids, 1-km splits with no id (their activity's 28-day window "
+         "from the secret epoch only, SP-800), grid "
          "cells of >= 5 people, the A layer's group statistics of >= k people (a_params, SP-587, "
          "research/a_layer.py), meta (attributions, the source rules in force). No GPS track, FIT, account, "
          "date, file name or free text; the link donor id -> user is accounts.db's research_links",

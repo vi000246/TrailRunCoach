@@ -176,6 +176,15 @@ class Status:
         return self
 
     # ---- helpers ---------------------------------------------------------
+    def _maintain_why(self) -> str:
+        """maintain_why() for the athlete's 主要訓練項目 (SP-830: road → 速度 / 閾值); trail on any error."""
+        try:
+            from backend.engine import primary_sport as PSP
+            sport = PSP.effective(self.ds, getattr(self.plan, "events", None) or (), self.today)
+        except Exception:                   # noqa: BLE001 — the status must still build
+            sport = "trail"
+        return maintain_why(sport)
+
     def _iso(self, day: float) -> str:
         return day_to_date(day).isoformat()
 
@@ -252,8 +261,9 @@ class Status:
     def i_heat(self) -> Indicator:
         """熱適應 (docs/research/heat-acclimation.md §5.3): the index S from
         the per-activity heat exposure (engine/heat.py, heat_data.py). Level:
-        acclimatised good, partial watch, none info; bad only when a hot A/B
-        race is within 30 days and its projected S < 0.75 (推估)."""
+        acclimatised good, partial watch, none info; watch when a hot A/B race
+        is within 30 days and its projected S < 0.75 (推估) — SP-856: was bad, but
+        since SP-569 there is no 熱適應課 to do, only the race-day reminder."""
         from backend.engine import heat as HT
         from backend.engine import heat_data as HD
         acts, meta = HD.exposures()
@@ -264,13 +274,14 @@ class Status:
         lv = cur["level"]
         level = {"acclimatised": GOOD, "partial": WATCH}.get(lv["id"], INFO)
         hr = HD.hot_race(self.plan.events, self.today, acts)
-        s_race, action = None, ""
+        s_race, action, race_low = None, "", False
         if hr:
             e = hr["event"]
             pj = HT.project(s, self.today, e.start)
             s_race = {"center": pj["center"], "low": pj["low"], "high": pj["high"], "event": e.name, "date": e.date}
             if pj["center"] < HT.LEVELS[0][1]:
-                level = BAD
+                # SP-856: watch, not bad — nothing to train (SP-569), only race day to pace for
+                level, race_low = WATCH, True
                 # SP-569: no 熱適應課 in the plan any more — the race-day heat reminder only
                 action = _("{race}（{date}）預估是熱天，比賽日熱適應預估 {s}：比賽當天配速放慢、多補水；"
                            "賽事計算機已把熱影響算進去", race=e.name, date=e.date, s=f"{pj['center']:.0%}")
@@ -278,7 +289,7 @@ class Status:
                    (f"，最後一次 {cur['since_last_d']} 天前" if cur["since_last_d"] is not None else "，沒有熱暴露紀錄"))
         if meta.get("missing"):
             verdict = "還沒有每筆活動的歷史天氣（路線頁重建一次、含天氣）：S 當作 0"
-            level = INFO if level != BAD else level
+            level = WATCH if race_low else INFO
         # HRC observation (§2.3): does the HR cost of heat fall as S rises?
         hrc = None
         try:
@@ -324,7 +335,7 @@ class Status:
                                     "next_a": None, "days_to_next_a": g["days_to_next_a"]})
         if getattr(p, "maintain", False):
             # SP-102 維持期: what it is and why, in plain words; the phase's note says from when
-            why = maintain_why() + (_("。{note}", note=p.note) if p.note else "") + \
+            why = self._maintain_why() + (_("。{note}", note=p.note) if p.note else "") + \
                 _("。到「賽事周期」頁加一場 A 賽事，周期會自動排出來")
             return Indicator("phase", _("周期"), INFO, txt, _(MAINTAIN_GOAL), why,
                              extra={"kind": p.kind, "maintain": True, "maintain_from": p.maintain_from,
@@ -411,7 +422,7 @@ class Status:
                     action = _("訓練期長期負荷沒有成長：檢查每週時數是否卡住") if k in ("base", "specific") else ""
                 else:
                     level, verdict, action = WATCH, _("每週 {ramp:+.1f}，長期負荷在下降", ramp=ramp), _("補回訓練量，或確認是否在恢復")
-        return Indicator("fitness", _("長期訓練負荷（Chronic load）"), level, txt, verdict, why, action, SRC_RAMP_FRIEL, now, spark,
+        return Indicator("fitness", _("長期訓練負荷（Chronic load）"), level, txt, verdict, why, action, _(SRC_RAMP_FRIEL), now, spark,
                          {"ramp_week": None if startup else ramp, "ramp_base": base, "ramp_level": lv,
                           "ramp_startup": startup, "pmc_start": start.get("source"),
                           "ramp_lines": None if startup else [LG.watch_line(base), LG.block_line(base)],
@@ -937,34 +948,39 @@ class Status:
             cd = dt.date.fromisoformat(ct["date"])
             cp = cd if cp is None or cd > cp else cp
         parts, worst = [], GOOD
+        # SP-748: the card's words in the request's language (the status is cached per language)
+        SEP = _("；")
         from backend.engine.planning import threshold_row
         for label, d in (("CP", cp), ("LTHR", lt), ("AeT", ae)):
             if label == "AeT":
                 # B3 (unsourced-rules.md): no fixed expiry — the AeT test is due for a reason
                 # (quality_gate.aet_test_reason, below), not by age
-                parts.append("AeT 沒測過" if d is None else f"AeT {(self.today - d).days} 天前")
+                parts.append(_("{name} 沒測過", name="AeT") if d is None
+                             else _("{name} {n} 天前", name="AeT", n=(self.today - d).days))
                 continue
             if label == "LTHR" and d is not None:
                 # event-driven, not by age (zones-and-thresholds.md §3.4 change 4): an applied
                 # estimate is said as one; retests come from the zone events below
                 r = threshold_row(self.plan, "lthr", self.today)
                 if r is not None and not r["measured"]:
-                    parts.append(f"LTHR {r['label']}，不是測試")
+                    parts.append(_("LTHR {label}，不是測試", label=r["label"]))
+                elif (r or {}).get("label"):
+                    parts.append("LTHR " + r["label"])
                 else:
-                    parts.append(f"LTHR {(r or {}).get('label') or f'{(self.today - d).days} 天前'}")
+                    parts.append(_("{name} {n} 天前", name="LTHR", n=(self.today - d).days))
                 continue
             if d is None:
-                parts.append(f"{label} 沒測過")
+                parts.append(_("{name} 沒測過", name=label))
                 worst = BAD
             else:
                 age = (self.today - d).days
-                parts.append(f"{label} {age} 天前")
+                parts.append(_("{name} {n} 天前", name=label, n=age))
                 if age > TEST_DAYS_BAD:
                     worst = BAD
                 elif age > TEST_DAYS_WATCH and worst != BAD:
                     worst = WATCH
-        txt = "OK" if worst == GOOD else "要測"
-        why = "；".join(parts)
+        txt = "OK" if worst == GOOD else _("要測")
+        why = SEP.join(parts)
         days_to = self.goals["days_to_next_a"]
         act = ""
         # which test week_plan should schedule: the CP test measures CP only; the
@@ -981,23 +997,24 @@ class Status:
                 (cp is None or cp.isoformat() < brk["return"]):
             cp_due = True
             worst = WATCH if worst == GOOD else worst
-            why += f"；停跑 {brk['days']} 天：恢復期結束後重測 CP（教練研討會）"
+            why += SEP + _("停跑 {n} 天：恢復期結束後重測 CP（教練研討會）", n=brk["days"])
         from backend.engine import cp_protocols as CPP
         proto = self._cp_protocol()
         if worst != GOOD:
-            act = (f"{CPP.NOTE_RACE}（課表偏好：用比賽）" if proto == "race" else
-                   f"排一次 CP 測試（{CPP.TABLE[proto]['label']}，{CPP.TABLE[proto]['hint'].split('；')[0]}）") + \
-                "＋ AeT 飄移測試（平日 50 分：10 分暖身＋40 分固定功率）；每 4–6 週一次"
+            act = (_("{note}（課表偏好：用比賽）", note=_(CPP.NOTE_RACE)) if proto == "race" else
+                   _("排一次 CP 測試（{label}，{hint}）", label=_(CPP.TABLE[proto]["label"]),
+                     hint=_(CPP.TABLE[proto]["hint"].split("；")[0]))) + \
+                _("＋ AeT 飄移測試（平日 50 分：10 分暖身＋40 分固定功率）；每 4–6 週一次")
             if days_to is not None and 10 <= days_to <= 21:
-                act += f"——賽前 {days_to} 天正好是測試的時機（賽前 10–21 天）"
+                act += _("——賽前 {n} 天正好是測試的時機（賽前 10–21 天）", n=days_to)
             elif days_to is not None and days_to < 10:
-                act = "賽前 10 天內不要測，賽後再測"
+                act = _("賽前 10 天內不要測，賽後再測")
                 worst = WATCH
-        v = "門檻是新的" if worst == GOOD else "門檻過期或沒測，區間和訓練負荷（Training load）都會跟著不準"
+        v = _("門檻是新的") if worst == GOOD else _("門檻過期或沒測，區間和訓練負荷（Training load）都會跟著不準")
         extra = {}
         if ct:
             extra["cp_test"] = ct
-            why += "；" + (_("最近一次 CP 測試 {d}：這次測試後的模型閾值功率（Modelled threshold power）{cp} W（課表自動採用）",
+            why += SEP + (_("最近一次 CP 測試 {d}：這次測試後的模型閾值功率（Modelled threshold power）{cp} W（課表自動採用）",
                             d=ct["date"], cp=f"{ct['cp']:.0f}") if ct.get("cp") is not None else
                           _("最近一次 CP 測試 {d}：算不出模型閾值功率（Modelled threshold power）", d=ct["date"]))
         # the latest AeT drift test (engine/aet_test.py): UA's three bands
@@ -1010,31 +1027,34 @@ class Status:
             done = AT.applied(self.plan, at)
             extra["aet_test"] = {**at, "applied": done, "apply": None if done else AT.apply_body(at)}
             if at.get("ok") and not done:
-                now = f"（目前 {at['aethr_now']:.0f}）" if at.get("aethr_now") else ""
+                now = _("（目前 {x}）", x=f"{at['aethr_now']:.0f}") if at.get("aethr_now") else ""
+                drift = f"{at['drift'] * 100:.1f}"
                 if at["band"] == "at":
                     worst = WATCH if worst == GOOD else worst
-                    txt = "要更新"
-                    v = f"{at['date']} 的 AeT 測試：飄移 {at['drift'] * 100:.1f}%，AeT = {at['aethr_suggest']} bpm{now}"
-                    act = f"套用這次的 AeT（{at['aethr_suggest']} bpm）" + (f"；{act}" if act else "")
+                    txt = _("要更新")
+                    v = _("{date} 的 AeT 測試：飄移 {drift}%，AeT = {aet} bpm{now}", date=at["date"], drift=drift,
+                          aet=at["aethr_suggest"], now=now)
+                    act = _("套用這次的 AeT（{aet} bpm）", aet=at["aethr_suggest"]) + (SEP + act if act else "")
                 elif str(at.get("band") or "").startswith("base_"):
                     # 徐國峰 90 分 / Friel: a base check, no AeT number to apply
-                    v2 = (f"{at['date']} 的有氧基礎測試：飄移 {at['drift'] * 100:.1f}%"
-                          f"（{AT.BAND_LABEL[at['band']]}）")
-                    why += f"；{v2}"
+                    v2 = _("{date} 的有氧基礎測試：飄移 {drift}%（{band}）", date=at["date"], drift=drift,
+                           band=_(AT.BAND_LABEL[at["band"]]))
+                    why += SEP + v2
                 else:
                     # +5 is UA's; −5 is 推估 (UA: "lower", Evoke: a slower pace — aet_test.LOWER_BPM)
-                    step = "+5 bpm" if at["band"] == "below" else "−5 bpm（推估）"
-                    act = (f"{at['date']} 的 AeT 測試飄移 {at['drift'] * 100:.1f}%（{AT.BAND_LABEL[at['band']]}）："
-                           f"下次起始心率 {step} 再測一次") + (f"；{act}" if act else "")
-            why += f"；最近一次 AeT 測試 {at['date']}：" + (f"飄移 {at['drift'] * 100:.1f}%" if at.get("ok")
-                                                          else at.get("reason") or "不採用")
+                    step = "+5 bpm" if at["band"] == "below" else _("−5 bpm（推估）")
+                    act = _("{date} 的 AeT 測試飄移 {drift}%（{band}）：下次起始心率 {step} 再測一次", date=at["date"],
+                            drift=drift, band=_(AT.BAND_LABEL[at["band"]]), step=step) + (SEP + act if act else "")
+            why += SEP + _("最近一次 AeT 測試 {date}：{res}", date=at["date"],
+                           res=_("飄移 {drift}%", drift=f"{at['drift'] * 100:.1f}") if at.get("ok")
+                           else at.get("reason") or _("不採用"))
         gate = next((i.extra for i in getattr(self, "indicators", []) if i.id == "gate"), None) or {}
         tr = gate.get("aet_test_reason")
         if tr and not (at and at.get("band") == "at" and not extra["aet_test"]["applied"]):
             # B3: the test is due for a reason, not a date (quality_gate.aet_test_reason)
             worst = WATCH if worst == GOOD else worst
-            v = f"建議 AeT 測試：{tr['text']}"
-            act = "排一次 AeT 測試（課表偏好的測試方式）" + (f"；{act}" if act else "")
+            v = _("建議 AeT 測試：{text}", text=tr["text"])
+            act = _("排一次 AeT 測試（課表偏好的測試方式）") + (SEP + act if act else "")
         # event-driven zone updates (engine/zone_events.py): suggestions only — they never
         # set cp_due, so week_plan schedules nothing from them; the 「建議做測試」 UI renders them
         try:
@@ -1059,10 +1079,10 @@ class Status:
             # SP-493 (owner 2026-10-14): 「LTHR 不準／要重測」 is said once, in the suggestion box (稍後提醒
             # there) — the 測試 card keeps the max HR's line only
             if dg.get("text") and dg.get("outlier") == "hrmax":
-                why += "；" + dg["text"]
+                why += SEP + dg["text"]
             c = (tc.get("hrmax") or {}).get("confidence")
             if c and c != "high":
-                why += "；" + _("{name} 可信度{c}", name=_("最大心率"), c=_(TC.CONF_LABEL[c]))
+                why += SEP + _("{name} 可信度{c}", name=_("最大心率"), c=_(TC.CONF_LABEL[c]))
         self.test_suggestions = ze["suggestions"]
         extra["test_suggestions"] = ze["suggestions"]
         extra["zone_events"] = ze["events"]
@@ -1074,14 +1094,14 @@ class Status:
             worst = WATCH if worst == GOOD else worst
             s0 = firm[0]
             if txt == "OK":
-                txt, v = "建議測", s0["title"]
-            why += "；" + "；".join(s["title"] for s in firm)
-            act = (act + "；" if act else "") + "建議（不會自動排課）：" + "、".join(
-                ZE.TEST_LABEL[t] for t in s0["tests"])
+                txt, v = _("建議測"), s0["title"]
+            why += SEP + SEP.join(s["title"] for s in firm)
+            act = (act + SEP if act else "") + _("建議（不會自動排課）：{tests}", tests=_("、").join(
+                _(ZE.TEST_LABEL[t]) for t in s0["tests"]))
         extra["cp_due"] = cp_due
         extra["aet_date"] = ae.isoformat() if ae else None
         extra["aet_last_test"] = at["date"] if at else None
-        return Indicator("testing", _("測試"), worst, txt, v, why, act, SRC_NOTES, extra=extra)
+        return Indicator("testing", _("測試"), worst, txt, v, why, act, _(SRC_NOTES), extra=extra)
 
     def i_data(self) -> Indicator:
         ath = self.ds.athlete
@@ -1177,7 +1197,7 @@ class Status:
                 "light": bool(getattr(self.phase, "light", False)),
                 # SP-102 維持期: the overview says it and why (no A race ahead to count down to)
                 "maintain": bool(getattr(self.phase, "maintain", False)),
-                "why": maintain_why() if getattr(self.phase, "maintain", False) else
+                "why": self._maintain_why() if getattr(self.phase, "maintain", False) else
                 (self.phase.note or None) if getattr(self.phase, "light", False) else None},
             "goals": self.goals,
             "headline": self.headline(),

@@ -1,15 +1,16 @@
 """SP-234: CWA 鄉鎮天氣預報 in the race-day weather chain — the nearest 鄉鎮公所,
 temperature moved from its height to the race height (−0.65 °C / 100 m, RH
-kept). SP-552: before Open-Meteo (CWA first for everyone; Open-Meteo only where CWA has
-nothing) — chain 登山 (5 km) → 鄉鎮 → Open-Meteo → climatology → manual; CWA_TOWN_FIRST
-= False gives back the 2026-10-06 order (Open-Meteo, then 鄉鎮). CWA, the elevation API
-and Open-Meteo are all fakes: no network."""
+kept). SP-552: before the global forecast (CWA first for everyone; the global one only where CWA has
+nothing) — chain 登山 (5 km) → 鄉鎮 → MET Norway (SP-797; was Open-Meteo) → climatology → manual;
+CWA_TOWN_FIRST = False gives back the 2026-10-06 order (the global forecast, then 鄉鎮). CWA, the
+elevation API and MET Norway are all fakes: no network."""
 import datetime as dt
 
 import pytest
 
 from backend.engine.racepower import weather as WX
 from backend.engine.racepower.env import dew_point
+from backend.tests.test_weather_met_sp797 import met_js
 
 approx = pytest.approx
 TODAY = dt.date(2026, 10, 6)
@@ -57,7 +58,7 @@ def _mountain_doc() -> dict:
 
 class Fake:
     def __init__(self, *, town_hourly=True, elev=(120.0, 620.0), om_fails=True):
-        # om_fails (default): the Open-Meteo forecast and archive fail, so the 鄉鎮 fallback is reached
+        # om_fails (default): the MET Norway forecast and the Open-Meteo archive fail, so the 鄉鎮 fallback is reached
         self.calls = []
         self.town_hourly, self.elev, self.om_fails = town_hourly, elev, om_fails
 
@@ -75,9 +76,9 @@ class Fake:
             return {"elevation": list(self.elev[:n])}
         if self.om_fails:
             raise RuntimeError("HTTP 500")
-        times = [f"{RACE.isoformat()}T{h:02d}:00" for h in range(24)]
-        return {"elevation": 600, "hourly": {"time": times, "temperature_2m": [10.0] * 24,
-                                            "relative_humidity_2m": [60.0] * 24}}
+        if url == WX.MET_FORECAST:
+            return met_js(RACE, temp=10.0, rh=60.0, alt=600, tz_h=9 if float(params["lon"]) > 125 else 8)
+        raise AssertionError(url)
 
     def urls(self):
         return [u for u, _p in self.calls]
@@ -102,30 +103,57 @@ def test_parse_reads_the_township_format_with_geocode():
     assert len(bt["hourly"]) == 24 and bt["hourly"][6]["temp"] == 20 and bt["hourly"][6]["rh"] == 80
 
 
-def test_the_township_forecast_comes_before_open_meteo_sp552(tmp_path):
-    g = Fake(om_fails=False)                         # Open-Meteo would answer: it is not asked
+def test_the_township_forecast_comes_before_met_norway_sp552(tmp_path):
+    # SP-552 Q1 (owner 2026-10-20): MET Norway is asked only for the wind the 鄉鎮 product leaves out
+    g = Fake(om_fails=False)
     r = _run(tmp_path, g)
     assert r["provider"] == "cwa_town_hourly"
-    assert [t["provider"] for t in r["tried"]] == ["cwa_hourly", "cwa_town_hourly"]
-    assert WX.OM_FORECAST not in g.urls()
+    assert r["values"]["temp_c"] == approx(20 - 3.25)               # the 鄉鎮 temperature, not MET's 10 °C
+    assert [t["provider"] for t in r["tried"]] == ["cwa_hourly", "cwa_town_hourly", "met_norway_wind"]
+    assert g.urls().count(WX.MET_FORECAST) == 1
     assert "中央氣象署" in r["detail"]["attribution"]
 
 
-def test_with_the_switch_off_open_meteo_comes_first_as_on_2026_10_06(tmp_path, monkeypatch):
+def test_a_township_answer_takes_its_wind_from_met_norway_sp552(tmp_path):
+    def get(url, params, timeout):
+        if url == WX.MET_FORECAST:
+            return met_js(RACE, temp=10.0, rh=60.0, wind=5.0, alt=620)
+        return Fake()(url, params, timeout)
+    r = _run(tmp_path, get)
+    assert r["provider"] == "cwa_town_hourly" and r["tried"][-1] == {"provider": "met_norway_wind", "ok": True}
+    w = r["wind"]
+    assert w and all(x["wind_kmh"] == approx(18.0) for x in w)       # 5 m/s
+    # the wind rows' temperature is the lapsed 鄉鎮 hour, so the wind chill matches the shown heat
+    on_day = [x for x in w if x["t"].startswith(RACE.isoformat())]
+    assert on_day and all(x["temp_c"] == approx(16.75) for x in on_day)
+    d = r["detail"]
+    assert d["wind_from"] == "met_norway" and d["gusts"] is False
+    assert "中央氣象署" in d["attribution"] and "MET Norway" in d["attribution"]
+
+
+def test_met_norway_down_leaves_the_township_answer_without_wind_sp552(tmp_path):
+    r = _run(tmp_path, Fake())                                        # MET Norway answers HTTP 500
+    assert r["provider"] == "cwa_town_hourly" and r["wind"] is None
+    t = r["tried"][-1]
+    assert t["provider"] == "met_norway_wind" and not t["ok"] and "500" in t["reason"]
+    assert "MET Norway" not in r["detail"]["attribution"]
+
+
+def test_with_the_switch_off_the_global_forecast_comes_first_as_on_2026_10_06(tmp_path, monkeypatch):
     monkeypatch.setattr(WX, "CWA_TOWN_FIRST", False)
     g = Fake(om_fails=False)
     r = _run(tmp_path, g)
-    assert r["provider"] == "open_meteo"
+    assert r["provider"] == "met_norway"
     assert not any(t["provider"].startswith("cwa_town") for t in r["tried"])
     assert not any(u.endswith(WX.CWA_TOWN_HOURLY) or u == WX.OM_ELEVATION for u in g.urls())
 
 
-def test_no_township_point_near_goes_to_open_meteo(tmp_path):
+def test_no_township_point_near_goes_to_met_norway(tmp_path):
     g = Fake(om_fails=False)
     r = _run(tmp_path, g, lat=35.36, lon=138.73)     # 富士山: CWA has nothing there
-    assert r["provider"] == "open_meteo"
+    assert r["provider"] == "met_norway"
     provs = [(t["provider"], t["ok"]) for t in r["tried"]]
-    assert provs.index(("cwa_town_hourly", False)) < provs.index(("open_meteo", True))
+    assert provs.index(("cwa_town_hourly", False)) < provs.index(("met_norway", True))
 
 
 def test_the_township_forecast_with_lapse(tmp_path):
@@ -145,8 +173,9 @@ def test_the_township_forecast_with_lapse(tmp_path):
     assert r["hourly"] and all(h["temp_c"] == approx(16.75) and h["rh_pct"] == approx(80) for h in r["hourly"])
     provs = [(t["provider"], t["ok"]) for t in r["tried"]]
     assert provs[0][0] == "cwa_hourly" and not provs[0][1]          # no 登山 point within 5 km
-    assert provs[-1] == ("cwa_town_hourly", True)                    # 登山 ✕ → 鄉鎮 ✓
-    assert WX.OM_FORECAST not in g.urls()
+    assert provs[1] == ("cwa_town_hourly", True)                     # 登山 ✕ → 鄉鎮 ✓
+    # SP-552 Q1: then MET Norway for the wind only (down here: the 鄉鎮 answer stands without it)
+    assert provs[2:] == [("met_norway_wind", False)] and r["wind"] is None
 
 
 def test_without_a_race_elevation_both_heights_come_from_one_elevation_call(tmp_path):

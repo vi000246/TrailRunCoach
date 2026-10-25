@@ -157,6 +157,41 @@ def test_the_six_sp644_scenarios_read_as_planned(row, cap):
     assert not cmp.get("short") and not cmp.get("off_plan") and not cmp.get("short_text")
 
 
+def test_the_done_box_labels_a_planned_mp_long_run():
+    # R1 (Q1-2): 計畫 「長跑（含 MP）」 not 「LSD」; 實際 「含 60 分馬拉松配速」 not 「輕鬆」
+    from backend.i18n import use_locale
+    _v, _t, _g, cmp = _judge(*SIX[1], cap=145.0, planned_mp_s=3600)
+    assert cmp["kind_label"] == "長跑（含 MP）" and cmp["actual_label"] == "含 60 分馬拉松配速"
+    s = {"kind": "long", "minutes": 150, "title": "長跑＋馬拉松配速 60 分", "state": "done", "tss": 175.0,
+         "done_by": {"session": {"type": "long", "z3_s": 0.0}, "moving_s": 9000.0, "category": "road", "tss": 175.0}}
+    with use_locale("en"):
+        en = PM.compare(s, 175.0)
+    assert en["kind_label"] == "Long run (with MP)" and en["actual_label"] == "incl. 60 min at marathon pace"
+    # the MP minutes are the stored structure's (an edited 45-min block), not the title's 60
+    st = WS.derive(O.road_long_session(150, "specific", 150.0, 70.0, mp={"share": 0.40}), TH)
+    for row in WS.flat(st["items"]):
+        if row["st"].get("note") == "馬拉松配速":
+            row["st"]["dur"]["value"] = 45 * 60
+    import json
+    assert PM.compare({**s, "steps": st}, 175.0)["actual_label"] == "含 45 分馬拉松配速"
+    assert PM.compare({**s, "steps": json.dumps(st)}, 175.0)["actual_label"] == "含 45 分馬拉松配速"
+
+
+def test_the_done_box_keeps_lsd_and_hard_without_an_mp_plan():
+    # an all-easy long run keeps 「LSD」 / 「輕鬆」; MP run with ≥ 10 min Zone 3 beyond it keeps 「強度」
+    lsd = {"kind": "long", "minutes": 150, "title": "LSD（路跑）", "state": "done", "tss": 175.0,
+           "done_by": {"session": {"type": "long", "z3_s": 0.0}, "moving_s": 9000.0, "category": "road", "tss": 175.0}}
+    got = PM.compare(lsd, 175.0)
+    assert got["kind_label"] is None and got["actual_label"] is None and got["actual"] == "easy"
+    _v, typ, grade, cmp = _judge(*SIX[1], cap=140.0, planned_mp_s=3600, extra=15)
+    assert grade == "hard" and cmp["kind_label"] == "長跑（含 MP）" and cmp["actual_label"] is None
+
+
+def test_the_done_box_reads_the_labels():
+    src = open(WS.__file__.replace("engine/workout_steps.py", "static/schedule.html"), encoding="utf-8").read()
+    assert "vs.kind_label ||" in src and "vs.actual_label ||" in src
+
+
 def test_without_the_plan_the_low_cap_still_reads_hard_long():
     # the exemption comes from what was planned: the same run unplanned keeps SP-644's reading
     _v, typ, grade, cmp = _judge(*SIX[1], cap=140.0, planned_mp_s=0)

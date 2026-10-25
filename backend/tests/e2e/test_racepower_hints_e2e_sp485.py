@@ -16,6 +16,7 @@ Run: ./e2e.sh -k sp485 (see conftest.py)."""
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -55,14 +56,57 @@ def _patch_plan(page, patch) -> None:
     page.route("**/api/v1/racepower/plan", handle)
 
 
-def _calc(page, eid: str) -> None:
+SAVED = re.compile(r"/api/v1/racepower/saved/[^/?]+(\?.*)?$")
+
+
+@pytest.fixture(autouse=True)
+def _first_visit(app):
+    """Every test starts from a first visit to the race and leaves nothing behind. The calculator keeps each
+    race's inputs and last result on the server (PUT /saved/<event>) and restores them when the race is opened —
+    the 努力目標 another test picked (test_racepower_effort_sp697 runs before these), and its result drawn at once,
+    before 計算's answer. Here the saved state is answered as none and saving goes nowhere, so a patched answer
+    is not kept for the tests after; a /plan still being patched when a test ends is dropped (else its route
+    callback fails in the next test's setup)."""
+    page, _ = app
+
+    def saved(route):
+        if route.request.method == "GET":
+            return route.fulfill(status=200, json={"saved": None})
+        if route.request.method == "PUT":
+            return route.fulfill(status=200, json={"event_id": None, "saved_at": None, "uid": None})
+        return route.continue_()
+    page.route(SAVED, saved)
+    yield
+    page.unroute_all(behavior="ignoreErrors")
+
+
+def _is_plan(req) -> bool:
+    return req.method == "POST" and req.url.endswith("/api/v1/racepower/plan")
+
+
+def _calc(page, eid: str, effort: str | None = None) -> None:
     open_page(page, f"{_server.PAGES['racepower']}?event={eid}")
     expect(page.locator("#event")).to_have_value(eid, timeout=30_000)
     page.click('#mode button[data-m="auto"]')
+    if effort:
+        page.click(f'#effort button[data-e="{effort}"]')
+    sent = []
+    page.on("request", lambda r: sent.append(r) if _is_plan(r) else None)
     page.click("#calc")
     expect(page.locator("#results .tiles").first).to_be_visible(timeout=90_000)
     page.wait_for_function("() => typeof PLAN !== 'undefined' && PLAN && document.querySelector('#segcmp table')",
                            timeout=60_000)
+    # the page may still be loading the race when 計算 is clicked (its GPX, the weather): a run it starts then
+    # cancels this one (SP-697) — the result to read is the last /plan's, once no newer one follows
+    while True:
+        n = len(sent)
+        resp = sent[-1].response()
+        page.wait_for_timeout(1000)                  # (a change is sent 250 ms after it: schedule())
+        if len(sent) == n:
+            break
+    assert resp and resp.ok, resp
+    page.wait_for_function("(t) => PLAN.summary && PLAN.summary.time_s === t", arg=resp.json()["summary"]["time_s"],
+                           timeout=30_000)
 
 
 def test_standard_shows_at_most_12_hints_on_the_demo_trail_race(app):
@@ -126,11 +170,16 @@ def test_no_stops_dehydration_and_too_fast_are_on_top_in_every_level(app, level)
 @pytest.mark.parametrize("level", H.LEVELS)
 def test_no_stops_from_the_server_is_shown_once_on_the_fuel_card(app, level):
     """SP-606: the real /plan answer, unpatched — the demo trail race has no aid stations, so the server's
-    沒填補給站 (RC21) is shown once, in the box under the 補給 card's title, and nowhere on the result."""
+    沒填補給站 (RC21) is shown once, in the box under the 補給 card's title, and nowhere on the result.
+
+    穩定 85 %: the server sends RC21 for a trail race of 2 h or more only (fuel.py: under 2 h is a 「half」 race,
+    drink by thirst, no water legs). The small demo's 50K is a 15 km course, and at 100 % its predicted time sits
+    right at 2 h and moves with the day the demo is built on (1.9 h on 2026-10-20); at 85 % it is well over."""
     page, _ = app
     eid = _event(page)
     _level(page, level)
-    _calc(page, eid)
+    _calc(page, eid, effort="0.85")
+    assert page.evaluate("() => PLAN.fuel.category") in ("long", "ultra"), page.evaluate("() => PLAN.fuel.hours")
     assert page.evaluate("() => RaceHints.list().filter((s) => s.startsWith('RC21')).length") == 1
     expect(page.locator('#fh-box [data-hint-id="RC21"]')).to_have_count(1)
     assert "沒有輸入補給站" not in page.locator("#results").inner_text()

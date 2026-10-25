@@ -70,9 +70,12 @@ V = 1
 # session's TSS is the calculator's (race HR, post-race correction) only while this origin stays
 RACECALC_ORIGIN = "racecalc"
 KINDS = ("warm", "work", "rest", "cool", "other")
-KIND_LABEL = {"warm": "暖身", "work": "主課", "rest": "休息", "cool": "緩和", "other": "其他", "repeat": "重複"}
+# N_: the editor shows them in the request's language (_context, structure_text; SP-906); a step named after
+# one (ensure_warm / carve_warm: 「暖身」) keeps the zh-TW word — it is the watch's step name
+KIND_LABEL = {"warm": N_("暖身"), "work": N_("主課"), "rest": N_("休息"), "cool": N_("緩和"), "other": N_("其他"),
+              "repeat": N_("重複")}
 TYPES = ("auto", "power", "hr", "pace", "rpe", "none")
-TYPE_LABEL = {"auto": "自動", "power": "功率", "hr": "心率", "pace": "配速", "rpe": "RPE", "none": "無"}
+TYPE_LABEL = {"auto": N_("自動"), "power": N_("功率"), "hr": N_("心率"), "pace": N_("配速"), "rpe": "RPE", "none": N_("無")}
 MODES = ("pct", "zone", "abs")
 INTENTS = ("easy", "band", "open")
 DUR_TYPES = ("time", "distance", "open", "load")
@@ -163,13 +166,13 @@ REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "�
 # only sizes the chart bar and the TSS estimate (推估: the load itself is always the watch's
 # record, never corrected by RPE — the user, 2026-10-04).
 RPE_MIN, RPE_MAX = 1, 10
-RPE_WORD = {1: "很輕鬆", 2: "輕鬆", 3: "中等", 4: "有點吃力", 5: "吃力", 6: "吃力", 7: "很累", 8: "很累", 9: "很累",
-            10: "極限"}
+RPE_WORD = {1: N_("很輕鬆"), 2: N_("輕鬆"), 3: N_("中等"), 4: N_("有點吃力"), 5: N_("吃力"), 6: N_("吃力"), 7: N_("很累"),
+            8: N_("很累"), 9: N_("很累"), 10: N_("極限")}
 RPE_FRAC = {1: 0.55, 2: 0.62, 3: 0.70, 4: 0.76, 5: 0.82, 6: 0.88, 7: 0.94, 8: 1.00, 9: 1.05, 10: 1.10}   # 推估
 RPE_EASY_MAX = 4                 # ≤ 4: below LT1 (Seiler's zone 1 by session RPE, 推估)
 RPE_HARD_MIN = 7                 # ≥ 7 很累: a hard session (workout_templates.technical_role)
 MAX_CLIMB_M = 5000
-RPE_LIMIT = "RPE、爬升／下降手錶沒有這種目標：這些段不設目標，RPE 和爬升寫在步驟名稱"
+RPE_LIMIT = N_("RPE、爬升／下降手錶沒有這種目標：這些段不設目標，RPE 和爬升寫在步驟名稱")
 
 
 NO_TPACE = N_("沒有閾值配速：這段推到手錶不會有配速目標")
@@ -256,6 +259,9 @@ class Ctx:
     # SP-642 (engine/hr_power_calib.py): the HR → common-scale entry (calibrate.entry of hr_power_slope);
     # None = the one in effect
     hrp: Optional[dict] = None
+    # SP-861: the descents of a route chart / 坡段表 / route session by the race calculator's personal grade
+    # model (user_templates.GradeCurve; the API sets it on the route paths only); None = Minetti + SP-639's rule
+    grade: Optional[object] = None
 
     def easy_frac(self) -> float:
         if self.easy_f is not None:
@@ -665,7 +671,8 @@ def heat_run(s: dict) -> bool:
 
 # SP-409: the planner's special easy runs as they are run, not one block of the whole session.
 # 長爬坡反覆 (specific_phase.apply_climb): 暖身 15 → N ×（上坡 rep＋下坡 rep × DOWN_SHARE）→ 緩和 (the
-# rest of the session: climb_minutes rounds the total to 5′). target_policy keeps long climbs at
+# rest of the session: climb_minutes rounds the total to 5′). The warm-up is the text's 「暖身 N 分」
+# (own_warm_s; 每堂課前加熱身 tops it up there and lengthens the session, SP-454), as the 陡坡健走's. target_policy keeps long climbs at
 # 「none」 (no HR / power on the watch, owner 2026-10-13 SP-409 Q1 A): the uphill's name says the
 # session's HR suggestion, and it and the descent carry an RPE (no watch target, RPE_LIMIT) — the IF
 # of the structure's TSS estimate, which the no-target work step's 1.05 (NONE_IF) put at ≈ 2 × the card.
@@ -690,15 +697,24 @@ def steep_walk(s: dict) -> bool:
     return s.get("kind") == "easy" and (s.get("id") == "steep" or "陡坡健走" in (s.get("title") or ""))
 
 
+def own_warm_s(s: dict, default_s: int) -> int:
+    """SP-454: the warm-up a 長爬坡反覆 / 陡坡健走's text states (「暖身 N 分」, not the easy runs'
+    「含暖身 N 分」 — 每堂課前加熱身 tops theirs up there), else `default_s`."""
+    from backend.engine.warmup import WARM_RE
+    m = WARM_RE.search(s.get("detail") or "")
+    return int(m.group(1)) * 60 if m and int(m.group(1)) > 0 else int(default_s)
+
+
 def _climb_items(s: dict, secs: int, ids) -> Optional[list]:
     from backend.engine.specific_phase import DOWN_SHARE
     n, rep_min = climb_reps(s)
     up, down = rep_min * 60, int(round(rep_min * DOWN_SHARE)) * 60
-    cool = secs - CLIMB_WARM_S - n * (up + down)
+    warm = own_warm_s(s, CLIMB_WARM_S)
+    cool = secs - warm - n * (up + down)
     if cool < CLIMB_COOL_MIN_S:
         return None
     hr = (s.get("target") or "").strip() or ("心率約" + EASY_CAP)
-    return [step(ids, "warm", CLIMB_WARM_S, _easy(*EASY_BAND)),
+    return [step(ids, "warm", warm, _easy(*EASY_BAND)),
             rep(ids, n, [step(ids, "work", up, {"type": "rpe", "lo": CLIMB_UP_RPE[0], "hi": CLIMB_UP_RPE[1]},
                               f"上坡 · {hr}"),
                          step(ids, "work", down, {"type": "rpe", "lo": CLIMB_DOWN_RPE[0], "hi": CLIMB_DOWN_RPE[1]},
@@ -706,11 +722,12 @@ def _climb_items(s: dict, secs: int, ids) -> Optional[list]:
             step(ids, "cool", cool, _easy(*EASY_BAND))]
 
 
-def _steep_items(secs: int, ids) -> Optional[list]:
-    main = secs - STEEP_WARM_S - STEEP_COOL_S
+def _steep_items(s: dict, secs: int, ids) -> Optional[list]:
+    warm = own_warm_s(s, STEEP_WARM_S)
+    main = secs - warm - STEEP_COOL_S
     if main < STEEP_MIN_S:
         return None
-    return [step(ids, "warm", STEEP_WARM_S, _easy(*EASY_BAND), "平路暖身"),
+    return [step(ids, "warm", warm, _easy(*EASY_BAND), "平路暖身"),
             step(ids, "work", main, _easy(*EASY_BAND)),
             step(ids, "cool", STEEP_COOL_S, _easy(*EASY_BAND), "平路緩和")]
 
@@ -913,7 +930,7 @@ def _easy_items(s: dict, kind: str, secs: int, ids) -> Optional[list]:
         return [step(ids, "work", secs, _easy(lo, hi))]
     # SP-409: 長爬坡反覆 / 陡坡健走 as their text says (one block, as before, when cut too short)
     special = (_climb_items(s, secs, ids) if climb_reps(s) else
-               _steep_items(secs, ids) if steep_walk(s) else None)
+               _steep_items(s, secs, ids) if steep_walk(s) else None)
     if special is not None:
         return special
     if kind == "easy" and heat_run(s) and secs >= 20 * 60:
@@ -1320,11 +1337,13 @@ class Resolved:
     err: str = ""
     intensity: Optional[tuple] = None    # what COROS gets: ("power" | "hr" | "pace", lo, hi)
     need: str = ""                       # "tpace": a % / zone pace target with no threshold pace
+    ecap: bool = False                   # an HR band whose top is the easy-run cap (SP-906: the editor
+                                         # read 「輕鬆跑上限」 off `sub`, which is in the page's language now)
 
     def as_dict(self) -> dict:
         return {"type": self.type, "lo": self.lo, "hi": self.hi, "frac": self.frac, "text": self.text,
                 "sub": self.sub, "auto": self.auto, "warn": self.warn, "err": self.err, "need": self.need,
-                "level": level(self.frac), "label": TYPE_LABEL.get(self.type, self.type)}
+                "level": level(self.frac), "label": _(TYPE_LABEL.get(self.type, self.type)), "ecap": self.ecap}
 
 
 def _watch_band(r: Resolved, c: Ctx, lo: float, hi: float) -> Resolved:
@@ -1334,13 +1353,13 @@ def _watch_band(r: Resolved, c: Ctx, lo: float, hi: float) -> Resolved:
     w = _power(c, wlo, whi)
     if w and w != r.intensity:
         r.intensity = w
-        r.sub = (r.sub + " · " if r.sub else "") + f"手錶上限 {w[2]:.0f} W"
+        r.sub = (r.sub + " · " if r.sub else "") + _("手錶上限 {w:.0f} W", w=w[2])
     return r
 
 
 def _from_int(it: Optional[tuple], c: Ctx, auto: bool = True, warn: str = "") -> Resolved:
     if not it:
-        return Resolved("none", text="不設目標", auto=auto, warn=warn)
+        return Resolved("none", text=_("不設目標"), auto=auto, warn=warn)
     typ, lo, hi = it
     if typ == "power":
         f = (lo + hi) / 2 / c.cp if c.cp else None
@@ -1349,12 +1368,13 @@ def _from_int(it: Optional[tuple], c: Ctx, auto: bool = True, warn: str = "") ->
         sub = f"{lo / c.cp * 100:.0f}–{hi / c.cp * 100:.0f}% CP · {zl}" if c.cp else ""
         return Resolved("power", lo, hi, f, f"{lo:.0f}–{hi:.0f} W", sub, auto, warn, intensity=it)
     f = c.hr_frac((lo + hi) / 2 / c.lthr) if c.lthr else 0.7
-    sub = ("≤ " + EASY_CAP if c.aet and abs(hi - c.aet) < 1 else
+    ecap = bool(c.aet and abs(hi - c.aet) < 1)
+    sub = (_("≤ 輕鬆跑上限") if ecap else
            f"{lo / c.lthr * 100:.0f}–{hi / c.lthr * 100:.0f}% LTHR" if c.lthr else "")
     hrr = hrr_text(c, lo, hi)
     if hrr:                                 # SP-642: a 儲備心率 plan says % HRR (the height stays ÷ LTHR)
         sub = hrr if not sub or sub.endswith("% LTHR") else f"{sub} · {hrr}"
-    return Resolved("hr", lo, hi, f, f"{lo:.0f}–{hi:.0f} bpm", sub, auto, warn, intensity=it)
+    return Resolved("hr", lo, hi, f, f"{lo:.0f}–{hi:.0f} bpm", sub, auto, warn, intensity=it, ecap=ecap)
 
 
 def hrr_text(c: Ctx, lo: float, hi: float) -> str:
@@ -1382,8 +1402,12 @@ def rpe_text(lo, hi) -> str:
     return f"{lo:g}" if lo == hi else f"{lo:g}–{hi:g}"
 
 
-def climb_text(tg: dict) -> str:
-    """「爬升 400 m · 下降 350 m」 of an RPE target (empty without either)."""
+def climb_text(tg: dict, shown: bool = False) -> str:
+    """「爬升 400 m · 下降 350 m」 of an RPE target (empty without either). zh-TW: the watch's step name
+    (rpe_name); `shown` = the editor's text in the request's language (SP-906)."""
+    if shown:
+        return " · ".join(_("爬升 {m} m", m=tg["up"]) if k == "up" else _("下降 {m} m", m=tg["down"])
+                          for k in ("up", "down") if tg.get(k))
     return " · ".join(f"{name} {tg[k]} m" for k, name in (("up", "爬升"), ("down", "下降")) if tg.get(k))
 
 
@@ -1400,16 +1424,16 @@ def rpe_hint(lo: float, hi: float, c: Ctx) -> str:
         txt = f"{a:.0f}–{b:.0f} bpm" if a and b else ""
     else:
         txt = f"≥ {0.95 * c.lthr:.0f} bpm" if c.lthr else ""
-    return f"參考心率 {txt}（不當目標）" if txt else ""
+    return _("參考心率 {hr}（不當目標）", hr=txt) if txt else ""
 
 
 def _rpe(tg: dict, c: Ctx) -> Resolved:
     lo, hi = rpe_band(tg)
-    a, b = RPE_WORD.get(int(round(lo)), ""), RPE_WORD.get(int(round(hi)), "")
-    word = a if a == b else f"{a}～{b}"
-    sub = " · ".join(x for x in (climb_text(tg), word, rpe_hint(lo, hi, c)) if x)
+    a, b = (_(RPE_WORD[k]) if k in RPE_WORD else "" for k in (int(round(lo)), int(round(hi))))
+    word = a if a == b else _("{a}～{b}", a=a, b=b)
+    sub = " · ".join(x for x in (climb_text(tg, shown=True), word, rpe_hint(lo, hi, c)) if x)
     return Resolved("rpe", lo, hi, rpe_frac(lo, hi, c.rpe_scale()), rpe_text(lo, hi), sub, auto=False,
-                    err="RPE 下限比上限高" if lo > hi else "")
+                    err=_("RPE 下限比上限高") if lo > hi else "")
 
 
 def _auto_easy(tg: dict, c: Ctx) -> Resolved:
@@ -1419,31 +1443,31 @@ def _auto_easy(tg: dict, c: Ctx) -> Resolved:
         p = _power(c, *easy_band((tg["plo"], tg["phi"]), c.pzm))
         if p:
             return _from_int(p, c)
-        return _from_int(easy_hr(c), c, warn="沒有 CP：改用心率")
+        return _from_int(easy_hr(c), c, warn=_("沒有 CP：改用心率"))
     if tg.get("plo") is not None and c.basis == "none":
-        return Resolved("none", text="不設目標")
+        return Resolved("none", text=_("不設目標"))
     e = easy_hr(c)
-    return _from_int(e, c, warn="" if e else "沒有 AeT／LTHR：不設目標")
+    return _from_int(e, c, warn="" if e else _("沒有 AeT／LTHR：不設目標"))
 
 
 def resolve(st: dict, c: Ctx) -> Resolved:
     tg = st.get("target") or OPEN
     ty = tg.get("type", "auto")
     if ty == "none":
-        return Resolved("none", text="不設目標", auto=False)
+        return Resolved("none", text=_("不設目標"), auto=False)
     if ty == "rpe":
         return _rpe(tg, c)
     if ty == "auto":
         it = tg.get("intent", "open")
         if it == "open":
-            return Resolved("none", text="不設目標")
+            return Resolved("none", text=_("不設目標"))
         if it == "easy":
             if st.get("kind") in ("warm", "cool") and c.walk:
                 # SP-474: a walking session's warm-up (ME 負重爬坡, 陡坡健走, 攻頂日模擬's 含暖身) and
                 # cool-down (the 陡坡健走's 平路緩和, the user 2026-10-13) have no target — the walk band's
                 # floor (hr_profile.walk_band) is above a warming-up / coming-down HR and the watch kept
                 # alerting; their TSS takes NONE_IF["warm"] / ["cool"] like any no-target warm-up / cool-down
-                return Resolved("none", text="不設目標")
+                return Resolved("none", text=_("不設目標"))
             r = _auto_easy(tg, c)
             if st.get("kind") == "warm":
                 # SP-479 (the owner 2026-10-14, B): every other auto-easy warm-up — running sessions, walking
@@ -1452,11 +1476,11 @@ def resolve(st: dict, c: Ctx) -> Resolved:
                 # as lo–hi (no cap alone). It is still run easy: the chart and the TSS keep the easy band's
                 # ≈ % CP (frac). The cool-down keeps the easy band (coming down from higher up, the floor
                 # rarely bites); a target set by hand (or a template's own) is the user's.
-                return Resolved("none", frac=r.frac, text="不設目標")
+                return Resolved("none", frac=r.frac, text=_("不設目標"))
             return r
         # band
         if c.basis == "none":
-            return Resolved("none", text="不設目標")
+            return Resolved("none", text=_("不設目標"))
         # 課表功率區間 (SP-363): the band in the chosen set (Palladino: as stored); a 個人化間歇 rep
         # (SP-590, "opt") is already the model's band
         from backend.engine.power_zone_plan import band as pz_band
@@ -1468,43 +1492,51 @@ def resolve(st: dict, c: Ctx) -> Resolved:
                 return _from_int(h, c)
             p = _power(c, tg["lo"], tg["hi"])
             if p:                                   # the power fallback: the watch band too (SP-378)
-                return _watch_band(_from_int(p, c, warn="沒有 LTHR：改用功率"), c, tg["lo"], tg["hi"])
-            return _from_int(p, c, warn="沒有 LTHR／CP：不設目標")
+                return _watch_band(_from_int(p, c, warn=_("沒有 LTHR：改用功率")), c, tg["lo"], tg["hi"])
+            return _from_int(p, c, warn=_("沒有 LTHR／CP：不設目標"))
         p = _power(c, tg["lo"], tg["hi"])
         if p:
             return _watch_band(_from_int(p, c), c, tg["lo"], tg["hi"])
         h = _work_hr(c, tg)
-        return _from_int(h, c, warn="沒有 CP：改用心率" if h else "沒有 CP／LTHR：不設目標")
+        return _from_int(h, c, warn=_("沒有 CP：改用心率") if h else _("沒有 CP／LTHR：不設目標"))
     mode = tg.get("mode", "pct")
     lo, hi = tg.get("lo"), tg.get("hi")
     if ty == "power":
         if mode == "zone":
             lo, hi = zone_span("power", tg.get("zone"), tg.get("zone_to"), c.pzm)
             if lo is None:
-                return Resolved("none", text="不設目標", auto=False, err=_("選了課表功率區間的區間，但目前沒有這一套"))
+                return Resolved("none", text=_("不設目標"), auto=False, err=_("選了課表功率區間的區間，但目前沒有這一套"))
         if mode != "abs":
             if not c.cp:
-                return Resolved("none", text="不設目標", auto=False, err="選了功率卻沒有 CP")
+                return Resolved("none", text=_("不設目標"), auto=False, err=_("選了功率卻沒有 CP"))
             lo, hi = lo * c.cp, hi * c.cp
         r = _from_int(("power", round(lo), round(hi)), c, auto=False)
     elif ty == "hr":
         if mode == "zone" and tg.get("zone") == "aet":
             e = easy_hr(c)
             if not e:
-                return Resolved("none", text="不設目標", auto=False, err="選了心率卻沒有 AeT／LTHR")
+                return Resolved("none", text=_("不設目標"), auto=False, err=_("選了心率卻沒有 AeT／LTHR"))
             r = _from_int(e, c, auto=False)
         elif mode == "zone" and tg.get("zone") in HR_MODEL_ZONES:
             b = _hr_model_zone(c, tg["zone"], tg.get("zone_to"))
             if not b:
-                return Resolved("none", text="不設目標", auto=False, err="選了心率區間卻沒有課表心率區間")
+                return Resolved("none", text=_("不設目標"), auto=False, err=_("選了心率區間卻沒有課表心率區間"))
             r = _from_int(("hr", *b), c, auto=False)
         else:
             if mode == "zone":
                 lo, hi = zone_span("hr", tg.get("zone"), tg.get("zone_to"))
             if mode != "abs":
                 if not c.lthr:
-                    return Resolved("none", text="不設目標", auto=False, err="選了心率卻沒有 LTHR")
-                lo, hi = lo * c.lthr, hi * c.lthr
+                    return Resolved("none", text=_("不設目標"), auto=False, err=_("選了心率卻沒有 LTHR"))
+                if mode == "pct":
+                    # SP-737: a % LTHR written in a step (a template's, or typed) lands in the same place of the
+                    # same zone of the 課表心率區間 in effect (hr_profile.frac_hr, as hrp_band: × LTHR under the
+                    # LTHR model; 儲備心率 / 最大心率 → that model's zone). A step saved with a Friel zone id keeps
+                    # resolving as × LTHR (SP-30)
+                    from backend.engine.hr_profile import frac_hr
+                    lo, hi = max(0.0, frac_hr(lo, c.hrz, c.lthr)), max(0.0, frac_hr(hi, c.hrz, c.lthr))
+                else:
+                    lo, hi = lo * c.lthr, hi * c.lthr
             r = _from_int(("hr", round(lo), round(hi)), c, auto=False)
     else:                                                    # pace
         if mode == "zone":
@@ -1522,7 +1554,7 @@ def resolve(st: dict, c: Ctx) -> Resolved:
             lo, hi = lo * c.tpace, hi * c.tpace
         a, b = min(lo, hi), max(lo, hi)
         f = 1.0 / ((a + b) / 2 / c.tpace) if c.tpace else 0.8
-        sub = f"{a / c.tpace * 100:.0f}–{b / c.tpace * 100:.0f}% 閾值配速（推估）" if c.tpace else ""
+        sub = _("{a:.0f}–{b:.0f}% 閾值配速（推估）", a=a / c.tpace * 100, b=b / c.tpace * 100) if c.tpace else ""
         # COROS intensityType 3, s/km (verified 2026-10-02): lo = the faster bound
         r = Resolved("pace", a, b, f, f"{mmss(a)}–{mmss(b)} /km", sub, False,
                      intensity=("pace", round(a), round(b)))
@@ -1532,7 +1564,7 @@ def resolve(st: dict, c: Ctx) -> Resolved:
         base = r.sub.rsplit(" · ", 1)[0] if ty == "power" else r.sub
         r.sub = f"{base} · {rz}" if base else rz
     if r.lo is not None and r.hi is not None and r.lo > r.hi and r.type != "pace":
-        r.err = "下限比上限高"
+        r.err = _("下限比上限高")
     # no plausible-range check on HR or power: this branch is the user's own override
     # (auto targets returned above), so a hand-entered value is sent as entered (SP-33)
     return r
@@ -1694,21 +1726,24 @@ def estimate_note(steps: dict, c: Ctx) -> str:
     parts = []
     if dist:
         _v, how = speed_kmh(None, c)
-        src = {"easy+tpace": f"你的輕鬆路跑速度 {c.v_easy:.1f} km/h（{c.v_easy_src or '近期紀錄'}）和閾值配速 {mmss(c.tpace or 0)}/km 之間，依每段的目標強度內插" if c.v_easy and c.tpace else "",
-               "easy": f"你的輕鬆路跑速度 {(c.v_easy or 0):.1f} km/h 依目標強度等比例放大" ,
-               "tpace": f"你的閾值配速 {mmss(c.tpace or 0)}/km 依目標強度換算",
-               "default": "沒有你的速度資料，先用 6:00/km"}[how]
-        parts.append("距離段：" + src)
+        src = {"easy+tpace": _("你的輕鬆路跑速度 {v:.1f} km/h（{src}）和閾值配速 {tp}/km 之間，依每段的目標強度內插",
+                               v=c.v_easy, src=c.v_easy_src or _("近期紀錄"), tp=mmss(c.tpace or 0))
+               if c.v_easy and c.tpace else "",
+               "easy": _("你的輕鬆路跑速度 {v:.1f} km/h 依目標強度等比例放大", v=c.v_easy or 0),
+               "tpace": _("你的閾值配速 {tp}/km 依目標強度換算", tp=mmss(c.tpace or 0)),
+               "default": _("沒有你的速度資料，先用 6:00/km")}[how]
+        parts.append(_("距離段：{how}", how=src))
         if c.terrain == "trail":
-            parts.append(f"越野：努力距離 EP = km × (1 + 爬升 {c.climb_per_km:.0f} m/km ÷ 100)" +
-                         (f"，用你的越野 EP 速度 {c.ep_kmh:.1f} km/h" if c.ep_kmh else "，你的越野紀錄不夠，先用路跑速度"))
+            parts.append(_("越野：努力距離 EP = km × (1 + 爬升 {c:.0f} m/km ÷ 100){speed}", c=c.climb_per_km,
+                           speed=_("，用你的越野 EP 速度 {v:.1f} km/h", v=c.ep_kmh) if c.ep_kmh
+                           else _("，你的越野紀錄不夠，先用路跑速度")))
     if lap:
-        parts.append("「直到按下計圈」段：用課表原本寫的最短時間")
+        parts.append(_("「直到按下計圈」段：用課表原本寫的最短時間"))
     if any(s["dur"]["type"] == "load" and not s["dur"].get("rpe") for s in rows):
-        parts.append(f"「{_(LOAD_LABEL)}」段：負荷 ÷（該段強度比² × 100）換成時間")
+        parts.append(_("「{label}」段：負荷 ÷（該段強度比² × 100）換成時間", label=_(LOAD_LABEL)))
     if any(s["dur"]["type"] == "load" and s["dur"].get("rpe") for s in rows):
         parts.append(_("「{label}」段用 RPE 填：用你填的分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數", label=_(LOAD_LABEL)))
-    return "；".join(parts) + "（推估）" if parts else ""
+    return _("{parts}（推估）", parts=_("；").join(parts)) if parts else ""
 
 
 NONE_IF = {"rest": 0.55, "warm": 0.65, "cool": 0.65, "other": 0.8, "work": 1.05}    # 推估
@@ -2087,14 +2122,17 @@ def equivalence(steps: dict, rung: Optional[str], c: Optional[Ctx] = None) -> Op
                           rung=IL.RUNG_NAME.get(rung, rung), s=IL.structure(canon))}
     v = variant_from_steps(steps, rung, c)
     if v is None:
-        return {"ok": False, "why": ["找不到有強度的主課段"], "variant": None,
-                "text": f"{IL.RUNG_NAME.get(rung, rung)}：找不到有功率／心率目標的主課段，這堂不算進階"}
+        return {"ok": False, "why": [_("找不到有強度的主課段")], "variant": None,
+                "text": _("{rung}：找不到有功率／心率目標的主課段，這堂不算進階", rung=IL.RUNG_NAME.get(rung, rung))}
     ok, why = IL.equivalent(v, canon)
     load = any(r["st"]["kind"] == "work" and r["st"]["dur"]["type"] == "load" for r in flat(steps.get("items") or []))
-    est = ("（「負荷」段的負荷換算成時間，推估）" if load else "（心率結構換算強度，推估）") if v.src_kind == "推估" else ""
-    return {"ok": ok, "why": why, "variant": v,
-            "text": f"和 {IL.RUNG_NAME.get(rung, rung)} 標準課表 {IL.structure(canon)} " +
-                    ("等效：這堂算進階" if ok else "不等效：這堂不算進階（" + "；".join(why) + "）") + est}
+    est = (_("（「負荷」段的負荷換算成時間，推估）") if load else _("（心率結構換算強度，推估）")) \
+        if v.src_kind == "推估" else ""
+    rn, cs = IL.RUNG_NAME.get(rung, rung), IL.structure(canon)
+    # SP-906: one text per outcome (the editor shows it in the request's language)
+    text = _("和 {rung} 標準課表 {s} 等效：這堂算進階{est}", rung=rn, s=cs, est=est) if ok else \
+        _("和 {rung} 標準課表 {s} 不等效：這堂不算進階（{why}）{est}", rung=rn, s=cs, why=_("；").join(why), est=est)
+    return {"ok": ok, "why": why, "variant": v, "text": text}
 
 
 # ---------------------------------------------------------------------------
@@ -2214,20 +2252,34 @@ def steps_text(steps: dict, c: Ctx) -> str:
         r = resolve(st, c)
         if r.type == "none":
             continue
-        t = f"{TYPE_LABEL[r.type]} {r.text}" + (f"（{r.sub.split(' · ')[0]}）" if r.sub else "")
+        t = f"{_(TYPE_LABEL[r.type])} {r.text}" + (_("（{sub}）", sub=r.sub.split(" · ")[0]) if r.sub else "")
         if t not in parts:
             parts.append(t)
     return " · ".join(parts[:3])[:200]
 
 
 def structure_text(steps: dict) -> str:
-    """「暖身 15 分 · 5×(2 分＋2 分) · 緩和 5 分」."""
+    """「暖身 15 分 · 5×(2 分＋2 分) · 緩和 5 分」. SP-865: consecutive lap-button steps (work / rest / other,
+    「直到按下計圈」) are one 「16 × 直到按下計圈」 — a route's session (route_session, a step per climb) and a race
+    export (racepower) are all of them, and the list said nothing about the structure."""
+    lap = _(OPEN_LABEL)
+
+    def seq(xs) -> list[str]:
+        runs: list[list] = []
+        for p in (one(x) for x in xs):
+            if runs and p == lap and runs[-1][0] == lap:
+                runs[-1][1] += 1
+            else:
+                runs.append([p, 1])
+        return [f"{n} × {p}" if n > 1 else p for p, n in runs]
+
     def one(x):
         if x.get("kind") == "repeat":
-            return f"{x['times']}×(" + "＋".join(one(y) for y in x["items"]) + ")"
+            return f"{x['times']}×(" + "＋".join(seq(x["items"])) + ")"
         return fmt_dur(x["dur"]) if x["kind"] in ("work", "rest", "other") else \
-            f"{KIND_LABEL[x['kind']]} {fmt_dur(x['dur'])}"
-    return " · ".join(one(x) for x in steps["items"])[:300]
+            f"{_(KIND_LABEL[x['kind']])} {fmt_dur(x['dur'])}"
+    from backend.engine import stored_text as ST     # SP-906: 「15 分」「＋」 in the request's language
+    return ST.shown(" · ".join(seq(steps["items"])))[:300]
 
 
 # SP-632: the Effort Pace target's field codes are third-party (docs/plans/workout-editor.plan.md) — not yet on a watch
@@ -2238,7 +2290,8 @@ EX_LABEL = {1: N_("暖身"), 2: N_("訓練"), 3: N_("緩和"), 4: N_("休息")}
 
 def _ex_line(ex: dict) -> dict:
     if ex["targetType"] == 2:
-        dur = IL.fmt_s(ex["targetValue"])
+        from backend.engine import stored_text as ST     # SP-906: 「3 分」 in the request's language
+        dur = ST.shown(IL.fmt_s(ex["targetValue"]))
     elif ex["targetType"] == 5:
         dur = f"{ex['targetValue'] / 100000:g} km"
     elif ex["targetType"] == _cw().COROS_TARGET_TYPE_LOAD:
@@ -2291,7 +2344,7 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
         {"key": "ramp", "hit": False, "text": _("沒有漸進（ramp）步驟：漸進只寫在步驟名稱")},
     ]
     if any(r.type == "rpe" for _st, r in res):
-        limits.append({"key": "rpe", "hit": True, "text": RPE_LIMIT})
+        limits.append({"key": "rpe", "hit": True, "text": _(RPE_LIMIT)})
     lost = []
     if any(r.need == "tpace" for _st, r in res):
         lost.append(no_tpace_text())
@@ -2303,7 +2356,7 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
         lost.append(_(EP_LOST))
     if any(st["dur"]["type"] == "load" for st, _ in res):
         lost.append(_("「{x}」段：這裡填的是訓練負荷（Training load），推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；"
-                      "每次同步後用你的活動重新校正）", x=_(LOAD_LABEL)))
+                      "同步到新活動後最多每 7 天用你的活動重新校正一次）", x=_(LOAD_LABEL)))
     n = len(program["exercises"])
     if n > COROS_MAX_STEPS:
         lost.append(_("{n} 段超過 {max} 段：COROS 的上限未驗證", n=n, max=COROS_MAX_STEPS))
@@ -2478,10 +2531,10 @@ def zones_table(c: Ctx) -> dict:
     without LTHR), then the Friel rows marked `legacy` (shown only on a step that has one)."""
     hz = hr_model_zones(c)
     # a walking session (SP-115): the easy row is its uphill cap (hr_profile.walk_band)
-    cap_label = "≤ " + EASY_CAP
+    cap_label = _("≤ 輕鬆跑上限")
     if c.walk:
         from backend.engine.hr_profile import WALK_CAP
-        cap_label = "≤ " + _(WALK_CAP)
+        cap_label = _("≤ {cap}", cap=_(WALK_CAP))
 
     pz = power_set_zones((c.pzm or {}).get("system"), c.pzm) if c.pzm else None
 
@@ -2507,7 +2560,7 @@ def zones_table(c: Ctx) -> dict:
         for z, lo, hi in ZONES[ty]:
             if ty == "hr" and hz:
                 if z != "aet":
-                    out.append({"id": z, "label": f"Friel Z{z}（舊）", "lo": lo, "hi": hi, "legacy": True,
+                    out.append({"id": z, "label": _("Friel Z{z}（舊）", z=z), "lo": lo, "hi": hi, "legacy": True,
                                 "text": f"{lo * c.lthr:.0f}–{hi * c.lthr:.0f} bpm" if c.lthr else ""})
                 continue
             if ty == "hr" and z == "aet":

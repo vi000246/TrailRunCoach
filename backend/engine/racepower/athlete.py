@@ -1929,6 +1929,150 @@ def walk_capacity_inputs(ds, today: dt.date, exclude: Optional[set] = None, runs
 
 CAP_AET_DAYS = 90
 
+GROUP_DAYS_KEY = "racepower_group_days_v1"
+GROUP_DAY_MOVING_MS = 0.3        # as backtest.capacity_days: moving above 0.3 m/s
+
+
+def _group_day_segs(ds, w) -> list:
+    """SP-724: each local day of one hike as the capacity model reads it — the day's own track cut into
+    course segments ([grade, dist_m, z_mean]), its moving time (moving > 0.3 m/s, backtest.capacity_days)
+    and its date, km, climb and mean altitude. Days under backtest.HIKE_MIN_MOVING_S are left out."""
+    from backend.engine.racepower import backtest as BT
+    from backend.engine.racepower import course as CO
+    a = activity_arrays(ds, w)
+    if a is None:
+        return []
+    out = []
+    for n, part in BT._hike_days(a, w.entry.start):
+        tk = BT.track_of(part)
+        if tk is None:
+            continue
+        track, idx = tk
+        try:
+            course = CO.build_course(track)
+        except Exception:                   # noqa: BLE001 — a track the course builder can't cut
+            continue
+        segs = course["segments"]
+        d = BT._dt(part["t"])
+        moving = (np.nan_to_num(part["kmh"]) > GROUP_DAY_MOVING_MS * 3.6) & (d > 0)
+        t_act = float(sum(x["t"] for x in BT.actual_segments(part, idx, track, segs, moving)))
+        if t_act < BT.HIKE_MIN_MOVING_S:
+            continue
+        zs = [(s["z_mean"], s["dist_m"]) for s in segs if s.get("z_mean") is not None]
+        dsum = sum(x[1] for x in zs)
+        out.append({"day": n, "t_act": t_act, "km": course["totals"]["km"], "gain_m": course["totals"]["gain_m"],
+                    "date": (w.entry.start + dt.timedelta(seconds=float(np.nanmin(part["t"])))).date().isoformat(),
+                    "z_mean": sum(z * dd for z, dd in zs) / dsum if dsum else None,
+                    "segs": [[round(float(s["grade"]), 5), round(float(s["dist_m"]), 1),
+                              None if s.get("z_mean") is None else round(float(s["z_mean"]), 1)] for s in segs]})
+    return out
+
+
+def group_day_rows(ds, today: dt.date, tags: Optional[list] = None, pack_of=None) -> list[dict]:
+    """SP-724: every hiking day of the last HIKE_WINDOW_DAYS (hike_workouts) with its own segments and
+    moving time (disk-memoised per hike), its trip (workout idx), the day's pack (the trip's recorded pack,
+    else the 預設背負 for that many days — CAP.day_pack drops it day by day) and `solo` = the athlete set
+    the pace (own_paced: the user's 跟團 / 自己 mark first). capacity.group_factor reads them."""
+    from backend.engine.racepower import capacity as CAP
+    from backend.engine.wko5expr.dataset import date_to_day
+    if tags is None:
+        try:
+            from backend.engine import activity_tags as AT
+            tags = AT.load()
+        except Exception:                   # noqa: BLE001 — no tag store: the old opt-in file alone
+            tags = []
+    solo = solo_hikes(tags=tags)
+    meta = hike_meta()
+    body_w = ds.setting("weight", date_to_day(today))
+    out = []
+    for w in hike_workouts(ds, today):
+        if w.day >= date_to_day(today) + 1:
+            continue
+        rows = ds.cached_series(GROUP_DAYS_KEY, w, lambda w=w: _group_day_segs(ds, w)) or []
+        if not rows:
+            continue
+        if pack_of is not None:
+            p1 = pack_of(w.idx)
+        else:
+            rec = (_trip_of(meta, w) or {}).get("pack_kg")
+            p1 = float(rec) if rec is not None else CAP.pack_default(body_w, max(1, len(rows)))
+        own = own_paced(w, tags, solo)
+        for r in rows:
+            out.append({**r, "trip": w.idx, "solo": own, "label": label(w),
+                        "pack_kg": CAP.day_pack(p1, int(r.get("day") or 1))})
+    ds.flush_series()
+    return out
+
+
+MEMORY_KEY = "racepower_place_memory_v1"
+
+
+def _memory_track(ds, w) -> Optional[dict]:
+    """SP-726: one run's compact track for the 位置記憶 (memory.compact: every 25 m, moving > RUN_MOVING_KMH
+    as the HR model's moving time)."""
+    from backend.engine.racepower import memory as MEM
+    a = activity_arrays(ds, w)
+    if a is None or a.get("lat") is None or a.get("lon") is None or a.get("z") is None:
+        return None
+    return MEM.compact(a["lat"], a["lon"], a["d"], a["z"], a["t"], np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH)
+
+
+def memory_tracks(ds, model: Optional[dict]) -> dict:
+    """SP-726: {workout idx: compact track} of the trail HR model's runs (disk-memoised per run); runs
+    without GPS are left out."""
+    out = {}
+    by = {w.idx: w for w in ds.workouts}
+    for p in (model or {}).get("points") or []:
+        w = by.get(p.get("idx"))
+        if w is None:
+            continue
+        tr = ds.cached_series(MEMORY_KEY, w, lambda w=w: _memory_track(ds, w))
+        if tr:
+            out[w.idx] = tr
+    ds.flush_series()
+    return out
+
+
+CLIMB_KEY = "racepower_climb_track_v1"
+
+
+def _climb_track(ds, w) -> Optional[dict]:
+    """SP-728: one run's track for the 攀爬段 model (climb.compact: every 25 m, the time with the
+    watch's pauses left out and the part of it below 1 km/h)."""
+    from backend.engine.racepower import climb as CL
+    a = activity_arrays(ds, w)
+    if a is None or a.get("lat") is None or a.get("lon") is None or a.get("z") is None:
+        return None
+    return CL.compact(a["lat"], a["lon"], a["d"], a["z"], a["t"], a["kmh"])
+
+
+def climb_tracks(ds, model: Optional[dict]) -> dict:
+    """SP-728: {workout idx: climb track} of the trail HR model's runs (disk-memoised per run); runs
+    without GPS are left out."""
+    out = {}
+    by = {w.idx: w for w in ds.workouts}
+    for p in (model or {}).get("points") or []:
+        w = by.get(p.get("idx"))
+        if w is None:
+            continue
+        tr = ds.cached_series(CLIMB_KEY, w, lambda w=w: _climb_track(ds, w))
+        if tr:
+            out[w.idx] = tr
+    ds.flush_series()
+    return out
+
+
+def memory_course(tr: dict) -> Optional[dict]:
+    """SP-726 back-test: a run's own course (build_course on its compact track, the device distance as
+    the ruler, no OSM huts); None when it can't be cut."""
+    from backend.engine.racepower import course as CO
+    from backend.engine.racepower import gpx as GPX
+    try:
+        return CO.build_course(GPX.Track(list(tr["lat"]), list(tr["lon"]), list(tr["z"]), None, dist=list(tr["d"])),
+                               osm_huts=False)
+    except Exception:                       # noqa: BLE001 — too short / flat: no course
+        return None
+
 
 def walk_capacity(ds, today: Optional[dt.date] = None, exclude: Optional[set] = None, tech: float = 1.0,
                   inputs: Optional[dict] = None, boot_reps: int = 400, sigma_loo=None):

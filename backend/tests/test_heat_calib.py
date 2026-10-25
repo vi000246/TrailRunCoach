@@ -63,8 +63,8 @@ def test_beta_fit_and_shrinkage_for_the_author(tmp_path):
 
 
 def test_beta_needs_enough_efforts_and_spread(tmp_path):
-    _index(tmp_path, n_routes=2, per_route=10)                      # 20 < 30
-    assert HC.fit_hadley_beta() is None and HC.hr_beta()["source"] == "default"
+    _index(tmp_path, n_routes=2, per_route=10)                      # 20 < 30: only the count (SP-807)
+    assert HC.fit_hadley_beta() == CAL.count_only(20) and HC.hr_beta()["source"] == "default"
     rows = [{"route": "a", "hr": 150.0, "p": 200.0, "v": 10.0, "mv": 40.0, "hour": 7, "hadley": 120.0 + (i % 5)}
             for i in range(40)]
     assert HC.fit_beta_rows(rows) is None                           # Hadley span 4 < 40

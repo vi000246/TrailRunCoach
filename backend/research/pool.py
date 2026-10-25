@@ -14,7 +14,8 @@ Tables:
              time of day, sport, coarse distance / climb / duration (deid.summary), intensity, TSS,
              RPE, race, source chain — one per activity: the source allow-list and the tenant's
              duplicate groups decide which copy (research/sources.py)
-  splits     1-km splits, no donor / activity id, no time or order; export_year
+  splits     1-km splits, no donor / activity id, no time or order; rel_window (the activity's
+             28-day window from a secret epoch kept in accounts.db, for the retention — SP-800)
   daily      donor_id, rel_day, TSS, minutes, climb band, injury break flag (one row a day)
   grid       ~500-m cells walked by >= k distinct people (A layer: everyone the A layer and the
              source rules allow), count and median speed — the only positions, recomputed whole
@@ -23,10 +24,15 @@ No GPS track, no FIT, no file name, no platform id, no free text, no weight.
 
 Withdrawal (§7.2, SP-386): `withdraw(uid)` deletes the donor's summaries and daily rows and the
 link; splits and the grid (no id) stay. `sweep()` does it for every link whose person no longer
-consents (or is gone) — the scheduler runs it once a day while pool.db exists (`tick`), so a
-withdrawal is applied within 24 hours; deleting an account calls `withdraw` at once
-(accounts/deletion.py). Retention (§12, Q1-12, Q2-2): `expire` deletes summaries / daily rows older
-than RETENTION_YEARS (day 0 + rel_day) and whole export years of splits.
+consents (or is gone) — the scheduler runs it every hour while pool.db exists (`tick`,
+TICK_EVERY_S), so a withdrawal is applied well within 24 hours; deleting an account calls
+`withdraw` at once (accounts/deletion.py).
+
+Retention (§12, Q1-12, Q2-2, SP-800): one basis for every row, the activity's date. `expire` (in the
+same hourly `tick`) deletes each summary / daily row once its activity is RETENTION_YEARS old
+(day 0 + rel_day) and each split once its activity's window began more than RETENTION_YEARS ago
+(so a split goes up to 27 days early, never late); `export` never takes an activity that old, so
+nothing comes back after it is deleted.
 """
 from __future__ import annotations
 
@@ -55,7 +61,7 @@ CREATE TABLE IF NOT EXISTS summaries (donor_id TEXT NOT NULL, activity_key TEXT 
   season TEXT, time_of_day TEXT, sport TEXT, distance_km REAL, ascent_m INTEGER, duration_min INTEGER,
   pct_lthr REAL, pct_cp REAL, drift_pct REAL, tss REAL, rpe REAL, is_race INTEGER, source TEXT);
 CREATE INDEX IF NOT EXISTS summaries_donor ON summaries(donor_id);
-CREATE TABLE IF NOT EXISTS splits (export_year INTEGER NOT NULL, grade REAL, grade_sd REAL, ele_band_m INTEGER,
+CREATE TABLE IF NOT EXISTS splits (rel_window INTEGER NOT NULL, grade REAL, grade_sd REAL, ele_band_m INTEGER,
   speed_ms REAL, pct_lthr REAL, w_per_kg REAL, cadence REAL, temp_c REAL, decile INTEGER, sex TEXT, age_band TEXT);
 CREATE TABLE IF NOT EXISTS daily (donor_id TEXT NOT NULL, rel_day INTEGER NOT NULL, tss INTEGER, duration_min INTEGER,
   ascent_band_m INTEGER, injury_off INTEGER, PRIMARY KEY (donor_id, rel_day));
@@ -65,9 +71,12 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 SUMMARY_COLS = ("donor_id", "activity_key", "rel_day", "season", "time_of_day", "sport", "distance_km", "ascent_m",
                 "duration_min", "pct_lthr", "pct_cp", "drift_pct", "tss", "rpe", "is_race", "source")
-SPLIT_COLS = ("export_year", "grade", "grade_sd", "ele_band_m", "speed_ms", "pct_lthr", "w_per_kg", "cadence",
+SPLIT_COLS = ("rel_window", "grade", "grade_sd", "ele_band_m", "speed_ms", "pct_lthr", "w_per_kg", "cadence",
               "temp_c", "decile", "sex", "age_band")
 DAILY_COLS = ("donor_id", "rel_day", "tss", "duration_min", "ascent_band_m", "injury_off")
+EPOCH_KEY = "pool_split_epoch"      # research_keys in accounts.db: the splits' epoch, never in the pool
+SPLIT_WINDOW_DAYS = 28              # a split knows its activity's 4-week window, not the day
+EPOCH_SPAN_DAYS = 3653              # the epoch: a secret day in 2000-01-01 + 0..10 years
 
 
 class PoolDisabled(RuntimeError):
@@ -86,10 +95,39 @@ def connect(path: Optional[Path] = None, create: bool = False) -> Iterator[sqlit
     try:
         con.execute("PRAGMA busy_timeout=30000")
         con.executescript(SCHEMA)
+        _migrate_splits(con)
         yield con
         con.commit()
     finally:
         con.close()
+
+
+def _migrate_splits(con: sqlite3.Connection) -> None:
+    """A pool.db from before SP-800: its splits carry an export year only and cannot be aged row by
+    row, so the table is made again, empty (they are deleted early, never kept longer)."""
+    if "rel_window" in {r[1] for r in con.execute("PRAGMA table_info(splits)")}:
+        return
+    n = con.execute("SELECT count(*) FROM splits").fetchone()[0]
+    con.execute("DROP TABLE splits")
+    con.executescript(SCHEMA)
+    log.info("research pool: the splits table made again for the per-row retention (%d old splits dropped)", n)
+
+
+def split_epoch() -> dt.date:
+    """The splits' epoch: a day drawn once from a secret in accounts.db (research_keys), so the pool
+    alone holds no date — the same split as the donors' day 0 in research_links."""
+    from backend.accounts import store
+    k = store.research_key(EPOCH_KEY)
+    return dt.date(2000, 1, 1) + dt.timedelta(days=int.from_bytes(k[:4], "big") % EPOCH_SPAN_DAYS)
+
+
+def window_of(day: dt.date, epoch: dt.date) -> int:
+    return (day - epoch).days // SPLIT_WINDOW_DAYS
+
+
+def retention_cut(today: dt.date, years: int = D.RETENTION_YEARS) -> dt.date:
+    """The first day still kept: an activity before it is RETENTION_YEARS old (export and expire share it)."""
+    return today - dt.timedelta(days=round(365.25 * years))
 
 
 @dataclass
@@ -210,11 +248,15 @@ def _cells(td, rows, track, rng, policy, res) -> dict:
 def _export_donor(con, td, rows, track, key: bytes, have: set, today: dt.date, rng, policy, res) -> None:
     from backend.accounts import store
     from backend.research import tenant as T
+    cut = retention_cut(today)
     acts = []
     for r in sorted(rows, key=lambda r: (str(r["workout_date"]), r["id"])):
+        day = dt.date.fromisoformat(str(r["workout_date"])[:10])
+        if day < cut:                                   # RETENTION_YEARS old: expire would delete it (SP-800)
+            continue
         tr = track(r)
         if tr is not None:
-            acts.append((dt.date.fromisoformat(str(r["workout_date"])[:10]), r, tr))
+            acts.append((day, r, tr))
     if not acts:
         res.skipped["no_b_activity"] += 1
         return
@@ -224,6 +266,7 @@ def _export_donor(con, td, rows, track, key: bytes, have: set, today: dt.date, r
         day0 = first - dt.timedelta(days=int(rng.integers(0, D.DAY0_JITTER_DAYS + 1)))
         link = store.research_link_create(td.user_id, secrets.token_hex(16), day0)
     donor_id, day0 = link["donor_id"], dt.date.fromisoformat(link["day0"])
+    epoch = split_epoch()
     new_s, new_p, per_day = [], [], {}
     for day, r, tr in acts:
         rel = _rel(day, day0)
@@ -240,7 +283,9 @@ def _export_donor(con, td, rows, track, key: bytes, have: set, today: dt.date, r
             continue
         have.add(akey)
         new_s.append(s)
-        new_p += D.splits(tr, td.donor, today.year)
+        w = window_of(day, epoch)
+        if epoch + dt.timedelta(days=w * SPLIT_WINDOW_DAYS) >= cut:     # else expire takes them at once
+            new_p += D.splits(tr, td.donor, w)
     injury = set()
     for a, b in td.injury_breaks:
         if (b - a).days + 1 >= 7:
@@ -300,14 +345,15 @@ def sweep(path: Optional[Path] = None, create: bool = False) -> int:
 
 def expire(today: Optional[dt.date] = None, path: Optional[Path] = None,
            years: int = D.RETENTION_YEARS) -> dict:
-    """Retention: summaries / daily rows dated before today − `years` (day 0 + rel_day, the link
-    table being the only place with day 0), and the splits of export years before that year."""
+    """Retention, row by row on the activity's date (SP-800): summaries / daily rows dated before
+    retention_cut (day 0 + rel_day, the link table being the only place with day 0), and splits
+    whose activity window began before it (the epoch is in accounts.db too)."""
     from backend.accounts import store
     today = today or dt.date.today()
     p = Path(path or research.pool_db_path())
     if not p.exists():
         return {"summaries": 0, "daily": 0, "splits": 0}
-    cut = today - dt.timedelta(days=round(365.25 * years))
+    cut = retention_cut(today, years)
     out = {"summaries": 0, "daily": 0, "splits": 0}
     with connect(p) as con:
         for link in store.research_links():
@@ -321,7 +367,8 @@ def expire(today: Optional[dt.date] = None, path: Optional[Path] = None,
         for t in ("summaries", "daily"):
             out[t] += con.execute(f"DELETE FROM {t} WHERE donor_id NOT IN ({q})" if donors else f"DELETE FROM {t}",
                                   donors).rowcount
-        out["splits"] = con.execute("DELETE FROM splits WHERE export_year < ?", (today.year - years,)).rowcount
+        out["splits"] = con.execute("DELETE FROM splits WHERE rel_window * ? < ?",
+                                    (SPLIT_WINDOW_DAYS, (cut - split_epoch()).days)).rowcount
     return out
 
 

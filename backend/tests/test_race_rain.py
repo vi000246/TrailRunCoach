@@ -13,13 +13,6 @@ DAY = "2026-10-07"
 MSG = "預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地"
 
 
-def _om(pop, mm):
-    times = [f"{DAY}T{h:02d}:00" for h in range(24)]
-    return {"elevation": 300, "hourly": {"time": times, "temperature_2m": [20.0] * 24,
-                                         "relative_humidity_2m": [80.0] * 24,
-                                         "precipitation": mm, "precipitation_probability": pop}}
-
-
 def _row(a, b, pop=None, mm=None):
     return {"start": f"{DAY}T{a}", "end": f"{DAY}T{b}", "pop_pct": pop, "mm": mm}
 
@@ -80,28 +73,30 @@ def test_without_a_start_time_night_rain_is_ignored():
 
 # ---- rows from the providers -------------------------------------------------------
 
-def test_open_meteo_asks_for_rain_and_rows_cover_the_preceding_hour(tmp_path):
-    seen = {}
+def test_met_norway_rain_rows_cover_the_following_hour(tmp_path):
+    # SP-797: the forecast after CWA is MET Norway's (Open-Meteo's free API is non-commercial); its
+    # next_1_hours precipitation is of the hour AFTER the step (Open-Meteo's was of the hour before)
+    from backend.tests.test_weather_met_sp797 import met_js
+    seen = []
 
     def get(url, params, timeout):
-        seen.update(params)
-        return _om([10] * 8 + [60] + [10] * 15, [0.0] * 24)
+        seen.append(url)
+        return met_js(DAY, mm=0.0, pop=lambda t: 60.0 if t.hour == 7 else 10.0)
     r = WX.race_conditions(date=dt.date(2026, 10, 7), lat=25.0, lon=121.5, elevation_m=300,
                            today=dt.date(2026, 10, 6), key=None, get=get, cache_dir=tmp_path, use_cwa=False)
-    assert r["provider"] == "open_meteo"
-    assert "precipitation" in seen["hourly"] and "precipitation_probability" in seen["hourly"]
+    assert r["provider"] == "met_norway" and seen == [WX.MET_FORECAST]
     row = next(x for x in r["rain"] if x["end"] == f"{DAY}T08:00")
     assert row == {"start": f"{DAY}T07:00", "end": f"{DAY}T08:00", "pop_pct": 60.0, "mm": 0.0}
 
 
-def test_open_meteo_without_rain_columns_gives_no_rows(tmp_path):
+def test_met_norway_without_precipitation_gives_no_rows(tmp_path):
+    from backend.tests.test_weather_met_sp797 import met_js
+
     def get(url, params, timeout):
-        js = _om(None, None)
-        js["hourly"].pop("precipitation"), js["hourly"].pop("precipitation_probability")
-        return js
+        return met_js(DAY)
     r = WX.race_conditions(date=dt.date(2026, 10, 7), lat=25.0, lon=121.5, elevation_m=300,
                            today=dt.date(2026, 10, 6), key=None, get=get, cache_dir=tmp_path, use_cwa=False)
-    assert r["provider"] == "open_meteo" and r["rain"] is None
+    assert r["provider"] == "met_norway" and r["rain"] is None
 
 
 def test_cwa_pop_spans_are_parsed():

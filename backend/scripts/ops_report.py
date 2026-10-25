@@ -15,7 +15,10 @@ The report, per day (Asia/Taipei, the app's day):
      and the ones past WARN_SHARE of it;
   3. 回測排隊 — the `backtest` jobs: how many, their wait (median, longest);
   4. 非官方來源被擋 — COROS / Garmin: 429 / 403 / pauses / breaker / cooldown counts and, for each
-     account paused that day, how long until it recovered.
+     account paused that day, how long until it recovered;
+  5. 會員數 (SP-388 完成條件 4) — the members against the sign-up cap (accounts/login.max_users: the
+     admin page's members.max_users, else WKO5COACH_MAX_USERS, else 100), flagged from MEMBERS_WARN_SHARE
+     (80 %): the owner's cue to raise the cap or move the server before sign-up starts refusing people.
 
     python -m backend.scripts.ops_report                      # yesterday, as text (markdown)
     python -m backend.scripts.ops_report --date 2026-10-18 --json
@@ -44,6 +47,7 @@ FREE_CPU_S_PER_MONTH = 600.0                       # 每月 CPU 預算 10 分 (m
 WARN_SHARE = 0.8                                   # 「接近」: 80 % of the budget
 BLOCK_EVENTS = ("http_429", "http_403", "account_paused", "breaker_tripped", "server_cooldown", "disabled")
 RECOVERED = ("account_resumed", "account_recovered")
+MEMBERS_WARN_SHARE = 0.8                           # 會員數到封頂的 80 % (SP-388 完成條件 4)
 
 _LINE = re.compile(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})[^\t]*\tjob\t([\d.]+)\t(.*)$")
 _FIELD = re.compile(r" (\w+)=(\S+)")
@@ -126,9 +130,35 @@ def plans(db: Optional[Path], today: dt.date) -> dict[str, str]:
     return out
 
 
+def member_count(db: Optional[Path]) -> Optional[int]:
+    """The member cap's count from accounts.db, read-only (as accounts/store.count_users: every
+    account but the test ones); None without it."""
+    if db is None or not db.is_file():
+        return None
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            return int(con.execute("SELECT count(*) FROM users WHERE is_test = 0").fetchone()[0])
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+
+
+def member_signal(count: Optional[int], cap: Optional[int]) -> Optional[dict]:
+    """{count, cap, share, near, full}: near = at MEMBERS_WARN_SHARE of the cap or past it; None when
+    either is unknown (owner mode: no accounts)."""
+    if count is None or not cap:
+        return None
+    share = count / cap
+    return {"count": count, "cap": cap, "share": round(share, 3), "near": share >= MEMBERS_WARN_SHARE,
+            "full": count >= cap}
+
+
 # ---------------------------------------------------------------------------- the report
 
-def report(day: dt.date, js: list[dict], evs: list[dict], plan_of: dict[str, str]) -> dict:
+def report(day: dt.date, js: list[dict], evs: list[dict], plan_of: dict[str, str],
+           members: Optional[dict] = None) -> dict:
     d = day.isoformat()
     month = d[:7]
     cpu_day: dict = defaultdict(float)
@@ -169,7 +199,7 @@ def report(day: dt.date, js: list[dict], evs: list[dict], plan_of: dict[str, str
         sources[src] = {"counts": {k: v for k, v in counts.items() if v}, "paused": recov}
     return {"day": d, "cpu_total_s": round(sum(cpu_day.values()), 1), "tenants": per_tenant,
             "free_over_budget": free, "free_budget_s": FREE_CPU_S_PER_MONTH, "backtest": backtest,
-            "sources": sources}
+            "sources": sources, "members": members}
 
 
 def _guess(tenant: str) -> str:
@@ -202,6 +232,15 @@ def text(r: dict) -> str:
         for p in s["paused"]:
             back = f"{p['recovered_after_h']} 小時後恢復" if p["recovered_after_h"] is not None else "還沒恢復"
             lines.append(f"  - {p['tenant']} 暫停（{p['reason'] or '—'}），{back}")
+    m = r.get("members")
+    if m:
+        lines += ["", f"### 會員數（封頂的 {MEMBERS_WARN_SHARE:.0%} 起提醒）", ""]
+        line = f"{m['count']} / {m['cap']} 人（{m['share']:.0%}）"
+        if m["full"]:
+            line += "，**已滿**：新註冊會進候補名單"
+        elif m["near"]:
+            line += "，**接近封頂**：考慮調高上限（管理 › 全站設定 › 會員封頂）或升級主機"
+        lines.append(line)
     return "\n".join(lines) + "\n"
 
 
@@ -236,12 +275,23 @@ def main(argv: list[str]) -> int:
         from backend import accounts
         db = accounts.accounts_db_path()
     js, evs, plan_of = jobs(perf_files(folder)), events(ev_path), plans(db, last)
-    out = [report(last - dt.timedelta(days=i), js, evs, plan_of) for i in range(max(1, a.days) - 1, -1, -1)]
+    count = member_count(db)
+    members = member_signal(count, cap() if count is not None else None)
+    out = [report(last - dt.timedelta(days=i), js, evs, plan_of, members) for i in range(max(1, a.days) - 1, -1, -1)]
     if a.json:
         print(json.dumps(out if len(out) > 1 else out[0], ensure_ascii=False, indent=1))
     else:
         print("\n".join(text(r) for r in out))
     return 0
+
+
+def cap() -> Optional[int]:
+    """The sign-up cap (accounts/login.max_users); None when it cannot be read."""
+    try:
+        from backend.accounts import login
+        return login.max_users()
+    except Exception:                                  # noqa: BLE001 — the report goes on without it
+        return None
 
 
 if __name__ == "__main__":

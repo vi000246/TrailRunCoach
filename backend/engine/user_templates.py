@@ -75,6 +75,13 @@ ELEV_NOTE = N_("有 GPX 時橫軸可切換距離或時間。距離段照它的�
                "時間不夠走回坡底時，下一趟從停下的地方再往上爬")
 TABLE_NOTE = N_("坡段與爬坡由 GPX 平滑後切出；配速是你在這個強度的平地速度依坡度換算（Minetti，下坡最多快 10%，陡下坡 15% 以上不加速），"
                 "沒算技術地形，是推估。功率只在平路和可跑的坡（≤ 8%）當目標")
+# SP-861: the same with the descents by the race calculator's personal grade model (GradeCurve)
+ELEV_NOTE_PERSONAL = N_("有 GPX 時橫軸可切換距離或時間。距離段照它的距離放；時間、直到按下計圈、負荷、RPE 段用你這段強度的平地速度，"
+                        "上坡依坡度換算（Minetti 跑步耗能），下坡用你的個人坡度模型（跟賽事計算機同一套），是推估。"
+                        "反覆爬坡（主課在上坡）的休息段畫成往回走下坡，時間不夠走回坡底時，下一趟從停下的地方再往上爬")
+TABLE_NOTE_PERSONAL = N_("坡段與爬坡由 GPX 平滑後切出；配速是你在這個強度的平地速度依坡度換算：上坡用 Minetti，"
+                         "下坡用你的個人坡度模型（跟賽事計算機同一套，含你下坡的技術地形與速度上限），是推估。"
+                         "功率只在平路和可跑的坡（≤ 8%）當目標")
 LEVEL_EASY = N_("輕鬆（Z2）")
 LEVEL_MAIN = N_("這個範本的主課強度")
 SEG_KIND = {"run_climb": N_("可跑的爬坡"), "steep_climb": N_("陡坡"), "descent": N_("下坡"), "flat": N_("平路")}
@@ -492,6 +499,63 @@ def _gf(g: float) -> float:
     return max(1.0, f) if g <= STEEP_DOWN_GRADE else f
 
 
+class GradeCurve:
+    """SP-861 (SP-639 Q1-1 「之後 (b)」): the descents of the step chart / 坡段表 / a route session by the
+    race calculator's personal grade model — its trail RE(g) (grade_model.GaitRE.for_trail("race"), as
+    calc.plan builds it: the athlete's own 2 % bins shrunk to Minetti, the trail technicality per grade
+    bin) relative to its flat, times the calculator's downhill power (pacing.hill_factor at its default
+    β), capped at the personal descent speed (GaitRE.v_max: the trail median of that bin).
+
+        v(g) = v_flat × RE(g) / RE(0) × h(g),  ≤ v_max(g)        (g < 0; climbs and flats stay _gf)
+
+    Where a steep descent (≤ STEEP_DOWN_GRADE) has fewer than grade_model.SHRINK_N own windows the
+    model is mostly Minetti's prior (up to ≈ +11 %): SP-639's rule stays the floor there — no faster
+    than the flat. 推估, like the calculator's."""
+
+    def __init__(self, gre):
+        self.gre = gre
+
+    def kmh(self, v: float, g: float) -> float:
+        """Horizontal km/h at grade g for flat speed v (km/h)."""
+        if g >= 0:
+            return v / _gf(g)
+        from backend.engine.racepower import grade_model as GM
+        from backend.engine.racepower import pacing as PC
+        gre = self.gre
+        r0 = float(gre.re(0.0))
+        out = v * float(gre.re(g)) / r0 * PC.hill_factor(g) if r0 > 0 else v / _gf(g)
+        vm = gre.v_max(g)
+        if vm:
+            out = min(out, float(vm) * 3.6)
+        if g <= STEEP_DOWN_GRADE and gre.data_n(g) < GM.SHRINK_N:
+            out = min(out, v)
+        return max(0.1, out)
+
+
+def grade_curve(gm: Optional[dict]) -> Optional[GradeCurve]:
+    """The GradeCurve of the race calculator's grade models (api/racepower._grade_models); None without
+    one or when it has no windows of the athlete's own (all prior: nothing personal to show)."""
+    gre = (gm or {}).get("grade_re")
+    if gre is None or not int(getattr(gre, "n_samples", 0) or 0):
+        return None
+    if hasattr(gre, "for_trail"):
+        gre = gre.for_trail("race")
+    return GradeCurve(gre)
+
+
+def speed_on(v: float, g: float, c) -> float:
+    """Horizontal km/h at grade g for flat speed v: the personal descent curve on the context (c.grade,
+    SP-861) when there is one, else Minetti with SP-639's steep-descent rule (_gf)."""
+    gc = getattr(c, "grade", None) if c is not None else None
+    if gc is not None and g < 0:
+        return gc.kmh(v, g)
+    return v / _gf(g)
+
+
+def _personal(c) -> bool:
+    return getattr(c, "grade", None) is not None
+
+
 def _mins(s: float) -> str:
     m = max(1, int(round(s / 60.0)))
     return f"{m}′" if m < 60 else f"{m // 60}h{m % 60:02d}′"
@@ -511,12 +575,36 @@ def main_frac(order: list) -> Optional[float]:
     return num / den if den > 0 else None
 
 
-def course_table(course: dict, c, levels: list) -> dict:
+def route_walk(prof: Optional[dict], c=None) -> Optional[tuple]:
+    """(_Walk, the profile's first km) on a session's copy of the route (route_copy: the points the step
+    chart walks), None without a usable profile. SP-864: the 坡段表's climbs, a route session's steps and
+    a hill repeat's climb are timed on this one walk, so their times are the same number."""
+    r = route_copy({"km": (prof or {}).get("km") or [], "z": (prof or {}).get("z") or []}) if prof else None
+    if r is None:
+        return None
+    k0 = float((prof.get("km") or [0.0])[0])
+    return _Walk([k - r["km"][0] for k in r["km"]], r["z"], c), k0
+
+
+def walk_secs(w: Optional[tuple], a_km: float, b_km: float, v: float) -> Optional[float]:
+    """Seconds from a_km to b_km (the route's km) at flat speed v along route_walk's profile (each piece
+    at its own grade, as the step chart); None without a walk or a stretch."""
+    if w is None or b_km - a_km <= 1e-6:
+        return None
+    walk, k0 = w
+    return float(walk.move(a_km - k0, 1, v, dist=b_km - a_km)[1])
+
+
+def course_table(course: dict, c, levels: list, prof: Optional[dict] = None) -> dict:
     """The 坡段表 (SP-639): each segment and climb of the template's route with its kind (the race
     calculator's seg_targets.kind_of: flat / runnable climb ≤ 8 % / steep climb / descent) and, per
     intensity level (key, label, f = × CP), the pace, time, GAP and power there: the flat speed at f
     (the step chart's) over the grade's Minetti factor. Power a target on flat / runnable ground
-    only, a reference elsewhere (seg_targets.chart_rows' rule). 推估: no technical terrain."""
+    only, a reference elsewhere (seg_targets.chart_rows' rule). 推估: no technical terrain.
+    SP-864 Q1-1 (a): with the route's profile a climb's time (and its pace = that time over its
+    length) is walked along the profile piece by piece, as the step chart and a route session's steps
+    do (route_walk) — a climb whose grade goes up and down takes longer than its average grade says;
+    the segments (one grade each) keep their grade."""
     from backend.engine.racepower import seg_targets as SGT
     cp = c.cp
     lv, vs = [], {}
@@ -525,14 +613,20 @@ def course_table(course: dict, c, levels: list) -> dict:
         vs[key] = (v, f)
         lv.append({"key": key, "label": label, "frac": round(float(f), 3), "flat_pace_s_per_km": round(3600.0 / v, 1),
                    "power": round(f * cp) if cp else None})
+    w = route_walk(prof, c)
 
-    def est(dist_m: float, grade: float, kind: str) -> dict:
+    def est(dist_m: float, grade: float, kind: str, span: Optional[tuple] = None) -> dict:
         out = {}
         for key, (v, f) in vs.items():
-            pace = 3600.0 / (v / _gf(grade))
+            pace = 3600.0 / speed_on(v, grade, c)
+            t = dist_m / 1000.0 * pace
+            walked = walk_secs(w, span[0], span[1], v) if span else None
+            if walked is not None and dist_m > 0:
+                t = walked
+                pace = walked / (dist_m / 1000.0)
             p = round(f * cp) if cp else None
             ok = kind in ("flat", "run_climb")
-            out[key] = {"pace_s_per_km": round(pace, 1), "t_s": round(dist_m / 1000.0 * pace),
+            out[key] = {"pace_s_per_km": round(pace, 1), "t_s": round(t),
                         "gap_s_per_km": round(3600.0 / v, 1), "power": p if ok else None, "power_ref": None if ok else p}
         return out
 
@@ -544,11 +638,12 @@ def course_table(course: dict, c, levels: list) -> dict:
     climbs = []
     for cl in course.get("climbs") or []:
         k = SGT.kind_of({"grade": cl["grade"]})
-        e = est(cl["dist_m"], cl["grade"], k)
+        e = est(cl["dist_m"], cl["grade"], k, (float(cl["start_km"]), float(cl["end_km"])))
         climbs.append({**cl, "kind": k, "kind_label": _(SEG_KIND[k]), "est": e,
                        "label": _(CLIMB_LABEL, m=round(cl["gain_m"]), t=_mins(e[last]["t_s"])) if last else ""})
     return {"segments": segs, "climbs": climbs, "levels": lv, "rule": course.get("rule") or climb_rule(),
-            "note": _(TABLE_NOTE)}
+            "down_model": "personal" if _personal(c) else "minetti",
+            "note": _(TABLE_NOTE_PERSONAL if _personal(c) else TABLE_NOTE)}
 
 
 async def profile_of(db: AsyncSession, tid) -> Optional[dict]:
@@ -611,8 +706,9 @@ class _Walk:
     the step is spent on the flat there."""
     EPS = 1e-9
 
-    def __init__(self, km: list, z: list):
+    def __init__(self, km: list, z: list, c=None):
         self.km, self.z, self.end = km, z, km[-1]
+        self.c = c                                # its `grade` (SP-861): the personal descent curve
 
     def z_at(self, k: float) -> float:
         return _interp(min(max(k, 0.0), self.end), self.km, self.z)
@@ -650,7 +746,7 @@ class _Walk:
             if (lt is None and ld is None) or (lt is not None and lt <= 1e-6) or (ld is not None and ld <= 1e-9):
                 break
             nxt, g = self._piece(pos, sign, floor)
-            vh = v / _gf(g)
+            vh = speed_on(v, g, self.c)
             piece = float("inf") if nxt is None else abs(nxt - pos)
             take = piece
             if lt is not None:
@@ -723,7 +819,7 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
     k0 = km[0]
     km = [float(k) - k0 for k in km]
     z = [float(v) for v in z]
-    w = _Walk(km, z)
+    w = _Walk(km, z, c)
     pos = D = T = far = 0.0
     xs, xt, ss, ups, downs, rr = [0.0], [0.0], [], [], [], []
     path = [(0.0, 0.0, 0.0, True)]               # (km covered, route pos, s, keep)
@@ -766,9 +862,10 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
             # the climb picked on 路線 (route_library.apply: 「爬 120 m」 ends with the lap button at the top):
             # up to the top from wherever this rep starts — a rep after a short recovery climbs less (Q1-3)
             pos, used_t, used_d, gn, ls, pts = w.move(pos, 1, v, dist=top - pos)
-        elif back and typ == "open" and not st["dur"].get("est"):
-            # a 直到按下計圈 recovery of a hill repeat (「走下坡」): you press the lap at the bottom — walked
-            # all the way down, however long that takes (SP-639 Q1-3: only a timed one can stop part-way)
+        elif back and typ == "open":
+            # a 直到按下計圈 recovery of a hill repeat (「走下坡」, SP-862's 「回到坡底按圈」 with its estimate):
+            # you press the lap at the bottom — walked all the way down, however long that takes (SP-639
+            # Q1-3: only a timed one can stop part-way)
             pos, used_t, used_d, gn, ls, pts = w.move(pos, -1, v, dist=max(0.0, pos - rs["base"]), floor=rs["base"])
         else:
             pos, used_t, used_d, gn, ls, pts = w.move(pos, -1 if back else 1, v, secs=max(0.0, s),
@@ -813,7 +910,9 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
             # the scale of the drawn part (a hill repeat on a long route uses its first km only)
             "z_min": min(drawn), "z_max": max(drawn), "route_km": prof.get("route_km") or end,
             "km": round(min(far, end), 2), "total_km": round(D, 2), "complete": complete,
-            "gain_m": prof.get("gain_m"), "name": prof.get("filename") or prof.get("name") or "", "note": _(ELEV_NOTE)}
+            "gain_m": prof.get("gain_m"), "name": prof.get("filename") or prof.get("name") or "",
+            "down_model": "personal" if _personal(c) else "minetti",
+            "note": _(ELEV_NOTE_PERSONAL if _personal(c) else ELEV_NOTE)}
 
 
 # ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@
   // ladder rung or title (the 總覽's old rule)
   const FAM = { aerobic: "z3", vo2max: "z5", speed: "z5" };
   function kind(s) {
-    const k = s.kind, t = s.title || "";
+    const k = s.kind, t = s.title_src || s.title || "";      // the stored words (an English page shows title, SP-839)
     if (k === "test" || k === "race" || k === "notice" || k === "rest") return k;
     if (k === "quality") {
       const f = s.quality_family && FAM[s.quality_family.id];

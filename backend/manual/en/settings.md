@@ -60,6 +60,9 @@ No 4 weeks of running on record and answers that say you are starting out (not a
 4. A page shows at most 3 reminders; the rest fold into "N more reminders".
 
 It applies to the Overview, the schedule, the season plan's race check, the race calculator, Activities, Charts and the settings page itself; the injury log doesn't follow it. On the settings page: the tab notes show only at Full; Standard and Lean fold the fixed explanations into `?`. More in [Too many tips](faq.md#too-many-hints).
+
+### The Cairn introduction
+After "No thanks" on the "Plan this trip in Cairn" card of a multi-day trip, the last line here, "The Cairn introduction: turned off", brings it back with "Show it again" (see [Cairn](race.md#cairn)).
 :::
 
 ## Physiology {#body}
@@ -74,7 +77,7 @@ It applies to the Overview, the schedule, the season plan's race check, the race
 
 :::deep
 ### Heart rate
-- Max HR: yours > the watch account's > the highest heart rate held 5 seconds or more in the last 365 days of running > 208 − 0.7 × age (an estimate).
+- Max HR: yours > the watch account's > the best 10-second average heart rate in the last 365 days of running > 208 − 0.7 × age (an estimate).
 - Resting HR: yours, else the watch's.
 - Schedule heart-rate zones: auto (by which numbers are believable), lactate threshold, heart-rate reserve, max heart rate (COROS's 6 zones each). Auto = lactate threshold zones when LTHR is believable, else reserve when max and resting are, else max; you are told once when it changes. It affects only the schedule's heart-rate targets.
 - Under "My zones", the app's numbers next to the watch's; it opens only when they differ by 5 bpm or more (see [Numbers that differ from the watch](faq.md#watch-numbers)).

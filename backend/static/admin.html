@@ -94,6 +94,7 @@ td .rolebox small { color: var(--muted); font-size: 11.5px; white-space: normal;
 .denied { text-align: center; padding: 48px 16px; }
 .denied p { font-size: 16px; margin: 0 0 14px; }
 .badge.test { color: #fff; background: var(--warn); border-color: var(--warn); }
+.badge.coach { color: var(--good, var(--accent)); border-color: color-mix(in srgb, var(--good, var(--accent)) 45%, var(--line)); }
 .tform { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: end; }
 .tform label { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); }
 .tform input, .tform select { font: inherit; font-size: 14px; padding: 4px 8px; border-radius: 7px; border: 1px solid var(--line);
@@ -113,6 +114,19 @@ td .rolebox small { color: var(--muted); font-size: 11.5px; white-space: normal;
 label.extra { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
 label.extra small { color: var(--muted); }
 label.extra input { width: 4.5em; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+/* SP-388 營運報表 */
+.opsm { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.opslist { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.opslist a { display: inline-block; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--accent);
+  text-decoration: none; font-size: 13px; font-variant-numeric: tabular-nums; }
+.opslist a[aria-current="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.opsview { margin: 0; padding: 12px 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 70vh; overflow: auto; }
+/* SP-877 互推漏斗 */
+table.xpf td { font-variant-numeric: tabular-nums; vertical-align: top; }
+table.xpf td small { color: var(--muted); }
+tr.xpf-last td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+table.xpf .tag { display: inline-block; padding: 0 7px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; }
 .qmark { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line);
   color: var(--muted); font-size: 11px; cursor: help; }
 @media (max-width: 699px) {
@@ -151,6 +165,7 @@ label.extra input { width: 4.5em; padding: 2px 6px; border-radius: 6px; border: 
       <button type="button" role="tab" data-tab="waitlist" data-i18n="admin.tab.waitlist">候補名單</button>
       <button type="button" role="tab" data-tab="tests" data-i18n="admin.tab.tests">測試帳號</button>
       <button type="button" role="tab" data-tab="audit" data-i18n="admin.tab.audit">操作紀錄</button>
+      <button type="button" role="tab" data-tab="ops" data-i18n="admin.tab.ops">營運報表</button>
     </div>
     <div id="panel" role="tabpanel"></div>
   </div>
@@ -169,7 +184,7 @@ label.extra input { width: 4.5em; padding: 2px 6px; border-radius: 6px; border: 
   const panel = $("#panel");
   const tabs = [...document.querySelectorAll("[data-tab]")];
   for (const b of tabs) {
-    const need = b.dataset.tab === "config" || b.dataset.tab === "google" ? CAN_CONFIG : b.dataset.tab === "audit" ? true : CAN_USERS;
+    const need = b.dataset.tab === "config" || b.dataset.tab === "google" ? CAN_CONFIG : b.dataset.tab === "audit" || b.dataset.tab === "ops" ? true : CAN_USERS;
     if (!need) b.remove();
   }
 
@@ -316,6 +331,7 @@ label.extra input { width: 4.5em; padding: 2px 6px; border-radius: 6px; border: 
         .map((c) => `<th>${t("col." + c)}</th>`).join("")}</tr></thead><tbody>${d.users.map(userRow).join("")}</tbody></table></div>`
         : `<p class="empty">${t("users.none")}</p>`}<p class="msg" id="umsg"></p></section>`;
     decorateUsers(d);
+    decorateCoach(d);
     const put = async (id, body) => {
       try { await api(`/users/${id}`, { method: "PUT", body: JSON.stringify(body) }); showUsers(); }
       catch (e) { const m = $("#umsg"); m.className = "msg err"; m.textContent = e.message; }
@@ -453,6 +469,81 @@ label.extra input { width: 4.5em; padding: 2px 6px; border-radius: 6px; border: 
       : `<p class="empty">${t("audit.none")}</p>`}</section>`;
   };
 
+  // ---------------------------------------------------------------- 營運報表 (SP-388, backend/ops_daily.py)
+  // the member signal now, and the daily reports the server writes at 03:30 (kept 31 days): each day a
+  // link to the report's text; clicking shows it here, the link itself opens the plain file
+  const memberLine = (d) => {
+    const m = d.members;
+    if (!d.accounts || !m) return `<p class="sub">${esc(t("ops.members_off"))}</p>`;
+    const cls = m.full ? "dis" : m.near ? "paused" : "";
+    const what = m.full ? t("ops.members_full") : m.near ? t("ops.members_near", { pct: Math.round(d.warn_share * 100) }) : t("ops.members_ok");
+    return `<p class="opsm"><b>${esc(t("ops.members_count", { n: m.count, max: m.cap, pct: Math.round(m.share * 100) }))}</b>
+      <span class="${cls}">${esc(what)}</span></p>`;
+  };
+  const showOps = async () => {
+    loading();
+    let d;
+    try { d = await api("/ops"); } catch (e) { failed(e); return; }
+    const list = !d.on ? `<p class="empty">${esc(t("ops.off"))}</p>` : d.reports.length
+      ? `<ul class="opslist">${d.reports.map((r) => `<li><a href="/api/v1/admin/ops/${esc(r.day)}.md" data-day="${esc(r.day)}">${esc(r.day)}</a></li>`).join("")}</ul>`
+      : `<p class="empty">${esc(t("ops.none", { at: d.run_at }))}</p>`;
+    panel.innerHTML = `<section class="sec"><h2>${t("ops.members_h")}</h2>${memberLine(d)}</section>
+      <section class="sec"><h2>${t("ops.reports_h")}</h2><p class="sub">${esc(t("ops.lead", { at: d.run_at, days: d.keep_days }))}</p>
+      ${list}<pre class="opsview" id="opsview" hidden></pre><p class="msg" id="omsg"></p></section>
+      <section class="sec" id="xpf"><h2>${t("xpf.h")}</h2><p class="sub">${esc(t("xpf.lead"))}</p><div id="xpf-body"></div></section>`;
+    showFunnel();
+    for (const a of panel.querySelectorAll("[data-day]")) a.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      const view = $("#opsview"), m = $("#omsg");
+      for (const x of panel.querySelectorAll("[data-day]")) x.removeAttribute("aria-current");
+      a.setAttribute("aria-current", "true");
+      try {
+        const r = await fetch(a.href, { cache: "no-store" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        view.textContent = await r.text();
+        view.hidden = false; m.textContent = "";
+      } catch (e) { view.hidden = true; m.className = "msg err"; m.textContent = t("load_failed", { error: e.message }); }
+    });
+    const first = panel.querySelector("[data-day]");
+    if (first) first.click();                                    // the newest report open
+  };
+
+  // ---------------------------------------------------------------- 互推漏斗 (SP-877, GET /admin/xp-funnel)
+  // the 疊石 Cairn card's funnel per month (scripts/xp_funnel.py, computed when the tab opens), newest
+  // first, last month marked; 30-day retention as kept / people whose 30 days are over
+  const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : "—");
+  const keptCell = (g) => {
+    const done = g.n - g.waiting;
+    return `${g.kept} / ${done} · ${pct(g.kept, done)}` + (g.waiting ? `<br><small>${esc(t("xpf.waiting", { n: g.waiting }))}</small>` : "");
+  };
+  const funnelRow = (r, last) => {
+    const f = r.funnel, k = r.retained_30d;
+    const cells = [
+      ["month", `<b>${esc(r.month)}</b>` + (r.month === last ? ` <span class="tag">${esc(t("xpf.last"))}</span>` : "")],
+      ["saw", `${f.saw}<br><small>${esc(t("xpf.times", { n: f.shown_times }))}</small>`],
+      ["clicked", `${f.clicked} · ${pct(f.clicked, f.saw)}`],
+      ["dismissed", `${f.dismissed}`],
+      ["linked", `${f.linked} · ${pct(f.linked, f.saw)}`],
+      ["new", esc(t("xpf.new_cell", { cairn: r.from_cairn, share: r.from_share }))],
+      ["k_linked", keptCell(k.linked)], ["k_cairn", keptCell(k.from_cairn)],
+      ["k_share", keptCell(k.from_share)], ["k_control", keptCell(k.control)],
+    ];
+    return `<tr${r.month === last ? ' class="xpf-last"' : ""}>${cells.map(([c, v]) => `<td data-l="${esc(t("xpf.col." + c))}"><span>${v}</span></td>`).join("")}</tr>`;
+  };
+  const showFunnel = async () => {
+    const box = $("#xpf-body");
+    let d;
+    try { d = await api("/xp-funnel"); } catch (e) { if (box) box.innerHTML = `<p class="msg err">${esc(t("load_failed", { error: e.message }))}</p>`; return; }
+    if (!box) return;
+    if (!d.accounts) { box.innerHTML = `<p class="empty">${esc(t("ops.members_off"))}</p>`; return; }
+    if (!d.months.length) { box.innerHTML = `<p class="empty">${esc(t("xpf.none"))}</p>`; return; }
+    const cols = ["month", "saw", "clicked", "dismissed", "linked", "new", "k_linked", "k_cairn", "k_share", "k_control"];
+    box.innerHTML = (d.months.some((r) => r.month === d.last_month) ? "" : `<p class="sub">${esc(t("xpf.no_last", { month: d.last_month }))}</p>`)
+      + `<div class="tablewrap"><table class="xpf"><thead><tr>${cols.map((c) => `<th>${esc(t("xpf.col." + c))}</th>`).join("")}</tr></thead>
+      <tbody>${d.months.map((r) => funnelRow(r, d.last_month)).join("")}</tbody></table></div>
+      <p class="sub">${esc(t("xpf.note", { days: d.retain_days }))}</p>`;
+  };
+
   // ---------------------------------------------------------------- R2: admins, deleting a user (SP-351 R2)
   // added onto the users table after it is drawn: the role cell gets the admin switch, the status
   // cell the delete button. The site owner is always an admin and is never deleted; nobody deletes
@@ -493,6 +584,40 @@ label.extra input { width: 4.5em; padding: 2px 6px; border-radius: 6px; border: 
         await showUsers();
         msg(t("act.deleted", { who: word }), true);
       } catch (e) { b.disabled = false; msg(e.message, false); }
+    });
+  };
+
+  // ---------------------------------------------------------------- coaches (SP-789, SP-793)
+  // added onto the role cell like the admin switch: 設為教練／取消教練 and, for a coach, their students
+  // now / the most they may have (the number box; empty = the default). No payment yet: the admin decides
+  const decorateCoach = (d) => {
+    const trs = panel.querySelectorAll("tbody tr");
+    const msg = (text, ok) => { const m = $("#umsg"); if (m) { m.className = "msg " + (ok ? "ok" : ok === false ? "err" : ""); m.textContent = text; } };
+    d.users.forEach((u, i) => {
+      const box = trs[i] && trs[i].querySelector(".rolebox");
+      if (!box) return;
+      const who = u.email || u.name || `#${u.id}`, c = u.coach;
+      box.insertAdjacentHTML("beforeend", c
+        ? `<span class="badge coach">${esc(t("coach.badge", { used: c.used, max: c.max_students }))}</span>
+           <label class="extra"><small style="white-space:nowrap">${esc(t("coach.max"))}</small><input type="number" min="0" max="1000" step="1" inputmode="numeric"
+             data-coachmax="${u.id}" value="${c.custom ? c.max_students : ""}" placeholder="${d.coach_default_max ?? ""}" aria-label="${esc(t("coach.max"))}">
+             <span class="qmark" tabindex="0" title="${esc(t("coach.max_help", { n: d.coach_default_max ?? "" }))}">?</span></label>
+           <button type="button" class="linkbtn" data-coach="${u.id}" data-on="0" data-who="${esc(who)}">${t("coach.unmake")}</button>`
+        : `<button type="button" class="linkbtn" data-coach="${u.id}" data-on="1" data-who="${esc(who)}">${t("coach.make")}</button>`);
+    });
+    const put = async (id, body) => {
+      try { await api(`/users/${id}/coach`, { method: "PUT", body: JSON.stringify(body) }); await showUsers(); }
+      catch (e) { msg(e.message, false); }
+    };
+    for (const b of panel.querySelectorAll("[data-coach]")) b.addEventListener("click", () => {
+      const on = b.dataset.on === "1";
+      if (!confirm(t(on ? "coach.confirm_make" : "coach.confirm_unmake", { who: b.dataset.who }))) return;
+      put(b.dataset.coach, { coach: on });
+    });
+    for (const el of panel.querySelectorAll("[data-coachmax]")) el.addEventListener("change", () => {
+      if (el.value.trim() === "") { put(el.dataset.coachmax, { default_max: true }); return; }
+      const n = Math.round(Number(el.value));
+      if (Number.isFinite(n) && n >= 0) put(el.dataset.coachmax, { max_students: n });
     });
   };
 
@@ -545,7 +670,7 @@ label.extra input { width: 4.5em; padding: 2px 6px; border-radius: 6px; border: 
       for (const tr of tb.querySelectorAll("tbody tr")) [...tr.children].forEach((td, i) => { td.dataset.l = names[i] || ""; });
     }
   }).observe(panel, { childList: true, subtree: true });
-  const SHOW = { config: showConfig, users: showUsers, waitlist: showWaitlist, tests: () => { loading(); showTests(); }, audit: showAudit };
+  const SHOW = { config: showConfig, users: showUsers, waitlist: showWaitlist, tests: () => { loading(); showTests(); }, audit: showAudit, ops: showOps };
   const open = (name) => {
     const ok = tabs.filter((b) => b.isConnected).map((b) => b.dataset.tab);
     if (!ok.includes(name)) name = ok[0];

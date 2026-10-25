@@ -47,7 +47,7 @@ curl -s "${H[@]}" "$BASE/api/v1/debug/export/plan"
 
 回應都是 JSON（UTF-8，`Cache-Control: no-store`）。
 
-不想自己組 HTTP 的話，用 CLI（`backend/scripts/debug_fetch.py`，只送 GET；token 和代理帳密**只從環境變數讀**，只走 HTTPS（本機除外），不跟隨轉址）：
+不想自己組 HTTP 的話，用 CLI（`backend/scripts/debug_fetch.py`，讀取送 GET、寫入的 `preview`／`apply`／`undo` 送 POST（見「寫入」）；token 和代理帳密**只從環境變數讀**，只走 HTTPS（本機除外），不跟隨轉址）：
 
 ```bash
 export TRC_DEBUG_URL=https://<正式網址> TRC_DEBUG_TOKEN=trcd_...
@@ -69,7 +69,7 @@ python -m backend.scripts.debug_fetch export -o config.json
 | 怎麼拿 token | 個人 API token（SP-373，像 GitHub 的 personal access token）：擁有者在設定頁按「產生 token」→ 選名稱、範圍、有效期 → token **只顯示這一次**。**不用 PIN**（舊的 `TRC_DEBUG_PIN` 已不讀，留著也沒作用） |
 | 怎麼帶 | `X-TRC-Debug-Token: trcd_…`（建議；`Authorization` 留給密碼代理）或 `Authorization: Bearer trcd_…`。**網頁登入的 cookie 一律不讀**：被 XSS／CSRF 帶走的 session 叫不動這些端點，token 外流也碰不到一般功能 |
 | 儲存 | 資料庫（`debug_tokens`）只存 token 的 SHA-256 和前 4 碼（`trcd_AbCd…`，用來分辨）。token 是 256 位元亂數，資料庫外流也還原不出來 |
-| 範圍（scope） | `read:activity`、`read:plan`、`read:sync`、`read:gps`、`export:config`、`export:plan`。預設勾前三個；`read:gps`（`?gps=1` 要它）、`export:config`、`export:plan` 要自己勾 |
+| 範圍（scope） | `read:activity`、`read:plan`、`read:sync`、`read:gps`、`export:config`、`export:plan`、`write:config`。預設勾前三個；`read:gps`（`?gps=1` 要它）、`export:config`、`export:plan`、`write:config`（SP-802，見「寫入」）要自己勾。有 `write:config` 的 token 有效期最長 7 天、不能選「不過期」 |
 | 有效期 | 7／30／90／365 天或**不過期**，預設 90；到期自動失效。不過期的 token 只能靠撤銷停用（存成 9999-12-31，畫面顯示「不過期」） |
 | 撤銷 | 設定頁可以撤銷單一 token 或「全部撤銷」；撤銷後立刻 401（登入模式下在登入攔截就擋掉） |
 | 登入模式（SP-406） | `TRC_ACCOUNTS=1`＋完整 Google 登入時，登入攔截只認 session cookie；但 **GET／HEAD `/api/v1/debug/*` 帶 debug token** 會放行：token 產生時把雜湊登記到 accounts.db（`api_tokens`，client `debug`、scope `debug:*`，撤銷時刪掉），攔截層查到是**擁有者**的 token 才進擁有者的 tenant，之後照常由 debug API 檢查到期、撤銷、範圍、開關。debug token 打其他任何路徑（包括設定頁的端點、寫入）都跟沒登入一樣回 401。別人帳號名下的 `debug:*` 列一律 401。SP-406 之前產生的 token 沒登記，登入模式下要重新產生 |
@@ -98,7 +98,7 @@ python -m backend.scripts.debug_fetch export -o config.json
 
 ## 共同規則
 
-- **全部唯讀**。課表相關的端點**不呼叫** `plan_sessions.sessions()`（那支會拿寫入鎖、reconcile、記週存檔），而是在記憶體裡算一樣的東西：配對用 `plan_store.match_only`，「下次開頁會改什麼」用 `plan_store.reconcile_with_adapt`，都不寫回。只會寫 `debug_tokens`（最後使用時間／IP）、`debug_audit`、`debug_auth_failures`。**不會呼叫 COROS／TP**。
+- **除了 `/write/*`（SP-802，見「寫入」）全部唯讀**。課表相關的端點**不呼叫** `plan_sessions.sessions()`（那支會拿寫入鎖、reconcile、記週存檔），而是在記憶體裡算一樣的東西：配對用 `plan_store.match_only`，「下次開頁會改什麼」用 `plan_store.reconcile_with_adapt`，都不寫回。只會寫 `debug_tokens`（最後使用時間／IP）、`debug_audit`、`debug_auth_failures`。**不會呼叫 COROS／TP**。
 - **不回傳秘密**：密碼、COROS／TP token、記住的帳密（Fernet 加密的密碼）、debug token、備份資料夾、課表訂閱網址、分享連結、帳號 e-mail／使用者名稱／ID 一律不出現。最後一道防線 `debug_view.scrub`：
   - key 名稱按段比對（`coros_access_token` → coros／access／token），含 password、secret、cookie、sealed、token、auth、authorization、jwt、bearer、csrf、signature、otp、credential、pin、email、api_key、private_key、id_token、api_token、feed_token、share_id、user_id、username、data_dir、file_path… 的整個拿掉（`state`、`key`、`tokens` 這類不受影響）；
   - 字串值：debug token、Fernet 密文、JWT（`eyJ…`）、20 字以上的不透明字串換成 `[redacted]`；其他字串再過 `applog.redact`（家目錄、e-mail、網址參數、Bearer、key=value 秘密）。
@@ -219,6 +219,60 @@ python -m backend.scripts.debug_fetch export -o config.json
 ### `GET /api/v1/debug/export/plan` — 範圍 `export:plan`
 
 已存的課表（SP-373）：`schema_version`、`exported_at`、`count`、`sessions[]`。`sessions` 是 `plan_sessions` 的**每一列**（跟 `plan_store.to_dict` 同欄位，`title` 是存的原文）：自動產生的、使用者自己加的（`origin: custom`）、改過的（`edited`）、刪除／取代的標記（`state: deleted / superseded`，本機照抄才不會把刪掉的課又長回來）。**不含** COROS 推送紀錄（`coros_plan_push`：那是推送那台的）。跟其他回應一樣過 `debug_view.scrub`。
+
+---
+
+## 寫入（SP-802）
+
+讓 AI agent 替擁有者改**少數幾樣設定**：先預覽、再套用，每次都記下改了什麼、可以復原。程式：`backend/engine/debug_write.py`（白名單、預覽、套用、復原）、`backend/api/debug.py` 的 `/write/*`。
+
+- **範圍 `write:config`**：預設不勾、只有擁有者能產生，有效期最長 7 天（不能選「不過期」）。沒有這個範圍的 token 打 `/write/*` 一律 403。
+- **只能改白名單**，其他欄位一律 400 `BAD_CHANGE`：
+
+  | target | 能做什麼 | 規則 |
+  |---|---|---|
+  | `threshold` | 一個日期的門檻列（設定 › 門檻）：`set` 改 `lthr`／`aethr`／`mhr`／`rhr`／`cp`／`note`（`null` = 清掉），或 `delete: true` 刪整列 | 數字要在合理範圍（LTHR 80–230、AeT 60–220、最大心率 100–240、安靜心率 25–120、CP 50–700 W）；改過的值算「手動輸入」（`lthr_method` 等 = `manual`、`cp_manual` = true）；改完全空的列要用 `delete` |
+  | `event` | 新增賽事（不給 `id`）或改一場的欄位（給 `id`） | 跟賽事頁同一套檢查（`planning.Plan.upsert_event`）；**不能刪**（GPX 會一起刪掉、復原不回來） |
+  | `prefs` | 課表偏好的欄位（`plan_prefs.Prefs` 的欄位名，例 `runs`；或存的 key，例 `plan.prefs.runs_per_week`） | 跟課表偏好的「儲存」同一套檢查（`from_body` + `check`） |
+
+- **先預覽再套用**：預覽只算不寫，回逐欄的 舊值 → 新值和一個 `preview_id`（10 分鐘內、只有同一個 token 能用）。套用時如果那幾塊資料在預覽之後又被改過，回 409 `CHANGED`，要重新預覽。
+- **紀錄與復原**：每次套用記在 `debug.write.log`（最新 30 筆）：誰（token 名稱）、什麼時候、逐欄的差異，以及**改之前那一整塊的內容**（門檻全部列、賽事全部列或課表偏好全部 key），這就是那次寫入的備份。`undo` 把最新一筆（或指定 `change_id`）的舊內容放回去；如果那之後資料又被改過，回 409，照紀錄裡的 `before` 自己改回去。復原本身也記一筆。
+- 每次呼叫照常記進稽核；設定 › 進階 › Debug API 有一張「最近 AI 改了什麼」。
+
+```bash
+# 預覽：9/30 起 LTHR 改 166（SP-719）
+curl -s "${H[@]}" -H "Content-Type: application/json" -X POST "$BASE/api/v1/debug/write/preview" \
+  -d '{"changes": [{"target": "threshold", "date": "2026-09-30", "set": {"lthr": 166}}]}'
+# → {"preview_id": "pv_…", "diff": [{"part": "thresholds", "key": "2026-09-30", "field": "lthr", "before": null, "after": 166.0}, …]}
+
+# 套用（確認過 diff 之後）
+curl -s "${H[@]}" -H "Content-Type: application/json" -X POST "$BASE/api/v1/debug/write/apply" -d '{"preview_id": "pv_…"}'
+
+# 復原最新一次；看紀錄
+curl -s "${H[@]}" -H "Content-Type: application/json" -X POST "$BASE/api/v1/debug/write/undo" -d '{}'
+curl -s "${H[@]}" "$BASE/api/v1/debug/write/log?n=10"
+```
+
+同一件事用 CLI（SP-890；`TRC_DEBUG_TOKEN` 要有 `write:config`）：
+
+```bash
+python -m backend.scripts.debug_fetch preview --changes '[{"target": "threshold", "date": "2026-09-30", "set": {"lthr": 166}}]'
+python -m backend.scripts.debug_fetch preview -f changes.json     # 一個陣列、{"changes": [...]} 或單一個 change；- 是 stdin
+python -m backend.scripts.debug_fetch apply pv_…                   # 確認過 diff 之後
+python -m backend.scripts.debug_fetch undo                         # 最新一次；--change-id N 指定一次
+python -m backend.scripts.debug_fetch write-log -n 10
+```
+
+changes 不是 JSON、不是物件陣列時 CLI 直接結束（exit 2），什麼都不送；伺服器的錯誤（404 `NO_PREVIEW`／`NOTHING_TO_UNDO`、409 `CHANGED`）印在 stderr、exit 1。
+
+| 端點 | body | 回應 |
+|---|---|---|
+| `POST /api/v1/debug/write/preview` | `{changes: [...]}`（最多 20 個） | `preview_id`、`diff`、`expires_in_s`；沒有東西要改時 `nothing_to_change: true`、沒有 id |
+| `POST /api/v1/debug/write/apply` | `{preview_id}` | `change_id`、`diff`；404 `NO_PREVIEW`（過期、已套用、別的 token 的）、409 `CHANGED` |
+| `POST /api/v1/debug/write/undo` | `{change_id?}` | `undone`、`diff`；404 `NOTHING_TO_UNDO`、409 `CHANGED` |
+| `GET /api/v1/debug/write/log?n=10` | — | `writes`（含 `before`／`after`） |
+
+登入模式下，登入攔截對 `POST /api/v1/debug/write/*` 跟 GET 一樣放行擁有者的 debug token（不讀 cookie、不用 CSRF header）；debug token 打其他寫入一律 401。
 
 ---
 

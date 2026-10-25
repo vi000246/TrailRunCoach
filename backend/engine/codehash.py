@@ -8,6 +8,10 @@ unrelated function — threw every entry away on deploy (~2.5 NAS CPU-min per te
 
 * functions / methods: the compiled code (bytecode, constants, names, defaults), not the
   source text — comments, blank lines and edits elsewhere in the file don't count;
+* the same in every process (SP-773): a default that is a function, class or object is hashed
+  by its module.qualname (`_stable`), never by a repr with a memory address — that changed the
+  hash on every restart, and every disk cache keyed on it missed; a function / class of ours
+  given as a default (`gpx=stored_course`) is followed like a name the function reads;
 * reached through a global name, a module attribute (`A.pd_model`, also after a local
   `from … import … as A`), a nested function / lambda / comprehension, or a method name
   called on any object (`ds.channel(…)`) when that method belongs to a reached
@@ -22,7 +26,30 @@ roots of each cache.
 
 Cache plumbing (PLUMBING: `Dataset.cached_series`, `flush_series` …) is never followed:
 memoising a value does not change it, and an edit to the cache machinery would otherwise drop
-every value cached through it (SP-339).
+every value cached through it (SP-339). A caller can leave out more for its own cache (`skip`,
+SP-811): a method reached only through the by-name rule whose result the key already holds as a
+value — the estimate / PD memos skip `EngineConfig.load` (another `.load()`, json.load or
+activity_tags.load, matched it; the Dataset gets its config loaded, and `config.to_dict()` is
+in the key).
+
+This module itself is plumbing too (PLUMBING_MODULES, SP-894): the Dataset build reaches
+`estimate_code()` → `code_hash`, so every chart, activity_auto, the estimate and PD memos used to
+hash codehash's own functions — an edit here (SP-811, SP-819) changed all of their keys, though how a
+code version is computed is not what any cached value comes from. A change to the hashing rules that
+should drop the old values says so with the caches' manual versions.
+
+What `dis` finds in a code object and the sha1 of its parts are kept per code object (`_scan`,
+`_code_sha`, SP-878): many caches reach the same functions, and the warm-up's chart signatures
+scanned their bytecode again for each. What a name points to is looked up on every walk, so a module
+global replaced at run time is followed as it is now.
+
+Two functions can share a qualified name: every `@dataclass`'s generated `__repr__` (its
+`__wrapped__` is named `__create_fn__.<locals>.__repr__`), two lambdas in one function. The walk
+keeps the last one it reaches, and which is last follows the order of a set of names — the hash
+seed. `merge=True` keeps them all (sorted), so the hash is the same in every process and an
+edit to any of them changes it (SP-834). Only the chart signatures use it for now: turning it on
+everywhere changes every cache key once (estimate, PD, per-workout, series.db), which waits for a
+change that recomputes them anyway.
 
 `callable_hash(fn)` (SP-339) is for a callable made at the call site — `ds.cached_series(key, w,
 lambda w=w: _measure(ds, w))`: its defaults are inputs, not code, so they are left out; what it
@@ -37,6 +64,7 @@ import functools
 import hashlib
 import importlib
 import inspect
+import re
 import sys
 import types
 from typing import Any, Iterable, Optional
@@ -55,6 +83,8 @@ PLUMBING = frozenset({
     "backend.engine.wko5expr.dataset.batched_flush",
     "backend.engine.wko5expr.dataset.flush_held",
 })
+# modules whose functions and constants are never followed: this one (SP-894, the module doc)
+PLUMBING_MODULES = frozenset({__name__})
 
 
 def _ours(obj) -> bool:
@@ -109,16 +139,56 @@ def _constant(mod: types.ModuleType, name: str, depth: int = 0) -> Optional[str]
     return a
 
 
+_ADDR = re.compile(r" at 0x[0-9a-fA-F]+")
+
+
+def _qualname(x) -> str:
+    return f"{getattr(x, '__module__', None) or '?'}.{getattr(x, '__qualname__', None) or getattr(x, '__name__', '?')}"
+
+
+_SHA: dict = {}
+
+
+def _code_sha(co: types.CodeType):
+    """A fresh sha1 fed with a code object's parts (_code_parts), kept per code object like _scan
+    (SP-878): the caller may go on updating the copy it gets."""
+    hit = _SHA.get(id(co))
+    if hit is None or hit[0] is not co:
+        h = hashlib.sha1()
+        for p in _code_parts(co):
+            h.update(p if isinstance(p, bytes) else _stable(p).encode("utf-8"))
+            h.update(b"\x00")
+        hit = _SHA[id(co)] = (co, h)
+    return hit[1].copy()
+
+
+def _own_hash(co: types.CodeType) -> str:
+    return _code_sha(co).hexdigest()[:12]
+
+
 def _stable(x) -> str:
-    """repr with set / dict order fixed: a frozenset's repr follows the per-process hash
-    seed (PYTHONHASHSEED), and `x in {"a", "b"}` compiles to a frozenset constant."""
+    """repr that is the same in every process (SP-773):
+    * set / dict order fixed: a frozenset's repr follows the per-process hash seed
+      (PYTHONHASHSEED), and `x in {"a", "b"}` compiles to a frozenset constant;
+    * no memory address: a function, class or bound method (a default `gpx=stored_course`) is
+      written as module.qualname (a function also with its own compiled code, so two lambdas of
+      one scope differ and editing one counts); anything else whose repr carries
+      `at 0x…` (an `object()` sentinel, FastAPI's `Depends(get_db)`) loses the address."""
     if isinstance(x, (set, frozenset)):
         return f"{type(x).__name__}({sorted(_stable(v) for v in x)})"
     if isinstance(x, dict):
         return "{" + ",".join(sorted(f"{_stable(k)}:{_stable(v)}" for k, v in x.items())) + "}"
     if isinstance(x, (list, tuple)):
         return f"{type(x).__name__}[" + ",".join(_stable(v) for v in x) + "]"
-    return repr(x)
+    if isinstance(x, types.FunctionType):
+        return f"<function {_qualname(x)} {_own_hash(x.__code__)}>"
+    if isinstance(x, types.MethodType):
+        return f"<method {_stable(x.__func__)} of {_qualname(type(x.__self__))}>"
+    if isinstance(x, type):
+        return f"<class {_qualname(x)}>"
+    if isinstance(x, (types.BuiltinFunctionType, types.BuiltinMethodType)):
+        return f"<built-in {_qualname(x)}>"
+    return _ADDR.sub("", repr(x))
 
 
 def _code_parts(co: types.CodeType) -> Iterable:
@@ -156,14 +226,23 @@ def _resolve_import(name: str, frm: Optional[str]):
         return None
 
 
-def _refs(fn) -> tuple[list, set]:
-    """(objects a function refers to, attribute names it reads) — globals, module attributes
-    after `X.attr`, locally imported names; nested code included."""
-    co = fn.__code__
-    g = getattr(fn, "__globals__", {}) or {}
-    objs: list = []
-    attrs: set = set()
-    local: dict = {}
+# what `dis` finds in a code object, kept per code object (SP-878): {id(code): (code, events)}. A code
+# object never changes, so its scan is the same every time; what the names it reads point to is
+# looked up again on every walk (_refs), so a module global replaced at run time (a test's
+# monkeypatch) is followed as it is now. The code object is held so its id is never reused.
+_SCAN: dict = {}
+_GLOBAL, _ATTR, _IMPORT, _FROM = 0, 1, 2, 3
+_LOCAL_LOADS = ("LOAD_FAST", "LOAD_DEREF", "LOAD_CLOSURE")
+
+
+def _scan(co: types.CodeType) -> tuple:
+    """The instructions _refs resolves, in order, for a code object and its nested code:
+    (_IMPORT, top package, stored as) for `import a.b as c` / `import a`; (_FROM, module, name,
+    stored as | None); (_GLOBAL, name); (_ATTR, name, "global" | "local" | None, base name)."""
+    hit = _SCAN.get(id(co))
+    if hit is not None and hit[0] is co:
+        return hit[1]
+    events: list = []
     for c in _codes(co):
         ins = list(dis.get_instructions(c))
         pending = None
@@ -176,39 +255,86 @@ def _refs(fn) -> tuple[list, set]:
                     # `import a.b as c` (3.11: IMPORT_FROM follows) or plain `import a`
                     nxt = ins[i + 1] if i + 1 < len(ins) else None
                     if nxt is not None and nxt.opname.startswith("STORE"):
-                        local[nxt.argval] = _resolve_import(pending.split(".")[0], None)
+                        events.append((_IMPORT, pending.split(".")[0], nxt.argval))
             elif op == "IMPORT_FROM" and pending:
                 nxt = ins[i + 1] if i + 1 < len(ins) else None
-                obj = _resolve_import(pending, x.argval)
-                if nxt is not None and nxt.opname.startswith("STORE"):
-                    local[nxt.argval] = obj
-                if obj is not None:
-                    objs.append(obj)
+                events.append((_FROM, pending, x.argval,
+                               nxt.argval if nxt is not None and nxt.opname.startswith("STORE") else None))
             elif op in ("LOAD_GLOBAL", "LOAD_NAME"):
-                if x.argval in g:
-                    objs.append(g[x.argval])
-                    if not callable(g[x.argval]) and not isinstance(g[x.argval], types.ModuleType):
-                        objs.append(("const", fn.__module__, x.argval))
-                else:
-                    objs.append(("const", fn.__module__, x.argval))
+                events.append((_GLOBAL, x.argval))
             elif op in ("LOAD_ATTR", "LOAD_METHOD"):
-                attrs.add(x.argval)
                 prev = ins[i - 1] if i else None
-                if prev is not None:
-                    base = None
-                    if prev.opname in ("LOAD_GLOBAL", "LOAD_NAME"):
-                        base = g.get(prev.argval)
-                    elif prev.opname in ("LOAD_FAST", "LOAD_DEREF", "LOAD_CLOSURE"):
-                        base = local.get(prev.argval)
-                    if isinstance(base, types.ModuleType) and _ours(base):
-                        if hasattr(base, x.argval):
-                            v = getattr(base, x.argval)
-                            objs.append(v)
-                            if not callable(v) and not isinstance(v, types.ModuleType):
-                                objs.append(("const", base.__name__, x.argval))
-                    elif isinstance(base, type) and _ours(base) and x.argval in vars(base):
-                        objs.append(vars(base)[x.argval])
+                where = None
+                if prev is not None and prev.opname in ("LOAD_GLOBAL", "LOAD_NAME"):
+                    where = "global"
+                elif prev is not None and prev.opname in _LOCAL_LOADS:
+                    where = "local"
+                events.append((_ATTR, x.argval, where, prev.argval if where else None))
+    out = tuple(events)
+    _SCAN[id(co)] = (co, out)
+    return out
+
+
+def _refs(fn) -> tuple[list, set]:
+    """(objects a function refers to, attribute names it reads) — globals, module attributes
+    after `X.attr`, locally imported names; nested code included."""
+    g = getattr(fn, "__globals__", {}) or {}
+    objs: list = []
+    attrs: set = set()
+    local: dict = {}
+    for e in _scan(fn.__code__):
+        kind = e[0]
+        if kind == _IMPORT:
+            local[e[2]] = _resolve_import(e[1], None)
+        elif kind == _FROM:
+            obj = _resolve_import(e[1], e[2])
+            if e[3] is not None:
+                local[e[3]] = obj
+            if obj is not None:
+                objs.append(obj)
+        elif kind == _GLOBAL:
+            name = e[1]
+            if name in g:
+                objs.append(g[name])
+                if not callable(g[name]) and not isinstance(g[name], types.ModuleType):
+                    objs.append(("const", fn.__module__, name))
+            else:
+                objs.append(("const", fn.__module__, name))
+        else:
+            name, where, base_name = e[1], e[2], e[3]
+            attrs.add(name)
+            base = g.get(base_name) if where == "global" else local.get(base_name) if where == "local" else None
+            if isinstance(base, types.ModuleType) and _ours(base):
+                if hasattr(base, name):
+                    v = getattr(base, name)
+                    objs.append(v)
+                    if not callable(v) and not isinstance(v, types.ModuleType):
+                        objs.append(("const", base.__name__, name))
+            elif isinstance(base, type) and _ours(base) and name in vars(base):
+                objs.append(vars(base)[name])
     return objs, attrs
+
+
+def _default_refs(fn) -> list:
+    """Functions, methods and classes among a function's default values (also inside a tuple, list,
+    set or dict), to be followed like the names it reads."""
+    out: list = []
+
+    def walk(v, depth):
+        if isinstance(v, (types.FunctionType, types.MethodType, type, staticmethod, classmethod,
+                          property, functools.partial)):
+            out.append(v)
+        elif isinstance(v, dict) and depth < 3:
+            for k, x in v.items():
+                walk(k, depth + 1)
+                walk(x, depth + 1)
+        elif isinstance(v, (list, tuple, set, frozenset)) and depth < 3:
+            for x in v:
+                walk(x, depth + 1)
+
+    walk(fn.__defaults__ or (), 0)
+    walk(fn.__kwdefaults__ or {}, 0)
+    return out
 
 
 def _unwrap(f):
@@ -225,9 +351,15 @@ def _unwrap(f):
     return f
 
 
-def closure(roots: Iterable[Any], context: Iterable[type] = ()) -> dict:
-    """{qualified name: hash part} of everything the roots reach (see the module doc)."""
+def closure(roots: Iterable[Any], context: Iterable[type] = (), skip: Iterable[str] = (),
+            merge: bool = False) -> dict:
+    """{qualified name: hash part} of everything the roots reach (see the module doc).
+    `skip`: qualified names of functions this cache never follows, like PLUMBING but for one
+    caller (a method reached only by name whose effect the cache key holds as a value).
+    `merge`: functions sharing a qualified name all count, not just the last one reached."""
+    skip = PLUMBING | frozenset(skip)
     parts: dict = {}
+    same: dict = {}
     classes: list = [c for c in context]
     attrs: set = set()
     todo = list(roots)
@@ -248,7 +380,7 @@ def closure(roots: Iterable[Any], context: Iterable[type] = ()) -> dict:
             o = todo.pop()
             if isinstance(o, tuple) and len(o) == 3 and o[0] == "const":
                 key = f"{o[1]}:{o[2]}"
-                if key not in parts:
+                if key not in parts and o[1] not in PLUMBING_MODULES:
                     m = sys.modules.get(o[1])
                     c = _constant(m, o[2]) if m is not None else None
                     if c is not None and not isinstance(c, tuple):
@@ -262,7 +394,7 @@ def closure(roots: Iterable[Any], context: Iterable[type] = ()) -> dict:
             if isinstance(o, type):
                 if _ours(o):
                     seen_ids.add(id(o))
-                    if f"{o.__module__}.{o.__qualname__}" in PLUMBING:
+                    if f"{o.__module__}.{o.__qualname__}" in skip:
                         continue
                     classes.append(o)
                     parts[f"class:{o.__module__}.{o.__qualname__}"] = repr([b.__qualname__ for b in o.__mro__])
@@ -276,15 +408,16 @@ def closure(roots: Iterable[Any], context: Iterable[type] = ()) -> dict:
             if not _ours(fn):
                 continue
             seen_ids.add(id(fn))
-            if f"{fn.__module__}.{fn.__qualname__}" in PLUMBING:
+            if f"{fn.__module__}.{fn.__qualname__}" in skip or fn.__module__ in PLUMBING_MODULES:
                 continue
-            h = hashlib.sha1()
-            for p in _code_parts(fn.__code__):
-                h.update(p if isinstance(p, bytes) else _stable(p).encode("utf-8"))
-                h.update(b"\x00")
+            h = _code_sha(fn.__code__)
             h.update(_stable(fn.__defaults__).encode("utf-8"))
             h.update(_stable(fn.__kwdefaults__ or {}).encode("utf-8"))
-            parts[f"{fn.__module__}.{fn.__qualname__}"] = h.hexdigest()
+            key = f"{fn.__module__}.{fn.__qualname__}"
+            parts[key] = h.hexdigest()
+            if merge:
+                same.setdefault(key, set()).add(parts[key])
+            todo.extend(_default_refs(fn))       # a default `gpx=stored_course` is code it runs (SP-773)
             objs, a = _refs(fn)
             new_attrs = a - attrs
             attrs |= a
@@ -298,16 +431,23 @@ def closure(roots: Iterable[Any], context: Iterable[type] = ()) -> dict:
                             if name in vars(k):
                                 todo.append(vars(k)[name])
         break
+    for key, hs in same.items():
+        if len(hs) > 1:
+            parts[key] = "+".join(sorted(hs))
     return parts
 
 
-def code_hash(*roots, context: Iterable[type] = (), extra: Any = None) -> str:
-    """A short hash of the code the roots reach (+ `extra`, e.g. a manual version)."""
-    key = (tuple(id(r) for r in roots), tuple(id(c) for c in context), repr(extra))
+def code_hash(*roots, context: Iterable[type] = (), extra: Any = None, skip: Iterable[str] = (),
+              merge: bool = False) -> str:
+    """A short hash of the code the roots reach (+ `extra`, e.g. a manual version); `skip`
+    and `merge` as in closure()."""
+    skip = frozenset(skip)
+    key = (tuple(id(r) for r in roots), tuple(id(c) for c in context), repr(extra), tuple(sorted(skip)),
+           merge)
     hit = _MEMO.get(key)
     if hit is not None:
         return hit
-    out = _digest(closure(roots, context), extra)
+    out = _digest(closure(roots, context, skip, merge), extra)
     _MEMO[key] = out
     return out
 

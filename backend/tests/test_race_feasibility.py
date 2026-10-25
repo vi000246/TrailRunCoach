@@ -722,7 +722,8 @@ def test_calculator_page_names_the_trail_strategy_and_the_hr_fade():
     import json
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "static"
-    page = (root / "racepower.html").read_text("utf-8")
+    # SP-784: the chart's legend is static/seg_profile.js, which racepower.html loads
+    page = (root / "racepower.html").read_text("utf-8") + (root / "seg_profile.js").read_text("utf-8")
     assert 'T(t === "trail" ? "strategy.even_trail" : "strategy.even_road")' in page
     assert 'm === "hr" && P.type === "trail"' in page and 'T("legend.hr_fade")' in page
     assert 'data-i18n="racepower.strategy.tip"' in page

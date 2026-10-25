@@ -52,7 +52,7 @@ from dataclasses import asdict, dataclass, field, fields, replace
 from typing import Iterable, Optional
 
 from backend.engine.hr_profile import below
-from backend.i18n import _
+from backend.i18n import M_, N_, _
 
 KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.days": "days",
@@ -115,14 +115,16 @@ WD_ZH = "一二三四五六日"
 LONG_WD = {d: i for i, d in enumerate(WD)}      # 長跑日: any weekday (was sat / sun only)
 # rest = 休息日偏好 (SP-82): the weekdays the athlete would rather rest, first / second choice (engine/rest_days.py)
 PREF_KINDS = ("quality", "aet_test", "cp_test", "strides", "rest")
-PREF_LABEL = {"long": "LSD", "quality": "間歇", "aet_test": "AeT 測試", "cp_test": "CP 測試", "strides": "坡道衝刺／加速跑",
-              "rest": "休息日"}
+PREF_LABEL = {"long": N_("LSD"), "quality": N_("間歇"), "aet_test": N_("AeT 測試"), "cp_test": N_("CP 測試"),
+              "strides": N_("坡道衝刺／加速跑"), "rest": N_("休息日")}
+# 週一…週日 as a word of the week notes (M_ parameters: shown in the page's language, SP-839)
+WD_NAME = (N_("週一"), N_("週二"), N_("週三"), N_("週四"), N_("週五"), N_("週六"), N_("週日"))
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
 
-NOTE_HARD = "受限於你的偏好，本週少 {h} 小時；想補量可以多排一天或放寬長跑日上限"
-NOTE_SOFT = "單次上限 {cap} 分：多出的 {m} 分鐘放在長跑日（盡量不超過）"
-NOTE_AET_TEST = "AeT 飄移測試至少要 10 分暖身＋40 分固定功率（共 50 分，UA 不建議更短），不受單次時間上限"
+NOTE_HARD = N_("受限於你的偏好，本週少 {h} 小時；想補量可以多排一天或放寬長跑日上限")
+NOTE_SOFT = N_("單次上限 {cap} 分：多出的 {m} 分鐘放在長跑日（盡量不超過）")
+NOTE_AET_TEST = N_("AeT 飄移測試至少要 10 分暖身＋40 分固定功率（共 50 分，UA 不建議更短），不受單次時間上限")
 
 
 def note_test(protocol: Optional[str]) -> str:
@@ -321,8 +323,8 @@ def drop_overlaps(p: Prefs) -> tuple:
 def check(p: Prefs) -> None:
     """Cross-field rules the per-key validation can't see."""
     for b in overlaps(p):
-        raise ValueError(_("週{day}已給{taken}，不能再排{kind}（一天只能指定一種課）", day=WD_ZH[b["wd"]],
-                           taken=PREF_LABEL[b["owner"]], kind=PREF_LABEL[b["kind"]]))
+        raise ValueError(_("{day}已給{taken}，不能再排{kind}（一天只能指定一種課）", day=_(WD_NAME[b["wd"]]),
+                           taken=_(PREF_LABEL[b["owner"]]), kind=_(PREF_LABEL[b["kind"]])))
     n_days = sum(bool(x) for x in p.days)
     if p.runs is not None and p.runs > n_days:
         raise ValueError(_("每週跑步次數 {runs} 比可練日（{days} 天）多", runs=p.runs, days=n_days))
@@ -486,34 +488,36 @@ def _terrain_long(s: dict, p: Prefs, c: Ctx) -> None:
     if t == "auto" or (t == "road" and "馬拉松配速" in (s.get("title") or "")):
         return                  # (a 路跑 專項期 long run with its marathon-pace segment is road already)
     s["terrain"] = t
+    # (SP-905: a session's 說明 is msgids joined by 「；」, each shown in the page's language — engine/stored_text)
     if t == "road":
         s["title"] = "LSD（路跑）"
-        s["detail"] = f"平路或緩坡；全程心率壓在{below(c.cap())}"
+        s["detail"] = _("平路或緩坡") + "；" + _("全程心率壓在{cap}", cap=below(c.cap()))
     else:
         s["title"] = "LSD（山路越野）"
         s["target"] = easy_hr_text(c.aet, c.aet_measured)
-        s["detail"] = f"山路越野，陡坡用走的；只看心率（≤ {c.cap()}），山路的配速和功率不準"
+        s["detail"] = _("山路越野，陡坡用走的") + "；" + _("只看心率（≤ {cap}），山路的配速和功率不準", cap=c.cap())
 
 
 def _easy(template: Optional[dict], i: int, minutes: float, p: Prefs, c: Ctx) -> dict:
     base = dict(template) if template else {
-        "kind": "easy", "title": "輕鬆跑", "target": "", "detail": f"心率不超過{c.cap()}", "source": "Uphill Athlete",
-        "day": None, "done": False, "done_by": None}
+        "kind": "easy", "title": "輕鬆跑", "target": "", "detail": _("心率不超過{cap}", cap=c.cap()),
+        "source": "Uphill Athlete", "day": None, "done": False, "done_by": None}
     strides = i == 0 and any(w in (template or {}).get("title", "") for w in ("衝刺", "加速跑"))
     s = {**base, "id": f"easy{i + 1}", "kind": "easy", "minutes": _r5(minutes), "day": None,
          "done": False, "done_by": None}
     if not strides:
         s["title"] = "輕鬆跑"
-        s["detail"] = f"心率不超過{c.cap()}"
+        s["detail"] = _("心率不超過{cap}", cap=c.cap())
     t = p.terrain_easy
     if t == "trail":
-        from backend.engine.overview import TRANSITION_STRIDES
+        from backend.engine.overview import HILL_STRIDES, TRANSITION_STRIDES
         tr = strides and TRANSITION_STRIDES[0] in (template or {}).get("title", "")    # 轉換期 (SP-103): kept as is
         s["terrain"] = "trail"
         s["title"] = "輕鬆越野跑" + ((TRANSITION_STRIDES[0] if tr else "＋坡道衝刺 8×10 秒") if strides else "")
         s["target"] = easy_hr_text(c.aet, c.aet_measured)
-        s["detail"] = f"山路或步道；只看心率 ≤ {c.cap()}，配速和功率在山路不準" + \
-            ((TRANSITION_STRIDES[1] if tr else "；最後 8 趟 10 秒上坡衝刺，走下來恢復") if strides else "")
+        # (HILL_STRIDES[1] = 「；最後 8 趟 10 秒上坡衝刺，走下來恢復」)
+        s["detail"] = _("山路或步道") + "；" + _("只看心率 ≤ {cap}，配速和功率在山路不準", cap=c.cap()) + \
+            ((TRANSITION_STRIDES[1] if tr else HILL_STRIDES[1]) if strides else "")
         rate = c.rates.get("easy_trail") or c.rate("trail")
     else:
         if t == "road":
@@ -523,6 +527,9 @@ def _easy(template: Optional[dict], i: int, minutes: float, p: Prefs, c: Ctx) ->
     # the easy-run rates come from genuinely easy runs only (overview.easy_tss_rates, SP-302)
     s["tss"] = s["minutes"] / 60.0 * float(rate)
     return s
+
+
+FLAT_REPS = N_("平路 {n} 分鐘，慢跑 {n} 分鐘恢復")      # _quality_terrain's flat rewrite of 「上坡 N 分鐘（…），…」
 
 
 def _quality_terrain(s: dict, p: Prefs) -> None:
@@ -536,16 +543,17 @@ def _quality_terrain(s: dict, p: Prefs) -> None:
     uphill = "爬坡" in s["title"] or s["title"].endswith("上坡")
     if t == "flat" and uphill:
         s["title"] = re.sub(r"上坡$", "", s["title"]).replace("爬坡間歇", "間歇") + "（平路）"
+        # (SP-905: the rewritten part is the msgid FLAT_REPS, filled in)
         s["detail"] = re.sub(r"上坡 (\d+) 分鐘（[^）]*），慢跑或走下來恢復", r"平路 \1 分鐘，慢跑 \1 分鐘恢復",
                              s.get("detail") or "")
         s["terrain"] = "road"
     elif t == "flat":
         s["title"] += "（平路）"
-        s["detail"] = "平路或跑步機；" + (s.get("detail") or "")
+        s["detail"] = _("平路或跑步機") + "；" + (s.get("detail") or "")
         s["terrain"] = "road"
     elif t == "hill" and not uphill:
         s["title"] += "（坡道）"
-        s["detail"] = "找 4–8% 的長坡，上坡跑、下坡慢跑回來；" + (s.get("detail") or "")
+        s["detail"] = _("找 4–8% 的長坡，上坡跑、下坡慢跑回來") + "；" + (s.get("detail") or "")
         s["terrain"] = "trail"
     else:
         s["terrain"] = "trail"
@@ -567,7 +575,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
     # ---- quality count + terrain + interval target ------------------------
     if p.quality == 0 and hard:
         if any(s["kind"] == "test" for s in hard):
-            c.notes.append({"level": "info", "src": "prefs", "text": "偏好每週 0 次品質課：CP 測試也先不排"})
+            c.notes.append({"level": "info", "src": "prefs", "text": M_("偏好每週 0 次品質課：CP 測試也先不排")})
         hard = []
     q = [s for s in hard if s["kind"] == "quality"]
     if p.quality == 2 and c.allow_quality and len(q) == 1 and c.mode != "recovery_week" and (c.quality_cap or 2) >= 2:
@@ -580,8 +588,9 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
             hard.append({**q[0], "id": "quality2"})
         else:
             c.notes.append({"level": "info", "src": "quality_share",
-                            "text": f"偏好每週 2 堂品質課，但兩堂「{q[0]['title']}」會超過一週間歇總量上限"
-                                    f"（跑步時間 {QUALITY_SHARE_MAX:.0%}；教練中位數：80/20 Endurance 約 20%、Campos 2022 ≤ 30%、UA 和 Koop 約 10%）：本週排 1 堂"})
+                            "text": _("偏好每週 2 堂品質課，但兩堂「{title}」會超過一週間歇總量上限"
+                                      "（跑步時間 {share:.0%}；教練中位數：80/20 Endurance 約 20%、Campos 2022 ≤ 30%、"
+                                      "UA 和 Koop 約 10%）：本週排 1 堂", title=q[0]['title'], share=QUALITY_SHARE_MAX)})
     elif len(q) > 1 and (p.quality == 1 or (c.quality_cap or 2) < 2):
         hard = [s for s in hard if s["kind"] != "quality" or s is q[0]]
     for s in hard:
@@ -603,7 +612,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
                 if AT.is_xu(s):
                     continue                    # on the long day, not a weekday session
                 c.notes.append({"level": "info", "src": "prefs",
-                                "text": NOTE_AET_TEST if s["id"] == "test_aet"
+                                "text": M_(NOTE_AET_TEST) if s["id"] == "test_aet"
                                 else note_test(s.get("protocol") or "standard")})
             elif s["kind"] == "quality":
                 from backend.engine.warmup import floor_min
@@ -618,7 +627,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
     strength = [s for s in ss if s["kind"] == "strength"]
     if p.strength is not None:
         tpl = strength_t or {"kind": "strength", "title": "肌力（下肢單腳＋核心）", "minutes": 35, "target": "",
-                             "detail": "膝主導＋臀中肌；安排在輕鬆日或跑完後", "source": "Uphill Athlete",
+                             "detail": _("膝主導＋臀中肌；安排在輕鬆日或跑完後"), "source": "Uphill Athlete",
                              "tss": 35 / 60 * c.rate("strength"), "day": None, "done": False, "done_by": None}
         strength = [{**tpl, "id": f"strength{i + 1}", "day": None} for i in range(p.strength)]
 
@@ -661,11 +670,11 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
             excess -= fit
             if excess >= 5 and p.cap_mode == "soft":
                 target["minutes"] = _r5(target["minutes"] + excess)
-                c.notes.append({"level": "info", "src": "prefs", "text": NOTE_SOFT.format(cap=cap if cap is not None else long_cap,
+                c.notes.append({"level": "info", "src": "prefs", "text": M_(NOTE_SOFT, cap=cap if cap is not None else long_cap,
                                                                           m=_r5(excess))})
                 excess = 0.0
         if excess >= 5:
-            c.notes.append({"level": "watch", "src": "prefs", "text": NOTE_HARD.format(h=f"{excess / 60.0:.1f}")})
+            c.notes.append({"level": "watch", "src": "prefs", "text": M_(NOTE_HARD, h=f"{excess / 60.0:.1f}")})
 
     # ---- terrain and TSS of the long session ----------------------------------
     if long_s is not None:
@@ -684,8 +693,8 @@ QUALITY_ORDER = (1, 2, 3, 0, 4, 5, 6)          # Tue, Wed, Thu, Mon, Fri, Sat, S
 # UA (「minimum 48 hours … 72 is preferable」), Friel (48–72 h), Bompa & Buzzichelli 2015 p.167–168 and Stanley,
 # Peake & Buchheit 2013 (parasympathetic recovery ≥ 48 h after high intensity) — not Seiler 2007, whose HRV
 # recovery is minutes to hours. 台灣教練: Zone 5 at most twice a week.
-SRC_GAP = ("UA（至少 48 小時，72 更好）、Friel（48–72 小時）、Bompa p.167–168、Stanley 2013（高強度後副交感恢復 ≥ 48 小時）："
-           "強度課與長跑隔 ≥ 48 小時；台灣教練：5 區一週最多 2 次、間隔至少 2 天")
+SRC_GAP = N_("UA（至少 48 小時，72 更好）、Friel（48–72 小時）、Bompa p.167–168、Stanley 2013（高強度後副交感恢復 ≥ 48 小時）："
+             "強度課與長跑隔 ≥ 48 小時；台灣教練：5 區一週最多 2 次、間隔至少 2 天")
 LONG_MIN_TYPICAL = 90                            # 推估: an LSD rarely fits under 90 min
 
 
@@ -706,10 +715,13 @@ def day_conflicts(p: Prefs, auto_long_wd: int = 5) -> list[dict]:
     """Where the preferred weekdays break the default rules: [{"code", "kind", "wd", "rule",
     "source", "text", "action", "keep"}]. `keep` = the athlete chose 照我的偏好 for that code
     (pref_keep): the planner then keeps the preference; otherwise it moves the session and
-    says so. Codes: gap48, after_long, not_allowed, cap_long, z5_twice, aet_weekday, aet_gap."""
+    says so. Codes: gap48, after_long, not_allowed, cap_long, z5_twice, aet_weekday, aet_gap.
+    The texts are M_() (SP-907): the 課表偏好 dialog gets them in the request's language, and the one a
+    week note quotes (place: 「… → 這週改排別天」) follows the page's language from the shared plan cache."""
     out = []
     lw = long_weekday(p, auto_long_wd)
     q = p.pref_of("quality")
+    wdn = lambda wd: M_(WD_NAME[wd])            # noqa: E731 — 「週二」 as a word of the texts
 
     def add(code, kind, wd, rule, source, text, action):
         out.append({"code": code, "kind": kind, "wd": wd, "rule": rule, "source": source, "text": text,
@@ -717,36 +729,42 @@ def day_conflicts(p: Prefs, auto_long_wd: int = 5) -> list[dict]:
     for kind in PREF_KINDS:
         for wd in p.pref_of(kind):
             if not p.days[wd] and kind != "rest":          # (a day that isn't 可練日 is a rest day anyway)
-                add(f"not_allowed:{kind}:{wd}", kind, wd, "可練日", "課表偏好", f"{PREF_LABEL[kind]}偏好週{WD_ZH[wd]}，但週{WD_ZH[wd]}不是可練日",
-                    "改排在可練的日子")
+                add(f"not_allowed:{kind}:{wd}", kind, wd, M_("可練日"), M_("課表偏好"),
+                    M_("{kind}偏好{wd}，但{wd}不是可練日", kind=M_(PREF_LABEL[kind]), wd=wdn(wd)),
+                    M_("改排在可練的日子"))
+    src_gap = M_(SRC_GAP)
     for wd in q[:1]:
         g = _gap(wd, lw)
         alt = _better_day(p, lw)
-        alt_t = f"週{WD_ZH[alt]}" if alt is not None else "別天"
+        alt_t = wdn(alt) if alt is not None else M_("別天")
+        move = M_("改到{alt}", alt=alt_t) if alt is not None else M_("改到離長跑最遠的一天")
         if (wd - lw) % 7 == 1:
-            add("after_long", "quality", wd, "長跑隔天不排強度課", SRC_GAP,
-                f"間歇排在長跑（週{WD_ZH[lw]}）的隔天：長跑後腿還沒恢復（建議 ≥ 2 天，台灣教練）：要改到{alt_t}嗎？",
-                f"改到{alt_t}" if alt is not None else "改到離長跑最遠的一天")
+            add("after_long", "quality", wd, M_("長跑隔天不排強度課"), src_gap,
+                M_("間歇排在長跑（{lw}）的隔天：長跑後腿還沒恢復（建議 ≥ 2 天，台灣教練）：要改到{alt}嗎？",
+                   lw=wdn(lw), alt=alt_t), move)
         elif g < 2:
-            add("gap48", "quality", wd, "強度課與長跑隔 ≥ 48 小時", SRC_GAP,
-                f"間歇和 LSD 只隔 {g} 天（建議 ≥ 2 天，台灣教練）：要改到{alt_t}嗎？",
-                f"改到{alt_t}" if alt is not None else "改到離長跑最遠的一天")
+            add("gap48", "quality", wd, M_("強度課與長跑隔 ≥ 48 小時"), src_gap,
+                M_("間歇和 LSD 只隔 {g} 天（建議 ≥ 2 天，台灣教練）：要改到{alt}嗎？", g=g, alt=alt_t), move)
     if len(q) >= 2 and _gap(q[0], q[1]) < 2:
-        add("z5_twice", "quality", q[1], "5 區每週最多 2 次、間隔 ≥ 2 天", SRC_GAP,
-            f"兩個間歇偏好日週{WD_ZH[q[0]]}、週{WD_ZH[q[1]]}只隔 {_gap(q[0], q[1])} 天（台灣教練：至少隔 2 天）",
-            "第二堂改到隔 ≥ 2 天的日子")
+        add("z5_twice", "quality", q[1], M_("5 區每週最多 2 次、間隔 ≥ 2 天"), src_gap,
+            M_("兩個間歇偏好日{a}、{b}只隔 {g} 天（台灣教練：至少隔 2 天）", a=wdn(q[0]), b=wdn(q[1]),
+               g=_gap(q[0], q[1])),
+            M_("第二堂改到隔 ≥ 2 天的日子"))
     if lw < 5 and p.cap_long is None and p.cap_weekday is not None and p.cap_weekday < LONG_MIN_TYPICAL:
-        add("cap_long", "long", lw, "平日時間上限", "課表偏好（單次時間上限）",
-            f"長跑排在週{WD_ZH[lw]}，但平日上限只有 {p.cap_weekday} 分，LSD 放不下（通常 ≥ {LONG_MIN_TYPICAL} 分，推估）："
-            "設定「長跑日上限」或改到週末", "長跑照平日上限縮短")
+        add("cap_long", "long", lw, M_("平日時間上限"), M_("課表偏好（單次時間上限）"),
+            M_("長跑排在{wd}，但平日上限只有 {cap} 分，LSD 放不下（通常 ≥ {typ} 分，推估）：設定「長跑日上限」或改到週末",
+               wd=wdn(lw), cap=p.cap_weekday, typ=LONG_MIN_TYPICAL),
+            M_("長跑照平日上限縮短"))
     for kind in ("aet_test",):
         for wd in p.pref_of(kind)[:1]:
             if p.aet_test_days == "weekday" and wd >= 5:
-                add("aet_weekday", kind, wd, "AeT 測試只排平日（課表偏好 AeT 測試日）", "課表偏好",
-                    f"AeT 測試偏好週{WD_ZH[wd]}，但「AeT 測試日」設成只排平日", "改排平日（或把 AeT 測試日改成「任何一天」）")
+                add("aet_weekday", kind, wd, M_("AeT 測試只排平日（課表偏好 AeT 測試日）"), M_("課表偏好"),
+                    M_("AeT 測試偏好{wd}，但「AeT 測試日」設成只排平日", wd=wdn(wd)),
+                    M_("改排平日（或把 AeT 測試日改成「任何一天」）"))
             if _gap(wd, lw) < 2 or (q and _gap(wd, q[0]) < 1):
-                add("aet_gap", kind, wd, "測試前後不排長跑／強度課", "測試前一天輕鬆（推估）",
-                    f"AeT 測試偏好週{WD_ZH[wd]}，離長跑（週{WD_ZH[lw]}）或間歇太近：測出來的飄移會失真", "建議日期會避開，偏好日排在後面")
+                add("aet_gap", kind, wd, M_("測試前後不排長跑／強度課"), M_("測試前一天輕鬆（推估）"),
+                    M_("AeT 測試偏好{wd}，離長跑（{lw}）或間歇太近：測出來的飄移會失真", wd=wdn(wd), lw=wdn(lw)),
+                    M_("建議日期會避開，偏好日排在後面"))
     return out
 
 
@@ -758,7 +776,8 @@ def blocked_pref_notes(p: Prefs, monday: dt.date, blocked) -> list[dict]:
             d = (monday + dt.timedelta(days=wd)).isoformat()
             if d in (blocked or ()):
                 out.append({"level": "info", "src": "prefs",
-                            "text": f"{PREF_LABEL[kind]}偏好的週{WD_ZH[wd]}（{int(d[5:7])}/{int(d[8:10])}）是不排課日期：這週改排別天"})
+                            "text": M_("{kind}偏好的{wd}（{md}）是不排課日期：這週改排別天", kind=M_(PREF_LABEL[kind]),
+                                       wd=M_(WD_NAME[wd]), md=f"{int(d[5:7])}/{int(d[8:10])}")})
     return out
 
 
@@ -810,7 +829,7 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             if pick is None:
                 if notes is not None:
                     notes.append({"level": "info", "src": "prefs",
-                                  "text": "徐國峰 90 分鐘測試排在週末長跑日，本週沒有可練的週末：這週先不測"})
+                                  "text": M_("徐國峰 90 分鐘測試排在週末長跑日，本週沒有可練的週末：這週先不測")})
                 continue
             s["day"] = pick.isoformat()
             avail.remove(pick)
@@ -857,8 +876,9 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
                         break
                     if notes is not None:
                         why = next((c["text"] for c in conf if c["kind"] == "quality" and c["wd"] == wd),
-                                   f"週{WD_ZH[wd]}離長跑或另一堂強度課不到 2 天（台灣教練）")
-                        notes.append({"level": "watch", "src": "prefs", "text": f"{why} → 這週改排別天（要照偏好排，到課表偏好選「照我的偏好」）"})
+                                   M_("{wd}離長跑或另一堂強度課不到 2 天（台灣教練）", wd=M_(WD_NAME[wd])))
+                        notes.append({"level": "watch", "src": "prefs",
+                                      "text": M_("{why} → 這週改排別天（要照偏好排，到課表偏好選「照我的偏好」）", why=why)})
             pick = pick or next((d for d in cands if ok(d)), None) or next(
                 (d for d in cands if long_day is None or abs((d - long_day).days) >= 1), cands[0])
         elif s["kind"] == "easy" and any(w in (s.get("title") or "") for w in ("衝刺", "加速跑")) \

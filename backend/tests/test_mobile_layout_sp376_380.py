@@ -29,7 +29,8 @@ def test_phone_cards_cut_the_note_to_one_line_and_the_target_to_two():
 
 
 def test_one_finger_scrolls_the_page_over_charts_and_maps():
-    rp = (STATIC / "racepower.html").read_text("utf-8")
+    # SP-784: the profile chart is static/seg_profile.js, which racepower.html loads
+    rp = (STATIC / "racepower.html").read_text("utf-8") + (STATIC / "seg_profile.js").read_text("utf-8")
     assert 'const TOUCH = matchMedia("(pointer: coarse)").matches;' in rp
     assert 'TOUCH ? [{ type: "inside", moveOnMouseMove: false, preventDefaultMouseMove: false }' in rp
     assert "dragging: !TOUCH" in rp

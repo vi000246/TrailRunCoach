@@ -12,8 +12,11 @@ fresh dataset (a restarted server) alike, marked or not; the only change of sour
 later (a sync), from then on; 「你標了「當作間歇」」 is said only with the tag, and judging never writes it."""
 import datetime as dt
 
+import pytest
+
 from backend.engine import interval_eval as IE
 from backend.engine import workout_review as WR
+from backend.i18n import use_locale
 from backend.tests.test_interval_eval import _planned, _v1a_run
 from backend.tests.test_quality_gate import TODAY, _ds
 
@@ -83,3 +86,63 @@ def test_the_mark_is_named_only_when_the_tag_is_there(tmp_path, monkeypatch):
     for _ in range(2):
         v = WR.review(ds, w, "interval_verdict")
         assert v["badge"]["sub"].endswith("（你標了「當作間歇」：用偵測到的趟）"), v["badge"]
+
+
+# ---- R1 (Q1, 2026-10-20) ---------------------------------------------------------------------------
+
+def _detected(on: float):
+    """An unplanned run with 5 × 2′ at `on` W (CP 250): read on its detected reps."""
+    ds = _ds([_v1a_run(TODAY - dt.timedelta(days=3), on=on)])
+    ds.plan_rows = {}
+    return ds, ds.workouts[0]
+
+
+def test_detected_reps_say_the_band_they_fell_in_not_a_target():
+    """Q1-3: the 理由 line and the 每趟 tip of detected reps name the band the reps fell in
+    (「偵測到的趟落在超閾值帶（101–106% CP）」), never 「目標下限 101% CP」 — it read as a plan's target."""
+    ds, w = _detected(260.0)                                           # 104 % CP: 超閾值
+    e = IE.card_cached(ds, w)
+    assert e["kind"] == "detected" and not e["planned"] and e["band_text"] == "超閾值帶（101–106% CP）", e
+    v = WR.review(ds, w, "interval_verdict")
+    reasons = [r["data"]["value"] for r in v["series"]]
+    line = next(x for x in reasons if "趟達標" in x)
+    assert "偵測到的趟落在超閾值帶（101–106% CP）" in line and "目標下限" not in line, line
+    assert f"達標線 {e['floor']:.0f} W＝帶的下限 × {e['in_band_tol_text']}" in line, line
+    tip = {r["label"]: r for r in v["chip_rows"]}["每趟"]["tip"]
+    assert "偵測到的趟落在超閾值帶（101–106% CP）" in tip and "目標下限" not in tip and "目標上限" not in tip, tip
+    # the rule is unchanged: the same floor (the band's lower bound × the tolerance)
+    assert e["floor"] == pytest.approx(e["lo"] * e["cp"] * e["in_band_tol"])
+    with use_locale("en"):
+        v = WR.review(ds, w, "interval_verdict")
+    reasons = [r["data"]["value"] for r in v["series"]]
+    line = next(x for x in reasons if "on target" in x)
+    assert "the detected reps fall in the supra-threshold band (101–106% CP)" in line, line
+    assert "lower bound 101" not in line, line
+    tip = {r["label"]: r for r in v["chip_rows"]}["Each rep"]["tip"]
+    assert "supra-threshold band (101–106% CP)" in tip, tip
+
+
+def test_detected_band_text_edges():
+    assert IE.detected_band_text("VO2max", 1.06, 1.16) == "VO2max帶（106–116% CP）"
+    assert IE.detected_band_text("無氧", 1.16, 9.0) == "無氧帶（≥ 116% CP）"           # the open-ended band
+    assert IE.detected_band_text("", 0.82, 0.88) == "中位數 ±3% 的範圍（82–88% CP）"      # below every band
+    with use_locale("en"):
+        assert IE.detected_band_text("超閾值", 1.01, 1.06) == "supra-threshold band (101–106% CP)"
+
+
+def test_a_planned_session_still_says_its_target():
+    ds, w = _fresh_planned()
+    e = IE.card_cached(ds, w)
+    assert e["kind"] == "plan" and e["band_text"] is None
+    v = WR.review(ds, w, "interval_verdict")
+    line = next(r["data"]["value"] for r in v["series"] if "趟達標" in r["data"]["value"])
+    assert "目標下限" in line and "偵測到的趟" not in line, line
+
+
+def test_the_demo_build_adds_no_interval_mark():
+    """Q1-1 (b): the demo runner never pressed 「當作間歇判讀」 — its interval / hill / tempo runs are read
+    as anyone's (a quality run's detected reps, SP-519's automatic reading), not 「你標了「當作間歇」」."""
+    import inspect
+    from backend.demo import build as B
+    src = inspect.getsource(B._stage)
+    assert "FLAG_TAG" not in src and '"tags"' not in src

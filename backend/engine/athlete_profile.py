@@ -118,10 +118,10 @@ def effective_power_source(profile: dict, ds=None, today: Optional[dt.date] = No
     """(source, how): the entered one (「設定」), else detected (「自動偵測」)."""
     s = profile_power_source(profile)
     if s is not None:
-        return s, "設定"
+        return s, N_("設定")
     if ds is None:
-        return "none", "預設"
-    return detect_power_source(ds, today)["source"], "自動偵測"
+        return "none", N_("預設")
+    return detect_power_source(ds, today)["source"], N_("自動偵測")
 
 
 def use_power(source: str, accept_watch_power: bool) -> bool:

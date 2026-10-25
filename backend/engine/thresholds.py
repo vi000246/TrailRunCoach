@@ -319,36 +319,44 @@ def estimate_tpace(ds: Dataset, today: dt.date) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# maximum heart rate (推估) — the highest HR the athlete's own runs held
+# maximum heart rate (推估) — the highest HR the athlete's own runs reached
 #
 # Wrist optical HR only (no chest strap): its errors are short spikes (a jump
 # of 20–40 bpm within a second, often to 215–225) and cadence lock-on. Per
 # run, the shared cleaning (engine/hr_quality.clean, SP-265: gaps > 5 s, out
 # of range, spikes, moving up-steps, cadence lock — the numbers live there), then the run's
-# peak = the highest HR held for ≥ 5 s (the max of the rolling 5-s minimum
-# over valid samples), so a 1–4 s spike can't count.
+# peak = the best 10-s mean HR (the max of the rolling 10-s mean over fully valid
+# windows, hr_quality.rolling_mean_peak), so a 1–4 s spike can't decide it.
 # Result: the highest per-run peak of the runs (road, trail, treadmill) in the
-# 365 days up to the date; when that one run stands > 5 bpm above the next
-# (MHR_OUTLIER), it is taken as an artefact and the second-highest is used.
+# 365 days up to the date — the top run is used as it is.
+# SP-493 R2 (owner 2026-10-20, Q4): it was the highest HR held ≥ 5 s, and the top run
+# was dropped when it stood > 5 bpm above the next (MHR_OUTLIER, 2026-10-03). That rule
+# predates the shared cleaning (SP-265, 10-06), which removes the spikes, the up-steps,
+# the values > 220 and the cadence lock first; and one all-out test or race is exactly
+# the evidence a max HR needs. 「撐 10 秒」 (every second ≥ the value) was too hard to
+# reach, so the 10-s mean. A 10-s artefact that survives the cleaning still shows in the
+# confidence card's 120-s check (threshold_confidence.hrmax_check).
 # ≥ 3 runs with HR are needed. Every number here is 推估 (no source); the
 # value is a floor — a runner rarely reaches true HRmax outside a test.
 # ---------------------------------------------------------------------------
 
-MHR_KEY = "mhr_peak5_v2"      # v2 (SP-265): the shared cleaning (3-s spikes, cadence lock)
+MHR_KEY = "mhr_peak5_v3"      # v2 (SP-265): the shared cleaning; v3 (SP-493 R2): the best 10-s mean
 MHR_DAYS = 365
-MHR_HOLD_S = 5
-MHR_OUTLIER = 5.0
+MHR_MEAN_S = 10
 MHR_MIN_RUNS = 3
+MHR_REASON = N_("推估：近 {days} 天 {n} 次跑步中，10 秒平均心率的最高值"
+                "（先濾掉光學心率尖刺：3 秒內跳 ≥ 15 bpm 又回來、超過 220、跟著步頻）")
+MHR_TOO_FEW = N_("近 {days} 天只有 {n} 次跑步有心率（需要 ≥ {need} 次）")
 
 
 def peak_sustained_hr(t, hr, cadence_spm=None, speed_kmh=None) -> Optional[float]:
-    """The highest HR held ≥ MHR_HOLD_S seconds after the shared cleaning
-    (hr_quality.clean); None without enough valid samples."""
+    """The best MHR_MEAN_S-second mean HR after the shared cleaning
+    (hr_quality.clean, then hr_quality.rolling_mean_peak); None without enough valid samples."""
     from backend.engine import hr_quality as HQ
     c = HQ.clean(t, hr, cadence_spm, speed_kmh=speed_kmh)
     if c is None:
         return None
-    return HQ.held_peak(c[1], MHR_HOLD_S)
+    return HQ.rolling_mean_peak(c[1], MHR_MEAN_S)
 
 
 def _cadence_spm(ds, w):
@@ -365,11 +373,12 @@ def _cadence_spm(ds, w):
 
 def estimate_mhr(ds: Dataset, today: dt.date) -> dict:
     """Maximum HR (bpm, 推估) as of `today` from the runs of the 365 days up
-    to it: {"value", "n", "days", "peaks": [[date, bpm]] (top 5), "dropped",
-    "reason"}; value None with the reason when fewer than 3 runs have HR."""
+    to it: {"value", "n", "days", "peaks": [[date, bpm]] (top 5), "reason"};
+    value None with the reason when fewer than 3 runs have HR."""
+    from backend.i18n import current_locale
     tday = int(math.floor(date_to_day(today)))
     memo = getattr(ds, "memo", None)
-    mk = ("estimate_mhr", tday, len(getattr(ds, "workouts", []) or []))
+    mk = ("estimate_mhr", tday, len(getattr(ds, "workouts", []) or []), current_locale())   # the reason's language
     if isinstance(memo, dict) and mk in memo:
         return memo[mk]
     runs = [w for w in ds.workouts if w.sport == "run" and tday - MHR_DAYS < math.floor(w.day) <= tday]
@@ -388,20 +397,13 @@ def estimate_mhr(ds: Dataset, today: dt.date) -> dict:
         ds.flush_series()
     from backend.engine.wko5expr.dataset import day_to_date
     top = sorted(peaks, key=lambda p: -p[1])
-    out = {"value": None, "n": len(peaks), "days": MHR_DAYS, "dropped": None,
+    out = {"value": None, "n": len(peaks), "days": MHR_DAYS,
            "peaks": [[day_to_date(d).isoformat(), round(v)] for d, v in top[:5]]}
     if len(peaks) < MHR_MIN_RUNS:
-        out["reason"] = f"近 {MHR_DAYS} 天只有 {len(peaks)} 次跑步有心率（需要 ≥ {MHR_MIN_RUNS} 次）"
+        out["reason"] = _(MHR_TOO_FEW, days=MHR_DAYS, n=len(peaks), need=MHR_MIN_RUNS)
     else:
-        pick = top[0][1]
-        if top[0][1] - top[1][1] > MHR_OUTLIER:
-            out["dropped"] = [day_to_date(top[0][0]).isoformat(), round(top[0][1])]
-            pick = top[1][1]
-        out["value"] = round(pick)
-        out["reason"] = (f"推估：近 {MHR_DAYS} 天 {len(peaks)} 次跑步中，持續 ≥ {MHR_HOLD_S} 秒的最高心率"
-                         "（濾掉光學心率尖刺：3 秒內跳 ≥ 15 bpm 又回來、超過 220、跟著步頻）"
-                         + (f"；{out['dropped'][0]} 那次 {out['dropped'][1]} 比其他高太多，當成誤差不採用"
-                            if out["dropped"] else ""))
+        out["value"] = round(top[0][1])        # SP-493 R2: the top run stands (no outlier drop)
+        out["reason"] = _(MHR_REASON, days=MHR_DAYS, n=len(peaks))
     if isinstance(memo, dict):
         memo[mk] = out
     return out
@@ -409,7 +411,7 @@ def estimate_mhr(ds: Dataset, today: dt.date) -> dict:
 
 # ---------------------------------------------------------------------------
 # Hard efforts (SP-294, owner 2026-10-14): did the runs of the 365 days hold anything hard enough that
-# their 5-s peak (estimate_mhr) means something? An easy-only runner's peak is the top of his easy runs
+# their peak (estimate_mhr: the best 10-s mean) means something? An easy-only runner's peak is the top of his easy runs
 # — 147 against an age formula of 180 on docs/research/lthr-without-power.md §1.5 — so hr_profile.max_hr
 # prefers the age formula when the runs' value is > 10 bpm under it and nothing below counts as hard.
 # A run is hard when (first match wins, newest run first; all 推估 as markers of a hard effort):

@@ -265,6 +265,8 @@ html.anim .reveal.in { opacity: 1; transform: none; }
     <a class="brand" href="/"><i><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg></i><span>TrailRunCoach</span></a>
     <a class="link wide" href="/manual" data-i18n="intro.nav.manual">操作手冊</a>
     <a class="link wide" href="/about" data-i18n="intro.nav.about">關於</a>
+    <!-- SP-846: 方案與價格 — kept on a phone too (not .wide) -->
+    <a class="link" href="/pricing" data-i18n="intro.nav.pricing">方案與價格</a>
     <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:intro.lang.title" data-i18n="intro.lang.other">English</button>
     <a class="btn small primary signin" id="nav-login" href="/login" data-i18n="intro.nav.login">登入</a>
   </nav>
@@ -282,7 +284,7 @@ html.anim .reveal.in { opacity: 1; transform: none; }
           <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
           <a class="btn" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
         </div>
-        <p class="price" data-i18n="intro.cta.price">目前免費、名額有限，額滿收候補。</p>
+        <p class="price"><span data-i18n="intro.cta.price">免費方案可以一直用，名額有限、額滿收候補；訂閱即將開放（每月 NT$99 或每年 NT$890）。</span> <a href="/pricing" data-i18n="intro.cta.pricing">看方案與價格 →</a></p>
       </div>
       <!-- SP-637 R1: the 課表 calendar — the fictional runner's weeks before the 50K (/api/v1/intro/plan);
            tap a day for its sessions and their structure -->
@@ -363,6 +365,7 @@ html.anim .reveal.in { opacity: 1; transform: none; }
           <li data-i18n="intro.race.li.baiyue">百岳多日：按山屋與營地分日預覽，背包重量一起算</li>
           <li data-i18n="intro.race.li.group">跟團對照：拿開團的時刻表比一比，逐段看跟不跟得上</li>
           <li data-i18n="intro.race.li.share">算好的配速表可以存成課表，或用一個連結分享給同團的人</li>
+          <li><span data-i18n="intro.race.li.pace">揪團估腳程：上傳一趟爬山紀錄和路線，看這條路線大約幾小時、比一般登山客快還是慢（不用登入）</span> <a href="/share/pace" data-i18n="intro.race.pace_link">試算腳程 →</a></li>
         </ul>
       <!-- SP-637: the small calculator — the server computes (/api/v1/intro/estimate), the page only formats
            (R1: here in the race section, the 課表 calendar is the hero) -->
@@ -482,7 +485,7 @@ html.anim .reveal.in { opacity: 1; transform: none; }
         <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
         <a class="btn" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
       </div>
-      <p class="price" data-i18n="intro.cta.price">目前免費、名額有限，額滿收候補。</p>
+      <p class="price"><span data-i18n="intro.cta.price">免費方案可以一直用，名額有限、額滿收候補；訂閱即將開放（每月 NT$99 或每年 NT$890）。</span> <a href="/pricing" data-i18n="intro.cta.pricing">看方案與價格 →</a></p>
     </section>
   </div>
 </main>

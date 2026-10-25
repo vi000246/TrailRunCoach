@@ -6,6 +6,7 @@
 |---|---|---|
 | COROS / TrainingPeaks 登入 token、cookie | 本機資料庫 `~/.trailruncoach/wko5coach.db` | 帳密本身預設不保存 |
 | COROS / TrainingPeaks 密碼（只有勾「記住密碼」時） | 同一個資料庫的 `sync_state.coros_password_sealed`、`tp_password_sealed`（+ `tp_username`） | 見下方「記住密碼」 |
+| AI 問答的 API key（在設定頁貼上時，SP-785） | 擁有者資料夾的 `ai.json`（`api_key`，權限 600） | 環境變數 `TRC_ANTHROPIC_API_KEY`（或 `_FILE`）有設時用它、不存檔；畫面只顯示最後 4 碼，log 不印。見 `docs/spec/ai-qa.spec.md` |
 
 另外兩樣不加密、但也不會出現在 repo 或 API 回應裡：
 

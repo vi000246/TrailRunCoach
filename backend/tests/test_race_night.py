@@ -46,20 +46,18 @@ def test_sun_rows_prefer_open_meteo_and_cover_the_next_day():
     assert WX.sun_rows(None, 121.5, {dt.date(2026, 10, 7)}) is None
 
 
-def test_open_meteo_asks_for_sunrise_and_sunset(tmp_path):
-    seen = {}
+def test_met_norway_forecast_gets_noaa_sunrise_and_sunset(tmp_path):
+    # SP-797: MET Norway's forecast has no sunrise / sunset (Open-Meteo's daily values are gone): NOAA's
+    # formula, within a few minutes of Open-Meteo's 17:34 / 17:33 for the same place and days
+    from backend.tests.test_weather_met_sp797 import met_js
 
     def get(url, params, timeout):
-        seen.update(params)
-        times = [f"2026-10-07T{h:02d}:00" for h in range(24)]
-        return {"elevation": 300, "utc_offset_seconds": 28800,
-                "hourly": {"time": times, "temperature_2m": [20.0] * 24, "relative_humidity_2m": [80.0] * 24},
-                "daily": {"time": ["2026-10-07", "2026-10-08"], "sunrise": ["2026-10-07T05:51", "2026-10-08T05:52"],
-                          "sunset": ["2026-10-07T17:34", "2026-10-08T17:33"]}}
+        return met_js("2026-10-07")
     r = WX.race_conditions(date=dt.date(2026, 10, 7), lat=25.0, lon=121.5, elevation_m=300,
                            today=dt.date(2026, 10, 6), key=None, get=get, cache_dir=tmp_path, use_cwa=False)
-    assert seen["daily"] == "sunrise,sunset"
-    assert [x["sunset"] for x in r["sun"]] == ["2026-10-07T17:34", "2026-10-08T17:33"]
+    assert r["provider"] == "met_norway" and [x["src"] for x in r["sun"]] == ["noaa", "noaa"]
+    for x, ref in zip(r["sun"], ("2026-10-07T17:34", "2026-10-08T17:33")):
+        assert abs((dt.datetime.fromisoformat(x["sunset"]) - dt.datetime.fromisoformat(ref)).total_seconds()) <= 4 * 60
 
 
 # ---- dark spans -------------------------------------------------------------------------------

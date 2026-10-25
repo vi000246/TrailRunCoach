@@ -56,7 +56,7 @@ from typing import Optional
 
 import numpy as np
 
-from backend.i18n import N_, _
+from backend.i18n import M_, N_, _
 
 # (warm-up, main, cool-down) minutes per length
 VARIANTS = {"standard": (15, 60, 5),      # 80′: UA 40–60′ after a 10–15′ warm-up; Evoke 60′
@@ -81,46 +81,69 @@ LOWER_BPM = 5                   # 推估: > 5 % → start lower — UA says "low
                                 # gives a number (aerobic-base-readiness.md §8, 2026-10-06 verbatim check)
 # B3 (unsourced-rules.md): no fixed expiry / cadence any more (16 weeks, 4–6 weeks, every 5 base
 # weeks: no source). The test is due only for a reason (quality_gate.aet_test_reason).
-HEAT_TEXT = "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真；台灣教練、Lafrenz 2008）"
+HEAT_TEXT = N_("氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真；台灣教練、Lafrenz 2008）")
 
-SRC_UA_TEST = "Uphill Athlete 心率飄移測試（https://uphillathlete.com/aerobic-training/heart-rate-drift/，教練）"
+SRC_UA_TEST = N_("Uphill Athlete 心率飄移測試（https://uphillathlete.com/aerobic-training/heart-rate-drift/，教練）")
 
 # ---- the protocols (課表偏好 plan.prefs.aet_test_protocol) -------------------------
 # judge: ua = halves, UA's 3.5 / 5 % bands (finds the AeT HR); evoke = halves, > 5 % = above
 # AeT; friel = halves < 5 % / 5–10 / > 10 (aerobic endurance at AeT); xu = HR at minute 10 vs
 # minute 90, < 10 % = the base is sufficient (徐國峰's published comparison, not halves).
+# SP-905: the texts are msgids (a 「；」 outside brackets joins two: each is read back on its own)
 PROTOCOLS = {
-    "xu90": {"label": "徐國峰 90 分鐘平路 1 區", "warm": 10, "main": 80, "cool": 0, "judge": "xu",
-             "title": "AeT 飄移測試 徐國峰 90 分", "terrain": "平坦路段（排在週末長跑日）",
-             "hold": "配速固定在 E 配速，心率自然變", "rule": "第 10 分鐘心率 A、第 90 分鐘心率 B：(B − A) ÷ A < 10% 有氧基礎夠（5% 內國家級）",
-             "source": "徐國峰部落格（2016-12，有氧基礎檢測）；徐國峰《跑者都該懂的跑步數據》"},
-    "ua60": {"label": "Uphill Athlete 60 分", "warm": 15, "main": 60, "cool": 5, "judge": "ua",
-             "title": "AeT 飄移測試 60 分", "terrain": "跑步機 2–3% 或平路環線（不要山路）",
-             "hold": "固定功率（UA 原文固定配速；有 Stryd 用功率較穩）", "rule": "前半對後半：< 3.5% 低於 AeT、3.5–5% 前半心率就是 AeT、> 5% 起始太高",
+    "xu90": {"label": N_("徐國峰 90 分鐘平路 1 區"), "warm": 10, "main": 80, "cool": 0, "judge": "xu",
+             "title": "AeT 飄移測試 徐國峰 90 分", "terrain": N_("平坦路段（排在週末長跑日）"),
+             "hold": N_("配速固定在 E 配速，心率自然變"),
+             "rule": N_("第 10 分鐘心率 A、第 90 分鐘心率 B：(B − A) ÷ A < 10% 有氧基礎夠（5% 內國家級）"),
+             "source": "；".join((N_("徐國峰部落格（2016-12，有氧基礎檢測）"), N_("徐國峰《跑者都該懂的跑步數據》")))},
+    "ua60": {"label": N_("Uphill Athlete 60 分"), "warm": 15, "main": 60, "cool": 5, "judge": "ua",
+             "title": "AeT 飄移測試 60 分", "terrain": N_("跑步機 2–3% 或平路環線（不要山路）"),
+             "hold": N_("固定功率（UA 原文固定配速；有 Stryd 用功率較穩）"),
+             "rule": N_("前半對後半：< 3.5% 低於 AeT、3.5–5% 前半心率就是 AeT、> 5% 起始太高"),
              "source": SRC_UA_TEST},
-    "ua40": {"label": "Uphill Athlete 40 分（最短版）", "warm": 10, "main": 40, "cool": 0, "judge": "ua",
-             "title": "AeT 飄移測試 40 分", "terrain": "跑步機 2–3% 或平路環線",
-             "hold": "固定功率", "rule": "同 UA 60 分（\"If you only have 40 minutes, do that.\"、不建議短於 40 分）",
+    "ua40": {"label": N_("Uphill Athlete 40 分（最短版）"), "warm": 10, "main": 40, "cool": 0, "judge": "ua",
+             "title": "AeT 飄移測試 40 分", "terrain": N_("跑步機 2–3% 或平路環線"),
+             "hold": N_("固定功率"), "rule": N_("同 UA 60 分（\"If you only have 40 minutes, do that.\"、不建議短於 40 分）"),
              "source": SRC_UA_TEST},
-    "evoke60": {"label": "Evoke 60 分", "warm": 10, "main": 60, "cool": 5, "judge": "evoke",
-                "title": "AeT 飄移測試 Evoke 60 分", "terrain": "跑步機 2% 或平的環線（每 1.6 km 爬升 < 30 m、不要折返）",
-                "hold": "固定速度（\"DO NOT TOUCH THE SPEED CONTROL\"）", "rule": "1 小時內心率升 > 5% → 起始在 AeT 以上；第 10 分鐘已高 10 下還在升 → 提早放棄",
-                "source": "Evoke（https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-mountain-athlete/）"},
+    "evoke60": {"label": N_("Evoke 60 分"), "warm": 10, "main": 60, "cool": 5, "judge": "evoke",
+                "title": "AeT 飄移測試 Evoke 60 分", "terrain": N_("跑步機 2% 或平的環線（每 1.6 km 爬升 < 30 m、不要折返）"),
+                "hold": N_("固定速度（\"DO NOT TOUCH THE SPEED CONTROL\"）"),
+                "rule": "；".join((N_("1 小時內心率升 > 5% → 起始在 AeT 以上"), N_("第 10 分鐘已高 10 下還在升 → 提早放棄"))),
+                "source": N_("Evoke（https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-mountain-athlete/）")},
     "friel": {"label": N_("Friel 1 小時心率飄移"), "warm": 10, "main": 60, "cool": 5, "judge": "friel",
-              "title": "AeT 飄移測試 Friel 60 分", "terrain": "穩定的平路",
-              "hold": "在 AeT 心率附近穩定跑（1–2 小時取下限 1 小時）",
+              "title": "AeT 飄移測試 Friel 60 分", "terrain": N_("穩定的平路"),
+              "hold": N_("在 AeT 心率附近穩定跑（1–2 小時取下限 1 小時）"),
               "rule": N_("前後半心率飄移 < 5% 有氧耐力夠、5–10% 還在進步、> 10% 不足"),
-              "source": "Friel（https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/，教練）"},
+              "source": N_("Friel（https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/，教練）")},
 }
+
+
+def _parts(text: str) -> list[str]:
+    """A table text cut at its 「；」 outside brackets (the msgids it is joined from)."""
+    out, buf, depth = [], "", 0
+    for c in text:
+        depth += (c in "（(《") - (c in "）)》")
+        if c == "；" and depth == 0:
+            out.append(buf)
+            buf = ""
+        else:
+            buf += c
+    return out + [buf]
+
+
+def _joined(text: str) -> str:
+    """A table text that is msgids joined with 「；」 (PROTOCOLS, SRC): each one through _() (SP-905)."""
+    return "；".join(_(x) for x in _parts(text))
 STANDARD = "xu90"               # the auto choice — justification in aerobic-base-readiness.md §6.3
 BACKUP = "ua40"                 # when the standard doesn't fit (a long-day cap < 90 min)
 PROTOCOL_CHOICES = ("auto",) + tuple(PROTOCOLS)
 XU_MIN = sum((PROTOCOLS["xu90"]["warm"], PROTOCOLS["xu90"]["main"]))      # 90
 TITLE_RE = re.compile(r"飄移測試\s*(?:(徐國峰|Evoke|Friel)\s*)?(\d+)\s*分")
 
-SRC = ("Uphill Athlete 心率飄移測試（https://uphillathlete.com/aerobic-training/heart-rate-drift/："
-       "\"If you only have 40 minutes, do that.\"、不建議短於 40 分；前 20 分對後 20 分，< 3.5% / 3.5–5% / > 5%）；"
-       "Evoke 提早中止（https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-mountain-athlete/）")
+SRC = "；".join((N_("Uphill Athlete 心率飄移測試（https://uphillathlete.com/aerobic-training/heart-rate-drift/："
+                    "\"If you only have 40 minutes, do that.\"、不建議短於 40 分；前 20 分對後 20 分，< 3.5% / 3.5–5% / > 5%）"),
+                 N_("Evoke 提早中止（https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-"
+                    "mountain-athlete/）")))
 TITLES = {"standard": "AeT 飄移測試 60 分", "short": "AeT 飄移測試 40 分"}   # the main block's length
 TITLE = TITLES["standard"]
 AT_TITLE_LEN = re.compile(r"飄移測試\s*(\d+)\s*分")
@@ -557,15 +580,20 @@ def is_short(s: dict) -> bool:
 def protocol_tip(key: str) -> str:
     """The 課表偏好 hover: duration, terrain, what is held, how it is judged, source."""
     if key == "auto":
-        return (f"自動：標準版＝{PROTOCOLS[STANDARD]['label']}（放在週末長跑日，取代那次長跑）；"
-                f"長跑日上限 < 90 分放不下時改用備案 {PROTOCOLS[BACKUP]['label']}（平日）。"
-                "選標準版的理由：90 分鐘是徐國峰公開的測試長度（部落格 2016-12），測得太短看不出後段心率飄移；"
-                "UA 接受 40 分、Evoke 60 分、Friel 1–2 小時；沒有任何長度有同儕審查的驗證。")
+        return (_("自動：標準版＝{label}（放在週末長跑日，取代那次長跑）", label=_(PROTOCOLS[STANDARD]["label"])) + "；"
+                + _("長跑日上限 < 90 分放不下時改用備案 {label}（平日）", label=_(PROTOCOLS[BACKUP]["label"])) + "。"
+                + _("選標準版的理由：90 分鐘是徐國峰公開的測試長度（部落格 2016-12），測得太短看不出後段心率飄移") + "；"
+                + _("UA 接受 40 分、Evoke 60 分、Friel 1–2 小時") + "；" + _("沒有任何長度有同儕審查的驗證") + "。")
     p = PROTOCOLS[key]
     total = p["warm"] + p["main"] + p["cool"]
-    return (f"{p['label']}：共 {total} 分（暖身 {p['warm']}＋測試 {p['main']}"
-            + (f"＋緩和 {p['cool']}" if p["cool"] else "") + f" 分）；場地：{p['terrain']}；固定：{p['hold']}；"
-            f"判讀：{p['rule']}；來源：{p['source']}")
+    head = (_("{label}：共 {total} 分（暖身 {warm}＋測試 {main}＋緩和 {cool} 分）", label=_(p["label"]), total=total,
+              warm=p["warm"], main=p["main"], cool=p["cool"]) if p["cool"] else
+            _("{label}：共 {total} 分（暖身 {warm}＋測試 {main} 分）", label=_(p["label"]), total=total, warm=p["warm"],
+              main=p["main"]))
+    rule, src = _parts(p["rule"]), _parts(p["source"])
+    return "；".join([head, _("場地：{terrain}", terrain=_(p["terrain"])), _("固定：{hold}", hold=_(p["hold"])),
+                     _("判讀：{rule}", rule=_(rule[0]))] + [_(x) for x in rule[1:]]
+                    + [_("來源：{src}", src=_(src[0]))] + [_(x) for x in src[1:]])
 
 
 def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Optional[int] = None,
@@ -582,42 +610,49 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
     warm, main, cool = p["warm"], p["main"], p["cool"]
     tgt = []
     xu = None
+    # SP-905: the detail is msgids joined with 「；」「。」 (an English page reads each back on its own); the
+    # reason (why) and the place are one msgid, 「{why}：…」
     if key == "xu90":
         xu = xu_target(th if isinstance(th, dict) else {})
         tgt += [xu["text"], _("不設心率上限：心率升高也不要放慢（放慢會讓飄移偏小）")]
-        why = ("自動：標準版徐國峰 90 分鐘（取代週末那次長跑）：" if protocol == "auto" else "徐國峰 90 分鐘：")
-        body = (f"暖身 {warm} 分（心率不超過輕鬆跑上限），接著測試 {main} 分：平坦路段、配速固定不要調、心率讓它自己變，"
-                "記下第 10 分鐘和第 90 分鐘的心率；"
-                "補給每次停不超過 30 秒；(第 90 分 − 第 10 分) ÷ 第 10 分 < 10% 有氧基礎夠。")
-        place = "平坦路段（河濱）、不要山路；" + xu["why"]
+        why = _("自動：標準版徐國峰 90 分鐘（取代週末那次長跑）") if protocol == "auto" else _("徐國峰 90 分鐘")
+        body = (_("暖身 {warm} 分（心率不超過輕鬆跑上限），接著測試 {main} 分：平坦路段、配速固定不要調、心率讓它自己變，"
+                  "記下第 10 分鐘和第 90 分鐘的心率", warm=warm, main=main) + "；"
+                + _("補給每次停不超過 30 秒") + "；" + _("(第 90 分 − 第 10 分) ÷ 第 10 分 < 10% 有氧基礎夠") + "。")
+        place = _("{why}：平坦路段（河濱）、不要山路", why=why) + "；" + xu["why"]
     else:
         if p0:
-            tgt.append(f"固定功率 {p0:.0f} W（±3%）")
+            tgt.append(_("固定功率 {w:.0f} W（±3%）", w=p0))
         if hr0:
-            tgt.append(f"心率從 {hr0:.0f} 附近開始")
+            tgt.append(_("心率從 {hr:.0f} 附近開始", hr=hr0))
         if key == "ua40" and protocol in (None, "auto", "ua60", "xu90"):
-            why = ((f"平日上限 {cap_weekday} 分 → 用 UA 最短 40 分版本" if cap_weekday is not None else
-                    "長跑日放不下 90 分 → 備案 UA 最短 40 分版本")
-                   + ("（還是要 50 分：UA 不建議短於 40 分，不受上限）"
-                      if cap_weekday is not None and cap_weekday < SHORT_MIN else "") + "：")
+            if cap_weekday is None:
+                why = _("長跑日放不下 90 分 → 備案 UA 最短 40 分版本")
+            elif cap_weekday < SHORT_MIN:
+                why = _("平日上限 {cap} 分 → 用 UA 最短 40 分版本（還是要 50 分：UA 不建議短於 40 分，不受上限）",
+                        cap=cap_weekday)
+            else:
+                why = _("平日上限 {cap} 分 → 用 UA 最短 40 分版本", cap=cap_weekday)
         elif key == "ua60":
-            why = "沒有平日時間上限 → UA 標準版 80 分：" if cap_weekday is None else \
-                f"平日上限 {cap_weekday} 分放得下 → UA 標準版 80 分："
+            why = _("沒有平日時間上限 → UA 標準版 80 分") if cap_weekday is None else \
+                _("平日上限 {cap} 分放得下 → UA 標準版 80 分", cap=cap_weekday)
         else:
-            why = f"{p['label']}："
-        held = "固定功率不要調" if key != "friel" else "心率在 AeT 附近穩定跑"
-        body = (f"暖身 {warm} 分到開始流汗（心率不超過起始心率），接著測試 {main} 分{held}"
-                + ("（至少 40 分）" if key == "ua60" else "") + "；中途不停；"
-                + (f"緩和 {cool} 分。" if cool else "緩和可省略（0–5 分慢跑）。"))
-        place = "冷氣房跑步機 2–3%＋電扇（首選），或平路環線，不要山路；"
+            why = _(p["label"])
+        held = (_("心率在 AeT 附近穩定跑") if key == "friel" else
+                _("固定功率不要調（至少 40 分）") if key == "ua60" else _("固定功率不要調"))
+        body = (_("暖身 {warm} 分到開始流汗（心率不超過起始心率），接著測試 {main} 分{held}", warm=warm, main=main,
+                  held=held) + "；" + _("中途不停") + "；"
+                + (_("緩和 {n} 分", n=cool) if cool else _("緩和可省略（0–5 分慢跑）")) + "。")
+        place = _("{why}：冷氣房跑步機 2–3%＋電扇（首選），或平路環線，不要山路", why=why) + "；"
     # the abort rule is Evoke's; Evoke says "a slower pace another day" — the 5 bpm is ours (推估)
-    early = (_("主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天用較慢的配速再測（Evoke）；"
-               "起始心率約降 {n} bpm（推估）", n=LOWER_BPM)
+    early = (_("主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天用較慢的配速再測（Evoke）") + "；"
+             + _("起始心率約降 {n} bpm（推估）", n=LOWER_BPM)
              if p["judge"] in ("ua", "evoke") else "")
     return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": p["title"], "minutes": warm + main + cool,
-            "target": "；".join(tgt) or "固定功率（±3%），不要調",
-            "detail": why + place + body + HEAT_TEXT + "；記下溫度。" + early,
-            "source": p["source"] if key != "ua60" and key != "ua40" else SRC, "tss": (warm + main + cool) / 60 * 50,
+            "target": "；".join(tgt) or _("固定功率（±3%），不要調"),
+            "detail": place + body + _(HEAT_TEXT) + "；" + _("記下溫度") + "。" + early,
+            "source": _joined(p["source"] if key != "ua60" and key != "ua40" else SRC),
+            "tss": (warm + main + cool) / 60 * 50,
             **({"xu_basis": xu["basis"]} if xu else {})}
 
 
@@ -672,20 +707,20 @@ def xu_target(th: dict) -> dict:
                 "text": _("配速固定 {lo}–{hi} /km（E 配速 {mid} ±3%，推估），不要調",
                           lo=EP.fmt_pace(lo), hi=EP.fmt_pace(hi), mid=EP.fmt_pace(mid)),
                 "name": _("固定 E 配速，不要調"),
-                "why": _("強度：{e}。", e=EP.label(e))}
+                "why": _("強度：{e}", e=EP.label(e)) + "。"}
     cp = th.get("cp")
     if cp and th.get("cp_measured"):
         lo, hi = round(XU_CP[0] * float(cp)), round(XU_CP[1] * float(cp))
         return {"basis": "power", "lo": lo, "hi": hi,
                 "text": _("功率固定 {lo}–{hi} W（75–80% CP，Palladino 1C），不要調", lo=lo, hi=hi),
                 "name": _("固定功率 75–80% CP，不要調"),
-                "why": _("強度：沒有 180 天內的比賽成績可以算 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）。"
-                         "設定頁填一場比賽成績就會改用 E 配速。", cp=float(cp))}
+                "why": _("強度：沒有 180 天內的比賽成績可以算 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）",
+                         cp=float(cp)) + "。" + _("設定頁填一場比賽成績就會改用 E 配速") + "。"}
     return {"basis": "talk", "lo": None, "hi": None,
             "text": _("能講完整句子的配速，固定不要調"),
             "name": _("能講完整句子的配速，固定不要調"),
             "why": _("強度：沒有 180 天內的比賽成績可以算 E 配速，也沒有 CP 測試的結果：前 10 分鐘找能講完整句子的最快配速，"
-                     "之後就固定這個配速（講話測試，Foster 2008）。設定頁填一場比賽成績就會改用 E 配速。")}
+                     "之後就固定這個配速（講話測試，Foster 2008）") + "。" + _("設定頁填一場比賽成績就會改用 E 配速") + "。"}
 
 
 def xu_main_target(text: str) -> Optional[tuple]:
@@ -723,7 +758,7 @@ def pick_day_xu(avail: list, long_wd: int, cap_weekday: Optional[int] = None) ->
 # test defaults to a weekday (Mon–Fri); "any" = the interval placement.
 TEST_DAYS = {"weekday": (0, 1, 2, 3, 4)}
 DAY_ORDER = (1, 2, 3, 0, 4, 5, 6)      # Tue, Wed, Thu, Mon, Fri — plan_prefs.QUALITY_ORDER
-NOTE_NONE = "AeT 測試只排平日，本週平日沒有可練的日子：這週先不測"
+NOTE_NONE = N_("AeT 測試只排平日，本週平日沒有可練的日子：這週先不測")
 
 
 def test_days(prefs) -> Optional[tuple]:
@@ -759,7 +794,7 @@ def pick_day(avail: list, long_day: Optional[dt.date], hard_days=(), days=TEST_D
     pick = best(days)
     if pick is None and weekend_ok:
         pick = best(tuple(d for d in range(7) if d not in days))
-    return {"day": pick, "note": None if pick is not None else NOTE_NONE}
+    return {"day": pick, "note": None if pick is not None else M_(NOTE_NONE)}
 
 
 def is_aet_session(s: dict) -> bool:

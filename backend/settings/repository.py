@@ -309,6 +309,9 @@ DEFAULTS: dict[str, Any] = {
     # debug API for AI agents (SP-371, backend/debug_auth.py; 設定 › 進階): off = /api/v1/debug/* is 404.
     # Turned on by the owner (SP-373: no server PIN); the tokens are the debug_tokens table
     "debug.api.enabled": False,
+    # writes through the debug API (SP-802, engine/debug_write.py): [{id, at, by, kind, diff, before,
+    # after, undone_at}], the newest 30; written by apply / undo only (`before` = that write's backup)
+    "debug.write.log": [],
     # a local copy pulling from the production server (SP-373, engine/upstream.py): the last pull's
     # {at, what, counts, error}; written by the pull only (the address and token stay in the environment)
     "upstream.last_pull": None,
@@ -317,6 +320,9 @@ DEFAULTS: dict[str, Any] = {
     "weight.sync.state": None,
     # the COROS account weight the user said 「不用」 to (kg): its hint stays hidden until it changes
     "weight.coros.dismissed": None,
+    # the 疊石 Cairn card (SP-763, api/xp.py): true once 「不用了」 was pressed on it (both places at once);
+    # 設定 › 提示多寡 shows it again (false)
+    "ui.xp_cairn_off": False,
 }
 # keys that were removed: db/database.py init_db deletes any stored row
 # (backup.encryption held the sealed scrypt-derived backup key)
@@ -448,6 +454,8 @@ def validate(key: str, value: Any) -> None:
     if key == "weight.coros.dismissed" and value is not None and not (
             isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value < 1000):
         raise ValueError("weight.coros.dismissed must be a weight in kg or null")
+    if key == "ui.xp_cairn_off" and not isinstance(value, bool):
+        raise ValueError("ui.xp_cairn_off must be true or false")
     if key == "charts.data_source" and value not in ("source", "wko5"):
         raise ValueError("chart data source must be source or wko5")
     if key == "charts.wko5_views_dir" and value is not None and not (isinstance(value, str) and value.strip()):

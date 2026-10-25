@@ -40,7 +40,8 @@
 
 - WKO5 資料夾（各模組的 `ATHLETE_DIR` 一律經過 `settings/paths.for_tenant`）
 - 中央氣象署授權碼（`CWA_API_KEY` 或 `weather.json`）：使用者讀不到、也設不了；但站台用這把授權碼下載的氣象署預報
-  全站共用（SP-552：檔案在 server root、同一份只抓一次），所以使用者的賽事天氣也先用中央氣象署
+  全站共用（SP-552：檔案在 server root、同一份只抓一次），所以使用者的賽事天氣也先用中央氣象署；
+  歷史平均（Open-Meteo 封存資料）的快取也是全站一份（`climatology/` 在 server root）
 - TrainingPeaks 的 WKO5 client（`TP_CLIENT_ID`／`tp_client.json`）：TP 條款不准把 developer credentials 給別人
 - 整個資料夾的備份與還原（使用者要的是「下載我的資料」，SP-386）
 - 擁有者的 AI 金鑰（SP-306 做了之後）
@@ -170,6 +171,34 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' -H 'Accept: text/html' 
   等背景工作、刪租戶資料夾、從研究資料撤回、刪 `accounts.db` 所有列）。不需要對方重新用 Google 確認身分（那是本人刪除時的保護）。
 - 不能刪擁有者、不能刪自己（自己的帳號請到設定頁）、不能刪最後一位管理員；畫面上要輸入對方的 email（沒有 email 時是 `#<id>`）才會送出。
 - 操作紀錄 `user.delete`：只記 id、刪除前的方案／是否管理員／是否停用、中斷了哪些平台，不記 email 或名字。
+
+### 5.8 用 email 註冊與登入（SP-610）
+
+登入模式下，登入頁在 Google 按鈕下面多一組 email＋密碼，另有「用 email 註冊」「忘記密碼」。規則跟 Google 登入同一套
+（`backend/accounts/email_login.py`）：擁有者還沒登入過不開放、額滿進候補、管理員放行的候補用同一個 email 註冊就接上那個帳號、
+看過條款才建帳號與租戶。
+
+- 流程：註冊（email、選填的顯示名稱、密碼至少 10 個字元）→ 寄驗證信（連結 24 小時、用一次）→ 打開連結**再輸入一次密碼** → 條款 → 帳號。
+  忘記密碼 → 重設信（1 小時、用一次）→ 新密碼，所有裝置登出。
+  登入中改密碼（SP-858）：設定 › 帳號 › 密碼，先輸入目前的密碼、新密碼照註冊的規則（`POST /api/v1/account/email/password`）；
+  改好後**其他裝置登出、這台不登出**，還沒用的重設連結作廢；跟登入共用限流（每個用戶端、每個 email 15 分鐘 10 次）。Google 帳號沒有這一塊（409 `NO_EMAIL_SIGN_IN`）。
+- 不洩漏「這個 email 有沒有註冊」：註冊、忘記密碼不管 email 是誰的都回同一句話；已經有帳號的 email 收到的是「你已經有帳號」
+  （Google 帳號的是「請用 Google 登入」），帳號什麼都不變。登入打錯 email 或密碼是同一個錯誤，花的時間也一樣。
+- 存法：`accounts.db` 的 `email_accounts` 一張表（email、Argon2id 雜湊、確認時間、兩種連結的 sha256、到期時間）；帳號建好後
+  `identities` 多一列 provider `email`。既有的表與欄位沒動。刪除帳號會一起刪。
+- 限流：每個用戶端 15 分鐘內登入 10 次、寄信（註冊＋重設）10 次、用連結 10 次；每個 email 15 分鐘內被登入 10 次、一小時最多收 3 封信（多的不寄、回應不變）。
+- email 帳號**暫時不能連結疊石 Cairn**（等 SP-329 定案再補對應）：設定 › 疊石 Cairn 的連結按鈕關著並說明，API 回 409 `NO_GOOGLE`。
+
+寄信用 Resend（`backend/accounts/mailer.py`，標準函式庫 HTTP，沒有 SDK）：
+
+| 名字 | 用途 |
+|---|---|
+| `RESEND_API_KEY` | Resend 的 API key（密鑰；也可以 `RESEND_API_KEY_FILE`）。**沒設時信不會寄出**：整封信（含連結）印在 stderr（`docker logs`），開頭標「DEV MODE — NOT SENT」，啟動時也記一行 warning。開發時這樣就能走完流程；正式站上線前一定要設 |
+| `TRC_MAIL_FROM` | 寄件人，預設 `TrailRunCoach <no-reply@yichlin.com>`。網域要先在 Resend 驗證過（照 Resend 給的 SPF／DKIM DNS 紀錄加到網域） |
+
+上線前：開 Resend 帳號 → 在 Resend 加網域（例如 `yichlin.com`）→ 把它給的 DNS 紀錄（SPF 的 TXT、DKIM 的 TXT／CNAME，建議加 DMARC）
+加到 Cloudflare DNS → Resend 顯示 verified → 建一把只有寄信權限的 API key → NAS 的環境設 `RESEND_API_KEY`（寄件網域不是 `yichlin.com`
+時另設 `TRC_MAIL_FROM`）→ 重啟 → 用一個自己的信箱註冊一次確認收得到。
 
 ## 6. 還沒做的（別的單）
 

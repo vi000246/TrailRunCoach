@@ -1,5 +1,6 @@
 """SP-493 R1 (owner 2026-10-14, Q2-2): a max HR from the watch account is believable when a run of the
-last 90 days came close to it — a 10-s hold ≥ the value − 5 bpm (推估; threshold_confidence.WATCH_SEEN_*).
+last 90 days came close to it — a 10-s hold ≥ the value − 5 bpm (推估; threshold_confidence.WATCH_SEEN_*);
+R2 (owner 2026-10-20, Q4): the row's s10 is the best 10-s mean, and the texts say 「10 秒平均」.
 Before, every watch value was a low source, so 自動 almost never picked 儲備心率. Synthetic rows only."""
 import datetime as dt
 
@@ -53,11 +54,11 @@ def test_a_seen_watch_max_hr_is_believable_and_auto_picks_hrr():
     h = r["hrmax"]
     assert h["confidence"] == "medium" and h["seen"]["value"] == 186
     src = next(s for s in h["signals"] if s["id"] == "source")
-    assert src["level"] == "weak" and "撐 10 秒到 186" in src["text"] and "推估" in src["text"] and src["estimate"]
+    assert src["level"] == "weak" and "10 秒平均最高 186" in src["text"] and "推估" in src["text"] and src["estimate"]
     # 186 is 13 under 189 held for 120 s: no 「spike」 signal once a 10-s hold came within 5 bpm
     assert not any(s["id"] == "sustained" for s in h["signals"])
     a = r["auto"]
-    assert a["model"] == "hrr" and "撐 10 秒到 186" in a["reason"] and _days_ago(30) in a["reason"]
+    assert a["model"] == "hrr" and "10 秒平均最高 186" in a["reason"] and _days_ago(30) in a["reason"]
     assert not any("hrmax" in s["tests"] for s in r["suggestions"])      # no max-HR test asked for
     assert not r["warn"]["hrmax"]["low"]
 
@@ -66,7 +67,7 @@ def test_an_unseen_watch_max_hr_stays_low_and_auto_picks_hrmax():
     r = _assess(EASY + [run(date=_days_ago(30), s10=180.0, s60=178.0, s120=176.0)])
     assert r["hrmax"]["confidence"] == "low" and "seen" not in r["hrmax"]
     a = r["auto"]
-    assert a["model"] == "hrmax" and "近 90 天沒有跑步撐 10 秒到 184 以上" in a["reason"]
+    assert a["model"] == "hrmax" and "近 90 天沒有跑步 10 秒平均到 184 以上" in a["reason"]
     assert any("hrmax" in s["tests"] for s in r["suggestions"])
     old = _assess(EASY + [run(date=_days_ago(120), s10=188.0, s60=186.0, s120=184.0)])   # seen, but too long ago
     assert old["hrmax"]["confidence"] == "low" and old["auto"]["model"] == "hrmax"

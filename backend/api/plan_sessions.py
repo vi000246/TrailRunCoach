@@ -46,6 +46,155 @@ from backend.sync import workout_targets as WT
 router = APIRouter(prefix="/api/v1/overview/plan", tags=["overview"])
 
 SCOPES = ("day", "week", "phase")
+
+
+def _shown(out):
+    """A response in the request's language (SP-839): the stored zh-TW titles, reasons and type words,
+    and the cached inputs' M_() texts (engine/stored_text.shown_tree; a changed title keeps the stored
+    one as `title_src`). zh-TW: as it is."""
+    from backend.engine import stored_text as ST
+    from backend.i18n import DEFAULT_LOCALE, current_locale
+    if current_locale() == DEFAULT_LOCALE:
+        return out
+    out = _shown_coros(ST.shown_tree(out))
+    pairs: dict = {}
+
+    def leaves(x):
+        if isinstance(x, dict):
+            return {k: leaves(v) for k, v in x.items()}
+        y = ST.shown(x)
+        if isinstance(x, str) and y != x:
+            pairs[y] = x
+        return y
+    if isinstance(out, dict):
+        # {kind: title} / {kind: {terrain: title}}; targets: the 課表 dialog's default 目標 per kind (SP-905)
+        for k in ("default_titles", "family_titles", "auto_titles", "targets"):
+            if isinstance(out.get(k), dict):
+                out[k] = leaves(out[k])
+        # the thresholds' sources and the 課表心率區間 (built with the inputs, in zh-TW); easy_cap_label
+        # too (SP-905): the dialog writes 「心率 ≤ <it>」 into a session's 目標 — that pair is learnt here
+        if isinstance(out.get("thresholds"), dict):
+            th0 = out["thresholds"]
+            out["thresholds"] = ST.shown_tree(th0, keys=_TH_KEYS)
+            pairs.update(_easy_cap_pairs(th0, out["thresholds"]))
+        if pairs:
+            out["title_src_map"] = pairs            # shown → stored: what the dialog's fields read and send
+    return out
+
+
+# what the 課表 shows of a session's watch copy (SP-908): why it is not pushed / why a push failed — not its
+# name or steps (the watch's own text)
+_COROS_KEYS = frozenset({"reason", "error"})
+
+
+def _shown_coros(x):
+    """Every `coros` dict of a response with its reason / error in the request's language (made in zh-TW by a
+    background push or a handler that stores texts; engine/stored_text)."""
+    from backend.engine import stored_text as ST
+    if isinstance(x, list):
+        return [_shown_coros(v) for v in x]
+    if not isinstance(x, dict):
+        return x
+    out = {}
+    for k, v in x.items():
+        if k == "coros" and isinstance(v, dict):
+            out[k] = {kk: ST.shown(vv) if kk in _COROS_KEYS and isinstance(vv, str) else _shown_coros(vv)
+                      for kk, vv in v.items()}
+        else:
+            out[k] = _shown_coros(v)
+    return out
+
+
+_TH_KEYS = frozenset({"cp_source", "lthr_source", "aet_source", "easy_cap_tip", "label", "short", "source", "name",
+                      "reason", "easy_source", "easy_cap_label"})
+
+
+def _easy_cap_pairs(th: dict, shown: dict) -> dict:
+    """The 課表 dialog's easy-run 目標 (schedule.html aetText: aet.hr_le / aet.hr_cap_n, the page's catalog)
+    as the page shows it → as stored (zh-TW), so the dialog sends it back in the source language."""
+    from backend.i18n import DEFAULT_LOCALE, current_locale
+    from backend.i18n.pages import page_catalog
+    loc = current_locale()
+    zh, here = page_catalog(("schedule",), DEFAULT_LOCALE), page_catalog(("schedule",), loc)
+    out = {}
+    try:
+        if isinstance(th.get("easy_cap_label"), str):
+            out[here["schedule.aet.hr_le"].format(x=shown.get("easy_cap_label"))] = \
+                zh["schedule.aet.hr_le"].format(x=th["easy_cap_label"])
+        if th.get("aet"):
+            n = round(float(th["aet"]))
+            out[here["schedule.aet.hr_cap_n"].format(n=n)] = zh["schedule.aet.hr_cap_n"].format(n=n)
+        out[here["schedule.aet.hr_cap"]] = zh["schedule.aet.hr_cap"]
+    except (KeyError, ValueError, TypeError, AttributeError):
+        pass
+    return {k: v for k, v in out.items() if k != v}
+
+
+# the texts a body may send back as the English page showed them (SP-839 title; SP-905 目標／說明／出處)
+_TEXT_IN = ("title", "target", "detail", "source")
+
+
+def _title_in(data: dict) -> dict:
+    """A body's texts as stored (SP-839, SP-905): the English page sends a generated title / 目標 / 說明
+    back as it showed it (the 課表 dialog's fields) — those are stored in zh-TW again (engine/stored_text
+    .to_source); the user's own words stay as written."""
+    from backend.engine import stored_text as ST
+    if not isinstance(data, dict):
+        return data
+    loc = _REQ_LOC.get()                        # inside _stored_texts: the request's (the context runs zh-TW)
+    for k in _TEXT_IN:
+        if isinstance(data.get(k), str):
+            src = ST.to_source(data[k], loc)
+            if src != data[k]:
+                data = {**data, k: src}
+    return data
+
+
+def _src_locale():
+    """A block that makes texts a session is stored with (a suggestion, a library variant, a test
+    protocol, a structure's 目標) in the source language, whatever the request's (SP-905): code reads
+    them (「；」 parts, 「心率 x–y bpm」, 「目標配速」) and a page shows them in its own (_shown)."""
+    from backend.i18n import DEFAULT_LOCALE, use_locale
+    return use_locale(DEFAULT_LOCALE)
+
+
+# the request's language while a handler runs in the source language (_stored_texts); None = not inside one
+_REQ_LOC: contextvars.ContextVar = contextvars.ContextVar("plan_req_locale", default=None)
+
+
+def _stored_texts(fn):
+    """A handler that makes texts a session is stored with (SP-905): it runs in zh-TW (_src_locale) and
+    its answer is shown in the request's language (_shown; an error's message too). The watch push it
+    triggers keeps the request's language (_sync_watch: what the watch gets is unchanged, SP-908)."""
+    @functools.wraps(fn)
+    async def run(*a, **kw):
+        from backend.i18n import DEFAULT_LOCALE, current_locale
+        loc = current_locale()
+        if loc == DEFAULT_LOCALE:
+            return await fn(*a, **kw)
+        tok = _REQ_LOC.set(loc)
+        try:
+            with _src_locale():
+                out = await fn(*a, **kw)
+        except HTTPException as e:
+            raise HTTPException(e.status_code, _shown_detail(e.detail), headers=e.headers) from None
+        finally:
+            _REQ_LOC.reset(tok)
+        return _shown(out) if isinstance(out, (dict, list)) else out
+    return run
+
+
+def _shown_detail(d):
+    """An error's detail made in zh-TW, in the request's language (a msgid filled in; engine/stored_text)."""
+    from backend.engine import stored_text as ST
+    if isinstance(d, str):
+        return ST.shown(d)
+    if isinstance(d, dict):
+        return {k: (ST.shown(v) if k in ("message", "detail") and isinstance(v, str) else
+                    [ST.shown(x) for x in v] if k == "errors" and isinstance(v, list) else v) for k, v in d.items()}
+    return d
+
+
 _lock = threading.Lock()
 # the stored plan + a preview or two, for each tenant (SP-374 第 4 條: was 3 for the whole server)
 _cache = TenantLRU(per_tenant=3)
@@ -229,9 +378,13 @@ def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool
     key was built from, stored under that key, so every waiter gets its own key's result.
     Inside datasource.settings_memo() (SP-752): one computation read the settings DB ~1,070 times
     (read_setting / current_source for every session and activity it looked at); now each setting
-    once. A setting saved meanwhile is seen by the next computation, as with the key."""
+    once. A setting saved meanwhile is seen by the next computation, as with the key.
+    Always in zh-TW (SP-839): the inputs are one cache for every language (the key has no locale)
+    and the sessions they plan are stored as they are — in the source language, whose titles code
+    reads (「N×M 分」, 「長爬坡反覆」); a page shows them in its own (engine/stored_text, M_())."""
     from backend.engine.wko5expr.datasource import settings_memo
-    with settings_memo():
+    from backend.i18n import DEFAULT_LOCALE, use_locale
+    with settings_memo(), use_locale(DEFAULT_LOCALE):
         return _build_inputs_in(key, ds, today, prefs, bos, acc, auto_on, rpe_on, recorded)
 
 
@@ -638,7 +791,7 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
     t = time.perf_counter()
     inp = await _inputs(db)
     t = _took("inputs", t)
-    return await _sessions_body(db, inp, start, end, t)
+    return _shown(await _sessions_body(db, inp, start, end, t))
 
 
 async def _reconciled(db: AsyncSession, inp: dict, t: float) -> tuple[list[dict], float]:
@@ -852,7 +1005,9 @@ def _cp(inp: dict):
 
 
 @router.post("/sessions")
+@_stored_texts
 async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    data = _title_in(data)
     inp = await _inputs()
     data = _with_suggestion(data, inp) or _with_variant({k: v for k, v in data.items() if k != "suggest"}, inp,
                                                         None, data.get("day"))
@@ -867,7 +1022,7 @@ async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)
                 # same path as 排入測試 (SP-39, owner 2026-10-04); after the add, so a refused day
                 # keeps its long run
                 await _replace_long(db, out["day"])
-            return out
+            return _shown(out)
     except PS.PlanError as e:
         raise _err(e)
 
@@ -891,12 +1046,17 @@ async def _replace_long(db: AsyncSession, day: str) -> None:
 
 
 @router.post("/sessions/suggest")
+@_stored_texts
 async def suggest_session(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     """新增課表 (SP-628): what a new session of `kind` (a 強度課: its `family`) on `day` is filled
     with — the session the automatic plan would give (engine/session_suggest.py). Nothing is stored.
     {"title", "minutes", "target", "detail", "terrain", "variant": {key, reps, blocks, adj, rung_key}
     | None, "template_key" (速度: a template applied as the structure) | None, "locked": {text, why}
     | None (VO2max before the Zone 5 track opened), "reason"}; minutes None = nothing to suggest."""
+    return _shown(await _suggest_session(body, db))
+
+
+async def _suggest_session(body: dict, db: AsyncSession) -> dict:
     from backend.engine import session_suggest as SS
     kind, fam, day = body.get("kind") or "easy", body.get("family"), body.get("day")
     inp = await _inputs()
@@ -969,7 +1129,9 @@ def _with_swap(patch: dict, inp: dict, cur: Optional[dict]) -> dict:
 
 
 @router.patch("/sessions/{uid}")
+@_stored_texts
 async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    patch = _title_in(patch)
     inp = await _inputs()
     if patch.get("swap_to") is not None:
         cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
@@ -989,7 +1151,7 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
     if patch.get("day") and out.get("day"):
         await _b2b_moved(db, uid, out["day"])         # an accepted B2B day moved: the entry follows
     out["coros"] = await _sync_watch(db, [uid], inp)  # SP-358: the watch's copy follows now
-    return out
+    return _shown(out)
 
 
 # 交換課表 (SP-359; the 課表 calendar: right-click 「交換」 then pick the other session, or drop a
@@ -1010,8 +1172,8 @@ async def swap_sessions(body: dict = Body(...), db: AsyncSession = Depends(get_d
     for s in (sa, sb):
         await _b2b_moved(db, s["uid"], s["day"])    # an accepted B2B day moved: the entry follows
     after = await PS.load(db)
-    return {"sessions": [sa, sb], "warnings": RD.swap_warnings(after, [sa["uid"], sb["uid"]]),
-            "coros": await _sync_watch(db, [sa["uid"], sb["uid"]], inp)}      # SP-358: both days on the watch
+    return _shown({"sessions": [sa, sb], "warnings": RD.swap_warnings(after, [sa["uid"], sb["uid"]]),
+                   "coros": await _sync_watch(db, [sa["uid"], sb["uid"]], inp)})      # SP-358: both days on the watch
 
 
 # ---------------------------------------------------------------------------
@@ -1024,6 +1186,13 @@ async def swap_sessions(body: dict = Body(...), db: AsyncSession = Depends(get_d
 # ---------------------------------------------------------------------------
 
 def _test_templates(th: dict, prefs) -> dict:
+    """The 測試 dialog's protocols, made in zh-TW (SP-905: the dialog stores their title / 目標 / 說明;
+    a response shows them in its language, _shown)."""
+    with _src_locale():
+        return _test_templates_in(th, prefs)
+
+
+def _test_templates_in(th: dict, prefs) -> dict:
     from backend.engine import aet_test as AT
     from backend.engine import cp_protocols as CPP
     cp = []
@@ -1053,7 +1222,7 @@ def _test_templates(th: dict, prefs) -> dict:
 async def test_templates():
     inp = await _inputs()
     from backend.engine import plan_prefs as PP
-    return _test_templates(inp.get("thresholds") or {}, PP.load())
+    return _shown(_test_templates(inp.get("thresholds") or {}, PP.load()))
 
 
 SUGGEST_DAYS = 14
@@ -1160,6 +1329,7 @@ async def test_suggestions(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/test-suggestions/schedule")
+@_stored_texts
 async def schedule_test(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs(db)
     kind, day = body.get("kind"), body.get("day")
@@ -1209,7 +1379,7 @@ async def test_templates_for(kind: str, day: Optional[str], db: AsyncSession) ->
 async def get_test_templates_for(kind: str, day: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     if kind not in TEST_TEMPLATES:
         raise HTTPException(400, "kind must be cp or aet")
-    return {"kind": kind, "templates": await test_templates_for(kind, day, db)}
+    return _shown({"kind": kind, "templates": await test_templates_for(kind, day, db)})
 
 
 async def _template_session(inp: dict, key: str, kind: str) -> dict:
@@ -1589,6 +1759,7 @@ async def restore_test(body: dict = Body(...), db: AsyncSession = Depends(get_db
 
 
 @router.post("/suggestions/accept")
+@_stored_texts
 async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     from backend.engine import suggestions as SG
     sid, day = str(body.get("id") or ""), body.get("day")
@@ -1805,6 +1976,7 @@ async def steps_preview(body: dict = Body(...)):
     (engine/target_policy.py → sync/coros_workouts steps), nothing stored or sent."""
     from backend.engine import plan_prefs as PP
     from backend.engine import target_policy as TP
+    from backend.i18n import _
     inp = await _inputs()
     th = inp.get("thresholds") or {}
     s = {k: body.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "terrain", "protocol",
@@ -1816,8 +1988,8 @@ async def steps_preview(body: dict = Body(...)):
     try:
         lines = CW.step_lines(CW.session_steps({**s, "minutes": int(s.get("minutes") or 0)}, CW.Thresholds.of(th)))
     except CW.Unsupported as e:
-        lines = [f"不推送：{e}"]
-    return {"policy": pol, "lines": lines, "label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）"}
+        lines = [_("不推送：{why}", why=str(e))]
+    return {"policy": pol, "lines": lines, "label": _basis_label(pol)}
 
 
 # ---------------------------------------------------------------------------
@@ -1851,6 +2023,25 @@ def _speeds() -> dict:
                 "ep_kmh": tr.get("ep_kmh")}
     except Exception:                       # noqa: BLE001 — speeds are optional
         return {}
+
+
+def _grade_curve():
+    """SP-861: the race calculator's personal grade model as the route charts' descent curve
+    (user_templates.GradeCurve; the calculator's memoised fit, api/racepower._grade_models); None when
+    there is nothing to fit from (Minetti + SP-639's steep-descent rule then). Tests replace this."""
+    from backend.api import racepower as RP
+    from backend.engine import user_templates as UT
+    try:
+        return UT.grade_curve(RP._grade_models())
+    except Exception:                       # noqa: BLE001 — no model: the old rule
+        return None
+
+
+async def _with_grade(c):
+    """The step context with the personal descent curve (the route paths only: the first fit of the
+    day is the calculator's, off the event loop)."""
+    c.grade = await run_in_threadpool(_grade_curve)
+    return c
 
 
 def _climb_per_km(s: dict) -> Optional[float]:
@@ -2015,17 +2206,28 @@ def _hr_scale_ctx() -> Optional[dict]:
         return None
 
 
-def _context(env: dict) -> dict:
+def _basis_label(pol: dict) -> str:
+    """「目標用：功率（…）」 in the request's language (SP-906; the why is a stored-language text too)."""
+    from backend.engine import stored_text as ST
     from backend.engine import target_policy as TP
+    from backend.i18n import _
+    return _("目標用：{label}（{why}）", label=_(TP.LABEL[pol["basis"]]), why=ST.shown(pol["why"]))
+
+
+def _context(env: dict) -> dict:
+    from backend.engine import stored_text as ST
     from backend.engine import workout_steps as WS
+    from backend.i18n import _
     th, pol = env["th"], env["policy"]
-    return {"thresholds": {k: th.get(k) for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source",
-                                                  "thr_warn", "aet_measured")},
+    # SP-906: the editor's server texts in the request's language (the sources were made with the zh-TW inputs)
+    return {"thresholds": {k: ST.shown(th.get(k)) if k.endswith("_source") else th.get(k)
+                           for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source",
+                                     "thr_warn", "aet_measured")},
             "tpace_link": tpace_link(),
             "zones": WS.zones_table(env["ctx"]), "policy": pol,
-            "basis_label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）",
+            "basis_label": _basis_label(pol),
             "cap": env["cap"], "cap_mode": env["cap_mode"], "rung": env["rung"],
-            "kinds": WS.KIND_LABEL, "types": WS.TYPE_LABEL,
+            "kinds": {k: _(v) for k, v in WS.KIND_LABEL.items()}, "types": {k: _(v) for k, v in WS.TYPE_LABEL.items()},
             # the editor's 時長類型 dropdown: the provider's end conditions + labels (SP-38)
             "provider": env.get("provider"), "load_kinds": list(WS.LOAD_KINDS), "load_range": list(WS.LOAD_RANGE),
             # 「負荷」 entered by feel (SP-57, engine/rpe_load.py): the five levels and their TSS per hour in effect
@@ -2040,6 +2242,7 @@ def _context(env: dict) -> dict:
 @router.post("/steps/derive")
 async def steps_derive(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     from backend.engine import workout_steps as WS
+    from backend.i18n import _
     inp = await _inputs()
     stored = next((x for x in await PS.load(db) if x["uid"] == body.get("uid")), None) if body.get("uid") else None
     s = _session_of(body, stored)
@@ -2048,7 +2251,7 @@ async def steps_derive(body: dict = Body(...), db: AsyncSession = Depends(get_db
         return {"steps": stored["steps"], "derived": False, "context": _context(env)}
     d = WS.derive(s, env["th"])
     return {"steps": d, "derived": True, "context": _context(env),
-            "reason": "" if d else "這種課不推到手錶，或標題看不出結構（用「＋ 步驟」自己排）"}
+            "reason": "" if d else _("這種課不推到手錶，或標題看不出結構（用「＋ 步驟」自己排）")}
 
 
 def _norm_or_400(steps):
@@ -2068,7 +2271,12 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
     st = _norm_or_400(body.get("steps"))
     env = await _steps_env(s, inp, stored)
     out = {**WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"]),
-           "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
+           "basis_label": _basis_label(env["policy"]), "policy": env["policy"]}
+    # SP-906: the 目標 the dialog writes from `summary` is stored as zh-TW (`summary_src`: the page sends it back)
+    with _src_locale():
+        src = WS.steps_text(st, env["ctx"])
+    if src != out.get("summary"):
+        out["summary_src"] = src
     # SP-274 / SP-277: the LTHR / HRmax badge for this session (never on a test session)
     from backend.engine import threshold_confidence as TC
     out["thr_warn"] = TC.session_warn(env["th"].get("thr_warn"), s, st.get("items"), out.get("resolved"),
@@ -2081,7 +2289,7 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
         # session's own copy of the profile first (it outlives the template), else the template's
         from backend.engine import user_templates as UT
         prof = st.get("route") or await UT.profile_of(db, st["tpl"])
-        out["elev"] = UT.route_elevation(st, env["ctx"], prof) if prof else None
+        out["elev"] = UT.route_elevation(st, await _with_grade(env["ctx"]), prof) if prof else None
     return out
 
 
@@ -2089,8 +2297,8 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
 async def steps_templates(db: AsyncSession = Depends(get_db)):
     from backend.engine import user_templates as UT
     from backend.engine import workout_steps as WS
-    return WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)},
-                        warm_floor_s=_warm_floor_s())
+    return _shown(WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)},
+                               warm_floor_s=_warm_floor_s()))
 
 
 def _warm_floor_s() -> int:
@@ -2212,7 +2420,7 @@ async def user_templates_gpx_segments(tid: int, db: AsyncSession = Depends(get_d
     course = await _tpl_call(UT.course_of, db, tid)
     t = await _tpl_call(UT.get, db, tid)
     env = await _steps_env({"kind": "hike", "target_basis": t.get("target_basis"), "minutes": 0}, await _inputs())
-    c = env["ctx"]
+    c = await _with_grade(env["ctx"])
     levels = [("easy", _(UT.LEVEL_EASY), c.easy_frac())]
     try:
         v = WS.view(WS.normalize(t.get("steps") or {}), c, env["cap"], env["cap_mode"], env["rung"])
@@ -2221,7 +2429,8 @@ async def user_templates_gpx_segments(tid: int, db: AsyncSession = Depends(get_d
         main = None
     if main:
         levels.append(("main", _(UT.LEVEL_MAIN), main))
-    return UT.course_table(course, c, levels)
+    # SP-864: the climbs walked along the route's profile, as the step chart
+    return UT.course_table(course, c, levels, await UT.profile_of(db, tid))
 
 
 @router.get("/steps/templates/user/{tid}/gpx/file")
@@ -2322,15 +2531,16 @@ async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid
     # 我的範本 ranked with the built-ins (SP-36), the same menu /steps/templates gives
     tpl = WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)},
                        warm_floor_s=_warm_floor_s())
-    return TR.recommend(tpl, kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
-                        phase=_phase_on(inp, day), z5_open=bool(QG.z5_track(gate)["open"]) if gate else False,
-                        rung=rung_now, ladder_key=key, ladder_reason=why,
-                        sport=(inp.get("cur") or {}).get("primary_sport") or "trail")
+    return _shown(TR.recommend(tpl, kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
+                               phase=_phase_on(inp, day), z5_open=bool(QG.z5_track(gate)["open"]) if gate else False,
+                               rung=rung_now, ladder_key=key, ladder_reason=why,
+                               sport=(inp.get("cur") or {}).get("primary_sport") or "trail"))
 
 
 @router.get("/sessions/{uid}/coros-preview")
 async def coros_preview(uid: str, db: AsyncSession = Depends(get_db)):
     """「推到手錶會長這樣」 for a stored session: what COROS would get (nothing is sent)."""
+    from backend.i18n import _
     from backend.engine import workout_steps as WS
     inp = await _inputs()
     s = next((x for x in await PS.load(db) if x["uid"] == uid), None)
@@ -2339,7 +2549,7 @@ async def coros_preview(uid: str, db: AsyncSession = Depends(get_db)):
     env = await _steps_env(s, inp)
     st = s.get("steps") or WS.derive(s, env["th"])
     if not st:
-        return {"uid": uid, "pushed": False, "reason": "這種課不推到手錶"}
+        return {"uid": uid, "pushed": False, "reason": _("這種課不推到手錶")}
     return {"uid": uid, "pushed": True, "derived": not s.get("steps"), "name": CW.workout_name(s) if s.get("day") else "",
             **WS.watch_preview(WS.normalize(st), env["ctx"], overview=s.get("detail") or "")}
 
@@ -2438,7 +2648,7 @@ async def variants(uid: Optional[str] = None, day: Optional[str] = None, db: Asy
     if rung in IL.LIBRARY:
         out["drawer"] = IL.drawer(rung, cp, ctx["cap"], ctx["prefs"], ctx["history"], s.get("variant_key"))
         out["session"] = {k: s.get(k) for k in ("uid", "title", "variant_key", "rung_key", "equiv", "swap", "swap_reason")}
-    return out
+    return _shown(out)
 
 
 async def _unpush_expired(db: AsyncSession, deleted: list[dict]) -> dict:
@@ -2627,7 +2837,7 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
     missed = [s for s in new if PS.off_watch(s) and s["uid"] in rows]
     on_bl = [s for s in _on_blocked(new, bl, today) if s["uid"] in rows]
     old_calc = await prov.rows_by_key(db, _old_calc_keys(pushable))
-    return {**_meta(inp), "scope": scope, "start": a, "end": b, "sessions": todo,
+    return _shown({**_meta(inp), "scope": scope, "start": a, "end": b, "sessions": todo,
             "count": len(pushable), "to_send": len(will), "unchanged": len(pushable) - len(will),
             "skipped": [s for s in todo if s["coros"]["status"] == "skipped"],
             "missed_to_remove": len(missed), "blackout_to_remove": len(on_bl),
@@ -2637,7 +2847,7 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
             "pace_notes": [{"uid": s["uid"], "title": s.get("title"), "day": s.get("day"), "text": s["coros"]["pace_note"]}
                            for s in pushable if s["coros"].get("pace_note")],
             "tpace_link": tpace_link(),
-            "changes": changes, "by_day": R.by_day(changes)}
+            "changes": changes, "by_day": R.by_day(changes)})
 
 
 def _old_calc_keys(ss: list[dict]) -> list[str]:
@@ -2690,10 +2900,13 @@ async def _sync_watch(db: AsyncSession, uids, inp: Optional[dict] = None) -> dic
     # SP-362 B3: under the push lock only; the store as it is once this push's turn comes
     from backend import applog
     t0 = time.perf_counter()
+    from backend.i18n import current_locale, use_locale
     async with _plock():
         new = await PS.load(db)
-        res = await PA.push_window(db, new, inp, today, int(cfg["push_days"] or 7),
-                                   only={u for u in uids if u}, window=auto)
+        # a handler that stores texts runs in zh-TW (_stored_texts, SP-905); the push keeps the request's
+        with use_locale(_REQ_LOC.get() or current_locale()):
+            res = await PA.push_window(db, new, inp, today, int(cfg["push_days"] or 7),
+                                       only={u for u in uids if u}, window=auto)
     # SP-379: the watch's share of an edit / drag / swap (lock wait included)
     applog.took("watch push after edit", t0, provider=prov.id, status=res.get("status"),
                 sessions=len([u for u in uids if u]))
@@ -3223,10 +3436,59 @@ def tss_rates(tph: Optional[dict], sessions: list[dict], fallback: float = 50.0)
     return out
 
 
+class Rates(dict):
+    """tss_rates' TSS / h per session kind, plus what a session's structure is priced with (SP-817):
+    the plan inputs' thresholds `th`, the category TSS / h `tph` (session_structure.kind_rate's, the
+    editor's: tss_per_category) and the 課表偏好 `prefs`. A plain dict (no plan inputs) has none: minutes
+    × the rate only. JSON sees the TSS / h alone."""
+    th: Optional[dict] = None
+    tph: Optional[dict] = None
+    prefs = None
+
+
+def _with_ctx(rates: dict, th: Optional[dict], tph: Optional[dict], prefs=None) -> "Rates":
+    out = Rates(rates)
+    out.th, out.tph, out.prefs = th, tph, prefs
+    return out
+
+
+def structure_tss(s: dict, rates) -> Optional[float]:
+    """SP-817 (owner 2026-10-20, SP-646 Q1-3: 「有結構就一律用結構算」): the TSS of a run session's
+    structure — its stored steps, else the one workout_steps.derive reads from its text — by the
+    generator's rule (session_structure.figures, SP-437: the easy steps at this runner's own TSS / h),
+    the same number the structure editor shows; None without one (not a run session, no readable
+    structure, a lap-button / distance step) or without the plan inputs' thresholds (a plain rates dict).
+    A structure of the easy kinds that is all easy keeps the kind's TSS / h of the 課表 (`rates`, the
+    generator's own), as SP-437 keeps an all-easy session's rate: its time × that rate."""
+    th = getattr(rates, "th", None)
+    if not th:
+        return None
+    from backend.engine import session_structure as SST
+    if s.get("kind") not in SST.RUN_KINDS:
+        return None
+    try:
+        f = SST.figures(s, th, getattr(rates, "tph", None), getattr(rates, "prefs", None))
+    except Exception:                       # noqa: BLE001 — an unreadable structure: minutes × the rate
+        return None
+    if not f or not f.get("tss"):
+        return None
+    if s.get("kind") in SST.EASY_KINDS and f["easy_s"] >= f["sec"]:
+        return round(f["sec"] / 3600.0 * rates.get(s.get("kind"), 50.0), 1)
+    return float(f["tss"])
+
+
 def est_tss(s: dict, rates: dict) -> float:
+    """A session's planned TSS: the stored one (the generator's and the editor's rows carry their
+    structure's, SP-437 / SP-453); else its structure's (structure_tss, SP-817 — a custom session added
+    without one, e.g. through the API); else minutes × the kind's TSS / h."""
     if s.get("kind") in PS.NOT_LOAD:
         return 0.0
-    return float(s.get("tss") or 0.0) or (s.get("minutes") or 0) / 60.0 * rates.get(s.get("kind"), 50.0)
+    if s.get("tss"):
+        return float(s["tss"])
+    st = structure_tss(s, rates)
+    if st is not None:
+        return st
+    return (s.get("minutes") or 0) / 60.0 * rates.get(s.get("kind"), 50.0)
 
 
 _INPUTS_TPH = object()      # plan_rates: the plan inputs' own TSS / h per category
@@ -3239,11 +3501,14 @@ def plan_rates(inp: dict, every: list[dict], tph=_INPUTS_TPH) -> dict[str, float
     (`every` without deleted / superseded rows: the generator's own rates), the dataset's TSS / h
     per category `tph` (the calendar's _range_extras; left out = the plan inputs' own, week_plan's
     tss_per_category — the same overview._tss_per_hour of the same dataset and day) and the week's
-    target TSS / h for a kind with no rate of its own (a race without its own TSS)."""
+    target TSS / h for a kind with no rate of its own (a race without its own TSS). With the inputs'
+    thresholds and the same TSS / h per category, so a session without a stored TSS is priced by its
+    structure (structure_tss, SP-817)."""
     cur = inp.get("cur") or {}
     fallback = float(((cur.get("target") or {}).get("tss_per_hour")) or 50.0)
     shown = [s for s in every if s.get("state") not in ("deleted", "superseded")]
-    return tss_rates(cur.get("tss_per_category") if tph is _INPUTS_TPH else tph, shown, fallback)
+    cat = cur.get("tss_per_category") if tph is _INPUTS_TPH else tph
+    return _with_ctx(tss_rates(cat, shown, fallback), inp.get("thresholds"), cat, inp.get("prefs"))
 
 
 def session_est_tss(s: dict, ds=None, sessions: Optional[list[dict]] = None) -> float:
@@ -3252,7 +3517,9 @@ def session_est_tss(s: dict, ds=None, sessions: Optional[list[dict]] = None) -> 
     minutes × the calendar's tss_rates (the dataset's TSS / h, `_range_extras`; the generator's own
     rates from the stored plan, `sessions` or plan_store.rate_rows). The dataset scan only runs
     for a row without a TSS. The calendar's fallback rate (the week's target TSS / h) is not read
-    here (it needs the whole plan input): 50, which only a kind with no rate of its own uses (race)."""
+    here (it needs the whole plan input): 50, which only a kind with no rate of its own uses (race).
+    SP-817: a row without a TSS is priced by its structure (structure_tss) with the thresholds of
+    this tenant's newest plan inputs already computed (_inputs_peek; never computes them here)."""
     if s.get("kind") in PS.NOT_LOAD:
         return 0.0
     if s.get("tss"):
@@ -3266,7 +3533,25 @@ def session_est_tss(s: dict, ds=None, sessions: Optional[list[dict]] = None) -> 
         except Exception:                   # noqa: BLE001 — the defaults then, as tss_rates without tph
             tph = None
     rates = tss_rates(tph, PS.rate_rows() if sessions is None else sessions)
+    inp = _inputs_peek()
+    if inp is not None:
+        rates = _with_ctx(rates, inp.get("thresholds"), tph, inp.get("prefs"))
     return est_tss(s, rates)
+
+
+def _inputs_peek() -> Optional[dict]:
+    """This tenant's newest stored-plan inputs already computed (_last; a demo tenant, never kept there:
+    the cached inputs of its current key), or None — never computes them."""
+    with _lock:
+        prev = _last.get(_tenancy.current().id)
+    if prev:
+        return prev[1]
+    try:
+        key = inputs_key_now()
+    except Exception:                       # noqa: BLE001 — no Dataset / settings: minutes × the rate
+        return None
+    with _lock:
+        return _cache.get(key)
 
 
 # ---- B / C races on the 課表 (SP-504) -------------------------------------------------------------
@@ -3553,7 +3838,7 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
     try:
         out = await _calendar(start, end, db, tm, t0)
         stale = (out.get("stale") or {}).get("reason")
-        return out
+        return _shown(out)
     finally:
         _STALE_OK.reset(vtok)
         _TIMING.reset(tok)
@@ -3598,6 +3883,7 @@ async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float)
             "thresholds": inp["thresholds"], "tss_per_hour": tph, "tss_rates": rates,
             "targets": {k: tt.get(v, "") for k, v in KIND_TARGET.items()},
             "kinds": PS.kind_labels(), "default_titles": PS.DEFAULT_TITLES, "family_titles": PS.FAMILY_TITLES,
+            "auto_titles": PS.AUTO_TITLES,
             "prefs": inp.get("prefs"), "goal_climb_per_km": extras.get("goal_climb_per_km"),
             "plan_notes": _plan_notes(inp, start, end, _streak_note(every, inp)),
             "test_suggestions": sug,
@@ -3690,9 +3976,9 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss, day_rows=days,
                       week_sessions=[s for s in allss if mon.isoformat() <= s["day"] <= sun.isoformat()],
                       all_sessions=every, marks=mk, week_acts=extras["activities"], before_acts=before)
-    return {**out, "phases": phases, "current_phase": ph, "kinds": PS.kind_labels(),
-            "plan_phases": extras.get("plan_phases", extras["phases"]),
-            "plan_start": min((s["day"] for s in every if s.get("day")), default=None)}
+    return _shown({**out, "phases": phases, "current_phase": ph, "kinds": PS.kind_labels(),
+                   "plan_phases": extras.get("plan_phases", extras["phases"]),
+                   "plan_start": min((s["day"] for s in every if s.get("day")), default=None)})
 
 
 @router.get("/compliance/page", include_in_schema=False)

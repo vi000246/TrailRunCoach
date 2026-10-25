@@ -84,6 +84,18 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-b
   border: 1px solid var(--line); background: none; color: var(--muted); }
 .lang:hover { color: var(--accent); border-color: var(--accent); }
 [hidden] { display: none !important; }
+/* the e-mail sign-in (SP-610) */
+.divider { display: flex; align-items: center; gap: 10px; margin: 18px 0 12px; color: var(--muted); font-size: 13px; }
+.divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.field { display: grid; gap: 4px; margin: 0 0 12px; }
+.field > span { font-size: 13.5px; font-weight: 600; }
+.field input { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--text); font: inherit; }
+.field input:focus { border-color: var(--accent); }
+.field small { color: var(--muted); font-size: 12.5px; }
+.links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0 0; font-size: 13.5px; }
+.links a { color: var(--accent); text-decoration: none; }
+.links a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -92,14 +104,95 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-b
 
   <section class="card" id="lg-signin">
     <h1 data-i18n="login.h1">登入</h1>
-    <p data-i18n="login.lead">越野跑、百岳、路跑的訓練教練。用 Google 帳號登入；第一次登入會先請你看過條款。</p>
+    <p data-i18n="login.lead">越野跑、百岳、路跑的訓練教練。用 Google 帳號或 email 登入；第一次登入會先請你看過條款。</p>
     <div class="msg" id="lg-msg" role="status" hidden></div>
     <a class="btn wide" id="lg-google" href="/api/v1/account/login">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.6 12.3c0-.8-.1-1.5-.2-2.3H12v4.3h5.9a5 5 0 0 1-2.2 3.3v2.8h3.6c2.1-1.9 3.3-4.8 3.3-8.1z"/><path fill="#34A853" d="M12 23c3 0 5.5-1 7.3-2.7l-3.6-2.8c-1 .7-2.2 1.1-3.7 1.1-2.9 0-5.3-1.9-6.2-4.5H2.1v2.9A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.8 14.1a6.6 6.6 0 0 1 0-4.2V7H2.1a11 11 0 0 0 0 9.9l3.7-2.8z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3.1.6 4.2 1.7l3.2-3.2A11 11 0 0 0 2.1 7l3.7 2.9C6.7 7.3 9.1 5.4 12 5.4z"/></svg>
       <span data-i18n="login.google">用 Google 帳號登入</span>
     </a>
     <p class="note" data-i18n="login.note">我們只讀取你的 Google 帳號識別碼、名稱與 email，不會讀取其他 Google 資料。</p>
+    <div class="divider" data-i18n="login.email.or">或用 email 登入</div>
+    <form id="lg-email-form" novalidate>
+      <label class="field"><span data-i18n="login.email.email">Email</span>
+        <input type="email" id="lg-email" name="email" autocomplete="username" inputmode="email" maxlength="254" required></label>
+      <label class="field"><span data-i18n="login.email.password">密碼</span>
+        <input type="password" id="lg-password" name="password" autocomplete="current-password" maxlength="128" required></label>
+      <button type="submit" class="btn primary wide" id="lg-email-go" data-i18n="login.email.signin">用 email 登入</button>
+      <p class="err-line" id="lg-email-err" role="alert" hidden></p>
+    </form>
+    <div class="links">
+      <a href="/forgot-password" id="lg-to-forgot" data-i18n="login.email.forgot_link">忘記密碼？</a>
+      <a href="/register" id="lg-to-register" data-i18n="login.email.register_link">還沒有帳號？用 email 註冊</a>
+    </div>
     <p class="note what"><a href="/" id="lg-what" data-i18n="login.what">這是什麼？看介紹 →</a></p>
+  </section>
+
+  <section class="card" id="lg-register" hidden>
+    <h1 data-i18n="login.register.h">用 email 註冊</h1>
+    <p data-i18n="login.register.lead">填好後我們會寄一封驗證信到你的信箱：打開信裡的連結、輸入這組密碼，再看過條款，就完成註冊。</p>
+    <form id="lg-register-form" novalidate>
+      <label class="field"><span data-i18n="login.email.email">Email</span>
+        <input type="email" id="lg-r-email" name="email" autocomplete="username" inputmode="email" maxlength="254" required></label>
+      <label class="field"><span data-i18n="login.register.name">顯示名稱（選填）</span>
+        <input type="text" id="lg-r-name" name="name" autocomplete="nickname" maxlength="40"></label>
+      <label class="field"><span data-i18n="login.email.password">密碼</span>
+        <input type="password" id="lg-r-password" name="password" autocomplete="new-password" minlength="10" maxlength="128" required>
+        <small data-i18n="login.register.hint">至少 10 個字元；不要用 email、常見密碼或同一個字重複。</small></label>
+      <label class="field"><span data-i18n="login.email.password2">再輸入一次密碼</span>
+        <input type="password" id="lg-r-password2" name="password2" autocomplete="new-password" maxlength="128" required></label>
+      <div class="actions">
+        <button type="submit" class="btn primary" id="lg-r-go" data-i18n="login.register.go">寄驗證信</button>
+        <a class="btn" href="/login" data-i18n="login.email.back">回登入</a>
+      </div>
+      <p class="err-line" id="lg-r-err" role="alert" hidden></p>
+    </form>
+    <p class="note" data-i18n="login.register.cairn">用 email 註冊的帳號暫時不能連結疊石 Cairn；要連結 Cairn，請改用 Google 帳號登入。</p>
+  </section>
+
+  <section class="card" id="lg-forgot" hidden>
+    <h1 data-i18n="login.forgot.h">忘記密碼</h1>
+    <p data-i18n="login.forgot.lead">輸入註冊用的 email，我們會寄一封重設密碼的信（1 小時內有效）。</p>
+    <form id="lg-forgot-form" novalidate>
+      <label class="field"><span data-i18n="login.email.email">Email</span>
+        <input type="email" id="lg-f-email" name="email" autocomplete="username" inputmode="email" maxlength="254" required></label>
+      <div class="actions">
+        <button type="submit" class="btn primary" id="lg-f-go" data-i18n="login.forgot.go">寄重設密碼的信</button>
+        <a class="btn" href="/login" data-i18n="login.email.back">回登入</a>
+      </div>
+      <p class="err-line" id="lg-f-err" role="alert" hidden></p>
+    </form>
+  </section>
+
+  <section class="card" id="lg-reset" hidden>
+    <h1 data-i18n="login.reset.h">設定新密碼</h1>
+    <p data-i18n="login.reset.lead">設定新密碼後，所有已登入的裝置都會被登出。</p>
+    <div class="msg err" id="lg-x-msg" role="status" hidden></div>
+    <form id="lg-reset-form" novalidate>
+      <label class="field"><span data-i18n="login.reset.password">新密碼</span>
+        <input type="password" id="lg-x-password" name="password" autocomplete="new-password" minlength="10" maxlength="128" required>
+        <small data-i18n="login.register.hint">至少 10 個字元；不要用 email、常見密碼或同一個字重複。</small></label>
+      <label class="field"><span data-i18n="login.email.password2">再輸入一次密碼</span>
+        <input type="password" id="lg-x-password2" name="password2" autocomplete="new-password" maxlength="128" required></label>
+      <button type="submit" class="btn primary wide" id="lg-x-go" data-i18n="login.reset.go">設定新密碼</button>
+      <p class="err-line" id="lg-x-err" role="alert" hidden></p>
+    </form>
+    <div class="links">
+      <a href="/forgot-password" data-i18n="login.reset.again">重新寄一封重設密碼的信</a>
+      <a href="/login" data-i18n="login.email.back">回登入</a>
+    </div>
+  </section>
+
+  <section class="card" id="lg-verify" hidden>
+    <h1 data-i18n="login.verify.h">確認 email</h1>
+    <p data-i18n="login.verify.lead">輸入註冊時設定的密碼，完成 email 驗證。</p>
+    <div class="msg err" id="lg-v-msg" role="status" hidden></div>
+    <form id="lg-verify-form" novalidate>
+      <label class="field"><span data-i18n="login.email.password">密碼</span>
+        <input type="password" id="lg-v-password" name="password" autocomplete="current-password" maxlength="128" required></label>
+      <button type="submit" class="btn primary wide" id="lg-v-go" data-i18n="login.verify.go">驗證並繼續</button>
+      <p class="err-line" id="lg-v-err" role="alert" hidden></p>
+    </form>
+    <div class="links"><a href="/forgot-password" data-i18n="login.email.forgot_link">忘記密碼？</a></div>
   </section>
 
   <section class="card" id="lg-signup" hidden>
@@ -139,7 +232,8 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-b
   const T = (k, p) => (window.I18N ? window.I18N.t("login." + k, p) : k);
   const $ = (id) => document.getElementById(id);
   const q = new URLSearchParams(location.search);
-  const KNOWN = ["expired", "failed", "cancelled", "unverified", "disabled", "full", "rate_limited", "setup"];
+  const KNOWN = ["expired", "failed", "cancelled", "unverified", "disabled", "full", "rate_limited", "setup",
+    "google_account"];
 
   // the documents' few marks (terms.to_html does the same on /legal): ## / ### headings, - and 1.
   // lists, > notes, blank-line paragraphs, 【…】 marked. Text only (textContent), never markup.
@@ -204,9 +298,15 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-b
   if (next) $("lg-google").href = "/api/v1/account/login?" + new URLSearchParams({ next });
   const msg = $("lg-msg");
   const err = q.get("error");
+  // SP-764: a sign-in that started from 疊石 Cairn's 「用 TrailRunCoach 算這條」 (from=cairn in next, or on a refusal)
+  const fromCairn = q.get("from") === "cairn" || /[?&]from=cairn(&|$)/.test(next || "");
   if (err && KNOWN.includes(err)) {
-    msg.textContent = T("error." + err);
+    msg.textContent = err === "full" && fromCairn ? T("cairn.full") : T("error." + err);
     msg.className = "msg " + (err === "full" || err === "setup" ? "info" : "err");
+    msg.hidden = false;
+  } else if (fromCairn) {
+    msg.textContent = T("cairn.next");
+    msg.className = "msg info";
     msg.hidden = false;
   } else if (q.has("signed_out")) {
     msg.textContent = T("signed_out");
@@ -220,11 +320,96 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-b
     msg.textContent = T("deleted");
     msg.className = "msg info";
     msg.hidden = false;
+  } else if (["register", "reset"].includes(q.get("sent"))) {   // the e-mail sign-in's mails (SP-610)
+    msg.textContent = T("email.sent." + q.get("sent"));
+    msg.className = "msg info";
+    msg.hidden = false;
+  } else if (q.has("reset")) {
+    msg.textContent = T("email.reset_done");
+    msg.className = "msg info";
+    msg.hidden = false;
   }
   const csrfToken = async () => {
     const r = await fetch("/api/v1/session", { cache: "no-store", credentials: "same-origin" });
     return ((await r.json()) || {}).csrf || "";
   };
+
+  // ---- the e-mail sign-in (SP-610): sign in, sign up, forgot / reset the password, confirm the address ----
+  // each form posts JSON; the server's message (in the page's language) is shown when it refuses
+  const post = async (url, body) => {
+    const r = await fetch(url, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-TRC-CSRF": await csrfToken() },
+      body: JSON.stringify(body),
+    });
+    return { r, j: await r.json().catch(() => ({})) };
+  };
+  const wire = (formId, btnId, errId, build) => {
+    const form = $(formId), btn = $(btnId), errEl = $(errId);
+    const fail = (text) => { errEl.textContent = text || T("email.error"); errEl.hidden = false; };
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.hidden = true;
+      const req = build(fail);
+      if (!req) return;
+      btn.disabled = true;
+      try {
+        const { r, j } = await post(req.url, req.body);
+        if (r.ok && j.next) { location.replace(j.next); return; }
+        fail(j.detail && j.detail.message);
+      } catch (_) { fail(); }
+      btn.disabled = false;
+    });
+  };
+  const show = (id) => { $("lg-signin").hidden = true; $(id).hidden = false; };
+  const pwPair = (a, b, fail) => {
+    if ($(a).value.length < 10) { fail(T("email.short")); return false; }
+    if ($(a).value !== $(b).value) { fail(T("email.mismatch")); return false; }
+    return true;
+  };
+  const linkToken = () => {              // the mail's link: the token in the fragment, never sent; not kept
+    const t = location.hash.slice(1);
+    history.replaceState(null, "", location.pathname + location.search);
+    return t;
+  };
+  const path = location.pathname;
+  if (next) {
+    $("lg-to-register").href = "/register?" + new URLSearchParams({ next });
+  }
+  wire("lg-email-form", "lg-email-go", "lg-email-err", () =>
+    ({ url: "/api/v1/account/email/login", body: { email: $("lg-email").value, password: $("lg-password").value, next } }));
+  if (path === "/register") {
+    show("lg-register");
+    wire("lg-register-form", "lg-r-go", "lg-r-err", (fail) => pwPair("lg-r-password", "lg-r-password2", fail) && {
+      url: "/api/v1/account/email/register",
+      body: { email: $("lg-r-email").value, name: $("lg-r-name").value || null, password: $("lg-r-password").value, next },
+    });
+    return;
+  }
+  if (path === "/forgot-password") {
+    show("lg-forgot");
+    wire("lg-forgot-form", "lg-f-go", "lg-f-err", () => ({ url: "/api/v1/account/email/forgot", body: { email: $("lg-f-email").value } }));
+    return;
+  }
+  if (path === "/reset-password" || path === "/verify-email") {
+    const reset = path === "/reset-password";
+    show(reset ? "lg-reset" : "lg-verify");
+    const token = linkToken();
+    if (!token) {
+      const m = $(reset ? "lg-x-msg" : "lg-v-msg");
+      m.textContent = T("email.no_token"); m.hidden = false;
+      $(reset ? "lg-reset-form" : "lg-verify-form").hidden = true;
+      return;
+    }
+    if (reset) {
+      wire("lg-reset-form", "lg-x-go", "lg-x-err", (fail) => pwPair("lg-x-password", "lg-x-password2", fail) &&
+        { url: "/api/v1/account/email/reset", body: { token, password: $("lg-x-password").value } });
+    } else {
+      wire("lg-verify-form", "lg-v-go", "lg-v-err", () =>
+        ({ url: "/api/v1/account/email/verify", body: { token, password: $("lg-v-password").value, next } }));
+    }
+    return;
+  }
 
   // ---- a test account's one-time link (SP-611): the token is in the fragment, never sent to a server ----
   if (location.pathname === "/test-login") {

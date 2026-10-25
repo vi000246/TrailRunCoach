@@ -206,7 +206,7 @@ class PlanIn(PredictIn):
     # "skiba" (cycling τ) is still accepted from old saved pages and mapped to "wko5" in the planner
     wbal: Optional[Literal["wko5", "skiba", "skiba_run"]] = None
     # per-segment heat: the /weather hourly rows of the event (CWA 3-day or
-    # Open-Meteo); none, or no date / start time → the single To value
+    # MET Norway, SP-797); none, or no date / start time → the single To value
     hourly: Optional[list[HourIn]] = None
     hourly_heat: bool = True
     # SP-257: the /weather provider the To temperature / RH were filled from (the page sends it while
@@ -688,6 +688,7 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
         if body.type == "baiyue":
             opts["moving_rows"] = gm.get("moving_rows") or []
             opts["moving_rows_group"] = gm.get("moving_rows_group") or []
+            opts["group_factor"] = gm.get("group_factor")          # SP-724 (None: the group EP/h)
             # SP-732: each day's stops from the stop model (the trail HR model carries the profile)
             try:
                 th = ctx.trail_hr()
@@ -713,6 +714,15 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
             th = ctx.trail_hr() if body.type == "trail" else None
             if th is not None:
                 opts["stop_kind"] = stop_kind(ctx, body)
+                # SP-726: the segments you ran before (位置記憶); a context without it (tests): none
+                pm = getattr(ctx, "place_memory", None)
+                if pm is not None and course.get("source") == "gpx":
+                    try:
+                        opts["memory"] = pm(course, th)
+                    except Exception:       # noqa: BLE001 — the plan stands without it
+                        import traceback
+                        traceback.print_exc()
+                        opts["memory"] = None
 
             def run(o: dict, v: dict) -> dict:
                 return night(PL.plan_run(v1=v, course=course, grade_re=gre, opts=o, validated=validated,
@@ -796,6 +806,16 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
         out["summary"]["flat_pace_s_per_km"] = PL.flat_pace(out.get("segments") or [])
     # the main chart / table: pace, power and HR target per segment, null where not valid
     out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"), poles=body.poles, thr=thr)
+    # SP-728: the stretches where you may need hands too (攀爬段), drawn on the elevation chart; a context
+    # without it (tests) or a road race / manual course: none
+    cm = getattr(ctx, "climb_marks", None)
+    out["climb"] = None
+    if cm is not None and body.type in ("trail", "baiyue") and course.get("source") == "gpx":
+        try:
+            out["climb"] = cm(course)
+        except Exception:                   # noqa: BLE001 — the plan stands without it
+            import traceback
+            traceback.print_exc()
     if body.type != "baiyue":
         # the absolute-intensity bar's heart-rate version (SP-118; zonebar.py)
         from backend.engine.racepower import zonebar as ZB

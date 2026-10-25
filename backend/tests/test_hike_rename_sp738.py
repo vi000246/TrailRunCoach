@@ -37,7 +37,9 @@ def test_calculator_texts_say_hiking():
         assert "Baiyue" not in _cat("en", "racepower")[key], key
     assert "百岳步行模型" not in PAGE and "登山步行模型" in PAGE
     assert "體重 × 13 %" not in PAGE and "單日 4 kg、多日 9 kg" in PAGE
-    assert 'baiyue: "登山"' in (STATIC / "share.html").read_text("utf-8")         # the share page's type
+    # the share page's type (SP-460: its words are the share catalog's)
+    assert 'baiyue: JT("type.baiyue")' in (STATIC / "share.html").read_text("utf-8")
+    assert _cat("zh-TW", "share")["type.baiyue"] == "登山" and _cat("en", "share")["type.baiyue"] == "Hiking"
 
 
 def test_race_manager_kind_reads_hiking_and_old_events_still_load():

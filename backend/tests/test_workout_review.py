@@ -545,7 +545,7 @@ def test_bundled_workout_view_parses():
     from backend.engine.wko5expr.customviews import REPO_VIEWS, load_custom_views
     v = load_custom_views([REPO_VIEWS])["單次活動判讀"]
     assert [d["title"] for d in v["dashboards"]] == [
-        "本次重點", "有氧／心率飄移", "間歇", "爬坡與地形", "配速與耐久", "跑姿與膝蓋負荷（參考）"]
+        "本次重點", "有氧／心率飄移", "間歇", "閾值", "爬坡與地形", "配速與耐久", "跑姿與膝蓋負荷（參考）"]   # 閾值: SP-801
     assert all(d["charts"][0]["kind"] == "review" for d in v["dashboards"])
 
 

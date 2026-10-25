@@ -36,7 +36,7 @@ from typing import Optional
 
 import numpy as np
 
-from backend.i18n import N_
+from backend.i18n import M_, N_, _
 
 PROTOCOLS = ("quick", "standard", "race")
 DEFAULT = "quick"
@@ -103,30 +103,40 @@ NO_FIT = N_("算不出模型閾值功率（Modelled threshold power）：測試�
 
 TABLE = {
     "quick": dict(
-        label="快速：20 分全力", hint="約 37 分；準確度約 ±3%（SEE 6.7 W），不測無氧容量",
+        label=N_("快速：20 分全力"), hint="；".join((N_("約 37 分"), N_("準確度約 ±3%（SEE 6.7 W），不測無氧容量"))),
         title="CP 測試 20 分全力", minutes=37, tss=45.0,
-        target="20 分鐘全力、配速平均；最後 2 分可以加速",
-        detail="暖身 12 分（含 3 趟 20 秒加速）；20 分全力；緩和 5 分。平路或田徑場",
-        source="Ñancupil-Andrade 2024：跑步 CP ≈ 0.95 × 20 分全力功率",
         steps="暖身 12 分 → 20 分全力 → 緩和 5 分", warm=12, bouts=(20,), rest=0, cool=5),
     "standard": dict(
-        label="標準：12 分＋休 30 分＋3 分", hint="約 70 分；兩點 CP＋無氧容量，休息不能縮短",
+        label=N_("標準：12 分＋休 30 分＋3 分"), hint="；".join((N_("約 70 分"), N_("兩點 CP＋無氧容量，休息不能縮短"))),
         title="CP 測試 12 分 + 3 分", minutes=70, tss=65.0,
-        target="兩段都全力、配速平均；中間休 30 分鐘（不要縮短）",
-        detail="暖身 15 分；12 分全力；休 30 分（走或極慢跑）；3 分全力；緩和 10 分。平路或田徑場",
-        source="Stryd 9/3 兩段測試（Ruiz-Alias 2022/2025），先長後短；每 4–6 週",
         steps="暖身 15 分 → 12 分全力 → 休 30 分 → 3 分全力 → 緩和 10 分", warm=15, bouts=(12, 3), rest=30,
         cool=10),
     "race": dict(
-        label="用比賽：5–10 K 比賽或計時跑", hint="不另外排；用 Riegel 換算（外插），不測無氧容量",
-        title="CP 測試：5–10 K 比賽或計時跑", minutes=0, tss=0.0, target="", detail="", source="",
+        label=N_("用比賽：5–10 K 比賽或計時跑"), hint="；".join((N_("不另外排"), N_("用 Riegel 換算（外插），不測無氧容量"))),
+        title="CP 測試：5–10 K 比賽或計時跑", minutes=0, tss=0.0,
         steps="", warm=0, bouts=(), rest=0, cool=0),
 }
-NOTE_RACE = "用 5–10 K 比賽或計時跑代替 CP 測試"
+NOTE_RACE = N_("用 5–10 K 比賽或計時跑代替 CP 測試")
 
 
 def norm(protocol: Optional[str]) -> str:
     return protocol if protocol in PROTOCOLS else DEFAULT
+
+
+def _texts(p: str) -> dict:
+    """The session's 目標 / 說明 / 出處 (SP-905: msgids joined with 「；」「。」, so an English page reads
+    them back; the 「暖身 N 分」「緩和 N 分」 the step builders parse stay)."""
+    t = TABLE[p]
+    if p == "quick":
+        return {"target": _("20 分鐘全力、配速平均") + "；" + _("最後 2 分可以加速"),
+                "detail": "；".join((_("暖身 {n} 分（含 3 趟 20 秒加速）", n=t["warm"]), _("{n} 分全力", n=t["bouts"][0]),
+                                    _("緩和 {n} 分", n=t["cool"]))) + "。" + _("平路或田徑場"),
+                "source": _("Ñancupil-Andrade 2024：跑步 CP ≈ 0.95 × 20 分全力功率")}
+    return {"target": _("兩段都全力、配速平均") + "；" + _("中間休 {n} 分鐘（不要縮短）", n=t["rest"]),
+            "detail": "；".join((_("暖身 {n} 分", n=t["warm"]), _("{n} 分全力", n=t["bouts"][0]),
+                                _("休 {n} 分（走或極慢跑）", n=t["rest"]), _("{n} 分全力", n=t["bouts"][1]),
+                                _("緩和 {n} 分", n=t["cool"]))) + "。" + _("平路或田徑場"),
+            "source": _("Stryd 9/3 兩段測試（Ruiz-Alias 2022/2025），先長後短") + "；" + _("每 4–6 週")}
 
 
 def session_for(protocol: Optional[str]) -> Optional[dict]:
@@ -136,8 +146,8 @@ def session_for(protocol: Optional[str]) -> Optional[dict]:
     if p == "race":
         return None
     t = TABLE[p]
-    return {"id": "test", "kind": "test", "title": t["title"], "minutes": t["minutes"], "target": t["target"],
-            "detail": t["detail"], "source": t["source"], "tss": t["tss"], "protocol": p}
+    return {"id": "test", "kind": "test", "title": t["title"], "minutes": t["minutes"], **_texts(p),
+            "tss": t["tss"], "protocol": p}
 
 
 def protocol_of(s: Optional[dict]) -> Optional[str]:
@@ -161,7 +171,7 @@ def protocol_of(s: Optional[dict]) -> Optional[str]:
 def cap_note(protocol: Optional[str]) -> str:
     """plan_prefs.NOTE_TEST: the test is exempt from the per-session cap."""
     t = TABLE[norm(protocol)]
-    return f"CP 測試的流程固定（{t['steps']}），不受單次時間上限"
+    return M_("CP 測試的流程固定（{steps}），不受單次時間上限", steps=t["steps"])
 
 
 # ---------------------------------------------------------------------------

@@ -89,7 +89,8 @@ OUT = {{ m, html: D.html(m, t) }};
     assert m["persisted"] == "no" and m["canAsk"] is True
     h = out["html"]
     assert "4.2 MB" in h and "20 MB" in h and "3.5 MB" in h
-    for txt in ("P0", "P1", "P2", "已存好", "目前沒有要存的資料", "2026-10-17 16:00", "要求持久保存"):
+    # SP-758: an empty P2 says how it fills (opening an activity), not 「目前沒有要存的資料」
+    for txt in ("P0", "P1", "P2", "已存好", "還沒有：打開一筆近 30 天的活動就會存", "2026-10-17 16:00", "要求持久保存"):
         assert txt in h, txt
     assert "無法取得" not in h
     assert "加到主畫面" not in h                                        # not an iPhone tab

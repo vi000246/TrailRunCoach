@@ -111,7 +111,7 @@
   "ed.note": "備註",
   "ed.days": "天數",
   "ed.pack": "行程背包 kg",
-  "ed.pack_tip": "登山行程（多日是第 1 天）的背包重量；空白 = 預設背負：單日 4 kg、多日 9 kg（推估）。登山預測用它，賽前的陡坡健走也用它算模擬負重的坡度",
+  "ed.pack_tip": "登山行程（多日是第 1 天）的背包重量；空白 = 預設背負：設定 › 進階設定 › 自動估算的參數有填「單日／多日登山預設背負」就用它，沒填時同類行程（單日／多日）記過的背負滿 3 趟用你自己的中位數，不夠用單日 4 kg、多日 9 kg（推估）。登山預測用它，賽前的陡坡健走也用它算模擬負重的坡度",
   "ed.adv": "進階：土徑比、背包、登山杖",
   "ed.saved": "已儲存",
   "gpx.h": "路線 GPX",
@@ -140,6 +140,7 @@
   "cairn.push_h": "把路線推到 Cairn",
   "cairn.push_go": "推到 Cairn",
   "cairn.unavailable": "推到 Cairn 要先登入並在 設定 › 連結 連結疊石 Cairn 帳號；這個網站目前沒有開放。",
+  "cairn.no_google": "推到 Cairn 要先連結疊石 Cairn 帳號，用 email 登入的帳號暫時不能連結；要用這個功能請改用 Google 帳號登入。",
   "cairn.link_first": "還沒連結疊石 Cairn：先到設定連結你的 Cairn 帳號，才能推。",
   "cairn.link_go": "去連結 →",
   "cairn.plan": "推到 Cairn 是付費方案的功能。",
@@ -150,6 +151,10 @@
   "cairn.consent": "同意：{text}",
   "cairn.done_created": "已在 Cairn 建立行程",
   "cairn.done_updated": "已更新 Cairn 上的行程",
+  "cairn.what_origin": "會推：賽事計算機存的配速曲線、每晚的過夜點。",
+  "cairn.origin": "這場的 GPX 是從 Cairn 的「{name}」匯入的：推送會更新那一條行程，不會另外新建；路線檔、行程名稱，以及你在 Cairn 加的點和填的時刻都不會動。",
+  "cairn.done_origin": "已更新 Cairn 上原本那條行程",
+  "cairn.new_go": "在 Cairn 另建一條",
   "cairn.need_url": "貼上 Cairn 的分享連結",
   "cairn.imported_ev": "已匯入 {name}：這場改成 {km} km ↑{gain} m、{days} 天",
   "result_line": "名次或成績：{v}",
@@ -165,5 +170,7 @@
   "grp.sig_legacy": "這條路線建得比較早，看不出時間是人填的還是自動算的，所以沒有自動勾",
   "grp.sep": "；",
   "grp.saved_on": "已設成團的時間表，賽事計算機會做跟團對照",
-  "grp.saved_off": "已取消團的時間表"
+  "grp.saved_off": "已取消團的時間表",
+  "cairn.from_new": "從疊石 Cairn 帶來「{name}」（{days} 天）。確認日期、類型和優先級後按「儲存」：路線會匯入這場賽事，接著打開賽事計算機。",
+  "cairn.from_fail": "從疊石 Cairn 帶來的連結讀不到：{msg}"
 }

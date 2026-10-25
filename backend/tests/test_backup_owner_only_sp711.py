@@ -157,6 +157,14 @@ def test_every_owner_only_cap_has_a_check(tmp_path, monkeypatch):
         assert P.for_tenant(wk) == wk
         assert TP.lookup_client_creds()[0] == ("owners-id", "owners-secret")
         assert WX.load_key() == "OWNERS-CWA-KEY-123"
-    # ai.owner_key: there is no owner AI key in the code yet (SP-306) — nothing reads one, so
-    # nothing to guard; the cap stays reserved and a user tenant does not have it
+    # ai.owner_key (SP-785, backend/ai/config.py): the owner's AI key — a user tenant reads none and
+    # may not save one
     assert not _user_tenant(tmp_path).can("ai.owner_key")
+    from backend.ai import config as AIC
+    monkeypatch.setenv(AIC.ENV_KEY, "sk-ant-OWNERS-AI-KEY-0123456789")
+    with tenancy.use(_user_tenant(tmp_path / "u7")):
+        assert AIC.api_key() is None and AIC.key_source() == "none"
+        with pytest.raises(PermissionError):
+            AIC.save_key("sk-ant-SOMEONES-KEY-0123456789")
+    with tenancy.use(tenancy.owner()):
+        assert AIC.api_key() == "sk-ant-OWNERS-AI-KEY-0123456789"

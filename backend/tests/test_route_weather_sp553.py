@@ -1,7 +1,7 @@
 """SP-553: a long course's weather at several points along it — one per 10 km, at most 6 — each
 section's rows read at the clock the plan reaches that section (heat, then the rain, 冷風 and 失溫
 reminders), moved to the segment's height from the section point's. The call count has a cap
-(CWA files shared by the site, Open-Meteo once per point and memoised, no climatology for the
+(CWA files shared by the site, MET Norway once per point and cached (SP-797), no climatology for the
 points). The weather card links to the same route in 疊石 Cairn when the event's note holds its
 link. Fakes only, no network."""
 import datetime as dt
@@ -12,6 +12,7 @@ from backend.engine.racepower import gpx as GPX
 from backend.engine.racepower import weather as WX
 from backend.tests.test_race_calculator import _upload
 from backend.tests.test_racepower_v2 import client, synthetic_track  # noqa: F401  (fixture)
+from backend.tests.test_weather_met_sp797 import met_js
 
 approx = pytest.approx
 DAY = "2099-01-10"
@@ -68,20 +69,18 @@ def test_each_point_gets_its_own_forecast_with_a_call_cap(tmp_path):
             return doc
         if "opendataapi" in url:
             raise RuntimeError("HTTP 500")                  # the 鄉鎮 / weekly files: not needed here
-        if url == WX.OM_FORECAST:
-            times = [f"{DAY}T{h:02d}:00" for h in range(24)]
-            return {"elevation": 600, "hourly": {"time": times, "temperature_2m": [18.0] * 24,
-                                                "relative_humidity_2m": [70.0] * 24}}
+        if url == WX.MET_FORECAST:                         # SP-797: MET Norway in place of Open-Meteo
+            return met_js(DAY, temp=18.0, rh=70.0)
         raise AssertionError(f"no climatology for the points: {url}")
     pts = WX.route_conditions(secs, date=dt.date(2099, 1, 10), today=dt.date(2099, 1, 9), key="k" * 12,
                               get=get, cache_dir=tmp_path)
-    assert [p["provider"] for p in pts] == ["cwa_hourly", "open_meteo", "cwa_hourly", "open_meteo"]
+    assert [p["provider"] for p in pts] == ["cwa_hourly", "met_norway", "cwa_hourly", "met_norway"]
     assert pts[0]["detail"]["cwa_location"] == "甲山" and pts[2]["detail"]["cwa_location"] == "乙山"
     assert pts[0]["hourly"][9]["temp_c"] == 12 and pts[2]["hourly"][9]["temp_c"] == 3
     assert pts[1]["elevation_m"] == approx(secs[1]["elevation_m"])     # the height the rows refer to
-    # the cap: the 3-day file once for every point (shared), Open-Meteo once per point that needs it
+    # the cap: the 3-day file once for every point (shared), MET Norway once per point that needs it
     assert calls.count(WX.CWA_URL.format(id=WX.CWA_HOURLY)) == 1
-    assert calls.count(WX.OM_FORECAST) == 2
+    assert calls.count(WX.MET_FORECAST) == 2
     assert not any(u == WX.OM_ARCHIVE for u in calls)
 
 

@@ -228,7 +228,7 @@ def test_random_donor_id_and_no_account_gps_or_fit_in_the_pool(server, tmp_path)
     assert all(len(r) == len(P.SPLIT_COLS) for r in _q(pool, "SELECT * FROM splits"))
 
 
-def test_splits_are_untrimmed_and_carry_the_export_year(server, tmp_path):
+def test_splits_are_untrimmed_and_carry_the_activity_window(server, tmp_path):
     TRACKS.clear()
     pool = tmp_path / "pool.db"
     u = _user("loop@x.tw", "g-loop")
@@ -241,9 +241,11 @@ def test_splits_are_untrimmed_and_carry_the_export_year(server, tmp_path):
         far = (HOME[0] + 3000 * M_LAT, HOME[1])
         TRACKS[(u.id, i + 1)] = _track([HOME, far, HOME], _utc(d))
     _export(pool)
-    rows = _q(pool, "SELECT export_year, sex, age_band FROM splits")
+    rows = _q(pool, "SELECT rel_window, sex, age_band FROM splits")
     assert len(rows) >= 4 * 5
-    assert {r[0] for r in rows} == {TODAY.year}
+    # SP-800: the activity's 28-day window counted from the pool's secret epoch (not the export year)
+    epoch = P.split_epoch()
+    assert {r[0] for r in rows} == {P.window_of(d, epoch) for d in days}
     assert {(r[1], r[2]) for r in rows} == {("female", "30-39")}
 
 
@@ -373,20 +375,97 @@ def test_deleting_the_account_withdraws_first(server, tmp_path, monkeypatch):
     assert store.research_links() == []
 
 
-def test_retention_deletes_old_rows_and_whole_export_years(server, tmp_path):
+def test_retention_deletes_each_row_three_years_after_its_activity(server, tmp_path):
+    """SP-800: summaries and splits on one basis, the activity's date, row by row. Two people (told
+    apart in the splits by sex), one run each, 100 days apart: when the first run is 3 years old its
+    summary, daily row and splits go at the next clean-up and the second's stay. The old rule (whole
+    export years, `export_year < this year - 3`) kept splits 3 to 4 years."""
     TRACKS.clear()
     pool = tmp_path / "pool.db"
-    u = _one_runner(server)
+    early, late = TODAY - dt.timedelta(days=130), TODAY - dt.timedelta(days=30)
+    for email, sub, sex, day in (("f@x.tw", "g-f", "female", early), ("m@x.tw", "g-m", "male", late)):
+        u = _user(email, sub)
+        _consent(u.id, b=True)
+        _tenant(u.folder(), [(1, day, "upload", None, None)], sex=sex)
+        TRACKS[(u.id, 1)] = _track(_north(HOME, 6), _utc(day))
     _export(pool)
-    with sqlite3.connect(pool) as con:
-        con.execute("UPDATE splits SET export_year = ? WHERE rowid IN (SELECT rowid FROM splits LIMIT 2)",
-                    (TODAY.year - 4,))
-    out = P.expire(TODAY, path=pool)
-    assert out["splits"] == 2 and out["summaries"] == 0
-    out = P.expire(TODAY + dt.timedelta(days=4 * 366), path=pool)     # everything is older than 3 years then
-    assert out["summaries"] == 3 and _q(pool, "SELECT count(*) FROM daily") == [(0,)]
+
+    def count(sex):
+        return _q(pool, "SELECT count(*) FROM splits WHERE sex = ?", sex)[0][0]
+    n_f, n_m = count("female"), count("male")
+    assert n_f and n_m
+    none = {"summaries": 0, "daily": 0, "splits": 0}
+    assert P.expire(TODAY, path=pool) == none
+    span = TODAY - P.retention_cut(TODAY)                            # 3 years
+
+    # a window before the early run is 3 years old: nothing of it goes yet
+    assert P.expire(early + span - dt.timedelta(days=P.SPLIT_WINDOW_DAYS), path=pool) == none
+    # the day after it is 3 years old: its summary, daily row and splits are gone; the late run's stay
+    out = P.expire(early + span + dt.timedelta(days=1), path=pool)
+    assert out == {"summaries": 1, "daily": 1, "splits": n_f}
+    assert count("female") == 0 and count("male") == n_m
+    # the late run the same way — 3 years after it, not at the end of the year after (the old rule: 2030)
+    later = late + span + dt.timedelta(days=1)
+    assert later.year == TODAY.year + 3
+    assert P.expire(later, path=pool) == {"summaries": 1, "daily": 1, "splits": n_m}
+    for t in ("summaries", "daily", "splits"):
+        assert _q(pool, f"SELECT count(*) FROM {t}") == [(0,)]
+
+
+def test_the_export_leaves_out_activities_older_than_three_years(server, tmp_path):
+    """SP-800: the first export used to take a person's whole history; a 4-year-old run's summary went
+    at the next clean-up, but its splits came in under this year and stayed 3 to 4 more years."""
+    TRACKS.clear()
+    pool = tmp_path / "pool.db"
+    u = _user("old@x.tw", "g-old")
+    _consent(u.id, b=True)
+    old, new = TODAY - dt.timedelta(days=4 * 365), TODAY - dt.timedelta(days=10)
+    _tenant(u.folder(), [(1, old, "upload", None, None), (2, new, "upload", None, None)])
+    TRACKS[(u.id, 1)] = _track(_north(HOME, 8), _utc(old))
+    TRACKS[(u.id, 2)] = _track(_north(HOME, 5), _utc(new))
+    res = _export(pool)
+    n_new = len(D.splits(TRACKS[(u.id, 2)], D.Donor("female", 36, 170.0, weight_kg=55.0), 0))
+    assert res.summaries == 1 and res.daily == 1
+    assert res.splits == n_new and _q(pool, "SELECT count(*) FROM splits") == [(n_new,)]
+    assert P.expire(TODAY, path=pool) == {"summaries": 0, "daily": 0, "splits": 0}   # nothing old came in
+
+
+def test_an_expired_run_is_not_exported_again(server, tmp_path):
+    """Before SP-800 the clean-up deleted a 3-year-old summary, the next export found its activity key
+    gone and added the run again — with a fresh set of splits."""
+    TRACKS.clear()
+    pool = tmp_path / "pool.db"
+    _one_runner(server)
+    _export(pool)
+    later = TODAY + dt.timedelta(days=3 * 366)
+    P.expire(later, path=pool)
+    assert _q(pool, "SELECT count(*) FROM summaries") == [(0,)]
+    res = P.export(path=pool, today=later, rng=np.random.default_rng(7), loader=_loader, force=True)
+    assert res.summaries == 0 and res.splits == 0 and res.daily == 0
+    for t in ("summaries", "daily", "splits"):
+        assert _q(pool, f"SELECT count(*) FROM {t}") == [(0,)]
+
+
+def test_an_old_pool_file_gets_the_new_splits_table(server, tmp_path):
+    """A pool.db from before SP-800 has splits with an export year only: they cannot be aged row by row,
+    so the table is made again (empty) the first time the file is opened."""
+    pool = tmp_path / "pool.db"
+    con = sqlite3.connect(pool)
+    con.execute("CREATE TABLE splits (export_year INTEGER NOT NULL, grade REAL, grade_sd REAL, ele_band_m INTEGER, "
+                "speed_ms REAL, pct_lthr REAL, w_per_kg REAL, cadence REAL, temp_c REAL, decile INTEGER, sex TEXT, "
+                "age_band TEXT)")
+    con.execute("INSERT INTO splits (export_year, grade) VALUES (2026, 0.01)")
+    con.commit()
+    con.close()
+    with P.connect(pool) as c:
+        assert {r[1] for r in c.execute("PRAGMA table_info(splits)")} == set(P.SPLIT_COLS)
     assert _q(pool, "SELECT count(*) FROM splits") == [(0,)]
-    assert u
+
+
+def test_the_module_note_says_the_sweep_runs_every_hour():
+    doc = " ".join(P.__doc__.split())
+    assert "once a day" not in doc and "every hour" in doc
+    assert P.TICK_EVERY_S == 3600
 
 
 # ---------------------------------------------------------------------------- the real reader

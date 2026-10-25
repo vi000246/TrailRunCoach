@@ -148,10 +148,10 @@ async def _settings(db: AsyncSession) -> dict:
 
 @router.get("/meta")
 async def meta(db: AsyncSession = Depends(get_db)):
-    return {"areas": [{"key": k, "label": v, "custom": False} for k, v in INJ.AREAS.items()]
+    # the words in the request's language (SP-841); a custom area is the user's own label
+    return {"areas": [{"key": k, "label": INJ.area_label(k), "custom": False} for k in INJ.AREAS]
             + [{"key": a, "label": a, "custom": True} for a in await custom_areas(db)],
-            "sides": INJ.SIDES, "no_side": list(INJ.NO_SIDE), "kinds": INJ.KINDS, "severities": INJ.SEVERITIES,
-            "severity_help": INJ.SEVERITY_HELP, "statuses": INJ.STATUSES, "pain": INJ.PAIN,
+            **INJ.tables(), "no_side": list(INJ.NO_SIDE),
             "settings": await _settings(db), "pattern_min_n": INJ.PATTERN_MIN_N,
             "disclaimer": _(INJ.DISCLAIMER), "monitor": INJ.monitor(None)["text"],
             # 傷別 (SP-269): optional, each tied to one area ("other": any); the pain-monitoring text of each
@@ -222,7 +222,8 @@ async def put_settings(body: dict = Body(...), db: AsyncSession = Depends(get_db
         if v:
             an = await run_in_threadpool(_analysis_cached, None, False, None)
             if an["n"] < INJ.PATTERN_MIN_N:
-                raise HTTPException(400, f"要有 {INJ.PATTERN_MIN_N} 次以上進分析的受傷紀錄才能打開（目前 {an['n']} 次）")
+                raise HTTPException(400, _("要有 {need} 次以上進分析的受傷紀錄才能打開（目前 {n} 次）",
+                                           need=INJ.PATTERN_MIN_N, n=an["n"]))
         await r.set(INJ.SETTING_PATTERN, v)
     if "reentry_step_up" in body:
         if not isinstance(body["reentry_step_up"], bool):
@@ -430,8 +431,10 @@ def _analysis_cached(severities: Optional[tuple], season: bool, area: Optional[s
     from backend.api.wko5views import _dataset
     from backend.engine import injury_exposure as IE
     from backend.engine.overview import day_to_date
+    from backend.i18n import current_locale
     ds = _dataset()
-    key = (*_tenancy.ds_key(ds), _stamp(), severities, season, area)
+    # the labels, help and reasons are in the request's language (SP-841): one entry per language
+    key = (*_tenancy.ds_key(ds), _stamp(), severities, season, area, current_locale())
     with _an_lock:
         hit = _an_memo.get(key)
     if hit is not None and not hit.get("pending"):

@@ -47,17 +47,30 @@ def test_hover_shows_this_and_a_future_weeks_reasons(app):
     rows = _rows(page)
     today = page.evaluate("D.today")
     cur = next(w for w in rows if w["start"] <= today <= w["end"])
-    fut = next(w for w in rows if w["start"] > today and w["provisional"])
+    _hover_why(page, cur)
+    fut = next((w for w in rows if w["start"] > today and w["provisional"]), None)
+    if fut is None:
+        # late in a month the month in view ends before the first projected week (projection.py: every week
+        # after next week is provisional) — it is in the next month
+        last = max(w["start"] for w in page.evaluate("D.week_rows"))
+        page.click("#next")
+        page.wait_for_function("(s) => (D.week_rows || []).some((w) => w.start > s)", arg=last, timeout=60_000)
+        page.wait_for_selector("#calwrap:not(.loading)", timeout=60_000)
+        rows = rows + _rows(page)
+        fut = next(w for w in rows if w["start"] > today and w["provisional"])
     assert any("推估" in x for w in rows if w["mode_label"] == "恢復週" for x in w["why"]), rows
-    for w in (cur, fut):
-        pill = page.locator(f'.wk[data-week="{w["start"]}"] .sum .wkq')
-        pill.scroll_into_view_if_needed()
-        pill.hover()
-        txt = _pop(page)
-        assert "這週為什麼這樣排" in txt and all(x in txt for x in w["why"]), (txt, w)
-        assert ("暫定：" in txt) == bool(w["provisional"])
-        page.mouse.move(5, 5)
-        expect(page.locator(".qtip-pop")).to_have_count(0)
+    _hover_why(page, fut)
+
+
+def _hover_why(page, w: dict) -> None:
+    pill = page.locator(f'.wk[data-week="{w["start"]}"] .sum .wkq')
+    pill.scroll_into_view_if_needed()
+    pill.hover()
+    txt = _pop(page)
+    assert "這週為什麼這樣排" in txt and all(x in txt for x in w["why"]), (txt, w)
+    assert ("暫定：" in txt) == bool(w["provisional"])
+    page.mouse.move(5, 5)
+    expect(page.locator(".qtip-pop")).to_have_count(0)
 
 
 def test_english_reasons_are_english(app):

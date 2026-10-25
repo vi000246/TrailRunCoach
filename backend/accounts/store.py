@@ -16,7 +16,14 @@ written on sign-in / sign-up.
   usage       the free tier's counters per user / quota / period (SP-330); usage_items: what
               was counted, when a distinct item counts once a period (a chart dashboard a day, a
               calculator route a day); quota_extra: an admin's 本月額外次數 per user and month (SP-713)
-  api_tokens  service tokens of another project (疊石 Cairn / inReachLiveTrack, SP-329, client
+  xp_events   cross-product counts (SP-765, accounts/xp.py; SP-571 §4.3): user × event × day (the app's
+              day, Asia/Taipei) × times, the same shape as Cairn's usage_daily. Events: xp-card-shown,
+              xp-card-click, xp-card-dismiss (the 疊石 Cairn card, SP-763), xp-linked (the account linked
+              with Cairn, SP-329). Apart from usage on purpose: those are the free tier's quotas (SP-330).
+              users.signup_source: where a new account came from, set once at sign-up ("cairn" when the
+              sign-up started from a link carrying from=cairn; "share" from a race share page's
+              「用自己的資料算」, SP-389 Q1-2; NULL otherwise)
+  api_tokens service tokens of another project (疊石 Cairn / inReachLiveTrack, SP-329, client
               "cairn"): sha256 only, the link:* scopes they carry, 30 days, one live per user and
               project, deleted when the user unlinks; and the weight API's tokens (SP-472, scope weight:write,
               client "weight"): their own row is in the tenant DB, this one only names the user
@@ -48,6 +55,28 @@ written on sign-in / sign-up.
   research_keys   the pool's secret keys (the HMAC key of the activity keys), never next to the pool
   test_login_links  a test account's one-time sign-in links (SP-611, accounts/test_accounts.py): sha256 of
               the token only, the user, who made it, when it ends; taken once
+  email_accounts  the e-mail sign-in (SP-610, accounts/email_login.py): the address (lower-cased, the
+              key), the Argon2id hash of the password (PHC string, accounts/passwords.py — never the
+              password), the name typed at sign-up, when the address was confirmed, and the two
+              one-time links by the sha256 of their token only (verify: the address check, 24 h; reset:
+              a new password, 1 h). user_id stays empty until the account is made (the address
+              confirmed and the terms accepted, under the same cap as Google's sign-up); the account
+              then has an identities row provider "email", subject = the address. A row without a user
+              is a sign-up in progress; delete_user removes the row with the person
+  coach_profiles  who is a coach (SP-789: an admin makes one on the admin page, no payment yet): the
+              code students type to ask for them (not a secret: it only asks, the coach accepts), the
+              most students they may have (SP-793; NULL = coaching.DEFAULT_MAX_STUDENTS), who granted it
+  coach_links  a coach and a student (SP-789; accounts/coaching.py has the rules): pending (the student
+              typed the coach's code, the coach has not accepted yet) -> active (the student accepted the
+              coach's invite link, or the coach accepted the student's request) -> ended (the student
+              withdrew, the coach let them go, the admin took the coach away; ended_by). Many to many in
+              the table; coaching.MAX_COACHES_PER_STUDENT says how many live links a student may have.
+              perms: what the student allows on top of reading (SP-792; {} until then). An active row is
+              the one thing that lets a coach read a student's data (coaching.student_of). Each accept
+              and each end of an active link is also a consents row of the student (action
+              "coach_accept" / "coach_end", client "coach")
+  coach_invites  a coach's invite link (SP-789): the sha256 of its token only, one live per coach (a new
+              one replaces the old), until expires_at; any number of students may use it
 
 Test accounts (SP-611): users.is_test = 1. An admin makes them on the admin page (test_meta
 {"origin": "admin", ...}: no e-mail, no Google account, signed in only through a one-time link)
@@ -57,7 +86,9 @@ the background sync, the research pool, the server backup), and accept no terms.
 
 delete_user (SP-386) removes every row that names a person: the user row (identities, sessions,
 shares, usage, api_tokens, consents go with it, ON DELETE CASCADE), their sign-ins in progress and
-sign-up tickets, and their e-mail on the waitlist. Never the owner.
+sign-up tickets, and their e-mail on the waitlist; their coaching (SP-789: their coach profile, invite
+link and every link where they are the coach or the student, and their name in the consents rows
+of their students). Never the owner.
 
 Every function opens its own connection (short; WAL + busy_timeout), so it is safe from the
 event loop thread, the thread pool and the scheduler alike. User 1 is the owner, migrated in
@@ -141,6 +172,13 @@ CREATE TABLE IF NOT EXISTS usage_items (
     period TEXT NOT NULL,
     item TEXT NOT NULL,
     PRIMARY KEY (user_id, key, period, item)
+);
+CREATE TABLE IF NOT EXISTS xp_events (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event TEXT NOT NULL,
+    day TEXT NOT NULL,
+    n INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, event, day)
 );
 CREATE TABLE IF NOT EXISTS quota_extra (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -238,6 +276,64 @@ CREATE TABLE IF NOT EXISTS test_login_links (
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS email_accounts (
+    email TEXT PRIMARY KEY,
+    user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    password_hash TEXT NOT NULL,
+    display_name TEXT,
+    verified_at TEXT,
+    verify_hash TEXT UNIQUE,
+    verify_expires_at TEXT,
+    reset_hash TEXT UNIQUE,
+    reset_expires_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS coach_profiles (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    code TEXT NOT NULL UNIQUE,
+    max_students INTEGER,
+    granted_by INTEGER,
+    granted_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS coach_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coach_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    initiated_by TEXT NOT NULL,
+    perms TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    accepted_at TEXT,
+    ended_at TEXT,
+    ended_by TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS coach_links_live ON coach_links(coach_id, student_id)
+    WHERE status IN ('pending', 'active');
+CREATE INDEX IF NOT EXISTS coach_links_student ON coach_links(student_id, status);
+CREATE INDEX IF NOT EXISTS coach_links_coach ON coach_links(coach_id, status);
+CREATE TABLE IF NOT EXISTS coach_invites (
+    token_hash TEXT PRIMARY KEY,
+    coach_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS coach_views (
+    token_hash TEXT PRIMARY KEY REFERENCES sessions(token_hash) ON DELETE CASCADE,
+    coach_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    started_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS coach_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    coach_id INTEGER,
+    coach_name TEXT,
+    at TEXT NOT NULL,
+    action TEXT NOT NULL,
+    params TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS coach_audit_student ON coach_audit(student_id, id);
 """
 
 
@@ -335,6 +431,7 @@ _ADDED_COLUMNS = (
     ("consents", "client", "TEXT"),                                      # SP-329
     ("users", "is_test", "INTEGER NOT NULL DEFAULT 0"),                  # SP-611
     ("users", "test_meta", "TEXT"),                                      # SP-611
+    ("users", "signup_source", "TEXT"),                                  # SP-765
 )
 
 
@@ -1079,6 +1176,233 @@ def take_signup_ticket(token: Optional[str]) -> Optional[dict]:
     return None if dt.datetime.fromisoformat(out["expires_at"]) <= _now() else out
 
 
+# ---------------------------------------------------------------------------- the e-mail sign-in (SP-610)
+
+def _norm_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+
+def email_account(email: str) -> Optional[dict]:
+    """The e-mail sign-in row of an address (any state), None when there is none."""
+    init()
+    with connect() as con:
+        r = con.execute("SELECT * FROM email_accounts WHERE email = ?", (_norm_email(email),)).fetchone()
+    return dict(r) if r else None
+
+
+def email_account_of(uid: int) -> Optional[dict]:
+    init()
+    with connect() as con:
+        r = con.execute("SELECT * FROM email_accounts WHERE user_id = ?", (int(uid),)).fetchone()
+    return dict(r) if r else None
+
+
+def user_by_email(email: str) -> Optional[User]:
+    """The first account whose e-mail is this address (a Google one, an admitted one, the owner…)."""
+    init()
+    with connect() as con:
+        return _user(con.execute("SELECT * FROM users WHERE lower(email) = ? ORDER BY id LIMIT 1",
+                                 (_norm_email(email),)).fetchone())
+
+
+def _admitted_row(con: sqlite3.Connection, email: str) -> Optional[sqlite3.Row]:
+    """An account an admin let in from the waitlist (admit_waitlisted) that nobody signed in to
+    yet: this e-mail, no Google account, no identity of any kind, never the owner or a test account."""
+    return con.execute("SELECT u.* FROM users u WHERE lower(u.email) = ? AND u.google_sub IS NULL AND u.role = ? "
+                       "AND u.id != 1 AND u.is_test = 0 "
+                       "AND NOT EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id) "
+                       "AND NOT EXISTS (SELECT 1 FROM email_accounts e WHERE e.user_id = u.id) "
+                       "ORDER BY u.id LIMIT 1", (email, USER)).fetchone()
+
+
+def admitted_by_email(email: str) -> Optional[User]:
+    init()
+    with connect() as con:
+        return _user(_admitted_row(con, _norm_email(email)))
+
+
+def put_email_signup(email: str, password_hash: str, display_name: Optional[str], token: str,
+                     ttl_s: int) -> str:
+    """A sign-up with this address: "pending" when stored — a new row, or an unconfirmed one taken
+    over (its password, name and link replaced: the earlier link stops working, whoever asked for
+    it) — "verified" when the address is confirmed already (nothing changed)."""
+    init()
+    e, now = _norm_email(email), _now()
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        r = con.execute("SELECT verified_at FROM email_accounts WHERE email = ?", (e,)).fetchone()
+        if r is not None and r["verified_at"]:
+            return "verified"
+        exp = _iso(now + dt.timedelta(seconds=ttl_s))
+        if r is None:
+            con.execute("INSERT INTO email_accounts(email, password_hash, display_name, verify_hash, verify_expires_at, "
+                        "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (e, password_hash, display_name, _hash(token), exp, _iso(now), _iso(now)))
+        else:
+            con.execute("UPDATE email_accounts SET password_hash = ?, display_name = ?, verify_hash = ?, "
+                        "verify_expires_at = ?, reset_hash = NULL, reset_expires_at = NULL, updated_at = ? "
+                        "WHERE email = ? AND verified_at IS NULL",
+                        (password_hash, display_name, _hash(token), exp, _iso(now), e))
+        return "pending"
+
+
+def email_verify_row(token: Optional[str]) -> Optional[dict]:
+    """The row a live address-check link belongs to (not taken)."""
+    if not token:
+        return None
+    init()
+    with connect() as con:
+        r = con.execute("SELECT * FROM email_accounts WHERE verify_hash = ?", (_hash(token),)).fetchone()
+    if r is None or not r["verify_expires_at"] or dt.datetime.fromisoformat(r["verify_expires_at"]) <= _now():
+        return None
+    return dict(r)
+
+
+def confirm_email(token: Optional[str], email: str) -> Optional[dict]:
+    """Take an address-check link once, for the row the caller peeked (email_verify_row): the address
+    confirmed by one conditional UPDATE (two clicks can't both take it; a link replaced meanwhile
+    no longer matches). The confirmed row, or None for an unknown, used or expired link."""
+    if not token:
+        return None
+    init()
+    h, now, e = _hash(token), _now(), _norm_email(email)
+    with _LOCK, connect() as con:
+        cur = con.execute("UPDATE email_accounts SET verified_at = coalesce(verified_at, ?), verify_hash = NULL, "
+                          "verify_expires_at = NULL, updated_at = ? "
+                          "WHERE email = ? AND verify_hash = ? AND verify_expires_at > ?",
+                          (_iso(now), _iso(now), e, h, _iso(now)))
+        if cur.rowcount != 1:
+            return None
+        return dict(con.execute("SELECT * FROM email_accounts WHERE email = ?", (e,)).fetchone())
+
+
+def put_email_reset(email: str, token: str, ttl_s: int) -> bool:
+    """A password-reset link for an address with an e-mail sign-in (the older link replaced). False
+    when there is no such row."""
+    init()
+    now = _now()
+    with _LOCK, connect() as con:
+        cur = con.execute("UPDATE email_accounts SET reset_hash = ?, reset_expires_at = ?, updated_at = ? "
+                          "WHERE email = ?", (_hash(token), _iso(now + dt.timedelta(seconds=ttl_s)), _iso(now),
+                                              _norm_email(email)))
+        return cur.rowcount == 1
+
+
+def email_reset_row(token: Optional[str]) -> Optional[dict]:
+    """The row a live reset link belongs to (not taken)."""
+    if not token:
+        return None
+    init()
+    with connect() as con:
+        r = con.execute("SELECT * FROM email_accounts WHERE reset_hash = ?", (_hash(token),)).fetchone()
+    if r is None or not r["reset_expires_at"] or dt.datetime.fromisoformat(r["reset_expires_at"]) <= _now():
+        return None
+    return dict(r)
+
+
+def take_email_reset(token: Optional[str], password_hash: str) -> Optional[dict]:
+    """A reset link used once: the new password stored, the address counted as confirmed (the link
+    came to its inbox), any unused address-check link dropped, and every session of the account
+    ended (signed out everywhere, in the same transaction). The row, or None for an unknown, used
+    or expired link."""
+    if not token:
+        return None
+    init()
+    h, now = _hash(token), _now()
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        r = con.execute("SELECT * FROM email_accounts WHERE reset_hash = ? AND reset_expires_at > ?",
+                        (h, _iso(now))).fetchone()
+        if r is None:
+            return None
+        con.execute("UPDATE email_accounts SET password_hash = ?, reset_hash = NULL, reset_expires_at = NULL, "
+                    "verify_hash = NULL, verify_expires_at = NULL, verified_at = coalesce(verified_at, ?), "
+                    "updated_at = ? WHERE email = ?", (password_hash, _iso(now), _iso(now), r["email"]))
+        if r["user_id"] is not None:
+            con.execute("DELETE FROM sessions WHERE user_id = ?", (int(r["user_id"]),))
+        return dict(con.execute("SELECT * FROM email_accounts WHERE email = ?", (r["email"],)).fetchone())
+
+
+def set_email_password(email: str, password_hash: str) -> None:
+    """A stronger hash of the same password (passwords.needs_rehash, at a sign-in)."""
+    init()
+    with _LOCK, connect() as con:
+        con.execute("UPDATE email_accounts SET password_hash = ?, updated_at = ? WHERE email = ?",
+                    (password_hash, _iso(_now()), _norm_email(email)))
+
+
+def change_email_password(uid: int, password_hash: str, keep_token: Optional[str]) -> int:
+    """A signed-in account's new password (SP-858, 設定 › 帳號 › 密碼; the old one checked by the
+    caller): stored, any unused reset link dropped (it would set a password the person no longer
+    means), and every OTHER session of the account ended — the one that asked (keep_token) stays
+    signed in. One transaction. The number of sessions ended; -1 when the account has no e-mail
+    sign-in."""
+    init()
+    now = _iso(_now())
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        cur = con.execute("UPDATE email_accounts SET password_hash = ?, reset_hash = NULL, reset_expires_at = NULL, "
+                          "updated_at = ? WHERE user_id = ?", (password_hash, now, int(uid)))
+        if cur.rowcount != 1:
+            return -1
+        keep = _hash(keep_token) if keep_token else ""
+        cur = con.execute("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (int(uid), keep))
+        return int(cur.rowcount)
+
+
+def _link_email(con: sqlite3.Connection, uid: int, email: str) -> None:
+    con.execute("UPDATE email_accounts SET user_id = ?, updated_at = ? WHERE email = ?", (uid, _iso(_now()), email))
+    con.execute("INSERT INTO identities(user_id, provider, subject, email, created_at) VALUES (?, 'email', ?, ?, ?)",
+                (uid, email, email, _iso(_now())))
+
+
+def create_email_user(email: str, cap: Optional[int] = None) -> Optional[User]:
+    """The account of a confirmed e-mail sign-up (the terms just accepted): a new user (e-mail
+    verified, the name typed at sign-up) with its identity (provider "email") and the row linked, in
+    one write transaction with the cap check (create_user's rule). The user already linked when it
+    is there; None when the row is missing or unconfirmed, or the server is full."""
+    init()
+    e = _norm_email(email)
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute("SELECT * FROM email_accounts WHERE email = ?", (e,)).fetchone()
+        if row is None or not row["verified_at"]:
+            return None
+        if row["user_id"] is not None:
+            return _user(con.execute("SELECT * FROM users WHERE id = ?", (int(row["user_id"]),)).fetchone())
+        if cap is not None and con.execute("SELECT count(*) FROM users WHERE is_test = 0").fetchone()[0] >= cap:
+            return None
+        if con.execute("SELECT 1 FROM users WHERE id = 1").fetchone() is None:
+            if con.execute("SELECT 1 FROM sqlite_sequence WHERE name = 'users'").fetchone() is None:
+                con.execute("INSERT INTO sqlite_sequence(name, seq) VALUES ('users', 1)")
+        cur = con.execute("INSERT INTO users(role, email, email_verified, display_name, created_at) "
+                          "VALUES (?, ?, 1, ?, ?)", (USER, e, row["display_name"], _iso(_now())))
+        uid = int(cur.lastrowid)
+        con.execute("UPDATE users SET tenant_dir = ? WHERE id = ?", (f"users/{uid}", uid))
+        _link_email(con, uid, e)
+        return _user(con.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone())
+
+
+def link_admitted_email(email: str) -> Optional[User]:
+    """A confirmed e-mail sign-up whose address an admin let in from the waitlist (admit_waitlisted):
+    the waiting account takes the e-mail sign-in (the row linked, an identity added; one transaction,
+    so two confirmations can't both take it). None otherwise."""
+    init()
+    e = _norm_email(email)
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute("SELECT * FROM email_accounts WHERE email = ?", (e,)).fetchone()
+        if row is None or not row["verified_at"] or row["user_id"] is not None:
+            return None
+        u = _admitted_row(con, e)
+        if u is None:
+            return None
+        if row["display_name"] and not u["display_name"]:
+            con.execute("UPDATE users SET display_name = ? WHERE id = ?", (row["display_name"], int(u["id"])))
+        _link_email(con, int(u["id"]), e)
+        return _user(con.execute("SELECT * FROM users WHERE id = ?", (int(u["id"]),)).fetchone())
+
+
 # ---------------------------------------------------------------------------- plans, usage (SP-330)
 
 def set_plan(uid: int, plan: str, expires_at: Optional[str] = None) -> None:
@@ -1122,6 +1446,48 @@ def usage_get_con(con, uid: int, key: str, period: str) -> int:
     r = con.execute("SELECT used FROM usage WHERE user_id = ? AND key = ? AND period = ?",
                     (int(uid), key, period)).fetchone()
     return int(r[0]) if r else 0
+
+
+# ---------------------------------------------------------------------------- cross-product events (SP-765)
+
+def xp_add(uid: int, event: str, day: str, cap: int) -> Optional[int]:
+    """One more `event` for the user on `day` (YYYY-MM-DD); the new count, or None at `cap` (nothing
+    counted: a page reloading in a loop never grows the table)."""
+    init()
+    with _LOCK, connect() as con:
+        r = con.execute("SELECT n FROM xp_events WHERE user_id = ? AND event = ? AND day = ?",
+                        (int(uid), event, day)).fetchone()
+        n = int(r[0]) if r else 0
+        if n >= cap:
+            return None
+        con.execute("INSERT INTO xp_events(user_id, event, day, n) VALUES (?, ?, ?, 1) "
+                    "ON CONFLICT(user_id, event, day) DO UPDATE SET n = n + 1", (int(uid), event, day))
+        return n + 1
+
+
+def xp_events_of(uid: int) -> list[dict]:
+    """The user's own counts, oldest first ({event, day, n}; 下載我的資料)."""
+    init()
+    with connect() as con:
+        return [dict(r) for r in con.execute(
+            "SELECT event, day, n FROM xp_events WHERE user_id = ? ORDER BY day, event", (int(uid),))]
+
+
+def set_signup_source(uid: int, source: Optional[str]) -> bool:
+    """Where the account came from, written once (an existing value is never replaced)."""
+    if not source:
+        return False
+    init()
+    with _LOCK, connect() as con:
+        return con.execute("UPDATE users SET signup_source = ? WHERE id = ? AND signup_source IS NULL",
+                           (source, int(uid))).rowcount == 1
+
+
+def signup_source(uid: int) -> Optional[str]:
+    init()
+    with connect() as con:
+        r = con.execute("SELECT signup_source FROM users WHERE id = ?", (int(uid),)).fetchone()
+        return r[0] if r else None
 
 
 def usage_refund(uid: int, key: str, period: str, item: Optional[str] = None) -> None:
@@ -1315,15 +1681,411 @@ def billing_mark_synced(uid: int, at: str) -> None:
         con.execute("UPDATE billing_subscriptions SET synced_at = ? WHERE user_id = ?", (at, int(uid)))
 
 
+# ---------------------------------------------------------------------------- coaches and students (SP-789, SP-793)
+# The rules and their words are accounts/coaching.py's; here only the rows, each change in one write
+# transaction with the checks it depends on (two clicks can't both take a coach's last place).
+
+COACH_LIVE = ("pending", "active")
+
+
+class CoachRefused(ValueError):
+    """A coaching change refused: `code` says why (coaching.REFUSED has the words)."""
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+def coach_profile(uid: int) -> Optional[dict]:
+    init()
+    with connect() as con:
+        r = con.execute("SELECT * FROM coach_profiles WHERE user_id = ?", (int(uid),)).fetchone()
+    return dict(r) if r else None
+
+
+def coach_profiles() -> dict[int, dict]:
+    """user id -> coach profile with `used` (active students), for the admin page."""
+    init()
+    with connect() as con:
+        rows = [dict(r) for r in con.execute(
+            "SELECT p.*, (SELECT count(*) FROM coach_links l WHERE l.coach_id = p.user_id AND l.status = 'active') "
+            "AS used FROM coach_profiles p")]
+    return {int(r["user_id"]): r for r in rows}
+
+
+def _coach_consent(con: sqlite3.Connection, link: sqlite3.Row, action: str, **extra) -> None:
+    """A consents row of the student for an active link starting or ending (the last terms version
+    and analysis state copied, like record_link)."""
+    import json
+    sid = int(link["student_id"])
+    last = con.execute(f"SELECT terms_version, analysis FROM consents WHERE user_id = ? AND {_TERMS_ROWS} "
+                       "ORDER BY id DESC LIMIT 1", (sid,)).fetchone()
+    coach = con.execute("SELECT display_name FROM users WHERE id = ?", (int(link["coach_id"]),)).fetchone()
+    try:
+        perms = json.loads(link["perms"] or "{}")
+    except ValueError:
+        perms = {}
+    docs = {"coach_id": int(link["coach_id"]), "coach_name": coach[0] if coach else None, "link_id": int(link["id"]),
+            "initiated_by": link["initiated_by"], "perms": perms, **extra}
+    con.execute("INSERT INTO consents(user_id, terms_version, documents, analysis, accepted_at, action, client) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'coach')",
+                (sid, last[0] if last else "", json.dumps(docs, sort_keys=True, ensure_ascii=False),
+                 int(last[1]) if last else 0, _iso(_now()), action))
+
+
+def _end_links(con: sqlite3.Connection, rows: list, by: str) -> None:
+    now = _iso(_now())
+    for link in rows:
+        con.execute("UPDATE coach_links SET status = 'ended', ended_at = ?, ended_by = ? WHERE id = ?",
+                    (now, by, int(link["id"])))
+        if link["status"] == "active":
+            _coach_consent(con, link, "coach_end", by=by)
+
+
+def set_coach(uid: int, on: bool, code: Optional[str] = None, by: Optional[int] = None) -> bool:
+    """Make a user a coach (`code`: their new code) or take it away: every live link of theirs ends
+    (ended_by "admin", a consents row for each student who was active) and their invite link goes,
+    in the same transaction. True when something changed. Raises sqlite3.IntegrityError when the
+    code is taken (the caller draws another)."""
+    init()
+    uid = int(uid)
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        have = con.execute("SELECT 1 FROM coach_profiles WHERE user_id = ?", (uid,)).fetchone() is not None
+        if on == have:
+            return False
+        if on:
+            if not code:
+                raise ValueError("a coach needs a code")
+            con.execute("INSERT INTO coach_profiles(user_id, code, granted_by, granted_at) VALUES (?, ?, ?, ?)",
+                        (uid, code, by, _iso(_now())))
+            return True
+        live = con.execute("SELECT * FROM coach_links WHERE coach_id = ? AND status IN ('pending', 'active')",
+                           (uid,)).fetchall()
+        _end_links(con, live, "admin")
+        con.execute("DELETE FROM coach_invites WHERE coach_id = ?", (uid,))
+        con.execute("DELETE FROM coach_profiles WHERE user_id = ?", (uid,))
+        return True
+
+
+def set_coach_max(uid: int, n: Optional[int]) -> None:
+    """A coach's own most students (SP-793; None: the default). Students they have stay."""
+    init()
+    with _LOCK, connect() as con:
+        con.execute("UPDATE coach_profiles SET max_students = ? WHERE user_id = ?", (n, int(uid)))
+
+
+def set_coach_code(uid: int, code: str) -> None:
+    """A new code (the old one stops working). sqlite3.IntegrityError when taken."""
+    init()
+    with _LOCK, connect() as con:
+        con.execute("UPDATE coach_profiles SET code = ? WHERE user_id = ?", (code, int(uid)))
+
+
+def coach_by_code(code: str) -> Optional[User]:
+    """The coach whose code this is (an enabled account), None otherwise."""
+    init()
+    with connect() as con:
+        return _user(con.execute("SELECT u.* FROM coach_profiles p JOIN users u ON u.id = p.user_id "
+                                 "WHERE p.code = ? AND u.disabled_at IS NULL", (code,)).fetchone())
+
+
+def put_coach_invite(coach_id: int, token: str, ttl_s: int) -> str:
+    """The coach's invite link by the sha256 of its token, replacing their older one; when it ends (ISO)."""
+    init()
+    now = _now()
+    exp = _iso(now + dt.timedelta(seconds=ttl_s))
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        con.execute("DELETE FROM coach_invites WHERE coach_id = ? OR expires_at <= ?", (int(coach_id), _iso(now)))
+        con.execute("INSERT INTO coach_invites(token_hash, coach_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                    (_hash(token), int(coach_id), _iso(now), exp))
+    return exp
+
+
+def coach_invite_of(coach_id: int) -> Optional[dict]:
+    """The coach's live invite link: {created_at, expires_at} (never the token: only its hash is kept)."""
+    init()
+    with connect() as con:
+        r = con.execute("SELECT created_at, expires_at FROM coach_invites WHERE coach_id = ? AND expires_at > ?",
+                        (int(coach_id), _iso(_now()))).fetchone()
+    return dict(r) if r else None
+
+
+def delete_coach_invite(coach_id: int) -> int:
+    init()
+    with _LOCK, connect() as con:
+        return con.execute("DELETE FROM coach_invites WHERE coach_id = ?", (int(coach_id),)).rowcount
+
+
+def coach_by_invite(token: Optional[str]) -> Optional[User]:
+    """The coach a live invite link belongs to (still a coach, enabled); None otherwise."""
+    if not token:
+        return None
+    init()
+    with connect() as con:
+        return _user(con.execute("SELECT u.* FROM coach_invites i JOIN coach_profiles p ON p.user_id = i.coach_id "
+                                 "JOIN users u ON u.id = i.coach_id WHERE i.token_hash = ? AND i.expires_at > ? "
+                                 "AND u.disabled_at IS NULL", (_hash(token), _iso(_now()))).fetchone())
+
+
+_LINK_COLS = ("l.id, l.coach_id, l.student_id, l.status, l.initiated_by, l.perms, l.created_at, l.accepted_at, "
+              "l.ended_at, l.ended_by")
+
+
+def coach_links_of(uid: int, as_: str, live_only: bool = True) -> list[dict]:
+    """The links where `uid` is the coach (as_ "coach") or the student ("student"), with the other
+    person's name (`other_name`; never their e-mail), newest first."""
+    if as_ not in ("coach", "student"):
+        raise ValueError(as_)
+    me, other = ("coach_id", "student_id") if as_ == "coach" else ("student_id", "coach_id")
+    init()
+    live = " AND l.status IN ('pending', 'active')" if live_only else ""
+    with connect() as con:
+        return [dict(r) for r in con.execute(
+            f"SELECT {_LINK_COLS}, o.display_name AS other_name, o.disabled_at AS other_disabled "
+            f"FROM coach_links l JOIN users o ON o.id = l.{other} WHERE l.{me} = ?{live} ORDER BY l.id DESC",
+            (int(uid),))]
+
+
+def coach_link(link_id: int) -> Optional[dict]:
+    init()
+    with connect() as con:
+        r = con.execute("SELECT * FROM coach_links WHERE id = ?", (int(link_id),)).fetchone()
+    return dict(r) if r else None
+
+
+def active_coach_link(coach_id: int, student_id: int) -> Optional[dict]:
+    """The active link between this coach and this student, when both accounts are enabled and the
+    coach is still a coach; None otherwise. The one check every read of a student's data goes
+    through (coaching.student_of), on every request."""
+    init()
+    with connect() as con:
+        r = con.execute("SELECT l.* FROM coach_links l JOIN coach_profiles p ON p.user_id = l.coach_id "
+                        "JOIN users c ON c.id = l.coach_id JOIN users s ON s.id = l.student_id "
+                        "WHERE l.coach_id = ? AND l.student_id = ? AND l.status = 'active' "
+                        "AND c.disabled_at IS NULL AND s.disabled_at IS NULL",
+                        (int(coach_id), int(student_id))).fetchone()
+    return dict(r) if r else None
+
+
+def coached_student_ids(student_id: Optional[int] = None) -> list[int]:
+    """Every student with an active link to a coach — both accounts enabled, the coach still a
+    coach (the same conditions as active_coach_link); only `student_id` when given. SP-790: the
+    students whose coach-dashboard summary is kept up to date (coach_board); never a reason to read
+    anyone's data."""
+    init()
+    only, args = ("AND l.student_id = ? ", (int(student_id),)) if student_id is not None else ("", ())
+    with connect() as con:
+        return [int(r[0]) for r in con.execute(
+            "SELECT DISTINCT l.student_id FROM coach_links l JOIN coach_profiles p ON p.user_id = l.coach_id "
+            "JOIN users c ON c.id = l.coach_id JOIN users s ON s.id = l.student_id "
+            "WHERE l.status = 'active' AND c.disabled_at IS NULL AND s.disabled_at IS NULL "
+            f"{only}ORDER BY l.student_id", args)]
+
+
+def _coach_room(con: sqlite3.Connection, coach_id: int, default_max: int) -> None:
+    """CoachRefused("COACH_FULL") when the coach has as many active students as they may (SP-793)."""
+    p = con.execute("SELECT max_students FROM coach_profiles WHERE user_id = ?", (coach_id,)).fetchone()
+    cap = default_max if p is None or p[0] is None else int(p[0])
+    used = con.execute("SELECT count(*) FROM coach_links WHERE coach_id = ? AND status = 'active'",
+                       (coach_id,)).fetchone()[0]
+    if used >= cap:
+        raise CoachRefused("COACH_FULL")
+
+
+def _coach_ok(con: sqlite3.Connection, coach_id: int, student_id: int) -> None:
+    if coach_id == student_id:
+        raise CoachRefused("SELF")
+    c = con.execute("SELECT u.disabled_at FROM coach_profiles p JOIN users u ON u.id = p.user_id "
+                    "WHERE p.user_id = ?", (coach_id,)).fetchone()
+    if c is None or c[0]:
+        raise CoachRefused("NOT_A_COACH")
+    s = con.execute("SELECT disabled_at FROM users WHERE id = ?", (student_id,)).fetchone()
+    if s is None or s[0]:
+        raise CoachRefused("NO_STUDENT")
+
+
+def _student_room(con: sqlite3.Connection, student_id: int, max_coaches: int, but: Optional[int] = None) -> None:
+    """CoachRefused when the student has as many live links as they may (`but`: this link left out)."""
+    rows = con.execute("SELECT id, status FROM coach_links WHERE student_id = ? AND status IN ('pending', 'active')",
+                       (student_id,)).fetchall()
+    rows = [r for r in rows if r["id"] != but]
+    if len(rows) >= max_coaches:
+        raise CoachRefused("HAS_COACH" if any(r["status"] == "active" for r in rows) else "REQUEST_PENDING")
+
+
+def coach_request(coach_id: int, student_id: int, max_coaches: int) -> dict:
+    """The student typed the coach's code: a pending link the coach accepts or declines."""
+    init()
+    coach_id, student_id = int(coach_id), int(student_id)
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        _coach_ok(con, coach_id, student_id)
+        _student_room(con, student_id, max_coaches)
+        cur = con.execute("INSERT INTO coach_links(coach_id, student_id, status, initiated_by, created_at) "
+                          "VALUES (?, ?, 'pending', 'student', ?)", (coach_id, student_id, _iso(_now())))
+        return dict(con.execute("SELECT * FROM coach_links WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def coach_accept_invite(coach_id: int, student_id: int, max_coaches: int, default_max: int) -> dict:
+    """The student accepted the coach's invite link: an active link now (the coach asked by sending
+    it), a consents row of the student."""
+    init()
+    coach_id, student_id = int(coach_id), int(student_id)
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        _coach_ok(con, coach_id, student_id)
+        _student_room(con, student_id, max_coaches)
+        _coach_room(con, coach_id, default_max)
+        now = _iso(_now())
+        cur = con.execute("INSERT INTO coach_links(coach_id, student_id, status, initiated_by, created_at, accepted_at) "
+                          "VALUES (?, ?, 'active', 'coach', ?, ?)", (coach_id, student_id, now, now))
+        link = con.execute("SELECT * FROM coach_links WHERE id = ?", (cur.lastrowid,)).fetchone()
+        _coach_consent(con, link, "coach_accept")
+        return dict(link)
+
+
+def coach_accept_request(coach_id: int, link_id: int, max_coaches: int, default_max: int) -> dict:
+    """The coach accepted a student's request (theirs, still pending): active now, a consents row of
+    the student (who asked for it when they typed the code)."""
+    init()
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        link = con.execute("SELECT * FROM coach_links WHERE id = ?", (int(link_id),)).fetchone()
+        if link is None or int(link["coach_id"]) != int(coach_id) or link["status"] != "pending":
+            raise CoachRefused("NO_REQUEST")
+        _coach_ok(con, int(coach_id), int(link["student_id"]))
+        _student_room(con, int(link["student_id"]), max_coaches, but=int(link["id"]))
+        _coach_room(con, int(coach_id), default_max)
+        con.execute("UPDATE coach_links SET status = 'active', accepted_at = ? WHERE id = ?",
+                    (_iso(_now()), int(link_id)))
+        link = con.execute("SELECT * FROM coach_links WHERE id = ?", (int(link_id),)).fetchone()
+        _coach_consent(con, link, "coach_accept", asked_at=link["created_at"])
+        return dict(link)
+
+
+def coach_end(link_id: int, by: str, actor_id: int) -> dict:
+    """A live link ended by one of its two people (`by` "student" | "coach", `actor_id` must be that
+    side's user): the student withdrew or cancelled their request, the coach let the student go or
+    declined the request. An active one gets a consents row of the student. CoachRefused("NO_LINK")
+    for a link that is not theirs or not live."""
+    if by not in ("student", "coach"):
+        raise ValueError(by)
+    col = "student_id" if by == "student" else "coach_id"
+    init()
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        link = con.execute(f"SELECT * FROM coach_links WHERE id = ? AND {col} = ? AND status IN ('pending', 'active')",
+                           (int(link_id), int(actor_id))).fetchone()
+        if link is None:
+            raise CoachRefused("NO_LINK")
+        _end_links(con, [link], by)
+        return dict(con.execute("SELECT * FROM coach_links WHERE id = ?", (int(link_id),)).fetchone())
+
+
+def set_coach_perms(link_id: int, student_id: int, perms: dict) -> dict:
+    """The student's switches on an active link of theirs (SP-792; coaching.PERMS, already checked by
+    the caller), a consents row with the new switches. CoachRefused("NO_LINK") when it is not theirs
+    or not active."""
+    import json
+    init()
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        link = con.execute("SELECT * FROM coach_links WHERE id = ? AND student_id = ? AND status = 'active'",
+                           (int(link_id), int(student_id))).fetchone()
+        if link is None:
+            raise CoachRefused("NO_LINK")
+        con.execute("UPDATE coach_links SET perms = ? WHERE id = ?",
+                    (json.dumps(perms, sort_keys=True), int(link_id)))
+        link = con.execute("SELECT * FROM coach_links WHERE id = ?", (int(link_id),)).fetchone()
+        _coach_consent(con, link, "coach_perms")
+        return dict(link)
+
+
+# ---------------------------------------------------------------------------- 代看 and the coach's edits (SP-791, SP-792)
+# accounts/viewing.py has the rules: a session that views a student is one coach_views row, keyed by the
+# session's token hash (it goes with the session: signing out, the session's end, either account deleted);
+# the gate checks the link again on every request. coach_audit is what the student reads back.
+
+COACH_AUDIT_KEEP = 500          # rows kept per student (the oldest go first)
+
+
+def coach_view_put(token: str, coach_id: int, student_id: int) -> None:
+    init()
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        if con.execute("SELECT 1 FROM sessions WHERE token_hash = ? AND user_id = ?",
+                       (_hash(token), int(coach_id))).fetchone() is None:
+            raise KeyError("not this coach's session")
+        con.execute("INSERT OR REPLACE INTO coach_views(token_hash, coach_id, student_id, started_at) VALUES (?, ?, ?, ?)",
+                    (_hash(token), int(coach_id), int(student_id), _iso(_now())))
+
+
+def coach_view_of(token: Optional[str], coach_id: int) -> Optional[int]:
+    """The student this session of `coach_id` views, None when it views nobody."""
+    if not token:
+        return None
+    init()
+    with connect() as con:
+        r = con.execute("SELECT student_id FROM coach_views WHERE token_hash = ? AND coach_id = ?",
+                        (_hash(token), int(coach_id))).fetchone()
+    return int(r[0]) if r else None
+
+
+def coach_view_drop(token: Optional[str]) -> Optional[int]:
+    """This session views nobody any more; the student it viewed (None: none)."""
+    if not token:
+        return None
+    init()
+    with _LOCK, connect() as con:
+        r = con.execute("SELECT student_id FROM coach_views WHERE token_hash = ?", (_hash(token),)).fetchone()
+        con.execute("DELETE FROM coach_views WHERE token_hash = ?", (_hash(token),))
+    return int(r[0]) if r else None
+
+
+def coach_audit_add(student_id: int, coach_id: int, action: str, params: Optional[dict] = None) -> None:
+    """One line of what a coach did in a student's data (the coach's name copied: it stays readable
+    after a rename; taken out when the coach's account is deleted)."""
+    import json
+    init()
+    with _LOCK, connect() as con:
+        name = con.execute("SELECT display_name FROM users WHERE id = ?", (int(coach_id),)).fetchone()
+        con.execute("INSERT INTO coach_audit(student_id, coach_id, coach_name, at, action, params) VALUES (?, ?, ?, ?, ?, ?)",
+                    (int(student_id), int(coach_id), name[0] if name else None, _iso(_now()), action,
+                     json.dumps(params or {}, sort_keys=True, ensure_ascii=False)))
+        con.execute("DELETE FROM coach_audit WHERE student_id = ? AND id NOT IN "
+                    "(SELECT id FROM coach_audit WHERE student_id = ? ORDER BY id DESC LIMIT ?)",
+                    (int(student_id), int(student_id), COACH_AUDIT_KEEP))
+
+
+def coach_audit_of(student_id: int, limit: int = 100, since: Optional[str] = None) -> list[dict]:
+    """The student's coach log, newest first."""
+    import json
+    init()
+    q, args = "SELECT * FROM coach_audit WHERE student_id = ?", [int(student_id)]
+    if since:
+        q += " AND at >= ?"
+        args.append(since)
+    with connect() as con:
+        rows = [dict(r) for r in con.execute(q + " ORDER BY id DESC LIMIT ?", (*args, int(limit)))]
+    for r in rows:
+        try:
+            r["params"] = json.loads(r["params"] or "{}")
+        except ValueError:
+            r["params"] = {}
+    return rows
+
+
 # ---------------------------------------------------------------------------- deleting an account (SP-386)
 
 _USER_TABLES = ("identities", "sessions", "shares", "usage", "usage_items", "api_tokens", "consents",
-                "billing_subscriptions", "test_login_links", "quota_extra")
+                "billing_subscriptions", "test_login_links", "quota_extra", "email_accounts", "coach_profiles", "xp_events")
 
 
 def delete_user(uid: int) -> dict:
     """Every row that names this person, in one transaction: the user row (identities, sessions,
-    shares, usage, usage_items, api_tokens, consents and billing_subscriptions cascade; the
+    shares, usage, usage_items, api_tokens, consents, billing_subscriptions and xp_events cascade; the
     billing_events of theirs keep only the webhook id, for the duplicate check), the sign-ins in progress and
     sign-up tickets that are theirs (by user id or Google sub) and their e-mail on the waitlist.
     {table: rows deleted}. ValueError for the owner (user 1) — never deleted here."""
@@ -1350,13 +2112,41 @@ def delete_user(uid: int) -> dict:
         out["oauth_states"] = con.execute("DELETE FROM oauth_states WHERE user_id = ?", (uid,)).rowcount
         out["waitlist"] = con.execute(f"DELETE FROM waitlist WHERE lower(email) IN ({q(emails)})",
                                       tuple(emails)).rowcount if emails else 0
+        # an e-mail sign-up of the same address still in progress (SP-610; the linked row cascades)
+        out["email_signups"] = con.execute(
+            f"DELETE FROM email_accounts WHERE user_id IS NULL AND email IN ({q(emails)})",
+            tuple(emails)).rowcount if emails else 0
         out["billing_events"] = con.execute("UPDATE billing_events SET user_id = NULL WHERE user_id = ?",
                                             (uid,)).rowcount
         # the research pool's link (SP-586): deletion.py withdrew the pool rows already
         out["research_links"] = con.execute("DELETE FROM research_links WHERE user_id = ?", (uid,)).rowcount
+        # coaching (SP-789): every link where they coach or are coached, their invite link; their name
+        # leaves the consents rows of their students (the rows stay: those are the students' history)
+        out["coach_links"] = con.execute("DELETE FROM coach_links WHERE coach_id = ? OR student_id = ?",
+                                         (uid, uid)).rowcount
+        out["coach_invites"] = con.execute("DELETE FROM coach_invites WHERE coach_id = ?", (uid,)).rowcount
+        out["coach_names"] = con.execute(
+            "UPDATE consents SET documents = json_set(documents, '$.coach_name', NULL) WHERE client = 'coach' "
+            "AND user_id != ? AND json_extract(documents, '$.coach_id') = ? "
+            "AND json_extract(documents, '$.coach_name') IS NOT NULL", (uid, uid)).rowcount
+        # 代看 and the coach's edits (SP-791, SP-792): no session views them or is theirs; their own coach
+        # log goes, and their name leaves their students' logs (the lines stay: the students' history)
+        out["coach_views"] = con.execute("DELETE FROM coach_views WHERE coach_id = ? OR student_id = ?",
+                                         (uid, uid)).rowcount
+        out["coach_audit"] = con.execute("DELETE FROM coach_audit WHERE student_id = ?", (uid,)).rowcount
+        out["coach_audit_names"] = con.execute(
+            "UPDATE coach_audit SET coach_id = NULL, coach_name = NULL WHERE coach_id = ?", (uid,)).rowcount
         out["users"] = con.execute("DELETE FROM users WHERE id = ?", (uid,)).rowcount
         left = [t for t in (*_USER_TABLES, "billing_events")
                 if con.execute(f"SELECT 1 FROM {t} WHERE user_id = ? LIMIT 1", (uid,)).fetchone()]
+        if con.execute("SELECT 1 FROM coach_links WHERE coach_id = ? OR student_id = ? LIMIT 1", (uid, uid)).fetchone():
+            left.append("coach_links")
+        if con.execute("SELECT 1 FROM coach_invites WHERE coach_id = ? LIMIT 1", (uid,)).fetchone():
+            left.append("coach_invites")
+        if con.execute("SELECT 1 FROM coach_views WHERE coach_id = ? OR student_id = ? LIMIT 1", (uid, uid)).fetchone():
+            left.append("coach_views")
+        if con.execute("SELECT 1 FROM coach_audit WHERE student_id = ? OR coach_id = ? LIMIT 1", (uid, uid)).fetchone():
+            left.append("coach_audit")
         if left:                                                    # foreign keys off: never half done
             raise RuntimeError(f"rows left after deleting user {uid}: {left}")
         return {k: v for k, v in out.items() if v}

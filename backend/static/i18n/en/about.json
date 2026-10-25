@@ -56,8 +56,10 @@
   "d.google.desc": "Terrain and road tiles; map data © Google.",
   "d.cwa.name": "Central Weather Administration (CWA) open data",
   "d.cwa.desc": "Mountain and township weather forecasts (the weather in the race calculator and the schedule), used under the Open Government Data License, version 1.0 (Taiwan); source: Central Weather Administration, Ministry of Transportation and Communications.",
+  "d.metno.name": "MET Norway (Norwegian Meteorological Institute)",
+  "d.metno.desc": "Weather forecasts the CWA does not provide (up to 9 days ahead, places outside Taiwan). Data from MET Norway, available under CC BY 4.0.",
   "d.openmeteo.name": "Open-Meteo",
-  "d.openmeteo.desc": "Weather forecasts the CWA does not provide, past climate data and elevation, available under CC BY 4.0. Part of the elevation data comes from the Copernicus GLO-90 DEM: © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.",
+  "d.openmeteo.desc": "Past climate data (the race-day mean of the same month over 10 years, the weather during each run) and elevation, available under CC BY 4.0. Part of the elevation data comes from the Copernicus GLO-90 DEM: © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.",
   "software.h": "Open source software",
   "software.lead": "This service uses the open source software below under each project's licence; the full licence texts are on each project's website.",
   "software.name": "Software",
@@ -65,5 +67,11 @@
   "trademarks.h": "Trademarks",
   "trademarks.registered": "TrainingPeaks®, TSS®, Training Stress Score®, NP®, Normalized Power®, IF® and Intensity Factor® are registered trademarks of TrainingPeaks, LLC.",
   "trademarks.others": "COROS, Garmin, Stryd, Strava, Google and other names are trademarks of their respective owners. TrailRunCoach is not affiliated with, authorised or endorsed by any of these companies.",
-  "trademarks.own": "Training load, Intensity, Weighted power and Chronic load / Acute load / Load balance in this service are our own metrics; the names above are mentioned only to identify a data source, a compatible file format, or to let you compare numbers."
+  "trademarks.own": "Training load, Intensity, Weighted power and Chronic load / Acute load / Load balance in this service are our own metrics; the names above are mentioned only to identify a data source, a compatible file format, or to let you compare numbers.",
+  "cairn.h": "Cairn",
+  "cairn.what": "Cairn is our other service, for planning hiking trips: where each day ends and where you sleep on a timeline, the 3D terrain and the trail surface, your live position shared with the family who stay behind once you set off, and group sign-ups. TrailRunCoach covers the training before you go and how long the trip will take, how to pace it and how much to eat, so the two complement each other. Cairn makes a free account the first time you sign in with Google.",
+  "cairn.routes": "Routes go both ways: paste a Cairn trip's share link in the Race manager and the route and each night's stop become that race's GPX; once it is worked out, you can push the route, the pacing curve and the overnight stops to Cairn (with your accounts linked, on a paid plan). The steps are in the manual's Cairn section.",
+  "cairn.link": "The same Google account is never linked on its own: you link it in the Cairn tab of Settings, or you are asked the first time something is to be pushed. Once linked, Cairn can read only the items listed — never your activities, heart rate or other health data — and you can unlink at any time.",
+  "legal.h": "Terms and privacy",
+  "legal.lead": "The documents you agree to when you sign up: the rules for using this service, how we handle your data, and the health-risk and third-party notices."
 }

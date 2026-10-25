@@ -183,6 +183,39 @@ details.coach[open] > summary { margin-bottom: 12px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
 .legend i { display: inline-block; width: 12px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 .legend i.ol { border: 1.5px solid var(--muted); background: transparent; }
+#tr-legend[hidden], #tr-grid[hidden] { display: none; }
+/* 每日完成堂數 (SP-446): a day holds 0–2 sessions, so a grid, not bars. ≤ 12 weeks (.wide): a row per week, a
+   cell per day (✓ one done, ✓2 two), the week's count at the right; longer (.tight): small cells, a column per
+   week (as GitHub's contributions), the latest weeks in view. 跳過 is a dashed grey box (SP-398: no red) */
+.dg { font-variant-numeric: tabular-nums; }
+.dg.wide { display: grid; grid-template-columns: 40px repeat(7, minmax(0, 1fr)) 46px; gap: 5px; align-items: center; }
+.dg.tight { display: grid; grid-auto-flow: column; gap: 3px; overflow-x: auto; padding-bottom: 4px; justify-content: start; }
+.dg .wh { text-align: center; font-size: 11.5px; color: var(--muted); }
+.dg .wl { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.dg .sum { text-align: right; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.dg .sum small { font-size: 11px; color: var(--muted); font-weight: 600; margin-left: 2px; }
+.dg.tight .wl { font-size: 10.5px; overflow: visible; }
+.dg.tight .wh { font-size: var(--wf, 10px); line-height: 1; align-self: stretch; display: grid; place-items: center start;
+  position: sticky; left: 0; z-index: 1; background: var(--panel); }
+.dc { height: 30px; border-radius: 6px; border: 1px solid var(--line); display: grid; place-items: center;
+  font-size: 12.5px; font-weight: 700; color: var(--good); background: var(--panel); }
+.dg.tight .dc { height: 100%; border-radius: 3px; font-size: 9.5px; line-height: 1; }
+.dc.c1 { background: color-mix(in srgb, var(--good) 15%, var(--panel)); border-color: color-mix(in srgb, var(--good) 45%, var(--panel)); }
+.dc.c2 { background: color-mix(in srgb, var(--good) 32%, var(--panel)); border-color: color-mix(in srgb, var(--good) 65%, var(--panel)); }
+.dg.tight .dc.c1 { background: color-mix(in srgb, var(--good) 40%, var(--panel)); border-color: transparent; }
+.dg.tight .dc.c2 { background: var(--good); border-color: transparent; color: var(--panel); }
+.dc.skip { border: 1.5px dashed var(--faint); background: transparent; }
+.dg.tight .dc.rest { background: color-mix(in srgb, var(--line) 70%, var(--panel)); border-color: transparent; }
+.dc.pad { visibility: hidden; }
+.dc.today { box-shadow: 0 0 0 1.5px var(--accent); }
+.legend .lk { display: inline-grid; place-items: center; width: auto; min-width: 16px; padding: 0 2px; height: 14px; font-style: normal; border-radius: 3px; margin-right: 5px; vertical-align: -2px;
+  font-size: 9.5px; font-weight: 700; color: var(--good); border: 1px solid var(--line); }
+.legend .lk.c1 { background: color-mix(in srgb, var(--good) 15%, var(--panel)); border-color: color-mix(in srgb, var(--good) 45%, var(--panel)); }
+.legend .lk.c2 { background: color-mix(in srgb, var(--good) 32%, var(--panel)); border-color: color-mix(in srgb, var(--good) 65%, var(--panel)); }
+.legend.tight .lk.c1 { background: color-mix(in srgb, var(--good) 40%, var(--panel)); border-color: transparent; }
+.legend.tight .lk.c2 { background: var(--good); border-color: transparent; }
+.legend.tight .lk.rest { background: color-mix(in srgb, var(--line) 70%, var(--panel)); border-color: transparent; }
+.legend .lk.skip { border: 1.5px dashed var(--faint); }
 .kinds { display: grid; gap: 9px; }
 .kr { display: grid; grid-template-columns: 82px minmax(0, 1fr) 92px; gap: 10px; align-items: center; font-size: 13px; }
 .kr .kl { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -335,6 +368,8 @@ details.coach[open] > summary { margin-bottom: 12px; }
           <button type="button" data-u="day" data-i18n="compliance.unit.day">天</button><button type="button" data-u="week" data-i18n="compliance.unit.week">週</button><button type="button" data-u="month" data-i18n="compliance.unit.month">月</button>
         </span><span id="tr-q"></span></h2>
       <div class="plot" id="tr-plot" role="img"></div>
+      <div class="dg" id="tr-grid" role="img" hidden></div>
+      <div class="legend" id="tr-legend" style="margin-top:10px" hidden></div>
     </section>
   </div>
 
@@ -506,7 +541,7 @@ function render() {
     // 教練視角 (SP-400): counts on top, the rates underneath
     kpi(T("kpi.rate"), T("kpi.rate_tip"), `${t.completed}${unit}`,
       t.due ? esc(T("kpi.rate_due", { due: t.due, pct: pc(t.rate) })) + (t.open ? ` · ${esc(T("kpi.open", { n: t.open }))}` : "") : esc(T("empty_short")),
-      t.due ? `<div class="split" role="img" aria-label="${esc(STATUS.filter((s) => s !== "open").map((s) => `${SW(s)} ${t[s]}`).join("，"))}">${split}</div>` : ""),
+      t.due ? `<div class="split" role="img" aria-label="${esc(STATUS.filter((s) => s !== "open").map((s) => `${SW(s)} ${t[s]}`).join(T("split_sep")))}">${split}</div>` : ""),
     kpi(T("kpi.ok"), `${T("kpi.ok_tip")}\n\n${levelsTip()}`, `${t.done}${unit}`,
       esc(T("kpi.ok_sub", { pct: t.due ? pc(t.ok_rate) : "–", partial: t.partial, off: t.off_plan }))),
     kpi(T("kpi.tss"), T("kpi.tss_tip"), t.tss_pct != null ? `${t.tss_pct}<small>%</small>` : "–",
@@ -670,10 +705,13 @@ function renderRatio() {
 }
 
 // 每週完成堂數 (SP-401): how many sessions were done per 天 / 週 / 月 — bars that only add up, no
-// pass line and no colour for falling short (docs/research/positive-compliance.md §1 #7)
+// pass line and no colour for falling short (docs/research/positive-compliance.md §1 #7). 天 is a grid (SP-446)
 function renderTrend(ws) {
-  const rows = ws.filter((w) => w.start <= S.today && (S.unit !== "day" || w.due || w.completed));
+  const grid = S.unit === "day";
   $("tr-q").innerHTML = q(T("trend.tip" + sfx()));
+  $("tr-plot").hidden = grid; $("tr-grid").hidden = !grid; $("tr-legend").hidden = !grid;
+  if (grid) return renderDayGrid(ws);
+  const rows = ws.filter((w) => w.start <= S.today);
   $("tr-plot").setAttribute("aria-label", T("trend.aria" + sfx()));
   chart("tr-plot").setOption({ ...axisBase(), grid: { left: 40, right: 12, top: 14, bottom: 26 },
     tooltip: { ...axisBase().tooltip, formatter: (ps) => {
@@ -685,6 +723,71 @@ function renderTrend(ws) {
     series: [{ type: "bar", barMaxWidth: 26, data: rows.map((w) => ({ value: w.completed || 0,
       itemStyle: { color: css("--good"), opacity: w.current ? 0.55 : 0.9, borderRadius: [4, 4, 0, 0] } })) }] }, true);
 }
+
+// 每日完成堂數 (SP-446, mock A of the ticket): ≤ GRID_WEEKS weeks a row per week (✓ / ✓2, the week's count at the
+// right); longer the same weeks × days as small cells, a column per week, sized to the card (scrolls past ~50)
+const GRID_WEEKS = 12;
+const DG = { w: 0 };
+function dayCell(by, iso) {
+  const d = by.get(iso);
+  if (!d || iso > S.today) return { cls: "pad", n: 0, tip: "" };
+  const n = d.completed || 0, skip = !n && (d.due || 0) > 0;
+  const word = n ? T("trend.done", { n }) : skip ? SW("missed") : T("trend.rest");
+  return { cls: (n >= 2 ? "c2" : n ? "c1" : skip ? "skip" : "rest") + (iso === S.today ? " today" : ""), n,
+    tip: `${mdw(iso)} · ${word}${iso === S.today ? ` · ${T("trend.current_day")}` : ""}` };
+}
+function renderDayGrid(days) {
+  const g = $("tr-grid");
+  g.setAttribute("aria-label", T("trend.aria_day"));
+  g.removeAttribute("style");              // the small cells' sizes (below)
+  if (!days.length) { g.className = "dg"; g.innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("tr-legend").innerHTML = ""; return; }
+  const by = new Map(days.map((d) => [d.start, d]));
+  const weeks = [];
+  for (let w = mondayOf(days[0].start); w <= days[days.length - 1].start; w = addDays(w, 7)) weeks.push(w);
+  const wd = (i) => (F ? F.weekday(i, "narrow") : "MTWTFSS"[i]);
+  const box = (c) => `<span class="dc ${c.cls}"${c.tip ? ` title="${esc(c.tip)}"` : ""}>`;
+  const tight = weeks.length > GRID_WEEKS;
+  g.className = "dg " + (tight ? "tight" : "wide");
+  $("tr-legend").className = "legend" + (tight ? " tight" : "");
+  const lk = (cls, mark, label) => `<span><i class="lk ${cls}" aria-hidden="true">${mark}</i>${esc(label)}</span>`;
+  if (!tight) {
+    const head = `<span></span>${[0, 1, 2, 3, 4, 5, 6].map((i) => `<span class="wh">${esc(wd(i))}</span>`).join("")}<span class="wh">${esc(T("trend.sum_head"))}</span>`;
+    g.innerHTML = head + weeks.map((w) => {
+      const cs = [0, 1, 2, 3, 4, 5, 6].map((i) => dayCell(by, addDays(w, i)));
+      const sum = cs.reduce((t, c) => t + c.n, 0);
+      return `<span class="wl">${esc(md(w))}</span>${cs.map((c) => `${box(c)}${c.n ? "✓" + (c.n >= 2 ? c.n : "") : ""}</span>`).join("")}` +
+        `<span class="sum">${esc(T("trend.week_sum", { n: sum }))}</span>`;
+    }).join("");
+    $("tr-legend").innerHTML = lk("c1", "✓", T("trend.done", { n: 1 })) + lk("c2", "✓2", T("trend.done", { n: 2 })) +
+      lk("skip", "", SW("missed")) + lk("rest", "", T("trend.rest"));
+    return;
+  }
+  // the cell size from the card's width: 6–22 px (a year fits a desktop card; a phone scrolls, the weekdays
+  // stay), the numbers once they fit
+  DG.w = g.clientWidth;
+  const gap = weeks.length > 30 ? 2 : 3;
+  const c = Math.max(6, Math.min(22, Math.floor((DG.w - 16 - gap * weeks.length) / weeks.length)));
+  g.style.gap = `${gap}px`;
+  g.style.setProperty("--wf", c < 10 ? "8.5px" : "10px");      // the weekday letters within two rows
+  g.style.gridTemplateRows = `14px repeat(7, ${c}px)`;
+  g.style.gridTemplateColumns = "14px";
+  g.style.gridAutoColumns = `${c}px`;
+  // a week's label where a month starts (the first week only when no month starts in the next three)
+  const starts = weeks.map((w, k) => k > 0 && w.slice(0, 7) !== weeks[k - 1].slice(0, 7));
+  const label = (k) => starts[k] || (k === 0 && !starts.slice(1, 4).includes(true));
+  g.innerHTML = `<span class="wh"></span>${[0, 1, 2, 3, 4, 5, 6].map((i) => `<span class="wh">${i % 2 ? "" : esc(wd(i))}</span>`).join("")}` +
+    weeks.map((w, k) => `<span class="wl">${label(k) ? esc(md(w)) : ""}</span>` + [0, 1, 2, 3, 4, 5, 6].map((i) => {
+      const x = dayCell(by, addDays(w, i));
+      return `${box(x)}${x.n >= 2 && c >= 15 ? x.n : ""}</span>`;
+    }).join("")).join("");
+  g.scrollLeft = g.scrollWidth;            // the latest weeks in view
+  $("tr-legend").innerHTML = lk("c1", "", T("trend.done", { n: 1 })) + lk("c2", "", T("trend.done_more", { n: 2 })) +
+    lk("skip", "", SW("missed")) + lk("rest", "", T("trend.rest"));
+}
+new ResizeObserver(() => {
+  const g = $("tr-grid");
+  if (!g.hidden && g.classList.contains("tight") && g.clientWidth !== DG.w && S.data) renderDayGrid(buckets());
+}).observe($("tr-grid"));
 
 const KSTAT = ["done", "partial", "off_plan", "missed"];
 // a 強度課 row / session by its family (SP-79: 有氧間歇 / VO2max 間歇 / 速度; none = 強度課)

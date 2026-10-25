@@ -58,6 +58,15 @@
       if (i >= 0) PAGES.splice(i, 1);
     }
   }
+  // 代看 (SP-791, accounts/viewing.py): a coach viewing a student — the injury log and the admin page are
+  // closed (the server refuses them too); the banner and 回到我自己 below; the controls locked by caps
+  const VIEW = (!PUBLIC && !DEMO && SESSION.login && SESSION.viewing) || null;
+  if (VIEW) {
+    for (const id of ["injuries", "admin"]) {
+      const i = PAGES.findIndex((p) => p.id === id);
+      if (i >= 0) PAGES.splice(i, 1);
+    }
+  }
   // less-used pages sit under 「更多」 (owner, 2026-10-02: the bar was too crowded)
   // 成就 is the 成就 tab of 活動列表 (2026-10-02); /api/v1/achievements/page redirects there
   // 操作手冊 sits right above 設定 (SP-505: 「選單放在設定頁的上面」)
@@ -152,6 +161,11 @@
       padding: 6px 10px; min-height: 44px; }
   }
   @media print { .appnav { display: none; } }
+  /* SP-751: a read-only field looks read-only on every page (greyed, dashed border; the page's own --muted /
+     --panel, so dark mode too) — a field with its own lock look (.locked, the 課表 dialog's 分鐘) keeps it */
+  input[readonly]:not(.locked):not([type=checkbox]):not([type=radio]), textarea[readonly]:not(.locked) {
+    background-color: color-mix(in srgb, var(--muted, #6a7482) 16%, var(--panel, #fff)) !important;
+    border-style: dashed !important; color: var(--muted, #6a7482); cursor: default; }
   `;
   const st = document.createElement("style");
   st.id = "appshell-css";
@@ -192,6 +206,17 @@
     pl.querySelector(".an-purpose").textContent = T(role === "subscriber" ? "account.plans_sub" : "account.plans_free");
     pl.title = T("account.plans_title");
     nav.querySelector(".an-menu").appendChild(pl);
+  }
+  // 教練看板 (SP-790, api/coach_board.py): in 更多 for a coach (GET /api/v1/session user.coach)
+  if (SESSION.login && SESSION.user && SESSION.user.coach && !DEMO) {
+    const cb = document.createElement("a");
+    cb.className = "an-item an-coach"; cb.href = "/api/v1/coach/board/page"; cb.setAttribute("role", "menuitem");
+    if (location.pathname === "/api/v1/coach/board/page") cb.setAttribute("aria-current", "page");
+    cb.innerHTML = `${I('<circle cx="9" cy="8" r="3"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3 3 0 0 1 0 5.6M17.5 14.2a5.5 5.5 0 0 1 3 5.3"/>')}<span class="an-name"></span><span class="an-purpose"></span>`;
+    cb.querySelector(".an-name").textContent = T("account.coach_board");
+    cb.querySelector(".an-purpose").textContent = T("account.coach_board_purpose");
+    cb.title = T("account.coach_board_purpose");
+    nav.querySelector(".an-menu").appendChild(cb);
   }
   // sign-in mode (SP-58): 登出 at the end of 更多, with whose account this is
   if (SESSION.login && SESSION.user) {
@@ -267,6 +292,110 @@
     const putT = () => nav.after(tb);
     if (document.body) putT(); else document.addEventListener("DOMContentLoaded", putT);
   }
+  // 代看 (SP-791): 「正在看 X 的資料」, what the student lets the coach change (SP-792), 回到我自己 — on every page
+  const VIEW_CSS = `.an-view { position: sticky; top: var(--shell-top, 0px); z-index: 38; display: flex; flex-wrap: wrap;
+      gap: 4px 12px; align-items: center; padding: 7px 14px; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+      color: #fff; background: #1d4ed8; overflow-wrap: anywhere; }
+    .an-view b { font-weight: 700; }
+    .an-view .an-v-what { font-size: 12.5px; opacity: .92; }
+    .an-view .an-v-sp { flex: 1; }
+    .an-view button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 3px 12px; border-radius: 6px; cursor: pointer;
+      border: 1px solid #fff; background: #fff; color: #1d4ed8; }
+    .an-view button:disabled { opacity: .6; cursor: default; }
+    .an-vnote { padding: 6px 14px; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; color: var(--text, #111);
+      background: color-mix(in srgb, #1d4ed8 10%, var(--panel, #fff)); border-bottom: 1px solid color-mix(in srgb, #1d4ed8 30%, var(--line, #e1e5ea)); }
+    .an-vnote a { color: var(--accent, #2563eb); font-weight: 600; margin-left: 8px; white-space: nowrap; }
+    @media (max-width: 699px) { .an-view { top: 0; padding: 6px 10px; } .an-view .an-v-sp { display: none; } }`;
+  let viewBar = null;               // the banner first, a note under it
+  const putUnderNav = (el) => {
+    const put = () => (viewBar && viewBar !== el && viewBar.isConnected ? viewBar.after(el) : nav.after(el));
+    if (document.body) put(); else document.addEventListener("DOMContentLoaded", put);
+  };
+  const viewNote = new URLSearchParams(location.search).get("coach_view");
+  if (VIEW || viewNote || ((SESSION.coach_edit || SESSION.coach_requests) && !PUBLIC && !DEMO)) {
+    const vs = document.createElement("style");
+    vs.textContent = VIEW_CSS;
+    document.head.appendChild(vs);
+  }
+  if (VIEW) {
+    const vb = document.createElement("div");
+    vb.className = "an-view"; vb.setAttribute("role", "status");
+    const who = document.createElement("b");
+    who.textContent = T("view.banner", { name: VIEW.name || `#${VIEW.student_id}` });
+    const perms = VIEW.perms || {};
+    const can = [perms.plan && T("view.perm_plan"), perms.training && T("view.perm_training")].filter(Boolean);
+    const what = document.createElement("span");
+    what.className = "an-v-what";
+    what.textContent = can.length ? T("view.can", { what: can.join(T("view.sep")) }) : T("view.readonly");
+    const sp = document.createElement("span"); sp.className = "an-v-sp";
+    const back = document.createElement("button");
+    back.type = "button"; back.textContent = T("view.back"); back.title = T("view.back_title");
+    back.addEventListener("click", async () => {
+      back.disabled = true;
+      let to = VIEW.back || "/api/v1/app/settings#coach";
+      try {
+        const j = await (await window.fetch("/api/v1/coach/view/stop", { method: "POST" })).json();
+        if (j && typeof j.go === "string" && j.go.startsWith("/") && !j.go.startsWith("//")) to = j.go;
+      } catch (_) {}
+      location.href = to;
+    });
+    vb.append(who, what, sp, back);
+    putUnderNav(vb);
+    viewBar = vb;
+  }
+  // a page 代看 may not open sent the coach to the overview; a withdrawal ended the view (their own 教練 tab)
+  if (viewNote === "blocked" || viewNote === "ended") {
+    const n = document.createElement("div");
+    n.className = "an-vnote"; n.setAttribute("role", "note");
+    n.textContent = T(viewNote === "ended" ? "view.ended" : "view.blocked");
+    putUnderNav(n);
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete("coach_view");
+      history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+    } catch (_) {}
+  }
+  // SP-792: the student's 首頁 and 課表 say when their coach last changed something (the last 14 days)
+  if (!VIEW && !PUBLIC && !DEMO && SESSION.coach_edit && cur && (cur.id === "home" || cur.id === "schedule")) {
+    const e = SESSION.coach_edit, CK = "appshell.coach_edit.seen";
+    let seen = null;
+    try { seen = localStorage.getItem(CK); } catch (_) {}
+    if (seen !== e.at) {
+      const n = document.createElement("div");
+      n.className = "an-vnote"; n.setAttribute("role", "note");
+      let at = e.at;
+      try { at = new Date(e.at).toLocaleString(L.locale || undefined, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (_) {}
+      const txt = document.createElement("span");
+      txt.textContent = T("coach_edit.line", { name: e.coach || T("coach_edit.someone"), at });
+      const a = document.createElement("a");
+      a.href = "/api/v1/app/settings#coach"; a.textContent = T("coach_edit.log");
+      const x = document.createElement("a");
+      x.href = "#"; x.textContent = T("notice.close"); x.setAttribute("role", "button");
+      x.addEventListener("click", (ev) => { ev.preventDefault(); n.remove(); try { localStorage.setItem(CK, e.at); } catch (_) {} });
+      n.append(txt, a, x);
+      putUnderNav(n);
+    }
+  }
+  // SP-823: a coach with students waiting for a yes (they typed the code) reads it on every page — not only
+  // in 設定 › 教練. Closing it hides this batch (the newest request's time); a new request shows it again
+  if (!VIEW && !PUBLIC && !DEMO && SESSION.coach_requests && SESSION.coach_requests.n > 0) {
+    const q = SESSION.coach_requests, CK = "appshell.coach_requests.seen";
+    let seen = null;
+    try { seen = localStorage.getItem(CK); } catch (_) {}
+    if (seen !== q.at) {
+      const n = document.createElement("div");
+      n.className = "an-vnote an-creq"; n.setAttribute("role", "note");
+      const txt = document.createElement("span");
+      txt.textContent = T("coach_req.line", { n: q.n });
+      const a = document.createElement("a");
+      a.href = "/api/v1/app/settings#coach"; a.textContent = T("coach_req.go");
+      const x = document.createElement("a");
+      x.href = "#"; x.textContent = T("coach_req.close"); x.setAttribute("role", "button");
+      x.addEventListener("click", (ev) => { ev.preventDefault(); n.remove(); try { localStorage.setItem(CK, q.at); } catch (_) {} });
+      n.append(txt, a, x);
+      putUnderNav(n);
+    }
+  }
   if (cur && !document.title.includes("·")) document.title = `${cur.name.split("／")[0]} · ${T("brand")}`;
   window.AppShell = { pages: PAGES, current: cur, session: SESSION, can };
 
@@ -294,15 +423,31 @@
     }
     clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, link ? 8000 : 3500);
   };
+  // 代看 (SP-791): the student withdrew — the page reloads (the server sends the coach to their own 教練 tab);
+  // a write the student does not allow, or that only the student may make, says why
+  const viewCheck = (r, write) => {
+    if (r && r.status === 403) {
+      r.clone().json().then((j) => {
+        const d = j && (j.detail || j), code = d && d.code;
+        if (code === "COACH_VIEW_ENDED") location.reload();
+        else if (write && typeof code === "string" && code.startsWith("COACH_")) toast((d && d.message) || T("view.locked"));
+      }).catch(() => {});
+    }
+    return r;
+  };
   window.fetch = async (input, init) => {
     const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
     let url;
     try { url = new URL(typeof input === "string" ? input : input.url, location.href); } catch (_) { url = null; }
-    if (method === "GET" || method === "HEAD" || !url || url.origin !== location.origin) return nativeFetch(input, init);
+    if (method === "GET" || method === "HEAD" || !url || url.origin !== location.origin) {
+      const p = nativeFetch(input, init);
+      return VIEW && url && url.origin === location.origin ? p.then((r) => viewCheck(r, false)) : p;
+    }
     const tok = await csrf();
     const headers = new Headers((init && init.headers) || (input instanceof Request ? input.headers : undefined));
     if (tok) headers.set("X-TRC-CSRF", tok);
     const r = await nativeFetch(input, { ...(init || {}), headers, credentials: "same-origin" });
+    if (VIEW) viewCheck(r, true);
     if (DEMO && (r.status === 403 || r.status === 429 || r.status === 413)) {
       r.clone().json().then((j) => {
         const d = j && (j.detail || j);
@@ -706,7 +851,8 @@
         navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
         if (window.TRC_SESSION) {
           const s = SESSION;
-          swPost({ type: "session", session: { mode: s.mode, user: s.user ? { id: s.user.id } : null, login: s.login || null } });
+          swPost({ type: "session", session: { mode: s.mode, user: s.user ? { id: s.user.id } : null, login: s.login || null,
+                                                viewing: !!s.viewing } });     // SP-791: 代看 — the copy stays out of it
         } else swPost({ type: "sync" });
         // an installed app keeps its data (Chrome / Safari decide without asking)
         if (STANDALONE && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
@@ -746,6 +892,45 @@
   }
 
   // ---- the demo banner + locked buttons ----------------------------------
+  // buttons / inputs marked data-cap="sync" (… push, share, thresholds.write …) are
+  // locked when the session lacks the cap: disabled, with the reason on hover
+  // the pages' owner-only controls, by selector (so each page needn't know about the demo)
+  const CAP_SELECTORS = [
+    ["push", "#push-main, #push-caret, [data-unpush], #sd-push, #coros, #cx-go"],
+    ["share", "#share, #share-go"],
+    ["backtest", "#bt-run"],
+    ["weather.key", "#cwasave, #cwakey"],
+    ["thresholds.write", "#addthr, #savethr, [data-apply-at], [data-apply-thr]"],
+    ["dataset.write", "#rebuild, [data-rename-route], #ex-save, #act-save, [data-exclude]"],
+    ["upload.fit", "input[type=file][accept*='.fit' i]:not([accept*='.gpx' i])"],
+    ["ai", "[data-ai]"],
+  ];
+  function capLock(selectors, LOCKED) {
+    const lock = (root) => {
+      if (!root.querySelectorAll) return;
+      for (const [cap, sel] of selectors) {
+        if (can(cap) || !sel) continue;
+        for (const el of root.querySelectorAll(sel)) if (!el.dataset.cap) el.dataset.cap = cap;
+        if (root.matches && root.matches(sel) && !root.dataset.cap) root.dataset.cap = cap;
+      }
+      for (const el of (root.querySelectorAll ? root.querySelectorAll("[data-cap]") : [])) {
+        const need = el.dataset.cap.split(/\s+/).filter(Boolean);
+        if (need.every(can) || el.dataset.capLocked) continue;
+        el.dataset.capLocked = "1";
+        el.title = LOCKED;
+        if ("disabled" in el) el.disabled = true;
+        el.setAttribute("aria-disabled", "true");
+        el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation(); toast(LOCKED); }, true);
+      }
+    };
+    const startLock = () => {
+      lock(document);
+      new MutationObserver((ms) => {
+        for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) lock(n.parentNode || n);
+      }).observe(document.body, { childList: true, subtree: true });
+    };
+    if (document.body) startLock(); else document.addEventListener("DOMContentLoaded", startLock);
+  }
   let renderBanner = () => {};
   if (DEMO) {
     st.textContent += `
@@ -799,51 +984,28 @@
     if (document.body) mountBanner(); else document.addEventListener("DOMContentLoaded", mountBanner);
     setInterval(() => { const el = banner.querySelector(".an-d-left"); if (el) el.textContent = left(); }, 60e3);
 
-    // buttons / inputs marked data-cap="sync" (… push, share, thresholds.write …) are
-    // locked when the session lacks the cap: disabled, with the reason on hover
-    // the pages' owner-only controls, by selector (so each page needn't know about the demo)
-    const CAP_SELECTORS = [
-      ["push", "#push-main, #push-caret, [data-unpush], #sd-push, #coros, #cx-go"],
-      ["share", "#share, #share-go"],
-      ["backtest", "#bt-run"],
-      ["weather.key", "#cwasave, #cwakey"],
-      ["thresholds.write", "#addthr, #savethr, [data-apply-at], [data-apply-thr]"],
-      ["dataset.write", "#rebuild, [data-rename-route], #ex-save, #act-save, [data-exclude]"],
-      ["upload.fit", "input[type=file][accept*='.fit' i]:not([accept*='.gpx' i])"],
-      ["ai", "[data-ai]"],
-    ];
-    const LOCKED = T("demo.locked");
-    const lock = (root) => {
-      if (!root.querySelectorAll) return;
-      for (const [cap, sel] of CAP_SELECTORS) {
-        if (can(cap) || !sel) continue;
-        for (const el of root.querySelectorAll(sel)) if (!el.dataset.cap) el.dataset.cap = cap;
-        if (root.matches && root.matches(sel) && !root.dataset.cap) root.dataset.cap = cap;
-      }
-      for (const el of (root.querySelectorAll ? root.querySelectorAll("[data-cap]") : [])) {
-        const need = el.dataset.cap.split(/\s+/).filter(Boolean);
-        if (need.every(can) || el.dataset.capLocked) continue;
-        el.dataset.capLocked = "1";
-        el.title = LOCKED;
-        if ("disabled" in el) el.disabled = true;
-        el.setAttribute("aria-disabled", "true");
-        el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation(); toast(LOCKED); }, true);
-      }
-    };
-    const startLock = () => {
-      lock(document);
-      new MutationObserver((ms) => {
-        for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) lock(n.parentNode || n);
-      }).observe(document.body, { childList: true, subtree: true });
-    };
-    if (document.body) startLock(); else document.addEventListener("DOMContentLoaded", startLock);
+    capLock(CAP_SELECTORS, T("demo.locked"));
+  }
+  // 代看 (SP-791, SP-792): the same locks from the view's caps — plan.write / push / upload.gpx with the
+  // student's 課表 switch, thresholds.write with 門檻與訓練設定; the rest (sync, share, …) never
+  if (VIEW) {
+    st.textContent += `[data-cap][data-cap-locked] { opacity: .5; cursor: not-allowed !important; }`;
+    capLock([...CAP_SELECTORS,
+      ["thresholds.write", "#hr-model, #hr-max-save, #hr-rest-save, #hr-max-auto, #hr-rest-auto, #pz-model, #pmc-save, #pmc-clear, "
+        + "#race-save, #race-clear, #thr-add, #thr-save, [data-tcapply], [data-apply], [data-trm], [data-race]"],
+      ["plan.write", "[data-approve], [data-reject], [data-undo], [data-aet-apply], .sg-item [data-act=accept], .sg-item [data-act=dismiss], "
+        + ".sg-item [data-act=decline], #pull-btn, #rec-btn, #sd-del, #sd-swap, #sd-climb, #pf-reset, [data-act=\"del-expired\"], "
+        + "[data-add], [data-ctx=\"add\"], [data-ctx=\"del\"]"],
+      ["upload.gpx", "input[type=file][accept*='.gpx' i]"],
+    ], T("view.locked"));
   }
 
   // ---- ? help → the manual (SP-558) -------------------------------------------------------------
   // A ? with data-manual="<chapter>#<section>" gets 「看手冊 →」 after its text. A page's own popup
   // calls ManualLink.decorate(popup, button) when it shows one (and leaves it open while the pointer
   // moves into it: ManualLink.into(mouseout event); a click inside it is the link's own). A ? whose
-  // text is only its title (the settings page) gets a small popup of its own here on a click. Every
+  // text is only its title (the settings page) gets a small popup of its own here on a click — SP-750: on the
+  // settings page every ? (button.q with a title), not only the data-manual ones, so a phone reads it too. Every
   // data-manual must name a section that exists (backend/tests/test_manual_sp558.py).
   // SP-559: a popup whose text names a glossary word (/manual/terms.json: the 名詞表's :::terms) also gets
   // a last row 「名詞表：長期訓練負荷 · 負荷平衡」 linking to those sections (at most GL_MAX, in the text's
@@ -916,7 +1078,8 @@
       a.className = "an-man an-gl"; a.href = h.url; a.textContent = h.word; a.title = T("manual.glossary_title");
       row.appendChild(a);
     });
-    pop.appendChild(row);
+    const ai = pop.querySelector(".askai-row");                    // 「還不懂？問 AI」 (SP-786) stays last
+    if (ai) pop.insertBefore(row, ai); else pop.appendChild(row);
     manLive(pop, btn);
   }
   function manDecorate(pop, btn) {
@@ -934,16 +1097,20 @@
     }
     if (gl) glRow(pop, btn, text, href);
     else glLoad().then(() => { if (pop.isConnected) glRow(pop, btn, text, href); });
+    // SP-786: 「還不懂？問 AI」 last, when the AI 問答 is on (static/askai.js)
+    if (window.AskAI) { window.AskAI.decorate(pop, btn); manLive(pop, btn); }
     return pop;
   }
   // the pointer left the ? for its popup (which has the link): keep it open
   const manInto = (e) => !!(e && e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".qtip-pop, .qpop, .an-qpop"));
   let qpop = null;
+  // SP-750: the settings page's ? are title-only (no popup of the page's own)
+  const QSEL = "[data-manual][title]:not([data-tip])" + (cur && cur.id === "settings" ? ", button.q[title]:not([data-tip])" : "");
   const qpopHide = () => { if (qpop) { qpop.remove(); qpop = null; } };
   document.addEventListener("click", (e) => {
     if (!e.target.closest) return;
     if (e.target.closest(".an-qpop")) return;
-    const b = e.target.closest("[data-manual][title]:not([data-tip])");
+    const b = e.target.closest(QSEL);
     if (!b) { qpopHide(); return; }
     const again = qpop && qpop._for === b;
     qpopHide();
@@ -1054,16 +1221,59 @@
   if (!PUBLIC) setTimeout(poll, 250);       // signed out: no one's data to wait for
   window.AppShell.datasetStatus = poll;
 
+  // ---- a page's own bottom bar clears the floating buttons (SP-913) ------------------------------------------
+  // An element marked data-float-clear (the 活動列表's sticky 比較 bar) that the floating 建議 box
+  // (static/suggestions.js) or 問 AI button (static/askai.js) would cover — measured where they float on their
+  // own — lifts them above it: <html> gets --float-clear (its top's distance from the viewport bottom + 8 px),
+  // which both use as their least `bottom`, and a `floatclear` event (askai.js re-stacks its button). Pages
+  // without such a bar, or while it is hidden or out of their way: 0px, the boxes stay where they were.
+  // AppShell.floatClear() measures again (a page calls it after showing / hiding its bar).
+  const FLOATS = ".sugbox:not([hidden]), .askai-fab:not([hidden])";
+  let fcPx = 0, fcQueued = false, fcRo = null;
+  function floatClear() {
+    const root = document.documentElement;
+    const bars = [...document.querySelectorAll("[data-float-clear]")]
+      .map((b) => b.getBoundingClientRect()).filter((r) => r.height > 0 && r.top < innerHeight && r.bottom > 0);
+    if (!bars.length && !fcPx) return;
+    const set = (px) => { root.style.setProperty("--float-clear", `${px}px`); window.dispatchEvent(new Event("floatclear")); };
+    set(0);                                                    // where they float on their own
+    const floats = [...document.querySelectorAll(FLOATS)].map((f) => f.getBoundingClientRect()).filter((r) => r.height > 0);
+    const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    let need = 0;
+    for (const r of bars) if (floats.some((f) => hit(f, r))) need = Math.max(need, Math.ceil(innerHeight - r.top + 8));
+    fcPx = need;
+    if (need) set(need);
+  }
+  const fcLater = () => { if (fcQueued) return; fcQueued = true; requestAnimationFrame(() => { fcQueued = false; floatClear(); }); };
+  function fcWatch() {
+    const bars = document.querySelectorAll("[data-float-clear]");
+    if (!bars.length) return;
+    if (!fcRo && window.ResizeObserver) fcRo = new ResizeObserver(fcLater);  // shown / hidden / taller
+    if (fcRo) for (const b of bars) if (!b._fc) { b._fc = true; fcRo.observe(b); }
+    if (!fcWatch.on) {
+      fcWatch.on = true;
+      addEventListener("scroll", fcLater, { passive: true, capture: true });  // a sticky bar moves while scrolling
+      addEventListener("resize", fcLater, { passive: true });
+    }
+    fcLater();
+  }
+  window.AppShell.floatClear = () => { fcWatch(); floatClear(); };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fcWatch); else fcWatch();
+
   if (DEMO || PUBLIC) return;  // the demo has no sync, no settings, no first-run wizard; a visitor neither
 
+  // 代看 (SP-791): nothing below writes into the student's data on its own — no auto-sync, no FIT folder,
+  // no time zone, no first-run wizard (the suggestion box and the region stay: they read)
   // auto-sync on site open (COROS / TP, per the settings page; throttled inside autosync.js)
-  const as = document.createElement("script");
-  as.src = "/api/v1/static/autosync.js";
-  as.defer = true;
-  document.head.appendChild(as);
+  if (!VIEW) {
+    const as = document.createElement("script");
+    as.src = "/api/v1/static/autosync.js";
+    as.defer = true;
+    document.head.appendChild(as);
+  }
 
   // SP-324: the remembered FIT folder (desktop Chrome / Edge only) imports its new files on open
-  if (typeof window.showDirectoryPicker === "function" && can("upload.fit")) {
+  if (!VIEW && typeof window.showDirectoryPicker === "function" && can("upload.fit")) {
     const ff = document.createElement("script");
     ff.src = "/api/v1/static/fitfolder.js";
     ff.dataset.auto = "1";
@@ -1072,12 +1282,22 @@
   }
 
   // the floating suggestion box (B2B weekends, due tests, zone retests): every page shows it — but the
-  // manual (SP-558) and 關於 (SP-495), pages for reading that it would cover
-  if (!cur || !PUBLIC_PAGES.has(cur.id)) {
+  // manual (SP-558) and 關於 (SP-495), pages for reading that it would cover; nor the 教練看板 (SP-790):
+  // the coach's own suggestions there covered the students' alerts
+  if ((!cur || !PUBLIC_PAGES.has(cur.id)) && me?.dataset.page !== "coach_board") {
     const sg = document.createElement("script");
     sg.src = "/api/v1/static/suggestions.js";
     sg.defer = true;
     document.head.appendChild(sg);
+  }
+
+  // 問 AI (SP-786, static/askai.js; the backend SP-785): the owner only, while 設定 › 進階 › AI 問答 is on — the
+  // session says so (api/session.py `ai`); never while viewing a student (no `ai` then)
+  if (SESSION.ai && SESSION.ai.on && !VIEW) {
+    const ai = document.createElement("script");
+    ai.src = "/api/v1/static/askai.js";
+    ai.defer = true;
+    document.head.appendChild(ai);
   }
 
   // 地區 tw | intl (engine/region.py): hides the Taiwan-only parts outside Taiwan
@@ -1085,6 +1305,7 @@
   rg.src = "/api/v1/static/region.js";
   document.head.appendChild(rg);
 
+  if (VIEW) return;
   // the browser's time zone, once per browser: one input of the automatic zone (engine/localtime.py)
   try {
     const z = Intl.DateTimeFormat().resolvedOptions().timeZone;

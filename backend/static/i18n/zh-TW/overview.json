@@ -42,6 +42,8 @@
   "stale.reload": "重新整理",
   "stale.reload_tip": "顯示的是 {at} 算好的狀態，新的還沒算完；按這裡重新整理",
   "stale.wait": "狀態更新中，幾秒後再套用",
+  "stale.hr": "心率區間更新中",
+  "stale.hr_tip": "換了課表心率區間，先顯示 {at} 算好的狀態；新的算好會自動換上",
   "jump.aria": "本頁段落",
   "jump.status": "狀況",
   "jump.log": "紀錄",

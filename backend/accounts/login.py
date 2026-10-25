@@ -41,6 +41,11 @@ Who becomes whom (resolve(), after Google's id_token checked out and its e-mail 
   An e-mail Google has not verified is refused before any of this ("unverified"): the e-mail is
   never trusted for the owner match, the waitlist or contact.
 
+The e-mail sign-in (SP-610, accounts/email_login.py) follows the same rules once the address is
+confirmed (email_login.resolve): no new account before the owner's first sign-in, the cap and the
+waitlist, an admitted waitlisted account taken over, the terms before the account is made. It never
+makes or takes the owner, and an address that is a Google account's stays Google's.
+
 New terms (terms.VERSION) stop a signed-in user too: the gate answers 403 TERMS_REQUIRED / sends
 the pages to /signup until accepted (consent_current(), cached a few minutes per user).
 
@@ -119,6 +124,10 @@ PUBLIC_PATHS = PUBLIC_PATHS | {"/join"}
 # a test account's one-time sign-in link (SP-611, accounts/testaccounts.py): the page (its token in the
 # URL's fragment, never sent) and the POST it makes — exactly these two paths
 PUBLIC_PATHS = PUBLIC_PATHS | {"/test-login", "/api/v1/account/test-login"}
+# the e-mail sign-in (SP-610, api/account_email.py): its pages (the links' tokens in the URL's fragment, never
+# sent) and the POSTs they make — exactly these paths
+PUBLIC_PATHS = PUBLIC_PATHS | {"/register", "/forgot-password", "/reset-password", "/verify-email"} | {
+    "/api/v1/account/email/" + p for p in ("register", "verify", "login", "forgot", "reset")}
 # 介紹頁 (SP-622, main._home): "/" signed out is the product's introduction (signed in: the overview, as
 # before) — exactly "/", nothing under it
 PUBLIC_PATHS = PUBLIC_PATHS | {"/"}
@@ -127,6 +136,9 @@ PUBLIC_PATHS = PUBLIC_PATHS | {"/"}
 PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/estimate"} | {f"/api/v1/intro/example/{k}" for k in ("trail", "baiyue", "road")}
 # SP-637 R1: the 課表 demo — the built-in template library and the fictional runner's frozen calendar
 PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/templates", "/api/v1/intro/plan"}
+# 方案與價格 (SP-846, api/billing.py): the prices and the plan table, linked from the 介紹頁 — exactly /pricing
+# (the plans page /plans and its checkout stay behind sign-in)
+PUBLIC_PATHS = PUBLIC_PATHS | {"/pricing"}
 PUBLIC_PREFIXES = ("/api/v1/static/", "/manual/")
 _OAUTH_CALLBACK = ("/oauth/", "/callback")
 # never a place to come back to after signing in (loops)
@@ -254,6 +266,8 @@ def _decide() -> tuple:
                         "e-mail address can change hands) until the owner has signed in once",
                         ENV_OWNER_EMAIL, ENV_OWNER_SUB)
     google.configure(cid, secret, public)
+    from backend.accounts import mailer
+    mailer.warn_if_dev()                  # the e-mail sign-in's mails (SP-610): sent, or only printed
     secure = https or os.environ.get("WKO5COACH_COOKIE_SECURE", "1") != "0"
     return SIGNIN, secure, (sub, email)
 
@@ -327,6 +341,13 @@ def safe_next(raw: Optional[str]) -> str:
     return raw
 
 
+def error_url(reason: str, next_url: Optional[str] = None) -> str:
+    """/login?error=<reason>; a sign-in that started from a 疊石 Cairn link (from=cairn in its next,
+    SP-764) adds from=cairn, so the page can say what happens to the route (額滿: the waitlist line)."""
+    from backend.accounts import xp as XP
+    return f"/login?error={reason}" + ("&from=cairn" if XP.source_of(next_url) == "cairn" else "")
+
+
 def max_users() -> int:
     """The sign-up cap: the admin page's value, else WKO5COACH_MAX_USERS (TRC_MAX_USERS), else 100
     (site_config.get: the page wins over the environment)."""
@@ -364,10 +385,11 @@ def demo_url() -> Optional[str]:
     return raw
 
 
-def join_link() -> Optional[dict]:
+def join_link(source: Optional[str] = None) -> Optional[dict]:
     """Where 「用自己的資料算」 (the share page's button) goes, {kind, url}; None: no button.
       signup    sign-in on, the owner linked, room left -> /login (Google sign-in is the sign-up),
-                then the race calculator
+                then the race calculator; `source` (the share page: "share", SP-765 / SP-389 Q1-2)
+                rides on that next as from=<source>, so the new account keeps where it came from
       waitlist  sign-in on and full -> /login?waitlist=1 (signing in puts the e-mail on the list)
       demo      sign-up not open yet (owner mode, or sign-in on before the owner's first sign-in)
                 -> the public demo (TRC_DEMO_URL)
@@ -386,7 +408,8 @@ def join_link() -> Optional[dict]:
         if linked:
             if is_full:
                 return {"kind": "waitlist", "url": "/login?waitlist=1"}
-            return {"kind": "signup", "url": "/login?" + urlencode({"next": JOIN_NEXT})}
+            nxt = JOIN_NEXT + ("?" + urlencode({"from": source}) if source else "")
+            return {"kind": "signup", "url": "/login?" + urlencode({"next": nxt})}
     url = demo_url()
     # SP-124 Q2 (owner, 2026-10-19): no demo site yet -> the 關於 page (/about, public) until one is set
     return {"kind": "demo", "url": url} if url else {"kind": "about", "url": ABOUT_URL}
@@ -452,11 +475,17 @@ def _owner_linked() -> bool:
     return o is not None and bool(o.google_sub)
 
 
-def _terms(kind: str, ident: google.Identity, next_url: str, user_id: Optional[int] = None) -> Outcome:
+def ticket(kind: str, provider: str, subject: str, email: Optional[str], name: Optional[str], next_url: str,
+           user_id: Optional[int] = None) -> Outcome:
+    """To the terms: a sign-up ticket (kind signup: a new person; reconsent: user_id) — Google's or
+    the e-mail sign-in's (SP-610: provider "email", subject the address)."""
     token = _secrets.token_urlsafe(32)
-    store.put_signup_ticket(token, kind, ident.provider, ident.subject, ident.email, ident.name, user_id,
-                            next_url, TICKET_TTL_S)
+    store.put_signup_ticket(token, kind, provider, subject, email, name, user_id, next_url, TICKET_TTL_S)
     return Outcome("terms", ticket=token)
+
+
+def _terms(kind: str, ident: google.Identity, next_url: str, user_id: Optional[int] = None) -> Outcome:
+    return ticket(kind, ident.provider, ident.subject, ident.email, ident.name, next_url, user_id)
 
 
 def _waitlist(email: Optional[str]) -> Outcome:
@@ -509,6 +538,10 @@ def accept_terms(ticket: dict, documents: dict) -> Outcome:
         u = store.get_user(ticket["user_id"]) if ticket.get("user_id") else None
     else:
         u = store.find_identity(ticket["provider"], ticket["subject"])
+        if u is None and ticket["provider"] == "email":
+            # the e-mail sign-in (SP-610): the confirmed row becomes the account, under the same cap
+            from backend.accounts import email_login
+            return email_login.accept_terms(ticket, documents)
         if u is None:
             if not _owner_linked():
                 return Outcome("refused", reason="setup")
@@ -541,3 +574,5 @@ def accept_terms_signed_in(u: store.User, documents: dict) -> Outcome:
 def reset_limits() -> None:
     START_LIMIT.reset()
     CALLBACK_LIMIT.reset()
+    from backend.accounts import email_login
+    email_login.reset_limits()

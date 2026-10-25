@@ -394,8 +394,14 @@ def scan_repo(allow: Optional[Allow] = None) -> dict[str, FileScan]:
 
 # ---- catalogs -----------------------------------------------------------------
 
+def _no_plural_words(s: str) -> str:
+    """`{days|day|days}` (SP-762) counts as a use of the `days` field."""
+    return re.sub(r"\{(\w+)\|[^{}|]*\|[^{}|]*\}", r"{\1}", s)
+
+
 def py_fields(s: str) -> set[str]:
     """str.format field names ({ramp:.1f} -> ramp)."""
+    s = _no_plural_words(s)
     out = set()
     try:
         for _lit, name, _spec, _conv in string.Formatter().parse(s):
@@ -407,7 +413,7 @@ def py_fields(s: str) -> set[str]:
 
 
 def js_fields(s: str) -> set[str]:
-    return set(re.findall(r"\{(\w+)\}", s))
+    return set(re.findall(r"\{(\w+)\}", _no_plural_words(s)))
 
 
 def _texts(v) -> list[str]:

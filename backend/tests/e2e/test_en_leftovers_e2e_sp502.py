@@ -76,7 +76,7 @@ def test_capacity_page_power_curve_in_english(app):
         return [].concat(o.legend || []).flatMap((l) => l.data || []).map((x) => typeof x === "string" ? x : x?.name)
           .concat((o.series || []).map((s) => s.name)); }""")
     assert legend and not [x for x in legend if x and any("㐀" <= ch <= "鿿" for ch in x)], legend
-    assert "New bests, last 7 days" in legend
+    assert "New bests, last 14 days" in legend           # SP-688: the curve is fixed at the last 14 days
     assert not left, left
     assert not _listed_on(page), _listed_on(page)
 

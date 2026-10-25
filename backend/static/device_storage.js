@@ -7,7 +7,8 @@
  *              and the copy's own size (the worker's bookkeeping)
  *   P0/P1/P2   per tier: kept / partly / not kept / pushed out over the budget / nothing to keep /
  *              not yet — from the worker's status() (AppOffline.status(), shell.js): the tiers are
- *              offline_core.js's, never recomputed here
+ *              offline_core.js's, never recomputed here. P2 (SP-758) is the activities opened in the
+ *              last 30 days: how many it keeps (status().acts) and their size
  *   持久保存   navigator.storage.persisted(); not yet → a button asks (navigator.storage.persist())
  *   最後更新   the newest tier refill
  *   加到主畫面 on an iPhone / iPad browser tab (not the home-screen app): Safari deletes a tab's
@@ -70,10 +71,12 @@
     const t = st.tiers && st.tiers[tier];
     const present = st.present ? !!st.present[tier] : true;      // a worker from before SP-322: trust its record
     const base = { tier, mb: mbOf(bytes) };
+    // SP-758: P2 is filled by opening activities (單次活動), not by the refill — its count is what it keeps
+    if (tier === "p2" && st.user && present && bytes > 0) return { ...base, state: "acts", n: st.acts || 0, at: (t && t.at) || null };
     if (!st.user || !t || !present) return { ...base, state: "none" };
     const ok = t.ok || 0, failed = t.failed || 0;
     let state;
-    if (!ok && !failed) state = "empty";                  // nothing to keep in this tier (P2 until SP-325)
+    if (!ok && !failed) state = "empty";                  // nothing to keep in this tier yet (P2: no activity opened)
     else if (!ok) state = "failed";
     else if (!(bytes > 0)) state = "evicted";             // kept, then pushed out over the budget / quota
     else if (failed) state = "partial";
@@ -133,12 +136,13 @@
     // P0 / P1 / P2
     const STATE = {
       ok: () => T("state_ok"), partial: (r) => T("state_partial", { n: r.failed }), failed: () => T("state_failed"),
-      evicted: () => T("state_evicted"), empty: () => T("state_empty"), none: () => T("state_none"), na: () => T("na"),
+      evicted: () => T("state_evicted"), empty: (r) => T(r.tier === "p2" ? "state_empty_p2" : "state_empty"),
+      none: () => T("state_none"), na: () => T("na"), acts: (r) => T("state_acts", { n: r.n }),
     };
     const WHAT = { p0: () => T("p0_what"), p1: () => T("p1_what"), p2: () => T("p2_what") };
     const LABEL = { p0: () => T("p0"), p1: () => T("p1"), p2: () => T("p2") };
     for (const r of m.tiers) {
-      const size = r.state === "ok" || r.state === "partial" ? ` · ${esc(r.mb)} MB` : "";
+      const size = r.state === "ok" || r.state === "partial" || r.state === "acts" ? ` · ${esc(r.mb)} MB` : "";
       rows.push([LABEL[r.tier](), `<span class="ds-st ds-${r.state}">${STATE[r.state](r)}</span>${size}`
         + ` <span class="meta">${WHAT[r.tier]()}</span>`]);
     }

@@ -69,6 +69,7 @@ ITEMS: dict[str, Item] = {i.key: i for i in (
     # the plans' limits (SP-321 / SP-330)
     Item("quota.free.charts", "quota", "int", 5, 0, 10000),
     Item("quota.free.calc", "quota", "int", 10, 0, 10000),
+    Item("quota.free.participants", "quota", "int", 10, 0, 10000),     # SP-805: 團員腳程估算（疊石 Cairn 揪團）
     Item("quota.subscriber.backtest", "quota", "int", 2, 0, 10000),
     # COROS for the whole server (SP-385, sync/coros_limits.py reads the same keys)
     Item("coros.rate_per_s", "coros", "float", 2.0, 0.1, 50),

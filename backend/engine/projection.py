@@ -276,9 +276,9 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         else:
             add(id="long", kind="long", title="LSD" + ("（山路）" if mountain else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
-                detail=("有山路就走山路，陡坡用走的" if mountain else "平路或緩坡")
-                + f"；全程心率壓在{below(cap_txt)}，爬坡可以走",
-                source=O.SRC_KOOP if kind == "specific" else O.SRC_UA, tss=long_min / 60.0 * tph)
+                detail=(_("有山路就走山路，陡坡用走的") if mountain else _("平路或緩坡"))
+                + "；" + _("全程心率壓在{cap}，爬坡可以走", cap=below(cap_txt)),
+                source=_(O.SRC_KOOP) if kind == "specific" else O.SRC_UA, tss=long_min / 60.0 * tph)
             if info is not None and info.get("due") and not rec_wk:
                 ss.extend(B2B.followers(ss[-1], info))     # out of the easy minutes (Koop)
         if rec_wk:
@@ -293,7 +293,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                 add(**_bq(b))
         elif allow_quality:
             add(id="quality", kind="quality", title="有氧間歇（巡航）3×10 分", minutes=60, target=tgt.get("threshold", ""),
-                detail="休 2–3 分鐘；暖身 15 分、緩和 10 分", source=O.SRC_PALLADINO + "（3B）", tss=70.0)
+                detail=_("休 2–3 分鐘") + "；" + O._WARM_COOL, source=_("Palladino 功率區間（3B）"), tss=70.0)
     elif kind == "taper" and bqs:
         for b in bqs:                               # 減量期's two-track pick (overview.quality_sessions)
             add(**_bq(b))
@@ -301,9 +301,10 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         add(**O.TAPER_Q, target=tgt.get("threshold", ""))
     if kind == "taper" and (taper or {}).get("long"):
         lm = O.taper_long_minutes(total)          # the last long run (SP-96), as week_plan
-        add(id="long", kind="long", title=f"長跑（減量期，≤ {O.TAPER_LONG_MAX_MIN} 分）", minutes=int(round(lm / 5) * 5),
-            target=tgt.get("long", ""), detail=f"心率不超過{cap_txt}；"
-            + ("平路或緩坡，不跑長下坡" if taper.get("sore") else "輕鬆跑"), source=O.SRC_TAPER_WEEK, tss=lm / 60.0 * tph)
+        add(id="long", kind="long", title=_("長跑（減量期，≤ {max} 分）", max=O.TAPER_LONG_MAX_MIN),
+            minutes=int(round(lm / 5) * 5), target=tgt.get("long", ""), detail=_("心率不超過{cap}", cap=cap_txt) + "；"
+            + (_("平路或緩坡，不跑長下坡") if taper.get("sore") else _("輕鬆跑")), source=_(O.SRC_TAPER_WEEK),
+            tss=lm / 60.0 * tph)
     n_strength = 2 if kind in ("base", "transition", "recovery", "rebuild") else 1
     st_s = STP.session(strength, ss)                 # 肌力課依期別 (SP-119), as week_plan
     for i in range(n_strength):
@@ -331,7 +332,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         st_t, st_d, st_s = st or ("", "", "")
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
-            detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
+            detail=_("心率不超過{cap}", cap=cap_txt) + (st_d if strides else ""),
             source=O.SRC_UA + (st_s if kind in ("transition", "rebuild") else ""), tss=m / 60.0 * easy_tph)
     if prefs is not None and prefs.active:
         from backend.engine import plan_prefs as PP
@@ -649,10 +650,16 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     cur_t = cur.get("taper") or {}
     last_runs = cur_t.get("pre_runs") or sum(1 for s in cur_s if s.get("kind") in O.RUN_KINDS) or None
     pre_h = cur_t.get("pre_hours")
+
+    def strength_days(xs) -> list[str]:
+        """The days of a week's general strength sessions (not the balance block) — the next week's
+        taper maintenance session is never the day after one (SP-866, drop_strength_before_a's `before`)."""
+        return [s["day"] for s in xs if s.get("kind") == "strength" and s.get("id") != BP.ID and s.get("day")]
+    prev_st = strength_days(cur_s)
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
         kind = phase_kind(phases, week)
-        mw = PLN.maintain_week(phases, week) if kind == "base" else None      # SP-102 維持期
+        mw = PLN.maintain_week(phases, week, sport) if kind == "base" else None      # SP-102 維持期 (SP-830: road → 速度／閾值)
         inj_rule = INJ.condition_week(inj_events, week) if inj_events else None     # SP-270
         tc = O.taper_context(phases, events, week) if events is not None else None
         same = bool(tc and cur_t.get("id") == tc["id"])
@@ -736,7 +743,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 why = why + [M_("不排課 {range}：少 {n} 個可練日，週量 × {f:.0%}", range=BL.range_text(lost), n=len(lost), f=f)]
                 notes.append(BL.week_note(bmap, lost, lost_h))
         q_n = O.quality_per_week(PR, kind, mode, gate)
-        dec = allow_quality(kind, gate, week, dict(steps), mode, q_n, prefer="z5" if mw is not None else None)
+        dec = allow_quality(kind, gate, week, dict(steps), mode, q_n, prefer=mw.get("track", "z5") if mw is not None else None)
         # the user's own RPE ≥ 7 技術地形 sessions this week: in the 20 % first (technical.py, SP-74)
         user_q = TECH.user_quality(user_rows, week) \
             if kind in ("base", "specific") and mode != "recovery_week" else []
@@ -858,7 +865,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 tech = {"active": False}
         # 賽前停肌力 (SP-86): week_plan's A-event windows, the same rule (overview.drop_strength_before_a)
         n_notes = len(notes)
-        ss = O.drop_strength_before_a(ss, s_stops, week, notes, blocked=set(bmap), allowed=allowed_fn)
+        ss = O.drop_strength_before_a(ss, s_stops, week, notes, blocked=set(bmap), allowed=allowed_fn,
+                                      before=prev_st)
         # 減量期規則 (SP-96): the same rule as week_plan (overview.taper_rules)
         ss = O.taper_rules(ss, tc, week, notes, road, easy_target=tgt.get("z2", ""), cp=th.get("cp"),
                            q_target=tgt.get("threshold", ""), prefs=PR,
@@ -898,7 +906,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             ss = [s for s in ss if s["kind"] not in O.RUN_KINDS]
             for s in ss:
                 if s["kind"] == "strength":
-                    s["detail"] = (s.get("detail") or "") + _("；會痛的動作先不做")
+                    s["detail"] = (s.get("detail") or "") + "；" + _("會痛的動作先不做")
             notes.append({"level": "bad", "src": "injury_light",
                           "text": _("疼痛紅燈還沒解除：這週先不排跑步，等下一次跑步標記改變燈號；交叉訓練和肌力照做")})
         if tc and (kind == "taper" or split):        # SP-668: the week the taper starts in too
@@ -923,7 +931,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         prev_lost = lost
         drop = [s for s in ss if not s["day"] and s["kind"] != "strength"] if lost else []
         if drop:
-            notes.append({"level": "info", "src": "blackout", "text": f"剩下的日子排不下 {len(drop)} 堂課（約 {sum(s['minutes'] for s in drop)} 分鐘）——不用補"})
+            notes.append({"level": "info", "src": "blackout", "text": M_("剩下的日子排不下 {n} 堂課（約 {m} 分鐘）——不用補", n=len(drop),
+                                                                     m=sum(s['minutes'] for s in drop))})
         # 平衡／腳踝 (engine/balance_plan.py, SP-120 — part of strength): the same rule as week_plan
         try:
             bal = BP.week_context(a_evs, week, kind, prefs)
@@ -970,7 +979,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     **({"technical": TECH.public(tech)} if tech.get("active") else {}),
                     **({"base_climb": BC.public(bc)} if bc.get("active") else {}),
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
-        long_n = next((s for s in ss if s["id"] == "long"), None) if kind != "taper" else None
+        prev_st = strength_days(ss)
+        long_n =next((s for s in ss if s["id"] == "long"), None) if kind != "taper" else None
         recent_long.append(float(long_n["minutes"]) if long_n else 0.0)
         if long_n is None and ramp:
             # SP-288: a ramp week of easy runs only — its longest run is the next week's reference (as

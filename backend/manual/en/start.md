@@ -81,7 +81,7 @@ While older activities are filled in, numbers that need the whole history — Ch
 
 :::deep
 ### Later syncs
-Each later sync fetches from 14 days before the last one, so it is quick. Activities that failed to download or import are listed under Advanced › failed downloads, and later syncs retry only those (each at most 5 times or 7 days); a full check compares the platform's activities with these one by one and downloads what is missing.
+Each later sync fetches from 14 days before the last one, so it is quick. Activities that failed to download or import are listed under "Activities that failed to download" in the "Advanced settings" fold of the Data & sync tab, and later syncs retry only those (each at most 5 times or 7 days); a full check compares the platform's activities with these one by one and downloads what is missing.
 
 ### Why 90 days first
 A whole history can be a thousand FIT files or more; waiting for all of them would make the first visit very long. The schedule and the overview need the recent training most, so 90 days come first and the older files follow one at a time; Chronic load builds up from the whole history, so it shows once that is complete.
@@ -126,7 +126,7 @@ Max and resting HR are used for the heart-rate-reserve and max-HR zones. Usually
 
 :::deep
 ### Max HR from your runs
-The highest HR held for 5 seconds or more in the last 365 days of running, with the spikes of optical HR filtered out, so one bad reading cannot lift all the zones.
+The spikes of optical HR are filtered out first, then the best 10-second average HR in the last 365 days of running is taken, so one bad reading cannot lift all the zones. The highest run counts as it is, even when it stands above the others — one all-out test or race is exactly the evidence needed.
 
 ### The schedule's HR zones
 They only set the HR targets of the schedule (automatic planning, workout steps, the watch): recovery Z1, easy / long / trail Z2, tempo Z3, threshold Z4, VO2max Z5. Without max or resting HR, lactate-threshold zones are used. The charts choose their own HR zones, unaffected. An entered value counts from today; earlier charts keep the values of their time.

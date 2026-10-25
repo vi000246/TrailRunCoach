@@ -68,6 +68,8 @@ def fit_easy_margin(ds, today: Optional[dt.date]):
     lthr = on("lthr", today) if on is not None else None
     pts = DA.aet_points(ds, today)
     agg = TE.aet_aggregate([(p["hr1"], p["drift"], p["se"]) for p in pts], lthr=lthr)
+    if agg.se is None and int(agg.n or 0) < MIN_POINTS:
+        return CAL.count_only(agg.n or 0)               # SP-807: the count below min_n
     return margin_fit(agg.se, agg.n)
 
 

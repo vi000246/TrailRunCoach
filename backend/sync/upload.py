@@ -56,7 +56,8 @@ log = logging.getLogger(__name__)
 
 SOURCE = "upload"                       # workout_files.source of an imported file
 FIT_EXTS = (".fit", ".fit.gz")
-TRACK_EXTS = (".tcx", ".tcx.gz", ".gpx", ".gpx.gz")     # turned into FIT (SP-349, files/track_fit.py)
+# turned into FIT (SP-349, files/track_fit.py); .pwx: TrainingPeaks / WKO (SP-833)
+TRACK_EXTS = (".tcx", ".tcx.gz", ".gpx", ".gpx.gz", ".pwx", ".pwx.gz")
 EXTS = FIT_EXTS + TRACK_EXTS
 # FIT files are small: the owner's median is 93 KB, 3 years 118 MB in 641 files (SP-319 §1); a
 # multi-day trip recorded every second is the big case (a few MB). 推估 with a wide margin.
@@ -95,15 +96,20 @@ def limits() -> dict:
             "exts": list(EXTS)}
 
 
-def is_fit_name(name: str) -> bool:
-    """A name this import takes: FIT, or a TCX / GPX track file (gzipped too)."""
-    n = (name or "").strip().lower()
-    return any(n.endswith(e) for e in EXTS)
-
 
 def is_track_name(name: str) -> bool:
+    """A track file turned into FIT here — also a Polar training-session JSON (SP-833: what Polar's
+    account download holds; the export import sends those, the page's pick does not offer .json)."""
+    from backend.files import track_fit
     n = (name or "").strip().lower()
-    return any(n.endswith(e) for e in TRACK_EXTS)
+    return any(n.endswith(e) for e in TRACK_EXTS) or track_fit.kind_of(n) == "polar"
+
+
+def is_fit_name(name: str) -> bool:
+    """A name this import takes: FIT, or a TCX / GPX / PWX track file (gzipped too), or a Polar
+    training-session JSON."""
+    n = (name or "").strip().lower()
+    return any(n.endswith(e) for e in EXTS) or is_track_name(n)
 
 
 def max_bytes(name: str) -> int:
@@ -152,15 +158,26 @@ def _gunzip(blob: bytes, cap: int) -> bytes:
     return raw
 
 
-def _track_fit(blob: bytes, name: str) -> bytes:
-    """A TCX / GPX file (gzip unpacked, at most MAX_TRACK_BYTES) as FIT bytes; _Bad otherwise
-    (CPU: run in a thread)."""
+def _local_tz(athlete_id: int):
+    """The athlete's zone (a PWX / Polar time without one is local time); None: UTC."""
+    try:
+        from backend.engine import localtime
+        return localtime.zone(athlete_id)
+    except Exception:                             # noqa: BLE001 — no settings: the file's times as UTC
+        return None
+
+
+def _track_fit(blob: bytes, name: str, athlete_id: int = 1) -> bytes:
+    """A TCX / GPX / PWX / Polar JSON file (gzip unpacked, at most MAX_TRACK_BYTES) as FIT bytes;
+    _Bad otherwise (CPU: run in a thread)."""
     from backend.files import track_fit
     if not blob:
         raise _Bad(EMPTY)
     raw = _gunzip(blob, MAX_TRACK_BYTES)
+    kind = track_fit.kind_of(name)
+    tz = _local_tz(athlete_id) if kind in ("pwx", "polar") else None
     try:
-        return track_fit.to_fit(raw, track_fit.kind_of(name))
+        return track_fit.to_fit(raw, kind, tz)
     except track_fit.TrackError as e:
         raise _Bad(e.reason)
 
@@ -264,7 +281,7 @@ async def import_one(db: AsyncSession, athlete_id: int, f: Incoming, folder: str
         return {**out, "reason": TOO_LARGE}
     try:
         if is_track_name(f.name):
-            raw = _fit_bytes(await asyncio.to_thread(_track_fit, f.data, f.name))
+            raw = _fit_bytes(await asyncio.to_thread(_track_fit, f.data, f.name, athlete_id))
         else:
             raw = _fit_bytes(f.data)
     except _Bad as e:

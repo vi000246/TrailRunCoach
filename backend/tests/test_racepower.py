@@ -363,7 +363,7 @@ def test_race_conditions_chain_falls_through(tmp_path):
                            elevation_m=3952, name="玉山", today=today, key=None, get=fake_get,
                            cache_dir=tmp_path)
     provs = [t["provider"] for t in r["tried"]]
-    assert provs[0] == "cwa" and "open_meteo" in provs and r["provider"] == "climatology"
+    assert provs[0] == "cwa" and "met_norway" in provs and r["provider"] == "climatology"   # SP-797
     assert r["values"]["temp_c"] == approx(15 - 6.5 * 0.952)
     assert r["values"]["altitude_m"] == 3952
     # no coordinates and no CWA -> manual

@@ -299,6 +299,8 @@ def main(argv: list[str]) -> int:
     try:
         if not url:                                        # same isolation as _server.main
             os.environ["WKO5COACH_TEST_REAL_HOME"] = str(Path.home())
+            from backend.tests import _guard                 # Playwright's browsers live under the real home
+            _guard._keep_playwright_browsers()
             home = Path(tempfile.mkdtemp(prefix="trc-shots-home-"))
             os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)
             srv = _server.Server(_server.build_base(home / "demo-root"), home / "uvicorn.log")

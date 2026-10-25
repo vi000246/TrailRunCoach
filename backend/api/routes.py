@@ -19,7 +19,7 @@ from typing import Optional
 import numpy as np
 from backend.i18n import _
 from backend.i18n.pages import render_page
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -623,13 +623,15 @@ def _along_series(tr, i0: int, i1: int, ref: np.ndarray, grid: np.ndarray, lat0,
 
 
 @workout_router.get("/workouts/{idx}/segments")
-def workout_segments(idx: int):
+def workout_segments(idx: int, response: Response = None):
     """Segments and routes this activity matched, with its rank on each."""
     ds = _ds()
     if not 0 <= idx < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     _ensure_fresh()
     w = ds.workouts[idx]
+    from backend.api.wko5views import act_header
+    act_header(response, w)                 # SP-758: kept offline under this activity
     file = w.entry.file
     view = _index()
     names = _names(view)
@@ -649,6 +651,7 @@ def workout_segments(idx: int):
                     continue
                 n_timed = sum(1 for x in it["efforts"] if x.get(it["time_key"]))
                 out.append({"id": it["id"], "name": names.get(it["id"]) or it["auto_name"],
+                            "renamed": bool(names.get(it["id"])),   # else an automatic name (Chinese: the card translates its kind word)
                             "kind": it["kind"], "kind_zh": it["kind_zh"], "length_m": it["length_m"],
                             "gain_m": it["gain_m"], "rank": e["rank"], "of": n_timed,
                             "time_s": e.get(it["time_key"]), "time_key": it["time_key"],

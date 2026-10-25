@@ -3,7 +3,7 @@ Race calculator API — the 賽事計算機 page (docs/research/superpower-calcu
 
     GET  /inputs        athlete-derived inputs (CP / W′ / TTE sources, RE, k, EP/h, conditions)
     GET  /peaks         百岳 / 小百岳 list (backend/data/baiyue.json)
-    GET  /weather       race-day conditions via CWA → Open-Meteo → climatology → manual
+    GET  /weather       race-day conditions via CWA → MET Norway (SP-797) → climatology → manual
     GET  /weather/key   CWA key status (masked);  POST /weather/key  save it
     POST /predict       road / trail / 百岳 prediction; every input overridable
     GET  /page          the HTML page
@@ -30,8 +30,9 @@ from pathlib import Path
 from typing import Optional
 
 from backend.engine.localtime import today_local
+from backend.i18n import _
 from backend.i18n.pages import render_page
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -276,6 +277,12 @@ class LiveContext:
     def hr_basis(self) -> Optional[dict]:
         return _hr_basis()
 
+    def place_memory(self, course: dict, model: Optional[dict]) -> Optional[dict]:
+        return _place_memory(course, model)
+
+    def climb_marks(self, course: dict) -> Optional[dict]:
+        return _climb_marks(course)
+
     def body(self) -> Optional[dict]:
         return _body(inputs())
 
@@ -340,7 +347,16 @@ def estimate(body: PlanIn):
 
 
 @router.get("/page", include_in_schema=False)
-def page():
+def page(cairn: Optional[str] = None):
+    # SP-764: Cairn's 「用 TrailRunCoach 算這條」 opens ?cairn=<share link>&from=cairn. A race is added in
+    # 賽事管理 only (SP-699: no route in the calculator without one), so the link goes there: 新增賽事
+    # filled from the Cairn trip, saved by the user, then back here on that race (static/races.html)
+    if cairn and not _tenancy.demo_mode():
+        from urllib.parse import urlencode
+
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("/api/v1/app/races/page?" + urlencode({"cairn": cairn[:2000], "from": "cairn"}),
+                                status_code=303, headers={"Cache-Control": "no-store"})
     return render_page("racepower")
 
 
@@ -492,6 +508,15 @@ def _fit_grade_models(ds, today, key) -> dict:
         # than a whole day's, so conservative)
         cap.sigma_loo = float(hc["sigma_loo"])
         cap.sigma_loo_src = f"回測：留一的段時間對數誤差 SD（{hc.get('today')}）"
+    # SP-724: the 跟團係數 (capacity × factor) only when the back-test found it better on your group days
+    gm["group_factor"] = None
+    if cap is not None and BT.group_factor_flag():
+        from backend.engine.racepower import capacity as CAP
+        try:
+            gm["group_factor"] = CAP.group_factor(cap, A.group_day_rows(ds, today))
+        except Exception:                   # noqa: BLE001 — the 跟團時間 falls back to the group EP/h
+            import traceback
+            traceback.print_exc()
     with _lock:
         _cache["grade"] = (key, time.time(), gm)
     return gm
@@ -747,6 +772,54 @@ def _trail_hr() -> Optional[dict]:
         m = None
     _cache["trail_hr"] = (key, m)
     return m
+
+
+def _place_memory(course: dict, model: Optional[dict]) -> Optional[dict]:
+    """SP-726: the 位置記憶 of a GPX course — the trail HR model's runs as memory (their compact tracks,
+    disk-memoised per run; the entries cached with the model), and whether the back-test lets it
+    change the times (backtest.memory_flag)."""
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import backtest as BT
+    from backend.engine.racepower import memory as MEM
+    if not model or course.get("source") != "gpx":
+        return None
+    hit = _cache.get("memory")
+    if hit and hit[0] is model:
+        ents = hit[1]
+    else:
+        ds = _dataset()
+        if model.get("dataset") == "wko5":           # the model came from the WKO5 folder (_trail_hr)
+            from backend.api.wko5views import _dataset as wds
+            ds = wds(source="wko5")
+        ents = MEM.entries(model, A.memory_tracks(ds, model))
+        _cache["memory"] = (model, ents)
+    mem = MEM.for_course(course, model, ents=ents)
+    if mem:
+        mem["apply"] = BT.memory_flag()
+    return mem
+
+
+def _climb_marks(course: dict) -> Optional[dict]:
+    """SP-728: the 攀爬段 of a GPX course — the scramble model fitted on the trail HR model's runs (their
+    climb tracks, disk-memoised per run; the fit cached with the model)."""
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import climb as CL
+    if course.get("source") != "gpx":
+        return None
+    model = _trail_hr()
+    if not model:
+        return None
+    hit = _cache.get("climb")
+    if hit and hit[0] is model:
+        fitted = hit[1]
+    else:
+        ds = _dataset()
+        if model.get("dataset") == "wko5":           # the model came from the WKO5 folder (_trail_hr)
+            from backend.api.wko5views import _dataset as wds
+            ds = wds(source="wko5")
+        fitted = CL.fit(A.climb_tracks(ds, model))
+        _cache["climb"] = (model, fitted)
+    return CL.marks(fitted, course.get("profile") or {})
 
 
 def _hr_basis() -> Optional[dict]:
@@ -1055,14 +1128,109 @@ SHARE_HEADERS = {"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow
 
 
 @share_router.get("/{sid}")
-def share_page(sid: str):
+def share_page(sid: str, request: Request):
     # 「用自己的資料算」 (SP-124): the same link for every visitor (login.join_link); the snapshot is
-    # read by the page from /data — nothing is computed here
+    # read by the page from /data — nothing is computed here. The link preview (SP-796) reads the
+    # same stored snapshot server side: LINE's / Facebook's crawlers run no script.
     import json
 
     from backend.accounts import login as LG
-    join = json.dumps(LG.join_link()).replace("<", "\\u003c")
-    return render_page("share", headers=SHARE_HEADERS, fill={"join": f"<script>window.TRC_JOIN = {join};</script>"})
+    join = json.dumps(LG.join_link("share")).replace("<", "\\u003c")
+    return render_page("share", headers=SHARE_HEADERS, fill={
+        "join": f"<script>window.TRC_JOIN = {join};</script>",
+        "og": share_preview_meta(_live_share(sid), _share_url(sid, request)),
+    })
+
+
+def _live_share(sid: str) -> Optional[dict]:
+    """The share's snapshot as /data would answer it; None when /data would not (missing, malformed id,
+    a disabled account's, expired)."""
+    from backend.engine.racepower import share as SH
+    from backend import tenancy
+    try:
+        snap = SH.load(sid)
+    except (SH.ShareError, tenancy.NoTenant, OSError, ValueError):
+        return None
+    if not isinstance(snap, dict) or SH.expired(snap):
+        return None
+    return SH.localized(snap)          # SP-831: the title (an example's) in the page's language
+
+
+def _share_url(sid: str, request: Request) -> Optional[str]:
+    """The share's address for og:url: WKO5COACH_PUBLIC_URL's origin, else the one the request came by;
+    None for an id no share can have."""
+    import os
+    from urllib.parse import quote
+
+    from backend.api import calendar_feed as CFA
+    from backend.engine import calendar_feed as CF
+    from backend.engine.racepower import share as SH
+    if not (SH.is_example(sid) or SH.ID_RE.match(sid or "")):
+        return None
+    base = CF.clean_origin(os.environ.get(CFA.ENV_PUBLIC_URL)) or CFA.request_origin(request)
+    return f"{base}/share/{quote(sid, safe='')}"
+
+
+def _cat_text(cat: dict, key: str, **params) -> str:
+    """A share-page catalog text with its {name}s filled in (a plural entry: its one / other form)."""
+    from backend import i18n
+    t = cat.get(key)
+    if isinstance(t, dict):
+        t = t.get("one" if i18n.is_one(params.get("n")) else "other") or t.get("other") or ""
+    t = i18n.plural_words(t if isinstance(t, str) else "", params)
+    try:
+        return t.format(**params)
+    except (KeyError, IndexError, ValueError):
+        return t
+
+
+def _hms(s) -> Optional[str]:
+    """H:MM:SS, as the share page writes a duration (hms() in share.html)."""
+    if not isinstance(s, (int, float)) or s != s or s < 0:
+        return None
+    s = round(s)
+    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
+
+
+def share_preview_meta(snap: Optional[dict], url: Optional[str] = None, loc: Optional[str] = None) -> str:
+    """SP-796: Open Graph / Twitter card tags for a share link pasted into LINE / Facebook — the race's
+    name, distance and climb, the predicted finish (登山: the moving time) and 「用自己的資料算」, in the
+    page's language. Only what the snapshot already shows anyone holding the link, never recomputed;
+    no snapshot (missing, expired): a generic card that names no race. Every value is HTML-escaped
+    (the title is the athlete's own text). The page stays noindex."""
+    import html
+    import re
+
+    from backend import i18n
+    from backend.i18n.pages import namespaces_for, page_catalog
+    loc = loc or i18n.current_locale()
+    cat = page_catalog(namespaces_for("share"), loc)
+    cta = _cat_text(cat, "share.join.button") + " →"
+    if snap:
+        title = re.sub(r"\s+", " ", str(snap.get("title") or "")).strip() or _cat_text(cat, "share.heading")
+        s, hike = snap.get("summary") or {}, snap.get("type") == "baiyue"
+        parts = [_cat_text(cat, f"share.type.{snap.get('type')}") if snap.get("type") in ("road", "trail", "baiyue") else ""]
+        if hike:
+            n = len(snap.get("days") or []) or s.get("days") or 1
+            parts.append(_cat_text(cat, "share.days", n=n))
+        km, gain = s.get("km"), s.get("gain_m")
+        if isinstance(km, (int, float)):
+            parts.append(f"{km:.1f} km" + (f" ↑{round(gain):,} m" if isinstance(gain, (int, float)) else ""))
+        t = _hms(s.get("capacity_time_s") if hike and s.get("capacity_time_s") is not None else s.get("time_s"))
+        if t:
+            parts.append(f"{_cat_text(cat, 'share.moving' if hike else 'share.finish')} {t}")
+        desc = " · ".join([p for p in parts if p] + [cta])
+    else:
+        title = _cat_text(cat, "share.page_title")
+        desc = _cat_text(cat, "share.og.generic") + " " + cta
+    tags = [("property", "og:type", "website"), ("property", "og:title", title),
+            ("property", "og:description", desc), ("property", "og:site_name", _cat_text(cat, "shell.brand")),
+            ("property", "og:locale", loc.replace("-", "_") if "-" in loc else {"en": "en_US"}.get(loc, loc))]
+    if snap and url:
+        tags.append(("property", "og:url", url))
+    tags += [("name", "twitter:card", "summary"), ("name", "twitter:title", title), ("name", "twitter:description", desc)]
+    return "\n".join(f'<meta {a}="{html.escape(k, quote=True)}" content="{html.escape(v, quote=True)}">'
+                     for a, k, v in tags if v)
 
 
 @share_router.get("/{sid}/data")
@@ -1076,10 +1244,14 @@ def share_data(sid: str):
     except (SH.ShareError, tenancy.NoTenant):   # NoTenant: a disabled account's share (tenancy_mw)
         snap = None
     if snap is None:
-        raise HTTPException(404, "這個分享不存在或已刪除")
+        raise HTTPException(404, _("這個分享不存在或已刪除"))
     if SH.expired(snap):
-        raise HTTPException(410, "這個分享已過期")
-    return JSONResponse(snap, headers=SHARE_HEADERS)
+        raise HTTPException(410, _("這個分享已過期"))
+    # SP-831: a snapshot frozen in Chinese (a user's share, a built-in example) in the request's language;
+    # the stored file is not touched
+    snap = SH.localized(snap)
+    # SP-784: the 分段目標 rows the page draws with the calculator's component (an older share: derived)
+    return JSONResponse(SH.with_rows(snap), headers=SHARE_HEADERS)
 
 
 @router.post("/export/plan")

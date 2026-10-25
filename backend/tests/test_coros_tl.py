@@ -343,6 +343,10 @@ NODE = shutil.which("node")
 def test_editor_dropdown_follows_the_provider():
     js = r"""
 const vm = require("vm"), fs = require("fs"), w = {};
+// the editor's words (SP-839): static/i18n/zh-TW/common.json through a t() like i18n.js's
+const cat = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+w.I18N = { t: (k, a, b) => { const p = typeof a === "string" ? b : a; const v = cat[k.replace(/^common\./, "")];
+  return String(v != null ? v : typeof a === "string" ? a : k).replace(/\{(\w+)\}/g, (m, x) => (p && p[x] != null ? p[x] : m)); } };
 vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), { window: w, document: {} });
 const E = w.WorkoutEditor.endOptions, caps = JSON.parse(process.argv[2]);
 const ctx = (id) => ({ provider: { label: caps[id].label, capabilities: caps[id].capabilities }, load_kinds: ["work"] });
@@ -355,7 +359,8 @@ console.log(JSON.stringify({
 }));
 """
     caps = {p["id"]: p for p in WT.available()}
-    r = subprocess.run([NODE, "-e", js, str(ROOT / "static" / "workout_editor.js"), json.dumps(caps)],
+    r = subprocess.run([NODE, "-e", js, str(ROOT / "static" / "workout_editor.js"), json.dumps(caps),
+                        str(ROOT / "static" / "i18n" / "zh-TW" / "common.json")],
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     assert r.returncode == 0, r.stderr
     got = json.loads(r.stdout)

@@ -100,13 +100,14 @@ def fit_easy_rows(rows: list[dict]) -> Optional[CAL.Fit]:
     return CAL.Fit(_clip(float(np.median(vals)), EASY_BOUNDS), float(np.std(vals)) / math.sqrt(len(vals)), len(vals))
 
 
-def easy_rows(ds, today: dt.date) -> list[dict]:
-    """The road runs of the WINDOW_WEEKS before `today` as rows {km, gain, minutes, hr (avg), aet
-    (of that day), if} — equivalence.samples_from's road runs with their IF."""
+def easy_rows(ds, today: dt.date, weeks: float = WINDOW_WEEKS) -> list[dict]:
+    """The road runs of the `weeks` (WINDOW_WEEKS) before `today` as rows {km, gain, minutes, hr (avg),
+    aet (of that day), if, src (the TSS's source: "power" = IF is NP ÷ that day's CP), date} —
+    equivalence.samples_from's road runs with their IF."""
     from backend.engine import overview as O
-    from backend.engine.wko5expr.dataset import date_to_day
+    from backend.engine.wko5expr.dataset import date_to_day, day_to_date
     from backend.engine.wko5expr.evaluator import WS, Evaluator
-    lo = today - dt.timedelta(weeks=WINDOW_WEEKS)
+    lo = today - dt.timedelta(weeks=weeks)
     ws = [w for w in O.workouts_between(ds, lo, today + dt.timedelta(days=1))
           if w.sport == "run" and O.category(w) == "road"]
     if not ws:
@@ -124,7 +125,8 @@ def easy_rows(ds, today: dt.date) -> list[dict]:
         except Exception:                   # noqa: BLE001 — a Dataset without thresholds: not easy
             aet = None
         out.append({"km": O._n(m.get("distance")) or 0.0, "gain": O._n(m.get("climbing")) or 0.0,
-                    "minutes": O.moving_s(w) / 60.0, "hr": h, "aet": aet, "if": m.get("if")})
+                    "minutes": O.moving_s(w) / 60.0, "hr": h, "aet": aet, "if": m.get("if"),
+                    "src": m.get("tss_source"), "date": day_to_date(w.day).isoformat()})
     return out
 
 

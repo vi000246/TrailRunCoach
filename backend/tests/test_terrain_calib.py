@@ -50,7 +50,7 @@ def test_author_like_runs_fit_back_to_153():
 
 
 def test_needs_eight_climbing_runs():
-    assert TC.fit_divisor(_ds(n_climb=5), TODAY) is None
+    assert TC.fit_divisor(_ds(n_climb=5), TODAY) == CAL.count_only(5)       # SP-807: only the count
 
 
 def test_the_value_in_effect_reaches_trailhr(monkeypatch):

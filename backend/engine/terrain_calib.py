@@ -31,7 +31,9 @@ def fit_rows(rows: list[tuple[float, float, float]]) -> Optional[CAL.Fit]:
     """rows = [(km, gain_m, moving_h)]."""
     rows = [r for r in rows if r[0] > 0 and r[2] > 0 and r[1] >= 0]
     climb = [r for r in rows if r[1] / r[0] >= CLIMB_M_PER_KM]
-    if len(climb) < MIN_CLIMB_RUNS or len(rows) < MIN_CLIMB_RUNS + 2:
+    if len(climb) < MIN_CLIMB_RUNS:
+        return CAL.count_only(len(climb))               # SP-807: the count below min_n
+    if len(rows) < MIN_CLIMB_RUNS + 2:
         return None
     A = np.array([[r[2], -r[1]] for r in rows], float)
     y = np.array([r[0] for r in rows], float)

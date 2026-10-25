@@ -20,6 +20,7 @@ Run: ./e2e.sh -k sp488 (see conftest.py)."""
 from __future__ import annotations
 
 import datetime as dt
+import re
 
 import pytest
 
@@ -159,7 +160,11 @@ def test_the_physiology_tab_in_the_consistent_state(app, level):
     src = page.locator('#hr-kv [data-hint-id="ST6"]')
     if level == "lean":
         expect(src).to_have_count(0)
-        assert page.locator("#hr-kv dd").first.get_attribute("title") == "你的設定 2026-09-24"
+        # the demo's own max HR row: its day follows the day the demo is built on (2026-09-24 when this was
+        # written), so the expected text is the server's, checked for its shape
+        want = page.request.get("/api/v1/plan/hr-profile").json()["max_hr"]["source"]
+        assert re.fullmatch(r"你的設定 \d{4}-\d{2}-\d{2}", want), want
+        assert page.locator("#hr-kv dd").first.get_attribute("title") == want
     else:
         expect(src).to_have_count(2)
 

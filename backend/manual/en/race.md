@@ -2,7 +2,7 @@
 id: race
 order: 4
 title: Race calculator and season plan
-summary: Filling in the calculator, reading the effort and the segment targets, fuelling, weather, hiking; the season plan's A / B / C races and phases, the race check, the race manager.
+summary: Filling in the calculator, reading the effort and the segment targets, fuelling, weather, hiking; the season plan's A / B / C races and phases, the race check, the race manager; routes to and from Cairn.
 icon: race
 ---
 The **Race calculator** answers "how long will this take, how do I run each part, how much do I eat and drink"; the **Season plan** decides the phases and whether there is time to get ready; the **Race manager** holds each race's details, GPX and result. All three are in the menu (the Race manager under More). Many of the calculator's and season plan's labels are still in Chinese on the English screens; the labels below are translated.
@@ -213,8 +213,32 @@ More → "Race manager" lists every race: the races of your season plan, plus ac
 - Format: trail races of 2 days or more ask "stages / non-stop".
 - Advanced: trail share % (50 % or more puts a technical-terrain session in each build week), pack kg for the trip, using poles.
 - A group timetable: tick that the club or group made the timetable, and the calculator takes each day's start time from it.
-- Import from or push to Cairn.
+- Import from or push to Cairn (see [Cairn](race.md#cairn)).
 
 ### Predicted vs actual
 A positive difference = slower than predicted. A finished A race shows its race readiness as of the day before. When comparing two, negative time or pace = B was faster; on the same route there is a link to the full comparison (see [Activities](analysis.md#activities)).
+:::
+
+## Cairn {#cairn}
+
+**Cairn** is our other service, for planning hiking trips, and it complements TrailRunCoach: TrailRunCoach covers the training before you go and "how long will this take, how do I pace it, how much do I eat"; Cairn covers the trip itself — where each day ends and where you sleep on a timeline, the 3D terrain and the trail surface, your live position shared with the family who stay behind once you set off, and group sign-ups. Cairn makes a free account the first time you sign in with Google.
+
+1. Bring a Cairn trip in: Race manager → "+ Add a race" or edit one → "Import a GPX from Cairn" and paste the trip's share link from Cairn. The route and each day's end (the overnight stops marked in Cairn) become the race's GPX, and its distance, climb and days follow; the date stays.
+2. Arriving from Cairn with a route (a share link in the address): after you sign in, "Add a race" opens filled in; check the date and press "Save", the route is imported and the Race calculator opens on that race.
+3. Push what you worked out to Cairn: edit the race in the Race manager and press "Push to Cairn" — the GPX, the pacing curve the calculator saved and each night's stop. It needs your Cairn account linked and a paid plan.
+4. The calculator's weather area has a link that opens the same route in Cairn.
+
+:::tip
+When you plan a multi-day trip (a race of 2 days or more in the Race manager, a multi-day result in the calculator), a card "Plan this trip in Cairn" sits below it. "No thanks" hides it in both places; the line under [How many tips](settings.md#hints) shows it again. It isn't shown while tips are set to Lean, nor once your account is linked with Cairn.
+:::
+
+:::deep
+### Linking the accounts
+The same Google account is the same person on both sides, but they are **never linked on their own**: you link them in Settings › Cairn, or you are asked the first time something is to be pushed. Once linked, Cairn can read only the items listed, each ticked separately — never your activities, heart rate or other health data; you can unlink at any time, and Cairn can't read anything from then on. Accounts made with email cannot be linked for now; to link, sign in with Google instead.
+
+### Without a TrailRunCoach account
+Someone arriving from Cairn signs in with Google and accepts the terms first; the route is brought in once they are back. Nothing is worked out before signing in. When the site is full, signing in puts you on the waiting list, the page says so, and Cairn's own time estimate for the route still works.
+
+### Share links
+The import reads Cairn once with the share link; the share code is not kept. Once the share is stopped or made anew in Cairn, the old link no longer reads and has to be copied again. Anyone holding a share link can see that route, so think before passing it on.
 :::

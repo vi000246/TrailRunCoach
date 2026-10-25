@@ -8,19 +8,26 @@ Legs (legs_of):
   * each climb of SP-639's rule (user_templates.CLIMB_*: ≥ 5 %, ≥ 30 m, a drop of max(10 m, 5 %)
     allowed) is one leg; between the climbs the grade segments (the race calculator's 坡段) make
     descents (≤ −3 %) and flat / rolling legs, neighbours of one kind together;
-  * a leg shorter than MIN_LEG_M goes into the neighbour whose grade is nearer (its own, net);
+  * a leg shorter than MIN_LEG_M goes into the neighbour whose grade is nearer (its own, net); a flat /
+    rolling one shorter than FLAT_MIN_M becomes part of the neighbouring climb or descent (SP-864);
   * at most watch_export.LAP_MAX steps: the shortest neighbours merged first (two climbs last).
 Targets (SP-632's rule, by the kind of ground with the most time in the leg, at the easy intensity):
-  * runnable (−3 … +15 %, watch_export.ep_ok): power in the easy band (power_zone_plan.easy_band;
-    no CP: HR ≤ the easy cap) with `ep` = the Effort Pace band (the GAP at that intensity ±
+  * runnable (−3 … +15 %, watch_export.ep_ok): power in a narrow band on the easy intensity (Ctx.easy_frac
+    ± EASY_HALF_BAND, SP-864 — the 坡段表's speed, so the name's time is the table's; no CP: HR ≤ the
+    easy cap) with `ep` = the Effort Pace band (the GAP at that intensity ±
     watch_export.EP_BAND) — COROS gets Effort Pace instead of HR, and instead of power with
     課表偏好「可跑坡目標」 = Effort Pace (workout_steps.ep_intensity);
   * steep (> +15 %): HR ≤ the easy cap; without LTHR / AeT RPE 3–4 with the climb;
   * descents: no target, 「控制、安全」 in the name.
 The run is easy (Z2): a route session is a long trail run, not a race. Each step is 「直到按下計圈」 with
-its estimated time (`est`, the step chart's speed: user_templates._flat_kmh over Minetti's factor,
+its estimated time (`est`, the step chart's speed: user_templates._flat_kmh over Minetti's factor —
+the descents by the personal grade model when the context has it, SP-861 user_templates.speed_on —
 walked along the profile as route_elevation does, so the chart puts each step on its stretch),
-named 「爬 120 m · 約 6′」 (user_templates.CLIMB_LABEL, as SP-640's hill repeats). The session gets the
+named 「爬 120 m · 約 6′」 (user_templates.CLIMB_LABEL, as SP-640's hill repeats). The name's time is the
+easy run's on the same walk (user_templates.route_walk, SP-864): the 坡段表's climbs are walked there too,
+so a climb step says the table's time — a steep one's HR cap is only a guard rail (SP-864 Q1-2), its `est`
+stays at the target's speed (the chart's). A climb that took in a short stretch (FLAT_MIN_M, MIN_LEG_M)
+says that stretch too: you press the lap at its end. The session gets the
 route's profile copy (the chart); the watch gets the steps and targets only (never the route). 推估.
 """
 from __future__ import annotations
@@ -31,6 +38,12 @@ from typing import Optional
 from backend.i18n import N_, _
 
 MIN_LEG_M = 200.0                 # SP-633 B: shorter legs go into the neighbour with the nearer grade
+# SP-864 (SP-641 Q1-3): a flat / rolling leg shorter than this goes into the neighbouring climb or descent
+# (it becomes part of that leg): fewer lap presses (貓空 17K made 16 steps)
+FLAT_MIN_M = 500.0
+# SP-864 (SP-641 Q1-2): the runnable legs' power is a narrow band around the easy intensity the 坡段表 uses
+# (Ctx.easy_frac), ± this × CP — the step's name then says the table's time (65–80 % CP made 24′ vs 20′)
+EASY_HALF_BAND = 0.03
 DOWN_GRADE = -0.03                # watch_export._group / seg_targets.DESCENT
 RPE_STEEP = (3, 4)                # 推估: an easy run's steep climb without HR (RPE_EASY_MAX = 4)
 CLIMB, DOWN, FLAT = "climb", "down", "flat"
@@ -43,6 +56,7 @@ ROLL_M = 10.0                     # a flat leg climbing or dropping this much is
 SAFE = N_("控制、安全")
 TITLE = N_("路線：{name}")
 EASY_NOTE = N_("強度是輕鬆跑（Z2）：可跑的坡看功率（COROS 可改 Effort Pace），陡坡看心率上限，下坡不設目標")
+LAST_NOTE = N_("段名的時間是你最近一次（{date}）實際走這條路段的時間；課的總時間和圖還是推估")
 MERGED_NOTE = N_("路線有 {n} 段，超過手錶建議的 {limit} 步：相鄰的段合併成 {m} 步")
 
 
@@ -139,9 +153,14 @@ def legs_of(course: dict, prof: dict, limit: Optional[int] = None) -> list[dict]
     def grade(p):
         return P.stats(p["a"], p["b"])["grade"]
 
-    # legs under MIN_LEG_M → the neighbour with the nearer grade (the shortest first)
+    def too_short(p) -> bool:
+        return (p["b"] - p["a"]) * 1000.0 < (FLAT_MIN_M if p["type"] == FLAT else MIN_LEG_M)
+
+    # legs under MIN_LEG_M (a flat / rolling one under FLAT_MIN_M) → the neighbour with the nearer grade
+    # (the shortest first); a flat one becomes part of that climb or descent (SP-864), the others merge as
+    # before (the longer one's kind)
     while len(ps) > 1:
-        short = [i for i, p in enumerate(ps) if (p["b"] - p["a"]) * 1000.0 < MIN_LEG_M]
+        short = [i for i, p in enumerate(ps) if too_short(p)]
         if not short:
             break
         i = min(short, key=lambda j: ps[j]["b"] - ps[j]["a"])
@@ -149,7 +168,11 @@ def legs_of(course: dict, prof: dict, limit: Optional[int] = None) -> list[dict]
         nb = [j for j in (i - 1, i + 1) if 0 <= j < len(ps)]
         j = min(nb, key=lambda k: (abs(grade(ps[k]) - g), ps[k]["b"] - ps[k]["a"]))
         lo, hi = min(i, j), max(i, j)
-        ps[lo:hi + 1] = [_merge2(ps[lo], ps[hi])]
+        if ps[i]["type"] == FLAT and ps[j]["type"] != FLAT:
+            keep = ps[j]
+            ps[lo:hi + 1] = [{"a": ps[lo]["a"], "b": ps[hi]["b"], "type": keep["type"], "no": keep["no"], "cg": keep.get("cg")}]
+        else:
+            ps[lo:hi + 1] = [_merge2(ps[lo], ps[hi])]
         ps = _coalesce(ps)
     # ≤ limit steps: the shortest neighbours first, two climbs last
     while len(ps) > limit:
@@ -190,7 +213,7 @@ def _cls(g: float, z: float, gap: float) -> tuple[str, bool]:
     return RUN, ok
 
 
-def _ground(leg: dict, segs: list, P: _Prof, v: float) -> tuple[str, bool]:
+def _ground(leg: dict, segs: list, P: _Prof, v: float, c=None) -> tuple[str, bool]:
     """The class with the most time in the leg (at flat speed v km/h over Minetti's factor), and whether
     most of the leg's time is Effort Pace ground (watch_export.EP_SHARE_MIN)."""
     from backend.engine import user_templates as UT
@@ -203,7 +226,7 @@ def _ground(leg: dict, segs: list, P: _Prof, v: float) -> tuple[str, bool]:
     parts = [p for p in parts if p[1] - p[0] > 1e-4] or [(a, b, leg["grade"])]
     for x0, x1, g in parts:
         z = (P.z_at(x0) + P.z_at(x1)) / 2.0
-        sec = (x1 - x0) / (v / UT._gf(g)) * 3600.0
+        sec = (x1 - x0) / UT.speed_on(v, g, c) * 3600.0
         k, ok = _cls(g, z, gap)
         t[k] = t.get(k, 0.0) + sec
         tot += sec
@@ -214,8 +237,6 @@ def _ground(leg: dict, segs: list, P: _Prof, v: float) -> tuple[str, bool]:
 
 def _target(cls: str, ep: Optional[list], gain_m: float, c) -> dict:
     from backend.engine import workout_steps as WS
-    from backend.engine.power_zone_plan import easy_band
-    from backend.engine.zones import EASY_BAND
     has_hr = bool(c.hrz and c.hrz.get("easy")) or bool(c.aet or c.lthr)
     if cls == DOWN:
         return {"type": "none"}
@@ -224,8 +245,10 @@ def _target(cls: str, ep: Optional[list], gain_m: float, c) -> dict:
             return {"type": "hr", "mode": "zone", "zone": "aet"}
         return {"type": "rpe", "lo": RPE_STEEP[0], "hi": RPE_STEEP[1], **({"up": int(round(gain_m))} if gain_m >= 1 else {})}
     if c.cp:
-        lo, hi = easy_band(EASY_BAND, c.pzm)
-        tg = {"type": "power", "mode": "pct", "lo": round(float(lo), 3), "hi": round(float(hi), 3)}
+        # SP-864: a narrow band centred on your easy intensity (the 坡段表's: Ctx.easy_frac), so the step's
+        # speed — and the time in its name — is the table's
+        f = float(c.easy_frac())
+        tg = {"type": "power", "mode": "pct", "lo": round(f - EASY_HALF_BAND, 3), "hi": round(f + EASY_HALF_BAND, 3)}
     elif has_hr:
         tg = {"type": "hr", "mode": "zone", "zone": "aet"}
     else:
@@ -243,9 +266,11 @@ def _speed(st: dict, c) -> float:
     return UT._flat_kmh(r.frac if r.frac is not None else WS.NONE_IF.get(st["kind"], c.easy_frac()), c)
 
 
-def build(course: dict, prof: dict, name: str, src: dict, c) -> dict:
+def build(course: dict, prof: dict, name: str, src: dict, c, actual: Optional[dict] = None) -> dict:
     """{"steps" (workout_steps format, origin user, the route's copy with its source), "legs",
-    "minutes", "km", "gain_m", "loss_m", "merged", "notes", "title"} of a route (the module docstring)."""
+    "minutes", "km", "gain_m", "loss_m", "merged", "notes", "title"} of a route (the module docstring).
+    `actual` (route_library.last_clock of a 「我的路段」, SP-863): each leg's time is the last time you did
+    that stretch (`est_src` "last" on the leg), the model's where it can't say."""
     from backend.engine import user_templates as UT
     from backend.engine import workout_steps as WS
     from backend.engine.racepower import watch_export as WE
@@ -257,22 +282,33 @@ def build(course: dict, prof: dict, name: str, src: dict, c) -> dict:
     # the session's copy of the profile (≤ ROUTE_MAX points): the chart walks this one, so do the estimates
     r = UT.route_copy({**prof, "name": name, "route_km": round(P.km[-1] - k0, 3),
                        "gain_m": round(sum(x["gain_m"] for x in legs), 1)})
-    walk = UT._Walk([k - r["km"][0] for k in r["km"]], r["z"])
+    walk = UT.route_walk(prof, c)          # SP-864: the 坡段表's climbs are timed on this same walk
     segs = sorted(course.get("segments") or [], key=lambda s: float(s["start_km"]))
     v_easy = UT._flat_kmh(c.easy_frac(), c)
+
+    def walked(v: float, lg: dict) -> float:
+        s = UT.walk_secs(walk, lg["start_km"], lg["end_km"], v) or 0.0
+        return float(math.ceil(max(5.0, min(6 * 3600.0, s)) - 1e-6))     # whole s, never short of the end
+
     items, out_legs = [], []
     for i, lg in enumerate(legs, 1):
         mine = [s for s in segs if float(s["end_km"]) > lg["start_km"] and float(s["start_km"]) < lg["end_km"]]
-        cls, ep_on = _ground(lg, mine, P, v_easy)
+        cls, ep_on = _ground(lg, mine, P, v_easy, c)
         kind = "other" if cls == DOWN else "work"
         st = {"id": f"g{i}", "kind": kind, "dur": {"type": "open"}, "target": _target(cls, None, lg["gain_m"], c), "note": ""}
         v = _speed(st, c)
         if ep_on:
             g = 3600.0 / v
             st["target"]["ep"] = [int(round(g * (1 - WE.EP_BAND))), int(round(g * (1 + WE.EP_BAND)))]
-        _pos, secs, _d, _gn, _ls, _pts = walk.move(lg["start_km"] - k0, 1, v, dist=lg["end_km"] - lg["start_km"])
-        secs = float(math.ceil(max(5.0, min(6 * 3600.0, secs)) - 1e-6))     # whole s, never short of the end
-        t = UT._mins(secs)
+        # `est`: the step chart's walk at the step's own speed (the chart puts each bar on its stretch by it)
+        secs = walked(v, lg)
+        # SP-864 Q1-2: the name's time is the easy run's — the 坡段表's speed — on every climb and flat leg, a
+        # steep one's HR cap (and a target without CP) only a guard rail; descents keep their own
+        named = secs if cls == DOWN or abs(v - v_easy) < 1e-9 else walked(v_easy, lg)
+        # SP-863: the name says the last time you did this stretch; `est` stays the model's walk (the chart
+        # puts each bar on its stretch by it, and the session's time / load)
+        last = actual["secs"](lg["start_km"] - k0, lg["end_km"] - k0) if actual else None
+        t = UT._mins(last or named)
         if lg["type"] == CLIMB:
             note = _(UT.CLIMB_LABEL, m=round(lg["climb_gain_m"] if lg["climb_gain_m"] is not None else lg["gain_m"]), t=t)
         elif lg["type"] == DOWN:
@@ -285,7 +321,8 @@ def build(course: dict, prof: dict, name: str, src: dict, c) -> dict:
         st["dur"]["est"] = int(round(secs))
         st["note"] = note[:WS.MAX_NOTE]
         items.append(st)
-        out_legs.append({**lg, "cls": cls, "est_s": secs, "name": st["note"], "target": st["target"]})
+        out_legs.append({**lg, "cls": cls, "est_s": secs, "name": st["note"], "target": st["target"],
+                         "est_src": "last" if last else "model", "last_s": round(last) if last else None})
     r["src"] = {"kind": src["kind"], "id": str(src["id"])}
     r["name"] = name
     steps = {"v": WS.V, "origin": "user", "items": items, "route": r}
@@ -295,6 +332,8 @@ def build(course: dict, prof: dict, name: str, src: dict, c) -> dict:
         notes.insert(0, _(MERGED_NOTE, n=n_all, limit=WE.LAP_MAX, m=len(legs)))
     if any(st["target"].get("ep") for st in items):
         notes.append(_(WE.EP_NOTE))
+    if any(x["est_src"] == "last" for x in out_legs):
+        notes.append(_(LAST_NOTE, date=(actual or {}).get("date") or ""))
     tot = sum(x["est_s"] for x in out_legs)
     return {"steps": steps, "legs": out_legs, "minutes": int(round(tot / 60.0)),
             "km": round(P.km[-1] - k0, 2), "gain_m": round(sum(x["gain_m"] for x in legs)),

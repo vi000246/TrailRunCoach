@@ -94,15 +94,21 @@ def test_compare_bundles_everything_for_two_courses():
 # --- API: the same route / segment is lined up point by point ---------------------
 
 class FakeDS:
-    """The two Dataset bits the API reads: workouts and channel(idx, name)."""
+    """The Dataset bits the API reads: workouts, channel(idx, name), and today / each workout's
+    day (SP-713: an activity's analysis checks the plan's chart range, membership.require_workout_age).
+    `today` is a fixed day a few weeks after the activities, not the clock's."""
+
+    TODAY = dt.date(2025, 4, 15)
 
     def __init__(self, acts):
+        from backend.engine.wko5expr.dataset import date_to_day
+        self.today = date_to_day(self.TODAY)
         self.workouts, self._ch = [], []
         for k, (m, ch) in enumerate(acts):
             start = dt.datetime.fromisoformat(m["start"])
             d = np.asarray(ch["dist_km"])
             self.workouts.append(SimpleNamespace(
-                idx=k, sport=m["sport"], sport_type=m["sport_type"],
+                idx=k, day=date_to_day(start), sport=m["sport"], sport_type=m["sport_type"],
                 entry=SimpleNamespace(file=m["file"], start=start),
                 metrics={"duration": ch["t"][-1], "distance": float(d[-1]), "climbing": 10.0, "tss": 50.0}))
             self._ch.append({"elapsedtime": np.asarray(ch["t"], float), "elapseddistance": d,

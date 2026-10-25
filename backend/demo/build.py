@@ -252,10 +252,9 @@ def _stage(base: Path, seed: int, anchor: dt.date, weeks: int, small: bool, warm
             if i is None or not a.get("name"):
                 continue
             body = {"name": a["name"]}
-            if a["kind"] in ("interval", "interval_short", "hill", "tempo"):
-                # a FIT carries no plan: the 間歇 analysis is asked for as a user would (「當作間歇判讀」)
-                from backend.engine.interval_eval import FLAG_TAG
-                body["tags"] = [FLAG_TAG]
+            # SP-520: no 「當作間歇」 tag — the demo runner never pressed 「當作間歇判讀」; a FIT carries no
+            # plan, so its interval / hill runs are read as the app reads anyone's (a quality run's detected
+            # reps, SP-519's automatic reading of a set of efforts), never 「你標了「當作間歇」」
             if a["kind"].startswith("race"):
                 body["activity_type"] = "race"
             ok(c.patch(f"/api/v1/app/workouts/{i}/activity", json=body), "name")

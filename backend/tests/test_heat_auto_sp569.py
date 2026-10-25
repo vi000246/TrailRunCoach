@@ -68,8 +68,8 @@ def test_no_heat_sessions_before_a_hot_a_race():
 
 
 def test_the_heat_card_keeps_the_race_day_reminder_without_scheduling():
-    """status.i_heat: a hot A race within 30 days with a low race-day S is still flagged, but the
-    action no longer promises 熱適應課 on the schedule."""
+    """status.i_heat: a hot A race within 30 days with a low race-day S is still flagged (SP-856: 黃 watch,
+    not 紅 bad — nothing to train for it), and the action no longer promises 熱適應課 on the schedule."""
     from backend.engine.status import Status
     from backend.tests.test_b2b import _history, _plan_with
     from backend.tests.test_quality_gate import TODAY
@@ -78,7 +78,7 @@ def test_the_heat_card_keeps_the_race_day_reminder_without_scheduling():
     plan.events = [_hot_a("2026-10-18")]
     ds.plan = plan
     ind = Status(ds, plan, TODAY, prefs=PP.Prefs()).i_heat()
-    assert ind.level == "bad"
+    assert ind.level == "watch"
     assert "熱天賽" in ind.action and "賽事計算機" in ind.action
     assert "排" not in ind.action and "課表" not in ind.action
 

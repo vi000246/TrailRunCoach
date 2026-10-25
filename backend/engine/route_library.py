@@ -20,8 +20,9 @@ Picking a route for a structure (apply): the session's steps get the route's pro
 repeat and the route a climb (the biggest unless another is picked, `climb` 0 = none), each rep's
 climb ends at the top with the lap button (直到按下計圈, its estimated time kept as `est`) and is
 named 「爬 120 m · 約 6′」 (user_templates.CLIMB_LABEL: the climb's gain, the time at the step's
-intensity by Minetti — the step chart's speed, 推估), and the chart starts the repeats at the climb's
-foot (`rep_km`). The watch gets the steps and targets only: no route is ever pushed (COROS / Garmin
+intensity by Minetti — the step chart's speed, 推估); the recovery right after it (kind rest) ends
+with the lap button back at the foot, 「回到坡底按圈 · 約 4′」 (SP-862, descent_secs), and the chart starts
+the repeats at the climb's foot (`rep_km`). The watch gets the steps and targets only: no route is ever pushed (COROS / Garmin
 take a route as a separate thing; the step name is the note, ≤ workout_steps.MAX_NOTE).
 """
 from __future__ import annotations
@@ -46,12 +47,16 @@ MAX_ROUTES = 200
 # a repeat's work leg counts as a climb rep when it ends with the lap button, or lasts at least this:
 # strides (≤ 1′ fast bits) on a route stay as they are
 CLIMB_REP_MIN_S = 90
-ROOT = None                      # fixed folder (tests); None = the tenant's route_gpx/
+# SP-862: the recovery right after the climb goes back down and ends with the lap button at the foot
+BACK_LABEL = N_("回到坡底按圈 · 約 {t}")
+ROOT = None                     # fixed folder (tests); None = the tenant's route_gpx/
 
 KIND_GPX, KIND_SEG = "gpx", "seg"
 # 「我的路段」 offered (done ≥ MINE_MIN times): every kind engine/routes.py finds, climbs first (the hill
 # repeats' use), then whole routes, shared stretches, descents
 MINE_KINDS = ("climb", "route", "stretch", "descent")
+# SP-863: the picker lists climbs and whole routes; shared stretches and descents go under 「更多」 (a starred one stays up)
+MINE_MORE = ("stretch", "descent")
 MINE_MIN = 2
 NOT_FOUND = N_("找不到這條路線")
 
@@ -296,12 +301,13 @@ def mine_course(item: dict, track: Optional[dict]) -> dict:
 
 def mine_row(item: dict, name: str, fav: bool = False, terrain: Optional[dict] = None) -> dict:
     """One 「我的路段」 row. `terrain` = {route id: 地形難度} (SP-731): a whole route (kind "route") carries
-    its default level (None = 未設) — the activities on it without their own mark take it."""
+    its default level (None = 未設) — the activities on it without their own mark take it. `more`
+    (SP-863): listed under 「更多」 in the picker — a shared stretch or a descent the user has not starred."""
     out = {"id": item["id"], "name": name, "kind": item["kind"], "direction": item.get("direction"),
            "length_m": item.get("length_m"), "gain_m": item.get("gain_m"), "n_efforts": item.get("n_efforts"),
            "n_activities": item.get("n_activities"), "best_s": item.get("best_s"), "last_s": item.get("last_s"),
            "last_date": item.get("last_date"), "time_key": item.get("time_key"), "fav": fav,
-           "renamed": name != item.get("auto_name")}
+           "renamed": name != item.get("auto_name"), "more": item["kind"] in MINE_MORE and not fav}
     if item["kind"] == "route":
         out["terrain"] = (terrain or {}).get(item["id"])
     return out
@@ -309,7 +315,8 @@ def mine_row(item: dict, name: str, fav: bool = False, terrain: Optional[dict] =
 
 def mine_rows(view: Optional[dict], names: dict, favs: dict, terrain: Optional[dict] = None) -> list[dict]:
     """「我的路段」 on the page and in the picker: the segments and routes done at least MINE_MIN times —
-    starred first, then renamed, then by kind (MINE_KINDS: climbs first), then the most done."""
+    climbs and whole routes first (SP-863; the rest is `more`, under 「更多」), then starred, renamed,
+    by kind (MINE_KINDS: climbs first), the most done."""
     if not view:
         return []
     out = []
@@ -317,8 +324,64 @@ def mine_rows(view: Optional[dict], names: dict, favs: dict, terrain: Optional[d
         if it.get("kind") not in MINE_KINDS or (it.get("n_activities") or 0) < MINE_MIN:
             continue
         out.append(mine_row(it, names.get(it["id"]) or it.get("auto_name") or "", it["id"] in favs, terrain))
-    out.sort(key=lambda r: (not r["fav"], not r["renamed"], MINE_KINDS.index(r["kind"]), -(r["n_efforts"] or 0), r["name"]))
+    out.sort(key=lambda r: (r["more"], not r["fav"], not r["renamed"], MINE_KINDS.index(r["kind"]),
+                            -(r["n_efforts"] or 0), r["name"]))
     return out
+
+
+# ---------------------------------------------------------------------------
+# 「我的路段」: the last time you did it (SP-863)
+# ---------------------------------------------------------------------------
+
+# the column of the compact track (engine/routes.py) each ranking time is the difference of: a segment's
+# elapsed time (the clock, Strava's way), a whole route's moving time
+TIME_COL = {"elapsed_s": "t", "moving_s": "cm"}
+
+
+def last_effort(item: dict) -> Optional[dict]:
+    """The most recent effort in the item's own direction (the efforts are oldest first, as the 路線進步
+    page's 「最近一次」)."""
+    effs = [e for e in item.get("efforts") or [] if (e.get("dir") or "same") == "same"]
+    return effs[-1] if effs else None
+
+
+def last_clock(item: dict, track: Optional[dict], course_km: float) -> Optional[dict]:
+    """{"secs": (a_km, b_km) → the seconds the most recent effort took between a and b km of the item's
+    course (None when it can't say), "date", "key"}; None without a timed effort or its track.
+
+    The course is the reference effort's stretch (mine_course), the latest effort may be another
+    activity: a km of the course is put on the latest effort's stretch by its share of the length
+    (推估 for a part; the whole stretch is exactly its time). The time is the item's own ranking time
+    (time_key: a segment's elapsed, a route's moving)."""
+    e = last_effort(item)
+    key = item.get("time_key") or "elapsed_s"
+    col = TIME_COL.get(key)
+    if e is None or not track or col is None or not e.get(key) or not course_km or course_km <= 0:
+        return None
+    try:
+        i0, i1 = int(e["i0"]), int(e["i1"])
+        d = [None if v is None else float(v) for v in (track.get("d") or [])[i0:i1 + 1]]
+        t = [None if v is None else float(v) for v in (track.get(col) or [])[i0:i1 + 1]]
+    except (KeyError, TypeError, ValueError):
+        return None
+    pts = [(x, y) for x, y in zip(d, t) if x is not None and y is not None]
+    if len(pts) < 2 or pts[-1][0] <= pts[0][0]:
+        return None
+    from backend.engine.user_templates import _interp
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    d0, span = xs[0], xs[-1] - xs[0]
+    whole = float(e[key])
+
+    def secs(a_km: float, b_km: float) -> Optional[float]:
+        fa = min(1.0, max(0.0, float(a_km) / course_km))
+        fb = min(1.0, max(0.0, float(b_km) / course_km))
+        if fb <= fa:
+            return None
+        if fa <= 1e-6 and fb >= 1.0 - 1e-6:
+            return whole                     # the whole stretch: the time on the list
+        s = _interp(d0 + fb * span, xs, ys) - _interp(d0 + fa * span, xs, ys)
+        return s if s > 0 else None
+    return {"secs": secs, "date": (e.get("start") or "")[:10] or None, "key": key}
 
 
 # ---------------------------------------------------------------------------
@@ -351,22 +414,48 @@ def _climb_rep(st: dict) -> bool:
     return d.get("type") in ("distance", "load")
 
 
-def climb_secs(st: dict, climb: dict, c) -> float:
+def climb_secs(st: dict, climb: dict, c, walk: Optional[tuple] = None) -> float:
     """The climb's time at the step's intensity: the flat speed there (the step chart's, user_templates
     ._flat_kmh) over Minetti's factor at the climb's grade; a step with no target at the session's
-    easy intensity. 推估."""
+    easy intensity. SP-864: with the route's walk (user_templates.route_walk) the climb is walked along
+    the profile piece by piece, as the step chart and the 坡段表 do. 推估."""
     from backend.engine import user_templates as UT
     from backend.engine import workout_steps as WS
     r = WS.resolve(st, c)
     f = r.frac if r.frac is not None else WS.NONE_IF.get(st["kind"], c.easy_frac())
+    walked = UT.walk_secs(walk, float(climb.get("start_km") or 0.0), float(climb.get("end_km") or 0.0),
+                          UT._flat_kmh(f, c)) if walk else None
+    if walked is not None:
+        return walked
     v = UT._flat_kmh(f, c) / UT._gf(float(climb.get("grade") or 0.0))
     return float(climb.get("dist_m") or 0.0) / 1000.0 / max(0.1, v) * 3600.0
 
 
-def apply(steps: dict, prof: dict, src: dict, climb: Optional[dict], c) -> tuple[dict, int]:
+def descent_secs(st: dict, climb: dict, c) -> float:
+    """SP-862: the way back down the climb at the recovery's intensity — as the step chart walks it
+    (user_templates.route_elevation): a recovery with no target walks (WALK_KMH), else its flat speed;
+    at the climb's grade going down by the same descent curve as the chart (UT.speed_on: the personal one
+    of SP-861 when the context has it, else Minetti with no bonus on a steep one). 推估."""
+    from backend.engine import user_templates as UT
+    from backend.engine import workout_steps as WS
+    r = WS.resolve(st, c)
+    if r.frac is None and st["kind"] == "rest":
+        v = WS.WALK_KMH
+    else:
+        v = UT._flat_kmh(r.frac if r.frac is not None else WS.NONE_IF.get(st["kind"], c.easy_frac()), c)
+    v = UT.speed_on(v, -float(climb.get("grade") or 0.0), c)
+    return float(climb.get("dist_m") or 0.0) / 1000.0 / max(0.1, v) * 3600.0
+
+
+def apply(steps: dict, prof: dict, src: dict, climb: Optional[dict], c,
+          actual: Optional[dict] = None) -> tuple[dict, int]:
     """(the steps with the route, how many repeats now climb to the top). The structure's template link
     goes (a template is a structure only); each hill repeat's first work leg ends with the lap button at
-    the top (its estimated time kept), named 「爬 120 m · 約 6′」, its target as it was."""
+    the top (its estimated time kept), named 「爬 120 m · 約 6′」, its target as it was. `actual`
+    (last_clock of a 「我的路段」, SP-863): the name's time is the last time you did that climb (the
+    model's where it can't say); the step's estimate stays the model's. SP-862: the recovery right
+    after it (kind rest) ends with the lap button back at the foot, named 「回到坡底按圈 · 約 4′」
+    (descent_secs as its estimate), its target as it was — a fixed time often ended part-way up."""
     from backend.engine import user_templates as UT
     out = copy.deepcopy(steps)
     out.pop("tpl", None)
@@ -375,6 +464,7 @@ def apply(steps: dict, prof: dict, src: dict, climb: Optional[dict], c) -> tuple
         raise RouteError([_("這條路線沒有高度剖面")])
     r["src"] = {"kind": src["kind"], "id": str(src["id"])}
     n = 0
+    walk = UT.route_walk(prof, c)          # SP-864: the climb walked along the profile, as the chart does
     if climb:
         r["climb"] = {k: climb[k] for k in ("no", "gain_m", "dist_m", "grade", "start_km", "end_km")}
         r["rep_km"] = round(float(climb["start_km"]), 3)
@@ -382,9 +472,19 @@ def apply(steps: dict, prof: dict, src: dict, climb: Optional[dict], c) -> tuple
             leg = next((x for x in rep.get("items") or [] if x.get("kind") in ("work", "other")), None)
             if leg is None or not _climb_rep(leg):
                 continue
-            secs = climb_secs(leg, climb, c)
+            secs = climb_secs(leg, climb, c, walk)
+            # SP-863: the name says the last time you did the climb; `est` stays the model's (the chart, the load)
+            last = actual["secs"](climb["start_km"], climb["end_km"]) if actual else None
             leg["dur"] = {"type": "open", "est": int(round(min(6 * 3600.0, max(5.0, secs))))}
-            leg["note"] = _(UT.CLIMB_LABEL, m=round(float(climb["gain_m"])), t=UT._mins(secs))
+            leg["note"] = _(UT.CLIMB_LABEL, m=round(float(climb["gain_m"])), t=UT._mins(last or secs))
             n += 1
+            items = rep.get("items") or []
+            i = next(j for j, x in enumerate(items) if x is leg)
+            nxt = items[i + 1] if i + 1 < len(items) else None
+            # a fixed-time (or distance) recovery; one already to the lap button stays as written (「走下坡」)
+            if nxt is not None and nxt.get("kind") == "rest" and (nxt.get("dur") or {}).get("type") != "open":
+                back = descent_secs(nxt, climb, c)
+                nxt["dur"] = {"type": "open", "est": int(round(min(6 * 3600.0, max(5.0, back))))}
+                nxt["note"] = _(BACK_LABEL, t=UT._mins(back))
     out["route"] = r
     return out, n

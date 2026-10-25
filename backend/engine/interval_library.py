@@ -110,130 +110,147 @@ def _v(key, rung, cls, reps, work_s, rest_s, rest_mode, lo, hi, terrain="flat", 
     return Variant(key, rung, cls, reps, work_s, rest_s, rest_mode, lo, hi, terrain, canonical, src, src_kind, **kw)
 
 
-HAUGEN = "Haugen 2022（threshold intervals 3–15 分、休 1–2 分）"
-PALLADINO_NT = "Palladino near-threshold（工休比 3:1–4:1）"
-UA_Z3 = "Uphill Athlete Zone 3（每趟 15–60 分、工休 4:1–5:1）"
-FRIEL_ME = "Friel Base 2：2×20 分 Zone 3 肌耐力"
-DANIELS_TEMPO = "Daniels：連續節奏跑約 20 分起"
-KOOP_SSR = "Koop／CTS SteadyStateRun（20–60 分，可上坡）"
+# the sources (stored as a session's 出處, zh-TW): msgids, several joined by 「；」 (_src) — an English page
+# shows each part (engine/stored_text, SP-905)
+HAUGEN = N_("Haugen 2022（threshold intervals 3–15 分、休 1–2 分）")
+PALLADINO_NT = N_("Palladino near-threshold（工休比 3:1–4:1）")
+UA_Z3 = N_("Uphill Athlete Zone 3（每趟 15–60 分、工休 4:1–5:1）")
+FRIEL_ME = N_("Friel Base 2：2×20 分 Zone 3 肌耐力")
+DANIELS_TEMPO = N_("Daniels：連續節奏跑約 20 分起")
+KOOP_SSR = N_("Koop／CTS SteadyStateRun（20–60 分，可上坡）")
+DANIELS_TEMPO_SHORT = N_("Daniels：連續節奏跑約 20 分起（平日上限的較短版：推估）")
+KOOP_CLIMB = N_("Koop／CTS：長上坡穩定爬升（越野專項）")
+HAUGEN_HILL = N_("Haugen 2022（坡 5–10%）")
+PAL_MAP = N_("Palladino MAP 每趟 2.5–3 分")
+PFITZ_LT = N_("Pfitzinger 連續 LT 跑")
+STRUCT_EST = N_("結構屬推估")
+GRADE_LONG = N_("長坡 4–6%")
+
+
+def _src(*parts: str) -> str:
+    return "；".join(parts)
+
+
 LIBRARY: dict[str, tuple[Variant, ...]] = {
     # ---- the Zone 3 track (有氧間歇／節奏, Z3sub 88–95 % CP; SP-31): A1 2×15′ → A2 3×12′ → A3 2×20′ → A4 1×30′
     # — every rep 15–30 min (the user's 有氧間歇). Order 總量 → 每趟長度 (interval-prescription.md §A4.1); the
     # rests and the shorter / continuous equivalents are 推估 within the §C2 rules (continuous: ≥ 85 % of the TIZ)
     "a1": (
         _v("a1a", "a1", "Z3sub", 2, 900, 180, "jog", 0.88, 0.95, canonical=True,
-           src=f"{UA_Z3}；起步約週有氧量 5%（UA）", src_kind="coach"),
-        _v("a1b", "a1", "Z3sub", 3, 600, 120, "jog", 0.88, 0.95, src=f"{UA_Z3}；Daniels 巡航間歇延長版",
+           src=_src(UA_Z3, N_("起步約週有氧量 5%（UA）")), src_kind="coach"),
+        _v("a1b", "a1", "Z3sub", 3, 600, 120, "jog", 0.88, 0.95, src=_src(UA_Z3, N_("Daniels 巡航間歇延長版")),
            src_kind="coach"),
-        _v("a1c", "a1", "Z3sub", 1, 1560, 0, "none", 0.88, 0.92, src=f"{DANIELS_TEMPO}（平日上限的較短版：推估）",
+        _v("a1c", "a1", "Z3sub", 1, 1560, 0, "none", 0.88, 0.92, src=DANIELS_TEMPO_SHORT,
            src_kind="coach"),
         _v("a1d", "a1", "Z3sub", 2, 900, 180, "jog_down", 0.88, 0.95, "hill", grade="4–6%", src=KOOP_SSR,
            src_kind="coach"),
     ),
     "a2": (
         _v("a2a", "a2", "Z3sub", 3, 720, 180, "jog", 0.88, 0.95, canonical=True,
-           src=f"{UA_Z3}；Pfitzinger LT 每次 20 → 35–45 分", src_kind="coach"),
-        _v("a2b", "a2", "Z3sub", 2, 1080, 180, "jog", 0.88, 0.95, src=f"{UA_Z3}（每趟加長）", src_kind="coach"),
-        _v("a2c", "a2", "Z3sub", 1, 1920, 0, "none", 0.88, 0.92, src=f"{DANIELS_TEMPO}；Pfitzinger 連續 LT 跑",
+           src=_src(UA_Z3, N_("Pfitzinger LT 每次 20 → 35–45 分")), src_kind="coach"),
+        _v("a2b", "a2", "Z3sub", 2, 1080, 180, "jog", 0.88, 0.95,
+           src=N_("Uphill Athlete Zone 3（每趟 15–60 分、工休 4:1–5:1）（每趟加長）"), src_kind="coach"),
+        _v("a2c", "a2", "Z3sub", 1, 1920, 0, "none", 0.88, 0.92, src=_src(DANIELS_TEMPO, PFITZ_LT),
            src_kind="coach"),
         _v("a2d", "a2", "Z3sub", 3, 720, 180, "jog_down", 0.88, 0.95, "hill", grade="4–6%", src=KOOP_SSR,
            src_kind="coach"),
     ),
     "a3": (
         _v("a3a", "a3", "Z3sub", 2, 1200, 240, "jog", 0.88, 0.95, canonical=True,
-           src=f"{FRIEL_ME}；{UA_Z3}", src_kind="coach"),
-        _v("a3b", "a3", "Z3sub", 4, 600, 120, "jog", 0.88, 0.95, src="Daniels 巡航間歇（延長到 2×3 英里前的形式）",
+           src=_src(FRIEL_ME, UA_Z3), src_kind="coach"),
+        _v("a3b", "a3", "Z3sub", 4, 600, 120, "jog", 0.88, 0.95, src=N_("Daniels 巡航間歇（延長到 2×3 英里前的形式）"),
            src_kind="coach"),
-        _v("a3c", "a3", "Z3sub", 1, 2100, 0, "none", 0.88, 0.92, src=f"Pfitzinger 連續 LT 跑 35–45 分；{DANIELS_TEMPO}",
+        _v("a3c", "a3", "Z3sub", 1, 2100, 0, "none", 0.88, 0.92, src=_src(N_("Pfitzinger 連續 LT 跑 35–45 分"), DANIELS_TEMPO),
            src_kind="coach"),
-        _v("a3d", "a3", "Z3sub", 2, 1200, 240, "jog_down", 0.88, 0.95, "hill", grade="長坡 4–6%", src=KOOP_SSR,
+        _v("a3d", "a3", "Z3sub", 2, 1200, 240, "jog_down", 0.88, 0.95, "hill", grade=GRADE_LONG, src=KOOP_SSR,
            src_kind="coach"),
     ),
     "a4": (
         _v("a4a", "a4", "Z3sub", 1, 1800, 0, "none", 0.88, 0.92, canonical=True,
-           src=f"{KOOP_SSR}；Pfitzinger 連續 LT 跑", src_kind="coach"),
-        _v("a4b", "a4", "Z3sub", 1, 1800, 0, "none", 0.88, 0.92, "hill", grade="長坡 4–6%",
-           src="Koop／CTS：長上坡穩定爬升（越野專項）", src_kind="coach"),
-        _v("a4c", "a4", "Z3sub", 1, 1560, 0, "none", 0.88, 0.92, src=f"{DANIELS_TEMPO}（平日上限的較短版：推估）",
+           src=_src(KOOP_SSR, PFITZ_LT), src_kind="coach"),
+        _v("a4b", "a4", "Z3sub", 1, 1800, 0, "none", 0.88, 0.92, "hill", grade=GRADE_LONG,
+           src=KOOP_CLIMB, src_kind="coach"),
+        _v("a4c", "a4", "Z3sub", 1, 1560, 0, "none", 0.88, 0.92, src=DANIELS_TEMPO_SHORT,
            src_kind="coach"),
     ),
     # ---- Zone 3 巡航版 T1–T3 (Z3sub 90–95 % CP): the old Zone 3 rungs, kept for the weekday cap and
     # low-volume weeks (the Zone 3 track's fallback) and for the stored sessions (rung_key z3a / z3b / z3c)
     "z3a": (
         _v("t1a", "z3a", "Z3sub", 3, 360, 90, "jog", 0.90, 0.95, canonical=True,
-           src=f"{HAUGEN}；{PALLADINO_NT}；台灣教練：先練 3 區"),
-        _v("t1b", "z3a", "Z3sub", 6, 180, 60, "jog", 0.92, 0.97, src=f"{HAUGEN}；短趟強度略高：推估"),
+           src=_src(HAUGEN, PALLADINO_NT, N_("台灣教練：先練 3 區"))),
+        _v("t1b", "z3a", "Z3sub", 6, 180, 60, "jog", 0.92, 0.97, src=_src(HAUGEN, N_("短趟強度略高：推估"))),
         _v("t1c", "z3a", "Z3sub", 3, 360, 120, "jog_down", 0.90, 0.95, "hill", grade="4–6%",
-           src="Haugen 2022（坡 5–10%）；Koop／CTS 上坡"),
-        _v("t1d", "z3a", "Z3sub", 1, 1200, 0, "none", 0.88, 0.92, src="Daniels：20 分 T 節奏跑",
+           src=_src(HAUGEN_HILL, N_("Koop／CTS 上坡"))),
+        _v("t1d", "z3a", "Z3sub", 1, 1200, 0, "none", 0.88, 0.92, src=N_("Daniels：20 分 T 節奏跑"),
            src_kind="coach"),
     ),
     "z3b": (
         _v("t2a", "z3b", "Z3sub", 3, 480, 120, "jog", 0.90, 0.95, canonical=True,
-           src=f"{HAUGEN}；{PALLADINO_NT}；Daniels：T 一次約 20 分"),
+           src=_src(HAUGEN, PALLADINO_NT, N_("Daniels：T 一次約 20 分"))),
         _v("t2b", "z3b", "Z3sub", 4, 360, 90, "jog", 0.90, 0.95, src=HAUGEN),
         _v("t2c", "z3b", "Z3sub", 5, 300, 60, "jog", 0.90, 0.95,
-           src="挪威式短休（Casado 2023；Haugen 2022 「1 min recovery」）"),
+           src=N_("挪威式短休（Casado 2023；Haugen 2022 「1 min recovery」）")),
         _v("t2d", "z3b", "Z3sub", 3, 480, 120, "jog_down", 0.90, 0.95, "hill", grade="4–6%",
-           src="Haugen 2022（坡 5–10%）；Koop／CTS 上坡"),
+           src=_src(HAUGEN_HILL, N_("Koop／CTS 上坡"))),
     ),
     "z3c": (
         _v("t3a", "z3c", "Z3sub", 2, 720, 120, "jog", 0.90, 0.95, canonical=True,
-           src="教練研討會（閾值以下先延長時間）；CTS TempoRun 每趟 8–20 分", src_kind="coach"),
-        _v("t3b", "z3c", "Z3sub", 1, 1440, 0, "none", 0.88, 0.92, src="Daniels 節奏跑", src_kind="coach"),
-        _v("t3c", "z3c", "Z3sub", 2, 720, 180, "jog_down", 0.90, 0.95, "hill", grade="長坡 4–6%",
-           src="Koop／CTS：長上坡穩定爬升（越野專項）", src_kind="coach"),
+           src=_src(N_("教練研討會（閾值以下先延長時間）"), N_("CTS TempoRun 每趟 8–20 分")), src_kind="coach"),
+        _v("t3b", "z3c", "Z3sub", 1, 1440, 0, "none", 0.88, 0.92, src=N_("Daniels 節奏跑"), src_kind="coach"),
+        _v("t3c", "z3c", "Z3sub", 2, 720, 180, "jog_down", 0.90, 0.95, "hill", grade=GRADE_LONG,
+           src=KOOP_CLIMB, src_kind="coach"),
     ),
     # ---- T+ (Z3near 97–100 % CP): maintenance once Zone 5 is open -------------
     "tp": (
         _v("tpa", "tp", "Z3near", 3, 420, 120, "jog", 0.97, 1.00, canonical=True,
-           src="Palladino near-threshold 每趟 7–10 分、3:1–4:1", src_kind="coach"),
+           src=N_("Palladino near-threshold 每趟 7–10 分、3:1–4:1"), src_kind="coach"),
         _v("tpb", "tp", "Z3near", 4, 300, 90, "jog", 0.98, 1.01,
-           src="Palladino near-threshold；Stryd Cruise Intervals 94–100% CP", src_kind="coach"),
+           src=_src("Palladino near-threshold", "Stryd Cruise Intervals 94–100% CP"), src_kind="coach"),
         _v("tpc", "tp", "Z3near", 3, 420, 120, "jog_down", 0.97, 1.00, "hill", grade="4–6%",
-           src="Palladino near-threshold（上坡版：推估）", src_kind="coach"),
+           src=N_("Palladino near-threshold（上坡版：推估）"), src_kind="coach"),
     ),
     # ---- Zone 5 --------------------------------------------------------------------
     "z5a": (
         _v("v1a", "z5a", "Z5", 5, 120, 120, "walk", 1.06, 1.12, canonical=True,
-           src="台灣教練：5 區每趟 ≥ 2 分；Buchheit & Laursen 2013：休 < 2–3 分用被動恢復、約 10 分 T@VO2max"),
-        _v("v1b", "z5a", "Z5", 4, 150, 120, "walk", 1.05, 1.10, src="Palladino MAP 每趟 2.5–3 分",
+           src=_src(N_("台灣教練：5 區每趟 ≥ 2 分"), N_("Buchheit & Laursen 2013：休 < 2–3 分用被動恢復、約 10 分 T@VO2max"))),
+        _v("v1b", "z5a", "Z5", 4, 150, 120, "walk", 1.05, 1.10, src=PAL_MAP,
            src_kind="coach"),
         _v("v1c", "z5a", "Z5", 5, 120, 120, "jog_down", 1.06, 1.12, "hill", grade="6–10%",
-           src="Haugen 2022；Barnes 2013（上坡間歇）；Koop"),
+           src=_src("Haugen 2022", N_("Barnes 2013（上坡間歇）"), "Koop")),
         _v("v1d", "z5a", "Z5", 4, 120, 120, "walk", 1.05, 1.10, pattern=(120, 180, 180, 120),
-           src="Pyramid／Fartlek；結構屬推估", src_kind="推估"),
+           src=_src("Pyramid／Fartlek", STRUCT_EST), src_kind="推估"),
     ),
     "z5b": (
         _v("v2a", "z5b", "Z5", 4, 180, 180, "jog", 1.05, 1.10, canonical=True,
-           src="Koop／CTS 6×3 分、休 3 分；Palladino MAP 1:1", src_kind="coach"),
-        _v("v2b", "z5b", "Z5", 6, 120, 120, "walk", 1.06, 1.12, src="Buchheit & Laursen 2013 Part II 表 1（6–10×2 分）"),
+           src=_src(N_("Koop／CTS 6×3 分、休 3 分"), "Palladino MAP 1:1"), src_kind="coach"),
+        _v("v2b", "z5b", "Z5", 6, 120, 120, "walk", 1.06, 1.12, src=N_("Buchheit & Laursen 2013 Part II 表 1（6–10×2 分）")),
         _v("v2c", "z5b", "Z5", 4, 180, 180, "jog_down", 1.05, 1.10, "hill", grade="6–10%",
-           src="Koop：「uphill if possible」", src_kind="coach"),
-        _v("v2d", "z5b", "Z5", 3, 240, 180, "jog", 1.04, 1.08, src="Helgerud 2007 的形式（量少一點）"),
+           src=N_("Koop：「uphill if possible」"), src_kind="coach"),
+        _v("v2d", "z5b", "Z5", 3, 240, 180, "jog", 1.04, 1.08, src=N_("Helgerud 2007 的形式（量少一點）")),
     ),
     "z5c": (
         _v("v3a", "z5c", "Z5", 5, 180, 150, "walk", 1.05, 1.10, canonical=True,
-           src="Palladino：加組數＋縮短休息；Wen 2019：每堂 ≥ 15 分效果較大"),
+           src=_src(N_("Palladino：加組數＋縮短休息"), N_("Wen 2019：每堂 ≥ 15 分效果較大"))),
         _v("v3b", "z5c", "Z5", 5, 180, 120, "walk", 1.05, 1.10, pattern=(120, 180, 240, 180, 120),
-           src="Pyramid；結構屬推估", src_kind="推估"),
-        _v("v3c", "z5c", "Z5", 6, 150, 120, "walk", 1.05, 1.10, src="Palladino MAP 每趟 2.5–3 分",
+           src=_src("Pyramid", STRUCT_EST), src_kind="推估"),
+        _v("v3c", "z5c", "Z5", 6, 150, 120, "walk", 1.05, 1.10, src=PAL_MAP,
            src_kind="coach"),
         _v("v3d", "z5c", "Z5", 5, 180, 150, "jog_down", 1.05, 1.10, "hill", grade="6–10%",
-           src="Haugen 2022；Koop（上坡）"),
+           src=_src("Haugen 2022", N_("Koop（上坡）"))),
     ),
     "z5d": (
         _v("v4a", "z5d", "Z5", 4, 240, 180, "jog", 1.04, 1.08, canonical=True,
-           src="Helgerud 2007：4×4 分、休 3 分 @ 70% HRmax（主動）；Buchheit & Laursen 2013 結論 3"),
-        _v("v4b", "z5d", "Z5", 8, 120, 90, "walk", 1.06, 1.12, src="Buchheit & Laursen 2013 Part II 表 1；工休比 > 1"),
-        _v("v4c", "z5d", "Z5", 4, 240, 180, "jog_down", 1.04, 1.08, "hill", grade="4–6%（長趟用緩坡）",
-           src="Gajer（Buchheit & Laursen 2013 Part I §3.1.1.4）：上坡要長趟"),
+           src=_src(N_("Helgerud 2007：4×4 分、休 3 分 @ 70% HRmax（主動）"), N_("Buchheit & Laursen 2013 結論 3"))),
+        _v("v4b", "z5d", "Z5", 8, 120, 90, "walk", 1.06, 1.12,
+           src=_src(N_("Buchheit & Laursen 2013 Part II 表 1"), N_("工休比 > 1"))),
+        _v("v4c", "z5d", "Z5", 4, 240, 180, "jog_down", 1.04, 1.08, "hill", grade=N_("4–6%（長趟用緩坡）"),
+           src=N_("Gajer（Buchheit & Laursen 2013 Part I §3.1.1.4）：上坡要長趟")),
     ),
 }
 # 非同等 (§C4): selectable by hand, counts as a Zone 5 session, never progress
 NON_EQUIV = (
     _v("x3015", "x", "Z5", 13, 30, 15, "jog", 1.10, 1.20, sets=2, set_rest_s=180, listed_equiv=False,
-       src="Rønnestad 2015／2020 30/15（騎車）；每趟 < 2 分不符合 5 區每趟 ≥ 2 分（台灣教練）"),
+       src=_src(N_("Rønnestad 2015／2020 30/15（騎車）"), N_("每趟 < 2 分不符合 5 區每趟 ≥ 2 分（台灣教練）"))),
 )
 RUNG_NAME = {"a1": "A1", "a2": "A2", "a3": "A3", "a4": "A4", "z3a": "T1", "z3b": "T2", "z3c": "T3", "tp": "T+",
              "z5a": "V1", "z5b": "V2", "z5c": "V3", "z5d": "V4"}
@@ -319,15 +336,15 @@ def warm_floor(v: Variant, prefs=None) -> int:
 def _warm(v: Variant, level: str, c: int) -> list:
     """The warm-up blocks of a level with a `c`-minute city part (§C3)."""
     z5 = is_z5(v)
-    city = ("city", c, f"輕鬆跑暖身 {c} 分（可以就是跑到間歇地點；≤ 75% CP，最後 2 分漸進到約 85% CP）")
+    city = ("city", c, _("輕鬆跑暖身 {c} 分（可以就是跑到間歇地點；≤ 75% CP，最後 2 分漸進到約 85% CP）", c=c))
     if level == "full":
-        river = ("river", 5 if z5 else 3, f"輕鬆跑 {5 if z5 else 3} 分，漸進")
-        return [city, river] + ([("drills", 2, "動態伸展、跑姿 drill 2 分（擺腿、高抬腿、小步跑）")] if z5 else []) + \
-            [("strides", 3 if z5 else 2, f"快步跑 {3 if z5 else 2}×15–20 秒（不是衝刺），間隔慢跑 40 秒")]
+        river = ("river", 5 if z5 else 3, _("輕鬆跑 {m} 分，漸進", m=5 if z5 else 3))
+        return [city, river] + ([("drills", 2, _("動態伸展、跑姿 drill 2 分（擺腿、高抬腿、小步跑）"))] if z5 else []) + \
+            [("strides", 3 if z5 else 2, _("快步跑 {n}×15–20 秒（不是衝刺），間隔慢跑 40 秒", n=3 if z5 else 2))]
     if level == "min":
-        return [city] + ([("drills", 2, "動態伸展、drill 2 分"), ("strides", 1, "快步跑 1×15–20 秒")] if z5 else [])
-    return [city] + ([("drills", 2, "動態伸展、跑姿 drill 2 分")] if z5 else []) + \
-        [("strides", 3 if z5 else 2, f"快步跑 {3 if z5 else 2}×15–20 秒，間隔慢跑 40 秒")]
+        return [city] + ([("drills", 2, _("動態伸展、drill 2 分")), ("strides", 1, _("快步跑 1×15–20 秒"))] if z5 else [])
+    return [city] + ([("drills", 2, _("動態伸展、跑姿 drill 2 分"))] if z5 else []) + \
+        [("strides", 3 if z5 else 2, _("快步跑 {n}×15–20 秒，間隔慢跑 40 秒", n=3 if z5 else 2))]
 
 
 def blocks(v: Variant, level: str = "std", prefs=None, floor: Optional[int] = None) -> dict:
@@ -341,7 +358,8 @@ def blocks(v: Variant, level: str = "std", prefs=None, floor: Optional[int] = No
         warm = _warm(v, level, c + lack)
     cool = max(10, cooldown_floor(prefs)) if level == "full" else cooldown_floor(prefs)
     return {"warm": warm, "warm_min": sum(m for _, m, _ in warm), "cool_min": cool,
-            "cool_text": f"緩和 {cool} 分慢跑或走路" + ("（跑回家的話就是這段）" if cool >= 10 else "")}
+            "cool_text": _("緩和 {m} 分慢跑或走路（跑回家的話就是這段）", m=cool) if cool >= 10
+            else _("緩和 {m} 分慢跑或走路", m=cool)}
 
 
 def total_min(v: Variant, level: str = "std", prefs=None) -> float:
@@ -409,6 +427,16 @@ def fmt_s(s: float) -> str:
         return f"{s} 秒"
     m, r = divmod(s, 60)
     return f"{m} 分" if not r else f"{m}:{r:02d}"
+
+
+def fmt_dur(s: float) -> str:
+    """fmt_s in the request's language (a rest's / a step's text); structure() keeps fmt_s — titles are
+    stored in zh-TW and read by code."""
+    s = int(round(s))
+    if s < 60:
+        return _("{s} 秒", s=s)
+    m, r = divmod(s, 60)
+    return _("{m} 分", m=m) if not r else f"{m}:{r:02d}"
 
 
 def _mins(s: float) -> str:
@@ -527,10 +555,10 @@ def renamed(title: Optional[str]) -> Optional[str]:
 
 def rest_text(v: Variant) -> str:
     if v.continuous:
-        return "不休息"
+        return _("不休息")
     if v.terrain == "hill":
-        return f"慢跑或走下坡恢復（約 {fmt_s(v.rest_s)}）"
-    return _("休 {d}（{mode}）", d=fmt_s(v.rest_s), mode=_(REST_LABEL.get(v.rest_mode, N_("慢跑"))))
+        return _("慢跑或走下坡恢復（約 {d}）", d=fmt_dur(v.rest_s))
+    return _("休 {d}（{mode}）", d=fmt_dur(v.rest_s), mode=_(REST_LABEL.get(v.rest_mode, N_("慢跑"))))
 
 
 def describe(v: Variant, cp: Optional[float] = None) -> dict:
@@ -538,8 +566,9 @@ def describe(v: Variant, cp: Optional[float] = None) -> dict:
     pw = f"{v.lo * cp:.0f}–{v.hi * cp:.0f} W（{v.lo * 100:.0f}–{v.hi * 100:.0f}% CP）" if cp else \
         f"{v.lo * 100:.0f}–{v.hi * 100:.0f}% CP"
     ok, why = equivalent(v)
-    hr = {"Z3sub": "心率 AeT–LTHR（LTHR 還是預設值時約 85–90% HRmax）", "Z3near": "心率 95–100% LTHR",
-          "Z5": "最後 1 分鐘 ≥ 90% HRmax（Helgerud；3 分以上的趟才看心率）"}.get(v.cls, "")
+    hr = {"Z3sub": N_("心率 AeT–LTHR（LTHR 還是預設值時約 85–90% HRmax）"), "Z3near": N_("心率 95–100% LTHR"),
+          "Z5": N_("最後 1 分鐘 ≥ 90% HRmax（Helgerud；3 分以上的趟才看心率）")}.get(v.cls)
+    hr = _(hr) if hr else ""
     return {"key": v.key, "rung": v.rung, "hr": hr, "rung_name": RUNG_NAME.get(v.rung, ""), "cls": v.cls,
             "title": title(v), "structure": structure(v), "power": pw, "rest": rest_text(v),
             "terrain": v.terrain, "grade": v.grade, "tiz_min": round(tiz_s(v) / 60.0, 1),
@@ -617,6 +646,31 @@ def _fit_result(v, level, reps, equiv, progress, reason, action="ok", base=None,
             "reason": reason, "action": action, "base": base or v, **kw}
 
 
+CAP_DAYS = (N_("平日"), N_("週六"), N_("週日"))      # the days a cap is named by: cap_label 「<day>上限」
+
+
+def _moved(r: dict, rung: str, wd: str, cl: dict, warm: Optional[int]) -> str:
+    """「平日上限 40 分 放不下 A3 → 改到週六（<that day's reason>）」, after 「熱身 N 分＋主課放不進…：」 when the
+    warm-up floor is why (`warm`). One msgid each, the 「；上次做 …」 of the day's reason written out in it:
+    nested as fields it would sit too deep to read back inside a session's 說明 (engine/stored_text)."""
+    kw = {"rung": rung, "wd": wd, **cl}
+    if r.get("why_swap"):
+        kw.update(why=r["why_base"], a=r["why_swap"][0], b=r["why_swap"][1])
+        if warm is not None:
+            return _("熱身 {w} 分＋主課放不進{day}上限 {cap:.0f} 分：{day}上限 {cap:.0f} 分 放不下 {rung} → 改到{wd}（{why}；"
+                     "上次做 {a}，這次換 {b}（同等，不影響進階））", w=warm, **kw)
+        return _("{day}上限 {cap:.0f} 分 放不下 {rung} → 改到{wd}（{why}；上次做 {a}，這次換 {b}（同等，不影響進階））", **kw)
+    if warm is not None:
+        return _("熱身 {w} 分＋主課放不進{day}上限 {cap:.0f} 分：{day}上限 {cap:.0f} 分 放不下 {rung} → 改到{wd}（{why}）",
+                 w=warm, why=r["reason"], **kw)
+    return _("{day}上限 {cap:.0f} 分 放不下 {rung} → 改到{wd}（{why}）", why=r["reason"], **kw)
+
+
+def _cap_day(cap_label: str) -> str:
+    """「平日上限」 → 「平日」 (the reasons write 「{day}上限 N 分」); every cap_label passed ends in 上限."""
+    return _(cap_label[:-2] if cap_label.endswith("上限") else cap_label)
+
+
 def fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountain: bool = False,
         alt_caps: Optional[list] = None, adj: Optional[dict] = None, cap_label: str = "平日上限",
         hill: bool = False) -> dict:
@@ -664,33 +718,44 @@ def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountai
         std_pool = [canon] + [v for v in std_pool if v is not canon]
     ok = lambda v, lv: cap is None or total_min(v, lv, prefs) <= float(cap) + 1e-6
     need = total_min(canon, "min", prefs)
-    cl = f"{cap_label} {cap:.0f} 分" if cap is not None else ""
+    # 「平日上限 45 分」: every reason below that names the cap starts with it ({day}上限 {cap} 分, SP-905:
+    # one msgid each, so an English page reads it back); without a cap they are never reached
+    cl = {"day": _cap_day(cap_label), "cap": cap or 0}
     # 每堂課前加熱身 (SP-364): when its floor is what makes the rung not fit, the reasons below say so
     w_min = blocks(canon, "min", prefs)["warm_min"]
-    wn = _("熱身 {w} 分＋主課放不進{cl}：", w=w_min, cl=cl) \
-        if cap is not None and w_min > blocks(canon, "min", prefs, floor=0)["warm_min"] else ""
+    floor_short = cap is not None and w_min > blocks(canon, "min", prefs, floor=0)["warm_min"]
+
+    def wn(text: str) -> str:
+        return _("熱身 {w} 分＋主課放不進{day}上限 {cap:.0f} 分：{rest}", w=w_min, rest=text, **cl) \
+            if floor_short else text
     last = get(rh[-1]["variant_key"]) if rh else None
     for lv in LEVELS:
         for v in (std_pool[:1] if first else std_pool):
             if not ok(v, lv):
                 continue
             if lv == "full":
-                why = ("時間足夠 → 標準版" if v.canonical else "時間足夠 → 同等的標準長度版") + \
-                    ("（第一次做這一階：用有研究的那份課表）" if first and v.canonical else "")
+                why = (_("時間足夠 → 標準版（第一次做這一階：用有研究的那份課表）") if first and v.canonical
+                       else _("時間足夠 → 標準版") if v.canonical else _("時間足夠 → 同等的標準長度版"))
             else:
                 b = blocks(v, lv, prefs)
-                why = f"{cl} → {'標準版' if v.canonical else '同等的標準長度版'}，暖身縮到 {b['warm_min']} 分、緩和 {b['cool_min']} 分"
+                bw = {"w": b["warm_min"], "c": b["cool_min"]}
+                why = _("{day}上限 {cap:.0f} 分 → 標準版，暖身縮到 {w} 分、緩和 {c} 分", **cl, **bw) if v.canonical \
+                    else _("{day}上限 {cap:.0f} 分 → 同等的標準長度版，暖身縮到 {w} 分、緩和 {c} 分", **cl, **bw)
+            swap = {}
             if last is not None and last.key != v.key:
-                why += f"；上次做 {structure(last)}，這次換 {structure(v)}（同等，不影響進階）"
-            return _fit_result(v, lv, None, True, True, why, rung=rung, need_min=need)
+                swap = {"why_base": why, "why_swap": (structure(last), structure(v))}      # the move below quotes it
+                why += "；" + _("上次做 {a}，這次換 {b}（同等，不影響進階）", a=structure(last), b=structure(v))
+            return _fit_result(v, lv, None, True, True, why, rung=rung, need_min=need, **swap)
     for v in std_pool[1:] if first else []:
         if ok(v, "min"):
-            return _fit_result(v, "min", None, True, True, f"{cl} → 同等的標準長度版 {structure(v)}（標準版要 "
-                               f"{total_min(canon, 'min', prefs):.0f} 分）", rung=rung, need_min=need)
+            return _fit_result(v, "min", None, True, True,
+                               _("{day}上限 {cap:.0f} 分 → 同等的標準長度版 {s}（標準版要 {need:.0f} 分）",
+                                 s=structure(v), need=need, **cl), rung=rung, need_min=need)
     for v in short_pool:
         if ok(v, "min"):
             return _fit_result(v, "min", None, True, True,
-                               f"{cl} → 同等較短版 {structure(v)}（標準版 {structure(canon)} 要 {need:.0f} 分）",
+                               _("{day}上限 {cap:.0f} 分 → 同等較短版 {s}（標準版 {std} 要 {need:.0f} 分）",
+                                 s=structure(v), std=structure(canon), need=need, **cl),
                                rung=rung, need_min=need)
     floor = MIN_REPS.get(canon.cls, 2)
     for n in range(ref.n - 1, floor - 1, -1):
@@ -699,33 +764,64 @@ def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountai
             continue
         share = tiz_s(r) / tiz_s(ref)
         if share >= EQUIV_TIZ - 1e-9:
-            return _fit_result(r, "min", n, True, True, wn + f"{cl} → 減成 {n} 趟（目標區時間 {share * 100:.0f}%，仍算同等）",
+            return _fit_result(r, "min", n, True, True,
+                               wn(_("{day}上限 {cap:.0f} 分 → 減成 {n} 趟（目標區時間 {pct:.0f}%，仍算同等）",
+                                    n=n, pct=share * 100, **cl)),
                                base=ref, rung=rung, need_min=need)
         return _fit_result(r, "min", n, False, False,
-                           wn + f"{cl} → 縮量版 {n} 趟（目標區時間 {share * 100:.0f}% < 85%）：達標也只算維持，這一階不前進",
+                           wn(_("{day}上限 {cap:.0f} 分 → 縮量版 {n} 趟（目標區時間 {pct:.0f}% < 85%）：達標也只算維持，"
+                                "這一階不前進", n=n, pct=share * 100, **cl)),
                            base=ref, rung=rung, need_min=need, reduced=True)
     for label, c, *wd in alt_caps or []:
         if cap is not None and (c is None or c > cap):
             r = fit(rung, c, history, prefs, mountain, None, adj, cap_label=f"{label}上限", hill=hill)
             if r["action"] == "ok" and r["equiv"]:
-                return {**r, "action": "move", "move_to": label, "move_wd": wd[0] if wd else None,
-                        "reason": wn + f"{cl} 放不下 {RUNG_NAME.get(rung, rung)} → 改到{label}（{r['reason']}）"}
+                return {**{k: x for k, x in r.items() if k not in ("why_base", "why_swap")},
+                        "action": "move", "move_to": label, "move_wd": wd[0] if wd else None,
+                        "reason": _moved(r, RUNG_NAME.get(rung, rung), _(label), cl, w_min if floor_short else None)}
     prev = PREV_RUNG.get(rung)
     if prev:
         r = fit(prev, cap, history, prefs, mountain, None, None, cap_label, hill)
-        what = f"{RUNG_NAME.get(rung, rung)} 的 {structure(canon)}"
         return {**r, "action": "back", "equiv": False, "progress": False, "rung": prev, "need_min": need,
-                "reason": wn + f"{cl} 放不下 {what}（需要 {need:.0f} 分以上）：本週改排 {RUNG_NAME.get(prev, prev)} 的 "
-                          f"{structure(r['variant'])}，不算進階。要進階，把平日上限調到 {need:.0f} 分，或把品質課改到週末。",
+                "reason": wn(_("{day}上限 {cap:.0f} 分 放不下 {rung} 的 {s}（需要 {need:.0f} 分以上）：本週改排 {prev} 的 "
+                               "{s2}，不算進階", rung=RUNG_NAME.get(rung, rung), s=structure(canon), need=need,
+                               prev=RUNG_NAME.get(prev, prev), s2=structure(r["variant"]), **cl))
+                + "。" + _("要進階，把平日上限調到 {need:.0f} 分，或把品質課改到週末", need=need) + "。",
                 "warn": True}
     r = with_reps(ref, floor)
     return _fit_result(r, "min", floor, False, False,
-                       wn + f"{cl} 連 {floor} 趟都放不下：先排 {floor} 趟，達標也只算維持", base=ref, rung=rung,
-                       need_min=need, reduced=True, warn=True)
+                       wn(_("{day}上限 {cap:.0f} 分 連 {n} 趟都放不下：先排 {n} 趟，達標也只算維持", n=floor, **cl)),
+                       base=ref, rung=rung, need_min=need, reduced=True, warn=True)
 
 
 HR_LTHR = {"Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "Z5": (1.00, 1.05)}    # × LTHR; Z5 only on reps ≥ 3 min (Buchheit)
 RATE = {"Z3sub": 65.0, "Z3near": 68.0, "Z4": 70.0, "Z5": 72.0}        # TSS / h of a session (the old ladder's rates)
+
+
+def _hr_text(lo, hi, last_min: bool = False) -> str:
+    """「心率 150–170 bpm」, 「…（最後 1 分鐘）」 for a Zone 5 rep."""
+    return _("心率 {lo}–{hi} bpm（最後 1 分鐘）", lo=lo, hi=hi) if last_min else _("心率 {lo}–{hi} bpm", lo=lo, hi=hi)
+
+
+# 「暖身 15 分（輕鬆跑暖身 10 分（…）＋快步跑 2×15–20 秒，…）、緩和 5 分」 by the number of warm-up parts
+# (each part a msgid of _warm; 「＋」 between them is the msgid's own)
+_WARM_TEXT = (N_("暖身 {w} 分（{p1}）、緩和 {c} 分"), N_("暖身 {w} 分（{p1}＋{p2}）、緩和 {c} 分"),
+              N_("暖身 {w} 分（{p1}＋{p2}＋{p3}）、緩和 {c} 分"), N_("暖身 {w} 分（{p1}＋{p2}＋{p3}＋{p4}）、緩和 {c} 分"))
+
+
+def _warm_text(b: dict) -> str:
+    ps = [t for _c, _m, t in b["warm"]]            # _warm: 1–4 parts
+    return _(_WARM_TEXT[len(ps) - 1], w=b["warm_min"], c=b["cool_min"], **{f"p{i + 1}": p for i, p in enumerate(ps)})
+
+
+def _main_text(v: Variant, band: str, pre: str = "") -> str:
+    """「<pre>上坡（4–6% 坡）3×8 分，88–95% CP」 (msgids: the grade is a text of its own, the prefix a field),
+    else 「<pre>3×8 分，88–95% CP」 (the structure and the band read back as they are; the prefix reads
+    the rest as its own field, quality_gate.PREFIX_READ)."""
+    if v.terrain == "hill":
+        kw = {"grade": _(v.grade), "s": structure(v), "band": band}
+        return _("{pre}上坡（{grade} 坡）{s}，{band}", pre=pre, **kw) if pre else _("上坡（{grade} 坡）{s}，{band}", **kw)
+    return f"{pre}{structure(v)}，{band}"
 
 
 def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False, prefs=None,
@@ -739,31 +835,37 @@ def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False,
     use_hr = bool(lthr) and not lthr_default
     pm = th.get("power_model") if isinstance(th.get("power_model"), dict) else None
     # 個人化間歇 (SP-590): under 個人化區間 an interval at / above threshold takes the model's reps
-    v, opt, opt_note = _personal(f, v, lv, pm, cp, prefs)
+    v, opt, opt_note = _personal(f, v, lv, pm, cp, prefs, prefix)
     # 課表功率區間 (SP-363): the rep's band in the chosen set (Palladino: the variant's own)
     blo, bhi = plan_band(v, pm)
     band = f"{blo * 100:.0f}–{bhi * 100:.0f}% CP"
-    parts = [f"功率 {blo * cp:.0f}–{bhi * cp:.0f} W（{band}）"] if cp else [f"RPE 8（{band}）"]
+    parts = [_("功率 {lo}–{hi} W（{band}）", lo=f"{blo * cp:.0f}", hi=f"{bhi * cp:.0f}", band=band)] if cp \
+        else [f"RPE 8（{band}）"]
     # SP-493: under the 儲備心率 / 最大心率 課表心率區間 the HR is the class's zone of that model (what the
     # push gives a library step, hr_profile.work_band) — not × LTHR; the LTHR model keeps HR_LTHR
     from backend.engine.hr_profile import class_hr
     zb = class_hr(th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None, v.cls)
     if zb and use_hr and (v.cls != "Z5" or min(v.works) >= 180):
-        parts.append(f"心率 {zb[0]}–{zb[1]} bpm" + ("（最後 1 分鐘）" if v.cls == "Z5" else ""))
+        parts.append(_hr_text(zb[0], zb[1], v.cls == "Z5"))
     elif zb:
         pass                                        # a short Z5 rep: no HR, as under the LTHR model
     elif use_hr and v.cls == "Z3sub" and aet:
-        parts.append(f"心率 {aet:.0f}–{lthr:.0f} bpm")
+        parts.append(_hr_text(f"{aet:.0f}", f"{lthr:.0f}"))
     elif use_hr and v.cls in HR_LTHR and (v.cls != "Z5" or min(v.works) >= 180):
         a, b = HR_LTHR[v.cls]
-        parts.append(f"心率 {a * lthr:.0f}–{b * lthr:.0f} bpm" + ("（最後 1 分鐘）" if v.cls == "Z5" else ""))
+        parts.append(_hr_text(f"{a * lthr:.0f}", f"{b * lthr:.0f}", v.cls == "Z5"))
     b = blocks(v, lv, prefs)
-    warm_txt = "＋".join(t for _, _, t in b["warm"])
-    hill = f"上坡（{v.grade} 坡）" if v.terrain == "hill" else ""
-    body = f"{hill}{structure(v)}，{band}；{rest_text(v)}"
     total = int(round(total_min(v, lv, prefs)))
-    detail = (f"{f['reason']}。{prefix}{opt_note}{body}；暖身 {b['warm_min']} 分（{warm_txt}）、緩和 {b['cool_min']} 分"
-              + ("；暖身完 1–2 分內開始第一趟" if is_z5(v) else ""))
+    # the 說明 (SP-905: parts joined by 「；」「。」, each one msgid): the reason, then the gate's prefix (no
+    # separator after it — a msgid ending in 「：」 / 「，」) with the 個人化間歇 note or the main set, the rest,
+    # the warm-up. The prefix is read back as a field: {pre} of the msgids here, or the text after it as
+    # {rest} of quality_gate.PREFIX_READ (the plain main set 「3×8 分，88–95% CP」).
+    if opt_note:
+        head = opt_note + _main_text(v, band, "")          # opt_note starts with the prefix (_opt_text)
+    else:
+        head = _main_text(v, band, prefix)
+    detail = (f"{f['reason']}。{head}；{rest_text(v)}；{_warm_text(b)}"
+              + ("；" + _("暖身完 1–2 分內開始第一趟") if is_z5(v) else ""))
     adj = dict(f.get("adj") or {})
     if opt:
         adj["opt"] = opt                    # SP-590: the push / the structure / the judging read it back
@@ -797,14 +899,15 @@ def _opt_of(v: Variant) -> dict:
             "lo": v.lo, "hi": v.hi}
 
 
-def _personal(f: dict, v: Variant, lv: str, pm: Optional[dict], cp: Optional[float], prefs=None):
+def _personal(f: dict, v: Variant, lv: str, pm: Optional[dict], cp: Optional[float], prefs=None, pre: str = ""):
     """(variant, opt dict or None, detail text) of a session under 個人化區間 (SP-590): an interval at /
     above threshold re-cut to its level of the model's optimized intervals (power_zone_plan.optimized),
     rebuilt from the library row so the stored tweaks (variant_adj) apply on top of it the way
     resolve() does; its reps cut to the day's cap (f["cap"]) down to the level's minimum. The 30/15
-    (not an equivalent, picked by hand) is left as it is. Anything else: (v, None, "")."""
+    (not an equivalent, picked by hand) is left as it is. Anything else: (v, None, ""). `pre`: the
+    detail's prefix, the text's start (_opt_text)."""
     if v.opt >= 0:                                      # a stored one, fewer reps (overview._shorten)
-        return v, _opt_of(v), _opt_text(v, pm, cp, None)
+        return v, _opt_of(v), _opt_text(v, pm, cp, None, pre)
     if not v.listed_equiv or pm is None or pm.get("system") != "personal":
         return v, None, ""
     from backend.engine import power_zone_plan as PZP
@@ -821,18 +924,22 @@ def _personal(f: dict, v: Variant, lv: str, pm: Optional[dict], cp: Optional[flo
             out = adjust(base, {**adj, "opt": o})
             cut = cap
     o = {k: o[k] for k in ("level", "work_s", "reps", "rest_s", "lo", "hi", "w")}
-    return out, o, _opt_text(out, pm, cp, cut)
+    return out, o, _opt_text(out, pm, cp, cut, pre)
 
 
-def _opt_text(v: Variant, pm: Optional[dict], cp: Optional[float], cut: Optional[float]) -> str:
+def _opt_text(v: Variant, pm: Optional[dict], cp: Optional[float], cut: Optional[float], pre: str = "") -> str:
+    """「個人化間歇（閾值）：每趟 …；趟數與休息：…[；今天上限 …]。」 after the detail's prefix `pre` (the
+    gate's / the dose note's, quality_gate.prefix — a field of the first msgid, so it reads back, SP-905)."""
     from backend.engine import power_zone_plan as PZP
     w = f"{(v.lo + v.hi) / 2 * cp:.0f}" if cp else "–"
-    sec = int(round(v.work_s))
-    d = _("{s} 秒", s=sec) if sec < 60 else f"{sec // 60}:{sec % 60:02d}" if sec % 60 else _("{m} 分", m=sec // 60)
-    txt = _("個人化間歇（{name}）：每趟 {d}、約 {w} W，依你的功率–時間模型；趟數與休息：{rule}",
-            name=_(PZP.OPT_NAMES[v.opt]), d=d, w=w, rule=PZP.opt_rule(v.opt))
+    d = fmt_dur(v.work_s)
+    kw = {"name": _(PZP.OPT_NAMES[v.opt]), "d": d, "w": w}
+    # parts joined by 「；」 (each read back on its own)
+    txt = (_("{pre}個人化間歇（{name}）：每趟 {d}、約 {w} W，依你的功率–時間模型", pre=pre, **kw) if pre
+           else _("個人化間歇（{name}）：每趟 {d}、約 {w} W，依你的功率–時間模型", **kw)) \
+        + "；" + _("趟數與休息：{rule}", rule=PZP.opt_rule(v.opt))
     if cut is not None:
-        txt += _("；今天上限 {cap:.0f} 分，減成 {n} 趟", cap=cut, n=v.n)
+        txt += "；" + _("今天上限 {cap:.0f} 分，減成 {n} 趟", cap=cut, n=v.n)
     return txt + "。"
 
 
@@ -854,11 +961,11 @@ def steps(v: Variant, level: str = "std", prefs=None) -> list[dict]:
         out.append({"kind": "warm", "code": code, "s": int(m * 60), "text": text})
     works = v.works
     for i, w in enumerate(works):
-        out.append({"kind": "work", "s": int(w), "lo": v.lo, "hi": v.hi, "text": _("第 {i} 趟 {d}", i=i + 1, d=fmt_s(w))})
+        out.append({"kind": "work", "s": int(w), "lo": v.lo, "hi": v.hi, "text": _("第 {i} 趟 {d}", i=i + 1, d=fmt_dur(w))})
         if i == len(works) - 1:
             break
         if v.sets > 1 and (i + 1) % v.reps == 0:
-            out.append({"kind": "rest", "s": int(v.set_rest_s), "mode": "jog", "text": _("組間 {d}", d=fmt_s(v.set_rest_s))})
+            out.append({"kind": "rest", "s": int(v.set_rest_s), "mode": "jog", "text": _("組間 {d}", d=fmt_dur(v.set_rest_s))})
         elif v.rest_s:
             out.append({"kind": "rest", "s": int(v.rest_s), "mode": v.rest_mode,
                         "text": _(REST_LABEL.get(v.rest_mode, N_("慢跑")) or N_("恢復"))})
@@ -870,10 +977,15 @@ def steps(v: Variant, level: str = "std", prefs=None) -> list[dict]:
 # the 課表 page: the swap drawer and the editor's templates (§C5.4)
 # ---------------------------------------------------------------------------
 
+_SPLIT_WARM = (N_("暖身 {m}（{p1}）"), N_("暖身 {m}（{p1}＋{p2}）"), N_("暖身 {m}（{p1}＋{p2}＋{p3}）"),
+               N_("暖身 {m}（{p1}＋{p2}＋{p3}＋{p4}）"))
+
+
 def _split(v: Variant, level: str, prefs=None) -> str:
     b = blocks(v, level, prefs)
     name = {"city": _("輕鬆跑"), "river": _("漸進"), "drills": "drill", "strides": _("快步跑")}
-    warm = _("暖身 {m}（", m=b['warm_min']) + "＋".join(f"{name.get(c, c)} {m}" for c, m, _x in b["warm"]) + "）"
+    ps = [f"{name.get(c, c)} {m}" for c, m, _x in b["warm"]]            # _warm: 1–4 parts
+    warm = _(_SPLIT_WARM[len(ps) - 1], m=b["warm_min"], **{f"p{i + 1}": p for i, p in enumerate(ps)})
     return _("{warm} · 主課 {main} · 緩和 {cool} ＝ {total:.0f} 分", warm=warm, main=_mins(main_s(v)),
              cool=b['cool_min'], total=total_min(v, level, prefs))
 
@@ -895,6 +1007,17 @@ def option_row(v: Variant, cp: Optional[float], cap: Optional[float], prefs=None
     return d
 
 
+def _fit_shown(rung: str, cap: Optional[float], history, prefs, mountain: bool = False) -> dict:
+    """fit() for the swap drawer / the editor's templates (the request's language): its reason made in
+    zh-TW, like a stored one, and shown in the request's (engine/stored_text) — the structures in it
+    (「3×8 分」) are zh-TW words that only read back that way (SP-905)."""
+    from backend.engine import stored_text as ST
+    from backend.i18n import DEFAULT_LOCALE, use_locale
+    with use_locale(DEFAULT_LOCALE):
+        r = fit(rung, cap, history, prefs, mountain)
+    return {**r, "reason": ST.shown(r["reason"])}
+
+
 def drawer(rung: str, cp: Optional[float] = None, cap: Optional[float] = None, prefs=None, history=(),
            current: Optional[str] = None, mountain: bool = False) -> dict:
     """The swap drawer for a session of `rung`: the equivalent variants (rotation order,
@@ -902,7 +1025,7 @@ def drawer(rung: str, cp: Optional[float] = None, cap: Optional[float] = None, p
     its consequence (§C5.4)."""
     if rung not in LIBRARY:
         return {"rung": rung, "equivalent": [], "other": [], "recommended_key": None}
-    rec = fit(rung, cap, history, prefs, mountain)
+    rec = _fit_shown(rung, cap, history, prefs, mountain)
     allowed, hill = terrains(prefs, mountain)
     vs = _order(list(LIBRARY[rung]), rung, history, hill)
     eq = [option_row(v, cp, cap, prefs, history) for v in vs]
@@ -932,7 +1055,7 @@ def templates(cp: Optional[float] = None, cap: Optional[float] = None, prefs=Non
               rung_now: Optional[str] = None) -> dict:
     """Every library session for the editor's dropdown, grouped by rung, the one fit()
     picks for the athlete's current rung and cap marked 推薦."""
-    rec = fit(rung_now, cap, history, prefs) if rung_now in LIBRARY else None
+    rec = _fit_shown(rung_now, cap, history, prefs) if rung_now in LIBRARY else None
     groups = []
     for rung in RUNG_ORDER + ("tp",):
         rows = [option_row(v, cp, cap, prefs, history) for v in LIBRARY[rung]]
@@ -951,13 +1074,14 @@ def variant_patch(key: str, rung: Optional[str], th: dict, prefs=None, cap: Opti
     variant is an equivalent of that rung (and keeps ≥ 85 % of the TIZ)."""
     v0 = get(key)
     if v0 is None:
-        raise ValueError(f"沒有這個課表：{key}")
+        raise ValueError(_("沒有這個課表：{key}", key=key))
     rung = rung or v0.rung
     v = with_reps(v0, reps)
     canon = canonical(rung)
     equiv = v0.rung == rung and v0.listed_equiv and (canon is None or tiz_s(v) >= EQUIV_TIZ * tiz_s(canon) - 1e-9)
     lv = best_level(v, cap, prefs) or "min"
-    why = f"你換成 {structure(v)}（{'同等，不影響進階' if equiv else '非同等：這次不算進階'}）"
+    why = _("你換成 {s}（同等，不影響進階）", s=structure(v)) if equiv \
+        else _("你換成 {s}（非同等：這次不算進階）", s=structure(v))
     s = session_for({"variant": v, "level": lv, "reps": reps if reps and reps < v0.n else None, "equiv": equiv,
                      "progress": equiv, "reason": why, "rung": rung}, th, prefix, prefs=prefs, swap="user")
     out = {k: s[k] for k in ("title", "minutes", "target", "detail", "source", "tss", "variant_key", "rung_key",

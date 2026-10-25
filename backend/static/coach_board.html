@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="coach_board.title">教練看板</title>
+<style>
+/* 教練看板 (SP-790, api/coach_board.py): a coach's students at a glance, read only. Each row is the
+   student's summary computed ahead (backend/coach_board.py: after their sync, and nightly) plus the last
+   sync and the alerts; this page computes nothing. Wide: a table; under 760 px: one card per student. */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --ok: #1f7a3d; --warn: #8a5300; --warn-bg: #fff4e0; --err: #b3261e; --err-bg: #fdecea;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --ok: #5cc37f; --warn: #f0b75a; --warn-bg: #33270f; --err: #f28b82; --err-bg: #3a1d1b;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --ok: #5cc37f; --warn: #f0b75a; --warn-bg: #33270f; --err: #f28b82; --err-bg: #3a1d1b;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+a { color: var(--accent); }
+.cb-main { max-width: 1400px; margin: 0 auto; padding: 22px 16px 64px; }
+.cb-main h1 { margin: 6px 0 4px; font-size: 26px; line-height: 1.3; }
+.cb-lead { margin: 0 0 14px; color: var(--muted); max-width: 70ch; }
+.cb-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin: 0 0 14px; font-size: 14px; }
+.cb-head b { font-variant-numeric: tabular-nums; }
+.cb-pending { background: var(--warn-bg); color: var(--warn); border-radius: 999px; padding: 2px 10px; }
+/* SP-827: the order and the red-only filter */
+.cb-tools { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 0 0 12px; font-size: 14px; }
+.cb-tools[hidden] { display: none; }
+.cb-tool { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
+.cb-tool select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 5px 8px; max-width: 100%; }
+.cb-toggle { cursor: pointer; color: var(--text); }
+.cb-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--err); }
+.cb-msg { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; color: var(--muted); }
+.cb-msg.err { color: var(--err); }
+.cb-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow-x: auto; }
+table.cb { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cb th, .cb td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.cb tr:last-child td { border-bottom: 0; }
+.cb th { color: var(--muted); font-weight: 600; font-size: 12.5px; white-space: nowrap; background: color-mix(in srgb, var(--line) 30%, var(--panel)); }
+.cb-name { font-weight: 700; font-size: 15px; }
+.cb-sub { display: block; color: var(--faint); font-size: 12.5px; }
+.cb-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cb-big { font-weight: 600; }
+.cb-load { display: grid; grid-template-columns: auto auto; justify-content: start; gap: 0 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cb td.cb-who { min-width: 11em; }
+.cb td.cb-race-td { min-width: 13em; }
+.cb td.cb-alerts-td { min-width: 11em; }
+.cb td.cb-plan-td { max-width: 13em; }
+.cb-plan-td .cb-sub { white-space: normal; }
+.cb-load span:nth-child(odd) { color: var(--muted); font-size: 12.5px; }
+.cb-load .neg { color: var(--warn); }
+.cb-race b { display: block; }
+.cb-pri { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 0 6px; border-radius: 5px; background: var(--soft);
+  color: var(--accent); margin-right: 4px; }
+.cb-bar { display: block; height: 6px; width: 90px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 4px 0 2px; }
+.cb-bar i { display: block; height: 100%; background: var(--ok); border-radius: 999px; }
+.cb-bar.low i { background: var(--warn); }
+.cb-alerts { display: flex; flex-wrap: wrap; gap: 4px; max-width: 260px; }
+.cb-chip { display: inline-block; font-size: 12.5px; line-height: 1.35; padding: 2px 8px; border-radius: 999px; }
+.cb-chip.bad { background: var(--err-bg); color: var(--err); font-weight: 600; }
+.cb-chip.watch { background: var(--warn-bg); color: var(--warn); }
+.cb-none { color: var(--faint); }
+.cb-stale { color: var(--warn); font-size: 12.5px; }
+.cb-open { font-size: 13px; }
+/* phones: one card per student */
+@media (max-width: 759px) {
+  .cb-main { padding: 14px 12px 40px; }
+  .cb-main h1 { font-size: 22px; }
+  .cb-wrap { background: none; border: 0; box-shadow: none; overflow: visible; }
+  table.cb, .cb tbody, .cb tr, .cb td { display: block; width: 100%; }
+  .cb thead { display: none; }
+  .cb tr { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin: 0 0 12px; padding: 4px 0; }
+  .cb td { border: 0; padding: 6px 14px; display: grid; grid-template-columns: 7.5em 1fr; gap: 8px; }
+  .cb td::before { content: attr(data-label); color: var(--muted); font-size: 12.5px; padding-top: 1px; }
+  .cb td.cb-who { display: block; padding-top: 10px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 4px; }
+  .cb td.cb-who::before { display: none; }
+  .cb td.cb-plan-td { max-width: none; }
+  .cb-alerts { max-width: none; }
+}
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="coach_board"></script>
+<main class="cb-main">
+  <h1 data-i18n="coach_board.h1">教練看板</h1>
+  <p class="cb-lead" data-i18n="coach_board.lead">每位學員一行：近 7／28 天的量、負荷、下一場賽事、課表完成度和最後同步。數字在學員同步後、改了賽事或課表後和每天夜間算好，這頁只讀、不會改學員的資料。</p>
+  <div class="cb-head" id="cb-head" hidden></div>
+  <div class="cb-tools" id="cb-tools" hidden></div>
+  <div id="cb-body"><p class="cb-msg" data-i18n="coach_board.loading">讀取中…</p></div>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const T = (k, p) => window.t("coach_board." + k, p);
+  const F = window.I18N.fmt;
+  const SETTINGS = "/api/v1/app/settings#coach";
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const num = (x, d = 0) => (x == null ? "" : F.num(x, d));
+  const signed = (x) => (x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + F.num(Math.abs(x), 0));
+  const daysAgo = (iso) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    const a = new Date(); a.setHours(0, 0, 0, 0);
+    const b = new Date(d); b.setHours(0, 0, 0, 0);
+    return Math.round((a - b) / 86400000);
+  };
+
+  function vol(v) {
+    const box = el("div", "cb-num");
+    if (!v) { box.append(el("span", "cb-none", "—")); return box; }
+    if (!v.sessions) { box.append(el("span", "cb-none", T("vol.none"))); return box; }
+    box.append(el("span", "cb-big", F.dist(v.distance_km)),
+      el("span", "cb-sub", T("vol.time_climb", { time: F.dur(v.moving_s), climb: num(v.climbing_m) })),
+      el("span", "cb-sub", T("vol.sessions", { n: v.sessions, tss: num(v.tss) })));
+    return box;
+  }
+
+  function load(l) {
+    if (!l) return el("span", "cb-none", "—");
+    if (l.pending) return el("span", "cb-none", T("load.pending"));
+    const g = el("div", "cb-load");
+    g.append(el("span", null, T("load.ctl")), el("span", null, num(l.ctl)),
+      el("span", null, T("load.atl")), el("span", null, num(l.atl)),
+      el("span", null, T("load.tsb")), el("span", l.tsb != null && l.tsb < 0 ? "neg" : null, signed(l.tsb)));
+    return g;
+  }
+
+  function race(r) {
+    if (!r) return el("span", "cb-none", T("race.none"));
+    const box = el("div", "cb-race");
+    const name = el("b", null);
+    name.append(el("span", "cb-pri", T("race.priority", { p: r.priority || "?" })), document.createTextNode(r.name || ""));
+    const when = r.in_days > 0 ? T("race.in", { n: r.in_days }) : r.in_days === 0 ? T("race.today") : T("race.ongoing");
+    box.append(name, el("span", "cb-sub", `${F.date(r.date, "mdw")} · ${when}`));
+    const bits = [];
+    if (r.distance_km) bits.push(F.dist(r.distance_km, 0));
+    if (r.climbing_m) bits.push(T("race.climb", { m: num(r.climbing_m) }));
+    if (bits.length) box.append(el("span", "cb-sub", bits.join(" · ")));
+    return box;
+  }
+
+  function plan(p) {
+    const box = el("div", "cb-num");
+    const d = p && p.d28, w = p && p.week;
+    if (!d || d.rate == null) {
+      box.append(el("span", "cb-none", T("plan.none")));
+    } else {
+      box.append(el("span", "cb-big", F.pct(d.rate)));
+      const bar = el("span", "cb-bar" + (d.rate < 0.6 ? " low" : ""));
+      const fill = el("i"); fill.style.width = Math.max(2, Math.min(100, d.rate * 100)) + "%";
+      bar.append(fill);
+      box.append(bar, el("span", "cb-sub", T("plan.d28", { done: d.done, due: d.due })));
+    }
+    if (w && w.planned) box.append(el("span", "cb-sub", T("plan.week", { done: w.done, planned: w.planned })));
+    return box;
+  }
+
+  function sync(row) {
+    const box = el("div", "cb-num");
+    if (!row.last_sync) { box.append(el("span", "cb-none", T("sync.never"))); return box; }
+    const n = daysAgo(row.last_sync);
+    box.append(el("span", null, F.date(row.last_sync, "mdw")),
+      el("span", "cb-sub", n === 0 ? T("sync.today") : T("sync.ago", { n })));
+    return box;
+  }
+
+  function alerts(row) {
+    const box = el("div", "cb-alerts");
+    if (!row.alerts.length) { box.append(el("span", "cb-none", T("alerts.none"))); return box; }
+    for (const a of row.alerts) box.append(el("span", "cb-chip " + a.level, a.text));
+    return box;
+  }
+
+  function who(row) {
+    const td = el("td", "cb-who");
+    // SP-791 (代看): open_url is POSTed (shell.js adds the CSRF header) and answers {go: the student's overview}
+    const name = row.open_url ? el("a", "cb-name", row.name) : el("span", "cb-name", row.name);
+    if (row.open_url) {
+      name.href = "#";
+      name.addEventListener("click", async (e) => {
+        e.preventDefault();
+        try {
+          const r = await fetch(row.open_url, { method: "POST" });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error((d && d.detail && (d.detail.message || d.detail)) || r.status);
+          location.href = (d && typeof d.go === "string" && d.go.startsWith("/") && !d.go.startsWith("//")) ? d.go : "/api/v1/overview/page";
+        } catch (err) {
+          td.append(el("span", "cb-stale", String(err.message || err)));
+        }
+      });
+    }
+    td.append(name, el("span", "cb-sub", T("since", { date: F.date(row.since, "ymd") })));
+    const s = row.summary;
+    if (!s) td.append(el("span", "cb-stale", T("summary.none")));
+    else if (row.refreshing) td.append(el("span", "cb-sub cb-refreshing", T("summary.refreshing")));   // SP-826
+    else if (row.summary_age_days >= 2) td.append(el("span", "cb-stale", T("summary.age", { n: row.summary_age_days })));
+    else if (s.last_activity) td.append(el("span", "cb-sub", T("last_activity", { date: F.date(s.last_activity, "mdw") })));
+    return td;
+  }
+
+  // SP-827: the order and the 「只看有紅燈的」 filter, on the rows as they came (the server's order is the
+  // alerts one: the most red, then yellow, then by name); the choice kept per viewer (localStorage)
+  const VIEW_KEY = "coach_board.view";
+  const SORTS = ["alerts", "race", "plan"];
+  const loadView = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(VIEW_KEY) || "{}") || {};
+      return { sort: SORTS.includes(v.sort) ? v.sort : "alerts", red: v.red === true };
+    } catch (_) { return { sort: "alerts", red: false }; }
+  };
+  const saveView = (v) => { try { localStorage.setItem(VIEW_KEY, JSON.stringify(v)); } catch (_) { /* not kept */ } };
+  const VIEW = loadView();
+  const isRed = (row) => (row.alerts || []).some((a) => a.level === "bad");
+  const raceKey = (row) => (row.next_race && row.next_race.in_days != null ? row.next_race.in_days : null);
+  const planKey = (row) => {
+    const d = row.summary && row.summary.plan && row.summary.plan.d28;
+    return d && d.rate != null ? d.rate : null;
+  };
+  function ordered(rows) {
+    const key = VIEW.sort === "race" ? raceKey : VIEW.sort === "plan" ? planKey : null;
+    let out = rows.map((row, i) => ({ row, i }));
+    if (key) {
+      // lowest first (the nearest race, the least done); none at the end; ties keep the alerts order
+      out.sort((a, b) => {
+        const x = key(a.row), y = key(b.row);
+        if (x == null || y == null) return (x == null) - (y == null) || a.i - b.i;
+        return x - y || a.i - b.i;
+      });
+    }
+    out = out.map((o) => o.row);
+    return VIEW.red ? out.filter(isRed) : out;
+  }
+
+  function tools(d) {
+    const box = $("cb-tools");
+    const lab = el("label", "cb-tool");
+    const sel = el("select"); sel.id = "cb-sort";
+    for (const s of SORTS) { const o = el("option", null, T("sort." + s)); o.value = s; sel.append(o); }
+    sel.value = VIEW.sort;
+    sel.addEventListener("change", () => { VIEW.sort = sel.value; saveView(VIEW); draw(d); });
+    lab.append(el("span", null, T("sort.label")), sel);
+    const tog = el("label", "cb-tool cb-toggle");
+    const cb = el("input"); cb.type = "checkbox"; cb.id = "cb-red"; cb.checked = VIEW.red;
+    cb.addEventListener("change", () => { VIEW.red = cb.checked; saveView(VIEW); draw(d); });
+    tog.append(cb, el("span", null, T("red.only", { n: d.students.filter(isRed).length })));
+    box.replaceChildren(lab, tog);
+    box.hidden = false;
+  }
+
+  const COLS = ["d7", "d28", "load", "race", "plan", "sync", "alerts"];
+  function render(d) {
+    const head = $("cb-head");
+    head.replaceChildren(el("span", null, T("head.used", { used: d.used, max: d.max_students })));
+    if (d.pending) head.append(el("span", "cb-pending", T("head.pending", { n: d.pending })));
+    const manage = el("a", null, T("head.manage")); manage.href = SETTINGS;
+    head.append(manage);
+    head.hidden = false;
+    const body = $("cb-body");
+    if (!d.students.length) {
+      const p = el("p", "cb-msg", T("empty") + " ");
+      const a = el("a", null, T("head.manage")); a.href = SETTINGS;
+      p.append(a);
+      body.replaceChildren(p);
+      return;
+    }
+    tools(d);
+    draw(d);
+  }
+
+  function draw(d) {
+    const body = $("cb-body");
+    const rows = ordered(d.students);
+    if (!rows.length) {                    // 只看有紅燈的, and nobody has one
+      body.replaceChildren(el("p", "cb-msg", T("red.none")));
+      return;
+    }
+    const table = el("table", "cb");
+    const tr = el("tr");
+    tr.append(el("th", null, T("col.student")), ...COLS.map((c) => el("th", null, T("col." + c))));
+    const thead = el("thead"); thead.append(tr);
+    const tbody = el("tbody");
+    for (const row of rows) {
+      const s = row.summary || {};
+      const cells = {
+        d7: vol((s.volume || {}).d7), d28: vol((s.volume || {}).d28), load: load(s.load), race: race(row.next_race),
+        plan: plan(s.plan), sync: sync(row), alerts: alerts(row),
+      };
+      const r = el("tr");
+      r.dataset.student = row.student_id;
+      r.append(who(row));
+      for (const c of COLS) {
+        const td = el("td", ["race", "plan", "alerts"].includes(c) ? `cb-${c}-td` : null); td.dataset.label = T("col." + c);
+        td.append(cells[c]);
+        r.append(td);
+      }
+      tbody.append(r);
+    }
+    table.append(thead, tbody);
+    const wrap = el("div", "cb-wrap"); wrap.append(table);
+    body.replaceChildren(wrap);
+  }
+
+  (async () => {
+    let r, d = null;
+    try {
+      r = await fetch("/api/v1/coach/board", { cache: "no-store" });
+      try { d = await r.json(); } catch (_) { d = null; }
+    } catch (_) { r = null; }
+    if (r && r.ok && d) { render(d); return; }
+    const code = d && d.detail && d.detail.code;
+    const msg = code === "NOT_A_COACH" ? T("not_coach") : T("failed", { status: r ? r.status : "—" });
+    $("cb-body").replaceChildren(el("p", "cb-msg" + (code === "NOT_A_COACH" ? "" : " err"), msg));
+  })();
+})();
+</script>
+</body>
+</html>

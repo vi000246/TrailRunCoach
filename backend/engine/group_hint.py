@@ -14,6 +14,19 @@ slower than their own trail runs climb at that heart rate and grade. Rule (SP-71
     hr_pct > 0.50 and vam_ratio > 0.90 → suggest 自己
     otherwise (or too little data)     → no suggestion
 
+SP-724 adds the stops as a third vote (the SP-716 diary check: group days stop 0.85–2.0 × their moving
+time, the owner's own runs ~0.44):
+
+    stop_share = the hike's stopped ÷ moving time (all its days; nonmoving.run_row, > 1 km/h moving)
+
+    each sign votes: hr_pct < 0.35 → 跟團, > 0.50 → 自己 (between: no vote); vam_ratio < 0.90 → 跟團,
+    > 0.90 → 自己; stop_share ≥ 0.80 → 跟團, < 0.80 → 自己
+    ≥ 2 votes and more than the other side → that suggestion; otherwise none
+
+On the four diary-checked group trips of SP-716 (hr_pct / vam_ratio / stop_share: 0.06 / 0.77 / 1.22,
+0.04 / 0.91 / 2.01, 0.54 / 0.64 / 0.85, 0.04 / 0.68 / 1.49) the two-sign rule suggests 跟團 for two, the
+three votes for all four. Without the stops (no samples) the two-sign rule above stays.
+
 Only a suggestion: the list shows it faded and one click makes it the user's mark (activity_tags.GROUPS);
 nothing reads the suggestion itself. Cached per activity (the climbs: climb_vam's cached series; the HR:
 athlete.intensity_stats) and per dataset (ds.memo).
@@ -31,9 +44,11 @@ RULE = {
     "min_ref_runs": 5,                             # 推估: own trail runs with HR for the percentile
     "min_ref_climbs": 20,                          # 推估: own-paced climbs for the expected VAM
     "min_climbs": 1,                               # a hike needs ≥ 1 climb with HR for its ratio
+    "group_stop": 0.80,                            # SP-724 (推估): stopped ÷ moving ≥ this votes 跟團
 }
-SOURCE = ("跟團建議（推估）：這次的移動心率在你自己越野跑心率裡的百分位 < 0.35，且爬坡 VAM ÷ 你自己同心率同坡度的預期 < 0.9 → 跟團；"
-          "百分位 > 0.5 且 > 0.9 → 自己；其他不建議")
+SOURCE = ("跟團建議（推估）：心率在你自己越野跑心率裡的百分位（< 0.35 投跟團、> 0.5 投自己）、爬坡 VAM ÷ 你自己同心率同坡度的預期"
+          "（< 0.9 投跟團、> 0.9 投自己）、停留 ÷ 移動時間（≥ 0.8 投跟團、< 0.8 投自己），兩票以上而且比另一邊多就建議；"
+          "沒有停留資料時：百分位 < 0.35 且 VAM 比 < 0.9 → 跟團，> 0.5 且 > 0.9 → 自己")
 
 
 def hr_percentile(hr: Optional[float], ref) -> Optional[float]:
@@ -68,16 +83,41 @@ def vam_ratio(model: Optional[dict], climbs) -> Optional[float]:
     return float(math.exp(float(np.median(r))))
 
 
-def suggest(hr_pct: Optional[float], ratio: Optional[float]) -> Optional[str]:
-    """"group" / "solo" / None by the SP-716 rule (module docstring)."""
+def suggest(hr_pct: Optional[float], ratio: Optional[float], stop_share: Optional[float] = None) -> Optional[str]:
+    """"group" / "solo" / None by the SP-716 rule; with `stop_share` (stopped ÷ moving) the SP-724 three
+    votes (module docstring)."""
     if hr_pct is None or ratio is None:
         return None
     k = RULE
-    if hr_pct < k["group_hr_pct"] and ratio < k["group_vam"]:
+    if stop_share is None or not math.isfinite(stop_share):
+        if hr_pct < k["group_hr_pct"] and ratio < k["group_vam"]:
+            return "group"
+        if hr_pct > k["solo_hr_pct"] and ratio > k["solo_vam"]:
+            return "solo"
+        return None
+    votes = []
+    votes.append("group" if hr_pct < k["group_hr_pct"] else "solo" if hr_pct > k["solo_hr_pct"] else None)
+    votes.append("group" if ratio < k["group_vam"] else "solo" if ratio > k["solo_vam"] else None)
+    votes.append("group" if stop_share >= k["group_stop"] else "solo")
+    g, s = votes.count("group"), votes.count("solo")
+    if g >= 2 and g > s:
         return "group"
-    if hr_pct > k["solo_hr_pct"] and ratio > k["solo_vam"]:
+    if s >= 2 and s > g:
         return "solo"
     return None
+
+
+def stop_share(ds, w) -> Optional[float]:
+    """SP-724: one hike's stopped ÷ moving time over all its days (athlete.nonmoving_day_rows, the stop
+    model's own definition); None without samples."""
+    from backend.engine.racepower import athlete as A
+    try:
+        rows = [r for r in A.nonmoving_day_rows(ds, w) if r]
+    except Exception:                       # noqa: BLE001 — no samples: no stop vote
+        return None
+    mv = sum(float(r.get("moving_s") or 0.0) for r in rows)
+    st = sum(float(r.get("stopped_s") or 0.0) for r in rows)
+    return st / mv if mv > 0 else None
 
 
 def _climbs(ds, w) -> list[dict]:
@@ -117,7 +157,8 @@ def compute(ds, tags: Optional[list] = None) -> dict:
             continue
         p = hr_percentile(_hr(ds, w), ref_hr)
         r = vam_ratio(model, _climbs(ds, w))
-        out[w.idx] = {"suggest": suggest(p, r), "hr_pct": p, "vam_ratio": r}
+        st = stop_share(ds, w)
+        out[w.idx] = {"suggest": suggest(p, r, st), "hr_pct": p, "vam_ratio": r, "stop_share": st}
     flush = getattr(ds, "flush_series", None)
     if flush:
         flush()

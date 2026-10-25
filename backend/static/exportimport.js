@@ -32,7 +32,7 @@
   const ACTIVE = new Set(["queued", "running"]);
   const SRC = { coros: "COROS", garmin: "Garmin", trainingpeaks: "TrainingPeaks", tp: "TrainingPeaks" };
   // the archive's own reasons (the per-file ones are fitimport's)
-  const OWN = new Set(["not_activity_file", "unsupported_format", "polar_json", "apple_health", "too_deep",
+  const OWN = new Set(["not_activity_file", "unsupported_format", "polar_json", "apple_health", "apple_health_unreadable", "too_deep",
     "too_many_files", "too_large_inflated", "not_zip", "too_many_entries"]);
 
   const mb = (n) => { const v = n / 1048576; return v >= 10 ? String(Math.round(v)) : v.toFixed(1); };
@@ -141,7 +141,7 @@
       <p class="ei-meta" data-ei="hint"></p>
       <details class="ei-how"><summary>${esc(T("how.title"))}</summary><ul>
         <li>${esc(T("how.garmin"))}</li><li>${esc(T("how.tp"))}</li><li>${esc(T("how.coros"))}</li>
-        <li>${esc(T("how.own"))}</li><li>${esc(T("how.later"))}</li></ul></details>
+        <li>${esc(T("how.own"))}</li><li>${esc(T("how.polar"))}</li><li>${esc(T("how.apple"))}</li></ul></details>
       <div data-ei="result"></div>`;
     const q = (k) => el.querySelector(`[data-ei="${k}"]`);
     const pick = q("pick"), input = q("file"), prog = q("prog"), status = q("status"), result = q("result"), hint = q("hint");

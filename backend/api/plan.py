@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.engine.localtime import today_local
-from backend.i18n import _
+from backend.i18n import N_, _
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -36,9 +36,10 @@ router = APIRouter(prefix="/api/v1/plan", tags=["plan"])
 WKO5_DEFAULT_DATE = dt.date(1980, 1, 1)
 
 # which periodization dashboard to open in each phase (views/periodization.json)
+# (the name is the dashboard's id in the view; dashboard_label is it in the page's language, SP-460)
 PHASE_DASHBOARD = {
-    "recovery": "① 轉換期", "transition": "① 轉換期", "rebuild": "① 轉換期", "base": "② 基礎期",
-    "specific": "③ 專項期", "taper": "④ 減量期", "event": "④ 減量期",
+    "recovery": N_("① 轉換期"), "transition": N_("① 轉換期"), "rebuild": N_("① 轉換期"), "base": N_("② 基礎期"),
+    "specific": N_("③ 專項期"), "taper": N_("④ 減量期"), "event": N_("④ 減量期"),
 }
 
 
@@ -86,7 +87,7 @@ def _wko5_settings() -> dict:
 def _kinds() -> dict:
     """Event kind labels. SP-738: the baiyue kind reads 登山 everywhere (郊山、中級山、百岳; it
     used to read 多日登山 outside Taiwan) — the stored kind is unchanged, old data reads the same."""
-    return dict(P.KINDS)
+    return {k: _(v) for k, v in P.KINDS.items()}
 
 
 def _notify(thresholds: bool) -> None:
@@ -140,7 +141,7 @@ def _effective(plan: P.Plan, today: dt.date) -> dict:
         "aethr": {"value": aet if aet is not None else (None if lthr_v is None else round(0.89 * lthr_v, 1)),
                   "source": "plan" if aet is not None else "friel_0.89",
                   "method": (ar or {}).get("method"),
-                  "label": (ar or {}).get("label") or "0.89 × LTHR（Friel Z2 上限，推估）",
+                  "label": (ar or {}).get("label") or _("0.89 × LTHR（Friel Z2 上限，推估）"),
                   # the 「± N bpm」 badge on an estimated AeT (zones.aet_uncertainty); None when measured
                   "pm": None if aet is None and lthr_v is None else aet_uncertainty(
                       "measured" if ar and ar.get("measured") else "estimate" if aet is not None else "friel")},
@@ -158,16 +159,18 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
     e = P._d(end) or max(today, ev_last) + dt.timedelta(days=42)
     phases = P.phases(plan, b, e)
     cur = next((p for p in phases if P._d(p.start) <= today <= P._d(p.end)), None)
+    kinds = _kinds()                        # SP-460: the page's language (the stored kind is unchanged)
     return {
         "today": today.isoformat(),
         "begin": b.isoformat(), "end": e.isoformat(),
-        "events": [{**P.event_json(x, today), "gpx": EG.meta(gpx.get(x.id))}
+        "events": [{**P.event_json(x, today), "gpx": EG.meta(gpx.get(x.id)), "kind_label": kinds.get(x.kind, x.kind)}
                    for x in sorted(plan.events, key=lambda x: x.date)],
         "phases": [P.phase_json(p, plan.events) for p in phases],
         "manual_phases": bool(plan.phases),
         "b_windows": P.b_event_windows(plan.events),
         "current_phase": None if cur is None else {
             **P.phase_json(cur, plan.events), "dashboard": PHASE_DASHBOARD.get(cur.kind),
+            "dashboard_label": _(PHASE_DASHBOARD[cur.kind]) if cur.kind in PHASE_DASHBOARD else None,
             "days_left": (P._d(cur.end) - today).days},
         "goals": P.goals(plan, today),
         "thresholds": [t.__dict__ for t in sorted(plan.thresholds, key=lambda t: t.date)],
@@ -175,7 +178,7 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
         "power_zones": {"source": SOURCE, "zones": zones_json(eff["cp"]["value"]),
                         "stryd": {"source": STRYD_SOURCE, "zones": zones_json(eff["cp"]["value"], STRYD_POWER_ZONES)}},
         "wko5_settings": _wko5_settings(),
-        "phase_labels": P.PHASES, "kinds": _kinds(),
+        "phase_labels": {k: _(v) for k, v in P.PHASES.items()}, "kinds": kinds,
         "rules": {"taper_days": P.TAPER_DAYS, "specific_weeks": P.SPECIFIC_WEEKS,
                   "mini_taper_days": P.MINI_TAPER_DAYS, "long_event_hours": P.LONG_EVENT_HOURS,
                   "long_event_ep": P.SIZE_EP[P.ULTRA - 1],

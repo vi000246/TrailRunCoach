@@ -20,10 +20,12 @@ def _sections() -> list[str]:
 
 
 def test_four_tabs_each_section_on_one():
-    """…and 疊石 Cairn (SP-666), a fifth shown in sign-in mode only (test_cairn_tab_sp666.py)."""
+    """…and 疊石 Cairn (SP-666) and 教練 (SP-789), shown in sign-in mode only (test_cairn_tab_sp666.py,
+    test_coaching_sp789.py)."""
     tabs = _tabs()
-    assert list(tabs) == ["personal", "body", "data", "advanced", "cairn"]
+    assert list(tabs) == ["personal", "body", "data", "advanced", "cairn", "coach"]
     assert tabs["cairn"] == ["cairn"]
+    assert tabs["coach"] == ["coach"]
     placed = [i for ids in tabs.values() for i in ids]
     assert len(placed) == len(set(placed))                          # one tab per section
     secs = _sections()
@@ -33,7 +35,7 @@ def test_four_tabs_each_section_on_one():
     assert {"hr", "thresholds", "power"} <= set(tabs["body"])
     assert {"sync", "weightsync", "backup", "archive", "device", "calendar"} == set(tabs["data"])     # 運動紀錄保留 (SP-317),
     # 這台裝置的離線資料 (SP-322), 體重同步 (SP-472)
-    assert {"mode", "calib", "fixes", "debugapi", "upstream"} == set(tabs["advanced"])   # debugapi: SP-371; upstream: SP-373
+    assert {"mode", "calib", "fixes", "debugapi", "upstream", "askai"} == set(tabs["advanced"])   # debugapi: SP-371; upstream: SP-373; askai: SP-786
     # a section without an id would land on 進階設定 silently: there is none
     main = PAGE[PAGE.index("<main>"):PAGE.index("</main>")]
     assert len(re.findall(r"<section\b", main)) == len(secs)

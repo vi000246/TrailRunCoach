@@ -27,6 +27,8 @@ A chapter file:
     title: 課表
     summary: 課卡怎麼讀、改課與重排、推到手錶、行事曆訂閱
     icon: schedule                        # one of the shell's page icons (static/manual.js)
+    deep_sub: 細節                         # optional: the 「深入」 fold's label in this chapter (SP-855: the
+                                          #   FAQ's are not formulas), else manual.json's deep_sub
     ---
     Intro paragraph (optional).
 
@@ -317,6 +319,7 @@ class Chapter:
     intro_text: str
     sections: list[Section]
     images: list[str]
+    deep_sub: str = ""                                  # front matter deep_sub: the fold's label (SP-855)
 
     @property
     def url(self) -> str:
@@ -385,7 +388,7 @@ def parse(text: str, locale: str, where: str = "chapter") -> Chapter:
     except ValueError:
         raise ManualError(f"{where}: order is not a number") from None
     return Chapter(cid, locale, order, meta.get("title", cid), meta.get("summary", ""), meta.get("icon", ""),
-                   intro_html, " ".join(intro_words), sections, images)
+                   intro_html, " ".join(intro_words), sections, images, meta.get("deep_sub", ""))
 
 
 _CACHE: dict[str, tuple[tuple, list[Chapter]]] = {}
@@ -463,11 +466,13 @@ def _toc(chs: list[Chapter], cur: Optional[Chapter]) -> str:
     return "<ol>" + "".join(items) + "</ol>"
 
 
-def _section_html(s: Section, cat: dict) -> str:
+def _section_html(s: Section, cat: dict, sub: str = "") -> str:
+    """One section; `sub` = the chapter's own label for the 「深入」 fold (front matter deep_sub), else
+    manual.json's 「公式、模型與來源」."""
     deep = ""
     if s.deep_html:
         deep = (f'<details class="m-deep" id="{s.anchor}--deep"><summary><span class="m-tag m-tag-deep">'
-                f'{_E(_t(cat, "deep"))}</span><span class="m-deep-sub">{_E(_t(cat, "deep_sub"))}</span></summary>'
+                f'{_E(_t(cat, "deep"))}</span><span class="m-deep-sub">{_E(sub or _t(cat, "deep_sub"))}</span></summary>'
                 f'<div class="m-deep-body">{s.deep_html}</div></details>')
     return (f'<section class="m-sec" id="{s.anchor}" data-anchor="{s.anchor}"><h2><a class="m-hash" '
             f'href="#{s.anchor}" aria-label="{_E(_t(cat, "link_here"))}">#</a>{_E(s.title)}</h2>'
@@ -500,7 +505,7 @@ def _fill(loc: str, chs: list[Chapter], cur: Optional[Chapter]) -> dict:
                     if nxt else "<span></span>") + "</nav>")
         main = (f'<header class="m-head"><a class="m-crumb" href="{URL}">{_E(name)}</a><h1>{_E(cur.title)}</h1>'
                 + (f'<div class="m-intro">{cur.intro_html}</div>' if cur.intro_html else "") + "</header>"
-                + "".join(_section_html(s, cat) for s in cur.sections) + pager)
+                + "".join(_section_html(s, cat, cur.deep_sub) for s in cur.sections) + pager)
         title = f"{cur.title} · {name}"
     return {"title": _E(f"{title} · TrailRunCoach", quote=False), "toc": _toc(chs, cur), "main": main,
             "chapter": _E(cur.id if cur else "")}

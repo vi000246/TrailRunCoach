@@ -376,6 +376,42 @@ def test_compliance(app):
     no_loading(page, "#kpis")
 
 
+def test_compliance_day_grid_sp446(app):
+    """課表統計's 每日完成堂數 (SP-446): 天 draws a grid, not bars — ≤ 12 weeks a row per week with the week's
+    count, longer the small cells (a column per week); 週 brings the bar chart back."""
+    page, _ = app
+    open_page(page, _server.PAGES["compliance"])
+    page.add_style_tag(content=".sugbox { display: none !important; }")     # the 建議 panel covers the chart's buttons
+    no_loading(page, "#kpis")
+    page.click('#period button[data-p="4w"]')
+    no_loading(page, "#kpis")
+    page.locator('#tr-h .unitsw button[data-u="day"]').click()
+    grid = page.locator("#tr-grid")
+    expect(grid).to_be_visible()
+    expect(page.locator("#tr-plot")).to_be_hidden()
+    expect(grid).to_have_class(re.compile(r"\bwide\b"))
+    expect(grid.locator(".wl")).to_have_count(4)
+    expect(grid.locator(".sum")).to_have_count(4)
+    expect(grid.locator(".dc")).to_have_count(28)
+    expect(page.locator("#tr-legend")).to_be_visible()
+    page.click('#period button[data-p="12w"]')
+    no_loading(page, "#kpis")
+    expect(grid.locator(".wl")).to_have_count(12)
+    # 20 weeks: the small cells
+    today = page.evaluate("S.today")
+    page.click('#period button[data-p="custom"]')
+    page.fill("#c-a", page.evaluate(f"addDays(mondayOf('{today}'), -133)"))
+    page.fill("#c-b", today)
+    page.click("#c-go")
+    no_loading(page, "#kpis")
+    expect(grid).to_have_class(re.compile(r"\btight\b"))
+    expect(grid.locator(".dc")).to_have_count(20 * 7)
+    expect(grid.locator(".sum")).to_have_count(0)
+    page.locator('#tr-h .unitsw button[data-u="week"]').click()
+    expect(grid).to_be_hidden()
+    chart_drawn(page, "#tr-plot")
+
+
 def test_templates_manage(app):
     """範本: list, filters, open a built-in one, copy it to 我的範本, delete the copy."""
     page, _ = app
@@ -568,7 +604,7 @@ def test_climb_tab_follows_the_activity_with_synced_map(app):
     prev = _json(page, "/api/v1/sync/settings").get("primary_sport") or "auto"
     assert page.request.put("/api/v1/sync/settings", data={"primary_sport": "road"}).ok
     try:
-        open_page(page, f"{VIEWER}?view=單次活動判讀&dash=3&workout={trail[0]['index']}")
+        open_page(page, f"{VIEWER}?view=單次活動判讀&dash=4&workout={trail[0]['index']}")
         _viewer_loaded(page)
         expect(page.locator("#tree .db.on .nm")).to_have_text("爬坡與地形")
         expect(page.locator("#grid .cmmap .lmap.leaflet-container")).to_be_visible(timeout=30_000)

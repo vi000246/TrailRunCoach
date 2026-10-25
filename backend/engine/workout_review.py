@@ -230,9 +230,11 @@ EXTRA_SECTIONS = ("grades", "pacing", "durability_curve", "cp_test",
                   # 間歇判讀 (engine/interval_eval.py)
                   "interval_verdict", "interval_reps", "interval_power", "interval_battery", "interval_tiz",
                   "interval_hr", "wprime_battery",
+                  # 閾值段 (engine/threshold_segments.py, SP-801)
+                  "threshold_list", "threshold_trace", "threshold_trend",
                   # 跑姿依坡度／隨疲勞 (form_bins)
                   "form_grades", "form_work", "form_cadence")
-SUGGESTED = {"easy": 1, "long": 1, "hard_long": 1, "test_aet": 1, "quality": 2, "test_cp": 2}
+SUGGESTED = {"easy": 1, "long": 1, "hard_long": 3, "test_aet": 1, "quality": 2, "test_cp": 2}
 # the session classifier's labels (docs/research/vo2max-session-detection.md §3.5; owner 2026-10-02)
 STIM_LABEL = {"z5": N_("Z5 間歇"), "z3": N_("Z3 閾值")}
 HARD_LONG_HIKE = N_("高強度長天")
@@ -2899,7 +2901,7 @@ def review(ds, w, section: str = "summary", basis: str = "pace") -> dict:
         return {**base, "empty": "這筆活動沒有逐秒資料"}
     c = classify(ds, w, m)
     base["classification"] = c
-    base["suggested_dashboard"] = (2 if c["type"] == "test_cp" else 3 if c["terrain"] in ("trail", "hike")
+    base["suggested_dashboard"] = (2 if c["type"] == "test_cp" else 4 if c["terrain"] in ("trail", "hike")
                                    else SUGGESTED.get(c["type"], 0))
     fn = _SECTIONS.get(section)
     if fn is None:
@@ -3317,9 +3319,35 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
                                sub=_("共 {gain:.0f} m · 每 100 m {hr} 下", gain=sum(x['gain_m'] for x in cl),
                                      hr=_num(m.get('hr_per_100m'))),
                                tip="\n".join(_trail_lines(ds, w, m)) or None))
+    thc = _threshold_card(ds, w, typ)          # SP-889: the 閾值 tab's segments, pointed at
+    if thc:
+        cards.append(thc)
     if c.get("cp_hint"):
         cards.append(_card("chip", id="cp_hint", icon="test", text=_("像 CP 測試？"), level="info", tip=_(CP_HINT)))
     return cards
+
+
+def _threshold_card(ds, w, typ: str) -> Optional[dict]:
+    """SP-889: the 閾值 tab (SP-801) is only found by looking — 本次重點 says how many ≥ 10-min Zone 3
+    stretches the run has and points there. None without one (or on a CP test: its all-out is the test)."""
+    from backend.engine import threshold_segments as TS
+    from backend.engine.overview import category
+    if typ == "test_cp" or category(w) not in QUALITY_CATEGORIES:
+        return None
+    try:
+        segs = TS.segments(ds, w).get("segs") or []
+    except Exception:                       # noqa: BLE001 — an unreadable file: no card, the tab says why
+        return None
+    if not segs:
+        return None
+    n = len(segs)
+    tot = sum(s["duration_s"] for s in segs) / 60
+    top = max(s["duration_s"] for s in segs) / 60
+    return _card("stat", id="threshold", icon="z3", label=_("閾值段"), value=str(n), unit=_("段", n=n),
+                 sub=_("看「閾值」分頁"),          # SP-889: the total is in the ?; a longer line was cut
+                 tip=_("這次有 {n} 段連續 ≥ {s} 分鐘的 3 區（功率或心率任一達到），共 {m:.0f} 分、最長 {top:.0f} 分。"
+                       "每段的功率、心率、後半撐不撐得住和跟之前比的趨勢，詳細在「閾值」分頁。",
+                       n=n, s=TS.SEG_MIN_S // 60, m=tot, top=top))
 
 
 def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> list[dict]:
@@ -4346,13 +4374,13 @@ def _iv_verdict(ds, w, m, c, base):
                 return {**base, "empty": e["why"]}
             return {**base, "badge": {"text": _("這次不是間歇課"), "level": "", "sub": _(e.get("type_label") or "")},
                     "series": [_row(_("偵測"), _("偵測到 {n} 趟用力段，可以當作間歇判讀", n=n),
-                                    e["why"] + "\n" + _("用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（≥ 0.95 × 88% CP）≥ 2.5 分的段"))],
+                                    e["why"] + "\n" + _("用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（功率 ≥ 0.95 × 88% CP 或心率 ≥ 95% LTHR，下坡不算）≥ 2.5 分的段"))],
                     "action": _offer_action(w)}
         rows = [_row(_("間歇"), e["why"])]
         if e.get("flagged"):
             return {**base, "series": rows}
         rows.append(_row(_("偵測"), _("偵測到 {n} 趟用力段，可以當作間歇判讀", n=n) if n else _("沒有偵測到用力段，當作間歇也沒有趟可判讀"),
-                         _("用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（≥ 0.95 × 88% CP）≥ 2.5 分的段")))
+                         _("用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（功率 ≥ 0.95 × 88% CP 或心率 ≥ 95% LTHR，下坡不算）≥ 2.5 分的段")))
         head = _("找不到趟") if c["type"] == "quality" else _("這次不是間歇課")
         out = {**base, "badge": {"text": head, "level": "", "sub": _(e.get("type_label") or "")}, "series": rows}
         if n:
@@ -4412,7 +4440,7 @@ def _iv_verdict(ds, w, m, c, base):
                      f"無氧儲備最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
     src_name = {"lap": N_("COROS 推送的分段"), "power": N_("功率型態"), "short": N_("短趟偵測"), "z3": N_("3 區偵測"),
                 "auto_lap": N_("手錶分段（自動判讀）"), "auto": N_("功率型態（自動判讀）")}.get(e["rep_source"])
-    src_rule = {"lap": "lap", "power": N_("0.95 × 目標下限"), "short": "≥ 95% CP", "z3": "≥ 0.95 × 88% CP",
+    src_rule = {"lap": "lap", "power": N_("0.95 × 目標下限"), "short": "≥ 95% CP", "z3": N_("功率 ≥ 0.95 × 88% CP 或心率 ≥ 95% LTHR"),
                 "auto_lap": N_("分段平均 ≥ 95% CP"), "auto": N_("10 秒功率 ≥ 95% CP、≥ 40 秒")}.get(e["rep_source"])
     src = _("{name}（{rule}）", name=_(src_name), rule=_(src_rule)) if src_name else "—"
     rows.append(_row(_("找趟"), src))
@@ -4421,12 +4449,19 @@ def _iv_verdict(ds, w, m, c, base):
     chips = [_chip_row(_("每趟"), [_("{hit}/{n} 趟達標", hit=hit, n=n)] + ([_("{k} 趟偏高", k=n_high)] if n_high else []),
                        _("全部達標") if hit >= n else _("差 {k} 趟", k=n - hit),
                        "good" if hit >= n else "warn",
-                       # the tolerance / TIZ goal in effect and whose they are (interval_calib, SP-69)
-                       _("達標 = 平均 ≥ {floor:.0f} W（目標下限 {lo:.0f}% CP × {tol}，{basis}）。逐趟看「每趟功率」。",
-                         floor=e["floor"], lo=e["lo"] * 100, tol=e.get("in_band_tol_text", "0.98"),
-                         basis=e.get("in_band_basis", ""))
-                       + (_("超過 {ceil:.0f} W（目標上限 × 1.02，推估）算偏高：仍算達標，只是做太重。", ceil=e["ceil"])
-                          if e.get("ceil") is not None else ""))]
+                       # the tolerance / TIZ goal in effect and whose they are (interval_calib, SP-69);
+                       # SP-520: detected reps' band is where they fell, not a plan's 目標下限
+                       (_("達標 = 平均 ≥ {floor:.0f} W＝帶的下限 × {tol}（{basis}）；偵測到的趟落在{band}。逐趟看「每趟功率」。",
+                          floor=e["floor"], band=e["band_text"], tol=e.get("in_band_tol_text", "0.98"),
+                          basis=e.get("in_band_basis", ""))
+                        + (_("超過 {ceil:.0f} W（帶的上限 × 1.02，推估）算偏高：仍算達標，只是做太重。", ceil=e["ceil"])
+                           if e.get("ceil") is not None else ""))
+                       if e.get("band_text") else
+                       (_("達標 = 平均 ≥ {floor:.0f} W（目標下限 {lo:.0f}% CP × {tol}，{basis}）。逐趟看「每趟功率」。",
+                          floor=e["floor"], lo=e["lo"] * 100, tol=e.get("in_band_tol_text", "0.98"),
+                          basis=e.get("in_band_basis", ""))
+                        + (_("超過 {ceil:.0f} W（目標上限 × 1.02，推估）算偏高：仍算達標，只是做太重。", ceil=e["ceil"])
+                           if e.get("ceil") is not None else "")))]
     if e.get("tiz_ratio") is not None:
         ok = e["tiz_ratio"] >= e.get("tiz_goal", IE.TIZ_GOAL)
         chips.append(_chip_row(_("目標區時間"), [_("{a:.1f} / {b:.0f} 分", a=e['tiz_s'] / 60, b=e['tiz_plan_s'] / 60), f"{e['tiz_ratio'] * 100:.0f}%"],
@@ -4499,25 +4534,39 @@ def _iv_reps(ds, w, m, c, base):
     k_in = sum(1 for r in reps if r["status"] == "in")
     k_hi = sum(1 for r in reps if r["status"] == "high")
     k_lo = sum(1 for r in reps if r["status"] == "low")
+    # SP-849: detected reps (no 課表) have no target — the band is where they fell (SP-520's words)
+    det = e.get("kind") == "detected"
     # SP-516: 達標 = in + high (≥ the floor), as 間歇判讀 counts it; the high ones named
     head = (_("{n} 趟中 {k} 趟達標", n=n, k=k_in + k_hi)
-            + (_("（{k} 趟在目標內，{h} 趟偏高）", k=k_in, h=k_hi) if k_hi else "")
+            + ((_("（{k} 趟在帶內，{h} 趟偏高）", k=k_in, h=k_hi) if det else
+                _("（{k} 趟在目標內，{h} 趟偏高）", k=k_in, h=k_hi)) if k_hi else "")
             + (_("，{k} 趟偏低", k=k_lo) if k_lo else ""))
     if len(reps) < n:
         head += _("，少做 {k} 趟", k=n - len(reps))
     band = (f"{e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP（{lo_w:.0f}–{hi_w:.0f} W）" if hi_w is not None
             else f"≥ {e['lo'] * 100:.0f}% CP（≥ {lo_w:.0f} W）")
-    desc = (f"每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 目標 {band}。長條頂端在綠色帶裡或上面 = 達標："
-            + _("綠 ✓ 在目標內、黃 ▼ 偏低（< {floor:.0f} W = 下限 × {tol}，{basis}）",
-                floor=e["floor"], tol=e.get("in_band_tol_text", "0.98"), basis=e.get("in_band_basis", ""))
-            + (f"、紅 ▲ 偏高（> {ceil:.0f} W = 上限 × 1.02，推估）" if ceil is not None else "")
-            + "。偏高在判讀裡仍算達標，只是提醒做太重。"
-            + (f"掉速 {e['fade'] * 100:+.0f}%（最後一趟比第一趟）。" if e.get("fade") is not None else "")
-            + "滑過點看那趟的時間長度、% CP 和後半心率。")
+    tol_kw = dict(floor=e["floor"], tol=e.get("in_band_tol_text", "0.98"), basis=e.get("in_band_basis", ""))
+    if det:
+        watts = f"{lo_w:.0f}–{hi_w:.0f} W" if hi_w is not None else f"≥ {lo_w:.0f} W"
+        desc = (_("每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 偵測到的趟落在的{band}，{w}（沒有課表，所以沒有目標）。"
+                  "長條頂端在綠色帶裡或上面 = 達標：", band=e.get("band_text") or "", w=watts)
+                + _("綠 ✓ 在帶內、黃 ▼ 偏低（< {floor:.0f} W = 帶的下限 × {tol}，{basis}）", **tol_kw)
+                + (_("、紅 ▲ 偏高（> {ceil:.0f} W = 帶的上限 × 1.02，推估）", ceil=ceil) if ceil is not None else ""))
+    else:
+        desc = (f"每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 目標 {band}。長條頂端在綠色帶裡或上面 = 達標："
+                + _("綠 ✓ 在目標內、黃 ▼ 偏低（< {floor:.0f} W = 下限 × {tol}，{basis}）", **tol_kw)
+                + (f"、紅 ▲ 偏高（> {ceil:.0f} W = 上限 × 1.02，推估）" if ceil is not None else ""))
+    desc += ("。偏高在判讀裡仍算達標，只是提醒做太重。"
+             + (f"掉速 {e['fade'] * 100:+.0f}%（最後一趟比第一趟）。" if e.get("fade") is not None else "")
+             + "滑過點看那趟的時間長度、% CP 和後半心率。")
     prof = {"mode": "plan", "cp": round(cp, 1), "band": [round(lo_w, 1), None if hi_w is None else round(hi_w, 1)],
             "floor": round(e["floor"], 1), "ceil": None if ceil is None else round(ceil, 1), "n_plan": n, "reps": reps,
-            "counts": {"in": k_in, "high": k_hi, "low": k_lo, "missing": n - len(reps)}}
-    return {**base, "series": [], "rep_profile": prof, "subtitle": head, "description": desc}
+            "counts": {"in": k_in, "high": k_hi, "low": k_lo, "missing": n - len(reps)},
+            # SP-849: the legend / frame / tip say the band's name, not 「目標」
+            "source": "detected" if det else "plan", "band_name": e.get("band_name") if det else None}
+    # SP-920: the view's title / ? text for detected reps (wko5views._render, views/workout.json `by_source`)
+    return {**base, "series": [], "rep_profile": prof, "subtitle": head, "description": desc,
+            **({"text_source": "detected"} if det else {})}
 
 
 def _iv_reps_test(e, base):
@@ -4579,14 +4628,17 @@ def _iv_power(ds, w, m, c, base):
         prof = _iv_reps(ds, w, m, c, {}).get("rep_profile") or {}
         reps = [{"k": r["k"], "label": r["label"], "a": r["start_s"], "b": r["start_s"] + r["duration_s"],
                  "power": r["power"], "status": r["status"]} for r in prof.get("reps", [])]
+    det = ok and e.get("kind") == "detected"      # SP-849: no 課表 → the band is where the reps fell, not a target
     trace = {"x": r1(t, 1), "power": r1(p30), "dfrc": r1(dfrc, 4), "hr": r1(hr) if hr is not None else None,
              "cp": round(cp, 1), "band": band, "reps": reps, "test": test,
+             "band_name": e.get("band_name") if det and band else None,
              "dfrc_min": {"t": float(t[i_min]) if len(t) else 0.0, "pct": round(b["dfrc_min_pct"], 4)},
              "dfrc_end": None if not len(dfrc) or not math.isfinite(dfrc[-1]) else round(float(dfrc[-1]), 4),
              "wprime_kj": round(b["wprime_j"] / 1000, 1)}
     pdc = e.get("pdc5") if ok else None
     desc = ("上：橘色面積 = 功率（30 秒平均，左軸 W），虛線 = CP"
-            + (f"，灰帶 = 目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP" if band and band[1] else
+            + (_("，灰帶 = 偵測到的趟落在的{band}", band=e.get("band_text") or "") if det and band else
+               f"，灰帶 = 目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP" if band and band[1] else
                f"，灰帶 = 目標 ≥ {e['lo'] * 100:.0f}% CP" if band else "")
             + (f"；淺色底 + 數字 = 第幾{'段' if test else '趟'}" if reps else "")
             + f"。藍線 = 無氧儲備（Anaerobic reserve）：無氧容量剩多少（右軸 %，{b['wprime_j'] / 1000:.1f} kJ = 100%）：高於 CP（{cp:.0f} W）就耗，"
@@ -4596,7 +4648,8 @@ def _iv_power(ds, w, m, c, base):
     sub = _("無氧儲備最低 {pct:.0f}%（{t}）· 整趟高於 CP 的功 {kj:.1f} kJ（{share:.0f}% 無氧容量，含回充後再用）",
             pct=b['dfrc_min_pct'] * 100, t=_hms(trace['dfrc_min']['t']), kj=b['wprime_used_j'] / 1000,
             share=b['wprime_used_j'] / b['wprime_j'] * 100)
-    return {**base, "series": [], "iv_trace": trace, "subtitle": sub, "description": desc}
+    return {**base, "series": [], "iv_trace": trace, "subtitle": sub, "description": desc,
+            **({"text_source": "detected"} if det and band else {})}     # SP-920: the view's by_source text
 
 
 def _battery_of(ds, w):
@@ -4694,7 +4747,139 @@ def _iv_hr(ds, w, m, c, base):
                            "同功率心率越低越好；超出灰帶才算有變化）。"}
 
 
+# ---------------------------------------------------------------------------
+# 閾值 tab (engine/threshold_segments.py, SP-801): every ≥ 10-min stretch in Zone 3 (power or
+# HR), whatever the session's format — display only, apart from the 間歇 page's verdict.
+# ---------------------------------------------------------------------------
+
+def _ts(ds, w, base):
+    """(segments, None) or (None, the card to return instead)."""
+    from backend.engine import threshold_segments as TS
+    from backend.engine.overview import category
+    if category(w) not in QUALITY_CATEGORIES:
+        return None, {**base, "empty": _("不是跑步或登山：不找閾值段")}
+    r = TS.segments(ds, w)
+    if not r.get("lthr") and not r.get("cp"):
+        return None, {**base, "empty": _("還沒有 LTHR 或 CP：不找閾值段")}
+    if not r["segs"]:
+        return None, {**base, "empty": _("這次沒有連續 ≥ {m} 分鐘的 3 區段落", m=TS.SEG_MIN_S // 60)}
+    return r, None
+
+
+def _ts_rule(r: dict) -> str:
+    cp, lthr = r.get("cp"), r.get("lthr")
+    parts = ([_("功率 ≥ {w:.0f} W（0.95 × 88% CP）", w=0.95 * 0.88 * cp)] if cp else []) + \
+            ([_("心率 ≥ {b:.0f} bpm（95% LTHR，扣每段前 3 分、下坡不算）", b=0.95 * lthr)] if lthr else [])
+    return _("3 區 = {rule}，任一達到就算；連續 ≥ 10 分鐘、中間掉下 ≤ 30 秒不算斷（推估）。",
+             rule=_("或").join(parts))
+
+
+def _ts_list(ds, w, m, c, base):
+    """閾值段: one chip row per segment, the CP hint under them."""
+    from backend.engine import threshold_segments as TS
+    r, bad = _ts(ds, w, base)
+    if bad:
+        return bad
+    by = {"power": N_("功率"), "hr": N_("心率"), "both": N_("功率＋心率")}
+    rows = []
+    for sg in r["segs"]:
+        nums = [_("{m:.0f} 分", m=sg["duration_s"] / 60)]
+        if sg["power"]:
+            nums.append(f"{sg['power']:.0f} W" + (f" · {sg['pct_cp'] * 100:.0f}% CP" if sg["pct_cp"] else ""))
+        if sg["hr"]:
+            nums.append(f"{sg['hr']:.0f} bpm" + (f" · {sg['pct_lthr'] * 100:.0f}% LTHR" if sg["pct_lthr"] else ""))
+        if sg["grade"] is not None:
+            nums.append(_("坡度 {g:.0f}%", g=sg["grade"] * 100))
+        if sg["vam"] is not None and sg["vam"] > 50:
+            nums.append(f"VAM {sg['vam']:.0f}")
+        if sg["fade"] is not None:
+            nums.append(_("後半功率 {v:+.0f}%", v=round(sg["fade"] * 100) + 0.0))   # + 0.0: no "-0"
+        if sg["drift"] is not None:
+            nums.append(_("心率飄移 {v:+.1f}%", v=sg["drift"] * 100))
+        tip = _("{t} 起；用{by}判到 3 區。", t=_hms(sg["start_s"]), by=_(by[sg["by"]]))
+        if sg["basis"] == "vam":
+            tip += _("坡度平均 > 8% 或登山：Stryd 算不到垂直方向的功，這段不看功率，看 VAM。")
+        if sg["drift"] is not None:
+            tip += _("心率飄移 = 前半的功率 ÷ 心率比後半高多少，> 5% 算飄（手腕光學心率，只當參考）。")
+        rows.append(_chip_row(_("第 {k} 段", k=sg["k"]), nums, tip=tip))
+    hint = next((sg for sg in r["segs"] if TS.cp_hint(sg)), None)
+    if hint:
+        rows.append(_chip_row(_("CP"), [_("第 {k} 段 {m:.0f} 分平均 {pct:.0f}% CP", k=hint["k"], m=hint["duration_s"] / 60,
+                                         pct=hint["pct_cp"] * 100)], _("CP 可能低估"), "warn",
+                              _("20 分鐘以上能撐 ≥ 95% CP，CP 可能設低了（20 分鐘全力約 1.03 × CP，推估）；到設定 › 門檻看要不要重測或更新。")))
+    total = sum(sg["duration_s"] for sg in r["segs"])
+    return {**base, "series": [], "chip_rows": rows,
+            "subtitle": _("{n} 段，共 {m:.0f} 分鐘在 3 區", n=len(r["segs"]), m=total / 60),
+            "description": _ts_rule(r) + _("只是顯示：不改課表配對、間歇次數和硬課次數。")}
+
+
+def _ts_trace(ds, w, m, c, base):
+    """心率與功率 over the run, a vertical line at each segment's start and end, the HR Zone 3 line."""
+    r, bad = _ts(ds, w, base)
+    if bad:
+        return bad
+    from backend.engine.wko5expr import units as U
+    s = _samples(ds, w)
+    t = np.asarray(s["t"], float)
+    bu, wu = U.meta("BPM"), U.meta("WATTS")
+    out = []
+    if s["hr"] is not None:
+        out.append({"name": _("心率"), "type": "line", "expression": "", "y_axis": "BPM", "unit": bu, "color": BAD,
+                    "data": {"kind": "points", "x": "seconds", "points": _thin(t - t[0], _roll30(s["hr"]))}})
+    if s["power"] is not None and r["kind"] == "run":
+        out.append({"name": _("功率（30 秒）"), "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu,
+                    "color": SERIES1, "data": {"kind": "points", "x": "seconds", "points": _thin(t - t[0], _roll30(s["power"]))}})
+    if r.get("lthr"):
+        out.append({"name": _("3 區心率（95% LTHR）"), "type": "line", "expression": "", "y_axis": "BPM", "unit": bu,
+                    "color": MUTED, "line_style": "dash", "data": {"kind": "hline", "y": round(0.95 * r["lthr"], 1)}})
+    for sg in r["segs"]:
+        for x in (sg["start_s"], sg["start_s"] + sg["duration_s"]):
+            out.append({"name": _("閾值段起訖"), "type": "line", "expression": "", "color": GOOD,
+                        "line_style": "dash", "data": {"kind": "vline", "x": round(x, 1)}})
+    return {**base, "axes": [{"id": "BPM", "unit": bu}, {"id": "WATTS", "unit": wu}], "series": out,
+            "description": _("紅 = 心率、藍 = 功率（30 秒平均；登山不畫，Stryd 算不到爬升的功）；綠色虛線 = 每段的起點和終點；灰虛線 = 3 區心率。")}
+
+
+def _roll30(x) -> np.ndarray:
+    x = np.asarray(x, float)
+    fin = np.isfinite(x)
+    k = np.ones(30) / 30
+    c = np.convolve(fin.astype(float), k, "same")
+    return np.where(c > 0.5, np.convolve(np.where(fin, x, 0.0), k, "same") / np.maximum(c, 1e-9), np.nan)
+
+
+def _ts_trend(ds, w, m, c, base):
+    """成果趨勢: the earlier segments of the same basis and about the same length, by date."""
+    from backend.engine import threshold_segments as TS
+    r, bad = _ts(ds, w, base)
+    if bad:
+        return bad
+    tr = TS.trend(ds, w, r)
+    prev = [[p["date"], round(p["eff"], 3)] for p in tr["points"] if not p["current"]]
+    cur = [[p["date"], round(p["eff"], 3)] for p in tr["points"] if p["current"]]
+    if not tr["basis"]:
+        return {**base, "empty": _("這次的段落沒有可以比的數字（爬升太少或沒有心率）")}
+    if not prev:
+        return {**base, "empty": _("近 {d} 天還沒有長度相近（±30%）的閾值段可以比", d=TS.TREND_DAYS)}
+    power = tr["basis"] == "power"
+    unit = {"id": "EFF", "label": "W/bpm" if power else "m/h/bpm", "kind": "number", "dec": [[0, 2]]}
+    s = [{"name": _("之前的閾值段"), "type": "line", "line_style": "none", "expression": "", "y_axis": "EFF", "unit": unit,
+          "color": MUTED, "data": {"kind": "points", "x": "datetime", "points": prev}},
+         {"name": _("這次"), "type": "line", "line_style": "none", "expression": "", "y_axis": "EFF", "unit": unit,
+          "color": SERIES1, "data": {"kind": "points", "x": "datetime", "points": cur}}]
+    med = float(np.median([p[1] for p in prev]))
+    s.append({"name": _("之前的中位 ±3%"), "type": "line", "expression": "", "y_axis": "EFF", "unit": unit, "color": MUTED,
+              "data": {"kind": "band", "range": [round(med * 0.97, 3), round(med * 1.03, 3)]}})
+    what = _("每下心跳的功率（W/bpm）") if power else _("每下心跳的爬升速度（VAM ÷ 心率）")
+    return {**base, "axes": [{"id": "EFF", "unit": unit}], "series": s,
+            "subtitle": _("{what}，長度 {m:.0f} 分 ±30%", what=what, m=tr["ref_s"] / 60),
+            "description": _("每個點 = 一段閾值段：越高 = 同樣心率做得越多，往上走就是進步。只比同一種（功率／VAM）、"
+                             "長度差不多（±30%）的段，近 {d} 天；超出灰帶（之前的中位 ±3%，Buchheit 2014 的心率雜訊）才算有變化。"
+                             "登山和坡度 > 8% 的段用 VAM（負重、海拔、天氣都會讓心率偏高，只當參考）。", d=TS.TREND_DAYS)}
+
+
 _SECTIONS = {"summary": _summary, "aerobic": _aerobic, "intervals": _intervals, "climbs": _climbs,
+             "threshold_list": _ts_list, "threshold_trace": _ts_trace, "threshold_trend": _ts_trend,
              "interval_verdict": _iv_verdict, "interval_reps": _iv_reps, "interval_power": _iv_power,
              "interval_battery": _iv_battery, "interval_tiz": _iv_tiz, "interval_hr": _iv_hr,
              "wprime_battery": _wprime_battery,

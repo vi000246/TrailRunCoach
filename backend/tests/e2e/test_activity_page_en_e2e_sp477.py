@@ -72,15 +72,33 @@ def _loaded(page, timeout: float = 120_000) -> None:
         timeout=timeout)
 
 
+def _segments_built(page, idx: int, timeout_s: float = 120) -> list:
+    """The 重複路段 card (static/segments_card.js, on 本次重點) lists the route index's segments this activity
+    passed; the first request starts building the index and the card says 「still being built」 until it is
+    there. Wait for it, so the card's segment names are checked whatever ran before (the compare page builds
+    it too)."""
+    import time
+    t0 = time.time()
+    while True:
+        r = page.request.get(f"/api/v1/app/workouts/{idx}/segments")
+        assert r.ok, r.status
+        if r.json().get("built"):
+            return r.json()["segments"]
+        assert time.time() - t0 < timeout_s, "the route index was not built"
+        page.wait_for_timeout(500)
+
+
 def test_single_activity_page_is_english(app):
     page, _ = app
     rows = _workouts(page)
     names = {str(a.get("name") or "") for a in rows} | {str(a.get("sport_type") or "") for a in rows}
     picked = _pick(rows)
     assert {"trail", "intervals"} <= set(picked)
+    # the demo trail run passes repeated segments: automatic names, written in Chinese on the server
+    assert _segments_built(page, picked["trail"]["index"])
     left = {}
     for what, a in picked.items():
-        for dash in range(6):
+        for dash in range(7):                        # views/workout.json's 7 dashboards (閾值: SP-801)
             open_page(page, f"{VIEWER}?view=單次活動判讀&dash={dash}&workout={a['index']}&lang=en")
             _loaded(page)
             page.wait_for_timeout(800)                   # the cards drawn after their data (maps, segments)

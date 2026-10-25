@@ -83,7 +83,10 @@ def test_run_writes_nothing_for_thin_data(monkeypatch):
     monkeypatch.setattr(CAL, "REGISTRY", reg)
     monkeypatch.setattr(CAL, "_load_items", lambda: None)
     up, skipped = CAL.run(SimpleNamespace(), {}, dt.date(2026, 10, 14))
-    assert up == {} and skipped == {ICAL.EASY: "n=4<10", ICAL.SCALE: "n=1<3"}
+    assert skipped == {ICAL.EASY: "n=4<10", ICAL.SCALE: "n=1<3"}
+    # no value is written; only the count, so the list says 「本人資料 4 筆」 (SP-807)
+    assert {n: (e["value"], e["source"], e["n"]) for n, e in up.items()} == {
+        ICAL.EASY: (None, "default", 4), ICAL.SCALE: (None, "default", 1)}
 
 
 # ---- 驗收 2: shrunk toward today's value, inside the bounds -------------------------------------

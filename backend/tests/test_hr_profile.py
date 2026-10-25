@@ -81,15 +81,17 @@ def test_gaps_are_not_bridged():
     assert peak_sustained_hr(t, hr) == pytest.approx(190.0)
 
 
-def test_estimate_takes_the_highest_run_and_drops_a_lone_outlier():
+def test_estimate_takes_the_highest_run_and_keeps_a_lone_top_run():
+    # SP-493 R2 (owner 2026-10-20, Q4): the spec changed — the best 10-s mean of each run, and the
+    # top run stands even when it is > 5 bpm above the next (the old MHR_OUTLIER drop is gone: the
+    # shared cleaning removes the spikes first, and one all-out test or race is the evidence)
     d = TODAY - dt.timedelta(days=10)
     runs = [_hr_run(d - dt.timedelta(days=i * 20), p, spikes=((300, 223.0, 6),))
             for i, p in enumerate((196.0, 199.0, 202.0, 214.0))]
     est = estimate_mhr(_ds(runs), TODAY)
     assert est["n"] == 4
-    assert est["value"] == 202 and est["dropped"][1] == 214     # 214 is > 5 above 202: an artefact
-    assert "推估" in est["reason"]
-    # within 5 bpm of the next: the top one stands
+    assert est["value"] == 214 and "dropped" not in est          # the 6-s 223 spike never counts
+    assert "推估" in est["reason"] and "10 秒平均" in est["reason"] and "不採用" not in est["reason"]
     runs = [_hr_run(d - dt.timedelta(days=i * 20), p) for i, p in enumerate((196.0, 203.0, 206.0))]
     assert estimate_mhr(_ds(runs), TODAY)["value"] == 206
 

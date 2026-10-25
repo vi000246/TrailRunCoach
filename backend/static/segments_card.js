@@ -20,6 +20,14 @@
     return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
   };
   const T = (k, p) => (window.I18N ? window.I18N.t("viewer.seg." + k, p) : k);   // i18n: viewer.seg.* (the viewer's catalog)
+  // the kind of a segment, and an automatic name (written in Chinese on the server, engine/routes.py auto_name)
+  // with its kind word translated — a peak name and the user's own names stay as they are (the same rule as
+  // routes.html nameOf)
+  const AUTO_WORDS = { "爬坡": "climb", "下坡": "descent", "路段": "stretch", "路線": "route" };
+  const zh = () => !window.I18N || window.I18N.locale === "zh-TW";
+  const kindOf = (r) => (zh() ? r.kind_zh : T("kind." + r.kind));
+  const nameOf = (r) => (r.renamed || zh() ? r.name
+    : String(r.name).replace(/(^|\s)(爬坡|下坡|路段|路線)(?=\s)/, (m, sp, w) => sp + T("kind." + AUTO_WORDS[w])));
   const cache = new Map();
   const none = new Set();       // workouts with no segment, card put away (標準／精簡): not added again
   let pending = null;
@@ -56,8 +64,8 @@
       const km = (r.length_m / 1000).toFixed(r.length_m < 10000 ? 2 : 1);
       const g = r.kind === "route" ? "" : r.gain_m >= 0 ? ` ↑${Math.round(r.gain_m)}` : ` ↓${Math.round(-r.gain_m)}`;
       return `<tr style="border-bottom:1px solid var(--line)">
-        <td style="padding:5px 4px"><a href="/api/v1/routes/page#${esc(r.id)}" style="color:var(--accent);text-decoration:none">${esc(r.name)}</a>
-          <div class="meta" style="font-size:11.5px">${esc(r.kind_zh)} ${km} km${g}</div></td>
+        <td style="padding:5px 4px"><a href="/api/v1/routes/page#${esc(r.id)}" style="color:var(--accent);text-decoration:none">${esc(nameOf(r))}</a>
+          <div class="meta" style="font-size:11.5px">${esc(kindOf(r))} ${km} km${g}</div></td>
         <td style="padding:5px 4px;text-align:right;white-space:nowrap">${rank}</td>
         <td style="padding:5px 4px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">${hms(r.time_s)}
           <div class="meta" style="font-size:11.5px">${r.delta_best_s ? "+" + hms(r.delta_best_s) : r.rank === 1 ? "" : "—"}</div></td></tr>`;

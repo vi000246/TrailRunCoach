@@ -97,7 +97,7 @@ def _values(ds, today, which: str) -> list[float]:
 
 def _p95_fit(vals: list[float]) -> Optional[CAL.Fit]:
     if len(vals) < MIN_RUNS:
-        return None
+        return CAL.count_only(len(vals))                # SP-807: the count below min_n
     v = float(np.percentile(vals, 95))
     return CAL.Fit(v, float(np.std(vals)) / math.sqrt(len(vals)), len(vals))
 

@@ -218,8 +218,12 @@ CALIB_NAME = "aet_heat_beta"
 
 def _calib_fit(ds, today: dt.date):
     from backend.engine.calibrate import Fit
+    from backend.engine.calibrate import count_only
     f = fit_heat_beta(_beta_rows(ds, today)[0])
-    return None if f.get("personal") is None else Fit(f["personal"], f.get("se"), int(f["n"]))
+    if f.get("personal") is None:
+        n = int(f.get("n") or 0)
+        return count_only(n) if n < BETA_MIN_N else None       # SP-807: the count below min_n
+    return Fit(f["personal"], f.get("se"), int(f["n"]))
 
 
 def _register() -> None:

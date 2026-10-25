@@ -33,7 +33,10 @@ The user's side also has
                                          before (Cairn's trip id, when), ready (a curve to send)
   POST /api/v1/account/links/cairn/events/<event id>/push   {consent?}: create the trip in Cairn,
                                          or update the one pushed before; consent: true switches
-                                         link:gpx_sync on first (the dialog's 「同意並推送」)
+                                         link:gpx_sync on first (the dialog's 「同意並推送」).
+                                         A GPX imported from Cairn updates the trip it came from
+                                         (SP-816; 409 CAIRN_ORIGIN_GONE when that is not theirs /
+                                         gone, then {new: true} creates one)
 """
 from __future__ import annotations
 
@@ -46,7 +49,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from backend.accounts import links as LK, login as LG
-from backend.i18n import N_, UserError
+from backend.i18n import N_, UserError, _
 from backend.security import ratelimit as RL
 
 router = APIRouter(tags=["link"], include_in_schema=False)
@@ -113,7 +116,11 @@ async def account_link(cid: str, body: LinkIn):
             raise UserError(N_("這個帳號沒有用 Google 登入，不能連結"), code="NO_GOOGLE", status=409)
         if not LK.secret(c):
             raise UserError(N_("這個服務還沒開放連結"), code="LINK_UNAVAILABLE", status=409)
+        was = await run_in_threadpool(LK.is_linked, u, c)
         await run_in_threadpool(LK.link, u, c)
+        if c is LK.CAIRN and not was:      # SP-765: the cross-product funnel's last step
+            from backend.accounts import xp as XP
+            await run_in_threadpool(XP.record, u, XP.LINKED)
     else:
         await run_in_threadpool(LK.unlink, u, c)
     return JSONResponse(await run_in_threadpool(LK.state, u, c), headers=NO_STORE)
@@ -200,6 +207,43 @@ async def link_cairn_curves(request: Request, gpx_sha256: Optional[str] = None):
                         headers=NO_STORE)
 
 
+# ---------------------------------------------------------------------------- 揪團的腳程估算 (SP-805)
+
+PACE_MAX_FILE = 20 * 1024 * 1024        # gpx.MAX_BYTES
+CONSENT_YES = ("1", "true", "yes", "on")
+
+
+@router.post("/api/v1/link/cairn/pace")
+async def link_cairn_pace(request: Request):
+    """SP-805 (SP-734): Cairn's 揪團報名 — one 報名者's uploaded track (GPX / FIT) + the trip's route →
+    their pace on it (engine/racepower/pace_estimate.py, as api/pace.py's estimate). Multipart: `track`,
+    `route`, `pack_kg`, `trip_kind` (group | solo), `route_pack_kg`, `route_days`, and `consent` — the
+    報名者 ticked 「用這份紀錄估腳程，算完就刪」 (SP-326: link:participant_ability needs that person's own
+    consent; no token carries the scope, links.CONSENT_PER_REQUEST). On the organiser's token (their
+    link) and their plan: one 報名者 = one distinct track a month (membership quota "participants":
+    the free tier QUOTAS, the 管理 page's quota.free.participants; a subscription unlimited); 429
+    QUOTA_EXCEEDED past it. Neither file is kept: read into memory, parsed, dropped; only a digest of
+    the track counts the quota item."""
+    import hashlib
+    from backend import membership as MS
+    from backend.api import pace as PA
+    _on()
+    await run_in_threadpool(_service_user, request, "link:account")
+    if (request.scope.get("state") or {}).get("link_route_scope") != "link:participant_ability":
+        raise HTTPException(401, {"code": "TOKEN_INVALID"})
+    up = await PA.read_upload(request, 2 * PACE_MAX_FILE + 64 * 1024, PACE_MAX_FILE)
+    if (up.fields.get("consent") or "").strip().lower() not in CONSENT_YES:
+        raise HTTPException(403, {"code": "CONSENT_REQUIRED", "scope": "link:participant_ability",
+                                  "who": "participant", "text": _(LK.PARTICIPANT_CONSENT)})
+    track, _name = up.file("track")
+    item = "track:" + hashlib.sha256(track).hexdigest()[:32]
+    out = await run_in_threadpool(PA.estimate_from_track, up)       # a file that cannot be used counts nothing
+    got = await run_in_threadpool(MS.consume, "participants", item)
+    out = PA._sanitize(out)
+    out["quota"] = {"used": got.get("used"), "limit": got.get("limit")}
+    return JSONResponse(out, headers=NO_STORE)
+
+
 # ---------------------------------------------------------------------------- 推到 Cairn (SP-655)
 
 @router.get("/api/v1/account/links/cairn/pushes")
@@ -221,6 +265,7 @@ async def cairn_push_status(eid: str):
 
 class PushIn(BaseModel):
     consent: Optional[bool] = None
+    new: Optional[bool] = None          # SP-816: a new trip after the one the GPX came from could not be updated
 
 
 @router.post("/api/v1/account/links/cairn/events/{eid}/push")
@@ -228,4 +273,5 @@ async def cairn_push(eid: str, body: PushIn):
     from backend.accounts import cairn_push as CP
     _on()
     u = _signed_in()
-    return JSONResponse(await run_in_threadpool(CP.push, u, eid, bool(body.consent)), headers=NO_STORE)
+    return JSONResponse(await run_in_threadpool(CP.push, u, eid, bool(body.consent), bool(body.new)),
+                        headers=NO_STORE)

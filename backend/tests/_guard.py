@@ -97,12 +97,24 @@ def _real_athlete_dir() -> str:
     return str(next((d for d in roots if any(d.glob("*.wko5athlete"))), REAL_WKO5))
 
 
+def _keep_playwright_browsers() -> None:
+    """Playwright finds its browsers under home on macOS / Linux (Windows: LOCALAPPDATA, untouched);
+    with home faked the e2e tests would look in the empty temp folder. Point it at the real cache
+    (not a guarded folder) unless PLAYWRIGHT_BROWSERS_PATH is set already."""
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or sys.platform == "win32":
+        return
+    cache = REAL_HOME / ("Library/Caches" if sys.platform == "darwin" else ".cache") / "ms-playwright"
+    if cache.is_dir():
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(cache)
+
+
 def install() -> None:
     global FAKE_HOME
     if FAKE_HOME is not None:
         return
     athlete = _real_athlete_dir() if REALDATA else None
     os.environ["WKO5COACH_TEST_TRUE_HOME"] = str(REAL_HOME)          # for xdist workers (above)
+    _keep_playwright_browsers()
     FAKE_HOME = Path(tempfile.mkdtemp(prefix="trc-test-home-"))
     atexit.register(shutil.rmtree, FAKE_HOME, True)
     for k in ("USERPROFILE", "HOME"):

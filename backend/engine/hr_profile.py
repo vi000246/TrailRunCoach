@@ -11,8 +11,8 @@ Where the numbers come from (resolution order, per date):
               「來自手錶」; the Garmin account's zones while Garmin is the 資料來源,
               SP-91) — owner
               2026-10-03: 「就用手錶的資料」
-           3. thresholds.estimate_mhr (runs of the 365 days up to the day,
-              「推估」), only without a watch value — training runs rarely reach
+           3. thresholds.estimate_mhr (runs of the 365 days up to the day, the
+              best 10-s mean — SP-493 R2; 「推估」), only without a watch value — training runs rarely reach
               HRmax, so it is a floor (the user's last 365 days peak at 191,
               the watch says 202)
            4. the age formula (Tanaka, 「推估」): without 1–3, or (SP-294, owner
@@ -22,8 +22,8 @@ Where the numbers come from (resolution order, per date):
               plan's, else 0.90 × the age formula) — an easy-only
               runner's peak is the top of his easy runs, not his max
            How far each is believed (threshold_confidence): 1 test → high, typed →
-           medium; 2 medium once a run of the last 90 days held 10 s within 5 bpm
-           of it (SP-493 R1), else low; 3 and 4 low. Only a believed max HR lets
+           medium; 2 medium once a run of the last 90 days had a best 10-s mean
+           within 5 bpm of it (SP-493 R1 / R2), else low; 3 and 4 low. Only a believed max HR lets
            自動 pick 儲備心率.
   rest HR  1. plan thresholds `rhr` dated on or before the day            「你的設定 YYYY-MM-DD」
            2. the COROS account (zoneData.rhr)                            「來自手錶」
@@ -117,7 +117,7 @@ AGE_MHR_SOURCE = N_("推估（年齡公式，個人可以差 10 bpm 以上）")
 # them → the age formula. 10 bpm: the individual SD of Tanaka's formula is about that size (cold-start.md
 # §4.3, 未驗證) — a smaller gap is within the formula's own error, so the runner's own value stays.
 AGE_OVER_RUNS_BPM = 10.0
-AGE_OVER_RUNS_SOURCE = N_("推估（年齡公式 {age_v:.0f}，個人可以差 10 bpm 以上；近 365 天跑步最高 {run_v:.0f}，"
+AGE_OVER_RUNS_SOURCE = N_("推估（年齡公式 {age_v:.0f}，個人可以差 10 bpm 以上；近 365 天跑步 10 秒平均最高 {run_v:.0f}，"
                           "但沒有比賽、測試或閾值以上的跑步，只能算下限，低了 {d:.0f} bpm 不採用）")
 LTHR_PRIOR_SOURCE = N_("推估（最大心率的 90 %）")
 # the easy runs' backup when the HR numbers are a prior (§4.3: the talk test, 教練常見做法, 未驗證)
@@ -270,7 +270,7 @@ def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = Tru
     watch = float(acc["max_hr"]) if acc and acc.get("max_hr") else None
     ev = float(est["value"]) if est and est.get("value") else None
     if watch is not None:
-        note = _("；近 365 天跑步最高 {v:.0f}（推估）", v=ev) if ev is not None else ""
+        note = _("；近 365 天跑步 10 秒平均最高 {v:.0f}（推估）", v=ev) if ev is not None else ""
         return {"value": watch, "kind": "coros", "source": _("來自手錶（COROS 帳號）") + note, "estimate": est}
     a = _age_on(ds, day)
     if ev is not None:
@@ -279,7 +279,7 @@ def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = Tru
             # SP-294: an easy-only runner's peak is a floor far under his max — the age formula instead
             return {"value": am, "kind": "age", "estimate": est, "age": a, "runs_value": ev,
                     "source": _(AGE_OVER_RUNS_SOURCE, age_v=am, run_v=ev, d=am - ev)}
-        return {"value": ev, "kind": "estimate", "source": _("推估（近 365 天跑步）"), "estimate": est}
+        return {"value": ev, "kind": "estimate", "source": _("推估（近 365 天跑步 10 秒平均最高）"), "estimate": est}
     if a is not None:
         # SP-289: the last layer — Tanaka's age formula, labelled 推估
         return {"value": age_max_hr(a), "kind": "age", "source": _(AGE_MHR_SOURCE), "estimate": est, "age": a}
@@ -475,17 +475,22 @@ def easy_cap_label(src=None, bpm: Optional[float] = None, measured: Optional[boo
     if bpm is None and isinstance(src, dict):
         e = src.get("easy") if "easy" in src else ((src.get("hr_model") or {}).get("easy") or [None, src.get("aet")])
         bpm = e[1] if isinstance(e, (list, tuple)) and len(e) == 2 else None
-    return EASY_CAP + (f" {float(bpm):.0f} bpm" if bpm else "") + (EASY_CAP_MEASURED if measured else "")
+    # SP-905: msgids (the zh-TW text as before: EASY_CAP + 「 N bpm」 + EASY_CAP_MEASURED); a session's 目標 /
+    # 說明 quoting it is shown in the page's language (engine/stored_text)
+    if bpm:
+        b = f"{float(bpm):.0f}"
+        return _("輕鬆跑上限 {bpm} bpm（實測 AeT）", bpm=b) if measured else _("輕鬆跑上限 {bpm} bpm", bpm=b)
+    return _("輕鬆跑上限（實測 AeT）") if measured else _("輕鬆跑上限")
 
 
 def below(label: str) -> str:
     """「輕鬆跑上限 148 bpm 以下」 / 「輕鬆跑上限以下」 (a space only after 「bpm」)."""
-    return label + (" 以下" if label.endswith("bpm") else "以下")
+    return _("{label} 以下", label=label) if label.endswith("bpm") else _("{label}以下", label=label)
 
 
 def easy_cap_hr(bpm: Optional[float] = None, measured: bool = False) -> str:
     """The HR target text of an easy / long / hike session: 「心率 ≤ 輕鬆跑上限 148 bpm」."""
-    return "心率 ≤ " + easy_cap_label(None, bpm, measured)
+    return _("心率 ≤ {cap}", cap=easy_cap_label(None, bpm, measured))
 
 
 # ---------------------------------------------------------------------------
@@ -644,7 +649,7 @@ def walk_cap_label(w: Optional[dict]) -> str:
         how = _("{pct}% 最大心率，最大心率是推估", pct=pct)
     else:
         how = _("{pct}% 最大心率", pct=pct)
-    return f"{_(WALK_CAP)} {w['value']:.0f} bpm（{how}）"
+    return _("爬坡上限 {v:.0f} bpm（{how}）", v=w["value"], how=how)     # SP-905: one msgid (read back)
 
 
 def walk_cap_hint(w: Optional[dict]) -> str:
@@ -662,14 +667,15 @@ def walk_cap_hint(w: Optional[dict]) -> str:
         how = _("{pct}% 最大心率，最大心率是推估", pct=pct)
     else:
         how = _("{pct}% 最大心率", pct=pct)
-    return _("心率參考上限約 {v:.0f} bpm（{how}）或 RPE ≤ {rpe}；技術路段以安全為主，不用硬壓心率",
-             v=w["value"], how=how, rpe=WALK_RPE)
+    # two msgids joined by 「；」 (SP-905: each part reads back once the hint is part of a session's 說明)
+    return _("心率參考上限約 {v:.0f} bpm（{how}）或 RPE ≤ {rpe}", v=w["value"], how=how, rpe=WALK_RPE) + "；" + \
+        _("技術路段以安全為主，不用硬壓心率")
 
 
 def walk_cap_hr(w: Optional[dict], aet: Optional[float] = None, measured: bool = False) -> str:
     """The target text of a walking session: 「心率 ≤ 爬坡上限 146 bpm（75% 最大心率）或 RPE ≤ 13，
     先到的為準」 — without a cap (no max HR, no age) the easy-run cap stands in."""
-    hr = ("心率 ≤ " + walk_cap_label(w)) if w else easy_cap_hr(aet, measured)
+    hr = _("心率 ≤ {cap}", cap=walk_cap_label(w)) if w else easy_cap_hr(aet, measured)
     return _("{hr} 或 RPE ≤ {rpe}，先到的為準", hr=hr, rpe=WALK_RPE)
 
 

@@ -68,7 +68,7 @@ def cp_changes(rows: list[tuple[str, float]], today: dt.date) -> list[float]:
 def fit_tol_rows(rows: list[tuple[str, float]], today: dt.date) -> Optional[CAL.Fit]:
     ch = cp_changes(rows, today)
     if len(ch) < MIN_CP_PAIRS:
-        return None
+        return CAL.count_only(len(ch))                  # SP-807: the count below min_n
     return CAL.Fit(_clip(1.0 - float(np.median(ch)) / 2.0, TOL_BOUNDS),
                    float(np.std(ch)) / 2.0 / math.sqrt(len(ch)), len(ch))
 

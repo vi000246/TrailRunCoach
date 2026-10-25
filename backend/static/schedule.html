@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-sugbox-dock>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>課表</title>
+<title data-i18n="schedule.page_title">課表</title>
 <style>
 :root {
   color-scheme: light;
@@ -45,6 +45,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .err { color: var(--bad); }
 .ok { color: var(--good); }
 main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
+/* SP-851: on a desktop the floating 建議 box (static/suggestions.js) keeps its room at the right — --sugbox-w while it
+   shows (open or collapsed) — and the page ends left of it, so the 週統計 column is never under it (only the part the
+   page's own side margin doesn't already give) */
+html.sugbox-docked main { padding-right: max(16px, calc(var(--sugbox-w, 0px) + 16px - max(0px, (100vw - 1320px) / 2))); }
 
 /* phase palette (the week row's left bar, SP-399: its own tokens — a session's type is an icon, sesschip.js) */
 .ph-base { --ph: var(--ph-base); } .ph-specific { --ph: var(--ph-specific); } .ph-taper { --ph: var(--ph-taper); }
@@ -412,6 +416,13 @@ dialog.sd .pd-row select { width: auto; max-width: 100%; padding: 4px 8px; font-
 
 .pnotes { margin: 0; padding: 7px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; display: grid; gap: 2px; }
 .pnotes .pn.watch { color: var(--watch); }
+/* SP-854: the week reminders' class-1 group (static/hints.js .hint-must) has no red frame, as on the 總覽 (SP-551):
+   each of its reminders has its level's left bar (the 總覽's .al colours) */
+.pnotes .hint-must { border: 0; border-radius: 0; padding: 0; margin: 0 0 4px; gap: 4px; }
+.pnotes .hint-must .hint-row { border-left: 4px solid var(--lc, var(--line)); padding: 1px 0 1px 8px; }
+.pnotes .hint-must .hint-row:has(.pn.good) { --lc: var(--good); }
+.pnotes .hint-must .hint-row:has(.pn.watch) { --lc: var(--watch); }
+.pnotes .hint-must .hint-row:has(.pn.bad) { --lc: var(--bad); }
 .pnotes .pn-detail > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 .pnotes .wk-l { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
 .pnotes .wk-why-d { font-size: 12.5px; color: var(--muted); margin: 4px 0; }
@@ -604,11 +615,11 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <span><b data-i18n="schedule.tabs.templates">範本</b><small data-i18n="schedule.tabs.templates_sub">自己的課表範本</small></span></a>
   </nav>
   <div class="bar calnav">
-    <h1 id="cal-label">課表</h1>
+    <h1 id="cal-label" data-i18n="schedule.page_title">課表</h1>
     <span class="navbtns">
-      <button class="btn icon" id="prev" type="button" aria-label="上個月">‹</button>
+      <button class="btn icon" id="prev" type="button" aria-label="上個月" data-i18n-attr="aria-label:schedule.nav.prev_month">‹</button>
       <button class="btn" id="go-today" type="button" data-i18n="schedule.today">今天</button>
-      <button class="btn icon" id="next" type="button" aria-label="下個月">›</button>
+      <button class="btn icon" id="next" type="button" aria-label="下個月" data-i18n-attr="aria-label:schedule.nav.next_month">›</button>
     </span>
     <span class="badge stale" id="stale-badge" role="status" hidden></span>
     <span class="spacer"></span>
@@ -661,29 +672,29 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   <div id="autoplan" data-limit="5" data-log="collapsible" style="margin-bottom:8px"></div>
   <script src="/api/v1/static/autoplan.js" defer></script>
   <script src="/api/v1/static/session_banner.js" defer></script>
-  <div class="pnotes" id="pnotes" role="region" aria-label="課表偏好的提醒" hidden></div>
+  <div class="pnotes" id="pnotes" role="region" aria-label="課表偏好的提醒" data-i18n-attr="aria-label:schedule.pn.aria" hidden></div>
   <!-- SP-471: the easy-power conflict's test with 排入 (static/eptest.js) -->
   <div id="eptest" hidden></div>
   <script src="/api/v1/static/eptest.js" defer></script>
-  <div class="tsug" id="tsug" aria-label="建議的測試" hidden></div>
-  <div class="calwrap loading" id="calwrap"><div id="cal"><p class="meta" style="padding:30px;text-align:center">載入課表中…</p></div></div>
+  <div class="tsug" id="tsug" aria-label="建議的測試" data-i18n-attr="aria-label:schedule.tsug.aria" hidden></div>
+  <div class="calwrap loading" id="calwrap"><div id="cal"><p class="meta" style="padding:30px;text-align:center" data-i18n="schedule.loading">載入課表中…</p></div></div>
   <div class="legend" id="legend"></div>
 </main>
 
 <dialog class="sd" id="ad" aria-labelledby="ad-h">
-  <div class="dh"><div><h3 id="ad-h">沒排課的活動</h3><span class="meta" id="ad-sub"></span></div>
-    <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+  <div class="dh"><div><h3 id="ad-h" data-i18n="schedule.ad.title">沒排課的活動</h3><span class="meta" id="ad-sub"></span></div>
+    <button class="x" type="button" data-close aria-label="關閉" data-i18n-attr="aria-label:schedule.cf.close">✕</button></div>
   <div class="done-box" id="ad-body"></div>
 </dialog>
 
 <dialog class="sd" id="sd" aria-labelledby="sd-h">
   <form id="sd-form" novalidate>
-    <div class="dh"><div><h3 id="sd-h">新增課表</h3><span class="meta" id="sd-sub"></span></div>
-      <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="dh"><div><h3 id="sd-h" data-i18n="schedule.ctx.add">新增課表</h3><span class="meta" id="sd-sub"></span></div>
+      <button class="x" type="button" data-close aria-label="關閉" data-i18n-attr="aria-label:schedule.cf.close">✕</button></div>
     <div id="sd-mark" hidden></div>
     <div class="meta sd-watch" id="sd-watch" hidden></div>
     <div class="done-box" id="sd-done" hidden></div>
-    <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
+    <fieldset class="kinds" id="sd-kinds"><legend data-i18n="schedule.sd.kind">類型</legend></fieldset>
     <!-- SP-628: what a new session was filled with (POST /sessions/suggest) — the ladder step, or
          「還沒解鎖」 for a VO2max session before the Zone 5 track opened -->
     <div class="hint" id="sd-sug" aria-live="polite" hidden></div>
@@ -700,8 +711,8 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     </div>
     <div class="var-box" id="sd-test" hidden>
       <div class="row2">
-        <label>哪一種測試<select id="sd-tkind"><option value="">先選…</option><option value="cp">CP 測試</option><option value="aet">AeT 測試</option></select></label>
-        <label>方式<select id="sd-tproto" disabled><option value="">先選測試</option></select></label>
+        <label><span data-i18n="schedule.sd.tkind">哪一種測試</span><select id="sd-tkind"><option value="" data-i18n="schedule.sd.pick">先選…</option><option value="cp" data-i18n="schedule.pd.kind.cp_test">CP 測試</option><option value="aet" data-i18n="schedule.pd.kind.aet_test">AeT 測試</option></select></label>
+        <label><span data-i18n="schedule.sd.tproto">方式</span><select id="sd-tproto" disabled><option value="" data-i18n="schedule.sd.pick_test">先選測試</option></select></label>
       </div>
       <div class="hint" id="sd-tinfo"></div>
     </div>
@@ -709,7 +720,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <!-- the old 間歇範本 dropdown is gone: 結構 › 插入範本 lists the same ladder sessions, its
            推薦 block puts the one the planner would pick first (engine/template_recs.py) -->
       <div class="var-cur" id="sd-var-cur"></div>
-      <button class="btn" type="button" id="sd-swap" hidden>換一個（同等課表）</button>
+      <button class="btn" type="button" id="sd-swap" hidden data-i18n="schedule.sd.swap">換一個（同等課表）</button>
     </div>
     <!-- SP-87: a long run → the same time as a 長爬坡有氧 on steady terrain (api PATCH {swap_to: "climb"}) -->
     <div class="var-box" id="sd-climbbox" hidden>
@@ -717,49 +728,49 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <button class="btn" type="button" id="sd-climb" data-i18n="schedule.ctx.to_climb">換成長爬坡有氧（同樣時間）</button>
     </div>
     <div class="row2">
-      <label>日期<input type="date" name="day" required></label>
-      <label><span><span id="sd-min-lbl">分鐘</span><button type="button" class="qtip" data-manual="schedule#edit" id="sd-min-q" aria-label="說明" data-tip="" hidden>?</button></span><input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
+      <label><span data-i18n="schedule.sd.day">日期</span><input type="date" name="day" required></label>
+      <label><span><span id="sd-min-lbl" data-i18n="schedule.sd.minutes">分鐘</span><button type="button" class="qtip" data-manual="schedule#edit" id="sd-min-q" aria-label="說明" data-i18n-attr="aria-label:schedule.pf.about" data-tip="" hidden>?</button></span><input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
     </div>
     <div class="hint" id="sd-tss" aria-live="polite"></div>
     <div class="hint" id="sd-rpe" aria-live="polite" hidden></div>
     <div class="hint" id="sd-fam" aria-live="polite" hidden></div>
     <fieldset class="eq" id="sd-eq" hidden>
-      <details class="eq-fold" id="sd-eq-fold"><summary>地形與同負荷換算</summary>
-      <div class="tseg" id="sd-ter" role="radiogroup" aria-label="地形">
-        <label><input type="radio" name="terrain" value="road">路跑</label><label><input type="radio" name="terrain" value="trail">越野跑</label>
+      <details class="eq-fold" id="sd-eq-fold"><summary data-i18n="schedule.eq.fold">地形與同負荷換算</summary>
+      <div class="tseg" id="sd-ter" role="radiogroup" aria-label="地形" data-i18n-attr="aria-label:schedule.eq.terrain">
+        <label><input type="radio" name="terrain" value="road"><span data-i18n="schedule.rc.ter.road">路跑</span></label><label><input type="radio" name="terrain" value="trail"><span data-i18n="schedule.rc.ter.trail">越野跑</span></label>
       </div>
-      <label>爬升比例 <span><b id="eq-d-v" class="num">0</b> m/km</span>
+      <label><span data-i18n="schedule.eq.climb_rate">爬升比例</span> <span><b id="eq-d-v" class="num">0</b> m/km</span>
         <input type="range" id="eq-d" min="0" max="150" step="5" value="0" aria-describedby="eq-sum"></label>
       <div class="hint eq-grade" id="eq-grade" aria-live="polite"></div>
       <div class="hint" id="eq-goal-row"><button type="button" id="eq-goal"></button></div>
       <div class="row3">
-        <label>距離 km<input type="number" id="eq-km" min="0" max="500" step="0.1" inputmode="decimal"></label>
-        <label>爬升 m<input type="number" id="eq-gain" min="0" max="20000" step="10" inputmode="numeric"></label>
+        <label><span data-i18n="schedule.eq.km">距離 km</span><input type="number" id="eq-km" min="0" max="500" step="0.1" inputmode="decimal"></label>
+        <label><span data-i18n="schedule.eq.gain">爬升 m</span><input type="number" id="eq-gain" min="0" max="20000" step="10" inputmode="numeric"></label>
         <label><span data-i18n="schedule.eq.load">訓練負荷（Training load）</span><input type="number" id="eq-tss" min="0" max="2000" step="1" inputmode="numeric"></label>
       </div>
       <div class="row2">
-        <label>改其他欄位時固定<select id="eq-lock"><option value="time">鎖時間</option><option value="tss">鎖負荷</option><option value="dist">鎖距離</option></select></label>
-        <label class="chk"><input type="checkbox" id="eq-free">完全自由調整</label>
+        <label><span data-i18n="schedule.eq.lock">改其他欄位時固定</span><select id="eq-lock"><option value="time" data-i18n="schedule.eq.lock_time">鎖時間</option><option value="tss" data-i18n="schedule.eq.lock_tss">鎖負荷</option><option value="dist" data-i18n="schedule.eq.lock_dist">鎖距離</option></select></label>
+        <label class="chk"><input type="checkbox" id="eq-free"><span data-i18n="schedule.eq.free">完全自由調整</span></label>
       </div>
       <div class="eq-sum" id="eq-sum" aria-live="polite"></div>
       <div class="warn" id="eq-warn" role="status"></div>
       <div class="hint" id="eq-note"></div>
       </details>
     </fieldset>
-    <label>標題<input name="title" required maxlength="200" autocomplete="off"></label>
-    <label>目標<input name="target" maxlength="200" autocomplete="off" placeholder="例：心率 &lt; 輕鬆跑上限"></label>
+    <label><span data-i18n="schedule.sd.title">標題</span><input name="title" required maxlength="200" autocomplete="off"></label>
+    <label><span data-i18n="schedule.sd.target">目標</span><input name="target" maxlength="200" autocomplete="off" placeholder="例：心率 &lt; 輕鬆跑上限" data-i18n-attr="placeholder:schedule.sd.target_ph"></label>
     <div class="hint" id="sd-tgt"></div>
-    <label>備註<textarea name="detail" rows="2" maxlength="500" placeholder="休息、暖身、路線…"></textarea></label>
+    <label><span data-i18n="schedule.sd.detail">備註</span><textarea name="detail" rows="2" maxlength="500" placeholder="休息、暖身、路線…" data-i18n-attr="placeholder:schedule.sd.detail_ph"></textarea></label>
     <div class="hint" id="sd-gl"></div>
     <p class="meta faint" style="margin:0" id="sd-q" hidden></p>
     <div class="err" id="sd-err" role="alert"></div>
     <div class="btns">
-      <button class="btn danger" type="button" id="sd-del">刪除</button>
+      <button class="btn danger" type="button" id="sd-del" data-i18n="schedule.del.ok">刪除</button>
       <button class="btn" type="button" id="sd-revert" hidden data-i18n="schedule.rv.btn">還原成自動</button>
-      <button class="btn" type="button" id="sd-push">推送這天到 COROS</button>
+      <button class="btn" type="button" id="sd-push" data-i18n="schedule.sd.push">推送這天到 COROS</button>
       <span class="spacer"></span>
-      <button class="btn" type="button" data-close id="sd-cancel">取消</button>
-      <button class="btn primary" type="submit" id="sd-save">儲存</button>
+      <button class="btn" type="button" data-close id="sd-cancel" data-i18n="schedule.cf.cancel">取消</button>
+      <button class="btn primary" type="submit" id="sd-save" data-i18n="schedule.sd.save">儲存</button>
     </div>
   </form>
 </dialog>
@@ -773,12 +784,12 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 
 <!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
 <dialog class="sd wide" id="vd" aria-labelledby="vd-h">
-  <div class="dh"><div><h3 id="vd-h">換一個課表 <button type="button" class="qtip" data-manual="schedule#edit" id="vd-tip" aria-label="說明" data-tip="">?</button></h3><span class="meta" id="vd-sub"></span></div>
-    <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+  <div class="dh"><div><h3 id="vd-h"><span data-i18n="schedule.vd.title">換一個課表</span> <button type="button" class="qtip" data-manual="schedule#edit" id="vd-tip" aria-label="說明" data-i18n-attr="aria-label:schedule.pf.about" data-tip="">?</button></h3><span class="meta" id="vd-sub"></span></div>
+    <button class="x" type="button" data-close aria-label="關閉" data-i18n-attr="aria-label:schedule.cf.close">✕</button></div>
   <p class="meta" id="vd-rec"></p>
-  <h4 class="vd-g">同等（不影響進階）</h4>
+  <h4 class="vd-g" data-i18n="schedule.vd.eq">同等（不影響進階）</h4>
   <ul class="vd-list" id="vd-eq"></ul>
-  <h4 class="vd-g">不同等（會影響進階）</h4>
+  <h4 class="vd-g" data-i18n="schedule.vd.ot">不同等（會影響進階）</h4>
   <ul class="vd-list" id="vd-ot"></ul>
   <div class="err" id="vd-err" role="alert"></div>
 </dialog>
@@ -956,21 +967,21 @@ Garmin 推送不變：可以在手錶加 GAP（坡度調整配速）資料欄位
 
 <dialog class="sd" id="bo" aria-labelledby="bo-h">
   <form id="bo-form" novalidate>
-    <div class="dh"><div><h3 id="bo-h">🏖 設定不排課日期</h3><span class="meta">這幾天不排任何課，本週目標時數跟著減少；套用前會先預覽哪些課會移動或取消</span></div>
-      <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="dh"><div><h3 id="bo-h" data-i18n="schedule.bo.title_new">🏖 設定不排課日期</h3><span class="meta" data-i18n="schedule.bo.sub">這幾天不排任何課，本週目標時數跟著減少；套用前會先預覽哪些課會移動或取消</span></div>
+      <button class="x" type="button" data-close aria-label="關閉" data-i18n-attr="aria-label:schedule.cf.close">✕</button></div>
     <div class="row2">
-      <label>開始<input type="date" name="start" required></label>
-      <label>結束<input type="date" name="end" required></label>
+      <label><span data-i18n="schedule.bo.start">開始</span><input type="date" name="start" required></label>
+      <label><span data-i18n="schedule.bo.end">結束</span><input type="date" name="end" required></label>
     </div>
-    <label>說明（選填）<input name="label" maxlength="30" autocomplete="off" placeholder="例：連假出遊"></label>
+    <label><span data-i18n="schedule.bo.label">說明（選填）</span><input name="label" maxlength="30" autocomplete="off" placeholder="例：連假出遊" data-i18n-attr="placeholder:schedule.bo.label_ph"></label>
     <div class="hint" id="bo-sum" aria-live="polite"></div>
-    <p class="meta faint" style="margin:0">小技巧：在日曆上拖曳選取幾天，或點一天再按住 Shift 點另一天，也能直接設定</p>
+    <p class="meta faint" style="margin:0" data-i18n="schedule.bo.tip">小技巧：在日曆上拖曳選取幾天，或點一天再按住 Shift 點另一天，也能直接設定</p>
     <div class="err" id="bo-err" role="alert"></div>
     <div class="btns">
-      <button class="btn danger" type="button" id="bo-del">移除這段</button>
+      <button class="btn danger" type="button" id="bo-del" data-i18n="schedule.bo.del">移除這段</button>
       <span class="spacer"></span>
-      <button class="btn" type="button" data-close>取消</button>
-      <button class="btn primary" type="submit" id="bo-save">預覽變動</button>
+      <button class="btn" type="button" data-close data-i18n="schedule.cf.cancel">取消</button>
+      <button class="btn primary" type="submit" id="bo-save" data-i18n="schedule.bo.preview">預覽變動</button>
     </div>
   </form>
 </dialog>
@@ -979,7 +990,7 @@ Garmin 推送不變：可以在手錶加 GAP（坡度調整配速）資料欄位
   <form method="dialog">
     <div class="dh"><h3 id="cf-h"></h3><button class="x" value="cancel" data-i18n-attr="aria-label:schedule.cf.close" aria-label="關閉">✕</button></div>
     <div class="cf-body" id="cf-body"></div>
-    <div class="btns"><span class="spacer"></span><button class="btn" value="cancel" id="cf-no">取消</button><button class="btn primary" value="ok" id="cf-ok">確定</button></div>
+    <div class="btns"><span class="spacer"></span><button class="btn" value="cancel" id="cf-no" data-i18n="schedule.cf.cancel">取消</button><button class="btn primary" value="ok" id="cf-ok" data-i18n="schedule.cf.ok">確定</button></div>
   </form>
 </dialog>
 
@@ -988,20 +999,11 @@ const PAPI = "/api/v1/overview/plan";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // glossary: AeT / CP terms get a hover (tap on touch) explanation — same text as the overview page
+// T0: the catalog before tt (defined further down) exists — the top-level tables below
+const T0 = (k, p) => I18N.t("schedule." + k, p);
 const GLOSS = {
-  "AeT": "AeT 有氧閾值（≈ LT1、第一換氣閾值）：還能只用鼻子呼吸、能講完整句子的最高強度。基礎期的輕鬆課都壓在它以下。\n\n" +
-    "怎麼測（心率飄移測試）：\n" +
-    "1. 平路環線或跑步機 2–3%（不要山路），< 25 °C，先暖身 15 分鐘\n" +
-    "2. 從你猜的 AeT 心率起跑，固定功率跑 60 分鐘（至少 45 分），中途不停、不加速；補給和咖啡因照平常\n" +
-    "3. 比較前半與後半的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
-    "4. 判讀卡和總覽「測試」會出現「套用這次的 AeT」（沒測時用 0.89 × LTHR 估）",
-  "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
-    "怎麼測（課表偏好選一種）：\n" +
-    "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分\n" +
-    "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分\n" +
-    "• 用比賽：5–10 K 比賽或計時跑\n" +
-    "CP 自動計算（PD 模型擬合近 90 天功率曲線的上緣）：測試只是近 90 天功率曲線上的一次全力，課表的 CP 是這條曲線上緣擬合的模型閾值功率（Modelled threshold power）" +
-    "（差 3 W 以上才換），不用另外設定；每 4–6 週測一次，賽前 10 天內不要測",
+  "AeT": T0("gloss.aet"),
+  [T0("gloss.cp_term")]: T0("gloss.cp"),
 };
 const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
 const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>`);
@@ -1027,10 +1029,31 @@ const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
 const localTime = (s) => { if (!s) return null; const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s + "Z");
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
+// SP-839: the server shows a stored title in the page's language and keeps the stored one as
+// `title_src` (title_src_map: the dialog's default / automatic titles). The page's code reads a
+// title's words (越野、陡坡健走 13.5%、長爬坡有氧, the automatic titles) from the stored one, and the
+// dialog sends a generated title back as stored — every response is learnt here.
+const TSRC = {};
+const learnTitles = (x, depth = 0) => {
+  if (!x || typeof x !== "object" || depth > 6) return;
+  if (Array.isArray(x)) { x.forEach((v) => learnTitles(v, depth + 1)); return; }
+  // SP-905: the 目標 / 說明 / 出處 too (target_src, detail_src, source_src …): any `<key>` + `<key>_src`
+  for (const k of Object.keys(x)) {
+    if (k.endsWith("_src") && typeof x[k] === "string" && typeof x[k.slice(0, -4)] === "string") TSRC[x[k.slice(0, -4)]] = x[k];
+  }
+  if (x.title_src_map && typeof x.title_src_map === "object") Object.assign(TSRC, x.title_src_map);
+  for (const v of Object.values(x)) if (v && typeof v === "object") learnTitles(v, depth + 1);
+};
+const srcTitle = (s) => (s && (s.title_src || TSRC[s.title] || s.title)) || "";
+const srcOf = (v) => { const t = String(v || "").trim(); return TSRC[t] || t; };
+// SP-905: a 目標 / 說明 the server showed in the page's language goes back as stored; the user's own text as typed
+const srcKeep = (v) => TSRC[String(v || "").trim()] || v;
+
 async function sj(method, url, body) {
   const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
   const b = await r.json().catch(() => ({}));
-  if (r.status === 401) { const e = new Error("COROS 未登入或登入過期"); e.auth = true; throw e; }
+  if (r.ok) learnTitles(b);
+  if (r.status === 401) { const e = new Error(T0("err.coros_auth")); e.auth = true; throw e; }
   if (!r.ok) throw new Error(typeof b.detail === "string" ? b.detail : `${r.status} ${JSON.stringify(b.detail || b).slice(0, 200)}`);
   return b;
 }
@@ -1039,15 +1062,13 @@ async function sj(method, url, body) {
 // running, the editor's trail templates); 被動熱適應 is no longer offered (an existing one
 // still opens with its own radio)
 const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength"];
-const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測試", hike: "越野跑", strength: "肌力", heat_passive: "被動熱適應",
-  notice: "課表待確認", race: "比賽" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
+const KINDS = Object.fromEntries(["easy", "long", "quality", "test", "hike", "strength", "heat_passive", "notice", "race"]
+  .map((k) => [k, T0("kind." + k)]));      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
 // 強度課's three families (SP-79; workout_templates.FAMILIES) — never 「無氧間歇」. tt is defined further
 // down (and the dialog's radios are built before it), so the catalog is read directly
 const FAMILIES = ["aerobic", "vo2max", "speed"];
-const FAM_ZH = { aerobic: "有氧間歇", vo2max: "VO2max 間歇", speed: "速度" };
 // rule D's two tiers (SP-301): the done session's note hover
-const ADAPT_NOTE_TIP = "自動調整：輕鬆跑偏強＝平均功率超過 80% CP（Palladino）或訓練負荷（Training load）超過計畫 20%（TrainingPeaks），沒有功率時看平均心率超過輕鬆跑上限 +3（課表心率區間的 Z2 上緣，有實測 AeT 時用實測值；跟活動判讀同一個上限），只標示、不改課表；課別分類為閾值或更強＝跑成強度課，48 小時內的強度課延後或降一階。兩級的分法是推估。";
-const famLabel = (f) => (window.I18N ? I18N.t("schedule.family." + f, FAM_ZH[f] || f) : FAM_ZH[f] || f);
+const famLabel = (f) => T0("family." + f);
 // race: the season plan's race day, or the 賽事計算機's 「匯出至課表」 (its steps are editable here); never added by hand
 // 熱適應課 stored before SP-569 keep kind easy / long, tagged by the title: their card shows the sun (SessChip.kind)
 // 推送狀態 (coros_workouts.status_of): a small watch. A future / today's card draws it only for 需更新 /
@@ -1126,7 +1147,7 @@ async function load(quiet) {
     staleWatch();
     sugCount();                                    // 排入測試 ▸ in the context menu
   } catch (e) {
-    $("cal").innerHTML = `<p class="err" style="padding:20px">載入失敗：${esc(e.message)}</p>`;
+    $("cal").innerHTML = `<p class="err" style="padding:20px">${esc(tt("load_failed", { err: e.message }))}</p>`;
   } finally { $("calwrap").classList.remove("loading"); }
 }
 
@@ -1251,13 +1272,13 @@ function chipHtml(s, big) {
   const actual = done ? tt("chip.actual", { what: `${(s.done_by.category_label || tt("chip.done")) + sl} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}${rated}` }) : "";
   const line = done ? actual : s.target || "";
   const vd = verdict(s), nums = compNums(s.compliance);
-  const vdFull = vd ? vd + (nums ? `（${nums}）` : "") : "";
+  const vdFull = vd ? vd + (nums ? tt("paren", { x: nums }) : "") : "";
   const watch = s.state === "active" && s.day >= D.today && WATCH_ON_CARD.includes(c.status) ? syIcon(c.status, c.error || c.reason || "") : "";
   const pm = window.PlanMark ? PlanMark.lines(s, KINDS) : [];      // SP-318: ↻ auto / ✎ yours (plan_mark.js)
   const pend = !!(S.pend && S.pend.has(s.uid)), lock = pend || !!(S.swapLock && S.swapLock.has(s.uid));
   // §7.1: type：title, time, TSS, the verdict, 暫定, changed by, the watch — the reading order on screen
-  const lbl = [`${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}`, `${s.minutes || 0} 分鐘`, tss.replace("→", "實際"),
-    vdFull, odOf(s) ? tt("od." + odOf(s)) : "", prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : "", watch ? syLabel(c.status) : ""].filter(Boolean).join("，");
+  const lbl = [tt("chip.aria_head", { kind: (KINDS[s.kind] || "") + (fam ? tt("paren", { x: fam.text }) : ""), title: s.title }), tt("chip.aria_min", { n: s.minutes || 0 }), tss.replace("→", tt("chip.aria_actual")),
+    vdFull, odOf(s) ? tt("od." + odOf(s)) : "", prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : "", watch ? syLabel(c.status) : ""].filter(Boolean).join(tt("chip.aria_sep"));
   return `<button type="button" class="chip sc ${SessChip.cls(s)}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${lock ? " swap-lock" : ""}${pend ? " pend" : ""}" data-uid="${esc(s.uid)}" data-kind="${esc(s.kind)}"
       ${live && !lock ? 'draggable="true"' : ""}${lock ? ' aria-disabled="true"' : ""} aria-label="${esc(lbl)}" title="">
     ${SessChip.icon(SessChip.kind(s), { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="c-t sc-t">${esc(s.title)}</span><span class="c-r">${lock ? `<span class="c-lock" aria-hidden="true">${pend ? "↻" : "⇄"}</span>` : ""}${SessChip.ring(st, (s.compliance || {}).pct, { prov })}${odMark(s)}${watch}</span>
@@ -1276,7 +1297,7 @@ function popModel(s) {
   return {
     title: s.title, icon: SessChip.icon(SessChip.kind(s)), status: st,
     // the type under the title, unless the title already says it (「輕鬆跑」 · 輕鬆跑)
-    kind: s.title === KINDS[s.kind] ? "" : (KINDS[s.kind] || "") + (fam ? "（" + (fam.sub_label ? fam.text : fam.label) + "）" : ""),
+    kind: s.title === KINDS[s.kind] ? "" : (KINDS[s.kind] || "") + (fam ? tt("paren", { x: fam.sub_label ? fam.text : fam.label }) : ""),
     day: s.day && window.I18N && I18N.fmt ? I18N.fmt.date(s.day, "mdw") : s.day || "",
     // the pill: 完成 / 部分 72% / 換了課 / 跳過 / 暫定; none for a plain session still to come
     label: st === "todo" && !prov ? "" : SessChip.label(st, st === "partial" ? pct : null, { prov }),
@@ -1294,6 +1315,70 @@ function popModel(s) {
       ? { label: syLabel(c.status), why: c.error || c.reason || "", bad: c.status === "failed" } : null,
   };
 }
+// 問 AI (SP-884): a session card describes itself just before askai.js reads it (askai:describe) — the numbers
+// (day, type, minutes, distance, climb, load planned → done, the completion numbers, the target's parts, the
+// stored structure step by step) in data-ai-facts, the judgments (the verdict, rule D's too-hard note, 上坡改走,
+// the automatic adjustment, the target's basis) in data-ai-rules. Labels are for the model (English, never
+// shown); the values are the card's own words. A structure the dialog derives when it opens (not stored) is
+// not sent: the target and the detail carry it.
+function aiStepText(it) {
+  const d = it.dur || {}, t = it.target || {};
+  const mmss = (v) => `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}`;
+  const len = d.type === "time" ? mmss(+d.value || 0) : d.type === "distance" ? `${(d.value / 1000).toFixed(2)} km` : d.type === "load" ? `load ${n0(d.value)}` : "lap";
+  const tg = t.type === "auto" ? (t.intent === "band" ? `${Math.round((t.lo || 0) * 100)}–${Math.round((t.hi || 0) * 100)}%${t.cls ? " " + t.cls : ""}` : t.intent || "")
+    : t.type === "power" || t.type === "hr" || t.type === "pace" ? `${t.type} ${t.zone ? t.zone + (t.zone_to ? "–" + t.zone_to : "") : `${t.lo ?? ""}–${t.hi ?? ""}${t.mode === "pct" ? " ×" : ""}`}`
+    : t.type === "rpe" ? `RPE ${t.lo ?? ""}–${t.hi ?? ""}` : "";
+  return [it.kind, len, tg, it.note || ""].filter(Boolean).join(" ");
+}
+function aiSession(s) {
+  const facts = [], rules = [], db = s.done_by || {}, done = s.state === "done" && s.done_by, cp = s.compliance || {};
+  const add = (label, value) => { if (value != null && value !== "") facts.push({ label, value: String(value) }); };
+  const rule = (text, source) => { if (text) rules.push({ text: String(text), source: source || "" }); };
+  const fam = s.quality_family || null, st = SessChip.status(s);
+  add("day", s.day);
+  add("type", (KINDS[s.kind] || s.kind || "") + (fam ? ` (${fam.text || fam.label})` : ""));
+  add("status", SessChip.label(st, st === "partial" ? cp.pct : null, { prov: !!(s.provisional && s.state === "active") }));
+  add("planned minutes", s.minutes);
+  add("distance", s.distance_km ? `${(+s.distance_km).toFixed(1)} km` : "");
+  add("climb", s.climb_m ? `${Math.round(s.climb_m)} m` : "");
+  const est = s.tss_est ?? s.tss;
+  add("planned load", est != null ? n0(est) : "");
+  if (done) {
+    add("done load", db.tss != null ? n0(db.tss) : "");
+    add("what was run", `${db.category_label || ""}${db.session && db.session.type_label ? " · " + db.session.type_label : ""} ${hm(db.moving_s)}${db.distance_km ? ` · ${(+db.distance_km).toFixed(1)} km` : ""}`.trim());
+    if (db.self_rating) add("self-rating", db.self_rating.text);
+    add("completion numbers", compNums(s.compliance));
+  }
+  const tg = window.SessPop && SessPop.target ? SessPop.target(s.target) : { items: s.target ? [{ label: "", value: s.target }] : [], basis: [] };
+  tg.items.forEach((x) => add(x.label ? `target ${x.label}` : "target", x.value));
+  const items = (s.steps && Array.isArray(s.steps.items)) ? s.steps.items : [];
+  items.forEach((it, i) => add(`step ${i + 1}`, it.kind === "repeat"
+    ? `${it.times} × (${(it.items || []).map(aiStepText).join(" / ")})${it.last_rest === false ? ", no rest after the last" : ""}` : aiStepText(it)));
+  add("how", s.detail || "");
+  // the verdict, with the line of the legend that defines it (its thresholds, from the payload) as its source
+  const vd = verdict(s), lvl = SessChip.levelsText(D && D.compliance_levels).split("\n")[["done", "partial", "off_plan", "missed"].indexOf(st)] || "";
+  if (vd) rule(vd + (compNums(s.compliance) ? tt("paren", { x: compNums(s.compliance) }) : ""), lvl);
+  if (st === "partial" && s.vs && s.vs.short_text) rule(s.vs.short_text, lvl);
+  if (odOf(s) && s.note) rule(s.note, tt("od." + odOf(s)));
+  if (s.walk_hint) rule(s.walk_hint);
+  const pm = window.PlanMark ? PlanMark.lines(s, KINDS) : [];
+  if (pm.length) (pm.length > 1 ? pm.slice(1) : [PlanMark.label(s)]).forEach((l) => rule(l, PlanMark.label(s)));
+  tg.basis.forEach((b) => rule(b));
+  return { facts: facts.slice(0, 40), rules: rules.slice(0, 20) };
+}
+if (typeof document !== "undefined") document.addEventListener("askai:describe", (ev) => {
+  const el = ev.target, chip = el && el.closest ? el.closest(".chip.sc[data-uid]") : null;
+  const s = chip && ((D && D.sessions) || []).find((x) => x.uid === chip.dataset.uid);
+  if (!s) return;
+  try {
+    const d = aiSession(s);
+    el.dataset.aiKind = "session";
+    // 「正在問」: the session's title and day, not the card's long aria-label (SP-885)
+    el.dataset.aiTitle = [s.title, s.day && window.I18N && I18N.fmt ? I18N.fmt.date(s.day, "mdw") : s.day].filter(Boolean).join(" · ");
+    el.dataset.aiFacts = JSON.stringify(d.facts);
+    el.dataset.aiRules = JSON.stringify(d.rules);
+  } catch (err) { console.warn("askai:describe", err); }      // the card's text still goes
+});
 // an activity no session holds: 沒排課的活動, a dotted outline + its category's icon (click: summary,
 // open it, pair it with a session)
 function actHtml(a) {
@@ -1308,7 +1393,8 @@ function actHtml(a) {
   }
   // + the session class (workout_review.classify): Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …
   const lab = a.session && a.session.type_label ? `${a.category_label} · ${a.session.type_label}` : a.category_label;
-  return `<button type="button" class="chip sc act" data-act="${a.index}" aria-label="${esc(`沒排課的活動：${lab} ${hm(a.moving_s)}`)}" title="${esc(`沒排課的活動：${lab} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}\n點一下看摘要或配對到課表`)}">
+  return `<button type="button" class="chip sc act" data-act="${a.index}" aria-label="${esc(tt("act.aria", { lab, t: hm(a.moving_s) }))}" title="${esc(tt("act.tip", { lab, sport: a.sport_type || "", t: hm(a.moving_s),
+    dist: a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : "", climb: a.climbing_m ? tt("act.climb", { m: Math.round(a.climbing_m) }) : "" }))}">
     ${SessChip.icon(SessChip.actKind(a))}<span class="c-t sc-t">${esc(lab)}</span><span class="c-r">${hm(a.moving_s)}</span>
     ${m ? `<span class="c-m">${esc(m)}</span>` : ""}</button>`;
 }
@@ -1329,16 +1415,16 @@ function dayTip(d, ss) {
   const done = list.filter((s) => s.state === "done" && s.done_by && s.done_by.tss != null).reduce((a, s) => a + s.done_by.tss, 0);
   const b = boOf(d);
   if (b && b.kind === "rest") return tt("rest.day_tip", { day: md(d), wd: wd(d) });
-  if (b) return `${md(d)}（${wdl(d)}）　不排課${b.label ? `（${b.label}）` : ""}\n點標籤修改或移除`;
+  if (b) return tt("bo.day_tip", { day: md(d), wd: wdl(d), label: b.label ? tt("paren", { x: b.label }) : "" });
   const rc = raceMarks(d).map((r) => "\n" + raceT(r, "race.mark", { p: r.priority, name: r.name })).join("");
-  return `${md(d)}（${wdl(d)}）` + (list.length ? `　計畫負荷 ${n0(t)}${done ? ` · 完成 ${n0(done)}` : ""}` : "　沒有排課") + rc + (d >= D.today ? "\n點空白處新增；拖曳或 Shift＋點選可設定不排課日期" : "");
+  return tt("day.head", { day: md(d), wd: wdl(d) }) + (list.length ? tt("day.plan", { n: n0(t) }) + (done ? tt("day.done", { n: n0(done) }) : "") : tt("day.nothing")) + rc + (d >= D.today ? tt("day.add_tip") : "");
 }
 // 不排課日期 (engine/blackouts.py): one-off ranges, from the calendar payload
 const BOS = () => (D && D.blackouts) || [];
 const boOf = (iso) => BOS().find((b) => b.start <= iso && iso <= b.end);
 const boChip = (b) => b.kind === "rest" ? `<button type="button" class="bo-chip rest" data-rest="${esc(b.start)}" aria-label="${esc(tt("rest.chip_aria", { day: md(b.start) }))}"
-  title="${esc(tt("rest.chip_title"))}">${esc(tt("rest.chip"))}</button>` : `<button type="button" class="bo-chip" data-bo="${esc(b.id)}" aria-label="不排課 ${esc(rangeTxt(b.start, b.end))}${b.label ? "：" + esc(b.label) : ""}，修改或移除"
-  title="${esc(`不排課 ${rangeTxt(b.start, b.end)}${b.label ? "（" + b.label + "）" : ""}\n點一下修改或移除`)}">🏖 ${esc(b.label || "不排課")}</button>`;
+  title="${esc(tt("rest.chip_title"))}">${esc(tt("rest.chip"))}</button>` : `<button type="button" class="bo-chip" data-bo="${esc(b.id)}" aria-label="${esc(tt("bo.chip_aria", { range: rangeTxt(b.start, b.end), label: b.label ? tt("rc.colon") + b.label : "" }))}"
+  title="${esc(tt("bo.chip_tip", { range: rangeTxt(b.start, b.end), label: b.label ? tt("paren", { x: b.label }) : "" }))}">🏖 ${esc(b.label || tt("bo.chip"))}</button>`;
 const phaseOf = (iso) => (D.phases || []).find((p) => p.start <= iso && iso <= p.end);
 // A / B / C races (SP-504; api/plan_sessions.race_marks): a mark on the day — the A race too (R2, as the overview,
 // SP-517), its day then without the 賽事 phase label (the mark says it). A 百岳 trip (kind baiyue) is a 行程, not a
@@ -1362,9 +1448,9 @@ function sumHtml(w) {
   const pct = (a, b) => b > 0 ? Math.min(100, a / b * 100) : 0;
   return `${phPill(w)}
     <div class="r"><span>${esc(tt("wk.time"))}</span><span>${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span></div>
-    ${future ? "" : `<div class="trk" role="img" aria-label="完成 ${h1(w.done_hours)} / 計畫 ${h1(w.planned_hours)} 小時"><i style="width:${pct(w.done_hours, w.planned_hours).toFixed(0)}%"></i></div>`}
+    ${future ? "" : `<div class="trk" role="img" aria-label="${esc(tt("wk.time_aria", { done: h1(w.done_hours), plan: h1(w.planned_hours) }))}"><i style="width:${pct(w.done_hours, w.planned_hours).toFixed(0)}%"></i></div>`}
     ${w.compliance && !future ? "" : `<div class="r"><span>${esc(tt("load.col"))}</span><span>${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span></div>
-    ${future ? "" : `<div class="trk" role="img" aria-label="負荷完成 ${n0(w.done_tss)} / 計畫 ${n0(w.planned_tss)}"><i style="width:${pct(w.done_tss, w.planned_tss).toFixed(0)}%"></i></div>`}`}
+    ${future ? "" : `<div class="trk" role="img" aria-label="${esc(tt("wk.load_aria", { done: n0(w.done_tss), plan: n0(w.planned_tss) }))}"><i style="width:${pct(w.done_tss, w.planned_tss).toFixed(0)}%"></i></div>`}`}
     ${climbW(w, future)}
     ${compW(w)}
     ${w.provisional ? `<span class="tag">${esc(tt("wk.provisional"))}</span>` : cur ? `<span class="tag">${esc(tt("wk.this_week"))}</span>` : ""}`;
@@ -1407,9 +1493,11 @@ function render() {
   const { ss, acts } = byDay();
   const month = dOf(S.anchor).getMonth();
   const week = S.narrow || S.view === "week";
-  $("cal-label").textContent = week ? `${dOf(a).getFullYear()} · ${md(a)}–${md(b)}` : `${dOf(S.anchor).getFullYear()} 年 ${month + 1} 月`;
-  $("prev").setAttribute("aria-label", week ? "上一週" : "上個月");
-  $("next").setAttribute("aria-label", week ? "下一週" : "下個月");
+  // the month: 2026 年 10 月 / October 2026 (the month's name from Intl in the page's language)
+  $("cal-label").textContent = week ? `${dOf(a).getFullYear()} · ${md(a)}–${md(b)}`
+    : tt("cal.month", { y: dOf(S.anchor).getFullYear(), m: I18N.locale === "zh-TW" ? month + 1 : dOf(S.anchor).toLocaleString(I18N.locale, { month: "long" }) });
+  $("prev").setAttribute("aria-label", tt(week ? "nav.prev_week" : "nav.prev_month"));
+  $("next").setAttribute("aria-label", tt(week ? "nav.next_week" : "nav.next_month"));
   document.querySelectorAll("#view-seg button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.view === S.view)));
   const pn = phaseOf(D.today);
   $("phase-now").innerHTML = pn ? `${esc(tt("phase_now"))} <b class="ph-${esc(pn.kind)}" style="color:var(--ph)">${esc(pn.label)}</b> ${md(pn.start)}–${md(pn.end)}` : "";
@@ -1431,15 +1519,15 @@ function render() {
         const out = !week && dOf(d).getMonth() !== month;
         const items = (ss[d] || []).map((s) => chipHtml(s, week)).join("") + (acts[d] || []).map(actHtml).join("");
         cells.push(`<div class="cell ${out ? "out" : ""} ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" role="gridcell" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
-          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（${wdl(d)}）${d === D.today ? "，今天" : ""}${bo ? "，不排課" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}${raceMarkHtml(d)}
+          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="${esc(tt("cell.sel", { day: md(d), wd: wdl(d) }) + (d === D.today ? tt("cell.today") : "") + (bo ? tt("cell.bo") : ""))}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}${raceMarkHtml(d)}
           ${bo && (d === bo.start || i === 0) ? boChip(bo) : ""}
-          ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表" title="新增">＋</button>` : ""}</div>
+          ${can ? `<button type="button" class="add" data-add="${d}" aria-label="${esc(tt("cell.add_aria", { day: md(d) }))}" title="${esc(tt("cell.add"))}">＋</button>` : ""}</div>
           <div class="chips">${items || (week && can ? restMv(d, ss) : "")}${can ? ghostHtml(d) : ""}</div></div>`);
       }
       const ph = phaseOf(addDays(ws, 3)) || {};
       rows.push(`<div class="wk ph-${esc(w.phase || ph.kind || "none")} ${w.provisional ? "prov" : ""}" role="row" data-week="${ws}">${cells.join("")}<div class="sum" role="gridcell" aria-label="${esc(tt("wk.sum_col"))}">${sumHtml(w)}</div></div>`);
     }
-    $("cal").innerHTML = `<div class="cal ${week ? "week" : ""}" role="grid" aria-label="${esc($("cal-label").textContent)} 課表">
+    $("cal").innerHTML = `<div class="cal ${week ? "week" : ""}" role="grid" aria-label="${esc(tt("cal.aria", { label: $("cal-label").textContent }))}">
       <div class="cal-head" role="row">${WD_HEAD.map((x, i) => `<div role="columnheader" class="${i > 4 ? "we" : ""}">${esc(x)}${week ? ` ${md(addDays(a, i))}` : ""}</div>`).join("")}<div role="columnheader">${esc(tt("wk.sum_col"))}</div></div>
       ${rows.join("")}</div>`;
   }
@@ -1495,10 +1583,10 @@ function renderSug() {
   const box = $("tsug");
   box.hidden = !sg.length;
   box.innerHTML = sg.map((x) => `<div class="tsug-row" data-kind="${esc(x.kind)}"><span>🧪 ${esc(x.label)}</span>
-    <span class="tsug-act">${x.days.length ? `<select aria-label="測試日期">${x.days.map((d) =>
+    <span class="tsug-act">${x.days.length ? `<select aria-label="${esc(tt("tsug.day"))}">${x.days.map((d) =>
       `<option value="${esc(d.day)}">${esc(I18N.fmt.date(d.day, "mdw"))}${d.note ? ` · ${esc(d.note)}` : ""}</option>`).join("")}</select>
-      <button class="btn primary" type="button" data-sug="${esc(x.kind)}">排入</button>` : `<span class="meta">兩週內沒有適合的日子（離長跑、強度課太近）</span>`}
-      <span class="meta">${esc(x.title)} · ${x.minutes} 分</span></span></div>`).join("");
+      <button class="btn primary" type="button" data-sug="${esc(x.kind)}">${esc(tt("tsug.go"))}</button>` : `<span class="meta">${esc(tt("tsug.no_day"))}</span>`}
+      <span class="meta">${esc(x.title)} · ${esc(tt("rc.min", { n: x.minutes }))}</span></span></div>`).join("");
 }
 $("tsug").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-sug]");
@@ -1508,7 +1596,7 @@ $("tsug").addEventListener("click", async (e) => {
   try {
     const r = await sj("POST", `${PAPI}/test-suggestions/schedule`, { kind: b.dataset.sug, day });
     S.sel = day; await load();
-    msg(`已排入「${esc(r.title)}」到 ${md(day)}`, "ok");
+    msg(esc(tt("tsug.done", { title: r.title, day: md(day) })), "ok");
   } catch (err) { msg(esc(err.message), "err"); b.disabled = false; }
 });
 function agendaHtml(a, ss, acts) {
@@ -1518,9 +1606,9 @@ function agendaHtml(a, ss, acts) {
     const d = addDays(a, i), bo = boOf(d), can = d >= D.today && !bo;
     const items = (ss[d] || []).map((s) => chipHtml(s, true)).join("") + (acts[d] || []).map(actHtml).join("");
     days.push(`<div class="ag-day ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
-      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}${bo ? "，不排課" : ""}" style="padding:0;height:auto;text-align:left">${esc(I18N.fmt.weekday(d, "short"))}<b>${dOf(d).getDate()}</b></button>${d === D.today ? esc(tt("today")) : ""}${raceMarkHtml(d)}</div>
+      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="${esc(tt("cell.sel_ag", { day: md(d) }) + (bo ? tt("cell.bo") : ""))}" style="padding:0;height:auto;text-align:left">${esc(I18N.fmt.weekday(d, "short"))}<b>${dOf(d).getDate()}</b></button>${d === D.today ? esc(tt("today")) : ""}${raceMarkHtml(d)}</div>
       <div class="chips">${bo ? boChip(bo) : ""}${items || (bo || raceOn(d) ? "" : restMv(d, ss) || `<span class="rest">${esc(tt(d < D.today ? "day.none" : "day.rest"))}</span>`)}${can ? ghostHtml(d) : ""}</div>
-      ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表">＋</button>` : "<span></span>"}</div>`);
+      ${can ? `<button type="button" class="add" data-add="${d}" aria-label="${esc(tt("cell.add_aria", { day: md(d) }))}">＋</button>` : "<span></span>"}</div>`);
   }
   const future = a > D.today;
   return `<div class="agenda"><div class="ag-sum ph-${esc(w.phase || (ph && ph.kind) || "none")}">
@@ -1554,6 +1642,8 @@ function renderLegend() {
 }
 
 // ---------------- toolbar ----------------
+// SP-791 / SP-821: a coach viewing a student (代看) — the session says so (shell.js VIEW)
+const VIEWING = !!((window.TRC_SESSION || {}).login && (window.TRC_SESSION || {}).viewing);
 function scopeRange(scope, day) {
   const t = D.today;
   if (scope === "day") return [day, day];
@@ -1565,7 +1655,9 @@ function renderToolbar() {
   const C = D.coros || {};
   $("push-split").hidden = !C.authenticated;
   const DEMO = (window.TRC_SESSION || {}).mode === "demo";      // no watch, no settings page in the demo
-  $("login-link").hidden = !!C.authenticated || DEMO;
+  // SP-821: a viewing coach can't log the student in (設定 shows them 生理數據 only) — no link; the
+  // status line below says the student logs in themselves
+  $("login-link").hidden = !!C.authenticated || DEMO || VIEWING;
   const wkd = weekDay(), [wa, wb] = scopeRange("week", wkd);
   const weekPast = wb < D.today;
   $("push-main-sub").textContent = weekPast ? "" : `${tt("scope.week")} ${rangeTxt(wa, wb)}`;
@@ -1593,14 +1685,19 @@ function renderToolbar() {
     if (C.outdated) parts.push(`<span class="warn" title="${esc(tt("st.outdated_tip"))}">${tt("st.outdated", { n: `<b>${C.outdated}</b>` })}</span>`);
     if (C.failed) parts.push(`<span class="bad">${tt("st.failed", { n: `<b>${C.failed}</b>` })}</span>`);
     if (C.pushed) parts.push(`<span>${tt("st.pushed", { n: `<b>${C.pushed}</b>` })}</span>`);
-  } else parts.push(`<span>${esc(tt(DEMO ? "st.demo" : "st.login"))}</span>`);
+  } else parts.push(`<span>${esc(tt(DEMO ? "st.demo" : VIEWING ? "st.view_login" : "st.login"))}</span>`);
   $("sync-status").innerHTML = parts.join("");
   renderPull();
 }
 function msg(html, cls = "") { $("sync-msg").innerHTML = html ? `<span class="${cls}">${html}</span>` : ""; }
 function errMsg(what, e) {
-  if (e.auth) { msg(`${esc(what)}失敗：COROS 未登入或登入過期 · <a href="/api/v1/app/settings#sync">到設定頁重新登入 →</a>`, "err"); if (D) { D.coros.authenticated = false; renderToolbar(); } }
-  else msg(`${esc(what)}失敗：${esc(e.message)}`, "err");
+  if (e.auth) {
+    // SP-821: while viewing, the student logs in again themselves — no link to a 設定 the coach can't use
+    const again = VIEWING ? esc(tt("err.view_relogin")) : `<a href="/api/v1/app/settings#sync">${esc(tt("pull.relogin"))}</a>`;
+    msg(`${esc(tt("err.failed_auth", { what }))} · ${again}`, "err");
+    if (D) { D.coros.authenticated = false; renderToolbar(); }
+  }
+  else msg(esc(tt("err.failed", { what, err: e.message })), "err");
 }
 
 // ---- menus (split + overflow): click, Esc, arrow keys ----
@@ -1677,7 +1774,7 @@ async function reconcile(opts = {}) {
   if (S.busy) return;
   msg(`<span class="spin"></span> ${esc(tt("rc.computing"))}`);
   let p;
-  try { p = await sj("GET", `${PAPI}/reconcile`); } catch (e) { return errMsg("重排", e); }
+  try { p = await sj("GET", `${PAPI}/reconcile`); } catch (e) { return errMsg(tt("what.replan"), e); }
   msg("");
   let n = (p.changes || []).length;
   const main = !opts.title;                          // the toolbar's 依實際進度重排 (not 課表偏好's save)
@@ -1705,7 +1802,7 @@ async function reconcile(opts = {}) {
     await sj("POST", `${PAPI}/reconcile`, { decisions: dec, reset_edited: reset });
     msg(esc(tt(reset ? "rc.reset_done" : "rc.done", { n })), "ok"); await load();
   }
-  catch (e) { errMsg("重排", e); }
+  catch (e) { errMsg(tt("what.replan"), e); }
   finally { S.busy = false; renderToolbar(); }
 }
 
@@ -1717,33 +1814,34 @@ async function push(scope, day) {
   if (S.busy || !D) return;
   day = scope === "phase" ? null : (day || (scope === "day" ? S.sel : weekDay()));
   S.busy = true; renderToolbar();
-  msg(`<span class="spin"></span> 準備推送（${SCOPE_NAME[scope]}）…`);
+  msg(`<span class="spin"></span> ${esc(tt("ps.preparing", { scope: SCOPE_NAME[scope] }))}`);
   try {
     const p = await sj("GET", `${PAPI}/push-coros/preview?${scopeQs(scope, day)}`);
     msg("");
     const recN = (p.changes || []).filter((c) => c.action !== "done").length;
     const rng = rangeTxt(p.start, p.end);
-    if (!p.count && !p.missed_to_remove && !p.blackout_to_remove && !recN) { msg(`${esc(rng)} 沒有可以推送的課`); return; }
-    const html = `<p class="big" style="margin:0">把 <b>${esc(rng)}</b> 的 <b>${p.count}</b> 堂課推送到 COROS 行事曆？</p>
-      <p class="meta" style="margin:0">新送出或更新 <b>${p.to_send}</b> 堂，${p.unchanged} 堂已經是最新的不會重送；會同步到手錶。</p>
-      ${p.skipped.length ? `<p class="meta" style="margin:0">${p.skipped.length} 堂（肌力等）不推送。</p>` : ""}
-      ${p.missed_to_remove ? `<p class="meta" style="margin:0">${p.missed_to_remove} 堂錯過的課會從 COROS 移除。</p>` : ""}
-      ${p.blackout_to_remove ? `<p class="meta" style="margin:0">🏖 ${p.blackout_to_remove} 堂在不排課日期內的課會從 COROS 移除（課表裡保留，等你決定移動或刪除）。</p>` : ""}
-      ${(p.pace_notes || []).length ? `<p class="meta" style="margin:0;color:var(--watch)">⚠ ${esc(p.pace_notes[0].text)}：${p.pace_notes.map((n) => esc(`${md(n.day)} ${n.title || ""}`)).join("、")}${p.tpace_link ? ` <a href="${esc(p.tpace_link)}" target="_blank" rel="noopener">${esc((window.I18N ? I18N.t("workout.no_tpace_link", "看閾值配速怎麼估") : "看閾值配速怎麼估"))}</a>` : ""}</p>` : ""}
-      ${scope === "phase" ? `<p class="meta" style="margin:0">最遠排到 ${md(p.end)}（最多 ${p.max_weeks} 週）。</p>` : ""}
-      ${recN ? `<div><b style="font-size:13px">推送前會先依實際進度重排（${recN} 項）</b>${changesHtml(p.by_day)}</div>` : ""}`;
-    if (!(await ask(`推送到手錶 · ${SCOPE_NAME[scope]}`, html, `推送 ${p.count} 堂`))) return;
-    msg(`<span class="spin"></span> 推送 ${esc(rng)} 的 ${p.to_send} 堂課到 COROS…`);
+    if (!p.count && !p.missed_to_remove && !p.blackout_to_remove && !recN) { msg(esc(tt("ps.nothing", { range: rng }))); return; }
+    // the catalog text carries the <b>…</b>; the range goes in escaped
+    const html = `<p class="big" style="margin:0">${tt("ps.q", { range: esc(rng), n: p.count })}</p>
+      <p class="meta" style="margin:0">${tt("ps.send", { n: p.to_send, same: p.unchanged })}</p>
+      ${p.skipped.length ? `<p class="meta" style="margin:0">${esc(tt("ps.skipped", { n: p.skipped.length }))}</p>` : ""}
+      ${p.missed_to_remove ? `<p class="meta" style="margin:0">${esc(tt("ps.missed", { n: p.missed_to_remove }))}</p>` : ""}
+      ${p.blackout_to_remove ? `<p class="meta" style="margin:0">🏖 ${esc(tt("ps.blackout", { n: p.blackout_to_remove }))}</p>` : ""}
+      ${(p.pace_notes || []).length ? `<p class="meta" style="margin:0;color:var(--watch)">⚠ ${esc(p.pace_notes[0].text)}${esc(tt("rc.colon"))}${p.pace_notes.map((n) => esc(`${md(n.day)} ${n.title || ""}`)).join(tt("rc.sep"))}${p.tpace_link ? ` <a href="${esc(p.tpace_link)}" target="_blank" rel="noopener">${esc(I18N.t("common.workout.no_tpace_link"))}</a>` : ""}</p>` : ""}
+      ${scope === "phase" ? `<p class="meta" style="margin:0">${esc(tt("ps.until", { day: md(p.end), n: p.max_weeks }))}</p>` : ""}
+      ${recN ? `<div><b style="font-size:13px">${esc(tt("ps.replan", { n: recN }))}</b>${changesHtml(p.by_day)}</div>` : ""}`;
+    if (!(await ask(tt("ps.title", { scope: SCOPE_NAME[scope] }), html, tt("ps.ok", { n: p.count })))) return;
+    msg(`<span class="spin"></span> ${esc(tt("ps.working", { range: rng, n: p.to_send }))}`);
     const res = await sj("POST", `${PAPI}/push-coros?${scopeQs(scope, day)}`);
     const k = (st) => res.sessions.filter((r) => r.status === st);
     const nNew = k("pushed").filter((r) => r.changed).length, fails = k("failed");
     const rm = (res.removed || []).filter((r) => r.status === "removed").length;
     const chk = [...new Set([...res.sessions, ...(res.removed || [])].map((r) => r.check_day).filter(Boolean))].sort();
     await load();
-    msg(`${fails.length ? "" : "✓ "}推送完成（${esc(rng)}）：新推送 ${nNew} · 更新 ${k("updated").length}${rm ? ` · 移除 ${rm}` : ""}${fails.length ? ` · <b class="err">失敗 ${fails.length}</b>` : ""}` +
+    msg(`${fails.length ? "" : "✓ "}${esc(tt("ps.done", { range: rng, n: nNew, u: k("updated").length }))}${rm ? esc(tt("ps.done_rm", { n: rm })) : ""}${fails.length ? ` · <b class="err">${esc(tt("ps.done_fail", { n: fails.length }))}</b>` : ""}` +
       (chk.length ? `<br><span class="warn">${esc(checkNote(chk).replace(/^[；;]\s*/, ""))}</span>` : "") +
-      (fails.length ? `<ul>${fails.map((f) => `<li class="err">${md(f.day)} ${esc(f.title)}：${esc(f.error || "")}</li>`).join("")}</ul>` : ""), fails.length ? "" : "ok");
-  } catch (e) { errMsg("推送", e); }
+      (fails.length ? `<ul>${fails.map((f) => `<li class="err">${md(f.day)} ${esc(f.title)}${esc(tt("rc.colon"))}${esc(f.error || "")}</li>`).join("")}</ul>` : ""), fails.length ? "" : "ok");
+  } catch (e) { errMsg(tt("what.push"), e); }
   finally { S.busy = false; if (D) renderToolbar(); }
 }
 async function unpush(scope) {
@@ -1754,14 +1852,14 @@ async function unpush(scope) {
   try {
     const all = (await sj("GET", `${PAPI}/sessions?start=${a}&end=${b}`)).sessions;
     const n = all.filter((s) => s.coros && (s.coros.coros_program_id || s.coros.coros_id_in_plan)).length;
-    if (!n) { msg(`${esc(rangeTxt(a, b))} 沒有推送過的課`); return; }
-    if (!(await ask("從 COROS 移除", `<p style="margin:0">把 <b>${esc(rangeTxt(a, b))}</b> 推送過的 <b>${n}</b> 堂課從 COROS 行事曆和課表庫移除？</p>
-      <p class="meta" style="margin:0">只會動這裡推送過的；已經在手錶上完成的不會刪。課表本身不變，之後可以再推送。</p>`, `移除 ${n} 堂`, { danger: true }))) return;
-    msg(`<span class="spin"></span> 從 COROS 移除 ${n} 堂…`);
+    if (!n) { msg(esc(tt("up.nothing", { range: rangeTxt(a, b) }))); return; }
+    if (!(await ask(tt("up.title"), `<p style="margin:0">${tt("up.q", { range: esc(rangeTxt(a, b)), n })}</p>
+      <p class="meta" style="margin:0">${esc(tt("up.note"))}</p>`, tt("up.ok", { n }), { danger: true }))) return;
+    msg(`<span class="spin"></span> ${esc(tt("up.working", { n }))}`);
     const r = await sj("DELETE", `${PAPI}/push-coros?${scopeQs(scope, day)}`);
     await load();
-    msg(`已從 COROS 移除 ${r.removed.filter((x) => x.status === "removed").length} 堂（${esc(rangeTxt(r.start, r.end))}）`, "ok");
-  } catch (e) { errMsg("移除", e); }
+    msg(esc(tt("up.done", { n: r.removed.filter((x) => x.status === "removed").length, range: rangeTxt(r.start, r.end) })), "ok");
+  } catch (e) { errMsg(tt("what.unpush"), e); }
   finally { S.busy = false; if (D) renderToolbar(); }
 }
 
@@ -1773,12 +1871,14 @@ async function unpush(scope) {
 let PRI = null;                                    // { source, label, logged_in, enabled, busy }
 const PULL_REPOLL_MS = 5000;
 async function loadPrimary() {
-  if ((window.TRC_SESSION || {}).mode === "demo") return;
+  // SP-821: nor while viewing a student — 抓活動 and its 設定 link are the student's own (the server refuses
+  // /sync/* to a viewer anyway)
+  if ((window.TRC_SESSION || {}).mode === "demo" || VIEWING) return;
   try { PRI = await TRCSync.primary(); } catch (_) { PRI = null; }
   renderPull();
 }
 function renderPull() {
-  const ok = !!PRI && (window.TRC_SESSION || {}).mode !== "demo";
+  const ok = !!PRI && (window.TRC_SESSION || {}).mode !== "demo" && !VIEWING;
   const ready = ok && PRI.logged_in && PRI.enabled;
   $("pull-btn").hidden = !ready;
   // not logged in / switched off: a link to 設定 instead of a request. COROS not logged in is
@@ -1846,7 +1946,7 @@ function famHint() {
 const rateOf = (k) => (D.tss_rates || {})[k] || D.tss_per_hour || 50;
 // SP-453 (owner's A): a 賽事計算機 export with its structure as exported keeps the calculator's TSS (race HR,
 // post-race correction) — the card, the week's total and this dialog one number; a changed structure: the structure's
-const CALC_TSS = "賽事計算機估（比賽心率、賽後校正）";
+const CALC_TSS = () => tt("tss.calc");
 function calcTss() {
   const o = dlg.orig;
   if (!o || o.tss_by !== "calc" || !(o.tss > 0) || kindVal() !== o.kind) return false;
@@ -1863,31 +1963,34 @@ function estDialog() {
 function tssHint() {
   const o = dlg.orig;
   if (dlg.ro) {
-    const act = o && o.state === "done" && o.done_by && o.done_by.tss != null ? ` → 實際 <b>${n0(o.done_by.tss)}</b>` : "";
-    $("sd-tss").innerHTML = o ? `計畫訓練負荷（Training load）<b>${n0(estOf(o))}</b>${act}` : "";
+    const act = o && o.state === "done" && o.done_by && o.done_by.tss != null ? ` → ${esc(tt("chip.aria_actual"))} <b>${n0(o.done_by.tss)}</b>` : "";
+    $("sd-tss").innerHTML = o ? `${esc(tt("tss.planned"))}<b>${n0(estOf(o))}</b>${act}` : "";
     return;
   }
   const e = estDialog();
-  if (e.calc) { $("sd-tss").innerHTML = `預估訓練負荷（Training load）<b class="num">${n0(e.tss)}</b> <span class="faint">${CALC_TSS}</span>`; return; }
-  $("sd-tss").innerHTML = `預估訓練負荷（Training load）<b class="num">${n0(e.tss)}</b> <span class="faint">≈ ${n0(e.rate)} 負荷/小時 × ${+F.minutes.value || 0} 分${eqOn() ? "（同強度 ≤ AeT：沿用原本每小時的負荷）" : ""}</span>`;
+  if (e.calc) { $("sd-tss").innerHTML = `${esc(tt("tss.est"))}<b class="num">${n0(e.tss)}</b> <span class="faint">${esc(CALC_TSS())}</span>`; return; }
+  $("sd-tss").innerHTML = `${esc(tt("tss.est"))}<b class="num">${n0(e.tss)}</b> <span class="faint">${esc(tt("tss.rate", { r: n0(e.rate), m: +F.minutes.value || 0 }) + (eqOn() ? tt("tss.same_aet") : ""))}</span>`;
 }
 
 // ---------------- terrain + same-load conversion (engine/equivalence.py) ----------------
 // two terrains: 路跑 / 越野跑 (an old 登山 session opens as 越野跑)
-const TER = { road: "路跑", trail: "越野跑", hike: "越野跑" };
+const TER = { road: T0("rc.ter.road"), trail: T0("rc.ter.trail"), hike: T0("rc.ter.trail") };
 const EQ_KINDS = new Set(["easy", "long", "hike"]);
-const AUTO_TITLE = { easy: { road: "輕鬆跑", trail: "輕鬆越野跑" }, long: { road: "LSD（路跑）", trail: "LSD（山路越野）" },
+// the dialog's automatic title by type and terrain: the server's (plan_store.AUTO_TITLES, in the page's
+// language, SP-839); these stored ones until the calendar has loaded
+const AUTO_TITLE0 = { easy: { road: "輕鬆跑", trail: "輕鬆越野跑" }, long: { road: "LSD（路跑）", trail: "LSD（山路越野）" },
   hike: { trail: "越野跑" } };
+const autoTitle = (k, t) => (((D && D.auto_titles) || AUTO_TITLE0)[k] || {})[t];
 const AUTO_TITLE_RE = /^(輕鬆跑|輕鬆跑（路跑）|輕鬆越野跑|(長時間輕鬆|LSD)(（[^）]*）)?|登山健行(（長時間）)?|健行|越野跑)$/;
 let EQ = null, eqReq = null;
 const loadEq = () => eqReq ||= sj("GET", `${PAPI}/equivalence`).then((b) => (EQ = b)).catch(() => { eqReq = null; return null; });
 const EQS = { rate: 50, tss0: 0, tssFix: 0, d: 0, needFill: false };
 const terVal = () => (F.querySelector('input[name="terrain"]:checked') || {}).value || "road";
 const eqOn = () => !$("sd-eq").hidden;
-const terOf = (s) => { if (!s) return "road"; const t = s.terrain || (s.kind === "hike" || /越野|山路/.test(s.title || "") ? "trail" : "road"); return t === "hike" ? "trail" : t; };
+const terOf = (s) => { if (!s) return "road"; const t = s.terrain || (s.kind === "hike" || /越野|山路/.test(srcTitle(s)) ? "trail" : "road"); return t === "hike" ? "trail" : t; };
 const defaultD = () => Math.round(D.goal_climb_per_km || 80);
 // the easy-run cap (hr_profile.easy_cap_label: 「輕鬆跑上限 N bpm」, 「（實測 AeT）」 only when measured)
-const aetText = () => { const t = D.thresholds || {}, a = t.aet; return t.easy_cap_label ? `心率 ≤ ${t.easy_cap_label}` : a ? `心率 ≤ 輕鬆跑上限 ${Math.round(a)} bpm` : "心率 ≤ 輕鬆跑上限"; };
+const aetText = () => { const t = D.thresholds || {}, a = t.aet; return t.easy_cap_label ? tt("aet.hr_le", { x: t.easy_cap_label }) : a ? tt("aet.hr_cap_n", { n: Math.round(a) }) : tt("aet.hr_cap"); };
 function capFor(kind) {
   const p = D.prefs || {};
   return kind === "long" || kind === "hike" ? (p.cap_long ?? p.cap_weekday) : kind === "easy" ? p.cap_weekday : null;
@@ -1925,19 +2028,18 @@ function eqSet({ min, km, gain, d, tss }) {
 }
 // grade readout: average = climb ÷ distance; trail (out-and-back / loop) ≈ half the distance
 // uphill, so the climbing sections ≈ 2 × average (推估). 陡坡健走 has its own target grade.
-const GRADE_TIP = "平均坡度＝爬升 ÷ 距離。越野多半是去回或繞圈，大約一半距離在上坡，所以爬坡段的坡度約是平均的 2 倍（推估；實際看路線）。" +
-  "陡坡健走有目標坡度：填距離會帶出預期爬升（距離 × 坡度），填爬升會帶出距離。";
+const GRADE_TIP = T0("eq.grade_tip");
 const gradeOf = (km, gain, trail) => km > 0 && gain > 0 ? { avg: gain / (km * 10), climb: trail ? gain / (km * 5) : null } : null;
 // the 陡坡健走 target grade (engine/steep_hill.py title 「陡坡健走 13.5%（…）」), else null
-const steepGrade = () => { const m = (F.title.value || "").match(/陡坡健走\s*([\d.]+)\s*%/); return m ? +m[1] : null; };
+const steepGrade = () => { const m = srcOf(F.title.value).match(/陡坡健走\s*([\d.]+)\s*%/); return m ? +m[1] : null; };
 function gradeRender() {
   const f = eqF(), sg = steepGrade(), g = gradeOf(f.km, f.gain, terVal() !== "road" && !sg);   // a steep walk is all uphill
-  $("eq-grade").innerHTML = !g ? (sg ? `目標坡度 <b class="num">${sg}%</b>：填距離會帶出爬升 ${qb(GRADE_TIP)}` : "") :
-    g.avg > 100 ? `坡度 ${g.avg.toFixed(0)}%：距離或爬升可能填錯 ${qb(GRADE_TIP)}` :
-    `平均坡度 <b class="num">${g.avg.toFixed(1)}%</b>` + (g.climb != null ? ` · 爬坡段約 <b class="num">${g.climb.toFixed(0)}%</b>（推估）` : "") +
-    (sg ? ` · 目標 ${sg}%` : "") + ` ${qb(GRADE_TIP)}`;
+  $("eq-grade").innerHTML = !g ? (sg ? `${tt("eq.target_grade", { g: `<b class="num">${sg}%</b>` })} ${qb(GRADE_TIP)}` : "") :
+    g.avg > 100 ? `${esc(tt("eq.grade_bad", { g: g.avg.toFixed(0) }))} ${qb(GRADE_TIP)}` :
+    tt("eq.avg", { g: `<b class="num">${g.avg.toFixed(1)}%</b>` }) + (g.climb != null ? tt("eq.climb_part", { g: `<b class="num">${g.climb.toFixed(0)}%</b>` }) : "") +
+    (sg ? esc(tt("eq.target", { g: sg })) : "") + ` ${qb(GRADE_TIP)}`;
 }
-const qb = (tip) => `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(tip)}">?</button>`;
+const qb = (tip) => `<button type="button" class="qtip" aria-label="${esc(tt("pf.about"))}" data-tip="${esc(tip)}">?</button>`;
 // `changed`: the field the user just edited; the lock decides what stays fixed
 function eqRecalc(changed, exactD) {
   if (!eqOn()) return;
@@ -1982,12 +2084,12 @@ function eqRecalc(changed, exactD) {
 function eqTip(mode) {
   if (!EQ) return "";
   const M = EQ.model;
-  if (mode === "road") return `距離 ↔ 時間：你的平路速度 ${M.v_flat_kmh.toFixed(1)} km/h（${M.v_flat_source}）；有坡時用努力距離 km + 爬升/100。`;
+  if (mode === "road") return tt("eq.tip_road", { v: M.v_flat_kmh.toFixed(1), src: M.v_flat_source });
   const bt = (EQ.backtest || {})[mode] || {}, mm = M.modes[mode] || {}, est = (EQ.estimate || {})[mode];
-  const how = mm.method === "ep" ? `努力距離 EP = km + 爬升/100，用你的越野 EP 速度 ${(mm.ep_kmh || 0).toFixed(1)} km/h`
-    : `平地 ${(mm.v_flat_kmh || 0).toFixed(1)} km/h＋上坡 ${Math.round(mm.vam_mh || 0)} m/h＋下坡修正（Naismith／Langmuir）`;
-  const err = bt.n ? `回測 ${bt.n} 次：平均差 ${bt.mae_min} 分（${bt.mape_pct} %）` : "紀錄還不夠回測";
-  return `距離 ↔ 時間：${how}；${err}${est ? "（推估）" : ""}。`;
+  const how = mm.method === "ep" ? tt("eq.tip_ep", { v: (mm.ep_kmh || 0).toFixed(1) })
+    : tt("eq.tip_vam", { v: (mm.v_flat_kmh || 0).toFixed(1), vam: Math.round(mm.vam_mh || 0) });
+  const err = bt.n ? tt("eq.tip_bt", { n: bt.n, mae: bt.mae_min, mape: bt.mape_pct }) : tt("eq.tip_no_bt");
+  return tt("eq.tip", { how, err, est: est ? tt("eq.tip_est") : "" });
 }
 function eqRender() {
   if (!eqOn()) return;
@@ -1995,26 +2097,31 @@ function eqRender() {
   $("eq-lock").disabled = ro || free;
   // nothing is disabled: the locked field is the anchor (editing it re-anchors)
   F.minutes.disabled = $("eq-km").disabled = $("eq-tss").disabled = $("eq-gain").disabled = $("eq-d").disabled = ro;
-  if (dlg.minLock) $("sd-min-q").dataset.tip = $("sd-min-q").dataset.tip.replace(/\n距離 ↔ 時間：.*$/s, "") + "\n" + eqTip(terVal());
+  if (dlg.minLock) {          // the old 「距離 ↔ 時間：…」 line (eq.tip_head starts every eqTip) is replaced
+    const tip0 = $("sd-min-q").dataset.tip, cut = tip0.indexOf("\n" + tt("eq.tip_head"));
+    $("sd-min-q").dataset.tip = (cut >= 0 ? tip0.slice(0, cut) : tip0) + "\n" + eqTip(terVal());
+  }
   const anchor = free ? null : { time: F.minutes, tss: $("eq-tss"), dist: $("eq-km") }[lock];
   [F.minutes, $("eq-tss"), $("eq-km")].forEach((x) => x.classList.toggle("anchor", x === anchor));
   const g = D.goal_climb_per_km;
   $("eq-goal-row").hidden = !g || terVal() === "road" || ro;
-  if (g) $("eq-goal").textContent = `套用目標賽事的爬升比例 ${Math.round(g)} m/km`;
-  if (!EQ) { $("eq-sum").textContent = "載入你的速度模型中…"; $("eq-warn").textContent = ""; $("eq-note").textContent = ""; return; }
+  if (g) $("eq-goal").textContent = tt("eq.goal", { n: Math.round(g) });
+  if (!EQ) { $("eq-sum").textContent = tt("eq.loading"); $("eq-warn").textContent = ""; $("eq-note").textContent = ""; return; }
   gradeRender();
   const mode = terVal(), f = eqF();
   const pct = EQS.tss0 > 0 ? (f.tss / EQS.tss0 - 1) * 100 : 0;
-  const diff = Math.abs(pct) < 1 ? `<span class="same">和原本一樣</span>` : `<span class="${pct > 0 ? "up" : "down"}">比原本${pct > 0 ? "多" : "少"} ${Math.abs(Math.round(pct))} %</span>`;
-  $("eq-sum").innerHTML = `${TER[mode]} <span class="d num">${f.km.toFixed(1)} km</span>${f.gain ? `、爬升 <span class="d num">${Math.round(f.gain)} m</span>` : ""}、約 <span class="d num">${f.min} 分</span> · 預估負荷 <b class="num">${n0(f.tss)}</b>（${diff}）`;
+  const diff = Math.abs(pct) < 1 ? `<span class="same">${esc(tt("eq.same"))}</span>` : `<span class="${pct > 0 ? "up" : "down"}">${esc(tt(pct > 0 ? "eq.more" : "eq.less", { n: Math.abs(Math.round(pct)) }))}</span>`;
+  $("eq-sum").innerHTML = tt("eq.sum", { ter: esc(TER[mode]), km: `<span class="d num">${f.km.toFixed(1)} km</span>`,
+    gain: f.gain ? tt("eq.sum_gain", { m: `<span class="d num">${Math.round(f.gain)} m</span>` }) : "",
+    min: `<span class="d num">${esc(tt("rc.min", { n: f.min }))}</span>`, tss: `<b class="num">${n0(f.tss)}</b>`, diff });
   const warns = [];
   const cap = capFor(kindVal());
-  if (cap && f.min > cap) warns.push(`⚠ 超過你設定的單次上限 ${cap} 分（課表偏好）`);
+  if (cap && f.min > cap) warns.push(tt("eq.w_cap", { n: cap }));
   const pred = f.km > 0 ? eqH(mode, f.km, f.gain) * 60 : 0;
-  if (f.km > 0 && Math.abs(pred - f.min) > Math.max(3, 0.05 * f.min)) warns.push(`依你的紀錄，${f.km.toFixed(1)} km／爬升 ${Math.round(f.gain)} m 約要 ${Math.round(pred)} 分`);
+  if (f.km > 0 && Math.abs(pred - f.min) > Math.max(3, 0.05 * f.min)) warns.push(tt("eq.w_pred", { km: f.km.toFixed(1), m: Math.round(f.gain), p: Math.round(pred) }));
   const mm = EQ.model.modes[mode];
   if (mode !== "road" && mm && mm.density_range && (EQS.d < mm.density_range[0] - 10 || EQS.d > mm.density_range[1] + 10))
-    warns.push(`爬升比例 ${Math.round(EQS.d)} m/km 在你的${TER[mode]}紀錄（${mm.density_range[0]}–${mm.density_range[1]} m/km）之外，誤差可能較大`);
+    warns.push(tt("eq.w_range", { d: Math.round(EQS.d), ter: TER[mode], a: mm.density_range[0], b: mm.density_range[1] }));
   $("eq-warn").innerHTML = warns.map(esc).join("<br>");
   $("eq-note").innerHTML = "";
   if (mode === "trail" && WE.doc && !dlg.ro) WE.refreshSoon();     // distance steps: EP with this climb
@@ -2049,9 +2156,9 @@ function eqFillLater() {
 }
 function autoText() {
   const t = terVal(), k = kindVal();
-  if (!dlg.titleTouched && AUTO_TITLE_RE.test(F.title.value.trim()) && (AUTO_TITLE[k] || {})[t]) F.title.value = AUTO_TITLE[k][t];
+  if (!dlg.titleTouched && AUTO_TITLE_RE.test(srcOf(F.title.value)) && autoTitle(k, t)) F.title.value = autoTitle(k, t);
   const hr = aetText();
-  if (t !== "road" && (!F.target.value || /功率/.test(F.target.value))) F.target.value = hr;
+  if (t !== "road" && (!F.target.value || /功率/.test(srcOf(F.target.value)))) F.target.value = hr;
   if (t === "road" && F.target.value === hr) F.target.value = (D.targets || {})[k] || "";
 }
 function onTerrain() {
@@ -2091,9 +2198,9 @@ function tgtHint() {
   // a new session filled from the interval ladder (SP-628) carries its own target: no 依門檻建議 over it
   const t = dlg.sug && dlg.sug.variant && !dlg.uid ? "" : eqOn() && terVal() !== "road" ? aetText() : (D.targets || {})[kindVal()] || "";
   dlg.sugg = t;
-  $("sd-tgt").innerHTML = t && F.target.value !== t && !F.target.disabled ? `依門檻建議：${gl(t)} <button type="button" id="sd-tgt-use">套用</button>` : "";
+  $("sd-tgt").innerHTML = t && F.target.value !== t && !F.target.disabled ? `${esc(tt("tgt.sugg"))}${gl(t)} <button type="button" id="sd-tgt-use">${esc(tt("tgt.use"))}</button>` : "";
   const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
-  $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
+  $("sd-gl").innerHTML = g.length ? `${esc(tt("gl.head"))}${g.map(gl).join(" · ")}` : "";
   $("sd-test").hidden = kindVal() !== "test" || !!dlg.ro;
   smBox();
   varLoad();
@@ -2118,7 +2225,7 @@ async function smBox() {
       const m = (t.moves || []).find((x) => x.key === key);
       return m ? m.name : null;
     }).filter(Boolean);
-    if (names.length && !$("sd-sm").hidden) $("sd-sm-txt").textContent = tt("sm.intro") + " " + tt("sm.now", { list: names.join("、") });
+    if (names.length && !$("sd-sm").hidden) $("sd-sm-txt").textContent = tt("sm.intro") + " " + tt("sm.now", { list: names.join(tt("rc.sep")) });
   } catch (_) { /* the button still works */ }
 }
 $("sd-sm-go").addEventListener("click", () => { $("sd").close(); openPrefs({ section: "sm" }); });
@@ -2127,7 +2234,7 @@ $("sd-sm-go").addEventListener("click", () => { $("sd").close(); openPrefs({ sec
 // basis (power / HR / pace), or 自動 = engine/target_policy.py by session type; one step is changed
 // by clicking its target. Nothing is stored until 儲存.
 function weSession() {
-  return { kind: kindVal(), title: F.title.value, minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
+  return { kind: kindVal(), title: srcOf(F.title.value), minutes: +F.minutes.value || 0, target: srcKeep(F.target.value), detail: srcKeep(F.detail.value),
     day: F.day.value, terrain: eqOn() ? terVal() : (dlg.orig || {}).terrain,
     // trail: the climb per km for the effort distance of distance steps (the panel's, else the goal race's)
     climb_per_km: eqOn() && terVal() === "trail" ? EQS.d : kindVal() === "hike" ? (D.goal_climb_per_km ?? null) : null,
@@ -2136,7 +2243,7 @@ function weSession() {
     protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
     // SP-453: the editor's own total shows the calculator's TSS too while the structure is unchanged
     calc_tss: dlg.orig && dlg.orig.tss_by === "calc" && dlg.orig.tss > 0 && kindVal() === dlg.orig.kind
-      ? { tss: dlg.orig.tss, label: CALC_TSS } : null,
+      ? { tss: dlg.orig.tss, label: CALC_TSS() } : null,
     ...(dlg.variant ? { variant_key: dlg.variant.key, variant_reps: dlg.variant.reps, variant_blocks: dlg.variant.blocks,
       variant_adj: dlg.variant.adj } : dlg.orig && dlg.orig.variant_key ? {
       variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
@@ -2156,9 +2263,9 @@ function minLock(v) {
   F.minutes.readOnly = lock;
   F.minutes.classList.toggle("locked", lock);
   const est = lock && v.totals.est;
-  $("sd-min-lbl").textContent = est ? "約（分鐘）" : "分鐘";
-  const tip = !lock ? "" : (est ? `總時間是估的：步驟裡有距離或「直到按下計圈」段。${v.totals.est_note || ""}` : "") +
-    (est ? "\n" : "") + "時間由下面的結構加總；要改時間就改步驟（點這格會打開結構）。" + (eqOn() ? "\n" + eqTip(terVal()) : "");
+  $("sd-min-lbl").textContent = tt(est ? "sd.minutes_est" : "sd.minutes");
+  const tip = !lock ? "" : (est ? tt("sd.min_est_tip", { note: v.totals.est_note || "" }) : "") +
+    (est ? "\n" : "") + tt("sd.min_lock_tip") + (eqOn() ? "\n" + eqTip(terVal()) : "");
   $("sd-min-q").hidden = !lock;
   $("sd-min-q").dataset.tip = tip;
   if (!lock) return;
@@ -2172,7 +2279,7 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   if (v && v.totals && we.dirty && v.summary) F.target.value = v.summary;
   if (v && v.totals && mine && !dlg.ro) {
     if (calcTss()) tssHint();        // SP-453: the calculator's number while the structure is the exported one
-    else $("sd-tss").innerHTML = `預估訓練負荷（Training load）<b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
+    else $("sd-tss").innerHTML = `${esc(tt("tss.est"))}<b class="num">${n0(v.totals.tss)}</b> <span class="faint">${esc(tt("tss.by_steps"))}</span>`;
   }
   rpeKind(v && mine ? v.rpe_role : null, we.dirty && !dlg.ro);
   if (v && "family" in v) { dlg.stepsFam = v.family; famHint(); }
@@ -2194,7 +2301,7 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   if (row.mine) dlg.tplBasis = row.target_basis || null;
   // a template names the session while the title is still the default one
   const defs = Object.values(D.default_titles || {});
-  if (!dlg.titleTouched && (!F.title.value || defs.includes(F.title.value) || AUTO_TITLE_RE.test(F.title.value.trim()) || dlg.tplTitle === F.title.value))
+  if (!dlg.titleTouched && (!F.title.value || defs.includes(F.title.value) || AUTO_TITLE_RE.test(srcOf(F.title.value)) || dlg.tplTitle === F.title.value))
     F.title.value = dlg.tplTitle = row.title || row.label;
   if (eqOn() && steepGrade() && +$("eq-km").value > 0) eqRecalc("km");   // 陡坡健走: the climb from the distance
   else if (eqOn()) gradeRender();
@@ -2218,8 +2325,8 @@ function rpeKind(role, change) {
     tgtHint();
   }
   el.textContent = role === "quality"
-    ? "RPE 最高到 7 以上：這堂算強度課（和其他強度課隔 48 小時、算進每週強度預算）" + (to ? "，類型已改成強度課" : "")
-    : "RPE 在 7 以下：這堂算輕鬆課（可以放在長跑的位置）" + (to ? `，類型已改成${KINDS[to]}` : "");
+    ? tt("rpe.q") + (to ? tt("rpe.changed", { k: KINDS.quality }) : "")
+    : tt("rpe.e") + (to ? tt("rpe.changed", { k: KINDS[to] }) : "");
 }
 function stepsPreview() {
   const k = kindVal();
@@ -2232,9 +2339,9 @@ function stepsPreview() {
 $("sd-tkind").addEventListener("change", () => {
   const k = $("sd-tkind").value, T = (D.test_templates || {})[k] || [], sel = $("sd-tproto");
   sel.disabled = !k;
-  sel.innerHTML = k ? `<option value="">選方式…</option>` + T.map((t) => `<option value="${esc(t.protocol)}"${t.none ? " disabled" : ""}>${esc(t.label)}${t.minutes ? ` · ${t.minutes} 分` : ""}</option>`).join("")
-    : `<option value="">先選測試</option>`;
-  $("sd-tinfo").textContent = k === "cp" ? "CP 測試量 CP（功率）；比賽代替測試時不排課" : k === "aet" ? "AeT 測試量有氧閾值心率（依方式看心率或配速）" : "";
+  sel.innerHTML = k ? `<option value="">${esc(tt("sd.pick_proto"))}</option>` + T.map((t) => `<option value="${esc(t.protocol)}"${t.none ? " disabled" : ""}>${esc(t.label)}${t.minutes ? ` · ${esc(tt("rc.min", { n: t.minutes }))}` : ""}</option>`).join("")
+    : `<option value="">${esc(tt("sd.pick_test"))}</option>`;
+  $("sd-tinfo").textContent = k === "cp" ? tt("sd.tinfo_cp") : k === "aet" ? tt("sd.tinfo_aet") : "";
 });
 $("sd-tproto").addEventListener("change", () => {
   const k = $("sd-tkind").value, t = ((D.test_templates || {})[k] || []).find((x) => x.protocol === $("sd-tproto").value);
@@ -2247,8 +2354,9 @@ $("sd-tproto").addEventListener("change", () => {
 });
 
 // ---- interval library: the editor's templates and 換一個 (engine/interval_library.py) ----
-const SRC_KIND = { peer: "同儕審查", coach: "教練來源", "推估": "推估" };
-const OUTC = { met: "達標", border: "邊界", unadapted: "未適應", too_high: "未適應（目標太高）" };
+// the server's source_kind (peer / coach / 推估) and outcome → their catalog keys
+const SRC_KIND = { peer: "src.peer", coach: "src.coach", "推估": "pf.est" };
+const OUTC = { met: "outc.met", border: "outc.border", unadapted: "outc.unadapted", too_high: "outc.too_high" };
 async function varLoad() {
   // a stored interval session: what it is now and 換一個 (new sessions pick in 結構 › 插入範本)
   const box = $("sd-var");
@@ -2263,28 +2371,27 @@ async function varLoad() {
     const r = await sj("GET", `${PAPI}/variants?${q}`);
     dlg.vars = r;
     const s = r.session;
-    $("sd-var-cur").innerHTML = s ? `目前：<b>${esc(s.title)}</b>${s.swap_reason ? ` · ${esc(s.swap_reason)}` : ""}${s.equiv === false ? " · <b>不算進階</b>" : ""}` : "";
+    $("sd-var-cur").innerHTML = s ? `${esc(tt("var.cur"))}<b>${esc(s.title)}</b>${s.swap_reason ? ` · ${esc(s.swap_reason)}` : ""}${s.equiv === false ? ` · <b>${esc(tt("var.no_prog"))}</b>` : ""}` : "";
     $("sd-swap").hidden = !r.drawer;
     box.hidden = !has(r) || kindVal() !== "quality";
-  } catch (e) { box.hidden = false; $("sd-var-cur").textContent = `讀取失敗：${e.message}`; }
+  } catch (e) { box.hidden = false; $("sd-var-cur").textContent = tt("read_failed", { err: e.message }); }
 }
 function vdRow(v, cur) {
-  const meta = [v.structure, v.power, v.rest, `目標區 ${v.tiz_min} 分`, v.terrain === "hill" ? `⛰ 上坡 ${v.grade}` : "平路",
-    v.last ? `上次 ${md(v.last.date)}${v.last.outcome ? ` ${OUTC[v.last.outcome] || v.last.outcome}` : ""}` : "沒做過"].filter(Boolean);
-  return `<li class="${v.key === cur && !v.reps ? "cur" : ""}${v.fits ? "" : " off"}"><span class="t">${esc(v.title)}${v.key === cur && !v.reps ? "（目前）" : ""}</span>
-    <button class="btn" type="button" data-vk="${esc(v.key)}" data-vr="${v.reps || ""}"${v.fits ? "" : " disabled"}>換成這個</button>
+  const meta = [v.structure, v.power, v.rest, tt("vd.tiz", { n: v.tiz_min }), v.terrain === "hill" ? tt("vd.hill", { g: v.grade }) : tt("vd.flat"),
+    v.last ? tt("vd.last", { day: md(v.last.date), out: v.last.outcome ? " " + (OUTC[v.last.outcome] ? tt(OUTC[v.last.outcome]) : v.last.outcome) : "" }) : tt("vd.never")].filter(Boolean);
+  return `<li class="${v.key === cur && !v.reps ? "cur" : ""}${v.fits ? "" : " off"}"><span class="t">${esc(v.title)}${v.key === cur && !v.reps ? esc(tt("vd.current")) : ""}</span>
+    <button class="btn" type="button" data-vk="${esc(v.key)}" data-vr="${v.reps || ""}"${v.fits ? "" : " disabled"}>${esc(tt("vd.use"))}</button>
     <span class="m">${esc(meta.join(" · "))}<br>${esc(v.split)}${v.fits ? "" : ` · ${esc(v.why_not)}`}</span>
-    <span class="c${v.equiv ? "" : " neq"}">${esc(v.consequence)}；來源（${esc(SRC_KIND[v.source_kind] || v.source_kind)}）：${esc(v.source)}</span></li>`;
+    <span class="c${v.equiv ? "" : " neq"}">${esc(v.consequence)}${esc(tt("vd.src", { kind: SRC_KIND[v.source_kind] ? tt(SRC_KIND[v.source_kind]) : v.source_kind, src: v.source }))}</span></li>`;
 }
 function openVd() {
   const d = dlg.vars && dlg.vars.drawer;
   if (!d) return;
-  $("vd-sub").textContent = `${d.rung_name} · ${md(F.day.value)}（${wdl(F.day.value)}）${dlg.vars.cap ? ` · 今天上限 ${dlg.vars.cap} 分` : " · 今天不限時間"}`;
-  $("vd-rec").textContent = d.recommended_reason ? `自動會選：${d.recommended_reason}` : "";
+  $("vd-sub").textContent = `${d.rung_name} · ${tt("day.head", { day: md(F.day.value), wd: wdl(F.day.value) })}${dlg.vars.cap ? tt("vd.cap", { n: dlg.vars.cap }) : tt("vd.no_cap")}`;
+  $("vd-rec").textContent = d.recommended_reason ? tt("vd.rec", { x: d.recommended_reason }) : "";
   $("vd-eq").innerHTML = d.equivalent.map((v) => vdRow(v, d.current_key)).join("");
   $("vd-ot").innerHTML = d.other.map((v) => vdRow(v, d.current_key)).join("");
-  $("vd-tip").dataset.tip = `同等＝同一類強度、目標區時間差 ±15% 內、5 區每趟 ≥ 2 分、工休比在範圍內、每趟用掉的無氧容量相近（30/15 不算同等）。` +
-    `換同等的課不影響進階；換不同等的會記下來，這次不算進階。換過的課算你的修改：自動重排不會蓋掉。${d.terrain_note}`;
+  $("vd-tip").dataset.tip = tt("vd.tip", { note: d.terrain_note || "" });
   $("vd-err").textContent = "";
   $("vd").showModal();
 }
@@ -2302,17 +2409,15 @@ $("vd").addEventListener("click", async (e) => {
     S.sel = r.day || S.sel;
     await load();
     const [w, cls] = watchNote(r.coros);
-    msg(`已換成「${esc(r.title)}」${r.equiv ? "（同等，不影響進階）" : "（不算進階）"}${esc(w)}`, cls);
+    msg(esc(tt("vd.done", { title: r.title }) + tt(r.equiv ? "vd.done_eq" : "vd.done_neq") + w), cls);
   } catch (err) { $("vd-err").textContent = err.message; b.disabled = false; }
 });
 // ---------------- planned vs actual (engine/plan_match.py) ----------------
-const MATCH_TIP = "配對：同一天、同類運動（路跑／越野）先配；一天兩筆以上時，配時間和強度最接近的課。長跑、強度課、測試在同一週別天做完也算。" +
-  "一筆活動只算一堂課；沒排課那天的跑步維持獨立一筆，不會把之後的課拉過來。可以手動改配或取消，取消後這筆活動不再自動配對。" +
-  "（COROS 的活動檔沒有記錄是照哪個課表跑的，所以由日期和運動類型配對。）";
+const MATCH_TIP = T0("match.tip");
 // 完成度等級 (SP-216, engine/plan_match.graded): the legend's 完成度 section as text (sesschip.js), with
 // the payload's thresholds
 const OFF_TIP = () => SessChip.levelsText(D && D.compliance_levels);
-const INT_LB = { hard: "強度", easy: "輕鬆" };
+const INT_LB = { hard: T0("int.hard"), easy: T0("int.easy") };
 const VIEWER = (a) => `/api/v1/app/viewer?${new URLSearchParams({ workout: a.index, label: `${md(a.date)} ${a.category_label || ""} ${hm(a.moving_s)}` })}`;
 const actOf = (i) => (D.activities || []).find((a) => a.index === i);
 const actTxt = (a) => `${md(a.date)} ${a.category_label || ""} ${hm(a.moving_s)}${a.distance_km ? ` · ${(+a.distance_km).toFixed(1)} km` : ""}${a.tss != null ? ` · ${tt("load.n", { n: n0(a.tss) })}` : ""}`;
@@ -2330,23 +2435,24 @@ const linkSel = (s, ph) => { const h = linkSelect(s, ph); return h ? `<div class
 function vsHtml(s) {
   const a = s.done_by || {}, vs = s.vs || {}, cp = s.compliance;
   const st = SessChip.status(s), why = cardWhy(s), nums = compNums(cp);
-  const plan = [(s.kind === "quality" && s.quality_family ? s.quality_family.label : KINDS[s.kind]) || "", s.minutes ? `${s.minutes}′` : "", tt("load.n", { n: n0(s.tss_est ?? s.tss) }), vs.planned ? INT_LB[vs.planned] : ""].filter(Boolean).join(" · ");
+  // SP-646 R1: a long run with a marathon-pace block — vs.kind_label 「長跑（含 MP）」 / vs.actual_label 「含 60 分馬拉松配速」
+  const plan = [vs.kind_label || (s.kind === "quality" && s.quality_family ? s.quality_family.label : KINDS[s.kind]) || "", s.minutes ? `${s.minutes}′` : "", tt("load.n", { n: n0(s.tss_est ?? s.tss) }), vs.planned ? INT_LB[vs.planned] : ""].filter(Boolean).join(" · ");
   const real = [a.category_label || "", hm(a.moving_s), a.distance_km ? `${(+a.distance_km).toFixed(1)} km` : "", a.climbing_m ? `↑${Math.round(a.climbing_m)} m` : "",
-    a.tss != null ? tt("load.n", { n: n0(a.tss) }) : "", vs.actual ? INT_LB[vs.actual] : "", a.self_rating ? a.self_rating.text : ""].filter(Boolean).join(" · ");
-  const hard = vs.hard_min != null ? `閾值以上 ${vs.hard_min} 分${vs.need_min ? `（強度課門檻 ${vs.need_min} 分）` : ""}` : "";
+    a.tss != null ? tt("load.n", { n: n0(a.tss) }) : "", vs.actual_label || (vs.actual ? INT_LB[vs.actual] : ""), a.self_rating ? a.self_rating.text : ""].filter(Boolean).join(" · ");
+  const hard = vs.hard_min != null ? tt("vs.hard", { n: vs.hard_min }) + (vs.need_min ? tt("vs.hard_need", { n: vs.need_min }) : "") : "";
   return `<div class="vs-h">${SessChip.ring(st, (cp || {}).pct)}<b>${esc(SessChip.label(st, st === "partial" ? (cp || {}).pct : null))}</b>` +
     (why ? `<span class="meta">· ${esc(why)}</span>` : "") +
     `<button type="button" class="qtip" data-manual="schedule#read-card" aria-label="${esc(tt("vs.levels_aria"))}" data-tip="${esc(OFF_TIP() + "\n\n" + MATCH_TIP)}">?</button>` +
     (vs.match_label ? `<span class="meta">${esc(vs.match_label)}</span>` : "") + `</div>` +
     (nums ? `<div class="vs-nums">${esc(nums)}</div>` : "") +
     (SessChip.hrNote(cp) ? `<div class="vs-nums">${esc(SessChip.hrNote(cp))}</div>` : "") +
-    `<dl class="vs"><dt>計畫</dt><dd>${esc(plan)}</dd><dt>實際</dt><dd class="${vs.off_plan ? "off" : ""}">${esc(real)}</dd>` +
+    `<dl class="vs"><dt>${esc(tt("vs.plan"))}</dt><dd>${esc(plan)}</dd><dt>${esc(tt("vs.actual"))}</dt><dd class="${vs.off_plan ? "off" : ""}">${esc(real)}</dd>` +
     (vs.off_plan ? `<dt></dt><dd class="off">${esc(vs.off_why || vs.text.replace(/^換了課：/, ""))}</dd>` : "") +
     (vs.short ? `<dt></dt><dd class="part">${esc(vs.short_text)}</dd>` : "") +
     (hard ? `<dt></dt><dd class="meta">${esc(hard)}</dd>` : "") + `</dl>` +
-    `<div class="vs-act">${a.index != null ? `<a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` : ""}` +
-    `<button type="button" class="btn" data-unlink="${esc(s.uid)}" title="這筆活動不算這堂課；之後也不會再自動配對">取消配對</button>` +
-    linkSelect(s, "改配到…") + `</div>`;
+    `<div class="vs-act">${a.index != null ? `<a class="btn" href="${esc(VIEWER(a))}">📈 ${esc(tt("vs.open"))}</a>` : ""}` +
+    `<button type="button" class="btn" data-unlink="${esc(s.uid)}" title="${esc(tt("vs.unlink_tip"))}">${esc(tt("vs.unlink"))}</button>` +
+    linkSelect(s, tt("vs.relink")) + `</div>`;
 }
 // ---- end done box ----
 async function doLink(uid, index) {
@@ -2354,7 +2460,7 @@ async function doLink(uid, index) {
     await sj("POST", `${PAPI}/sessions/${encodeURIComponent(uid)}/link`, { index: +index });
     $("sd").close(); $("ad").close();
     await load();
-    msg("已配對", "ok");
+    msg(esc(tt("vs.linked")), "ok");
   } catch (err) { msg(esc(err.message), "err"); }
 }
 async function doUnlink(uid) {
@@ -2362,7 +2468,7 @@ async function doUnlink(uid) {
     await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(uid)}/link`);
     $("sd").close();
     await load();
-    msg("已取消配對；這筆活動改列為沒排課的活動", "ok");
+    msg(esc(tt("vs.unlinked")), "ok");
   } catch (err) { msg(esc(err.message), "err"); }
 }
 $("sd-done").addEventListener("click", (e) => { const b = e.target.closest("[data-unlink]"); if (b) doUnlink(b.dataset.unlink); });
@@ -2375,17 +2481,17 @@ function openAct(index) {
   $("ad").dataset.index = index;
   $("ad-sub").textContent = `${I18N.fmt.date(a.date, "mdw")}${a.start ? " " + a.start.slice(11, 16) : ""}`;
   const ss = D.sessions.filter((s) => (s.link_options || []).includes(index));
-  const rows = [["類別", `${a.category_label || ""}${a.sport_type ? `（${a.sport_type}）` : ""}`], ["移動時間", hm(a.moving_s)],
-    ["距離", a.distance_km ? `${(+a.distance_km).toFixed(1)} km` : "–"], ["爬升", a.climbing_m ? `${Math.round(a.climbing_m)} m` : "–"],
-    [tt("load.label"), n0(a.tss)], ...(a.hard_s != null ? [["閾值以上", `${(a.hard_s / 60).toFixed(1)} 分`]] : [])];
+  const rows = [[tt("ad.cat"), `${a.category_label || ""}${a.sport_type ? tt("paren", { x: a.sport_type }) : ""}`], [tt("ad.moving"), hm(a.moving_s)],
+    [tt("ad.dist"), a.distance_km ? `${(+a.distance_km).toFixed(1)} km` : "–"], [tt("climb.label"), a.climbing_m ? `${Math.round(a.climbing_m)} m` : "–"],
+    [tt("load.label"), n0(a.tss)], ...(a.hard_s != null ? [[tt("ad.hard"), tt("rc.min", { n: (a.hard_s / 60).toFixed(1) })]] : [])];
   const h = $("ad-h");
   h.dataset.def ||= h.textContent;
   h.textContent = a.race ? raceT(a.race, "race.act", { name: a.race.name }) : h.dataset.def;
   $("ad-body").innerHTML = (a.race ? `<p class="meta" style="margin:0 0 6px">${esc(raceT(a.race, "race.act_note", { name: a.race.name, p: a.race.priority }))}</p>`
-    : `<p class="meta" style="margin:0 0 6px">這天沒有對應的課表，算計畫外的訓練 <button type="button" class="qtip" data-manual="schedule#read-card" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></p>`) +
+    : `<p class="meta" style="margin:0 0 6px">${esc(tt("ad.offplan"))} <button type="button" class="qtip" data-manual="schedule#read-card" aria-label="${esc(tt("ad.match_aria"))}" data-tip="${esc(MATCH_TIP)}">?</button></p>`) +
     `<dl class="vs">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` +
-    `<div class="vs-act"><a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` +
-    (ss.length ? `<select id="ad-link" aria-label="配對到課表"><option value="">配對到課表…</option>${ss.map((s) => `<option value="${esc(s.uid)}">${esc(`${md(s.day)} ${s.title}${s.state === "done" ? "（改配這筆）" : s.state === "missed" ? "（跳過）" : ""}`)}</option>`).join("")}</select>` : "") +
+    `<div class="vs-act"><a class="btn" href="${esc(VIEWER(a))}">📈 ${esc(tt("vs.open"))}</a>` +
+    (ss.length ? `<select id="ad-link" aria-label="${esc(tt("ad.link"))}"><option value="">${esc(tt("ad.link_ph"))}</option>${ss.map((s) => `<option value="${esc(s.uid)}">${esc(`${md(s.day)} ${s.title}${s.state === "done" ? tt("ad.relink") : s.state === "missed" ? tt("ad.skipped") : ""}`)}</option>`).join("")}</select>` : "") +
     `</div>`;
   $("ad").showModal();
 }
@@ -2398,19 +2504,19 @@ $("ad").addEventListener("change", (e) => { if (e.target.id === "ad-link" && e.t
 const fromCalc = (s) => !!(s && String(s.ext_key || "").startsWith("racecalc:"));
 function subOrigin(s) {
   if (!s) return "";
-  if (fromCalc(s)) return ` · ${tt("sd.from_calc")}${s.ext_edited ? " · 已修改" : ""}`;
-  return s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : "";
+  if (fromCalc(s)) return ` · ${tt("sd.from_calc")}${s.ext_edited ? " · " + tt("sd.edited") : ""}`;
+  return s.origin === "custom" ? " · " + tt("sd.custom") : s.edited ? " · " + tt("sd.edited") : "";
 }
 function openDlg(s, day) {
   closeMenus();
   const ro = s && !editable(s);
   dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null, variant: null, varFor: null, vars: null, test: null,
     famTouched: false, stepsFam: null };
-  $("sd-tkind").value = s && s.kind === "test" ? (s.protocol === "aet" || /AeT|飄移/.test(s.title || "") ? "aet" : "cp") : "";
+  $("sd-tkind").value = s && s.kind === "test" ? (s.protocol === "aet" || /AeT|飄移/.test(srcTitle(s)) ? "aet" : "cp") : "";
   $("sd-tkind").dispatchEvent(new Event("change"));
-  $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
+  $("sd-h").textContent = tt(!s ? "ctx.add" : ro ? "sd.view" : "sd.edit");
   const d = s ? s.day : day;
-  $("sd-sub").textContent = `${md(d)}（${wdl(d)}）${s && s.quality_family ? " · " + s.quality_family.text : ""}${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${subOrigin(s)}`;
+  $("sd-sub").textContent = `${tt("day.head", { day: md(d), wd: wdl(d) })}${s && s.quality_family ? " · " + s.quality_family.text : ""}${s && s.provisional && s.state === "active" ? " · " + tt("wk.prov_short") : ""}${subOrigin(s)}`;
   $("sd-mark").innerHTML = s && window.PlanMark ? PlanMark.detail(s, KINDS) : "";      // SP-318
   $("sd-mark").hidden = !$("sd-mark").innerHTML;
   // 手錶: the push state in words (a card draws only 需更新 / 失敗; SP-396)
@@ -2422,9 +2528,9 @@ function openDlg(s, day) {
   const pastOpen = s && s.state === "active" && s.day <= D.today && (s.link_options || []).length;
   db.hidden = !(s && (s.state === "done" || s.state === "missed" || pastOpen));
   if (s && s.state === "done") db.innerHTML = vsHtml(s) +
-    (s.note ? `<br><span class="adapt-note" title="${esc(window.I18N ? I18N.t("schedule.pf.adapt_note_tip", ADAPT_NOTE_TIP) : ADAPT_NOTE_TIP)}">⚠ ${esc(s.note)}</span>` : "");
-  else if (s && s.state === "missed") db.innerHTML = `<div class="vs-h">${SessChip.ring("missed")}<b>${esc(SessChip.label("missed"))}</b><span class="meta">：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}</span></div>${linkSel(s, "配對活動…")}`;
-  else if (pastOpen) db.innerHTML = `<span class="meta">還沒配到活動</span>${linkSel(s, "配對活動…")}`;
+    (s.note ? `<br><span class="adapt-note" title="${esc(tt("pf.adapt_note_tip"))}">⚠ ${esc(s.note)}</span>` : "");
+  else if (s && s.state === "missed") db.innerHTML = `<div class="vs-h">${SessChip.ring("missed")}<b>${esc(SessChip.label("missed"))}</b><span class="meta">${esc(tt("sd.no_act"))}${s.note ? esc(tt("paren", { x: s.note })) : ""}</span></div>${linkSel(s, tt("sd.link_act"))}`;
+  else if (pastOpen) db.innerHTML = `<span class="meta">${esc(tt("sd.not_linked"))}</span>${linkSel(s, tt("sd.link_act"))}`;
   F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);
   F.day.value = d;
   dlg.stepsFam = s ? s.steps_family || null : null;
@@ -2439,9 +2545,9 @@ function openDlg(s, day) {
   F.querySelectorAll("input, textarea").forEach((x) => { x.disabled = !!ro; });
   $("sd-err").textContent = "";
   $("sd-save").hidden = !!ro;
-  $("sd-cancel").textContent = ro ? "關閉" : "取消";
+  $("sd-cancel").textContent = tt(ro ? "cf.close" : "cf.cancel");
   // a past session that wasn't done can be deleted too (it never comes back; off the watch)
-  const del = $("sd-del"); del.hidden = !s || (ro && !expOpen(s)); del.classList.remove("armed"); del.textContent = "刪除";
+  const del = $("sd-del"); del.hidden = !s || (ro && !expOpen(s)); del.classList.remove("armed"); del.textContent = tt("del.ok");
   $("sd-revert").hidden = !s || ro || !s.revertible;                // SP-469: an edited auto session
   $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength" || s.kind === "heat_passive";
   $("sd-climbbox").hidden = !climbable(s);
@@ -2530,9 +2636,9 @@ $("sd").addEventListener("click", (e) => {
 F.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (dlg.ro) return;
-  if (!F.title.value.trim()) { $("sd-err").textContent = "標題不能空白"; F.title.focus(); return; }
-  if (!F.day.value || F.day.value < D.today) { $("sd-err").textContent = "不能排到過去的日子"; F.day.focus(); return; }
-  const body = { day: F.day.value, kind: kindVal(), title: F.title.value.trim(), minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
+  if (!F.title.value.trim()) { $("sd-err").textContent = tt("sd.e_title"); F.title.focus(); return; }
+  if (!F.day.value || F.day.value < D.today) { $("sd-err").textContent = tt("sd.e_past"); F.day.focus(); return; }
+  const body = { day: F.day.value, kind: kindVal(), title: srcOf(F.title.value), minutes: +F.minutes.value || 0, target: srcKeep(F.target.value), detail: srcKeep(F.detail.value),
     tss: Math.round(estDialog().tss * 10) / 10 };
   if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
   // SP-628: the dialog's suggestion — the server rebuilds it for the day (the reps for its cap, the mark)
@@ -2568,7 +2674,7 @@ F.addEventListener("submit", async (e) => {
       const saved = await optimistic([uid], (ss) => ss.map((x) => (x.uid === uid ? { ...x, ...body, tss_est: body.tss } : x)),
         () => sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, body));
       const [w, cls] = watchNote(saved && saved.coros);
-      msg(`已更新「${esc(body.title)}」` + esc(w), cls);
+      msg(esc(tt("sd.updated", { title: body.title }) + w), cls);
     } catch (err) { S.sel = was; if (D) render(); $("sd").showModal(); $("sd-err").textContent = err.message; }
     return;
   }
@@ -2580,8 +2686,8 @@ F.addEventListener("submit", async (e) => {
       let r = await WorkoutEditor.request(method, url, body);
       if (r.status === 422) {
         const errs = ((r.body.detail || {}).errors || []);
-        if (!(await ask("結構有錯誤", `<ul style="margin:0;padding-left:18px">${errs.map((x) => `<li class="err">${esc(x)}</li>`).join("")}</ul>
-          <p class="meta" style="margin:0">仍要照這樣儲存？</p>`, "仍要儲存", { danger: true }))) return;
+        if (!(await ask(tt("sd.steps_err"), `<ul style="margin:0;padding-left:18px">${errs.map((x) => `<li class="err">${esc(x)}</li>`).join("")}</ul>
+          <p class="meta" style="margin:0">${esc(tt("sd.steps_q"))}</p>`, tt("sd.steps_ok"), { danger: true }))) return;
         r = await WorkoutEditor.request(method, url, { ...body, steps_force: true });
       }
       if (!r.ok) throw new Error(typeof r.body.detail === "string" ? r.body.detail : JSON.stringify(r.body.detail || r.body).slice(0, 200));
@@ -2591,7 +2697,7 @@ F.addEventListener("submit", async (e) => {
     S.sel = body.day;
     await load();
     const [w, cls] = watchNote(saved && saved.coros);
-    msg((dlg.uid ? `已更新「${esc(body.title)}」` : `已新增「${esc(body.title)}」到 ${md(body.day)}`) + esc(w), cls);
+    msg(esc((dlg.uid ? tt("sd.updated", { title: body.title }) : tt("sd.added", { title: body.title, day: md(body.day) })) + w), cls);
   } catch (err) { $("sd-err").textContent = err.message; }
   finally { $("sd-save").disabled = false; }
 });
@@ -2601,14 +2707,14 @@ $("sd-del").addEventListener("click", async () => {
   if (!b.classList.contains("armed")) {
     b.classList.add("armed");
     const pushed = s.coros && ["pushed", "updated", "outdated"].includes(s.coros.status);
-    b.textContent = expOpen(s) ? tt("del.confirm_expired") : pushed ? "確定刪除（下次同步時也會從 COROS 移除）" : "確定刪除？";
+    b.textContent = expOpen(s) ? tt("del.confirm_expired") : pushed ? tt("del.confirm_pushed") : tt("del.confirm");
     return;
   }
   $("sd").close();
   try {
     const r = await optimistic([s.uid], (ss) => ss.filter((x) => x.uid !== s.uid),
       () => sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`));
-    msg(`已刪除「${esc(s.title)}」（${md(s.day)}）${esc(coroNote(r.coros))}`, "ok");
+    msg(esc(tt("del.done", { title: s.title, day: md(s.day) }) + coroNote(r.coros)), "ok");
   } catch (err) { errMsg(tt("del.what"), err); }
 });
 $("sd-push").addEventListener("click", () => { const s = findS(dlg.uid); if (!s) return; $("sd").close(); S.sel = s.day; render(); push("day", s.day); });
@@ -2619,7 +2725,7 @@ const ON_WATCH = ["pushed", "updated", "outdated", "failed"];
 function revertMsg(r, title) {
   const [w, cls] = watchNote(r.coros);
   if (r.state === "removed") return [tt("rv.done_gone", { title }) + w, cls];
-  const t = { title: r.title || title, day: `${md(r.day)}（${wdl(r.day)}）` };
+  const t = { title: r.title || title, day: tt("day.head", { day: md(r.day), wd: wdl(r.day) }) };
   const moved = r.change && r.change.reason && /同一天/.test(r.change.reason);
   return [tt(moved ? "rv.done_moved" : "rv.done", t) + w, cls];
 }
@@ -3176,7 +3282,7 @@ function openBo(b, start, end) {
   closeMenus();
   if (!D) return;
   boEdit = b || null;
-  $("bo-h").textContent = b ? "🏖 修改不排課日期" : "🏖 設定不排課日期";
+  $("bo-h").textContent = tt(b ? "bo.title_edit" : "bo.title_new");
   const a = b ? b.start : start || S.sel || D.today;
   BOF.start.value = a;
   BOF.end.value = b ? b.end : end || a;
@@ -3189,20 +3295,20 @@ function openBo(b, start, end) {
 }
 function boError() {
   const a = BOF.start.value, b = BOF.end.value;
-  if (!a || !b) return "要選開始和結束日期";
-  if (b < a) return "結束日不能早於開始日";
-  if (spanDays(a, b) > 62) return "一段最多 62 天";
+  if (!a || !b) return tt("bo.e_dates");
+  if (b < a) return tt("bo.e_order");
+  if (spanDays(a, b) > 62) return tt("bo.e_long", { n: 62 });
   const hit = BOS().find((x) => x !== boEdit && !(b < x.start || a > x.end));
-  if (hit) return `和另一段不排課日期重疊（${rangeTxt(hit.start, hit.end)}${hit.label ? " " + hit.label : ""}）`;
+  if (hit) return tt("bo.e_overlap", { range: rangeTxt(hit.start, hit.end) + (hit.label ? " " + hit.label : "") });
   return "";
 }
 function boSync() {
   const a = BOF.start.value, b = BOF.end.value;
   if (a && b && b >= a) {
     const n = (D.sessions || []).filter((s) => s.state === "active" && s.day >= a && s.day <= b && s.day >= D.today).length;
-    $("bo-sum").innerHTML = `${esc(rangeTxt(a, b))}，共 <b>${spanDays(a, b)}</b> 天` +
-      (n ? `；目前有 <b>${n}</b> 堂課在這幾天，會移到同一週的其他天或取消` : "；這幾天目前沒有排課") +
-      (b < D.today ? `<br><span class="faint">過去的日子：只做紀錄，不改課表</span>` : "");
+    $("bo-sum").innerHTML = tt("bo.sum", { range: esc(rangeTxt(a, b)), n: spanDays(a, b) }) +
+      (n ? tt("bo.sum_n", { n }) : esc(tt("bo.sum_none"))) +
+      (b < D.today ? `<br><span class="faint">${esc(tt("bo.sum_past"))}</span>` : "");
   } else $("bo-sum").textContent = "";
   $("bo-err").textContent = boError();
 }
@@ -3211,23 +3317,22 @@ $("bo").addEventListener("click", (e) => { if (e.target.closest("[data-close]") 
 // preview first (nothing saved), then save + reconcile with the choices made in the preview
 async function applyBlackouts(list, title, done, removing = false) {
   if (S.busy) return;
-  msg(`<span class="spin"></span> 計算不排課後的課表…`);
+  msg(`<span class="spin"></span> ${esc(tt("bo.working"))}`);
   let p;
   try { p = await sj("POST", `${PAPI}/blackouts/preview`, { blackouts: list }); } catch (e) { return errMsg(title, e); }
   msg("");
   const n = (p.changes || []).length;
-  const intro = removing ? "移除後這幾天恢復照常排課；之後還沒做、你沒改過的課依目前狀況重排，你改過或自己加的課不會動。"
-    : "這些日子不排課；之後還沒做、你沒改過的課會移到同一週的其他天，排不下的取消（長跑優先），本週目標時數跟著減少。你改過或自己加的課由你決定。";
-  const ok = await ask(title, `<p class="meta" style="margin:0">${intro}</p>${changesHtml(p.by_day, true)}`,
-    n ? `套用（${n} 項變動）` : "儲存", { cancel: "取消" });
-  if (!ok) { msg("不排課日期沒有變更"); return; }
+  const intro = tt(removing ? "bo.intro_rm" : "bo.intro");
+  const ok = await ask(title, `<p class="meta" style="margin:0">${esc(intro)}</p>${changesHtml(p.by_day, true)}`,
+    n ? tt("bo.apply", { n }) : tt("sd.save"), { cancel: tt("cf.cancel") });
+  if (!ok) { msg(esc(tt("bo.unchanged"))); return; }
   const dec = decisions();
   S.busy = true; renderToolbar(); msg(`<span class="spin"></span> ${esc(tt("rc.applying"))}`);
   try {
     const r = await sj("PUT", `${PAPI}/blackouts`, { blackouts: list, decisions: dec });
     await load();
     const [w, cls] = watchNote(r.coros);
-    msg(`${done}${(r.changes || []).length ? `：${r.changes.length} 項變動` : ""}${esc(w)}`, cls);
+    msg(esc(done + ((r.changes || []).length ? tt("bo.changes", { n: r.changes.length }) : "") + w), cls);
   } catch (e) { errMsg(title, e); }
   finally { S.busy = false; if (D) renderToolbar(); }
 }
@@ -3238,14 +3343,14 @@ BOF.addEventListener("submit", (e) => {
   const r = { id: boEdit ? boEdit.id : null, start: BOF.start.value, end: BOF.end.value, label: BOF.label.value.trim() };
   const list = BOS().filter((x) => x !== boEdit).concat([r]);
   $("bo").close();
-  const t = rangeTxt(r.start, r.end) + (r.label ? `（${r.label}）` : "");
-  applyBlackouts(list, boEdit ? "修改不排課日期" : "設定不排課日期", `已設定 ${t} 不排課`);
+  const t = rangeTxt(r.start, r.end) + (r.label ? tt("paren", { x: r.label }) : "");
+  applyBlackouts(list, tt(boEdit ? "bo.what_edit" : "bo.what_new"), tt("bo.done", { range: t }));
 });
 $("bo-del").addEventListener("click", () => {
   if (!boEdit) return;
   const b = boEdit, list = BOS().filter((x) => x !== b);
   $("bo").close();
-  applyBlackouts(list, "移除不排課日期", `已移除 ${rangeTxt(b.start, b.end)} 的不排課`, true);
+  applyBlackouts(list, tt("bo.what_rm"), tt("bo.done_rm", { range: rangeTxt(b.start, b.end) }), true);
 });
 
 // ---------------- calendar interaction ----------------
@@ -3366,7 +3471,7 @@ $("cal").addEventListener("drop", async (e) => {
       const r = await sj("POST", `${PAPI}/rest-days/move`, { from, to: day });
       S.sel = day; await load();
       const [wn, cls] = watchNote(r.coros);
-      msg(esc(tt("rest.mv_done", { to: `${md(day)}（${wdl(day)}）`, n: r.moved.length, from: `${md(from)}（${wdl(from)}）` }) + wn)
+      msg(esc(tt("rest.mv_done", { to: tt("day.head", { day: md(day), wd: wdl(day) }), n: r.moved.length, from: tt("day.head", { day: md(from), wd: wdl(from) }) }) + wn)
         + (r.warnings || []).map((w) => `<br>⚠ ${esc(w)}`).join(""), r.warnings?.length ? "err" : cls);
     } catch (err) { errMsg(tt("rest.mv_what"), err); }
     return;
@@ -3377,7 +3482,7 @@ $("cal").addEventListener("drop", async (e) => {
     const r = await optimistic([uid], (ss) => ss.map((x) => (x.uid === uid ? { ...x, day } : x)),
       () => sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day }));
     const [w, cls] = watchNote(r.coros);
-    msg(esc(tt("mv.done", { title: s.title, day: `${md(day)}（${wdl(day)}）` }) + w), cls);
+    msg(esc(tt("mv.done", { title: s.title, day: tt("day.head", { day: md(day), wd: wdl(day) }) }) + w), cls);
   } catch (err) { S.sel = s.day; if (D) render(); errMsg(tt("mv.what"), err); }
 });
 
@@ -3387,7 +3492,9 @@ $("cal").addEventListener("drop", async (e) => {
 // and puts the week's volume on its other days.
 const tt = (k, p) => (window.I18N ? I18N.t("schedule." + k, p) : k);
 const expOpen = (s) => !!s && s.kind !== "notice" && s.day < D.today && (s.state === "missed" || s.state === "active");
-const CTX = { el: null, at: 0, lp: null, quietUntil: 0 };
+// `at`: when a menu last opened (a long-press's contextmenu right after it is swallowed) — none yet, not 0:
+// performance.now() starts at the page load, so a right-click in its first 0.7 s did nothing
+const CTX = { el: null, at: -Infinity, lp: null, quietUntil: 0 };
 function ctxClose() { CTX.el?.remove(); CTX.el = null; }
 function ctxItems(target) {
   const chip = target.closest(".chip[data-uid]"), cell = target.closest("[data-day]");
@@ -3466,10 +3573,10 @@ function watchNote(c) {
   if (c && c.status === "ok" && (c.sent || c.removed)) return [tt("watch.ok", { provider: p }), "ok"];
   return ["", "ok"];
 }
-const checkNote = (days, p) => tt("watch.check", { provider: p || "COROS", days: days.map(md).join("、") });
+const checkNote = (days, p) => tt("watch.check", { provider: p || "COROS", days: days.map(md).join(tt("rc.sep")) });
 // ---------------- 長跑 → 長爬坡有氧 (SP-87; api PATCH /sessions/{uid} {swap_to: "climb"}) ----------------
 // the same day, minutes and TSS; still the week's long run (engine/base_climb.py's structure)
-const climbable = (s) => !!s && editable(s) && s.kind === "long" && !/^長爬坡有氧/.test(s.title || "");
+const climbable = (s) => !!s && editable(s) && s.kind === "long" && !/^長爬坡有氧/.test(srcTitle(s));
 async function toClimb(s) {
   if (S.busy || !climbable(s)) return;
   try {
@@ -3674,7 +3781,7 @@ async function openTests(day) {
   const d = tpDialog();
   d.dataset.day = day;
   $("tp-h").textContent = tt("tests.title");
-  $("tp-sub").textContent = `${md(day)}（${wdl(day)}）`;
+  $("tp-sub").textContent = tt("day.head", { day: md(day), wd: wdl(day) });
   $("tp-body").innerHTML = `<p class="meta"><span class="spin"></span> ${esc(tt("tests.loading"))}</p>`;
   d.showModal();
   let r;

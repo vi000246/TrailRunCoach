@@ -45,16 +45,18 @@ from typing import Optional
 
 from backend.i18n import N_, _
 
-AREAS = {"knee": "膝", "shin_calf": "小腿／脛骨", "achilles": "阿基里斯腱", "ankle": "腳踝",
-         "foot": "足底／腳跟", "hip": "髖／臀", "thigh": "大腿", "low_back": "下背", "other": "其他"}
+# the tables' words are msgids (SP-841): stored values are the keys (a custom area: the user's own label),
+# shown through _() — area_label, full_label, event_json, tables() for the /meta API
+AREAS = {"knee": N_("膝"), "shin_calf": N_("小腿／脛骨"), "achilles": N_("阿基里斯腱"), "ankle": N_("腳踝"),
+         "foot": N_("足底／腳跟"), "hip": N_("髖／臀"), "thigh": N_("大腿"), "low_back": N_("下背"), "other": N_("其他")}
 UNKNOWN = "unknown"
-SIDES = {"left": "左", "right": "右", "both": "兩側"}
+SIDES = {"left": N_("左"), "right": N_("右"), "both": N_("兩側")}
 NO_SIDE = ("low_back",)
-KINDS = {"overuse": "過度使用", "acute": "急性"}
-SEVERITIES = {"mild": "輕", "moderate": "中", "severe": "重"}
-SEVERITY_HELP = {"mild": "照練", "moderate": "減量或改練", "severe": "停跑"}
+KINDS = {"overuse": N_("過度使用"), "acute": N_("急性")}
+SEVERITIES = {"mild": N_("輕"), "moderate": N_("中"), "severe": N_("重")}
+SEVERITY_HELP = {"mild": N_("照練"), "moderate": N_("減量或改練"), "severe": N_("停跑")}
 SEV_RANK = {"mild": 1, "moderate": 2, "severe": 3}
-STATUSES = {"draft": "待補細節", "active": "進行中", "resolved": "好了"}
+STATUSES = {"draft": N_("待補細節"), "active": N_("進行中"), "resolved": N_("好了")}
 PAIN = {0: N_("沒痛"), 1: N_("痠"), 2: N_("痛"), 3: N_("中斷")}
 
 ATTACH_DAYS = 28        # 推估: a 痛 mark joins an open event of the same area that began ≤ 28 days before
@@ -88,7 +90,7 @@ PATTERN_MIN_N = 5
 # allowed to reach 5 on the VAS but should have subsided by the following morning. Pain and
 # stiffness in the Achilles tendon were not allowed to increase from week to week."
 # Studied in Achilles tendinopathy only: SP-269 shows it for the 跟腱 condition only.
-SILBERNAGEL = {"during_max": 5, "after_max": 5, "src": "Silbernagel 2007（阿基里斯腱疼痛監測模型）",
+SILBERNAGEL = {"during_max": 5, "after_max": 5, "src": N_("Silbernagel 2007（阿基里斯腱疼痛監測模型）"),
                "text": N_("疼痛監測（Silbernagel 2007）：跑的時候疼痛 ≤ 5/10；跑完 ≤ 5/10 且隔天早上要退回原本的程度；"
                           "疼痛和僵硬不能一週比一週多。原研究只看阿基里斯腱，用在其他部位是推估。")}
 DISCLAIMER = N_("這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。")
@@ -175,16 +177,26 @@ def norm_area(a) -> Optional[str]:
 
 
 def area_label(a: Optional[str]) -> str:
+    """A body area in the request's language; a custom area is the user's own label, as written."""
     if not a or a == UNKNOWN:
-        return "未指定部位"
-    return AREAS.get(a, a)
+        return _("未指定部位")
+    return _(AREAS[a]) if a in AREAS else a
 
 
 def full_label(area: Optional[str], side: Optional[str]) -> str:
-    s = SIDES.get(side or "", "")
-    if side == "both":
-        s = "雙側"
-    return f"{s}{area_label(area)}"
+    """「右膝」「雙側小腿／脛骨」 (en: "Knee (right)")."""
+    if side not in SIDES:
+        return area_label(area)
+    s = N_("雙側") if side == "both" else SIDES[side]
+    return _("{side}{area}", side=_(s), area=area_label(area))
+
+
+def tables() -> dict:
+    """The /meta tables in the request's language (SP-841)."""
+    return {"sides": {k: _(v) for k, v in SIDES.items()}, "kinds": {k: _(v) for k, v in KINDS.items()},
+            "severities": {k: _(v) for k, v in SEVERITIES.items()},
+            "severity_help": {k: _(v) for k, v in SEVERITY_HELP.items()},
+            "statuses": {k: _(v) for k, v in STATUSES.items()}, "pain": {k: _(v) for k, v in PAIN.items()}}
 
 
 def is_illness(ev: Optional[dict]) -> bool:
@@ -398,7 +410,10 @@ def recurrence(ev: dict, events: list[dict]) -> Optional[dict]:
         return None
     p = max(prev, key=lambda e: e["resolved_date"])
     days = (onset - _d(p["resolved_date"])).days
-    return {"note": f"距上次好了 {days} 天、同部位（#{p['id']}）", "days": days,
+    # stored in the event's note (the user's text from then on): always in the source language
+    from backend.i18n import DEFAULT_LOCALE, translate
+    return {"note": translate(N_("距上次好了 {days} 天、同部位（#{id}）"), DEFAULT_LOCALE, days=days, id=p["id"]),
+            "days": days,
             "recurrence_of": p["id"] if days <= RECUR_DAYS else None}
 
 
@@ -449,6 +464,10 @@ def days_off_auto(ev: dict, runs: list[tuple], today: dt.date) -> Optional[int]:
     return max(0, int(round(span - rest_share * span)))
 
 
+def _label(table: dict, k) -> str:
+    return _(table[k]) if k in table else ""
+
+
 def event_json(ev: dict, today: dt.date, linked: int = 0, auto_days: Optional[int] = None) -> dict:
     o = _d(ev.get("onset_date")) or today
     end = end_of(ev, today)
@@ -465,8 +484,8 @@ def event_json(ev: dict, today: dt.date, linked: int = 0, auto_days: Optional[in
             "monitor": None if ill else monitor(ev)["text"],
             "monitor_rule": None if ill else monitor(ev)["rule"],
             "area_label": area_label(ev.get("area")), "label": event_label(ev),
-            "severity_label": SEVERITIES.get(ev.get("severity"), ""), "kind_label": KINDS.get(ev.get("kind"), ""),
-            "status_label": STATUSES.get(ev.get("status"), ""), "custom_area": is_custom(ev.get("area")),
+            "severity_label": _label(SEVERITIES, ev.get("severity")), "kind_label": _label(KINDS, ev.get("kind")),
+            "status_label": _label(STATUSES, ev.get("status")), "custom_area": is_custom(ev.get("area")),
             "day_n": (end - o).days + 1, "open": is_open(ev), "linked": linked, "days_off_auto": auto_days,
             "days_off": ev.get("days_missed") if ev.get("days_missed") is not None else auto_days}
 
@@ -574,7 +593,7 @@ def pause_reason(events: list[dict], today: dt.date) -> Optional[str]:
     through the first run back (illness_rule)."""
     for e in active_on(events, today):
         if e.get("pause_quality") and not is_illness(e):
-            return f"傷病紀錄 #{e['id']}（{full_label(e.get('area'), e.get('side'))}）進行中：先不排間歇"
+            return _("傷病紀錄 #{id}（{label}）進行中：先不排間歇", id=e["id"], label=full_label(e.get("area"), e.get("side")))
     r = illness_rule(events, today)
     if r is not None:
         return _("傷病紀錄 #{id}（{label}）：{what}", id=r["id"], label=r["label"], what=r["text"])
@@ -715,7 +734,7 @@ def _mark_light(m: dict, prev_score: Optional[int], cond: Optional[str]) -> tupl
         return "green", _("上一次 {s}/10", s=sc)
     if p == 2:
         return "yellow", _("標了「痛」")
-    return "green", _("標了「{what}」", what=_(PAIN.get(p, "沒痛")))
+    return "green", _("標了「{what}」", what=_(PAIN.get(p, N_("沒痛"))))
 
 
 def event_light(e: dict, marks: list[dict], day: dt.date, since: Optional[dt.date] = None) -> dict:
@@ -977,9 +996,9 @@ def week_notes(events: list[dict], monday: dt.date, today: dt.date) -> list[dict
         n = (min(today, sun) - o).days + 1
         if n < 1:
             continue
-        sev = SEVERITIES.get(e.get("severity"), "")
         out.append({"level": "info", "src": "injury",
-                    "text": f"{full_label(e.get('area'), e.get('side'))}進行中（第 {n} 天，{sev}：{SEVERITY_HELP.get(e.get('severity'), '')}）"})
+                    "text": _("{label}進行中（第 {n} 天，{sev}：{help}）", label=full_label(e.get("area"), e.get("side")), n=n,
+                              sev=_label(SEVERITIES, e.get("severity")), help=_label(SEVERITY_HELP, e.get("severity")))})
     return out
 
 

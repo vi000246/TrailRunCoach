@@ -14,7 +14,8 @@ What the page says lives in two places:
 
 Only methods the program really uses, each with public literature or a public method; the page
 never names the products whose screens it replaces (SP-498) and says the methods belong to their
-authors. Links are external addresses only. Version: backend.__version__ and the commit of the
+authors. Links are external addresses only, except in sign-in mode: the last section then lists the
+terms of service, the privacy policy and the other documents agreed to at sign-up (/legal, SP-847). Version: backend.__version__ and the commit of the
 image (engine/debug_view.git_sha: TRC_GIT_SHA, else `git rev-parse`).
 """
 from __future__ import annotations
@@ -114,6 +115,9 @@ DATA: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
     ("rudy", (("rudy.basecamp.tw", "https://rudy.basecamp.tw/"),)),
     ("google", (("Google Maps", "https://www.google.com/maps"),)),
     ("cwa", (("opendata.cwa.gov.tw", "https://opendata.cwa.gov.tw/"), OGDL)),
+    # SP-797: the forecast CWA does not give; terms ask for 「Data from MET Norway」 and the licence
+    ("metno", (("api.met.no", "https://api.met.no/"),
+               ("CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"))),
     ("openmeteo", (("open-meteo.com", "https://open-meteo.com/"),
                    ("CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"))),
 )
@@ -165,7 +169,15 @@ def _section(sid: str, title: str, body: str) -> str:
     return f'<section class="ab-sec" id="{sid}"><h2>{_E(title, quote=False)}</h2>{body}</section>'
 
 
-def _fill(loc: str) -> dict:
+def _legal() -> str:
+    """SP-847: the documents a person agrees to at sign-up (/legal, accounts/terms.DOCUMENTS) — in
+    sign-in mode only: the owner's app and the demo have no /legal (404 there)."""
+    from backend.accounts import terms
+    return "".join(f'<li><a href="{terms.URL_PREFIX}{d.id}">{_E(i18n._(d.title), quote=False)}</a></li>'
+                   for d in terms.DOCUMENTS)
+
+
+def _fill(loc: str, legal: bool = False) -> dict:
     cat = page_catalog((NS,), loc)
     v = version()
     ver = (f'<dl class="ab-ver"><dt>{_E(_t(cat, "version.app"))}</dt><dd><code>{_E(v["version"])}</code></dd>'
@@ -184,10 +196,15 @@ def _fill(loc: str) -> dict:
     main = (
         f'<header class="ab-hero"><h1>{_E(_t(cat, "h1"))}</h1><p>{_E(_t(cat, "lead"))}</p>'
         f'<nav class="ab-toc" aria-label="{_E(_t(cat, "toc"))}">'
-        + "".join(f'<a href="#{k}">{_E(_t(cat, f"{k}.h"))}</a>' for k in ("version", "methods", "data", "software",
-                                                                           "trademarks"))
+        + "".join(f'<a href="#{k}">{_E(_t(cat, f"{k}.h"))}</a>' for k in ("version", "cairn", "methods", "data",
+                                                                           "software", "trademarks")
+                  + (("legal",) if legal else ()))
         + "</nav></header>"
         + _section("version", _t(cat, "version.h"), ver)
+        # SP-766: our other service, 疊石 Cairn — what it does and how a route goes between the two (words
+        # only: the manual's 疊石 Cairn section has the steps)
+        + _section("cairn", _t(cat, "cairn.h"),
+                   "".join(f"<p>{_E(_t(cat, k))}</p>" for k in ("cairn.what", "cairn.routes", "cairn.link")))
         + _section("methods", _t(cat, "methods.h"),
                    f'<p class="ab-lead">{_E(_t(cat, "methods.lead"))}</p><ol class="ab-list">{methods}</ol>')
         + _section("data", _t(cat, "data.h"),
@@ -198,11 +215,16 @@ def _fill(loc: str) -> dict:
                    f"<tbody>{sw}</tbody></table>")
         + _section("trademarks", _t(cat, "trademarks.h"),
                    f'<p>{_E(_t(cat, "trademarks.registered"))}</p><p>{_E(_t(cat, "trademarks.others"))}</p>'
-                   f'<p>{_E(_t(cat, "trademarks.own"))}</p>'))
+                   f'<p>{_E(_t(cat, "trademarks.own"))}</p>')
+        + (_section("legal", _t(cat, "legal.h"),
+                    f'<p class="ab-lead">{_E(_t(cat, "legal.lead"))}</p><ul class="ab-legal">{_legal()}</ul>')
+           if legal else ""))
     return {"title": _E(f'{_t(cat, "title")} · TrailRunCoach', quote=False), "main": main}
 
 
 @router.get(URL)
 def about_page():
     # the page inlines the session (a signed-in user's name): private, like every other page
-    return render_page("about", headers={"Cache-Control": "private, no-cache"}, fill=_fill(i18n.current_locale()))
+    from backend.accounts import login as LG
+    return render_page("about", headers={"Cache-Control": "private, no-cache"},
+                       fill=_fill(i18n.current_locale(), legal=LG.required()))

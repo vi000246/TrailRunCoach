@@ -4,6 +4,7 @@ order: 8
 title: FAQ
 summary: Sync failing, a missing activity, why the schedule looks like this, numbers that differ from the watch, too many tips, heat acclimation, importing and exporting files, background sync… each with a link to the full explanation.
 icon: faq
+deep_sub: Details
 ---
 Where people most often get stuck. Each question starts with the answer; its last line links to the part of the manual that explains it in full. Open “In depth” for the details.
 
@@ -176,10 +177,10 @@ More in the glossary: [Training load](glossary.md#training-load), [Zones](glossa
 
 :::deep
 ### Making the two agree
-Set the watch's heart-rate zones like the ones here: in the COROS app, profile → settings → heart rate zones. Max HR here comes from, in order: yours → the watch → the highest HR held 5 seconds or more in the last 365 days of running → the age formula (an estimate).
+Set the watch's heart-rate zones like the ones here: in the COROS app, profile → settings → heart rate zones. Max HR here comes from, in order: yours → the watch → the best 10-second average HR in the last 365 days of running → the age formula (an estimate).
 
 ### COROS's Training Load (TL)
-The default conversion comes from one runner's activities (an estimate); after each sync it is refitted on your own COROS activities that have TL, and a new fit replaces the old one only if it is no worse on the last 30 days.
+The default conversion comes from one runner's activities (an estimate); after a sync brings new activities it is refitted on your own COROS activities that have TL once 7 days have passed since the last estimate (at most once a week; to do it at once press "re-estimate now" in Settings › Advanced › auto-estimated parameters), and a new fit replaces the old one only if it is no worse on the last 30 days.
 :::
 
 ## I changed a threshold — why didn't the old numbers change? {#threshold-change}
@@ -252,7 +253,7 @@ When an A or B race within 30 days is forecast hot and your projected acclimatio
 
 ## How do I import or export files? {#import-export}
 
-**Import**: Settings → Data & sync → “Import FIT files”, for files or a whole folder (TCX and GPX too); a whole account's export ZIP (Garmin, COROS…) goes through “Import an account export”. **Export**: Settings → Personal → Account → “Download my data”.
+**Import**: Settings → Data & sync → “Import FIT files”, for files or a whole folder (TCX, GPX and PWX too); a whole account's export ZIP (Garmin, COROS, Polar, Apple Health…) goes through “Import an account export”. **Export**: Settings → Personal → Account → “Download my data”.
 
 More: [Connecting a data source](start.md#connect) (without a COROS or Garmin account).
 
@@ -260,7 +261,7 @@ More: [Connecting a data source](start.md#connect) (without a COROS or Garmin ac
 ### Import
 - At most 20 MB a file and 3000 files at a time; the same file imported again never makes two.
 - Desktop Chrome and Edge can set an auto-import folder: new files are imported each time you open the site (same computer, same browser).
-- “Import an account export” takes a ZIP of up to 4 GB and resumes after an interruption.
+- “Import an account export” takes a ZIP of up to 4 GB and resumes after an interruption. An Apple Health export is often over 1 GB: it takes a while before its workouts are listed.
 
 ### Export
 “Download my data” is one zip: settings, season plan, schedule, notes, injury log, uploaded GPX, activities and FIT originals, account details and consent history (no login credentials or remembered passwords). “Download all my FIT files” packs only the FIT files.

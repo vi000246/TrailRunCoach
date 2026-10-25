@@ -17,7 +17,8 @@ Kinds (the `type` of a row):
                it stands in for the `test` row of the same kind.
   zone_test    a zone-update retest (engine/zone_events.py suggestions:
                HR shift at the same power, a ≥ 4-week break, the first cool
-               spell; engine/threshold_confidence.py: LTHR / max HR not
+               spell, easy runs above the easy zone = the CP may be low (SP-848);
+               engine/threshold_confidence.py: LTHR / max HR not
                believable, SP-64) — a test (AeT / CP) and a day; the 30-min TT
                and the max-HR test are not scheduled here but carry `links`
                (「安排課表」 → the 課表 page's new-session dialog).

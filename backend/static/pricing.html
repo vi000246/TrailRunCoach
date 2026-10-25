@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="pricing.title">方案與價格 · TrailRunCoach</title>
+<meta name="description" data-i18n-attr="content:pricing.description" content="TrailRunCoach 的免費方案與訂閱方案：各有哪些功能、月繳與年繳多少錢。課表、近 90 天的資料和安全提示免費就能用。">
+<style>
+/* 方案與價格 (SP-846, api/billing.py /pricing, billing/plan_table.py): public, signed in or not. Mock A
+   of the ticket: two plan cards on top (the subscription's price by the month / year switch), the safety
+   strip, the whole comparison folded under 「看全部差別」 (open from 900 px), a few questions, the start
+   button. The intro page's colours and top bar (intro.html), light and dark; no shell. */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --warm: #b45309; --ok: #1f7a3d; --ok-soft: #e3f3e8; --on-accent: #ffffff;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --warm: #fbbf24; --ok: #5cc37f; --ok-soft: #17301f; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --warm: #fbbf24; --ok: #5cc37f; --ok-soft: #17301f; --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); overflow-wrap: anywhere;
+  font: 15.5px/1.65 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+a { color: var(--accent); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+.narrow { max-width: 820px; margin-left: auto; margin-right: auto; }
+/* top bar (intro.html's) */
+.top { position: sticky; top: 0; z-index: 10; background: var(--panel); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; gap: 6px; min-height: 54px; }
+.brand { display: flex; align-items: center; gap: 8px; margin-right: auto; color: var(--text); text-decoration: none;
+  font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+.brand i { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); display: grid; place-items: center; flex: none; }
+.brand svg { width: 18px; height: 18px; color: #fff; }
+.top .link { color: var(--muted); text-decoration: none; padding: 6px 8px; border-radius: 7px; font-size: 14px; white-space: nowrap; }
+.top .link:hover, .top .link[aria-current="page"] { color: var(--accent); }
+.top .link[aria-current="page"] { font-weight: 600; }
+.lang { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 7px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--line); background: none; color: var(--muted); }
+.lang:hover { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 560px) { .top .link.wide { display: none; } .brand span { display: none; } }
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 9px 18px;
+  border-radius: 10px; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; text-align: center;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.small { min-height: 36px; padding: 5px 14px; font-size: 14px; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn:focus-visible, .lang:focus-visible, a:focus-visible, summary:focus-visible, .seg button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; }
+/* heading */
+.head { text-align: center; padding: 34px 0 16px; }
+.kicker { margin: 0 0 4px; color: var(--warm); font-weight: 700; font-size: 13px; letter-spacing: .04em; }
+h1 { margin: 0 0 8px; font-size: clamp(26px, 4.4vw, 38px); line-height: 1.25; text-wrap: balance; }
+.lead { margin: 0 auto; color: var(--muted); max-width: 34em; }
+.seg { display: inline-flex; margin: 18px 0 0; padding: 3px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); }
+.seg button { font: inherit; font-size: 14px; font-weight: 600; border: 0; background: none; color: var(--muted);
+  padding: 6px 16px; border-radius: 999px; cursor: pointer; min-height: 36px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.seg small { color: var(--ok); font-weight: 700; margin-left: 4px; font-size: 12.5px; }
+.seg button[aria-pressed="true"] small { color: inherit; opacity: .85; }
+/* the two plans */
+.plans { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); margin-top: 18px; }
+@media (min-width: 720px) { .plans { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.plan { position: relative; padding: 22px 20px 20px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line);
+  box-shadow: var(--shadow); display: grid; gap: 12px; align-content: start; }
+.plan.paid { border: 2px solid var(--accent); }
+.badge { position: absolute; top: -12px; left: 20px; background: var(--accent); color: var(--on-accent); font-size: 12.5px;
+  font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.plan h2 { margin: 0; font-size: 19px; }
+.who { margin: 0; color: var(--muted); font-size: 14px; }
+.price { font-size: 34px; font-weight: 750; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.price small { font-size: 15px; color: var(--muted); font-weight: 600; }
+.save { margin: 2px 0 0; color: var(--ok); font-size: 13.5px; font-weight: 600; }
+.plan .btn { width: 100%; }
+.pr-note { margin: -4px 0 0; color: var(--muted); font-size: 13px; }
+.plan ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font-size: 14.5px; }
+.plan li { display: flex; gap: 8px; align-items: flex-start; }
+.ck { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800;
+  margin-top: 2px; background: var(--ok-soft); color: var(--ok); }
+.plan.paid .ck { background: var(--soft); color: var(--accent); }
+.from { margin: 2px 0 -2px; color: var(--muted); font-size: 13.5px; font-weight: 600; }
+.safe { margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: var(--soft); font-size: 14px;
+  display: flex; gap: 10px; align-items: center; }
+.safe svg { flex: none; width: 22px; height: 22px; color: var(--accent); }
+.safe b { margin-right: 4px; }
+/* the whole comparison (billing/plan_table.rows_html) */
+.all { margin-top: 22px; }
+details.cmp { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+details.cmp > summary { cursor: pointer; padding: 12px 16px; font-weight: 650; min-height: 48px; display: flex; align-items: center;
+  justify-content: space-between; gap: 10px; list-style: none; }
+details.cmp > summary::-webkit-details-marker { display: none; }
+details.cmp > summary::after { content: "▾"; color: var(--accent); }
+details.cmp[open] > summary::after { content: "▴"; }
+.tbl { overflow-x: auto; }
+table.pt { width: 100%; border-collapse: collapse; font-size: 14px; }
+.pt th, .pt td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+.pt thead th { color: var(--muted); font-size: 13px; font-weight: 600; background: var(--bg); }
+.pt td:nth-child(2), .pt td:nth-child(3), .pt thead th:nth-child(2), .pt thead th:nth-child(3) { width: 28%; }
+.pt tr.pt-grp th { background: var(--bg); color: var(--warm); font-weight: 700; font-size: 12.5px; letter-spacing: .04em;
+  padding-top: 6px; padding-bottom: 6px; }
+.pt .pt-yes { color: var(--ok); font-weight: 700; }
+.pt .pt-no { color: var(--faint); }
+.pt td.pt-paid { color: var(--accent); font-weight: 600; }
+.pt-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* questions */
+.faq { margin-top: 28px; }
+.faq h2 { font-size: 20px; margin: 0 0 8px; }
+.faq details { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin: 0 0 8px; }
+.faq summary { cursor: pointer; padding: 10px 14px; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.faq details > p { margin: 0; padding: 0 14px 12px; color: var(--muted); }
+.end { text-align: center; padding: 30px 0 44px; }
+.end p { margin: 0 0 12px; color: var(--muted); }
+footer { border-top: 1px solid var(--line); background: var(--panel); padding: 22px 0 28px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; }
+footer a { color: var(--muted); }
+footer a:hover { color: var(--accent); }
+footer .lang { margin-left: auto; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="top">
+  <nav class="wrap" aria-label="主要連結" data-i18n-attr="aria-label:pricing.nav.label">
+    <a class="brand" href="/"><i><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg></i><span>TrailRunCoach</span></a>
+    <a class="link wide" href="/manual" data-i18n="pricing.nav.manual">操作手冊</a>
+    <a class="link" href="/pricing" aria-current="page" data-i18n="pricing.nav.pricing">方案與價格</a>
+    <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:pricing.lang.title" data-i18n="pricing.lang.other">English</button>
+    <!--fill:nav_cta-->
+  </nav>
+</header>
+<main class="wrap">
+  <div class="head">
+    <p class="kicker" data-i18n="pricing.kicker">方案與價格</p>
+    <h1 data-i18n="pricing.h1">免費就能備賽，訂閱看得更遠、算得更多</h1>
+    <p class="lead" data-i18n="pricing.lead">課表、近 90 天的資料和所有安全提示，免費方案一直都能用。</p>
+    <div class="seg" role="group" aria-label="繳費週期" data-i18n-attr="aria-label:pricing.seg.label">
+      <button type="button" id="seg-month" data-iv="month" aria-pressed="false"><span data-i18n="pricing.seg.month">月繳</span></button><button type="button" id="seg-year" data-iv="year" aria-pressed="true"><span data-i18n="pricing.seg.year">年繳</span><small><!--fill:save_pct--></small></button>
+    </div>
+  </div>
+
+  <div class="plans narrow">
+    <section class="plan" aria-labelledby="free-h">
+      <h2 id="free-h" data-i18n="pricing.free.h">免費</h2>
+      <p class="who" data-i18n="pricing.free.who">第一次備賽、想先試試看的人</p>
+      <div class="price" data-i18n="pricing.free.price">NT$0</div>
+      <!--fill:free_cta-->
+      <ul>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.free.li.plan">依目標賽事排課表、改課表、手動記錄</span></li>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.free.li.charts" data-limit="free.charts" data-tpl="pricing.free.li.charts_n">近 90 天的圖表與活動判讀</span></li>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.free.li.calc" data-limit="free.calc" data-tpl="pricing.free.li.calc_n">賽事計算機每月 10 次</span></li>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.free.li.auto">匯入或同步後，課表每天夜間調整一次</span></li>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.free.li.keep">完整資料保留 1 年，之後留摘要</span></li>
+      </ul>
+    </section>
+    <section class="plan paid" aria-labelledby="paid-h">
+      <span class="badge" data-i18n="pricing.paid.badge">備賽季推薦</span>
+      <h2 id="paid-h" data-i18n="pricing.paid.h">訂閱</h2>
+      <p class="who" data-i18n="pricing.paid.who">整季在練、一年跑幾場賽事的人</p>
+      <div data-iv-show="year">
+        <div class="price"><!--fill:price_year--><small data-i18n="pricing.per.year">／年</small></div>
+        <p class="save"><!--fill:year_note--></p>
+      </div>
+      <div data-iv-show="month" hidden>
+        <div class="price"><!--fill:price_month--><small data-i18n="pricing.per.month">／月</small></div>
+        <p class="save"><!--fill:month_note--></p>
+      </div>
+      <!--fill:paid_cta-->
+      <p class="from" data-i18n="pricing.paid.from">免費的全部，加上：</p>
+      <ul>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.paid.li.charts">365 天與全部歷史的圖表與活動判讀</span></li>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.paid.li.calc">賽事計算機不限次數</span></li>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.paid.li.backtest" data-limit="subscriber.backtest" data-tpl="pricing.paid.li.backtest_n">回測</span></li>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.paid.li.auto">匯入或同步後，課表即時調整</span></li>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.paid.li.keep">完整資料保留自選 2／3／5／10 年</span></li>
+        <li><span class="ck" aria-hidden="true">✓</span><span data-i18n="pricing.paid.li.cairn">賽事路線同步到疊石 Cairn</span></li>
+      </ul>
+    </section>
+  </div>
+
+  <p class="safe narrow"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12.2l2.2 2.2 4.4-4.6"/></svg><span><b data-i18n="pricing.safe.h">安全不收費。</b><span data-i18n="pricing.safe.text">安全提示、關門判斷、傷病紅燈、熱與寒冷提醒，兩個方案都一樣。</span></span></p>
+
+  <section class="all narrow">
+    <details class="cmp" id="pr-all">
+      <summary><!--fill:row_count--></summary>
+      <div class="tbl">
+        <table class="pt">
+          <thead><tr><th scope="col" data-i18n="plans.compare.feature">功能</th><th scope="col" data-i18n="plans.compare.free">免費</th><th scope="col" data-i18n="plans.compare.paid">訂閱</th></tr></thead>
+          <tbody><!--fill:plan_rows--></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <section class="faq narrow" aria-labelledby="faq-h">
+    <h2 id="faq-h" data-i18n="pricing.faq.h">常見問題</h2>
+    <details><summary data-i18n="pricing.faq.trial.q">有免費試用嗎？</summary><p data-i18n="pricing.faq.trial.a">免費方案沒有期限。</p></details>
+    <details><summary data-i18n="pricing.faq.cancel.q">可以隨時取消嗎？</summary><p data-i18n="pricing.faq.cancel.a">可以。</p></details>
+    <details><summary data-i18n="pricing.faq.data.q">不續訂的話，我的資料會不見嗎？</summary><p data-i18n="pricing.faq.data.a">不會刪掉。</p></details>
+    <details><summary data-i18n="pricing.faq.pay.q">怎麼付款？會拿到收據嗎？</summary><p data-i18n="pricing.faq.pay.a">在 Polar 的付款頁用信用卡付款。</p></details>
+  </section>
+
+  <div class="end">
+    <p data-i18n="pricing.end.text">先用免費方案排一份課表，覺得有用再訂閱。</p>
+    <!--fill:end_cta-->
+  </div>
+</main>
+<footer>
+  <div class="wrap">
+    <a href="/manual" data-i18n="pricing.footer.manual">操作手冊</a>
+    <a href="/about" data-i18n="pricing.footer.about">關於</a>
+    <a href="/legal/terms" data-i18n="pricing.footer.terms">服務條款</a>
+    <a href="/legal/privacy" data-i18n="pricing.footer.privacy">隱私權政策</a>
+    <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:pricing.lang.title" data-i18n="pricing.lang.other">English</button>
+  </div>
+</footer>
+<script>
+(() => {
+  const L = window.I18N || { locale: "zh-TW", setLocale: () => {} };
+  const loc = L.locale === "en" ? "en" : "zh-TW";
+  for (const b of document.querySelectorAll("[data-lang-switch]")) {
+    b.lang = loc === "en" ? "zh-Hant" : "en";
+    b.addEventListener("click", () => L.setLocale(loc === "en" ? "zh-TW" : "en"));
+  }
+  // 月繳／年繳: which price the subscription card shows (yearly first, mock A)
+  const pick = (iv) => {
+    for (const b of document.querySelectorAll(".seg [data-iv]")) b.setAttribute("aria-pressed", String(b.dataset.iv === iv));
+    for (const el of document.querySelectorAll("[data-iv-show]")) el.hidden = el.dataset.ivShow !== iv;
+  };
+  for (const b of document.querySelectorAll(".seg [data-iv]")) b.addEventListener("click", () => pick(b.dataset.iv));
+  // the whole comparison: folded on a phone, open where there is room
+  if (window.matchMedia && window.matchMedia("(min-width: 900px)").matches) document.getElementById("pr-all").open = true;
+})();
+</script>
+</body>
+</html>

@@ -32,7 +32,9 @@
 主要訓練項目 = 路跑 (engine/primary_sport.py; info["sport"] = "road"): no コース定數 — the long
 day follows the race DISTANCE (ROAD_FRAC of the race km, ≤ ROAD_LONG_MAX_KM, Pfitzinger's longest
 runs; ≤ ROAD_LONG_MAX_MIN) at long-run pace (race pace × ROAD_EASY_SLOW, 推估) — for a race ≤ ROAD_SHORT_KM
-never below the base phase's long run (SP-523: a 10K's share was ~8 km); no 長爬坡反覆 /
+never below the base phase's long run (SP-523: a 10K's share was ~8 km), but ≤ 130 % of the race
+(ROAD_SHORT_MAX_SHARE, SP-523 R1; the same floor and ceiling for a 越野 athlete whose A race is a short road
+race); no 長爬坡反覆 /
 descent session; the race simulation is a long run in race kit, fuelling and pacing on the flat.
 
 Planner hooks (overview.week_plan, projection.project_weeks): plan_context() /
@@ -88,6 +90,13 @@ ROAD_FRAC = {10: 0.55, 9: 0.60, 8: 0.65, 7: 0.70, 6: 0.75, 5: 0.70, 4: 0.80, 3: 
 # distance gave a 10K 8 km at week 4 (coaches: 10K ~13 km, Higdon 129 %; half 76–122 %) — never drops the
 # long run below the base phase's (base_long_minutes: 30 % of the week, ≥ 60 min, ≤ +10 %)
 ROAD_SHORT_KM = 21.1
+# SP-523 R1 (owner 2026-10-20, Q1-2 / Q1-3): the floor holds whenever the A race is a road race ≤ 21.1 km —
+# also for a 主要訓練項目 越野 athlete (the race's kind decides, not the primary sport) — and it never lifts the
+# long run past ROAD_SHORT_MAX_SHARE of the race (路跑 path: its distance at long-run pace; 越野 path: its time,
+# what the detail's 「單日目標的 X%」 counts) — a 10K's base long run was 183 % of it; Higdon's 10K longest
+# 8 mi ≈ 129 %, coaches' 10K ~13 km. The ceiling wins over the base floor (it exists to stop that lift); it never
+# cuts the share itself (≤ 80 %) and never goes under BASE_LONG_MIN (a long run is ≥ 1 h). 推估.
+ROAD_SHORT_MAX_SHARE = 1.30
 BASE_LONG_SHARE = 0.30              # overview.week_plan's base-phase long run: 30 % of the week (推估)
 BASE_LONG_MIN = 60.0                # … ≥ 60 min
 ROAD_LONG_MAX_KM = 35.0
@@ -124,22 +133,46 @@ ME_UP_MPH = 500.0
 ME_DOWN_MPH = 1000.0
 ME_WARM_MIN = 10
 ME_MAX_MIN = 150
-SRC_ME = ("ME（肌耐力）：Uphill Athlete〈Vertical Beast Mode〉——背 15–40% 體重爬陡坡，腿先酸、呼吸不喘；每週一次、做完 3 天輕鬆，"
-          "共 6–10 次；從攻頂日爬升的 50% 開始，最後超過它；一次只加一樣；前提 AeT 在 AnT 的 10% 以內。Evoke：最後兩週不做 ME。"
-          "每週比例、背 15% 體重、上坡 350 m/h 為推估")
-SRC_SUMMIT = ("攻頂日模擬：Uphill Athlete〈Training for Mountaineering〉——行程前 8 週起每週一次，一天爬完攻頂日的爬升，"
-              "背和行程差不多重的背包；時間用山本正嘉背 10% 體重每小時 430 m 上、下山約 650 m/h 估（推估）")
+# the sessions' 出處 (SP-905): msgids joined with 「；」「。」 — each one is read back on its own (_tr where used)
+SRC_ME = ("；".join((N_("ME（肌耐力）：Uphill Athlete〈Vertical Beast Mode〉——背 15–40% 體重爬陡坡，腿先酸、呼吸不喘"),
+                    N_("每週一次、做完 3 天輕鬆，共 6–10 次"), N_("從攻頂日爬升的 50% 開始，最後超過它"), N_("一次只加一樣"),
+                    N_("前提 AeT 在 AnT 的 10% 以內")))
+          + "。" + N_("Evoke：最後兩週不做 ME") + "。" + N_("每週比例、背 15% 體重、上坡 350 m/h 為推估"))
+SRC_SUMMIT = "；".join((N_("攻頂日模擬：Uphill Athlete〈Training for Mountaineering〉——行程前 8 週起每週一次，一天爬完攻頂日的爬升，"
+                          "背和行程差不多重的背包"),
+                       N_("時間用山本正嘉背 10% 體重每小時 430 m 上、下山約 650 m/h 估（推估）")))
 
-SRC = ("單日目標＝コース定數（山本正嘉）；進度：江晏慶「抓比賽距離爬升的七成」（賽前約 1.5 個月）、"
-       "Koop 最長一次 20–80% 賽事距離、CTS 賽前 4–6 週最大量；每週比例為推估")
-SRC_CLIMB = ("Uphill Athlete／Koop：專項期練比賽的坡（坡度、長度）；下坡用跑的累積下坡耐受（重複負荷效應，"
-             "Bontemps 2025）；次數、長度上限為推估")
-SRC_ROAD = ("長跑距離進度：Pfitzinger & Douglas《Advanced Marathoning》（最長約 32–35 km）；"
-            "半馬、10K 不短於基礎期的長跑（Higdon 10K 最長 8 mi、Norris 半馬 10–16 mi）；"
-            "每週比例、3 小時上限、長跑配速 ≈ 比賽配速 × 1.15 為推估")
-SRC_SIM = ("Koop《Training Essentials for Ultrarunning》：賽前演練裝備、補給、配速；Uphill Athlete：在像比賽的地形演練；"
-           "越野賽前第 6、4 週（CTS、Koop 賽前 4–6 週；vert.run 最後 3 週不做大的）、路跑第 4、3 週（Higdon、Norris）、"
-           "目標定數為推估")
+SRC = "；".join((N_("單日目標＝コース定數（山本正嘉）"),
+                N_("進度：江晏慶「抓比賽距離爬升的七成」（賽前約 1.5 個月）、Koop 最長一次 20–80% 賽事距離、CTS 賽前 4–6 週最大量"),
+                N_("每週比例為推估")))
+SRC_CLIMB = "；".join((N_("Uphill Athlete／Koop：專項期練比賽的坡（坡度、長度）"),
+                      N_("下坡用跑的累積下坡耐受（重複負荷效應，Bontemps 2025）"), N_("次數、長度上限為推估")))
+SRC_ROAD = "；".join((N_("長跑距離進度：Pfitzinger & Douglas《Advanced Marathoning》（最長約 32–35 km）"),
+                     N_("半馬、10K 不短於基礎期的長跑，但最長約比賽距離的 130%（Higdon 10K 最長 8 mi ≈ 129%、Norris 半馬 10–16 mi）"),
+                     N_("每週比例、3 小時上限、130% 上限、長跑配速 ≈ 比賽配速 × 1.15 為推估")))
+SRC_SIM = "；".join((N_("Koop《Training Essentials for Ultrarunning》：賽前演練裝備、補給、配速"),
+                    N_("Uphill Athlete：在像比賽的地形演練"),
+                    N_("越野賽前第 6、4 週（CTS、Koop 賽前 4–6 週；vert.run 最後 3 週不做大的）、路跑第 4、3 週（Higdon、Norris）、"
+                       "目標定數為推估")))
+
+
+def _tr(text: str) -> str:
+    """A text joined from msgids with 「；」「。」 outside brackets (the SRC_* above): each one through _()
+    (SP-905; generated in the source language, so the text stays as it is)."""
+    out, buf, depth = [], "", 0
+    for c in text:
+        depth += (c in "（(《「") - (c in "）)》」")
+        if c in "；。" and depth == 0:
+            out += [_(buf) if buf else buf, c]
+            buf = ""
+        else:
+            buf += c
+    return "".join(out + [_(buf) if buf else buf])
+
+
+def _add_src(s: dict, src: str) -> str:
+    """The session's 出處 with `src` after it (「；」)."""
+    return ((s.get("source") or "") + "；" + _tr(src)).lstrip("；")
 
 
 def _d(x) -> Optional[dt.date]:
@@ -404,11 +437,43 @@ def short_road(race: Optional[dict]) -> bool:
     return bool(km) and float(km) <= ROAD_SHORT_KM
 
 
+def short_road_floor(info: Optional[dict]) -> bool:
+    """The short-race floor applies (SP-523): a race ≤ ROAD_SHORT_KM on the 路跑 path, or — on the 越野 path —
+    an A race that is itself a road race (kind 'road'; SP-523 R1, Q1-2)."""
+    race = (info or {}).get("race")
+    if not short_road(race) or info.get("summit_sim"):
+        return False
+    return is_road(info) or race.get("kind") == "road"
+
+
+def short_road_ceiling(info: dict) -> Optional[float]:
+    """The most the base floor may lift a short road race's long run to (SP-523 R1, Q1-3): ROAD_SHORT_MAX_SHARE
+    of the race, measured the way the long day's detail measures it — 路跑 path: the race distance at long-run
+    pace (decorate's 「賽事距離的 X%」); 越野 path: the race day's time (route()'s 「單日目標的 X%」, km = that
+    share of the race km) — ≥ BASE_LONG_MIN. None without a race time."""
+    race = info["race"]
+    if is_road(info):
+        p = road_pace(race)
+        top = ROAD_SHORT_MAX_SHARE * race["day"]["km"] * p if p else None
+    else:
+        h = (race.get("day") or {}).get("hours")
+        top = ROAD_SHORT_MAX_SHARE * h * 60.0 if h else None
+    return max(top, BASE_LONG_MIN) if top is not None else None
+
+
+def short_road_lift(info: dict, want: float, longest: float, week_min: float) -> float:
+    """`want` (the share) lifted to the base phase's long run, ≤ short_road_ceiling — never below `want`."""
+    floor = base_long_minutes(week_min, longest)
+    top = short_road_ceiling(info)
+    return max(want, min(floor, top) if top is not None else floor)
+
+
 def long_minutes(info: dict, longest: float, week_min: Optional[float] = None) -> Optional[float]:
     """This week's long day: frac × the race day's time, ≤ +10 % over `longest` (the
     longest of the last 30 days); not below min(90 min, the aim) unless the +10 % says so (SP-66:
-    the floor used to lift the day over the cap). 路跑 ≤ 21.1 km with the week's minutes `week_min`:
-    not below the base phase's long run (base_long_minutes, SP-523)."""
+    the floor used to lift the day over the cap). A road race ≤ 21.1 km (路跑 path, or a 越野 athlete's road
+    A race) with the week's minutes `week_min`: not below the base phase's long run (base_long_minutes,
+    SP-523), but ≤ 130 % of the race distance (short_road_ceiling, SP-523 R1)."""
     if not info or not info.get("active"):
         return None
     want = trail_aim(info)[0]
@@ -420,8 +485,8 @@ def long_minutes(info: dict, longest: float, week_min: Optional[float] = None) -
         if not p:
             return None
         want = min(min(info["frac"] * info["race"]["day"]["km"], ROAD_LONG_MAX_KM) * p, ROAD_LONG_MAX_MIN)
-        if week_min is not None and short_road(info["race"]):
-            want = max(want, base_long_minutes(week_min, longest))     # SP-523: a 10K's share was ~8 km
+    if week_min is not None and short_road_floor(info):
+        want = short_road_lift(info, want, longest, week_min)          # SP-523: a 10K's share was ~8 km
     cap = max(float(longest or 0.0), 60.0) * STEP
     return min(max(min(FLOOR_MIN, want), min(want, cap)), cap)
 
@@ -445,18 +510,30 @@ def route(race: dict, minutes: float) -> dict:
 
 def route_text(race: dict, minutes: float, capped: bool = False, at_max: bool = False) -> str:
     r = route(race, minutes)
-    s = (f"這次目標定數約 {r['cc']:.0f}（單日目標的 {r['f'] * 100:.0f}%）：約 {r['km']:.0f} km、"
-         f"↑{r['climb_m']:.0f} ↓{r['descent_m']:.0f} m 的路線")
+    kw = dict(cc=r["cc"], p=r["f"] * 100, km=r["km"], up=r["climb_m"], down=r["descent_m"])
     if r["climb_per_km"] >= 10:
-        s += f"（每公里 ↑{r['climb_per_km']:.0f} ↓{r['descent_per_km']:.0f} m，像{race['name']}）"
+        s = _("這次目標定數約 {cc:.0f}（單日目標的 {p:.0f}%）：約 {km:.0f} km、↑{up:.0f} ↓{down:.0f} m 的路線"
+              "（每公里 ↑{upk:.0f} ↓{downk:.0f} m，像{name}）", upk=r["climb_per_km"], downk=r["descent_per_km"],
+              name=race["name"], **kw)
+    else:
+        s = _("這次目標定數約 {cc:.0f}（單日目標的 {p:.0f}%）：約 {km:.0f} km、↑{up:.0f} ↓{down:.0f} m 的路線", **kw)
     if capped:
-        s += "；受「每次最多 +10%」限制"
+        s += "；" + _("受「每次最多 +10%」限制")
     elif at_max:
-        s += _("；長天上限 {h:g} 小時：比賽更長的部分交給 B2B 和週量", h=TRAIL_LONG_MAX_MIN / 60)
+        s += "；" + _("長天上限 {h:g} 小時：比賽更長的部分交給 B2B 和週量", h=TRAIL_LONG_MAX_MIN / 60)
     return s
 
 
 _OLD_TERRAIN = ("挑每公里爬升", "有山路就走山路", "平路或緩坡")
+
+
+def short_road_note(info: dict, m: float) -> str:
+    """The long day's note when the short-race floor lifted it (SP-523), plus the 130 % ceiling when that is
+    what stopped it (SP-523 R1)."""
+    top = short_road_ceiling(info)
+    if top is not None and top > BASE_LONG_MIN and m >= top - 3:
+        return "；" + _("比賽距離短：專項期的長跑不短於基礎期的長跑，最長約比賽距離的 {p:.0f}%", p=ROAD_SHORT_MAX_SHARE * 100)
+    return "；" + _("比賽距離短：專項期的長跑不短於基礎期的長跑")
 
 
 def decorate(ss: list[dict], info: Optional[dict]) -> None:
@@ -474,13 +551,13 @@ def decorate(ss: list[dict], info: Optional[dict]) -> None:
         km = road_km(race, m)
         want = long_minutes(info, 1e9) or m
         pct = km / race["day"]["km"] * 100 if race["day"].get("km") else 0
-        head = (f"這次約 {km:.0f} km（賽事距離的 {pct:.0f}%）"
-                + ("；受「每次最多 +10%」限制" if want > m + 5 and not info.get("recovery") else ""))
+        head = (_("這次約 {km:.0f} km（賽事距離的 {p:.0f}%）", km=km, p=pct)
+                + ("；" + _("受「每次最多 +10%」限制") if want > m + 5 and not info.get("recovery") else ""))
         if short_road(race) and m > want + 5 and not info.get("recovery"):
-            head += _("；比賽距離短：專項期的長跑不短於基礎期的長跑")      # SP-523
+            head += short_road_note(info, m)                            # SP-523
         s["detail"] = "；".join([head] + [p for p in (s.get("detail") or "").split("；") if p])
         s["distance_km"] = round(km, 1)
-        s["source"] = ((s.get("source") or "") + "；" + SRC_ROAD).lstrip("；")
+        s["source"] = _add_src(s, SRC_ROAD)
         info["long"] = {"minutes": int(m), "pct": round(pct), "km": round(km, 1)}
         return
     if info.get("summit_sim"):
@@ -490,10 +567,13 @@ def decorate(ss: list[dict], info: Optional[dict]) -> None:
     r = route(race, m)
     parts = [p for p in (s.get("detail") or "").split("；") if p and not p.startswith(_OLD_TERRAIN)]
     rec = bool(info.get("recovery"))        # SP-97: shorter on purpose, not the +10 % cap (SP-66)
-    s["detail"] = "；".join([route_text(race, m, want > m + 5 and not rec, cut and m >= want - 5 and not rec)] + parts)
+    head = route_text(race, m, want > m + 5 and not rec, cut and m >= want - 5 and not rec)
+    if short_road_floor(info) and m > want + 5 and not rec:
+        head += short_road_note(info, m)                                # SP-523 R1: a 越野 athlete's road A race
+    s["detail"] = "；".join([head] + parts)
     s["distance_km"] = round(r["km"], 1)
     s["climb_m"] = round(r["climb_m"])
-    s["source"] = ((s.get("source") or "") + "；" + SRC).lstrip("；")
+    s["source"] = _add_src(s, SRC)
     info["long"] = {"minutes": int(m), "cc": round(r["cc"], 1), "pct": round(r["f"] * 100), "km": round(r["km"], 1),
                     "climb_m": round(r["climb_m"]), "descent_m": round(r["descent_m"])}
 
@@ -517,11 +597,10 @@ def summit_session(s: dict, info: dict, minutes: float) -> None:
     head = _("一天爬升約 {cl:.0f} m（攻頂日＝第 {d} 天 {need:.0f} m 的 {p:.0f}%），背 {kg:g} kg 的背包（行程背包），"
              "爬上去再下來", cl=climb, d=sm["day"], need=sm["climb_m"], p=f * 100, kg=round(float(sm["pack_kg"]), 1))
     if f < 0.95:
-        head += _("；受「每次最多 +10%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點", p=f * 100)
+        head += "；" + _("受「每次最多 +10%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點", p=f * 100)
     tail = _("做完在活動頁記下這次背多少，賽事評估才會算這次（爬升到攻頂日的 100% 而且有背包，3 次算夠）")
     s.update(title=_("攻頂日模擬｜{name}", name=race["name"]), detail="；".join([head] + parts + [tail]),
-             climb_m=round(climb), terrain="trail",
-             source=((s.get("source") or "") + "；" + SRC_SUMMIT).lstrip("；"))
+             climb_m=round(climb), terrain="trail", source=_add_src(s, SRC_SUMMIT))
     info["long"] = {"minutes": int(minutes), "summit_sim": True, "climb_m": round(climb), "pct": round(f * 100),
                     "pack_kg": sm["pack_kg"], "need_m": round(sm["climb_m"])}
 
@@ -539,7 +618,7 @@ def walk_targets(ss: list[dict], walk: Optional[dict], aet: Optional[float] = No
             continue
         hr = HP.walk_cap_hr(walk, aet, aet_measured)
         s["target"] = hr
-        up = _("上坡{hr}；{down}", hr=hr, down=_(HP.WALK_DOWN))
+        up = _("上坡{hr}", hr=hr) + "；" + _(HP.WALK_DOWN)
         det = s.get("detail") or ""
         if up in det:
             continue                                        # already done (a projected week re-run)
@@ -568,15 +647,18 @@ def me_session(info: dict, weight_kg: Optional[float], rate: float = 60.0) -> di
     climb = int(round(min(want, (ME_MAX_MIN - ME_WARM_MIN - 5) / per_m) / 10.0) * 10)
     kg = round(ME_PACK_SHARE * weight_kg) if weight_kg else ME_PACK_DEFAULT_KG
     m = _r5(ME_WARM_MIN + climb * per_m + 5)
-    detail = (_("背 {kg:g} kg（體重的 {p:.0f}%）", kg=kg, p=ME_PACK_SHARE * 100) if weight_kg
-              else _("背 {kg:g} kg（沒有體重紀錄，先用這個重量）", kg=kg))
-    detail += _("爬最陡的坡、樓梯或跑步機最大坡度，共爬升約 {cl:.0f} m（攻頂日 {need:.0f} m 的 {f:.0f}%）；"
-                "要腿先酸、呼吸不喘，心率不必拉高；背水上山、到頂把水倒掉輕裝下山，保護膝蓋；暖身 10 分。做完 3 天只排輕鬆",
-                cl=climb, need=sm["climb_m"], f=climb / float(sm["climb_m"]) * 100 if sm["climb_m"] else 0)
-    if climb < want - 10:
-        detail += _("（這週的目標是 {w:.0f} m，一次最多排 {m} 分鐘，先爬到這裡）", w=want, m=ME_MAX_MIN)
+    # SP-905: msgids joined with 「；」「。」 (the pack is a field of the first one)
+    pack = (_("背 {kg:g} kg（體重的 {p:.0f}%）", kg=kg, p=ME_PACK_SHARE * 100) if weight_kg
+            else _("背 {kg:g} kg（沒有體重紀錄，先用這個重量）", kg=kg))
+    detail = ("；".join((_("{pack}爬最陡的坡、樓梯或跑步機最大坡度，共爬升約 {cl:.0f} m（攻頂日 {need:.0f} m 的 {f:.0f}%）",
+                           pack=pack, cl=climb, need=sm["climb_m"],
+                           f=climb / float(sm["climb_m"]) * 100 if sm["climb_m"] else 0),
+                         _("要腿先酸、呼吸不喘，心率不必拉高"), _("背水上山、到頂把水倒掉輕裝下山，保護膝蓋"),
+                         _("暖身 {n} 分", n=ME_WARM_MIN)))
+              + "。" + (_("做完 3 天只排輕鬆（這週的目標是 {w:.0f} m，一次最多排 {m} 分鐘，先爬到這裡）", w=want, m=ME_MAX_MIN)
+                       if climb < want - 10 else _("做完 3 天只排輕鬆")))
     return {"id": "me", "kind": "quality", "title": _("ME 負重爬坡（爬升 {cl:.0f} m、背 {kg:g} kg）", cl=climb, kg=kg),
-            "minutes": int(m), "target": "", "detail": detail, "source": SRC_ME, "terrain": "trail",
+            "minutes": int(m), "target": "", "detail": detail, "source": _tr(SRC_ME), "terrain": "trail",
             "tss": round(rate * m / 60.0, 1), "climb_m": climb, "day": None, "done": False, "done_by": None}
 
 
@@ -702,14 +784,27 @@ def race_gait(feat: Optional[dict]) -> Optional[dict]:
     return {"gait": gait, "vam": float(dz) / float(mins) * 60.0, "grade": float(g), "speed_ms": v}
 
 
+CLIMB_WARM_MIN, CLIMB_COOL_MIN = 15, 10   # 推估: 暖身 15 分, 緩和 ~10 分 (the rest of the 5′-rounded total)
+
+
 def climb_minutes(sh: dict, n: Optional[int] = None) -> int:
     n = sh["n"] if n is None else n
-    return _r5(15 + n * sh["rep"] * (1 + DOWN_SHARE) + 10)
+    return _r5(CLIMB_WARM_MIN + n * sh["rep"] * (1 + DOWN_SHARE) + CLIMB_COOL_MIN)
+
+
+def climb_cool(sh: dict, n: Optional[int] = None) -> int:
+    """SP-837: the 緩和 minutes the structure gets (workout_steps._climb_items: the session minus the
+    warm-up and the repeats, each down = rep × DOWN_SHARE rounded) — climb_minutes rounds the total
+    to 5′, so it is 10 ± a few, and the text says this, not a fixed 10."""
+    n = sh["n"] if n is None else n
+    rep = int(sh["rep"])
+    return climb_minutes(sh, n) - CLIMB_WARM_MIN - n * (rep + int(round(rep * DOWN_SHARE)))
 
 
 def climb_text(race: dict, sh: dict, n: int, aet: Optional[float],
                aet_measured: bool = False) -> tuple[str, str, str]:
-    """`aet` = the easy-run cap (hr_profile.easy_cap_label)."""
+    """`aet` = the easy-run cap (hr_profile.easy_cap_label). The 緩和 minutes are the structure's
+    (climb_cool, SP-837)."""
     from backend.engine.hr_profile import easy_cap_label
     f = race.get("features") or {}
     g = sh["grade"]
@@ -720,19 +815,27 @@ def climb_text(race: dict, sh: dict, n: int, aet: Optional[float],
     down = (_("下坡用跑的：找接近 {g:.0f}% 的坡（賽道最陡的長下坡 ↓{dz:.0f} m；整場下降 {loss:.0f} m）",
               g=dn["grade"], dz=dn["dz"], loss=f.get("loss_m", 0))
             if dn else _("下坡用跑的，練下坡"))
-    kw = dict(name=race["name"], dz=sh["climb_dz"], g=g, when=when, lo=max(0, g - 2), hi=g + 2, rep=sh["rep"], n=n,
-              hr=hr, down=down)
+    # SP-905: msgids joined with 「；」「。」 (each read back on its own); without the race's climbing time
+    # there is no 「你的速度約」 (an empty field can't be read back: its own msgid)
+    kw = dict(name=race["name"], dz=sh["climb_dz"], g=g, lo=max(0, g - 2), hi=g + 2, rep=sh["rep"], n=n, hr=hr)
+    tail = _("暖身 {warm} 分、緩和 {cool} 分", warm=CLIMB_WARM_MIN, cool=climb_cool(sh, n))
     rg = race_gait(f)
     if rg is None:
         # no race time or a climb under 3 %: the text as before SP-227
-        detail = _("{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%{when}：找 {lo:.0f}–{hi:.0f}% 的坡，"
-                   "上坡 {rep} 分 × {n} 趟，用比賽的走／跑方式、{hr}；{down}。暖身 15 分、緩和 10 分", **kw)
+        head = (_("{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%{when}：找 {lo:.0f}–{hi:.0f}% 的坡，"
+                  "上坡 {rep} 分 × {n} 趟，用比賽的走／跑方式、{hr}", when=when, **kw) if when else
+                _("{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%：找 {lo:.0f}–{hi:.0f}% 的坡，"
+                  "上坡 {rep} 分 × {n} 趟，用比賽的走／跑方式、{hr}", **kw))
+        detail = head + "；" + down + "。" + tail
     else:
         # SP-227: the race's gait on this climb (runwalk.gait), e.g. 「比賽時這段每小時約 620 m、18%：用快走」
         how = _("比賽時這段每小時約 {vam:.0f} m、{g:.0f}%：{act}", vam=round(rg["vam"], -1), g=g,
                 act=_(CLIMB_GAIT_DO[rg["gait"]]))
-        detail = _("{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%{when}：找 {lo:.0f}–{hi:.0f}% 的坡，"
-                   "上坡 {rep} 分 × {n} 趟、{hr}；{how}；{down}。暖身 15 分、緩和 10 分", how=how, **kw)
+        head = (_("{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%{when}：找 {lo:.0f}–{hi:.0f}% 的坡，"
+                  "上坡 {rep} 分 × {n} 趟、{hr}", when=when, **kw) if when else
+                _("{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%：找 {lo:.0f}–{hi:.0f}% 的坡，"
+                  "上坡 {rep} 分 × {n} 趟、{hr}", **kw))
+        detail = head + "；" + how + "；" + down + "。" + tail
     return title, detail, hr
 
 
@@ -786,7 +889,7 @@ def apply_climb(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = 
         x["minutes"], x["tss"] = new, round(r * new, 1)
     rate = (rates or {}).get("trail") or (rates or {}).get("road") or 55.0
     title, detail, hr = climb_text(race, sh, n, aet, aet_measured)
-    s.update(id="climb", kind="easy", terrain="trail", minutes=int(m), title=title, detail=detail, source=SRC_CLIMB,
+    s.update(id="climb", kind="easy", terrain="trail", minutes=int(m), title=title, detail=detail, source=_tr(SRC_CLIMB),
              tss=round(rate * 1.1 * m / 60.0, 1), target=hr,
              climb_m=round(n * sh["rep"] / sh["climb_min"] * sh["climb_dz"]) if sh.get("climb_min") else None)
     rg = race_gait(race.get("features"))
@@ -825,16 +928,31 @@ def fuel_text(race: dict) -> str:
     n = max(1, int(race.get("days") or 1))
     cls = F.event_class(race.get("kind") or "race", race["hours"] / n, race["km"] / n)
     c = F.carb_target(cls)
-    s = f"每小時 {c['lo']:.0f}–{c['hi']:.0f} g 醣"
-    if c.get("every_min"):
-        s += f"（每 {c['every_min'][0]}–{c['every_min'][1]} 分吃一次）"
     w = F.water_band(cls, None, False)
-    if w:
-        s += f"、水 {w[0]:.0f}–{w[1]:.0f} ml/h"
     na = F.sodium_band(cls, None, False)
-    if na and na[1] > 0:
-        s += f"、鈉 {na[0]:.0f}–{na[1]:.0f} mg/h"
-    return s
+    every, na = c.get("every_min"), (na if na and na[1] > 0 else None)
+    kw = dict(lo=c["lo"], hi=c["hi"])
+    if every:
+        kw.update(a=every[0], b=every[1])
+    if w:
+        kw.update(wlo=w[0], whi=w[1])
+    if na:
+        kw.update(nlo=na[0], nhi=na[1])
+    # SP-905: one msgid per shape (an optional part can't be read back as a field of its own)
+    return _(FUEL_TEXT[(bool(every), bool(w), bool(na))], **kw)
+
+
+FUEL_TEXT = {
+    (False, False, False): N_("每小時 {lo:.0f}–{hi:.0f} g 醣"),
+    (True, False, False): N_("每小時 {lo:.0f}–{hi:.0f} g 醣（每 {a}–{b} 分吃一次）"),
+    (False, True, False): N_("每小時 {lo:.0f}–{hi:.0f} g 醣、水 {wlo:.0f}–{whi:.0f} ml/h"),
+    (True, True, False): N_("每小時 {lo:.0f}–{hi:.0f} g 醣（每 {a}–{b} 分吃一次）、水 {wlo:.0f}–{whi:.0f} ml/h"),
+    (False, False, True): N_("每小時 {lo:.0f}–{hi:.0f} g 醣、鈉 {nlo:.0f}–{nhi:.0f} mg/h"),
+    (True, False, True): N_("每小時 {lo:.0f}–{hi:.0f} g 醣（每 {a}–{b} 分吃一次）、鈉 {nlo:.0f}–{nhi:.0f} mg/h"),
+    (False, True, True): N_("每小時 {lo:.0f}–{hi:.0f} g 醣、水 {wlo:.0f}–{whi:.0f} ml/h、鈉 {nlo:.0f}–{nhi:.0f} mg/h"),
+    (True, True, True): N_("每小時 {lo:.0f}–{hi:.0f} g 醣（每 {a}–{b} 分吃一次）、水 {wlo:.0f}–{whi:.0f} ml/h、"
+                           "鈉 {nlo:.0f}–{nhi:.0f} mg/h"),
+}
 
 
 def sim_sessions(race: dict, minutes: list[int], aet: Optional[float], rate: float,
@@ -847,26 +965,29 @@ def sim_sessions(race: dict, minutes: list[int], aet: Optional[float], rate: flo
         out = []
         for m in minutes:
             km = road_km(race, m)
+            # SP-905: msgids joined with 「；」「。」 (each read back on its own)
             out.append({"kind": "long", "title": f"賽事模擬｜{race['name']}", "minutes": int(m), "target": hr,
-                        "detail": (f"約 {km:.0f} km 平路。穿比賽的鞋、衣褲，早餐、補給照比賽：{fuel_text(race)}；"
-                                   f"前段輕鬆，中後段照比賽計畫的配速跑一段，{hr}（比賽配速那段除外）"),
-                        "source": SRC_SIM, "terrain": "road", "tss": round(rate * m / 60.0, 1),
+                        "detail": (_("約 {km:.0f} km 平路", km=km) + "。"
+                                   + _("穿比賽的鞋、衣褲，早餐、補給照比賽：{fuel}", fuel=fuel_text(race)) + "；"
+                                   + _("前段輕鬆，中後段照比賽計畫的配速跑一段，{hr}（比賽配速那段除外）", hr=hr)),
+                        "source": _tr(SRC_SIM), "terrain": "road", "tss": round(rate * m / 60.0, 1),
                         "distance_km": round(km, 1)})
         return out
     multi = int(race.get("days") or 1) > 1
-    kit = ("背行程的背包和裝備（演練打包、重量照行程）" if multi or race.get("kind") == "baiyue"
-           else "穿比賽的鞋、衣褲、背心，帶強制裝備（頭燈、雨衣…）")
+    kit = (_("背行程的背包和裝備（演練打包、重量照行程）") if multi or race.get("kind") == "baiyue"
+           else _("穿比賽的鞋、衣褲、背心，帶強制裝備（頭燈、雨衣…）"))
     out = []
     for i, m in enumerate(minutes, 1):
         head = route_text(race, m)
         r = route(race, m)
-        tail = ("" if not multi else ("第 1 天，" if i == 1 else "第 2 天：接續的一天，同樣的背包，"))
-        detail = (f"{head}。{tail}{kit}；補給照比賽：{fuel_text(race)}，早餐也照比賽吃；"
-                  f"配速照比賽計畫，前段刻意保守，爬坡照比賽的走／跑方式，{hr}")
-        if i == 1 and m < FUEL_MIN_H * 60:
-            detail += f"（Koop：練補給至少 {FUEL_MIN_H:.0f} 小時，這次先練到 {m} 分）"
+        gear = (kit if not multi else _("第 1 天，{kit}", kit=kit) if i == 1 else
+                _("第 2 天：接續的一天，同樣的背包，{kit}", kit=kit))
+        pace = (_("配速照比賽計畫，前段刻意保守，爬坡照比賽的走／跑方式，{hr}（Koop：練補給至少 {h:.0f} 小時，這次先練到 {m} 分）",
+                  hr=hr, h=FUEL_MIN_H, m=m) if i == 1 and m < FUEL_MIN_H * 60 else
+                _("配速照比賽計畫，前段刻意保守，爬坡照比賽的走／跑方式，{hr}", hr=hr))
+        detail = "；".join((head + "。" + gear, _("補給照比賽：{fuel}，早餐也照比賽吃", fuel=fuel_text(race)), pace))
         out.append({"kind": "long", "title": f"賽事模擬｜{race['name']}" + (f" 第 {i} 天" if multi else ""),
-                    "minutes": int(m), "target": hr, "detail": detail, "source": SRC_SIM, "terrain": "trail",
+                    "minutes": int(m), "target": hr, "detail": detail, "source": _tr(SRC_SIM), "terrain": "trail",
                     "tss": round(rate * m / 60.0, 1), "distance_km": round(r["km"], 1), "climb_m": round(r["climb_m"])})
     return out
 

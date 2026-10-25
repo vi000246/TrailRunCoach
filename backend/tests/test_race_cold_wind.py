@@ -131,32 +131,33 @@ def test_baiyue_days_start_from_the_start_time():
 
 # ---- rows from the providers ---------------------------------------------------------------
 
-def test_open_meteo_asks_for_wind_and_gives_rows(tmp_path):
-    seen = {}
+def test_met_norway_gives_wind_rows_in_km_per_hour(tmp_path):
+    # SP-797: MET Norway (m/s → km/h); gusts only where its Nordic model has them, never in Taiwan
+    from backend.tests.test_weather_met_sp797 import met_js
 
     def get(url, params, timeout):
-        seen.update(params)
-        times = [f"2026-10-07T{h:02d}:00" for h in range(24)]
-        return {"elevation": 3000, "hourly": {"time": times, "temperature_2m": [-2.0] * 24,
-                                              "relative_humidity_2m": [80.0] * 24, "wind_speed_10m": [35.0] * 24,
-                                              "wind_gusts_10m": [60.0] * 24, "apparent_temperature": [-9.0] * 24}}
+        assert url == WX.MET_FORECAST
+        return met_js("2026-10-07", temp=-2.0, rh=80.0, wind=35.0 / 3.6, alt=3000)
     r = WX.race_conditions(date=dt.date(2026, 10, 7), lat=23.47, lon=120.96, elevation_m=3000,
                            today=dt.date(2026, 10, 6), key=None, get=get, cache_dir=tmp_path, use_cwa=False)
-    assert r["provider"] == "open_meteo"
-    for k in ("wind_speed_10m", "wind_gusts_10m", "apparent_temperature"):
-        assert k in seen["hourly"]
+    assert r["provider"] == "met_norway"
     row = next(x for x in r["wind"] if x["t"] == "2026-10-07T08:00")
-    assert row == {"t": "2026-10-07T08:00", "temp_c": -2.0, "wind_kmh": 35.0, "gust_kmh": 60.0, "apparent_c": -9.0}
+    assert row == {"t": "2026-10-07T08:00", "temp_c": -2.0, "wind_kmh": pytest.approx(35.0), "gust_kmh": None,
+                   "apparent_c": None}
+    # where MET has gusts (its Nordic model) they still go through
+    nordic = met_js("2026-10-07", temp=-2.0, rh=80.0, wind=10.0, gust=20.0)
+    rows = WX.met_wind_rows(WX.met_rows(nordic, WX.TZ), {dt.date(2026, 10, 7)})
+    assert rows[8]["gust_kmh"] == pytest.approx(72.0)
 
 
-def test_open_meteo_without_wind_gives_no_rows(tmp_path):
+def test_met_norway_without_wind_gives_no_rows(tmp_path):
+    from backend.tests.test_weather_met_sp797 import met_js
+
     def get(url, params, timeout):
-        times = [f"2026-10-07T{h:02d}:00" for h in range(24)]
-        return {"elevation": 300, "hourly": {"time": times, "temperature_2m": [20.0] * 24,
-                                             "relative_humidity_2m": [80.0] * 24}}
+        return met_js("2026-10-07")
     r = WX.race_conditions(date=dt.date(2026, 10, 7), lat=25.0, lon=121.5, elevation_m=300,
                            today=dt.date(2026, 10, 6), key=None, get=get, cache_dir=tmp_path, use_cwa=False)
-    assert r["provider"] == "open_meteo" and r["wind"] is None
+    assert r["provider"] == "met_norway" and r["wind"] is None
 
 
 def test_cwa_wind_speed_in_metres_per_second():

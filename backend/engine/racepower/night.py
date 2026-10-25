@@ -3,8 +3,8 @@ Night on race day: the segments run in the dark, and an optional night slowdown 
 
 docs/research/night-and-sleep.md §2.1 / §4.2 單 1.
 
-  * Sunrise / sunset of the event days come from /weather (`sun`: Open-Meteo's
-    daily values, else NOAA's formula); a GPX course without them gets NOAA's
+  * Sunrise / sunset of the event days come from /weather (`sun`: NOAA's formula
+    at the place's clock since SP-797; Open-Meteo's daily values on older answers); a GPX course without them gets NOAA's
     formula at its start point (weather.sun_times, UTC+8). Dark = before the
     first sunrise, between each sunset and the next sunrise, after the last
     sunset.

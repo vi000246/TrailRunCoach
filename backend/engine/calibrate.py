@@ -4,8 +4,9 @@ Per-athlete calibration (generalize-athlete plan §0.1, batch B1).
 Every 「A 類」 number that used to be tuned on one runner's data becomes an
 `Item`: a literature / 推估 default plus a fit on the athlete's own data,
 shrunk toward the default with w = n / (n + k), as engine/drift_agg.py does
-for the AeT heat β. Below `min_n` points nothing is written and the default
-stands.
+for the AeT heat β. Below `min_n` points no value is written and the default
+(or the last good fit) stands; when no fit stands, the count alone is stored
+(source default, value None) so the list says how many points there are (SP-807).
 
 Storage: one settings key per item, `athlete.calib.<name>` (settings/
 repository.py), value
@@ -49,10 +50,17 @@ SOURCES = ("default", "fitted", "user")
 
 @dataclass(frozen=True)
 class Fit:
-    """An item's fit on the athlete's data: the estimate, its SE, n points."""
-    value: float
+    """An item's fit on the athlete's data: the estimate, its SE, n points. `value` None = fewer
+    points than the item needs: only the count (count_only, SP-807)."""
+    value: Optional[float]
     se: Optional[float]
     n: int
+
+
+def count_only(n: int) -> Fit:
+    """A fit below min_n that carries only how many of the athlete's own points there are (SP-807):
+    shrink stores no value for it, run stores the count so the list says 「本人資料 8 筆」."""
+    return Fit(None, None, int(n))
 
 
 @dataclass(frozen=True)
@@ -220,10 +228,27 @@ def basis(name: str, user_id: int = 1) -> str:
     return chip(_registry()[name], entry(name, user_id))["text"]
 
 
+def count_entry(item: Item, prev: Optional[dict], n: int, today: dt.date) -> Optional[dict]:
+    """SP-807: the entry that records how many of the athlete's own points a fit below min_n found,
+    so the list says 「本人資料 8 筆，滿 10 筆…」 instead of 0 — or None when nothing is to be
+    written: a fitted / manual entry stands (the last good fit is never replaced by a count), a
+    manual-only item has no fit to count, and the same count is not written twice."""
+    if item.manual_only:
+        return None
+    prev = prev or {}
+    if prev.get("source") in ("user", "fitted") and prev.get("value") is not None:
+        return None
+    if prev and prev.get("source") == "default" and int(prev.get("n") or 0) == n:
+        return None
+    return {"value": None, "se": None, "n": int(n), "fitted_at": today.isoformat(), "source": "default"}
+
+
 def run(ds, stored: dict, today: Optional[dt.date] = None) -> tuple[dict, dict]:
     """(updates {name: entry}, skipped {name: why}) for every registered item.
-    A manual entry is kept; a fit below min_n writes nothing (the default /
-    the last good fit stand); a fit that raises is skipped."""
+    A manual entry is kept; a fit below min_n stores no value (the default /
+    the last good fit stand) — only its count when no fit stands (count_entry,
+    SP-807; such an entry has source default and is still listed in `skipped`);
+    a fit that raises is skipped."""
     today = today or dt.date.today()
     updates, skipped = {}, {}
     for name, item in _registry().items():
@@ -238,7 +263,11 @@ def run(ds, stored: dict, today: Optional[dt.date] = None) -> tuple[dict, dict]:
             continue
         e = shrink(item, f)
         if e is None:
-            skipped[name] = f"n={0 if f is None else f.n}<{item.min_n}"
+            n = 0 if f is None else int(f.n)
+            skipped[name] = f"n={n}<{item.min_n}"
+            c = count_entry(item, stored.get(name), n, today)
+            if c is not None:
+                updates[name] = c
             continue
         updates[name] = {**e, "fitted_at": today.isoformat()}
     return updates, skipped
@@ -258,7 +287,8 @@ async def calibrate(db, athlete_id: int = 1, ds=None, today: Optional[dt.date] =
         await repo.set(key(n), e)
     await repo.set(LAST_RUN_KEY, dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"))
     await db.commit()
-    out = {"written": sorted(updates), "skipped": skipped}
+    out = {"written": sorted(n for n, e in updates.items() if e.get("source") == "fitted"),
+           "skipped": skipped}
     # the COROS TL conversion (engine/coros_tl.py, SP-38): a multi-parameter fit with its own
     # backtest, so not an Item — same trigger, same Dataset; it never stops the items above
     try:

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title data-i18n="pace.page_title">腳程試算</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --watch: #b45309; --bad: #c62828; --good: #1b7f5a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --watch: #fbbf24; --bad: #f87171; --good: #34c38f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --watch: #fbbf24; --bad: #f87171; --good: #34c38f;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px; display: flex; flex-wrap: wrap;
+  gap: 8px 16px; align-items: center; justify-content: space-between; }
+header h1 { font-size: 18px; margin: 0; }
+header a.home { color: var(--muted); text-decoration: none; font-size: 13px; }
+.meta { color: var(--muted); font-size: 12.5px; }
+main { max-width: 920px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+.lead { margin: 0 0 4px; }
+form { display: grid; gap: 12px; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+legend { font-weight: 600; padding: 0 4px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+label { display: inline-flex; gap: 6px; align-items: center; }
+input[type=number] { width: 72px; font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+input[type=file] { max-width: 100%; font: inherit; }
+.hint { color: var(--muted); font-size: 12.5px; margin: 0; }
+button.go { justify-self: start; font: inherit; font-weight: 600; padding: 8px 18px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+button.go[disabled] { opacity: .6; cursor: progress; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.tile.main { border-color: var(--accent); }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .s { font-size: 12px; color: var(--muted); }
+.faster { color: var(--good); }
+.slower { color: var(--watch); }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.notes { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+.err { color: var(--bad); margin: 0; }
+.badge { display: inline-block; font-size: 11.5px; border: 1px solid var(--watch); color: var(--watch); border-radius: 10px; padding: 0 8px; margin-left: 6px; font-weight: 400; }
+.join { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; border-color: var(--accent); background: var(--soft); }
+.join h2 { margin: 0 0 2px; }
+.join p { margin: 0; color: var(--muted); font-size: 13px; }
+.join-btn { display: inline-block; padding: 7px 14px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.join[hidden], [hidden] { display: none !important; }
+@media (max-width: 600px) {
+  main { padding: 10px 10px 30px; } .tile .v { font-size: 19px; }
+  th, td { white-space: normal; padding: 5px 4px; }      /* five columns fit a phone without a sideways scroll */
+}
+</style>
+</head>
+<body>
+<header>
+  <div><h1 data-i18n="pace.heading">腳程試算</h1><div class="meta" data-i18n="pace.sub">揪團前先看看：這條路線大約要走多久</div></div>
+  <a class="home" href="/" data-i18n="pace.home">TrailRunCoach 首頁</a>
+</header>
+<main>
+  <section>
+    <p class="lead" data-i18n="pace.lead">上傳一趟最近的爬山紀錄（手錶或登山 App 記錄的 GPX／FIT），再上傳這次要走的路線，就能看到這條路線大約要幾小時，以及比一般登山客快還是慢。</p>
+    <p class="hint" data-i18n="pace.privacy">檔案只用來計算，算完就丟掉，不會保存。</p>
+  </section>
+  <section>
+    <form id="f" novalidate>
+      <fieldset>
+        <legend data-i18n="pace.track.h">1. 一趟爬山紀錄</legend>
+        <input type="file" id="track" name="track" accept=".gpx,.fit,application/gpx+xml" aria-label="爬山紀錄" data-i18n-attr="aria-label:pace.track.h">
+        <div class="row">
+          <label><span data-i18n="pace.track.pack">那趟背包大約</span> <input type="number" id="pack" name="pack_kg" min="0" max="40" step="0.5" value="6"> kg</label>
+          <span class="row" role="radiogroup" aria-label="那趟怎麼走" data-i18n-attr="aria-label:pace.track.kind">
+            <label><input type="radio" name="trip_kind" value="group" checked> <span data-i18n="pace.track.group">跟團</span></label>
+            <label><input type="radio" name="trip_kind" value="solo"> <span data-i18n="pace.track.solo">自己走</span></label>
+          </span>
+        </div>
+        <p class="hint" data-i18n="pace.track.hint">紀錄要有時間。跟團時走的是團的步調，估出來的範圍會比較寬。</p>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="pace.route.h">2. 這次的路線</legend>
+        <input type="file" id="route" name="route" accept=".gpx,.fit,application/gpx+xml" aria-label="路線" data-i18n-attr="aria-label:pace.route.h">
+        <div class="row">
+          <label><span data-i18n="pace.route.days">走幾天</span> <input type="number" id="days" name="route_days" min="1" max="10" step="1" value="1"></label>
+          <label><span data-i18n="pace.route.pack">這次背包</span> <input type="number" id="rpack" name="route_pack_kg" min="0" max="40" step="0.5" placeholder="自動" data-i18n-attr="placeholder:pace.route.pack_auto"> kg</label>
+        </div>
+        <p class="hint" data-i18n="pace.route.hint">背包沒填：單日 4 kg、多日 9 kg。</p>
+      </fieldset>
+      <button type="submit" class="go" id="go" data-i18n="pace.go">試算</button>
+      <p class="err" id="err" role="alert" hidden></p>
+    </form>
+  </section>
+  <section id="res" hidden aria-live="polite">
+    <h2><span data-i18n="pace.res.h">結果</span><span class="badge" data-i18n="pace.res.badge">推估</span></h2>
+    <div class="tiles">
+      <div class="tile main"><div class="k" data-i18n="pace.res.total">這條路線大約</div><div class="v" id="r-total">–</div><div class="s" id="r-total-s"></div></div>
+      <div class="tile"><div class="k" data-i18n="pace.res.general">比一般登山客</div><div class="v" id="r-general">–</div><div class="s" data-i18n="pace.res.general_s">只算走路的時間</div></div>
+      <div class="tile" id="t-you" hidden><div class="k" data-i18n="pace.res.you">比你</div><div class="v" id="r-you">–</div><div class="s" id="r-you-s"></div></div>
+      <div class="tile"><div class="k" data-i18n="pace.res.moving">走路／停留</div><div class="v" id="r-moving">–</div><div class="s" id="r-stop"></div></div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th data-i18n="pace.res.part">路段</th><th class="n" data-i18n="pace.res.km">距離</th><th class="n" data-i18n="pace.res.speed">速度</th><th class="n" data-i18n="pace.res.vs_general">比一般登山客</th><th class="n" id="th-you" data-i18n="pace.res.vs_you" hidden>比你</th></tr></thead>
+        <tbody id="parts"></tbody>
+      </table>
+    </div>
+    <ul class="notes">
+      <li id="r-basis"></li>
+      <li data-i18n="pace.note.limits">只有一趟紀錄時範圍比較寬；背包、海拔和那趟差很多時誤差會變大。</li>
+      <li data-i18n="pace.note.stops">停留時間（休息、吃飯、拍照）資料少時用一般登山的比例估。</li>
+    </ul>
+  </section>
+  <section class="join" id="join" hidden><div><h2 data-i18n="pace.join.title">想跟自己的腳程比？</h2><p data-i18n="pace.join.text">登入後，同一條路線會多一欄「比你快／慢多少」，用你帳號裡的登山紀錄算。</p></div><a class="join-btn" id="join-btn" data-i18n="pace.join.button">免費註冊</a></section>
+</main>
+<!--fill:join-->
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const T = (k, p) => (window.I18N ? window.I18N.t("pace." + k, p) : k);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const SIMILAR = 3;
+  let me = null;          // {csrf} when signed in (the page then asks for 「比你」)
+
+  // 「免費註冊」 for a visitor who is not signed in (the share page's join link, SP-124)
+  const join = (() => {
+    const j = window.TRC_JOIN;
+    if (!j || !["signup", "waitlist", "demo", "about"].includes(j.kind) || typeof j.url !== "string") return null;
+    return /^\/(?!\/)/.test(j.url) || /^https:\/\//.test(j.url) ? j : null;
+  })();
+
+  // signed in? GET /api/v1/session (behind the site's gate it fails for a visitor: no 「比你」 then)
+  fetch("/api/v1/session", { cache: "no-store", credentials: "same-origin" })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((s) => {
+      if (s && (s.mode === "owner" || s.mode === "user") && s.csrf) me = { csrf: s.csrf };
+    })
+    .catch(() => {})
+    .finally(() => {
+      if (!me && join) { $("join-btn").href = join.url; $("join").hidden = false; }
+    });
+
+  const hours = (s) => {
+    const h = s / 3600;
+    return h < 10 ? (Math.round(h * 2) / 2).toFixed(1) : String(Math.round(h));
+  };
+  const hm = (s) => { const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+  // a time ratio (theirs / the other's) → 「快 12 %」 / 「慢 8 %」 / 「差不多」
+  const cmp = (ratio) => {
+    if (!ratio || !isFinite(ratio)) return { text: "–", cls: "" };
+    const p = Math.round((ratio - 1) * 100);
+    if (Math.abs(p) < SIMILAR) return { text: T("similar"), cls: "" };
+    return p < 0 ? { text: T("faster", { p: -p }), cls: "faster" } : { text: T("slower", { p }), cls: "slower" };
+  };
+  const put = (id, c) => { const el = $(id); el.textContent = c.text; el.className = "v " + c.cls; };
+
+  async function post(url, fd, headers) {
+    const r = await fetch(url, { method: "POST", body: fd, credentials: "same-origin", headers: headers || {} });
+    let j = null;
+    try { j = await r.json(); } catch (_) { j = null; }
+    if (!r.ok) {
+      const d = j && j.detail;
+      throw new Error((d && (d.message || (typeof d === "string" ? d : ""))) || T("err.generic", { status: r.status }));
+    }
+    return j;
+  }
+
+  function render(e, mine, mineErr) {
+    $("r-total").textContent = T("hours", { h: hours(e.total_s) });
+    $("r-total-s").textContent = T("range", { lo: hours(e.total_range_s[0]), hi: hours(e.total_range_s[1]) });
+    put("r-general", cmp(e.general.ratio));
+    $("r-moving").textContent = `${hm(e.moving_s)} / ${hm(e.stop.total_s)}`;
+    $("r-stop").textContent = T("stop_s", { lo: hm(e.stop.range_s[0]), hi: hm(e.stop.range_s[1]) });
+    const you = mine ? e.moving_s / mine.moving_s : null;
+    $("t-you").hidden = !(mine || mineErr);
+    $("th-you").hidden = !mine;
+    if (mine) {
+      put("r-you", cmp(you));
+      $("r-you-s").textContent = T("you_s", { h: hours(mine.total_s) });
+    } else if (mineErr) {
+      put("r-you", { text: "–", cls: "" });
+      $("r-you-s").textContent = mineErr;
+    }
+    const rows = [];
+    for (const k of ["up", "flat", "down"]) {
+      const p = e.parts[k];
+      if (!p || !(p.km > 0.05)) continue;
+      const speed = k === "up" && p.vam_m_h ? T("vam", { v: Math.round(p.vam_m_h / 10) * 10 }) : T("kmh", { v: (p.speed_kmh || 0).toFixed(1) });
+      const g = cmp(p.ratio);
+      let y = "";
+      if (mine) {
+        const q = mine.parts[k];
+        const c = cmp(q && q.person_s ? p.person_s / q.person_s : null);
+        y = `<td class="n ${c.cls}">${esc(c.text)}</td>`;
+      }
+      rows.push(`<tr><td>${esc(T("part." + k))}</td><td class="n">${p.km.toFixed(1)} km</td><td class="n">${esc(speed)}</td>` +
+        `<td class="n ${g.cls}">${esc(g.text)}</td>${y}</tr>`);
+    }
+    $("parts").innerHTML = rows.join("");
+    const b = e.basis || {};
+    $("r-basis").textContent = T("basis", { km: (b.km || 0).toFixed(1), gain: Math.round(b.gain_m || 0), kind: T("kind." + (b.trip_kind || "solo")) });
+    $("res").hidden = false;
+  }
+
+  $("f").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const err = $("err");
+    err.hidden = true;
+    const tr = $("track").files[0], ro = $("route").files[0];
+    if (!tr || !ro) { err.textContent = T("err.files"); err.hidden = false; return; }
+    const fd = new FormData($("f"));
+    const go = $("go");
+    go.disabled = true;
+    go.textContent = T("going");
+    try {
+      const e = await post("/share/pace/estimate", fd);
+      let mine = null, mineErr = "";
+      if (me) {
+        const fm = new FormData();
+        fm.append("route", ro);
+        for (const k of ["route_days", "route_pack_kg"]) if (fd.get(k)) fm.append(k, fd.get(k));
+        try { mine = await post("/api/v1/pace/me", fm, { "X-TRC-CSRF": me.csrf }); } catch (x) { mineErr = x.message; }
+      }
+      render(e, mine, mineErr);
+      $("res").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (x) {
+      err.textContent = x.message;
+      err.hidden = false;
+    } finally {
+      go.disabled = false;
+      go.textContent = T("go");
+    }
+  });
+})();
+</script>
+</body>
+</html>

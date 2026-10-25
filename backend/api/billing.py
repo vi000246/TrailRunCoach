@@ -4,7 +4,9 @@ the owner's single-user app (nobody to bill); the demo never mounts this router.
 
   GET  /plans                        the page: the two plans, the checkout, the subscription's state
                                      (back from Polar: ?billing=ok | cancel | portal)
-  GET  /api/v1/billing               {open, env, prices, role, plan_expires_at, subscription}; a
+  GET  /pricing                      方案與價格 (SP-846): public, signed in or not — the prices, the plan
+                                     cards and the same comparison as /plans (billing/plan_table.py)
+  GET  /api/v1/billing              {open, env, prices, role, plan_expires_at, subscription}; a
                                      subscription last checked over a day ago is asked again first
   POST /api/v1/billing/checkout      {interval: month | year, agree: true} -> {url} of Polar's
                                      checkout; 503 BILLING_NOT_OPEN until it is configured, 409
@@ -24,7 +26,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from backend import billing as B
-from backend.billing import service as SV
+from backend.billing import plan_table as PT, service as SV
 from backend.i18n import N_, UserError
 from backend.i18n.pages import render_page
 
@@ -66,7 +68,15 @@ def _base(request: Request) -> str:
 @router.get("/plans")
 def plans_page():
     _on()
-    return render_page("plans", headers={"Cache-Control": "private, no-cache"})
+    return render_page("plans", headers={"Cache-Control": "private, no-cache"},
+                       fill={"plan_rows": PT.rows_html("plans")})
+
+
+@router.get(PT.URL)
+def pricing_page():
+    """方案與價格 (SP-846): public (login.PUBLIC_PATHS), linked from the 介紹頁; the same table as /plans."""
+    _on()
+    return PT.pricing_page()
 
 
 @router.get("/api/v1/billing")

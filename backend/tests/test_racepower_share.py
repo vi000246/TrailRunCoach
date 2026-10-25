@@ -56,7 +56,8 @@ def test_share_round_trip_without_weight(client):
     assert len(snap["segments"]) == 43 and "kcal" in snap["segments"][0]
     # nothing beyond the whitelist (no sources, model inputs, warnings quoting the athlete's records)
     assert set(snap) == {"v", "title", "created", "expires", "type", "inputs", "summary", "effort", "cp", "weight",
-                         "segments", "seg_targets", "days", "profile", "fuel"}
+                         "segments", "seg_targets", "days", "profile", "fuel",
+                         "chart_rows"}   # SP-784: the 分段目標 rows (share.ROW_KEYS, test_share_targets_sp784.py)
     assert "used" not in json.dumps(snap) and "source" not in snap["summary"]
     lst = client.get("/api/v1/racepower/shares").json()["shares"]
     assert [x["id"] for x in lst] == [sid] and lst[0]["weight"] is False

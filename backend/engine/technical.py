@@ -41,7 +41,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from backend.i18n import _
+from backend.i18n import N_, _
 
 SPEC_RPE = (6, 7)            # 技術地形 90′ — RPE 7 = a quality session (workout_steps.RPE_HARD_MIN)
 SPEC_EASY_RPE = (4, 5)       # 專項期 without room / a spaced day: kept easy (推估)
@@ -52,8 +52,8 @@ WARM, COOL = 15, 10          # the template's
 EASY_MIN = 20                # the other easy runs give the difference, never below this
 TRAIL_PCT_MIN = 50.0         # SP-87 (owner 2026-10-12): a race with ≥ 50 % dirt / trail gets the 專項期 session
 HARD_IDS = ("long", "long2", "long3", "climb")   # B2B days and the race-climb repeats (steep_hill: its hard list)
-SRC = ("Koop（賽道專項：練和比賽相同的地形）；Uphill Athlete；RPE 對強度預算的換算是這個 app 的"
-       "建議（推估）")
+SRC_PARTS = (N_("Koop（賽道專項：練和比賽相同的地形）"), "Uphill Athlete", N_("RPE 對強度預算的換算是這個 app 的建議（推估）"))
+SRC = "；".join(SRC_PARTS)          # (SP-905: a session's 出處 is read part by part — the parts are msgids)
 
 
 def _d(x) -> Optional[dt.date]:
@@ -332,9 +332,13 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
     pick.update(id="tech", kind="quality" if role == "quality" else "hike", terrain="trail", minutes=m, target="",
                 steps=steps,
                 title=f"技術地形 {m}′（{_rpe_txt(rpe)}）",
-                detail=(f"找接近比賽路況的技術路段，{_rpe_txt(rpe)}" + (f"，爬升約 {climb} m" if climb else "")
-                        + "；心率、功率不當目標" + _hint(walk) + ("；算強度課，前後一天輕鬆" if role == "quality" else "")),
-                source=SRC, climb_m=float(climb) if climb else None, tss=round(rate * m / 60.0, 1))
+                # SP-905: msgids joined by 「；」 (each part is shown in the page's language, engine/stored_text)
+                detail=((_("找接近比賽路況的技術路段，{rpe}，爬升約 {climb} m", rpe=_rpe_txt(rpe), climb=climb) if climb
+                         else _("找接近比賽路況的技術路段，{rpe}", rpe=_rpe_txt(rpe)))
+                        + "；" + _("心率、功率不當目標") + _hint(walk)
+                        + ("；" + _("算強度課，前後一天輕鬆") if role == "quality" else "")),
+                source="；".join(_(p) for p in SRC_PARTS), climb_m=float(climb) if climb else None,
+                tss=round(rate * m / 60.0, 1))
     if delta > 0:
         _rebalance(ss, pick, delta)
     info["planned"].append({"day": pick["day"], "minutes": m, "rpe": list(rpe), "role": role, "work": work})

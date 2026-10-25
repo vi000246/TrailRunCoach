@@ -700,6 +700,56 @@ def group_time(ep: float, group_days: Sequence[dict]) -> Optional[dict]:
             "eph": [q25, q50, q75], "n": len(e)}
 
 
+# ---- SP-724: 跟團係數 — the group's pace apart from the altitude and the pack ------------------------
+# A group day is paced by the group, but its altitude and pack slow it too. The old 跟團時間 divided the
+# route's EP by the past group days' EP/h, so a 3000 m trip with 10 kg learnt from a 1000 m day hike (and
+# the other way round). Now each past group day's actual moving time is divided by the capacity model's
+# moving time of that same day (its own track cut into segments, its pack, the altitude of each segment,
+# the hours into the day — capacity.v, as backtest.capacity_days): r = actual ÷ capacity. The model
+# already carries the altitude and the pack, so r is the group's own pace (and its stops under 1 km/h
+# that are not stops). The plan's 跟團時間 = the route's capacity time at AeT (its pack, altitude, snow,
+# heat) × the median r, p25 / p75 = × the r quartiles. ≥ GROUP_MIN_DAYS group days, as before.
+GROUP_MIN_DAYS = 3
+GROUP_SOURCE = ("跟團係數（推估）：過去每個跟團日的實際移動時間 ÷ 能力模型算的同一天移動時間（那天自己的軌跡、背負、"
+                "每段海拔、走了幾小時），取中位數與 p25–p75；海拔與背包已經在能力模型裡，係數只剩跟團的步調")
+
+
+def day_capacity_time(cap: "WalkCapacity", segs: Sequence, load: float, n_day: int = 1) -> float:
+    """The capacity model's moving time (s) of one day given as [[grade, dist_m, z_mean], …] with `load`
+    kg, the hours into the day accumulating (as backtest.capacity_days); inf when a speed is 0."""
+    h, t = 0.0, 0.0
+    for g, d, z in segs:
+        v = cap.v(float(g), load, z=None if z is None else float(z), h=h, n_day=n_day)
+        if not v or v <= 0:
+            return math.inf
+        t += float(d) / v
+        h = t / 3600.0
+    return t
+
+
+def group_factor(cap: Optional["WalkCapacity"], days: Sequence[dict],
+                 min_days: int = GROUP_MIN_DAYS) -> Optional[dict]:
+    """SP-724: the 跟團係數 from the past hiking days (athlete.group_day_rows: {trip, date, day, segs,
+    t_act, pack_kg, solo, z_mean, km, gain_m}) — the group days only (solo = 自己). {median, p25, p75, n,
+    trips, rows [{…, t_cap, r}], source}; None without a model or with fewer than `min_days` days."""
+    if cap is None:
+        return None
+    rows = []
+    for d in days or []:
+        if d.get("solo") or not d.get("t_act") or not d.get("segs") or d.get("pack_kg") is None:
+            continue
+        t = day_capacity_time(cap, d["segs"], float(d["pack_kg"]), int(d.get("day") or 1))
+        if not (t > 0 and math.isfinite(t)):
+            continue
+        rows.append({**{k: d.get(k) for k in ("trip", "date", "day", "pack_kg", "z_mean", "km", "gain_m")},
+                     "t_act": float(d["t_act"]), "t_cap": t, "r": float(d["t_act"]) / t})
+    if len(rows) < min_days:
+        return None
+    q25, q50, q75 = (float(x) for x in np.percentile([r["r"] for r in rows], [25, 50, 75]))
+    return {"median": q50, "p25": q25, "p75": q75, "n": len(rows), "trips": len({r["trip"] for r in rows}),
+            "rows": rows, "source": GROUP_SOURCE}
+
+
 def band(t_s: float, sigma: float) -> dict:
     return {"p10_s": t_s * math.exp(-BAND_Z * sigma), "p90_s": t_s * math.exp(BAND_Z * sigma), "sigma": sigma}
 

@@ -315,6 +315,16 @@ def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
                         "kind": s.get("kind"), "minutes": s.get("minutes"), "origin": s.get("origin"),
                         "edited": s.get("edited")})
 
+    # SP-814: the runs the generator gave to an open interval / test session of the week (pass 2 links
+    # them there). The strict same-day pass does not give one to a long run on its own day first —
+    # a fartlek run on the LSD's day went to the LSD and the fartlek stayed 「沒有對應的活動」
+    held = {h.get("index"): s["uid"] for s in open_ if s.get("kind") in HARD and auto(s)
+            for h in [hint.get(s["uid"])] if h is not None}
+
+    def held_for_other(s, a) -> bool:
+        u = held.get(a.get("index"))
+        return u is not None and u != s["uid"] and (s.get("kind") == "long" or s.get("gen_key") == "long")
+
     def same_day(strict: bool):
         pairs = []
         for s in open_:
@@ -324,6 +334,8 @@ def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
                 if a.get("date") != s["day"] or not free(a):
                     continue
                 if not (sport_ok(s, a) if strict else can_match(s, a)):
+                    continue
+                if strict and held_for_other(s, a):
                     continue
                 c = cost(s, a) - (0.2 if (hint.get(s["uid"]) or {}).get("index") == a.get("index") else 0.0)
                 pairs.append((c, s.get("day"), s["uid"], a.get("index"), s, a))
@@ -404,7 +416,14 @@ def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
     ter, cat = s.get("terrain"), a.get("category")
     terrain_off = ter in ("road", "trail") and cat in ("road", "trail") and ter != cat
     hs = _f(a.get("hard_s"))
+    # SP-646 R1 (Q1-2): a 課表 long run with a marathon-pace block reads 「長跑（含 MP）」, not 「LSD」, and —
+    # run as planned (actual easy: its MP is 中強度, session_stimulus.planned_mp) — 「含 60 分馬拉松配速」,
+    # not 「輕鬆」, which read as if the MP was not run
+    mp_s = _planned_mp_s(s)
+    kind_label = _("長跑（含 MP）") if mp_s else None
+    actual_label = _("含 {n:.0f} 分馬拉松配速", n=mp_s / 60.0) if mp_s and got == "easy" else None
     return {"off_plan": bool(why), "short": short, "soft": soft, "planned": p, "actual": got, "grade": grade,
+            "kind_label": kind_label, "actual_label": actual_label,
             "intensity_pct": pct, "wrong_sport": wrong_sport,
             "terrain_off": terrain_off, "text": _("換了課：{why}", why=why[0]) if why else "",
             "off_why": why[0] if why else "",       # the reason alone (the pages that show 換了課 beside it)
@@ -412,6 +431,23 @@ def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
             "hard_min": None if hs is None else round(hs / 60.0, 1),
             "need_min": round(hard_need(s) / 60.0, 1) if p == "hard" else None,
             "match": a.get("match") or "day", "match_label": _match_label(a.get("match") or "day")}
+
+
+def _planned_mp_s(s: dict) -> int:
+    """SP-646: the planned marathon-pace seconds of a 課表 long run (workout_steps.mp_seconds; a stored
+    structure may still be its JSON text); 0 = none."""
+    from backend.engine import workout_steps as WS
+    st = s.get("steps")
+    if isinstance(st, str):
+        import json
+        try:
+            s = {**s, "steps": json.loads(st)}
+        except ValueError:
+            s = {**s, "steps": None}
+    try:
+        return WS.mp_seconds(s)
+    except Exception:                       # noqa: BLE001 — an unreadable structure: no MP label
+        return 0
 
 
 def _match_label(m: str) -> str:

@@ -12,9 +12,15 @@ has the sources):
   * a ZIP of FIT / TCX / GPX files the user packed (SP-407), a TrainingPeaks workout-file export
     zipped (.fit / .fit.gz / .tcx / .gpx: "the same format as it was uploaded"), COROS's bulk
     export (FIT or TCX), Polar Flow's per-session exports zipped (TCX / GPX / FIT).
-  * not (yet): Polar's account download (JSON training sessions) and Apple Health's export.zip
-    (export.xml + workout-routes/*.gpx without heart rate or sport): recognised, skipped with
-    their own reason, so the page can say so.
+  * SP-833: Polar's account download — each training-session-*.json goes through SP-323's import
+    like a TCX (files/track_fit.py turns it into FIT); TrainingPeaks' .pwx files the same way.
+  * SP-833: Apple Health's export.zip — apple_health_export/export.xml (often > 1 GB) is streamed
+    once while the archive is listed (files/apple_health.py: the workouts and the heart-rate samples
+    inside them, never the whole file in memory), each workout written to apple/<k>.json and listed
+    as an activity entry (container "apple"); the part that reaches it writes its FIT from those
+    samples and its workout-routes/*.gpx. A route no workout refers to is skipped and listed.
+    SP-911: that pass is done SCAN_PART_BYTES at a time (a part each) and written down as it goes
+    (apple-scratch/), so a restart goes on from the last checkpoint instead of reading it all again.
 
 The flow:
   1. create(): one import per tenant at a time, ≤ MAX_ARCHIVE_BYTES. The page sends the file in
@@ -46,7 +52,7 @@ MAX_NESTED_BYTES) and all inflated bytes together at MAX_INFLATE_BYTES; a file t
 activity file is never inflated.
 
 Files (per tenant, private: data_registry `imports/**`): imports/<id>/{state.json, archive.zip,
-nested/<k>.zip, manifest.json, items.jsonl}. Counts and sizes only in the logs.
+nested/<k>.zip, apple/<k>.json, manifest.json, items.jsonl}. Counts and sizes only in the logs.
 """
 from __future__ import annotations
 
@@ -80,6 +86,9 @@ MAX_INFLATE_BYTES = 12 * 1024 ** 3      # everything inflated by one import toge
 # one queue job's share: ~2 s per MB of FIT here, the NAS ~8.5× slower (SP-323) -> ~1 min there
 PART_BYTES = 4 * 1024 * 1024
 PART_FILES = 100
+# Apple Health's export.xml read per part (SP-911): ~130 MB/s here, ~15 MB/s on the NAS -> ~35 s
+# there; the next part inflates what was read again (~3–4× faster than reading it) and goes on
+SCAN_PART_BYTES = 512 * 1024 * 1024
 KEEP_UNFINISHED_DAYS = 7                # an upload never finished: dropped by the next create()
 LIST_MAX = 500                          # names kept per skipped reason (the rest as a count)
 READ_STEP = 1024 * 1024
@@ -95,7 +104,9 @@ NOT_ACTIVITY_FILE, UNSUPPORTED, POLAR_JSON, APPLE_ROUTE, TOO_DEEP, TOO_MANY = (
 NOT_ZIP, BOMB, TOO_MANY_ENTRIES = "not_zip", "too_large_inflated", "too_many_entries"
 RETRYABLE = {UP.ERROR}
 # activity formats this import cannot read (listed as such, not as 「不是活動檔」)
-UNSUPPORTED_EXTS = (".pwx", ".kml", ".kmz", ".srm", ".hrm", ".csv", ".slf", ".sml", ".xml")
+UNSUPPORTED_EXTS = (".kml", ".kmz", ".srm", ".hrm", ".csv", ".slf", ".sml", ".xml")
+APPLE = "apple"                         # the container of Apple Health's workouts (apple/<k>.json)
+APPLE_UNREADABLE = "apple_health_unreadable"   # export.xml could not be read
 
 _LOCK = threading.RLock()
 _LIVE: dict = {}                        # (tenant id, import id) -> the latest queued / running job
@@ -249,6 +260,8 @@ def _drop_data(d: Path) -> None:
         except OSError:
             pass
     shutil.rmtree(d / "nested", ignore_errors=True)
+    shutil.rmtree(d / APPLE, ignore_errors=True)
+    shutil.rmtree(d / "apple-scratch", ignore_errors=True)
 
 
 def delete(imp_id: str) -> bool:
@@ -432,6 +445,70 @@ def _kind_of(names: list[str]) -> str:
     return GENERIC
 
 
+def _apple_export(infos: list) -> Optional[zipfile.ZipInfo]:
+    """Apple Health's export.xml in the archive (not export_cda.xml)."""
+    for i in infos:
+        if re.search(r"(^|/)apple_health_export/export\.xml$", i.filename.lower()):
+            return i
+    return None
+
+
+def _scan_apple(zf: zipfile.ZipFile, info: zipfile.ZipInfo, d: Path, cap: int) -> Optional[tuple[list, set, int]]:
+    """Stream export.xml (files/apple_health.py) -> (entries [container, member, shown, size], the
+    route members the workouts refer to, the bytes inflated). Each workout to apple/<k>.json.
+    ArchiveError: too_large_inflated past `cap`, apple_health_unreadable for no Health XML.
+    None: SCAN_PART_BYTES read in this part and more to go (SP-911) — the pass is written down in
+    apple-scratch/ and the next part goes on from there (also after a restart: 重試)."""
+    from backend.files import apple_health as AH
+    got = [0]
+    scratch = d / "apple-scratch"
+    try:
+        f = zf.open(info)
+    except Exception as e:                           # noqa: BLE001 — BadZipFile, encrypted
+        shutil.rmtree(scratch, ignore_errors=True)
+        raise ArchiveError(UP.UNREADABLE) from e
+
+    def read(n: int) -> bytes:
+        try:
+            b = f.read(n)
+        except Exception as e:                       # noqa: BLE001 — a CRC error, zlib.error
+            raise ArchiveError(UP.UNREADABLE) from e
+        got[0] += len(b)
+        if got[0] > cap:
+            raise ArchiveError(BOMB)
+        return b
+
+    base = info.filename[: info.filename.lower().rfind("export.xml")]
+    # this very entry of this very archive: a checkpoint of another file is never gone on from
+    key = f"{info.filename}|{info.file_size}|{info.compress_size}|{info.CRC}|{info.header_offset}"
+    try:
+        with f:
+            res = AH.scan_export(read, scratch, base=base, key=key, budget=SCAN_PART_BYTES)
+    except AH.AppleError:
+        shutil.rmtree(scratch, ignore_errors=True)
+        raise ArchiveError(APPLE_UNREADABLE)
+    except ArchiveError:
+        shutil.rmtree(scratch, ignore_errors=True)        # past the cap / unreadable: nothing to go on with
+        raise
+    if res.get("paused"):
+        log.info("export import: Apple Health export.xml read to %d of %d bytes, the next part goes on",
+                 res["pos"], info.file_size)
+        return None
+    shutil.rmtree(scratch, ignore_errors=True)
+    out = d / APPLE
+    out.mkdir(exist_ok=True)
+    entries, routes = [], set()
+    for k, w in enumerate(res["workouts"]):
+        _write_json(out / f"{k}.json", w)
+        if w.get("route"):
+            routes.add(w["route"])
+        size = 16 * (len(w.get("hr") or ()) + len(w.get("power") or ())) + 24 * len(w.get("cad") or ()) + 1024
+        entries.append([APPLE, f"{k}.json", AH.name_of(w), size])
+    log.info("export import: Apple Health export.xml read, %d workouts, %d heart-rate and %d power / step "
+             "samples (%d dropped)", len(entries), res["hr_samples"], res.get("more_samples", 0), res["dropped"])
+    return entries, routes, got[0]
+
+
 def _ignored(name: str) -> bool:
     """macOS / Windows metadata a zip tool adds: never listed."""
     n = name.lower()
@@ -440,10 +517,11 @@ def _ignored(name: str) -> bool:
         ".ds_store", "thumbs.db", "desktop.ini")
 
 
-def scan(d: Path) -> dict:
+def scan(d: Path) -> Optional[dict]:
     """List the archive (manifest.json): the activity files in order, the nested ZIPs copied out
     under our own names, what is skipped (by reason, with names). ArchiveError for an archive
-    that is no ZIP or holds too many entries."""
+    that is no ZIP or holds too many entries. None (no manifest yet): Apple Health's export.xml
+    is read in parts and this part read its share (SP-911)."""
     nested = d / "nested"
     nested.mkdir(exist_ok=True)
     entries: list[list] = []                 # [container, member, shown name, declared size]
@@ -470,11 +548,26 @@ def scan(d: Path) -> dict:
             continue
         with zf:
             infos = [i for i in zf.infolist() if not i.is_dir()]
+            apple_xml, routes = None, set()
             if cont == 0:
                 kind = _kind_of([i.filename for i in infos])
+                apple_xml = _apple_export(infos) if kind == APPLE_HEALTH else None
+                if apple_xml is not None:
+                    try:
+                        res = _scan_apple(zf, apple_xml, d, MAX_INFLATE_BYTES - inflated)
+                    except ArchiveError as e:
+                        skip(e.reason, _clean(apple_xml.filename))
+                    else:
+                        if res is None:
+                            return None                       # export.xml read in part: the next part lists
+                        got, routes, n = res
+                        inflated += n
+                        entries.extend(got[:MAX_ACTIVITY_FILES])
+                        for g in got[MAX_ACTIVITY_FILES:]:
+                            skip(TOO_MANY, g[2])
             for info in infos:
-                if _ignored(info.filename):
-                    continue
+                if _ignored(info.filename) or info is apple_xml or info.filename in routes:
+                    continue                              # export.xml and its routes: read as workouts
                 shown = (prefix + _clean(info.filename))[-300:]
                 low = info.filename.lower()
                 if low.endswith(".zip"):
@@ -498,14 +591,12 @@ def scan(d: Path) -> dict:
                     inflated += target.stat().st_size
                     queue.append((k, target, shown + " › ", depth + 1))
                 elif kind == APPLE_HEALTH and re.search(r"(^|/)workout-routes/", low):
-                    skip(APPLE_ROUTE, shown)              # a route without heart rate or sport: later
+                    skip(APPLE_ROUTE, shown)              # a route no workout refers to
                 elif UP.is_fit_name(low):
                     if len(entries) >= MAX_ACTIVITY_FILES:
                         skip(TOO_MANY, shown)
                     else:
                         entries.append([cont, info.filename, shown, info.file_size])
-                elif re.search(r"(^|/)training-session-[^/]*\.json$", low):
-                    skip(POLAR_JSON, shown)
                 elif low.endswith(UNSUPPORTED_EXTS) and kind != APPLE_HEALTH:
                     skip(UNSUPPORTED, shown)
                 else:
@@ -527,6 +618,8 @@ async def process(db, d: Path, athlete_id: int, part_bytes: Optional[int] = None
     man = _read_json(d / "manifest.json")
     if man is None:
         man = await asyncio.to_thread(scan, d)
+        if man is None:                     # export.xml read in part (SP-911): the next part goes on
+            return {"more": 1, "added": 0, "stopped": (d / "cancel").exists()}
     _repair(d)
     done = {i.get("i") for i in _items(d)}
     pending = [i for i in range(len(man["entries"])) if i not in done]
@@ -549,6 +642,14 @@ async def process(db, d: Path, athlete_id: int, part_bytes: Optional[int] = None
                 if taken >= part_files or (taken and size >= part_bytes):
                     break
                 cont, member, shown, _declared = man["entries"][i]
+                if cont == APPLE:
+                    item = await _apple_item(db, athlete_id, d, member, shown, folder, zips)
+                    taken += 1
+                    size += int(_declared or 0)
+                    added += int(item["status"] == UP.ADDED)
+                    out.write(json.dumps({"i": i, **item}, ensure_ascii=False) + "\n")
+                    out.flush()
+                    continue
                 cap = UP.max_bytes(member)
                 item = None
                 try:
@@ -584,6 +685,34 @@ async def process(db, d: Path, athlete_id: int, part_bytes: Optional[int] = None
     man["inflated"] = inflated
     _write_json(d / "manifest.json", man)
     return {"more": max(0, len(pending) - taken), "added": added, "stopped": stopped}
+
+
+async def _apple_item(db, athlete_id: int, d: Path, member: str, shown: str, folder: str, zips: dict) -> dict:
+    """One Apple Health workout: its FIT from apple/<member> (the samples) and its route GPX in the
+    archive, through SP-323's import; the result named as listed."""
+    from backend.files import apple_health as AH
+    from backend.files import track_fit as TF
+    fail = {"name": shown, "status": UP.FAILED, "reason": UP.UNREADABLE, "date": None, "sport": None, "of": None}
+    w = _read_json(d / APPLE / member)
+    if not isinstance(w, dict) or "start" not in w:
+        return fail
+    gpx = None
+    if w.get("route"):
+        try:
+            zf = zips.get(0)
+            if zf is None:
+                zf = zips[0] = _open(d / "archive.zip")
+            gpx = await asyncio.to_thread(read_capped, zf, zf.getinfo(w["route"]), UP.MAX_TRACK_BYTES)
+        except (ArchiveError, KeyError):
+            gpx = None                                    # no route: the heart rate alone
+    try:
+        fit = await asyncio.to_thread(AH.to_fit, w, gpx)
+    except TF.TrackError as e:
+        return {**fail, "reason": e.reason, "status": UP.SKIPPED if e.reason == UP.NOT_ACTIVITY else UP.FAILED}
+    item = await UP.import_one(db, athlete_id, UP.Incoming("workout.fit", fit, len(fit)), folder)
+    if item["status"] == UP.FAILED and item["reason"] == UP.NOT_ACTIVITY:
+        item["status"] = UP.SKIPPED
+    return {**item, "name": shown}
 
 
 def run_part(imp_id: str, progress=None) -> dict:

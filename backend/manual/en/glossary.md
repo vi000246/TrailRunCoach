@@ -437,7 +437,7 @@ The middle bar = heart-rate-reserve zones; move only the resting HR and the othe
 Reserve = max HR − resting HR; a zone edge = resting HR + share × reserve (the schedule uses 59 / 74 / 84 / 88 / 95 %). With max minus resting under 40 it is not computed — check your settings.
 
 ### Where max and resting HR come from
-Max HR: yours → the watch's → the highest HR held 5 seconds or more in the last 365 days of running → the age formula 208 − 0.7 × age (an estimate; individuals can be 10 bpm or more off). Resting HR: yours → the watch's. See [Max and resting heart rate](start.md#heart-rate) in Getting started.
+Max HR: yours → the watch's → the best 10-second average HR in the last 365 days of running → the age formula 208 − 0.7 × age (an estimate; individuals can be 10 bpm or more off). Resting HR: yours → the watch's. See [Max and resting heart rate](start.md#heart-rate) in Getting started.
 
 ### Sources
 Karvonen et al. 1957 (the heart-rate-reserve method); Tanaka et al. 2001 (*Journal of the American College of Cardiology* 37:153–156, the age formula).

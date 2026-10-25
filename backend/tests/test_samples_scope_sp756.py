@@ -10,7 +10,9 @@ from backend.tests.test_quota_rules_sp713 import F, P, _fresh_site, client  # no
 
 
 def _ds(days_back):
-    ws = [SimpleNamespace(day=1000.0 - d, idx=i) for i, d in enumerate(days_back)]
+    # entry.start: the X-TRC-Activity header (SP-758) reads it; no start -> no header
+    ws = [SimpleNamespace(day=1000.0 - d, idx=i, entry=SimpleNamespace(start=None))
+          for i, d in enumerate(days_back)]
     reads = []
 
     def channel(i, name):

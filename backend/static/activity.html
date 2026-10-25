@@ -202,6 +202,7 @@ details.peaks .pk span { font-size: 12.5px; padding: 0 8px; border-radius: 10px;
 .achbar .cnt { margin-left: auto; color: var(--muted); font-size: 13px; }
 .cchip { padding: 1px 10px; border-radius: 12px; font-size: 12.5px; color: var(--muted); }
 .cchip[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); color: var(--accent); }
+.cchip.sug { color: var(--accent); border-style: dashed; opacity: .8; font-style: italic; }   /* SP-724: the suggested 跟團 / 自己 */
 #a-tbody .nm[contenteditable] { cursor: text; border-bottom: 1px dashed transparent; }
 #a-tbody .nm[contenteditable]:hover { border-bottom-color: var(--muted); }
 #a-tbody .pkl { display: block; color: var(--baiyue); font-size: 12px; white-space: normal; }
@@ -266,7 +267,7 @@ dialog#exp .row .sp { flex: 1; }
       </table>
     </div>
     <div class="pager" id="pager"></div>
-    <div class="cmpbar" id="cmpbar" role="status" aria-live="polite" hidden></div>
+    <div class="cmpbar" id="cmpbar" role="status" aria-live="polite" data-float-clear hidden></div>
   </div>
   <section id="ach" role="tabpanel" aria-labelledby="tab-ach" data-ach-only>
     <div class="kpis" id="a-kpis"></div>
@@ -535,6 +536,13 @@ function grpCtl(a) {
     return `<button type="button" class="mkc${s ? " sug" : ""}" data-grp="${v}" data-k="${esc(a.key)}" aria-pressed="${on}" title="${esc(tip)}">${esc(T("grp." + v))}${s ? "?" : ""}</button>`;
   }).join("") + `</span>`;
 }
+// SP-724: the editor's 跟團 row says why the app suggests what it does (the three signs, engine/group_hint.py)
+function grpWhy(a) {
+  const h = S.hints?.group?.[a.key], sug = groupOf(a) ? null : (h && h.suggest);
+  if (!sug) return "";
+  const n2 = (x) => (x == null ? "—" : num(x, 2));
+  return `<div class="why" data-grp-why>${esc(T("grp.why", { v: T("grp." + sug), hr: n2(h.hr_pct), vam: n2(h.vam_ratio), stop: n2(h.stop_share) }))}</div>`;
+}
 function tdiffCtl(a) {
   if (!tdiffRow(a)) return "";
   const cur = tdiffOf(a), rt = cur ? null : routeTdiff(a);
@@ -678,6 +686,8 @@ function cmpBar() {
   bar.innerHTML = `<span>${esc(T("cmp.picked"))} <b>${esc(a.start.slice(0, 10))} ${esc(title(a))}</b></span><span class="meta">${esc(T("cmp.next"))}</span>` +
     `<a href="${CMP_PAGE}?a=${a.index}">${esc(T("cmp.page"))}</a><button type="button" id="cmp-cancel">${esc(T("cmp.cancel"))}</button>`;
   $("cmp-cancel").onclick = () => { S.cmpA = null; render(); cmpBar(); };
+  // SP-913: the floating 建議 / 問 AI go above the bar instead of covering its right end (shell.js data-float-clear)
+  if (window.AppShell && AppShell.floatClear) AppShell.floatClear();
 }
 
 // 對到哪場賽事 (SP-674): the plan event this activity was. 自動 = the plan's own match (date + distance
@@ -981,6 +991,11 @@ function renderEditor() {
     <div class="fld"><span class="lab">${esc(T("f_tdiff"))}${qt(T("help.tdiff"))}</span>
       <div class="ctl" role="group" aria-label="${esc(T("f_tdiff"))}">${TDIFF_OPTS.map((v) =>
         `<button type="button" class="cchip" data-tdiff="${v}" aria-pressed="${tdiffOf(a) === v}">${esc(T("tdiff." + (v || "none")))}</button>`).join("")}</div></div>
+    ${isHikeRow(a) ? `<div class="fld" data-grp-fld><span class="lab">${esc(T("col.grp"))}${qt(T("help.grp"))}</span>
+      <div class="ctl" role="group" aria-label="${esc(T("col.grp"))}">${["group", "solo", ""].map((v) => {
+        const s = v && !groupOf(a) && sugGroup(a) === v;
+        return `<button type="button" class="cchip${s ? " sug" : ""}" data-grp-ed="${v}" aria-pressed="${groupOf(a) === v}"${s ? ` title="${esc(T("grp.sug_tip", { v: T("grp." + v) }))}"` : ""}>${esc(v ? T("grp." + v) : T("tdiff.none"))}${s ? "?" : ""}</button>`;
+      }).join("")}</div>${grpWhy(a)}</div>` : ""}
     ${S.pain ? `<div class="fld"><span class="lab">${esc(T("col.pain"))}${qt(T("help.pain"))}</span><div class="ctl" id="pain-ctl">${PainPicker.html(painState(a), S.pain, { qtip: qt })}</div></div>` : ""}
     ${a.index != null ? `<div class="fld"><span class="lab">${esc(T("f_pack"))}${qt(T("help.pack"))}</span>
       <div class="ctl">${!d ? esc(T("loading")) : `<input type="number" data-pack min="0" max="40" step="0.5" inputmode="decimal" style="width:6em" value="${pk?.pack_kg ?? ""}" placeholder="—" aria-label="${esc(T("f_pack"))}"> kg`}</div></div>` : ""}
@@ -1111,6 +1126,10 @@ function wireEditor(a) {
     if (surfaceOf(a) !== b.dataset.surface) saveFields(a, { surface: b.dataset.surface || null });
   }));
   ed.querySelector("button[data-rain-wet]")?.addEventListener("click", () => saveFields(a, { surface: "wet" }));
+  // SP-724: 跟團 / 自己 / 未標 in the editor too (a 3-way choice like 地形難度) — one click saves
+  ed.querySelectorAll("button[data-grp-ed]").forEach((b) => b.addEventListener("click", () => {
+    if (groupOf(a) !== b.dataset.grpEd) saveFields(a, { group: b.dataset.grpEd || null });
+  }));
   ed.querySelectorAll("button[data-tdiff]").forEach((b) => b.addEventListener("click", () => {
     if (tdiffOf(a) !== b.dataset.tdiff) saveFields(a, { terrain_difficulty: b.dataset.tdiff || null });
   }));

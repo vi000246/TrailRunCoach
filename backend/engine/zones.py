@@ -85,21 +85,23 @@ SOURCE = "Palladino Power Project zone table (2017/2019)"
 # so every sample falls in exactly one zone.
 # ---------------------------------------------------------------------------
 
+# the names are msgids (SP-748: the 心率區間 card read the English names in the Chinese page too);
+# zone_table gives them in the request's language
 CLASSIC_HR = [
-    ("AR", "Active Recovery", 0.0, 0.69),
-    ("E", "Endurance", 0.69, 0.84),
-    ("TE", "Tempo", 0.84, 0.95),
-    ("TH", "Threshold", 0.95, 1.06),
+    ("AR", N_("主動恢復"), 0.0, 0.69),
+    ("E", N_("耐力"), 0.69, 0.84),
+    ("TE", N_("節奏"), 0.84, 0.95),
+    ("TH", N_("閾值"), 0.95, 1.06),
     ("VM", "VO2max", 1.06, None),
 ]
 FRIEL_HR = [
-    ("1", "Recovery", 0.0, 0.85),
-    ("2", "Aerobic", 0.85, 0.90),
-    ("3", "Tempo", 0.90, 0.95),
-    ("4", "SubThreshold", 0.95, 1.00),
-    ("5a", "SuperThreshold", 1.00, 1.03),
-    ("5b", "Aerobic Capacity", 1.03, 1.06),
-    ("5c", "Anaerobic Capacity", 1.06, None),
+    ("1", N_("恢復"), 0.0, 0.85),
+    ("2", N_("有氧"), 0.85, 0.90),
+    ("3", N_("節奏"), 0.90, 0.95),
+    ("4", N_("次閾值"), 0.95, 1.00),
+    ("5a", N_("超閾值"), 1.00, 1.03),
+    ("5b", N_("有氧能力"), 1.03, 1.06),
+    ("5c", N_("無氧能力"), 1.06, None),
 ]
 # pace: fractions of threshold PACE (min/km); >1 = slower. Listed easy → hard.
 FRIEL_PACE = [

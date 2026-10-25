@@ -54,8 +54,12 @@ The account's own data (SP-386; accounts/export.py, accounts/deletion.py), signe
                                  OAuth consent screen (SP-387). Only these exact paths are public
                                  (login.PUBLIC_PATHS); an unknown id signed out is the gate's 401
 
+The e-mail sign-in (SP-610: sign up, confirm the address, sign in, reset the password) is
+api/account_email.py, on the same helpers.
+
 Cookies are named by login.cookie_name (__Host- over https). /login?error= codes the page
-explains: expired, failed, cancelled, unverified, disabled, full, rate_limited, setup.
+explains: expired, failed, cancelled, unverified, disabled, full, rate_limited, setup,
+google_account (an e-mail sign-up of an address that is a Google account's, SP-610).
 """
 from __future__ import annotations
 
@@ -184,7 +188,10 @@ async def callback(request: Request, state: str = "", code: str = "", error: str
         return resp
     out = await run_in_threadpool(LG.resolve, ident, row["next_url"])
     if out.kind == "refused":
-        return _to_login(out.reason or "failed")
+        # SP-764: a sign-in that came from 疊石 Cairn keeps saying so on the page (額滿: the waitlist line)
+        r = RedirectResponse(LG.error_url(out.reason or "failed", row["next_url"]), status_code=303)
+        r.headers["Cache-Control"] = "no-store"
+        return r
     if out.kind == "terms":
         resp = RedirectResponse("/signup", status_code=303)
         _set(resp, LG.SIGNUP_COOKIE, out.ticket, LG.TICKET_TTL_S)
@@ -245,8 +252,12 @@ def signup(body: SignupIn, request: Request):
         raise UserError(N_("登入逾時，請重新登入"), code="SIGNUP_EXPIRED", status=404)
     out = LG.accept_terms(ticket, documents)
     if out.kind != "session":
-        resp = JSONResponse({"ok": False, "next": f"/login?error={out.reason or 'failed'}"})
+        resp = JSONResponse({"ok": False, "next": LG.error_url(out.reason or "failed", ticket.get("next_url"))})
     else:
+        if ticket["kind"] == "signup":
+            # SP-765: where a new account came from (from=cairn in the address the sign-in started at)
+            from backend.accounts import xp as XP
+            store.set_signup_source(out.user.id, XP.source_of(ticket.get("next_url")))
         resp = JSONResponse({"ok": True, "next": LG.safe_next(ticket["next_url"])})
         _start_session(request, resp, out.user)
     resp.headers["Cache-Control"] = "no-store"
@@ -357,7 +368,9 @@ def _reauth_done(request: Request, row: dict, ident: google.Identity) -> Redirec
 def account_me(request: Request):
     _on()
     u = _signed_in()
-    return JSONResponse({"id": u.id, "name": u.display_name, "email": u.email, "role": u.role,
+    # how this account confirms who it is before a deletion: "email" (its password, SP-610) or "google"
+    sign_in = "email" if (not u.google_sub and store.email_account_of(u.id)) else "google"
+    return JSONResponse({"id": u.id, "name": u.display_name, "email": u.email, "role": u.role, "sign_in": sign_in,
                          "created_at": u.created_at, "can_delete": not u.is_owner,
                          "reauth_ok": (not u.is_owner) and _reauth_ok(request), "reauth_ttl_s": REAUTH_TTL_S,
                          "analysis": store.analysis_consent(u.id), "export_url": "/api/v1/account/export.zip"},

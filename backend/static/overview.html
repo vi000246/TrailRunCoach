@@ -493,8 +493,9 @@ function staleWatch(s) {
   clearTimeout(STALE.t); STALE.t = null;
   if (!st) { STALE.t0 = 0; STALE.gaveUp = false; return; }
   b.classList.toggle("gave-up", STALE.gaveUp);
-  b.textContent = STALE.gaveUp ? tO("stale.reload") : tO("stale.updating");
-  b.title = tO(STALE.gaveUp ? "stale.reload_tip" : "stale.tip", { at: atTime(st.since) });
+  // SP-809: after a switch of 課表心率區間 alone, 「心率區間更新中」 (as the 課表's badge)
+  b.textContent = STALE.gaveUp ? tO("stale.reload") : st.reason === "hr" ? tO("stale.hr") : tO("stale.updating");
+  b.title = tO(STALE.gaveUp ? "stale.reload_tip" : st.reason === "hr" ? "stale.hr_tip" : "stale.tip", { at: atTime(st.since) });
   if (STALE.gaveUp) return;
   if (!STALE.t0) STALE.t0 = Date.now();
   const poll = async () => {

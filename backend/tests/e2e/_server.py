@@ -150,6 +150,8 @@ def main(argv: list[str]) -> None:
     import shutil
     import tempfile
     os.environ["WKO5COACH_TEST_REAL_HOME"] = str(Path.home())     # the build refuses roots inside it
+    from backend.tests import _guard                              # Playwright's browsers live under the real home
+    _guard._keep_playwright_browsers()
     home = Path(tempfile.mkdtemp(prefix="trc-e2e-home-"))
     os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)    # nothing under the real home
     try:

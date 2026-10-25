@@ -1,0 +1,21 @@
+# 營運監控 (SP-388): a Telegraf next to the app — only when the NAS has no Telegraf with the docker
+# input already (README.md step 1; with one, add telegraf.conf's two inputs to it instead).
+# Synology: docker-compose v1 (/usr/local/bin/docker-compose), so the v3 file format.
+version: "3"
+services:
+  telegraf-trc:
+    image: telegraf:1.32
+    container_name: telegraf-trc
+    restart: unless-stopped
+    # the telegraf image's entrypoint drops to the telegraf user even with user: root, so it needs the
+    # socket's group: on this Synology /var/run/docker.sock is group 65538 (`stat -c %g`; 2026-10-20)
+    user: root
+    group_add:
+      - "65538"
+    env_file: .env                         # INFLUX_URL / INFLUX_TOKEN / INFLUX_ORG / INFLUX_BUCKET (README step 2)
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # the app's ops folder: <TRC_DATA_DIR> is the host folder mounted as the app's data folder
+      # (README step 0); only metrics.json is read
+      - <TRC_DATA_DIR>/logs/ops:/trc-ops:ro

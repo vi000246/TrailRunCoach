@@ -1,6 +1,6 @@
 # Module Spec: racepower
 
-> **Last Updated**: 2026-10-13
+> **Last Updated**: 2026-10-23
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -62,6 +62,7 @@ decisions on the workbook's ambiguities (D1–D10) are in
 | `heatacc.py` | HRC slope test deciding whether heat acclimation is credited (a) | `backend/engine/racepower/heatacc.py:35` |
 | `nonmoving.py` | Non-moving time (long / short stops) of a trail race from earlier races | `backend/engine/racepower/nonmoving.py:105` |
 | `share.py` | Read-only share snapshots (whitelisted fields, privacy scrub, expiry) | `backend/engine/racepower/share.py:75` |
+| `climb.py` | 攀爬段 (SP-728): your scramble windows, a terrain + place-memory logistic model checked by cross-validation grouped by run, the plan's marked stretches (推估, never changes the times) | `backend/engine/racepower/climb.py` |
 | `watch_export.py` | Plan → watch workout steps (lap-button legs or distance steps) | `backend/engine/racepower/watch_export.py:198` |
 | `race_calc_store.py` | Page inputs + last result saved per season-plan event (table `race_calc`; each row a stable `uid` + UTC `updated_at`, SP-310) | `backend/engine/race_calc_store.py:95` |
 | `event_gpx.py` | One stored GPX / FIT per season-plan event (+ day splits) | `backend/engine/event_gpx.py:145` |
@@ -275,8 +276,10 @@ newest confirmed road race of the last 365 days:
 attempt in `tried`. With `event_id` and no peak / coordinates, the location is the start of the
 event's stored GPX:
 Every tenant starts with CWA (SP-552: CWA open data may be used commercially with the source
-named; Open-Meteo only fills what CWA has not got — 8–16 days out, outside Taiwan, the
-climatology, heights):
+named; the rest only fills what CWA has not got — 7–9 days out, outside Taiwan, the
+climatology, heights). SP-797: Open-Meteo's free API is non-commercial only, so the forecast step is
+MET Norway's; Open-Meteo's archive (climatology, training conditions, route weather) and elevation API
+are still called until the ERA5 download and the DEM files replace them (ticket SP-797):
 1. CWA 登山三天 hourly (F-B0053-035), then 登山一週 day/night (F-B0053-033) — whole-file
    downloads from the fileapi, compacted and cached as `cwa_<id>.json`, refreshed when ≥ 3 h old;
    a stale cache is used when there is no key or the fetch fails. Locations match by name, else
@@ -292,13 +295,30 @@ climatology, heights):
    `town_elevation_m`, `target_elevation_m`, `lapse_m`, `offset_c`; the page names the 鄉鎮 and the
    metres / °C moved. No key, no coordinates, offline, no point within 20 km or no elevation →
    the next step, with the reason in `tried` (`cwa_town`, `cwa_town_hourly`, `cwa_town_weekly`).
-   Before the Open-Meteo forecast since SP-552 (`CWA_TOWN_FIRST`; False gives back the owner's
-   2026-10-06 order, Open-Meteo first, until a station comparison exists — **open**). The 鄉鎮
-   product's wind is still left out (valley point), so a race only the 鄉鎮 product covers has no
-   wind rows. The elevation lookup uses Open-Meteo's host: when it is down, the step works only
-   for points whose height is already cached.
-3. Open-Meteo forecast (≤ 16 days, lat/lon/elevation). It requests one extra day when the horizon
-   allows, for races that run past midnight.
+   Before the global forecast since SP-552 (`CWA_TOWN_FIRST`; False gives back the owner's
+   2026-10-06 order, the global forecast first, until a station comparison exists — **open**). The 鄉鎮
+   product's wind is still left out (valley point); since SP-552 Q1 (owner 2026-10-20) a 鄉鎮 answer
+   takes only its wind rows from MET Norway's forecast at the race point (`town_wind`: one
+   `met_forecast` call, its cache; within `MET_HORIZON_DAYS`), each row's `temp_c` the lapsed 鄉鎮
+   hour where there is one (so the wind chill uses the temperature shown), `detail.wind_from`
+   `met_norway`, `detail.gusts`, and the attribution names MET Norway; `tried` adds
+   `met_norway_wind`. MET down / out of range → the 鄉鎮 answer without wind, as before. The
+   elevation lookup uses Open-Meteo's host: when it is down, the step works only for points whose
+   height is already cached.
+3. MET Norway Locationforecast 2.0 `complete` (SP-797, `met_forecast`; was Open-Meteo's forecast):
+   when the event ends ≤ `MET_HORIZON_DAYS` (9) days out; lat/lon to 4 decimals, `altitude` in whole
+   metres (`met_params`). Terms (api.met.no/doc/TermsOfService): an identifying User-Agent (every
+   weather call sends `user_agent()`: `TrailRunCoach/<version> (+<public repo>)`, env
+   `TRC_USER_AGENT` overrides), ≤ 20 requests / s for the app (`_met_wait`, 50 ms apart per process),
+   an answer reused until its `Expires` (none → 30 min; already past → 1 min), then asked with
+   `If-Modified-Since` (304 keeps the body); MET down / 429 → an answer expired < 6 h ago, else the
+   next step. Times are UTC: `met_zone` puts them on the place's clock — UTC+8 in Taiwan; elsewhere
+   the athlete's zone when the race is within 800 km of their home weather cell or that zone equals
+   the solar zone, else round(lon / 15) h (推估; no zone-by-coordinates table). The daytime mean
+   needs a daytime row on every event day (`met_conditions`); hourly to ~64 h, then 6-hourly. No gusts
+   outside MET's Nordic model (`detail.gusts` false), no apparent temperature, no sunrise (NOAA).
+   Races 10–16 days out, which Open-Meteo forecast, now take the climatology (`tried` says
+   「超出 9 天預報範圍，改用歷史平均」). `detail.attribution` 「Weather data from MET Norway (CC BY 4.0)」.
 
 Shared CWA cache (SP-552): the four CWA files and `cwa_town_elevation.json` are one copy for the
 whole site in the server root (`weather.site_dir()` = `accounts.server_root()`: the owner's folder
@@ -309,21 +329,23 @@ get the old copy at once, or wait when there is none); written atomically; parse
 while the file is unchanged (`weather.cwa_doc`). A tenant other than the owner still never reads,
 sets or sees the key: `GET /weather/key` tells it only `shared: true`. Each CWA answer carries
 `detail.attribution` (「天氣資料來源：中央氣象署」; the 鄉鎮 one adds Open-Meteo for the heights), shown
-under the 環境 card. The climatology stays per tenant.
+under the 環境 card. The climatology is shared too (SP-552 Q1, owner 2026-10-20): `climatology/` in
+the server root (scope INSTANCE), one fetch at a time per file; a tenant folder's older file is read
+once and copied there (left in place).
 4. Open-Meteo archive climatology (SP-210, `fetch_climatology`): the month centred on the race
    date (±15 days) in each of the last 10 years, queried at the target elevation (0.01°, 10 m),
    each hour the mean of ERA5, ERA5-Land and ECMWF IFS 9 km (the three-model mean had the smallest
    error against CWA 1991–2020 station normals at 6 stations; numbers in the module docstring).
    Daytime mean as before, plus a 24-hour profile (each clock hour's mean). One archive call per
-   year, 4 in parallel; cached for good in `climatology/` under the shared data folder once every
+   year, 4 in parallel; cached for good in `climatology/` in the server root (SP-552) once every
    year answered over its whole window. The daytime mean stays the response's `values`; a plan run
    outside 06–18 widens it to its own hours on course (SP-257, below).
 5. Manual (`values: None`, the page's editable fields).
 
 The response also carries `hourly`: `[{t, temp_c, rh_pct, dew_c}]`, with `t` as naive local time
-(`YYYY-MM-DDTHH:MM`; CWA timestamps are UTC+8, Open-Meteo is asked with `timezone=auto`, i.e. the
-location's own zone). It covers the event days plus the day after. Only the CWA 3-day
-products (登山 and 鄉鎮, the latter lapse-corrected), the Open-Meteo forecast and the climatology (its 24-hour profile laid on each event day)
+(`YYYY-MM-DDTHH:MM`; CWA timestamps are UTC+8, Open-Meteo's archive is asked with `timezone=auto`, i.e. the
+location's own zone, MET Norway's UTC goes through `met_zone`). It covers the event days plus the day after. Only the CWA 3-day
+products (登山 and 鄉鎮, the latter lapse-corrected), the MET Norway forecast and the climatology (its 24-hour profile laid on each event day)
 provide it; the weekly blocks and manual give `null`. `hourly_at` (`backend/engine/racepower/weather.py:673`) interpolates temperature and dew
 point linearly between the bracketing rows and rebuilds RH from them. It takes the edge row up to
 1.5 h past either end, and returns nothing beyond that.
@@ -336,8 +358,8 @@ equal sections, at most `ROUTE_MAX_POINTS` (6), none under `ROUTE_MIN_KM` (8 km)
 the chain at each point by its own coordinates (no name match) with `forecast_only` (no climatology:
 its ten archive calls per point). Each point `{i, from_km, to_km, km, lat, lon, elevation_m (the
 height its rows refer to), provider, label, detail, hourly, rain, wind}`. Calls per race: the CWA
-files are the site's (SP-552: no call per point), Open-Meteo at most once per point and memoised for
-an hour per process (`om_forecast`, `OM_MEMO_TTL_S`, 256 entries), the town heights cached for good —
+files are the site's (SP-552: no call per point), MET Norway at most once per point and kept per
+process by its `Expires` (`met_forecast`, `MET_CACHE_MAX` 256 entries; SP-797), the town heights cached for good —
 at most 1 + 6 forecast calls. The page sends them back as `weather_points` (each section's hourly
 rows only when it sends `hourly`); the planner reads each segment's heat from the rows of the section
 holding its middle (`section_for`; `wx_point` on the segment) at its own clock and moves it from that
@@ -382,8 +404,10 @@ rows and without a start time or segments.
 
 Rain (SP-249, docs/research/wet-muddy-terrain.md §5 #1): the response also carries `rain`:
 `[{start, end, pop_pct, mm}]` in the same local time — CWA's 3- / 12-hour probability of
-precipitation (登山 and 鄉鎮 products, no amount), or Open-Meteo's hourly `precipitation` /
-`precipitation_probability` (each of the preceding hour, so a row spans t − 1 h … t); `null` for
+precipitation (登山 and 鄉鎮 products, no amount), or MET Norway's `precipitation_amount` /
+`probability_of_precipitation` (SP-797; each of the FOLLOWING period — `next_1_hours`, else
+`next_6_hours` where the series is 6-hourly — so a row spans t … t + 1 h or t + 6 h, an overlapping 6 h
+period left out; Open-Meteo's were of the preceding hour); `null` for
 the climatology and manual. The page sends them with /plan (`rain`); `calc.rain_reminder` takes
 the race window (start → start + `time_total_s` / `clock_s` / `time_s` + stops for a one-day event
 with a start time; otherwise 06–18 of each event day, day 1 from an earlier start — owner
@@ -393,8 +417,9 @@ PoP ≥ 50 % or the rows sum to ≥ 5 mm (thresholds 推估, kept as proposed). 
 no poles), `null` without rain data; the page shows the message under the result heading. The predicted time never changes.
 
 Wind (SP-251, docs/research/cold-environment.md §2.3 / §4.2 單 1): the response also carries `wind`:
-`[{t, temp_c, wind_kmh, gust_kmh, apparent_c}]` — Open-Meteo's hourly `wind_speed_10m` /
-`wind_gusts_10m` / `apparent_temperature` (km/h) with the hour's temperature, or the CWA mountain
+`[{t, temp_c, wind_kmh, gust_kmh, apparent_c}]` — MET Norway's `wind_speed` (m/s × 3.6) and
+`wind_speed_of_gust` only where its Nordic model gives one (never in Taiwan: `gust_kmh` null,
+`apparent_c` null; SP-797 — Open-Meteo gave gusts and apparent temperature), or the CWA mountain
 3-day product's 「風速」 (`WindSpeed`, m/s × 3.6; 3-hourly; no gusts — CWA 產品說明文件
 「休閒旅遊預報」 F-B0053-001…073, 2024-12-10) with that file's temperature interpolated to the row.
 `null` for the 鄉鎮 product (its point is the valley 公所, not the ridge), the weekly products, the
@@ -406,7 +431,8 @@ temperature moved from `heat_ref_alt_m` to the segment's height (−0.65 °C / 1
 (°F / mph form; only ≤ 10 °C and > 4.8 km/h). `plan.cold_wind` = `{alert, level (frostbite | cold |
 gust), min_wc_c, max_gust_kmh, min_temp_c, n, ranges, per_km}`: alert when any point has wind chill
 ≤ −10 °C (ECCC's long-exposure band, owner 2026-10-06) or gusts ≥ 50 km/h; ≤ −28 °C → the
-frostbite wording; `null` without wind data. `plan.attention` (`cold.attention`) = `{kinds, line,
+frostbite wording; `null` without wind data. Without any gust in the rows (CWA, MET Norway in Taiwan)
+the details say 「這份預報沒有陣風，只用平均風速判斷。」 instead of the gust threshold (SP-797). `plan.attention` (`cold.attention`) = `{kinds, line,
 gear, details}`: the outdoor reminders of the race merged into ONE line (SP-305: only when
 triggered, one gear list), details for the collapsed 「細節」; the page shows it in the same box as the
 rain line under the result heading. Road, trail and 百岳. The predicted time never changes.
@@ -422,9 +448,9 @@ the segment's plan temperature. Alert when it is ≤ 5 °C AND (`plan.rain.alert
 percentage in the text.
 
 Night (SP-254, docs/research/night-and-sleep.md §2.1 / §4.2 單 1): /weather also returns `sun` =
-`[{date, sunrise, sunset, src}]` for the event days and the day after — Open-Meteo's
-`daily=sunrise,sunset` when the forecast answered, else NOAA's solar formula (`weather.sun_times`,
-zenith 90.833°, UTC+8 unless the answer gives its offset; within ~1 min at Taiwan's latitudes, tested
+`[{date, sunrise, sunset, src}]` for the event days and the day after — NOAA's solar formula
+(`weather.sun_times`, zenith 90.833°, at UTC+8 or the MET answer's `met_zone` offset; SP-797 — an
+Open-Meteo answer's `daily=sunrise,sunset` is still read when passed; within ~1 min at Taiwan's latitudes, tested
 against api.sunrise-sunset.org). /plan takes `sun` (else `night.course_sun`: NOAA at the GPX start) and
 `night_slow_pct` (0 / 5 / 10 / 15, default 0, 推估; owner 2026-10-06: default 0 %, no learning from the
 athlete's own night runs). `night.apply` (inside `make_plan`, on the plan and on the goal's model run):
@@ -704,6 +730,15 @@ leverage, so α_post = −6.29 (personal weight 0.02 %). β = 0.0004 ± 0.0008 p
 ± 0.081 /h → +0.001. v_run,AeT from 227 windows; level δ̄ +26.5 %;
 c_cap 1.35; σ_LOO 0.18. D: the model is slower than the group on short steep days and steep
 segments (≥ +15 %: capacity ~34 % below the actual speed), so group-day times sit near or below it.
+
+SP-867: the 準確度 tab shows SP-724's 跟團係數 back-test (`hike_capacity.group_factor`,
+`backtest.group_factor_backtest`) as its own section 「跟團時間回測（跟團係數）」 (`groupFactorHtml`,
+`backend/static/racepower.html`): the old group-day EP/h and the new capacity × 跟團係數 (n, median |error|,
+bias, 10–90 %; the one in use highlighted) and whether the 百岳 calculator uses the factor (`better`); the
+factor over all group days (median, p25–p75, days, trips); the altitude and pack residual slopes (% per
+1000 m / per kg ± SE, 「估不出來」 without spread, too few days → none); the solo days' capacity error; each
+group day (date, day, km, climb, mean altitude, pack, actual moving, both errors) in a collapsed table; an
+`error` shown as such. Texts `bt.gf.*` (zh-TW + en).
 
 ### Heat acclimation (`backend/engine/heat.py`, `heat_data.py`)
 
@@ -1258,6 +1293,70 @@ card, stations) under `secrets.token_urlsafe(16)` in the tenant's private `racep
 height / age / sex, REE, model inputs, sources, warnings and anything injury / pain related never go
 in. Optional expiry 7 / 30 / 90 days. `share.html` renders the snapshot without recomputing.
 
+**分段目標 component** (SP-784, `backend/static/seg_profile.js`, `window.SegProfile`): the target line
+(pace / power / HR toggle) over the elevation profile, its legend, the hover text and the compact
+segment table, with their styles (scoped to `.segp`), are one file used by the calculator
+(`renderProfile` / `renderSegCompact` pass the page's state: measure, selection, hover, day ends,
+group legs, stations, the pole / 位置記憶 marks) and by the share page. Production lets only `/share/*`
+through Cloudflare Access, so the share page gets the file written in at its `<!--inline:seg_profile.js-->`
+marker (`backend/i18n/pages.py` `INLINE_SCRIPTS`, like i18n.js in `INLINE_I18N_PAGES`, SP-698). Its text is
+the `racepower.*` catalog (the share page loads that namespace). A snapshot keeps the plan's
+`chart_rows` through `share.ROW_KEYS` (never `memory` — the 位置記憶 runs — `hr_cap_src`, `z_mean`,
+`tech_f` or the GAP pace); a share made before SP-784 and the built-in examples get rows derived from
+their own segments at `/share/{sid}/data` (`share.with_rows`: `seg_targets.chart_rows` on the frozen
+segments, the race's HR cap from the snapshot's targets or summary; the stored file is not changed).
+
+**The share page in another language** (SP-831): the page's own words are the `share.*` / `racepower.*`
+catalogs (SP-460, SP-784); the snapshot's texts are what the calculator wrote, in the language it was
+computed in (the built-in examples and most users' shares: Chinese). `/share/{sid}/data` and the link
+preview read every share through `share.localized` (before `with_rows`) — a copy in the request's language,
+the stored file and the numbers untouched (owner decision on SP-831 Q1: read back, no change to how shares
+are stored). What has a key is rebuilt from it (the effort word from `effort.key` → `difficulty.LABELS`,
+the 補給 card's carbohydrate line from `fuel.category` → `fuel.CHO_RULES`, so a word renamed since — 百岳 →
+登山 — still reads); the other shown texts (an example's title, `EXAMPLE_TITLES`, and the untitled share's
+「賽事計畫」, `DEFAULT_TITLE` — a typed title stays as typed; the 推估 badge; 賽前補碳;
+the schedule's actions; the warnings; the segment targets' names, 補給 and badge) are read back against the
+backend catalog by `backend/i18n/reverse.py` (`from_source`: exact msgid, a msgid with fields as a pattern
+that has to write the text back, the parts of a 「；」 join and a msgid continuing the one before it; a
+field no msgid reads — a station's own name — stays; a reading that leaves every Chinese character as it was
+reads nothing). A text nothing reads stays as it is. A share made on the English page is stored in English
+and stays English on the Chinese page (only Chinese is read back). The calculator's share list
+(`share.listing`) shows the untitled share's word in the page's language too.
+The calculator's words a share shows follow the request's language at the source too: the effort word
+(`difficulty.LABELS` msgids), the carbohydrate line (`CHO_RULES` labels), the segment names (`seg_targets.KIND_LABEL`,
+「平緩」) and the fuel warnings RC18 / RC20 / RC21 / RC22. The REE warning (RC28) is dropped from a snapshot by
+its hint id as well as by its text, so it stays out whatever the language.
+
+**位置記憶 on the profile and the map** (SP-870): the calculator (not the share page: `SegProfile.option` /
+`legend` draw it only with `memory: true`) marks the stretches you ran before — `SegProfile.memSpans`: per
+chart row with `memory` its passes' km0–km1 merged and clipped to the segment (the whole segment when the
+passes carry no km) — as a purple (`--s7`) band with 📍 under the elevation (dashed border, fainter: only
+marked, the back-test has not switched it on), a wide purple line under the route on the course map (dashed
+when only marked; its tooltip lists the runs), legend 「📍 以前跑過的路段 ?」 on both; the chart hover adds
+「📍 走過 ×R」 and the runs (`memTip`). The rows are the table's 📍 column's. The map → chart hover now finds
+the elevation series by name (the 攀爬段 / 位置記憶 / group bands come before it).
+
+**攀爬段** (SP-728, `backend/engine/racepower/climb.py`): on a GPX trail / 登山 course the plan carries
+`climb` = {marks: [{start_km, end_km, p}], cv: {auc, top_share, base_share, top_pct, n_acts, n_pos,
+n_windows}, usable, reason (few | weak), badge 推估}. The history is the trail HR model's runs
+(`athlete.climb_tracks`, a 25 m track with the time — recording gaps > 30 s left out — and its part below
+1 km/h, disk-memoised under `racepower_climb_track_v1`); a 50 m window steeper than ±15 % is a scramble
+when its vertical speed is under 40 % of the athlete's median in its 5 % grade bin and more than half of
+it is below 1 km/h (SP-716's definition). Features are only what a plan has: the window's grade, the
+steepest 25 m step within ±100 / ±250 m, the grade's swing within ±250 m, the grade over ±300 m, and the
+place memory (earlier runs ≤ 30 m away in the same direction: seen, the share of them that scrambled
+there). A standardised L2 logistic regression; 5-fold cross-validation grouped by run (a test fold's runs
+never serve as memory) gives the AUC and the share of scrambles in the top 5 % (shown in the legend's ?).
+Marks: the plan's windows at or above the in-sample top 5 % and ≥ 2 × the overall share, one-window gaps
+bridged, ≥ 100 m. No marks with < 5 runs, < 20 scramble windows or scrambles in < 2 runs (`few`), or a
+cross-validated AUC < 0.65 (`weak`). The fit is cached with the trail HR model (`api/racepower._climb_marks`).
+The shared component draws them red under the elevation with a 🧗, adds a legend item with the ?, a hover
+line and a 🧗 in the grade cell; a share keeps the marks and the shares (`climb.summary`, not the run count).
+SP-872: with no marks because the model is not usable, the legend says why instead of nothing — reason
+`few`: 「🧗 還沒有足夠的攀爬紀錄」, `weak`: 「🧗 攀爬紀錄還分不出攀爬段」 (muted), its ? giving the thresholds and
+the runs / scramble windows so far (`SegProfile` `climbNone`); a usable model whose route has none, or no
+model at all, shows nothing; a share of such a plan has no `climb`, so the share page never says it.
+
 **Course map** (`backend/static/racepower.html:1830`): a GPX course whose profile has coordinates
 gets a Leaflet map above the profile chart (`#course-map-wrap`,
 `backend/static/racepower.html:441`); a manual course has none. The route is coloured by the
@@ -1322,6 +1421,35 @@ pushed with the plan's own push (overview spec, Stored plan / COROS push).
 - The old direct push (`/export/coros`, retired): its `racecalc:<event id>` workout is removed from
   the watch the next time the exported session is pushed from the 課表 (`stale_keys` in the plan
   push); the push preview counts it as `calc_to_replace`.
+
+### 腳程估算 (SP-805, `backend/engine/racepower/pace_estimate.py`)
+
+One recorded hike (GPX / FIT with times) + a route → that person's moving and total time on the route,
+for 疊石 Cairn's 揪團報名 (SP-734) and the public 試算頁. Nothing of either file is kept.
+
+- **Track → Ability** (`track_ability`): moving 100 m windows (`grade_model.windows`, moving > 0.3 m/s,
+  elevation smoothed like a course) → per-bin speeds (`fit_hike_speed`), brought to a 4 kg pack with the
+  v1 load factor (body weight 65 kg, 推估); a 跟團 track's bins count ½. `LeveledSpeed`: the bins shrink
+  (n / (n + 30)) to Tobler × the person's own level (their time-weighted speed ÷ Tobler's, shrunk to 1.0
+  with 10 windows; per 上坡 / 平路 / 下坡 shrunk to it with 20) — the bare Tobler prior would read every
+  single track as Tobler. Stops: `nonmoving._fit_kind` on the track's days (a stopped spell ≥ 4 h is a
+  night), the hike prior (0.60 at 1 h, 5 pseudo-days), range ratios 0.6 / 1.6 (推估).
+- **Account → Ability** (`account_ability`): the 百岳 calculator's `hike_speed` and the stop profile's
+  hike kind (跟團 / 自己 when marked), leveled the same way.
+- **Estimate** (`estimate`): the route in 100 m pieces; speed × pack factor (route pack, default 4 / 9 kg
+  for 1 / several days) × altitude (`env.segment_factors`, unacclimatised, against the track's median
+  elevation); moving range ± (8 % + 12 % × the time share on grades the track has < 10 windows of
+  + 5 % for 跟團); stops = `share_at` at the per-day moving time; parts 上坡 / 平路 / 下坡 (|grade| ≤ 5 %
+  flat) with their time, ratio, VAM, speed. The common ruler (`general_s`, never named on a page, SP-734
+  Q1-3): Munter (4 km/h, 100 m up = 1 km) + 200 m down = 1 km; `general.ratio` = time ÷ the ruler's.
+  `compare(a, b)`: a's time ÷ b's, overall and per part (Cairn's 「比主揪快／慢」, the page's 「比你」).
+- **Routes**: `GET /share/pace` (static/pace.html, i18n inline like the share page — Cloudflare Access lets
+  only /share/* through); `POST /share/pace/estimate` (anyone; the anonymous tenant; body ≤ 16 MB, file
+  ≤ 8 MB, per client 6 at once / 30 an hour, site 600 an hour, 2 at a time); `POST /api/v1/pace/me`
+  (signed in: the account estimate, one calculator use per route a day); `POST /api/v1/link/cairn/pace`
+  (Cairn, `link:participant_ability`: the organiser's linked token + the 報名者's `consent` in the request,
+  quota `participants` — free 10 a month, a distinct track counted once, 管理頁 `quota.free.participants`;
+  docs/plans/cairn-link.md §4.5). Tests: `backend/tests/test_pace_estimate_sp805.py`.
 
 ## Testing
 
@@ -1389,6 +1517,16 @@ real athlete folders).
 8 %, Keytel, Pandolf segments, the 百岳 daily example, event classes and the 90 g/h cap, water /
 sodium with heat, the sweat prior cap, the schedule (steep descents, climbs), waypoint stations,
 plan_fuel on road / trail GPX / 百岳, the pre-race load through /plan, the body profile order.
+`backend/tests/test_en_leftovers_sp921.py` (SP-921): the 解除全部鎖定 / 分享 buttons and the share dialog in
+English, the fuel schedule's rows and the 補給 column in the request's language (Chinese unchanged).
+`backend/tests/test_en_leftovers_sp831.py` (SP-831): `reverse.from_source` (exact, fields, joins, a kept station
+name, a long text quickly; the calculator's Chinese rows read back equal its English ones), the three examples
+in English with no Chinese left in what the page shows, the numbers and the Chinese unchanged, the files not
+touched, `/data` and the link preview, a user's own Chinese share in English (typed title and station name
+kept, file untouched), the untitled share's title, a text nothing reads kept, the calculator's effort / carbohydrate / segment words, RC28 out of a
+share by id, `seg_profile.js` with no Chinese literal and its keys in both languages.
+`backend/tests/test_en_leftovers_sp922.py` (SP-922): the 準確度 tab's own words (tab buttons, heading, renderBacktest) are
+catalog keys present in zh-TW and en with the same placeholders; no Chinese literal left in its script.
 `backend/tests/test_racepower_seg_targets.py`: kinds by grade, the trail and 百岳 target policy, the
 fuel summary, the targets through /plan. `backend/tests/test_racepower_share.py`: round trip without /
 with weight, bad ids, expiry, 百岳 snapshot without body / REE.
@@ -1531,7 +1669,7 @@ when set, but nothing fills it from the routes module yet.
 
 | Decision | Choice | Alternatives | Rationale |
 |---|---|---|---|
-| Race-day weather chain | 登山 → 鄉鎮 → Open-Meteo → climatology → manual, for every tenant, CWA files shared by the site (`backend/engine/racepower/weather.py` `race_conditions`, `CWA_TOWN_FIRST`) | Open-Meteo before 鄉鎮 (owner 2026-10-06 on SP-234, until a station comparison); CWA for the owner only (SP-384) | SP-552 (SP-531 W1, owner 2026-10-14): CWA open data may be used commercially, Open-Meteo's free tier may not, so CWA comes first wherever it has data; one switch gives the old order back |
+| Race-day weather chain | 登山 → 鄉鎮 → MET Norway (≤ 9 days) → climatology → manual, for every tenant, CWA files shared by the site (`backend/engine/racepower/weather.py` `race_conditions`, `CWA_TOWN_FIRST`) | Open-Meteo before 鄉鎮 (owner 2026-10-06 on SP-234, until a station comparison); CWA for the owner only (SP-384); Open-Meteo's forecast to 16 days (until SP-797) | SP-552 (SP-531 W1, owner 2026-10-14): CWA open data may be used commercially, Open-Meteo's free tier may not, so CWA comes first wherever it has data; one switch gives the old order back. SP-797 (SP-778 option B, owner 2026-10-20): the forecast after CWA is MET Norway's (free, commercial use allowed); no gusts, 10–16 days → climatology |
 | Rain reminder scope | Trail, 百岳 and road (own wording); without a start time only 06–18 is checked (`backend/engine/racepower/weather.py:108`) | Trail / 百岳 only, as in the ticket | Rain matters on road too; thresholds stay as proposed (推估). Owner 2026-10-06 on SP-249 |
 | Cold thresholds | Wind chill ≤ −10 °C or gusts ≥ 50 km/h; 失溫風險 at lowest temperature ≤ 5 °C with rain or wind chill ≤ −5 °C; no 強制裝備 checklist (`backend/engine/racepower/cold.py:52`) | Stricter or looser bands; a mandatory-gear list | Kept as proposed (ECCC bands, 推估). Owner 2026-10-06 on SP-251 / SP-253 |
 | Night slowdown | Optional 0 / 5 / 10 / 15 %, default 0 %, no learning from the athlete's own night runs (`backend/engine/racepower/night.py:24`) | A default slowdown; a personal fit | No study separates darkness from fatigue (Brager 2020's 35.9 % includes fatigue). Owner 2026-10-06 on SP-254 |
@@ -1612,3 +1750,14 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-14 | feature | SP-543 | 土徑比: the course's ground from the self-hosted Overpass (`surface.py`, table `course_surface` per course file), three groups 確定土徑 / 確定人工 / 不確定, unsure stretches dashed and clickable on the course map, a typed-in split, 路面未知 on failure (never blocks the calculation) |
 | 2026-10-14 | feature | SP-544 | The trail technicality only on the dirt + unsure share of each segment behind `TRC_TECH_DIRT_ONLY` (off: the back-test on the owner's trail runs was worse, 9.37 % → 9.76 %); `summary.tech_ground`, the line under 路面, the back-test's `tech_dirt` comparison via `GROUND_OF` |
 | 2026-10-14 | feature | SP-569 | The 熱適應 row (自動／未適應／部分／已適應／自訂 %, its ? and the S line) is gone from the page (user 2026-10-14: nothing to choose or keep up by hand): `heatAcclBody()` = `{mode: "auto"}`, a saved `S.heatAccl` is ignored; the race-day heat effect and its block in the results stay. |
+| 2026-10-20 | feature | SP-797 (SP-778 option B) | Race-day forecast after CWA from MET Norway Locationforecast 2.0 instead of Open-Meteo (free API non-commercial): `met_forecast` (Expires / If-Modified-Since, ≤ 20 / s, stale ≤ 6 h when MET fails), `met_zone` (UTC → the place's clock), ≤ 9 days, 10–16 days → climatology; no gusts → the 冷風 details say so; NOAA sunrise; every weather call sends `user_agent()`; about page names MET Norway. Open-Meteo archive and elevation still in use (ERA5 / DEM pending) |
+| 2026-10-20 | feature | SP-805 (SP-734) | 腳程估算: one recorded hike + a route → moving / total time with ranges, 上坡／平路／下坡 parts, stops, the ratio to a common ruler (pace_estimate.py, LeveledSpeed); the public 試算頁 /share/pace (+ 「比你」 for the signed in, /api/v1/pace/me) and Cairn's POST /api/v1/link/cairn/pace (link:participant_ability per request, quota participants 10 a month free); no file kept |
+| 2026-10-20 | feature | SP-784 | The 分段目標 chart, legend, hover text and compact table moved to `static/seg_profile.js` (SegProfile), used by the calculator (pixel-identical on the demo athlete) and the share page (written in by the server: `pages.INLINE_SCRIPTS`); the share page's old target cards and its splits table give way to it. Snapshots keep `chart_rows` (`share.ROW_KEYS`, no 位置記憶 / sources); older shares and the examples get rows derived at `/data` (`share.with_rows`). The grey 「參考」 cells and the HR-cap row title go through the catalog (`racepower.ref.*`, `hrcap_src`): English pages read 「ref.」 |
+| 2026-10-20 | feature | SP-728 (SP-716 D④) | 攀爬段 on the elevation chart (`climb.py`, plan `climb`): scramble windows on your own trail runs, a terrain-shape + place-memory logistic model, 5-fold cross-validation grouped by run whose top-5 % share and base share go in the legend's ?; marks only, times unchanged; OSM dictionary labels (SP-727) not in yet |
+| 2026-10-21 | feature | SP-870 | 位置記憶 marked on the calculator's profile (purple band + 📍, dashed when only marked) and course map (wide purple line under the route), legend + hover lines, the same rows as the table's 📍 (`SegProfile.memSpans`, `memory: true`; not on the share page); map → chart hover finds the elevation series by name; zh-TW + en; `backend/tests/test_memory_marks_sp870.py` |
+| 2026-10-21 | feature | SP-872 | No 攀爬段 because the climbing records can't say yet: the legend shows 「🧗 還沒有足夠的攀爬紀錄」 (`few`) or 「攀爬紀錄還分不出攀爬段」 (`weak`) with the thresholds and counts in its ?; zh-TW + en; `backend/tests/test_climb_none_sp872.py` |
+| 2026-10-21 | feature | SP-867 | 準確度 tab: SP-724's 跟團係數 back-test on screen — old group EP/h vs capacity × factor (errors, which one is used), the factor, altitude / pack residual slopes ± SE, solo days' capacity error, each group day (`groupFactorHtml`, `bt.gf.*` zh-TW + en); `backend/tests/test_backtest_group_factor_sp867.py` |
+| 2026-10-23 | bugfix | SP-921 | English leftovers on the calculator: 「解除全部鎖定」, 「分享」 and the share dialog they open (title, help, fields, list, messages, the delete confirm) through the catalog (`racepower.unlock`, `racepower.share.*`); the fuel schedule's actions — 「全程沒有水站：約帶 … ml」, 出發, the stations (type labels `STOP_TYPES` now msgids, the athlete's station name kept as written, what each station is for as whole phrases `STATION_DOES`), the fuel points (a point moved onto a food station joins its row through `_eat`, no longer by rewriting the Chinese text), the short-race and 百岳 day rows — through `_()`, so the schedule and the segment table's 補給 column follow the request's language; the joins use `_("；")`. Chinese unchanged; `backend/tests/test_en_leftovers_sp921.py` |
+| 2026-10-23 | change | SP-922 | 準確度 tab in English: the 計算／準確度 tab buttons, its heading, 重新回測 and 讀取中 (data-i18n), and everything `renderBacktest` writes itself — the state line (排隊中 / 回測中 / 上次失敗 / 上次回測 / 已經在算), the intro, every table header, the capacity / terrain / grid / hike-window notes, intensity, category and trail-group names (by key: `bt.cls.*`, `bt.cat.*`, `bt.grp.*`, 走為主's threshold read from the stored label), each race's columns — through `racepower.bt.*` (zh-TW word for word as before). The stored back-test's own texts (pass / fail reasons, notes, hike evidence, a row's error) stay in the language it ran in; `backend/tests/test_en_leftovers_sp922.py` |
+| 2026-10-23 | bugfix | SP-831 | The share page in English: every share — the three built-in examples and users' own (owner decision Q1), frozen in Chinese — is read in the request's language at `/share/{sid}/data` and in the link preview; a typed title or station name stays, the untitled 「賽事計畫」 reads "Race plan" (also in the calculator's share list) (`share.localized`: the effort word and the carbohydrate line from their keys, the rest read back against the catalog by the new `backend/i18n/reverse.py`; files and numbers untouched). The calculator's effort words, carbohydrate lines, segment names (`KIND_LABEL`, 平緩) and fuel warnings RC18 / RC20 / RC21 / RC22 now go through `_()`; RC28 is kept out of a share by its id too. `seg_profile.js` CSS comments in English (no Chinese literal left). `reverse.py` counts only Chinese characters (not punctuation) as read; `backend/tests/test_en_leftovers_sp831.py` |
+| 2026-10-24 | feature | SP-552 Q1 | Owner's answers 2026-10-20: a 鄉鎮 answer takes its wind rows from MET Norway's forecast at the race point (`town_wind`; temperature kept the lapsed 鄉鎮 one; attribution names MET Norway; `tried` `met_norway_wind`; MET down → no wind as before), so a race only the 鄉鎮 product covers gets the 冷風 reminder again; the climatology cache is one copy for the whole site (`climatology/` in the server root, scope INSTANCE, one fetch per file at a time; a tenant's older file is read once and copied); tests in `test_race_township.py`, `test_weather_shared_sp552.py` |

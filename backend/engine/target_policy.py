@@ -41,19 +41,24 @@ from typing import Optional
 from backend.i18n import N_, _
 
 BASES = ("auto", "hr", "power")
-LABEL = {"auto": "自動（依課表類型）", "hr": "心率", "power": "功率", "pace": "配速", "none": "不設目標"}
+LABEL = {"auto": N_("自動（依課表類型）"), "hr": N_("心率"), "power": N_("功率"), "pace": N_("配速"), "none": N_("不設目標")}
 SRC = {
-    "hr_base": "Uphill Athlete（AeT 以下累積有氧基礎）；長天後段心率飄移（Coyle & González-Alonso 2001）",
-    "power_easy": "路跑輕鬆／長跑看功率（Palladino Z1–Z2 % CP），心率以輕鬆跑上限為上限：天熱、疲勞時心率先到就放慢",
-    "power_iv":"Stryd 功率在 0–8% 坡≈固定代謝負荷（van Rassel 2026）；心率延遲 55–70 秒（Hunt 2015）",
-    "climb": "長爬坡：> 8% 功率低估、心率在 20 分以上才準（推估）",
+    "hr_base": N_("Uphill Athlete（AeT 以下累積有氧基礎）；長天後段心率飄移（Coyle & González-Alonso 2001）"),
+    "power_easy": N_("路跑輕鬆／長跑看功率（Palladino Z1–Z2 % CP），心率以輕鬆跑上限為上限：天熱、疲勞時心率先到就放慢"),
+    "power_iv": N_("Stryd 功率在 0–8% 坡≈固定代謝負荷（van Rassel 2026）；心率延遲 55–70 秒（Hunt 2015）"),
+    "climb": N_("長爬坡：> 8% 功率低估、心率在 20 分以上才準（推估）"),
     # SP-247: Gravina-Cognetti et al. 2025 (Sports 13:294; power-gap-trail-validity.md §3 #2)
     "down": N_("下坡：Stryd 功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），看下降量與技術"),
-    "cp": "CP 測試：全力段不設上下限，事後用功率算 CP",
-    "aet": "AeT 測試：依方式（徐國峰 90／Friel 看心率；UA／Evoke 固定功率）",
-    "walk": "登山爬坡：75% 最大心率以下或 RPE ≤ 13（萩原・山本 2011）；沒有最大心率時 (220 − 年齡) × 0.75"
-            "（長野縣 Safety Book，推估）；下坡看腿的感覺，不看心率",
+    "cp": N_("CP 測試：全力段不設上下限，事後用功率算 CP"),
+    "aet": N_("AeT 測試：依方式（徐國峰 90／Friel 看心率；UA／Evoke 固定功率）"),
+    "walk": N_("登山爬坡：75% 最大心率以下或 RPE ≤ 13（萩原・山本 2011）；沒有最大心率時 (220 − 年齡) × 0.75"
+               "（長野縣 Safety Book，推估）；下坡看腿的感覺，不看心率"),
 }
+# the session type in 「自動：<type>看<basis>」 (the 目標用 label's why)
+TYPE_WORD = {"easy": N_("輕鬆跑"), "trail_easy": N_("越野輕鬆跑"), "long": N_("長跑"), "trail_long": N_("山路長天"),
+             "hike": N_("越野跑"), "walk": N_("登山爬坡"), "interval": N_("間歇"), "hill": N_("爬坡重複"),
+             "climb": N_("長爬坡"), "downhill": N_("下坡練習"), "cp_test": N_("CP 測試"), "aet_test": N_("AeT 測試"),
+             "other": N_("其他")}
 TIP = ("課表的目標用心率還是功率。\n自動：路跑的輕鬆跑、長跑用功率，心率以輕鬆跑上限為上限（天熱、疲勞時心率先到就放慢）；"
        "越野輕鬆跑、山路長天、恢復跑用心率（≤ 輕鬆跑上限）；陡坡健走、登山健行的上坡用心率 ≤ 75% 最大心率或 RPE ≤ 13；3 區／5 區間歇和 3–8% 坡的爬坡重複用功率，"
        "心率只當上限提醒；長爬坡只給建議、不設目標；下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。\n"
@@ -163,10 +168,11 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Opti
     if base is None:
         base = _aet_basis(s)
     basis = base
-    why = f"自動：{ {'easy': '輕鬆跑', 'trail_easy': '越野輕鬆跑', 'long': '長跑', 'trail_long': '山路長天', 'hike': '越野跑', 'walk': '登山爬坡', 'interval': '間歇', 'hill': '爬坡重複', 'climb': '長爬坡', 'downhill': '下坡練習', 'cp_test': 'CP 測試', 'aet_test': 'AeT 測試', 'other': '其他'}[t] }看{LABEL[base]}"
+    # the why: one msgid each (with the fallback in brackets when there is one), filled in at the end
+    how = "auto"
     if chosen in ("hr", "power") and t not in ("cp_test", "aet_test", "downhill", "climb"):
         basis = chosen
-        why = ("這次課表你選了" if own in ("hr", "power") else "課表偏好：") + LABEL[chosen]
+        how = "own" if own in ("hr", "power") else "pref"
     fb = ""
     th = th or {}
     # generalize-athlete P12 / owner decision: auto power only for a Stryd runner — the
@@ -180,7 +186,16 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Opti
         basis, fb = "hr", _(CP_STALE)
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):
         basis, fb = "none", _("沒有 AeT／LTHR：不設目標")
-    return {"basis": basis, "chosen": own if own in ("hr", "power") else chosen, "type": t, "why": why + (f"（{fb}）" if fb else ""),
+    if how == "auto":
+        kw = {"type": _(TYPE_WORD[t]), "basis": _(LABEL[base])}
+        why = _("自動：{type}看{basis}（{fb}）", fb=fb, **kw) if fb else _("自動：{type}看{basis}", **kw)
+    elif how == "own":
+        why = _("這次課表你選了{basis}（{fb}）", basis=_(LABEL[chosen]), fb=fb) if fb \
+            else _("這次課表你選了{basis}", basis=_(LABEL[chosen]))
+    else:
+        why = _("課表偏好：{basis}（{fb}）", basis=_(LABEL[chosen]), fb=fb) if fb \
+            else _("課表偏好：{basis}", basis=_(LABEL[chosen]))
+    return {"basis": basis, "chosen": own if own in ("hr", "power") else chosen, "type": t, "why": why,
             "source": _(SRC[key]), "hr_cap": basis == "power" and t in ("interval", "hill", "easy", "long"), "fallback": fb}
 
 

@@ -29,6 +29,7 @@ from __future__ import annotations
 from typing import Optional
 
 from backend.engine import interval_library as IL
+from backend.i18n import N_, _
 from backend.engine import workout_templates as WT
 
 N_RECS = 3
@@ -43,7 +44,7 @@ DROP_BELOW = -40.0             # a row that ends below this is never recommended
 # planning's phases (SP-87 §4 #6: there is no 強化期 — its scores were never reached; an unknown phase = base)
 PHASE_OF = {"base": "base", "transition": "base", "rebuild": "recovery", "specific": "specific",
             "taper": "taper", "event": "taper", "recovery": "recovery"}
-PHASE_LABEL = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "recovery": "恢復期"}
+PHASE_LABEL = {"base": N_("基礎期"), "specific": N_("專項期"), "taper": N_("減量期"), "recovery": N_("恢復期")}
 
 # trail templates by what they train (phase rules below). 技術地形 (SP-62): the base phase mostly
 # low RPE (may replace part of the long run), the 專項期 one a week close to the race's terrain
@@ -63,7 +64,7 @@ ROAD_NO_TRAIL = -100.0
 FAMILY = {"lib:steep_5": "steep", "lib:steep_10": "steep", "lib:steep_15": "steep",
           "lib:ua_hill_sprints": "hills", "hill_sprints": "hills", "cp_quick": "cp", "cp_standard": "cp"}
 
-EXPLAIN = ("推薦依這堂課排序（權重是推估）：① 強度課的第一名一定是間歇階梯的下一步（自動排課會選的那份，依你目前這一階和這天的時間上限）；"
+EXPLAIN = N_("推薦依這堂課排序（權重是推估）：① 強度課的第一名一定是間歇階梯的下一步（自動排課會選的那份，依你目前這一階和這天的時間上限）；"
            "同一階的同等課表接在後面，換它們不影響進階。② 5 區還沒開放時不推薦 VO2max 間歇和速度課表（台灣教練：先練 3 區）。"
            "③ 階段：基礎期偏有氧間歇和低 RPE 的技術地形、專項期偏巡航間歇（閾值課在 VO2max 開放後也不停）和賽道的爬升、下坡、技術地形，"
            "減量期偏短的課（Koop；Uphill Athlete 由一般到專項）。"
@@ -129,7 +130,7 @@ class _Score:
     def reason(self, fallback: str) -> str:
         best = max(self.plus, key=lambda x: x[0])[1] if self.plus else fallback
         worst = min(self.minus, key=lambda x: x[0])[1] if self.minus else ""
-        return f"{best}；但{worst}" if worst and self.v > DROP_BELOW else best
+        return _("{best}；但{worst}", best=best, worst=worst) if worst and self.v > DROP_BELOW else best
 
 
 def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
@@ -145,75 +146,76 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
     # ① the ladder: the generator's own pick (fit() already fitted it into the day's cap) is
     # always first, whatever the other rules say
     if cat == "quality" and key and key == s["ladder_key"]:
-        sc.add(1000, s["ladder_reason"] or "間歇階梯的下一步")
+        sc.add(1000, s["ladder_reason"] or _("間歇階梯的下一步"))
         return sc
     if cat == "quality":
         if v is not None and v.rung == s["rung"] and v.listed_equiv:
-            sc.add(40, f"{IL.RUNG_NAME.get(v.rung, v.rung)} 的同等課表：換它不影響進階")
+            sc.add(40, _("{rung} 的同等課表：換它不影響進階", rung=IL.RUNG_NAME.get(v.rung, v.rung)))
         elif v is not None and not v.listed_equiv:
-            sc.add(-25, "非同等：不算進階")
+            sc.add(-25, _("非同等：不算進階"))
         elif v is not None and s["rung"] and v.rung != s["rung"]:
-            sc.add(-10, f"是 {IL.RUNG_NAME.get(v.rung, v.rung)}，不是你目前這一階")
+            sc.add(-10, _("是 {rung}，不是你目前這一階", rung=IL.RUNG_NAME.get(v.rung, v.rung)))
         elif v is None and s["rung"] and sub and sub == _rung_family(s["rung"]):
-            sc.add(15, f"和你目前這一階同一類（{WT.FAMILY_LABEL[sub]}）")
+            sc.add(15, _("和你目前這一階同一類（{family}）", family=_(WT.FAMILY_LABEL[sub])))
     # ② Zone 5
     if cat == "quality" and _is_z5(row, sub):
         if not s["z5_open"]:
-            sc.add(Z5_CLOSED, "5 區還沒開放")
+            sc.add(Z5_CLOSED, _("5 區還沒開放"))
         elif phase == "specific":
-            sc.add(12, f"{PHASE_LABEL[phase]}：5 區已開放")
+            sc.add(12, _("{phase}：5 區已開放", phase=_(PHASE_LABEL[phase])))
     # ③ phase
     if cat == "quality":
         if phase == "base" and sub == "aerobic":
-            sc.add(15, "基礎期先練有氧間歇（台灣教練：先練 3 區）")
+            sc.add(15, _("基礎期先練有氧間歇（台灣教練：先練 3 區）"))
         elif phase == "specific" and fsub in ("cruise", "supra"):
-            sc.add(10, f"{PHASE_LABEL[phase]}：巡航間歇，閾值課不停")
+            sc.add(10, _("{phase}：巡航間歇，閾值課不停", phase=_(PHASE_LABEL[phase])))
         elif phase in ("taper", "recovery") and mins <= SHORT_MIN + 15:
-            sc.add(10, f"{PHASE_LABEL[phase]}：量少")
+            sc.add(10, _("{phase}：量少", phase=_(PHASE_LABEL[phase])))
     elif cat == "trail":
         tk = _trail_key(row)                      # a 我的範本 row: the built-in list it falls in by its kind
         if phase == "specific" and tk in TRAIL_SPECIFIC:
-            sc.add(20, f"{PHASE_LABEL[phase]}：" + ("接近比賽的路況" if tk == "lib:tech_hard" else "練賽道的爬升／下坡"))
+            sc.add(20, _("{phase}：接近比賽的路況", phase=_(PHASE_LABEL[phase])) if tk == "lib:tech_hard"
+                    else _("{phase}：練賽道的爬升／下坡", phase=_(PHASE_LABEL[phase])))
         elif phase == "base" and tk in TRAIL_BASE:
-            sc.add(15, "基礎期：低 RPE 技術地形，可取代部分長跑" if tk == "lib:tech_easy" else "基礎期：有氧爬坡、腿力")
+            sc.add(15, _("基礎期：低 RPE 技術地形，可取代部分長跑") if tk == "lib:tech_easy" else _("基礎期：有氧爬坡、腿力"))
         if phase == "taper" and row.get("descent_only"):        # a downhill block of your own (SP-539)
-            sc.add(-80, "賽前 2 週內不做下坡離心")
+            sc.add(-80, _("賽前 2 週內不做下坡離心"))
         elif phase == "taper" and tk in TAPER_NO_CLIMB:
-            sc.add(-80, "減量期不排短距離高強度爬坡（江晏慶，SP-96）")
+            sc.add(-80, _("減量期不排短距離高強度爬坡（江晏慶，SP-96）"))
     elif cat in ("easy",) and phase in ("taper", "recovery") and mins <= SHORT_MIN + 15:
-        sc.add(12, f"{PHASE_LABEL[phase]}：短一點")
+        sc.add(12, _("{phase}：短一點", phase=_(PHASE_LABEL[phase])))
     elif cat == "test" and key in ("cp_quick", "cp_standard"):
-        sc.add(20, "這個 app 的 CP 測試：做完會更新 CP")
+        sc.add(20, _("這個 app 的 CP 測試：做完會更新 CP"))
     # ④ time
     if cap is not None and mins > cap + 0.5:
-        sc.add(OVER_CAP, f"超過這天上限 {cap:.0f} 分（要 {mins:.0f} 分）")
+        sc.add(OVER_CAP, _("超過這天上限 {cap:.0f} 分（要 {mins:.0f} 分）", cap=cap, mins=mins))
     elif want and want > 0 and mins >= ADDON_MIN:
         close = 1.0 - abs(mins - want) / max(want, 30.0)
         if close > 0:
-            sc.add(15 * close, f"{mins:.0f} 分，剛好是這堂的時間" if abs(mins - want) <= 5
-                   else f"{mins:.0f} 分，接近這堂的 {want:.0f} 分")
+            sc.add(15 * close, _("{mins:.0f} 分，剛好是這堂的時間", mins=mins) if abs(mins - want) <= 5
+                   else _("{mins:.0f} 分，接近這堂的 {want:.0f} 分", mins=mins, want=want))
     # ⑤ terrain
     if terrain == "trail" and _is_hill(row, cat) and cat != "trail":
-        sc.add(15, "越野日：上坡版")
+        sc.add(15, _("越野日：上坡版"))
     elif terrain == "road" and _is_hill(row, cat) and cat == "quality":
-        sc.add(-15, "要找坡（這堂是路跑）")
+        sc.add(-15, _("要找坡（這堂是路跑）"))
     # ⑥ the session's own type
     if cat == "easy":
         if kind == "long":
             if mins >= LONG_MIN:
-                sc.add(25, f"長跑日：{mins:.0f} 分夠長")
+                sc.add(25, _("長跑日：{mins:.0f} 分夠長", mins=mins))
             else:
-                sc.add(-10, "長跑日嫌短")
+                sc.add(-10, _("長跑日嫌短"))
         elif kind == "easy" and mins <= 70 and key != "strides":
-            sc.add(8, "輕鬆跑的長度")
+            sc.add(8, _("輕鬆跑的長度"))
     # ⑦ 主要訓練項目 = 路跑
     if s.get("sport") == "road":
         if cat == "trail":
-            sc.add(ROAD_NO_TRAIL, "主要訓練項目是路跑")
+            sc.add(ROAD_NO_TRAIL, _("主要訓練項目是路跑"))
         elif phase == "specific" and key in ROAD_SPECIFIC:
-            sc.add(20, f"{PHASE_LABEL[phase]}：馬拉松專項")
+            sc.add(20, _("{phase}：馬拉松專項", phase=_(PHASE_LABEL[phase])))
         if kind == "long" and key in ROAD_LONG:
-            sc.add(10, "馬拉松的長跑")
+            sc.add(10, _("馬拉松的長跑"))
     return sc
 
 
@@ -252,7 +254,7 @@ def ladder_pick(rung: Optional[str], cap: Optional[float], history=(), prefs=Non
         return None, ""
     f = IL.fit(rung, cap, history, prefs)
     name = IL.RUNG_NAME.get(f.get("rung") or rung, rung)
-    return f["variant"].key, f"間歇階梯的下一步（{name}）：{f['reason']}"
+    return f["variant"].key, _("間歇階梯的下一步（{name}）：{why}", name=name, why=f["reason"])
 
 
 def recommend(tpl: dict, *, kind: str, cap: Optional[float] = None, minutes: Optional[float] = None,
@@ -295,9 +297,9 @@ def recommend(tpl: dict, *, kind: str, cap: Optional[float] = None, minutes: Opt
                 if per_rung.get(v.rung, 0) >= 2:
                     continue
                 per_rung[v.rung] = per_rung.get(v.rung, 0) + 1
-            picks.append({"key": r["key"], "reason": sc.reason(f"{row_minutes(r):.0f} 分"), "mine": bool(r.get("mine"))})
+            picks.append({"key": r["key"], "reason": sc.reason(_("{m:.0f} 分", m=row_minutes(r))), "mine": bool(r.get("mine"))})
         out[cid] = picks
-    return {"cats": out, "tip": EXPLAIN,
+    return {"cats": out, "tip": _(EXPLAIN),
             "inputs": {"phase": ph, "phase_label": PHASE_LABEL[ph], "z5_open": s["z5_open"], "cap": cap,
                        "minutes": s["minutes"], "terrain": s["terrain"], "kind": s["kind"],
                        "rung": s["rung"], "rung_name": IL.RUNG_NAME.get(s["rung"] or "", None), "sport": sport,

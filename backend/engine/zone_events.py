@@ -53,6 +53,14 @@ Detectors (numbers 推估 unless a source is named):
                 band (route_weather.HOT_HADLEY); 3 days / 60 days / the summer
                 test are 推估.
 
+  cp_low_easy   SP-848: the easy runs say the CP is set low — the easy flat road runs of
+                the last 6 weeks picked by HR (intensity_calib.is_easy: avg HR ≤ AeT + 3,
+                ≤ 15 m/km, ≥ 20 min) with a power IF (NP ÷ that day's CP): ≥ 5 of them and
+                their median IF > 0.85 (intensity_calib.EASY_BOUNDS' top; Palladino's easy
+                zone ends at 80 % CP), and no CP test dated in those 6 weeks → a CP test.
+                0.85 / 6 weeks / 5 runs are 推估. A firm suggestion (the 測試 card turns
+                watch), 稍後提醒 / 不要 as every zone row.
+
   aet_bound     the AeT is only a lower bound (drift_agg.aet_validity: the
                 regression found no crossing, threshold_estimate.aet_lower_bound
                 holds): one AeT test every 8 weeks since the last AeT test
@@ -747,17 +755,50 @@ def applied_events(plan, today: dt.date) -> list[dict]:
     return out
 
 
+CP_LOW_IF = 0.85         # 推估: intensity_calib.EASY_BOUNDS' top — Palladino's easy zone ends at 80 % CP
+CP_LOW_DAYS = 42         # 推估: 「近期」 = the last 6 weeks
+CP_LOW_MIN_RUNS = 5      # 推估: one or two hilly / windy runs don't make a pattern
+
+
+def easy_power_ifs(ds, today: dt.date) -> list[tuple[str, float]]:
+    """SP-848: (date, IF) of the easy flat road runs of the last CP_LOW_DAYS — intensity_calib.is_easy
+    (avg HR ≤ AeT + 3, ≤ 15 m/km, ≥ 20 min: picked by HR, not by power) — whose IF is NP ÷ that day's
+    CP (a power TSS; an rTSS / hrTSS IF says nothing about the CP). Memoised per dataset and day."""
+    from backend.engine import intensity_calib as IC
+    memo = getattr(ds, "memo", None)
+    key = ("cp_low_easy", today.isoformat())
+    if isinstance(memo, dict) and key in memo:
+        return memo[key]
+    out = [(r["date"], float(r["if"])) for r in IC.easy_rows(ds, today, weeks=CP_LOW_DAYS / 7)
+           if r.get("src") == "power" and IC.is_easy(r)]
+    if isinstance(memo, dict):
+        memo[key] = out
+    return out
+
+
+def cp_low_check(ifs: list, plan, today: dt.date) -> dict:
+    """SP-848: {fired, n, median_if, dates, tested}. Fires when ≥ CP_LOW_MIN_RUNS easy runs' median IF
+    is above CP_LOW_IF and no CP test is dated in the window (a test since then already answered it)."""
+    since = (today - dt.timedelta(days=CP_LOW_DAYS)).isoformat()
+    vals = [v for _d, v in ifs]
+    med = round(statistics.median(vals), 3) if vals else None
+    tested = "cp" in tested_since(plan, since)
+    fired = len(vals) >= CP_LOW_MIN_RUNS and med is not None and med > CP_LOW_IF and not tested
+    return {"fired": fired, "n": len(vals), "median_if": med, "dates": [d for d, _v in ifs], "tested": tested,
+            "limit": CP_LOW_IF}
+
+
 SHIFT_KEYS = ("fired", "shift_bpm", "se_bpm", "threshold_bpm", "direction", "n", "same_side", "need_same_side",
               "noise_bpm", "reason")
 
 
 def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Optional[dict] = None,
                 points: Optional[list] = None, mornings: Optional[dict] = None,
-                aet_validity: Optional[dict] = None) -> dict:
+                aet_validity: Optional[dict] = None, easy_ifs: Optional[list] = None) -> dict:
     """{"suggestions": [...], "events": [...], "checks": {...}} — see the module doc.
     `acts`: activity_weather rows (heat_data.exposures); `brk`: reentry.find;
-    `points`: steady_points; `mornings`: heat_data.morning_weather (tests
-    pass them; with `acts` given and no `mornings`, no dawn is read)."""
+    `points`: steady_points; `mornings`: heat_data.morning_weather; `easy_ifs`:
+    easy_power_ifs (tests pass them; with `acts` given and no `mornings`, no dawn is read)."""
     real = acts is None
     if real:
         from backend.engine import heat_data as HD
@@ -846,6 +887,25 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
             val = DA.aet_validity(ds, today)
         except Exception:                           # noqa: BLE001
             val = None
+    # SP-848: easy runs persistently above the easy zone by power → the CP may be set low
+    if easy_ifs is None:
+        try:
+            easy_ifs = easy_power_ifs(ds, today)
+        except Exception:                           # noqa: BLE001 — no easy runs read, no suggestion
+            easy_ifs = []
+    cl = cp_low_check(easy_ifs, plan, today)
+    checks["cp_low_easy"] = cl
+    if cl["fired"]:
+        out.append(_suggestion(
+            "cp_low_easy", ["cp"],
+            _("輕鬆跑的強度一直偏高：CP 可能偏低，建議做 CP 測試"),
+            _("近 {w} 週 {n} 次輕鬆平路跑（平均心率 ≤ AeT + 3）的強度比（Intensity，相對當天的 CP）中位數 {med:.2f}，"
+              "高於輕鬆區上緣 {lim:.2f}（推估）：心率是輕鬆的、功率對 CP 卻偏高，多半是 CP 設低了。"
+              "CP 偏低時功率區間、課表的功率目標和訓練負荷都會跟著偏",
+              w=CP_LOW_DAYS // 7, n=cl["n"], med=cl["median_if"], lim=CP_LOW_IF),
+            today, None, {k: cl[k] for k in ("n", "median_if", "dates")},
+            _("Palladino 輕鬆區 ≤ 80% CP；門檻 {lim:.2f}、{w} 週、至少 {m} 次為推估",
+              lim=CP_LOW_IF, w=CP_LOW_DAYS // 7, m=CP_LOW_MIN_RUNS)))
     if val and val.get("lower_bound"):
         due = bound_reminder_due(plan, today)
         checks["aet_bound"] = {"value": val.get("value"), "due": due}

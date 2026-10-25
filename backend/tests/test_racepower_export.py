@@ -83,8 +83,14 @@ def test_hourly_at_interpolates_and_stops_at_the_edges():
     assert mid["rh_pct"] == approx(ENV.rh_from_dew_point(mid["temp_c"], mid["dew_c"]))
 
 
-def test_weather_returns_hourly_rows_from_open_meteo_and_climatology(tmp_path):
+def test_weather_returns_hourly_rows_from_met_norway_and_climatology(tmp_path):
+    # SP-797: the forecast is MET Norway's (Open-Meteo's free API is non-commercial); the climatology
+    # is still Open-Meteo's archive
+    from backend.tests.test_weather_met_sp797 import met_js
+
     def fake_get(url, params, timeout):
+        if url == WX.MET_FORECAST:
+            return met_js(dt.date(2026, 10, 4), temp=lambda t: 20.0 + t.hour * 0.5, rh=70.0, dew=15.0, days=2)
         lo = dt.date.fromisoformat(params["start_date"])
         n = (dt.date.fromisoformat(params["end_date"]) - lo).days + 1
         times = [f"{lo + dt.timedelta(days=d)}T{h:02d}:00" for d in range(n) for h in range(24)]
@@ -94,7 +100,7 @@ def test_weather_returns_hourly_rows_from_open_meteo_and_climatology(tmp_path):
     today = dt.date(2026, 9, 30)
     r = WX.race_conditions(date=dt.date(2026, 10, 4), lat=23.5, lon=121.0, elevation_m=500.0, today=today,
                            key=None, get=fake_get, cache_dir=tmp_path, use_cwa=False)
-    assert r["provider"] == "open_meteo"
+    assert r["provider"] == "met_norway"
     # the event day plus the day after (a race past midnight); daytime mean unchanged
     assert r["hourly"][0]["t"] == "2026-10-04T00:00" and r["hourly"][-1]["t"] == "2026-10-05T23:00"
     assert len(r["hourly"]) == 48 and r["values"]["temp_c"] == approx(20.0 + 0.5 * 11.5)

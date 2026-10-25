@@ -57,6 +57,13 @@ a { color: var(--accent); }
 table.pl-cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
 .pl-cmp th, .pl-cmp td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .pl-cmp th { color: var(--muted); font-weight: 600; font-size: 13px; }
+/* SP-846: the shared table's group headings and ✓ / — cells (billing/plan_table.py) */
+.pl-cmp tr.pt-grp th { color: var(--warn); font-size: 12.5px; letter-spacing: .04em; padding-top: 12px; }
+.pl-cmp .pt-yes { color: var(--ok); font-weight: 700; }
+.pl-cmp .pt-no { color: var(--faint); }
+.pl-cmp td.pt-paid { color: var(--accent); }
+.pl-cmp td.pt-paid.pt-yes { color: var(--accent); }
+.pt-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .pl-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 12px; }
 .pl-card { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 12px; padding: 14px;
   cursor: pointer; background: var(--bg); }
@@ -89,7 +96,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 <script src="/api/v1/static/shell.js" data-page="plans"></script>
 <main class="pl-main">
   <h1 data-i18n="plans.h1">方案與訂閱</h1>
-  <p class="pl-lead" data-i18n="plans.lead">免費方案可以一直用；訂閱後解鎖更長的圖表、無限次計算機、回測和即時同步。安全提示永遠免費。</p>
+  <p class="pl-lead" data-i18n="plans.lead">免費方案可以一直用；訂閱後解鎖更長的圖表、無限次計算機、回測和即時調課表。安全提示永遠免費。</p>
   <p class="pl-flash" id="pl-flash" role="status" hidden></p>
 
   <section class="pl-sec" id="pl-now-sec">
@@ -107,17 +114,9 @@ button:disabled { opacity: .55; cursor: not-allowed; }
     <h2 data-i18n="plans.compare.h">兩個方案的差別</h2>
     <table class="pl-cmp">
       <thead><tr><th data-i18n="plans.compare.feature">功能</th><th data-i18n="plans.compare.free">免費</th><th data-i18n="plans.compare.paid">訂閱</th></tr></thead>
-      <tbody>
-        <tr><td data-i18n="plans.row.view">看課表、改課表、手動記錄、活動列表、近 90 天圖表</td><td data-i18n="plans.row.view.free" data-limit="free.charts" data-tpl="row.view.free_n">✅（圖表每天 5 個）</td><td>✅</td></tr>
-        <tr><td data-i18n="plans.row.safety">安全提示、關門判斷、傷病紅燈、熱與寒冷提醒</td><td data-i18n="plans.row.safety.free">✅ 永遠免費</td><td>✅</td></tr>
-        <tr><td data-i18n="plans.row.data">手動匯入 FIT、下載我的資料</td><td>✅</td><td>✅</td></tr>
-        <tr><td data-i18n="plans.row.sync">自動同步</td><td data-i18n="plans.row.sync.free">每天夜間一次</td><td data-i18n="plans.row.sync.paid">有新活動就處理</td></tr>
-        <tr><td data-i18n="plans.row.auto">自動調課表</td><td data-i18n="plans.row.auto.free">夜間同步後</td><td data-i18n="plans.row.auto.paid">即時</td></tr>
-        <tr><td data-i18n="plans.row.calc">賽事計算機</td><td data-i18n="plans.row.calc.free" data-limit="free.calc" data-tpl="row.calc.free_n">每月 10 次（同一天同一條路線算 1 次）</td><td data-i18n="plans.row.calc.paid">不限次數</td></tr>
-        <tr><td data-i18n="plans.row.charts">365 天與全部歷史的圖表</td><td>—</td><td>✅</td></tr>
-        <tr><td data-i18n="plans.row.backtest">回測</td><td>—</td><td data-i18n="plans.row.backtest.paid" data-limit="subscriber.backtest" data-tpl="row.backtest.paid_n">每月 2 次</td></tr>
-        <tr><td data-i18n="plans.row.keep">完整資料保留</td><td data-i18n="plans.row.keep.free">1 年（之後只留摘要）</td><td data-i18n="plans.row.keep.paid">自選 2／3／5／10 年</td></tr>
-      </tbody>
+      <!-- SP-846: the rows are membership.PLAN_ROWS, written in by billing/plan_table.rows_html — the same
+           table as 方案與價格 (/pricing); the cells with a quota carry data-limit / data-tpl (SP-718, SP-892) -->
+      <tbody><!--fill:plan_rows--></tbody>
     </table>
   </section>
 

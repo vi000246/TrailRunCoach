@@ -210,9 +210,10 @@ def aggregate_grid(cells_per_person: list[dict], k: int = K_INTERNAL) -> tuple[l
 
 # ---------------------------------------------------------------------------- rows
 
-def splits(tr: Track, donor: Donor, export_year: int) -> list[dict]:
+def splits(tr: Track, donor: Donor, rel_window: int) -> list[dict]:
     """1-km splits of the whole activity (not trimmed, Q2-1). No donor id, activity id, time or
-    position; the export year for the retention (Q2-2)."""
+    position; for the retention (Q2-2, SP-800) the activity's 28-day window counted from the pool's
+    secret epoch (research/pool.py window_of) — no date, and one window holds many activities."""
     band = age_band(donor.age)
     total_t = float(tr.t[-1]) if len(tr.t) else 0.0
     out = []
@@ -233,7 +234,7 @@ def splits(tr: Track, donor: Donor, export_year: int) -> list[dict]:
         p = _nanmean(tr.power[sl])
         ele_mean = _nanmean(e)
         out.append({
-            "export_year": int(export_year),
+            "rel_window": int(rel_window),
             "grade": _r((e[-1] - e[0]) / max(1.0, d[-1] - d[0]), 3),
             "grade_sd": _r(g_sd, 3),
             "ele_band_m": int(_bin(ele_mean, 100.0)) if np.isfinite(ele_mean) else None,

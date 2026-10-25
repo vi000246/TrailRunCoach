@@ -240,6 +240,66 @@ def _slope_split(res: dict, segs: list, fit: Optional[dict], mbar: float) -> dic
     return {**res, "rows": rows, "slope_split": True}
 
 
+def _place_memory(res: dict, mem: Optional[dict], terrain_mult: float) -> dict:
+    """SP-726: the 位置記憶 (memory.py) on the segment times — the segments you ran before take your
+    pace there (the 地形難度 multiplier replaced on that part); the whole-race time follows. Only with
+    mem["apply"] (the back-test's go, backtest.memory_flag); without it the segments are only marked
+    (res["memory"], applied False). Speeds follow the times, powers stay the allocation's."""
+    from backend.engine.racepower import memory as MEM
+    if not mem or not mem.get("segments"):
+        return res
+    if not mem.get("apply"):
+        return {**res, "memory": {**mem, "applied": False, "delta_s": 0.0}}
+    ts = MEM.apply([r["t"] for r in res["rows"]], mem, terrain_mult)
+    t0 = res["T"]
+    rows = [{**r, "t": t, "v": r["v"] * r["t"] / t if t > 0 else r["v"]} for r, t in zip(res["rows"], ts)]
+    p_alloc = res.get("p_alloc", sum(r["P"] * r["t"] for r in res["rows"]) / t0)
+    return {**res, "rows": rows, "T": float(sum(ts)), "p_alloc": p_alloc,
+            "memory": {**mem, "applied": True, "delta_s": float(sum(ts)) - t0}}
+
+
+def _seg_memory(mem: Optional[dict], i: int) -> Optional[dict]:
+    """One segment's 位置記憶 for the table: {f (share you know), R (your pace there ÷ the model's), n,
+    applied, passes [{date, label, r, km0, km1}]}; None for a segment you never ran."""
+    row = ((mem or {}).get("segments") or {}).get(i)
+    if not row:
+        return None
+    return {"f": row["f"], "R": row["R"], "n": row["n"], "applied": bool(mem.get("applied")),
+            "passes": [{k: p.get(k) for k in ("date", "label", "r", "km0", "km1")} for p in row["passes"]]}
+
+
+def memory_summary(mem: Optional[dict]) -> Optional[dict]:
+    """The summary's 位置記憶: {applied, delta_s, n_activities, segments (count), source, badge}."""
+    if not mem or not mem.get("segments"):
+        return None
+    return {"applied": bool(mem.get("applied")), "delta_s": mem.get("delta_s") or 0.0,
+            "n_activities": mem.get("n_activities"), "segments": len(mem["segments"]), "k": mem.get("k"),
+            "source": mem.get("source"), "badge": "推估"}
+
+
+def memory_text(mem: dict) -> str:
+    """The RC8 line of the 位置記憶 (SP-726): which segments you ran before, from which runs, and what it
+    did to the whole-race time (or why it is only marked)."""
+    segs = sorted(mem["segments"].values(), key=lambda r: r["i"])
+    nums = "、".join(str(r["i"]) for r in segs)
+    seen: dict = {}
+    for r in segs:
+        for p in r["passes"]:
+            seen[p["idx"]] = p
+    runs = "、".join(f"{p.get('date') or ''} {p.get('label') or ''}".strip()
+                     for p in sorted(seen.values(), key=lambda p: p.get("date") or "")[:4])
+    more = len(seen) - 4
+    if more > 0:
+        runs += _("等 {n} 筆", n=len(seen))
+    if mem.get("applied"):
+        d = mem.get("delta_s") or 0.0
+        return _("位置記憶（推估）：第 {segs} 段你以前跑過（{runs}），那部分用你當時「實際 ÷ 同坡度預期」的快慢"
+                 "（一次經過算一半），整場 {d}", segs=nums, runs=runs,
+                 d=(("+" if d >= 0 else "−") + _("{m} 分", m=round(abs(d) / 60.0))))
+    return _("第 {segs} 段你以前跑過（{runs}）；位置記憶要等回測（至少 3 筆走過舊路的越野跑）證明比較準才會改時間，"
+             "現在只標出來", segs=nums, runs=runs)
+
+
 def _merge_for_export(segs: list[dict], limit: int = MAX_COROS_STEPS) -> list[dict]:
     s = [dict(x) for x in segs]
     while len(s) > limit:
@@ -780,6 +840,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                 # SP-723: the HR model's total split by the athlete's own slope cost (downhill included)
                 if gpx:
                     res = _slope_split(res, segs, hr_est.get("slope_cost"), mbar)
+                    # SP-726: the segments you ran before at your pace there (the total follows)
+                    res = _place_memory(res, opts.get("memory"), (hr_est.get("terrain") or {}).get("mult") or 1.0)
                 # SP-222: the HR model's total spread by the athlete's own fade, not evenly
                 res = _fade(res, hr_est.get("fade"))
         return {"res": res, "alpha_used": alpha_used, "runs": runs, "t_whole": t_whole, "p_whole": p_whole,
@@ -919,6 +981,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             "badge": None if (v2_primary and trusted) else "推估", "trusted": trusted, "hint": HINT_30S,
             **_heat_fields(seg_heat[i] if seg_heat else None, env["to"], z_ref, s.get("z_mean")),
             "wx_point": (seg_heat[i] or {}).get("wx_point") if seg_heat else None,     # SP-553
+            "memory": _seg_memory(res.get("memory"), i),                               # SP-726
         })
     if wb:
         for sg, val in zip(out_segs, wb["values"]):
@@ -1011,6 +1074,14 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                                   "上 ×{d:.2f}、陡上 ×{e:.2f}（相對努力距離的平均時間；{n} 次自己步調的越野跑，資料少時往預設收縮）。"
                                   "整場時間不變，只改各段怎麼分：下坡段變長、陡上段變短",
                                   a=c[0], b=c[1], c=c[2], d=c[3], e=c[4], n=sc.get("n_runs") or 0)))
+            if res.get("memory"):
+                warnings.append(H.tag("RC8", memory_text(res["memory"])))         # SP-726
+    nm_now = (hr_est or {}).get("nonmoving")
+    if nm_now and (res.get("memory") or {}).get("applied"):
+        # SP-726: the 位置記憶 moved the moving time — the stops follow it (the same stop model)
+        from backend.engine.racepower import nonmoving as NM
+        nm_now = NM.predict((trail_hr or {}).get("nonmoving"), T, opts.get("stops"),
+                            kind=opts.get("stop_kind") or "race") or nm_now
     summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp,
                # SP-723: whether the segment times carry the athlete's own slope cost
                "slope_split": ({"applied": True, "cost": (hr_est.get("slope_cost") or {}).get("cost"),
@@ -1025,10 +1096,10 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                "fade": {"applied": bool(res.get("faded")), "n_runs": (hr_est.get("fade") or {}).get("n_runs"),
                         "badge": "推估"} if hr_est is not None and hr_est.get("fade") else None,
                # moving time (T, the validated target) + the predicted non-moving time, shown apart
-               "nonmoving": (hr_est or {}).get("nonmoving"),
-               "time_total_s": T + hr_est["nonmoving"]["total_s"] if hr_est and hr_est.get("nonmoving") else None,
-               "time_total_range_s": [T + hr_est["nonmoving"]["p25_s"], T + hr_est["nonmoving"]["p75_s"]]
-               if hr_est and hr_est.get("nonmoving") else None,
+               "nonmoving": nm_now,
+               "time_total_s": T + nm_now["total_s"] if nm_now else None,
+               "time_total_range_s": [T + nm_now["p25_s"], T + nm_now["p75_s"]] if nm_now else None,
+               "memory": memory_summary(res.get("memory")),                       # SP-726
                "category": cat, "mode": mode, "effort_target": f_target if mode == "auto" else None,
                "finish_eta": _clock(opts.get("start_time"), T + _stops_before(stops, km + 1)),
                "stops_s": _stops_before(stops, km + 1), "badge": None if v2_primary else "推估",
@@ -1506,10 +1577,23 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     tot2 = sum(v * v for v in comp.values()) or 1.0
     bnd["shares"] = {k: v * v / tot2 for k, v in comp.items()}
     bnd["components"] = comp
-    grp = CAP.group_time(ep, group_days)
-    if grp and snow:
-        # past group days were walked without snow: their time gets the same climbing-leg factor (推估)
-        grp = {**grp, **{k: grp[k] * snow_f for k in ("p25_s", "p50_s", "p75_s")}}
+    # SP-724: the 跟團係數 (opts["group_factor"], capacity.group_factor — only when the back-test found it
+    # better on the athlete's own group days) × the route's capacity time at AeT (λ 1; its pack, altitude,
+    # snow, heat): the group's pace apart from the altitude and the pack. Else the group days' EP/h.
+    gf = opts.get("group_factor") if gpx and rows else None
+    gf = gf if gf and gf.get("median") else None
+    t_aet = t1 * band_f
+    if gf:
+        grp = {"p50_s": t_aet * gf["median"], "p25_s": t_aet * gf["p25"], "p75_s": t_aet * gf["p75"], "n": gf["n"],
+               "trips": gf.get("trips"), "eph": None, "factor": [gf["p25"], gf["median"], gf["p75"]],
+               "method": "factor"}
+    else:
+        grp = CAP.group_time(ep, group_days)
+        if grp:
+            grp["method"] = "eph"
+        if grp and snow:
+            # past group days were walked without snow: their time gets the same climbing-leg factor (推估)
+            grp = {**grp, **{k: grp[k] * snow_f for k in ("p25_s", "p50_s", "p75_s")}}
     # SP-732: each day's moving time → its predicted stops (the stop model of the trip kind)
     day_mv: dict[int, float] = {}
     if gpx:
@@ -1555,8 +1639,12 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
             hh = sum(s["t"] for s in ss) / 3600.0
             L = load_of(n)
             kcal = PR.yamamoto_cc(hh, km, gain, loss) * (weight + L)
-            g_day = CAP.group_time(km + gain / 100.0, group_days)
-            if g_day and snow:
+            if gf:                          # SP-724: that day's capacity time at AeT × the 跟團係數
+                t_d = sum(r["t"] for r in rows if int(r["s"].get("day") or 1) == n) * band_f
+                g_day = {"p50_s": t_d * gf["median"], "p25_s": t_d * gf["p25"], "p75_s": t_d * gf["p75"]}
+            else:
+                g_day = CAP.group_time(km + gain / 100.0, group_days)
+            if g_day and snow and not gf:
                 rr = [r for r in rows if int(r["s"].get("day") or 1) == n]
                 f_d = sum(r["t"] for r in rr) / (sum(r["t0"] for r in rr) or 1.0)
                 g_day = {**g_day, **{k: g_day[k] * f_d for k in ("p25_s", "p50_s", "p75_s")}}
@@ -1607,6 +1695,10 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         warnings.append(H.tag("RC1", "心率帶只有「AeT」與「能力上限」兩檔：處理心率落後後，陡坡速度仍不隨心率帶改變（β ≈ 0）"))
     if grp is None:
         warnings.append(H.tag("RC1", f"跟團時間需要 ≥ 3 天過去的跟團紀錄（目前 {len(group_days)} 天）"))
+    elif gf:
+        warnings.append(H.tag("RC1", _("跟團時間＝這條路線的能力時間（AeT）× 你的跟團係數 ×{f:.2f}（p25–p75 ×{lo:.2f}–×{hi:.2f}，"
+                                      "{n} 個跟團日）：過去跟團日的實際移動時間 ÷ 能力模型算的同一天時間，海拔與背包已經扣掉（推估）",
+                                      f=gf["median"], lo=gf["p25"], hi=gf["p75"], n=gf["n"])))
     warnings.append(H.tag("RC8", clock_line))
     if hacc:
         warnings.append(H.tag("RC11", f"熱：每段溫度由 {to['temp_c']:.1f} °C（{z0:.0f} m）以 0.0065 K/m 遞減率推算；"
@@ -1618,7 +1710,10 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     summary = {"time_s": T, "capacity_time_s": T, "clock_s": T / ratio + _stops_before(stops, km + 1),
                "rest": rest, "day_ratios": day_ratios,
                "group_time_s": ({"p25": grp["p25_s"], "p50": grp["p50_s"], "p75": grp["p75_s"], "n": grp["n"],
-                                 "eph": grp["eph"], "clock_p50": grp["p50_s"] / ratio_grp} if grp else None),
+                                 "eph": grp["eph"], "clock_p50": grp["p50_s"] / ratio_grp,
+                                 # SP-724: "factor" = capacity × 跟團係數, "eph" = the group days' EP/h
+                                 "method": grp.get("method"), "factor": grp.get("factor"),
+                                 "trips": grp.get("trips")} if grp else None),
                "main": main, "trip_kind": kind, "hr_band": band_id, "band": bnd,
                "speed_factor": lam, "km": km, "gain_m": gain, "loss_m": course["totals"].get("loss_m"),
                "M": (sum(r["t"] * r["A"] for r in rows) / sum(r["t"] for r in rows)) if rows else r1.get("M"),

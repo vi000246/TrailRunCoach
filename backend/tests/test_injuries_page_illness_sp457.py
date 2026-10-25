@@ -25,6 +25,11 @@ def _src() -> str:
     return PAGE.read_text("utf-8")
 
 
+def _zh() -> dict:
+    """The page's zh-TW words (SP-841 moved them to the catalog)."""
+    return json.loads((PAGE.parent / "i18n" / "zh-TW" / "injuries.json").read_text("utf-8"))
+
+
 def _blocks() -> str:
     src = _src()
     colours = re.search(r"const AREA_COL = .*?const NOTE_EX = [^\n]*\n", src, re.S)
@@ -42,6 +47,9 @@ const ctx = {
   ymd: (s) => String(s).slice(5), hoverable: () => {}, todayIso: () => "2026-10-19",
   S: { metric: "run_h", months: 18, acwr: false, meta: { areas: [{ key: "knee", label: "膝" }] } },
 };
+// the page's words (SP-841): static/i18n/zh-TW/injuries.json through a t() like i18n.js's
+const cat = JSON.parse(process.argv[3]);
+ctx.I18N = { locale: "zh-TW", t: (k, p) => String(cat[k.replace(/^injuries\./, "")] ?? k).replace(/\{(\w+)\}/g, (m, x) => (p && p[x] != null ? p[x] : m)) };
 vm.runInNewContext(process.argv[1], ctx);
 ctx.S.tl = JSON.parse(process.argv[2]);
 vm.runInNewContext("drawTimeline()", ctx);
@@ -70,7 +78,7 @@ def _bands(svg: str) -> dict:
 
 @pytest.mark.skipif(NODE is None, reason="node not installed")
 def test_an_illness_shows_on_the_timeline_in_its_own_colour():
-    r = subprocess.run([NODE, "-e", JS, _blocks(), json.dumps(TL)], capture_output=True, text=True,
+    r = subprocess.run([NODE, "-e", JS, _blocks(), json.dumps(TL), json.dumps(_zh())], capture_output=True, text=True,
                        encoding="utf-8", timeout=30)
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
@@ -86,9 +94,12 @@ def test_an_illness_shows_on_the_timeline_in_its_own_colour():
 
 def test_the_note_example_follows_injury_or_illness():
     src = _src()
-    ex = re.search(r"const NOTE_EX = \{ injury: \"([^\"]+)\", illness: \"([^\"]+)\" \};", src)
-    assert ex and "右膝" in ex.group(1) and "發燒" in ex.group(2) and "膝" not in ex.group(2)
+    # SP-841: NOTE_EX names the two catalog keys; their zh-TW words are the examples
+    keys = re.search(r"const NOTE_EX = \{ injury: \"([^\"]+)\", illness: \"([^\"]+)\" \};", src)
+    assert keys
+    inj, ill = _zh()[keys.group(1)], _zh()[keys.group(2)]
+    assert "右膝" in inj and "發燒" in ill and "膝" not in ill
     dlg = re.search(r"\nfunction renderDlg\(\) \{\n(.*?)\n\}\n", src, re.S)
-    assert dlg and '$("f-note").placeholder = NOTE_EX[ill ? "illness" : "injury"]' in dlg.group(1)
+    assert dlg and '$("f-note").placeholder = tr(NOTE_EX[ill ? "illness" : "injury"])' in dlg.group(1)
     # the static placeholder (the dialog's first paint) is the injury one, the default kind
-    assert f'id="f-note" rows="2" maxlength="1000" placeholder="{ex.group(1)}"' in src
+    assert f'id="f-note" rows="2" maxlength="1000" placeholder="{inj}" data-i18n-attr="placeholder:injuries.{keys.group(1)}"' in src

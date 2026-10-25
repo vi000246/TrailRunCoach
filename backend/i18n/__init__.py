@@ -11,7 +11,10 @@ no catalog). Other languages live in `locales/<locale>.json`:
 ``{"<msgid>": "English" | {"one": "...", "other": "..."} | null}``; null or a
 missing msgid falls back to the msgid itself. Placeholders are `str.format`
 fields, so `{ramp:.1f}` keeps its format spec in every language. A plural
-entry picks "one" when the `n` (or `count`) parameter is 1.
+entry picks "one" when the `n` (or `count`) parameter is 1. Inside a text,
+`{days|day|days}` is the word for the `days` parameter: the first form when it
+is exactly 1, else the second (SP-762: "1 day", "3 days" — any parameter, as
+many in one text as it needs; static/i18n/i18n.js reads the same).
 
 The locale comes from a contextvar that the request middleware sets
 (backend/i18n/middleware.py); background threads wrap their work in
@@ -26,7 +29,9 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
+import numbers
 import os
+import re
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -130,7 +135,24 @@ def catalog(loc: str) -> dict:
     return data
 
 
+# `{param|one|other}`: the word for a count (SP-762); the same pattern in static/i18n/i18n.js
+PLURAL_RX = re.compile(r"\{(\w+)\|([^{}|]*)\|([^{}|]*)\}")
+
+
+def is_one(v: Any) -> bool:
+    """A count of exactly 1 (1, or the text "1"); 1.0 / "1.0" read as a measurement: plural."""
+    return (isinstance(v, numbers.Integral) and not isinstance(v, bool) and v == 1) or (isinstance(v, str) and v.strip() == "1")
+
+
+def plural_words(s: str, params: dict) -> str:
+    """`{days|day|days}` -> "day" when params["days"] is 1, else "days" (unknown parameter: the plural)."""
+    if "|" not in s:
+        return s
+    return PLURAL_RX.sub(lambda m: m.group(2) if is_one((params or {}).get(m.group(1))) else m.group(3), s)
+
+
 def _format(s: str, params: dict) -> str:
+    s = plural_words(s, params)
     if not params:
         return s
     try:

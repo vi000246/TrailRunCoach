@@ -80,7 +80,10 @@ def make_events(anchor: dt.date) -> list:
     warm1 = _wd(a - dt.timedelta(days=7 * 21), 5)
     warm2 = _wd(a - dt.timedelta(days=7 * 19), 5)
     show = a - dt.timedelta(days=15)
-    race = _wd(a + dt.timedelta(days=26), 5)
+    # the Saturday four weeks after the anchor's week, whatever the anchor's weekday: a + 26 days put
+    # a Monday / Tuesday anchor's race a week sooner, so 貓空 (race − 21) fell in the anchor's own
+    # week and its 課表 had no interval session for the linked run (backend/demo/linked.py)
+    race = _wd(a + dt.timedelta(weeks=4), 5)
     return [
         Event(id="demo-half", name="示範城市半程馬拉松", date=half.isoformat(), kind="road", priority="A",
               distance_km=21.1, climbing_m=60, est_hours=1.45, note="虛構賽事"),

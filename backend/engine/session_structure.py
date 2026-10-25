@@ -133,6 +133,11 @@ def card_summary(st: dict, c, s: Optional[dict] = None, th: Optional[dict] = Non
     return _hr_part(st, c, " · ".join(parts)[:200])
 
 
+# 「功率 X（sub）」 / 「功率 X」 … = f"{WS.TYPE_LABEL[type]} {text}（{sub}）" as msgids (SP-905)
+_PART = {"power": (N_("功率 {text}（{sub}）"), N_("功率 {text}")), "hr": (N_("心率 {text}（{sub}）"), N_("心率 {text}")),
+         "pace": (N_("配速 {text}（{sub}）"), N_("配速 {text}")), "auto": (N_("自動 {text}（{sub}）"), N_("自動 {text}"))}
+
+
 def _parts(st: dict, c, skip_hr: bool = False) -> list[str]:
     """workout_steps.steps_text's parts without the HR band's 「% LTHR」 note (and without HR at all)."""
     from backend.engine import workout_steps as WS
@@ -146,7 +151,16 @@ def _parts(st: dict, c, skip_hr: bool = False) -> list[str]:
         sub = r.sub.split(" · ")[0] if r.sub else ""
         if r.type == "hr" and not sub.startswith("≤"):
             sub = ""
-        t = f"{WS.TYPE_LABEL[r.type]} {r.text}" + (f"（{sub}）" if sub else "")
+        # SP-905: one msgid per type (a session's 目標 is shown in the page's language, engine/stored_text)
+        pair = _PART.get(r.type)
+        rc = re.fullmatch(r"(爬升|下降) (\S+) m", sub) if r.type == "rpe" and sub else None
+        if rc is not None:           # 「RPE 3–5（下降 100 m）」 (workout_steps.climb_text's zh-TW part)
+            t = (_("RPE {text}（爬升 {m} m）", text=r.text, m=rc.group(2)) if rc.group(1) == "爬升" else
+                 _("RPE {text}（下降 {m} m）", text=r.text, m=rc.group(2)))
+        elif pair is None:
+            t = f"{WS.TYPE_LABEL[r.type]} {r.text}" + (f"（{sub}）" if sub else "")
+        else:
+            t = _(pair[0], text=r.text, sub=sub) if sub else _(pair[1], text=r.text)
         if t not in out:
             out.append(t)
     return out[:3]
@@ -163,12 +177,12 @@ def _hr_part(st: dict, c, out: str) -> str:
         if x.get("kind") != "work":
             continue
         if tg.get("intent") == "band" and tg.get("hr"):
-            part = f"心率 {int(tg['hr'][0])}–{int(tg['hr'][1])} bpm"
+            part = _("心率 {lo}–{hi} bpm", lo=int(tg['hr'][0]), hi=int(tg['hr'][1]))
             break
         if tg.get("intent") == "easy" and c.hr_cap and c.basis == "power":
             e = WS.easy_hr(c)
             if e:
-                part = f"心率 ≤ {int(e[2])} bpm"
+                part = _("心率 ≤ {hr} bpm", hr=int(e[2]))
                 break
     if not part:
         return out

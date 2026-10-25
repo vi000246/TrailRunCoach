@@ -74,8 +74,8 @@ def test_cp_tests_that_move_4_percent_fit_back_to_0_98():
 def test_steadier_cp_tests_move_the_tolerance_up_and_far_apart_ones_dont_count():
     f = IC.fit_tol_rows(_cp_rows([0.01, -0.01, 0.01]), TODAY)
     assert f.value == pytest.approx(0.995 if 0.995 <= IC.TOL_BOUNDS[1] else IC.TOL_BOUNDS[1])
-    assert IC.fit_tol_rows(_cp_rows([0.04, 0.04]), TODAY) is None              # 2 pairs < 3
-    assert IC.fit_tol_rows(_cp_rows([0.04, 0.04, 0.04], every=200), TODAY) is None
+    assert IC.fit_tol_rows(_cp_rows([0.04, 0.04]), TODAY) == CAL.count_only(2)  # 2 pairs < 3: the count (SP-807)
+    assert IC.fit_tol_rows(_cp_rows([0.04, 0.04, 0.04], every=200), TODAY) == CAL.count_only(0)
     assert IC.fit_tol_rows(_cp_rows([0.3, 0.3, 0.3]), TODAY).value == IC.TOL_BOUNDS[0]   # clipped
 
 

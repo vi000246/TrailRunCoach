@@ -70,14 +70,17 @@ async def _env(body: Optional[dict], db: AsyncSession) -> dict:
     if body.get("uid"):
         stored = next((x for x in await PSA.PS.load(db) if x["uid"] == body.get("uid")), None)
     s = PSA._session_of(body, stored)
-    return await PSA._steps_env(s, await PSA._inputs(), stored)
+    env = await PSA._steps_env(s, await PSA._inputs(), stored)
+    await PSA._with_grade(env["ctx"])           # SP-861: the descents by the personal grade model
+    return env
 
 
-async def _table(course: dict, db: AsyncSession) -> dict:
+async def _table(course: dict, db: AsyncSession, prof: Optional[dict] = None) -> dict:
+    """The 坡段表 at the easy run; with the route's profile its climbs walked along it (SP-864)."""
     from backend.engine import user_templates as UT
     env = await _env(None, db)
     c = env["ctx"]
-    return UT.course_table(course, c, [("easy", _(UT.LEVEL_EASY), c.easy_frac())])
+    return UT.course_table(course, c, [("easy", _(UT.LEVEL_EASY), c.easy_frac())], prof)
 
 
 def _profile_out(p: dict) -> dict:
@@ -115,7 +118,7 @@ async def library_detail(rid: int, db: AsyncSession = Depends(get_db)):
     from backend.engine import route_library as RL
     meta = await _call(RL.get, db, rid)
     c = await _call(RL.course_of, db, rid)
-    return {**meta, "profile": _profile_out(c["profile"]), "table": await _table(c["course"], db)}
+    return {**meta, "profile": _profile_out(c["profile"]), "table": await _table(c["course"], db, c["profile"])}
 
 
 @router.patch("/routes/library/{rid}")
@@ -221,7 +224,31 @@ async def _mine_course(rid: str) -> tuple[dict, str, dict]:
         got = await run_in_threadpool(RL.mine_course, it, track)
     except RL.RouteError as e:
         raise _err(e)
+    got["track"] = track
     return it, name, got
+
+
+def _mine_last(it: dict, got: dict) -> Optional[dict]:
+    """SP-863: the last time you did this 「我的路段」 (route_library.last_clock), None without one."""
+    from backend.api import routes as RA
+    from backend.engine import route_library as RL
+    e = RL.last_effort(it)
+    if e is None:
+        return None
+    track = got.get("track")
+    if not track or track.get("file") != e.get("file"):
+        try:
+            track = RA.STORE.load_track(e["file"])
+        except Exception:     # noqa: BLE001 — no track: the model's time
+            return None
+    try:
+        return RL.last_clock(it, track, float(got["totals"]["km"]))
+    except Exception:         # noqa: BLE001
+        return None
+
+
+def _last_out(actual: Optional[dict]) -> Optional[dict]:
+    return {"date": actual["date"], "key": actual["key"]} if actual else None
 
 
 @router.get("/routes/mine/{rid}")
@@ -230,15 +257,16 @@ async def mine_detail(rid: str, db: AsyncSession = Depends(get_db)):
     it, name, got = await _mine_course(rid)
     view, _names, _favs = _mine_view()
     return {**RL.mine_row(it, name, terrain=_mine_terrain(view)), "profile": _profile_out(got["profile"]), "totals": got["totals"],
-            "table": await _table(got["course"], db), "link": f"/api/v1/routes/page#{it['id']}"}
+            "table": await _table(got["course"], db, got["profile"]), "link": f"/api/v1/routes/page#{it['id']}"}
 
 
 # ---------------------------------------------------------------------------
 # a route on a day's structure
 # ---------------------------------------------------------------------------
 
-async def _picked(pick, db: AsyncSession) -> tuple[str, str, dict, dict, dict]:
-    """(kind, id, name, course, profile + meta) of a picked route: an uploaded GPX or a 「我的路段」."""
+async def _picked(pick, db: AsyncSession) -> tuple[str, str, dict, dict, dict, Optional[dict]]:
+    """(kind, id, name, course, profile + meta, the last time you did it — a 「我的路段」 only, SP-863) of a
+    picked route: an uploaded GPX or a 「我的路段」."""
     from backend.engine import route_library as RL
     kind, rid = (pick or {}).get("src"), (pick or {}).get("id")
     if kind not in (RL.KIND_GPX, RL.KIND_SEG) or rid in (None, ""):
@@ -246,10 +274,10 @@ async def _picked(pick, db: AsyncSession) -> tuple[str, str, dict, dict, dict]:
     if kind == RL.KIND_GPX:
         c = await _call(RL.course_of, db, rid)
         rid = (await _call(RL.get, db, rid))["id"]
-        return kind, rid, c["name"], c["course"], {**c["profile"], "route_km": c["km"], "gain_m": c["gain_m"]}
+        return kind, rid, c["name"], c["course"], {**c["profile"], "route_km": c["km"], "gain_m": c["gain_m"]}, None
     it, name, got = await _mine_course(str(rid))
     return kind, it["id"], name, got["course"], {**got["profile"], "route_km": got["totals"]["km"],
-                                                 "gain_m": got["totals"]["gain_m"]}
+                                                 "gain_m": got["totals"]["gain_m"]}, _mine_last(it, got)
 
 
 @router.post("/steps/from-route")
@@ -259,16 +287,17 @@ async def steps_from_route(body: dict = Body(...), db: AsyncSession = Depends(ge
     editor opens with it and the user saves it as a session of their own (POST /sessions, origin custom)."""
     from backend.api import plan_sessions as PSA
     from backend.engine import route_session as RS
-    kind, rid, name, course, prof = await _picked(body.get("route"), db)
+    kind, rid, name, course, prof, last = await _picked(body.get("route"), db)
     body = {**body, "kind": body.get("kind") or "hike", "terrain": body.get("terrain") or "trail"}
     env = await _env(body, db)
     try:
-        out = await run_in_threadpool(RS.build, course, prof, name, {"kind": kind, "id": rid}, env["ctx"])
+        out = await run_in_threadpool(RS.build, course, prof, name, {"kind": kind, "id": rid}, env["ctx"], last)
     except ValueError as e:
         raise HTTPException(400, {"errors": [str(e)]})
     out["steps"] = PSA._norm_or_400(out["steps"])
     out["name"] = name
     out["src"] = {"kind": kind, "id": str(rid)}
+    out["last"] = _last_out(last) if any(x.get("est_src") == "last" for x in out["legs"]) else None
     return out
 
 
@@ -294,11 +323,13 @@ async def steps_route(body: dict = Body(...), db: AsyncSession = Depends(get_db)
         name, course, prof = c["name"], c["course"], c["profile"]
         rid = (await _call(RL.get, db, rid))["id"]
         meta = {"route_km": c["km"], "gain_m": c["gain_m"]}
+        last = None
     else:
         it, name, got = await _mine_course(str(rid))
         rid = it["id"]
         course, prof = got["course"], got["profile"]
         meta = {"route_km": got["totals"]["km"], "gain_m": got["totals"]["gain_m"]}
+        last = _mine_last(it, got)          # SP-863: the climb's name says the last time you did it
     no = pick.get("climb")
     try:
         no = None if no is None else int(no)
@@ -310,10 +341,11 @@ async def steps_route(body: dict = Body(...), db: AsyncSession = Depends(get_db)
     env = await _env(body, db)
     c = env["ctx"]
     try:
-        out, n = RL.apply(steps, {**prof, **meta, "name": name}, {"kind": kind, "id": rid}, climb, c)
+        out, n = RL.apply(steps, {**prof, **meta, "name": name}, {"kind": kind, "id": rid}, climb, c, last)
     except RL.RouteError as e:
         raise _err(e)
     table = UT.course_table({"climbs": course.get("climbs") or [], "segments": []}, c,
-                            [("easy", _(UT.LEVEL_EASY), c.easy_frac())])
+                            [("easy", _(UT.LEVEL_EASY), c.easy_frac())], prof)
+    used = bool(n and climb and last and last["secs"](climb["start_km"], climb["end_km"]))
     return {"steps": PSA._norm_or_400(out), "climbs": table["climbs"], "climb": climb["no"] if climb else None,
-            "applied": n, "name": name}
+            "applied": n, "name": name, "last": _last_out(last) if used else None}

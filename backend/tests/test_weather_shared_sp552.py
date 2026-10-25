@@ -144,18 +144,84 @@ def test_a_user_sees_the_site_has_a_key_but_never_the_key(site):
     assert "CWA-SITE" not in str(s)
 
 
-def test_without_a_site_key_a_user_falls_through_to_open_meteo_as_before(site, monkeypatch):
+def test_without_a_site_key_a_user_falls_through_to_the_global_forecast_as_before(site, monkeypatch):
+    # SP-797: the global forecast is MET Norway's now (Open-Meteo's free API is non-commercial)
+    from backend.tests.test_weather_met_sp797 import met_js
     monkeypatch.delenv("CWA_API_KEY")
     calls = []
 
     def get(url, params, timeout):
         calls.append(url)
-        if url == WX.OM_FORECAST:
-            times = [f"{RACE.isoformat()}T{h:02d}:00" for h in range(24)]
-            return {"elevation": 1100, "hourly": {"time": times, "temperature_2m": [15.0] * 24,
-                                                  "relative_humidity_2m": [80.0] * 24}}
+        if url == WX.MET_FORECAST:
+            return met_js(RACE, temp=15.0, rh=80.0)
         raise AssertionError(url)
     with tenancy.use(_user(site, 2)):
         r = _race(get)
-    assert r["provider"] == "open_meteo"
+    assert r["provider"] == "met_norway"
     assert not any("opendataapi" in u for u in calls)
+
+
+# ---- the climatology (Q1 第 2 題, owner 2026-10-20): one copy for the whole site too ---------------
+
+FAR = dt.date(2026, 12, 20)                                # past every forecast: the climatology answers
+
+
+def _archive(calls, delay=0.0):
+    from backend.tests.test_race_climatology import archive
+    inner = archive(calls=calls)
+
+    def get(url, params, timeout):
+        if delay:
+            time.sleep(delay)
+        return inner(url, params, timeout)
+    return get
+
+
+def _far(get):
+    return WX.race_conditions(date=FAR, lat=23.4712, lon=120.9571, elevation_m=1000.0, today=TODAY, get=get,
+                              use_cwa=False)
+
+
+def test_the_climatology_is_fetched_once_for_every_tenant_in_the_server_root(site):
+    calls = []
+    a, b = _user(site, 2), _user(site, 3)
+    with tenancy.use(a):
+        ra = _far(_archive(calls))
+    with tenancy.use(b):
+        rb = _far(_archive(calls))
+    assert ra["provider"] == rb["provider"] == "climatology"
+    assert len(calls) == WX.CLIM_YEARS                     # one archive call per year, once for the site
+    assert ra["detail"]["cache"] == "miss" and rb["detail"]["cache"] == "hit"
+    assert rb["values"] == ra["values"]
+    assert len(list((site / "climatology").glob("*.json"))) == 1
+    assert not (a.root / "climatology").exists() and not (b.root / "climatology").exists()
+
+
+def test_concurrent_tenants_fetch_the_climatology_once(site):
+    calls, out = [], []
+
+    def run(n):
+        with tenancy.use(_user(site, n)):
+            out.append(_far(_archive(calls, delay=0.02))["detail"]["cache"])
+    ts = [threading.Thread(target=run, args=(n,)) for n in range(2, 5)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    assert len(calls) == WX.CLIM_YEARS
+    assert sorted(out) == ["hit", "hit", "miss"]
+
+
+def test_a_tenants_older_climatology_file_is_read_and_copied_to_the_site(site):
+    calls = []
+    u = _user(site, 2)
+    with tenancy.use(u):                                   # as before SP-552 Q1: the file in the tenant folder
+        first = WX.race_conditions(date=FAR, lat=23.4712, lon=120.9571, elevation_m=1000.0, today=TODAY,
+                                   get=_archive(calls), use_cwa=False, cache_dir=u.shared)
+    old = list((u.shared / "climatology").glob("*.json"))
+    assert len(old) == 1 and len(calls) == WX.CLIM_YEARS
+    with tenancy.use(u):
+        r = _far(_archive(calls))
+    assert len(calls) == WX.CLIM_YEARS and r["detail"]["cache"] == "hit"     # no new archive call
+    assert r["values"] == first["values"]
+    assert (site / "climatology" / old[0].name).exists() and old[0].exists()  # copied, the old one left

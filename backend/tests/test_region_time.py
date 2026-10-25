@@ -149,4 +149,7 @@ def test_open_meteo_asks_for_the_locations_zone():
     import inspect
     from backend.engine.racepower import weather as W
     src = inspect.getsource(W)
-    assert "Asia/Taipei" not in src and src.count('"timezone": "auto"') >= 3
+    # SP-797: the forecast call left Open-Meteo (archive + training conditions remain); MET Norway answers
+    # in UTC and its rows are put on the place's clock by met_zone (test_weather_met_sp797)
+    assert "Asia/Taipei" not in src and src.count('"timezone": "auto"') >= 2
+    assert "met_rows(js, tz)" in src and "met_zone(lat, lon, date" in src

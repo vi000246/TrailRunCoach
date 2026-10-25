@@ -151,3 +151,23 @@ def test_not_linked_highlights_the_link_first(app):
     expect(page.locator("#cairn-status button.primary")).to_be_visible()
     expect(page.locator('#cairn-features [data-link-scope="link:calc"] input')).to_be_disabled()
     expect(page.locator("#cairn-pushes")).to_contain_text("還沒有推過")
+
+
+@pytest.mark.parametrize("lang", ["zh-TW", "en"])
+def test_a_site_without_the_link_keys_says_it_is_not_the_account(app, lang):
+    """SP-329 R2: no Cairn secret on the site (reason "not_open") — the button is off and the note says
+    linking is not open yet, not the "sign in to Cairn with the same Google account" hint."""
+    page, _ = app
+    row = {**_row(linked=False), "available": False, "reason": "not_open"}
+    _signed_in(page, row=row, pushes=[])
+    _settings(page, "?lang=en" if lang == "en" else "", "#cairn")
+    status = page.locator("#cairn-status")
+    expect(status.locator("button")).to_be_disabled()
+    if lang == "en":
+        expect(status).to_contain_text("Linking with 疊石 Cairn is not open yet")
+        expect(status).to_contain_text("nothing is wrong with your account")
+        expect(status).not_to_contain_text("You need to have signed in to Cairn")
+    else:
+        expect(status).to_contain_text("疊石 Cairn 還沒開放連結")
+        expect(status).to_contain_text("跟你的帳號無關")
+        expect(status).not_to_contain_text("要用同一個 Google 帳號登入過 Cairn。連結後")

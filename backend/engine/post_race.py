@@ -152,9 +152,12 @@ def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, t
             m = int(_get(s, "minutes") or 0)
             nm = min(m, P.REC_SHORT_MIN) if short else m
             # the session itself only (SP-470): 「賽後第 1 週」 is the week's recovery note
-            detail = _("輕鬆跑 ≤ {max} 分", max=P.REC_SHORT_MIN) if short else _("輕鬆跑")
+            # (SP-905: one msgid each — a 「，」 suffix can't be read back on its own)
             if flat:
-                detail += _("，平路、不跑下坡")
+                detail = (_("輕鬆跑 ≤ {max} 分，平路、不跑下坡", max=P.REC_SHORT_MIN) if short else
+                          _("輕鬆跑，平路、不跑下坡"))
+            else:
+                detail = _("輕鬆跑 ≤ {max} 分", max=P.REC_SHORT_MIN) if short else _("輕鬆跑")
             if _get(s, "kind") != "easy":
                 n_easy += 1
                 put(s, id=f"easy{n_easy}", kind="easy", title=_("輕鬆跑"), **_easy_fields(easy_target))
@@ -178,13 +181,15 @@ def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, t
                 txt = (_("{p} 行程「{race}」{date} 後", p=p, race=w["race"], date=date) if trip else
                        _("{p} 賽事「{race}」{date} 後", p=p, race=w["race"], date=date))
             if touched and on_race:
-                txt += _("；行程當天只排行程") if trip else _("；比賽當天只排比賽")
+                txt += "；" + (_("行程當天只排行程") if trip else _("比賽當天只排比賽"))
             if w["flat"] is not None:
                 h = P.DOWNHILL_FLAT_DAYS * 24
-                txt += (_("；下坡比你近 6 週練過的多，行程後 {h} 小時內走平路、不排硬課", h=h) if trip else
-                        _("；下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課", h=h))
+                txt += "；" + (_("下坡比你近 6 週練過的多，行程後 {h} 小時內走平路、不排硬課", h=h) if trip else
+                              _("下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課", h=h))
             if gone:
-                txt += _("（{n} 堂排不開，拿掉了，不用補）", n=gone)
+                # (SP-905: the last part with its bracket is one text: 「…{txt}（N 堂排不開…）」)
+                head, sep, last = txt.rpartition("；")
+                txt = head + sep + _("{txt}（{n} 堂排不開，拿掉了，不用補）", txt=last, n=gone)
             notes.append({"level": "info", "src": "recovery", "text": txt})
     return keep
 

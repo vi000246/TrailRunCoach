@@ -142,7 +142,10 @@ ctx.document = { head: el(), createElement: el, getElementById: () => null };
 ctx.I18N = { t: (k, p) => {
   let v = cat[k.replace(/^common\./, "")];
   if (v && typeof v === "object") v = p && p.n === 1 ? v.one : v.other;
-  return String(v ?? k).replace(/\{(\w+)\}/g, (m, n) => (p && p[n] != null ? p[n] : m));
+  // SP-762 plural words, as i18n.js: {n|week|weeks} -> the first form when n is exactly 1
+  const one = (x) => x === 1 || (typeof x === "string" && x.trim() === "1");
+  v = String(v ?? k).replace(/\{(\w+)\|([^{}|]*)\|([^{}|]*)\}/g, (m, n, a, b) => (p && one(p[n]) ? a : b));
+  return v.replace(/\{(\w+)\}/g, (m, n) => (p && p[n] != null ? p[n] : m));
 } };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(`${dir}/hints.js`, "utf8"), ctx);

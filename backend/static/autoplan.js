@@ -39,13 +39,12 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const md = (d) => { if (!d) return "—"; const [, m, x] = d.split("-"); return `${+m}/${+x}`; };
   const when = (iso) => { if (!iso) return ""; const t = new Date(iso); return `${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`; };
-  const STATUS = { applied: "已套用", pending: "待確認", approved: "已同意", rejected: "已拒絕", superseded: "已被新提案取代",
-    undone: "已復原", restore: "復原", failed: "失敗" };
-  const ACTION = { added: "新增", removed: "取消", changed: "調整", done: "完成", missed: "沒跑", note: "備註", dropped: "不補" };
-  const PUSH = { ok: "已推送到手錶", partial: "部分推送失敗", failed: "推送失敗", unchanged: "手錶上已是最新", off: "未推送（自動推送已關）",
-    held: "等你確認，手錶維持原本的課", notice_removed: "已移除手錶上的提醒" };
-
   const T = (k, p) => (window.I18N ? window.I18N.t(k, p) : k);
+  // SP-909: the status / action / push words through common.autoplan.* (a code the catalog lacks: as sent)
+  const STATUS = ["applied", "pending", "approved", "rejected", "superseded", "undone", "restore", "failed"];
+  const ACTION = ["added", "removed", "changed", "done", "missed", "note", "dropped"];
+  const PUSH = ["ok", "partial", "failed", "unchanged", "off", "held", "notice_removed"];
+  const word = (list, ns, k) => (list.includes(k) ? T(`common.autoplan.${ns}.${k}`) : k);
   const LOG_KEY = "autoplan.log.open";
   const logOpen = () => { try { return localStorage.getItem(LOG_KEY) === "1"; } catch (_) { return false; } };
   root.addEventListener("toggle", (e) => {
@@ -63,7 +62,7 @@
   function itemsHtml(items, onlyForward) {
     const xs = (items || []).filter((i) => !onlyForward || ["added", "removed", "changed", "dropped", "note"].includes(i.action));
     if (!xs.length) return "";
-    return `<ul>${xs.slice(0, 8).map((i) => `<li>${md(i.day)} ${esc(ACTION[i.action] || i.action)}「${esc(i.title)}」${i.reason ? "：" + esc(i.reason) : ""}</li>`).join("")}${xs.length > 8 ? `<li class="meta">…還有 ${xs.length - 8} 項</li>` : ""}</ul>`;
+    return `<ul>${xs.slice(0, 8).map((i) => `<li>${esc(T("common.autoplan.item", { day: md(i.day), act: word(ACTION, "act", i.action), title: i.title || "" }))}${i.reason ? esc(T("common.autoplan.item_why", { why: i.reason })) : ""}</li>`).join("")}${xs.length > 8 ? `<li class="meta">${esc(T("common.autoplan.more", { n: xs.length - 8 }))}</li>` : ""}</ul>`;
   }
 
   function pushText(p) {
@@ -71,9 +70,9 @@
     // "pushing": the run saved the plan and is sending it to the watch (SP-362: outside the plan lock)
     // "interrupted": the push was cut off (shutdown / cancelled); the next push sends what is missing
     const t = p.status === "pushing" ? T("common.autoplan.pushing")
-      : p.status === "interrupted" ? T("common.autoplan.interrupted") : PUSH[p.status] || p.status || "";
-    const err = [p.error, ...(p.errors || [])].filter(Boolean).join("；");
-    return `<span class="meta">${esc(t)}${p.sent ? `（${p.sent} 堂）` : ""}</span>${err ? ` <span class="ap-err">${esc(err)}</span>` : ""}`;
+      : p.status === "interrupted" ? T("common.autoplan.interrupted") : p.status ? word(PUSH, "push", p.status) : "";
+    const err = [p.error, ...(p.errors || [])].filter(Boolean).join(T("common.autoplan.sep"));
+    return ` <span class="meta">${esc(t)}${p.sent ? esc(T("common.autoplan.sent", { n: p.sent })) : ""}</span>${err ? ` <span class="ap-err">${esc(err)}</span>` : ""}`;
   }
 
   async function render() {
@@ -82,11 +81,11 @@
     const out = [];
     const p = b.pending;
     if (p) {
-      out.push(`<div class="ap-box ap-pend" role="alert"><h3>⚠ 課表待確認 <span class="meta">${when(p.at)}</span></h3>
-        <div>${(p.big || []).map((x) => esc(x.text)).join("；")}</div>${itemsHtml(p.items, true)}
-        <div class="meta">${p.notice_uid ? "手錶上有一堂「⚠ 課表待確認」提醒，按下同意／拒絕後會自動移除。" : ""}在你決定之前，手錶維持原本的課。</div>
-        <div style="margin-top:6px;display:flex;gap:8px"><button class="pri" type="button" data-approve="${p.id}">同意，套用並推送</button>
-        <button type="button" data-reject="${p.id}">拒絕，維持原本的課</button></div></div>`);
+      out.push(`<div class="ap-box ap-pend" role="alert"><h3>${esc(T("common.autoplan.pending_title"))} <span class="meta">${when(p.at)}</span></h3>
+        <div>${(p.big || []).map((x) => esc(x.text)).join(esc(T("common.autoplan.sep")))}</div>${itemsHtml(p.items, true)}
+        <div class="meta">${p.notice_uid ? esc(T("common.autoplan.pending_notice")) : ""}${esc(T("common.autoplan.pending_hold"))}</div>
+        <div style="margin-top:6px;display:flex;gap:8px"><button class="pri" type="button" data-approve="${p.id}">${esc(T("common.autoplan.approve_btn"))}</button>
+        <button type="button" data-reject="${p.id}">${esc(T("common.autoplan.reject_btn"))}</button></div></div>`);
     }
     const rows = (b.log || []).filter((e) => e.status !== "pending");
     // data-log="none": no change log (總覽 shows only the pending proposal);
@@ -94,9 +93,9 @@
     const logMode = root.dataset.log || "";
     if (rows.length && logMode !== "none") {
       const list = rows.map((e) => `<div class="ap-row">
-        <span class="ap-at">${when(e.at)}</span><span class="ap-st">${esc(STATUS[e.status] || e.status)}</span>
+        <span class="ap-at">${when(e.at)}</span><span class="ap-st">${esc(word(STATUS, "st", e.status))}</span>
         <span class="ap-sum">${esc(e.summary)}${itemsHtml(e.items, true)}${pushText(e.push)}</span>
-        ${e.can_undo ? `<button type="button" data-undo="${e.id}" title="把這次動到的課還原成調整前，並重新推送（還原的課會變成你的課，之後自動調整不再動它們）">復原</button>` : ""}</div>`).join("");
+        ${e.can_undo ? `<button type="button" data-undo="${e.id}" title="${esc(T("common.autoplan.undo_tip"))}">${esc(T("common.autoplan.undo_btn"))}</button>` : ""}</div>`).join("");
       if (logMode === "collapsible") {
         out.push(`<details class="ap-box ap-log"${logOpen() ? " open" : ""}><summary>${esc(T("common.autoplan.log_title"))} <span class="meta">${esc(T("common.autoplan.log_count", { n: rows.length }))}</span></summary>${list}</details>`);
       } else {
@@ -123,7 +122,7 @@
     try {
       const r = await fn();
       if (r && r.status === "already_approved") note.textContent = T("common.autoplan.already_approved");
-    } catch (e) { alert(`${label}失敗：${e.message}`); }
+    } catch (e) { alert(T("common.autoplan.failed", { what: label, why: e.message })); }
     busy = false;
     await render();
     if (typeof window.onAutoPlanChange === "function") window.onAutoPlanChange();
@@ -132,9 +131,9 @@
   root.addEventListener("click", (e) => {
     const t = e.target.closest("button");
     if (!t || t.disabled || busy) return;
-    if (t.dataset.approve) act(() => sj("POST", `${API}/proposal/${t.dataset.approve}/approve`), "同意", t, T("common.autoplan.approving"));
-    else if (t.dataset.reject) act(() => sj("POST", `${API}/proposal/${t.dataset.reject}/reject`), "拒絕", t, T("common.autoplan.rejecting"));
-    else if (t.dataset.undo && confirm("把這次自動調整動到的課還原，並重新推送到手錶？")) act(() => sj("POST", `${API}/log/${t.dataset.undo}/undo`), "復原", t, T("common.autoplan.undoing"));
+    if (t.dataset.approve) act(() => sj("POST", `${API}/proposal/${t.dataset.approve}/approve`), T("common.autoplan.label_approve"), t, T("common.autoplan.approving"));
+    else if (t.dataset.reject) act(() => sj("POST", `${API}/proposal/${t.dataset.reject}/reject`), T("common.autoplan.label_reject"), t, T("common.autoplan.rejecting"));
+    else if (t.dataset.undo && confirm(T("common.autoplan.undo_confirm"))) act(() => sj("POST", `${API}/log/${t.dataset.undo}/undo`), T("common.autoplan.undo_btn"), t, T("common.autoplan.undoing"));
   });
   window.autoPlanRefresh = render;
   render();

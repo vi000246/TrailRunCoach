@@ -130,7 +130,7 @@ def test_kind_comes_from_the_activity_list_without_a_request():
 
 def _load_fn() -> str:
     html = PAGE.read_text(encoding="utf-8")
-    return html[html.index("async function load() {"):html.index("// ---- one chart card")]
+    return html[html.index("async function load("):html.index("// ---- one chart card")]
 
 
 def test_load_draws_before_any_wait():

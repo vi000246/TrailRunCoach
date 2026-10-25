@@ -1,0 +1,471 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_INFLUXDB",
+      "label": "InfluxDB (Flux)",
+      "type": "datasource",
+      "pluginId": "influxdb",
+      "pluginName": "InfluxDB",
+      "description": "the shared InfluxDB, a Flux data source"
+    },
+    {
+      "name": "VAR_BUCKET",
+      "label": "bucket",
+      "type": "constant",
+      "value": "<INFLUX_BUCKET>",
+      "description": "the bucket Telegraf writes to"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "datasource",
+      "id": "influxdb",
+      "name": "InfluxDB",
+      "version": "1.0.0"
+    }
+  ],
+  "uid": "trailruncoach-ops",
+  "title": "TrailRunCoach 營運",
+  "tags": [
+    "trailruncoach",
+    "ops"
+  ],
+  "timezone": "Asia/Taipei",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": {
+    "from": "now-14d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "bucket",
+        "type": "constant",
+        "hide": 2,
+        "query": "${VAR_BUCKET}",
+        "current": {
+          "value": "${VAR_BUCKET}",
+          "text": "${VAR_BUCKET}"
+        },
+        "options": [
+          {
+            "value": "${VAR_BUCKET}",
+            "text": "${VAR_BUCKET}",
+            "selected": true
+          }
+        ]
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "容器（trailruncoach）",
+      "id": 1,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU（核）",
+      "id": 2,
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "description": "每分鐘一筆；1 = 一個核。紅線 2 核＝升級門檻（SP-321 起始方案第 6 條）。",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          },
+          "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"docker_container_cpu\" and r._field == \"usage_percent\" and r.container_name == \"trailruncoach\" and r.cpu == \"cpu-total\")\n  |> group()\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> map(fn: (r) => ({r with _value: r._value / 100.0}))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "min": 0,
+          "displayName": "CPU（核）",
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line+area"
+            },
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "記憶體（GiB，不含可回收快取，同 docker stats）",
+      "id": 3,
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "description": "紅線 2.5 GiB＝升級門檻。",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          },
+          "query": "from(bucket: \"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"docker_container_mem\" and r.container_name == \"trailruncoach\" and (r._field == \"usage_percent\" or r._field == \"limit\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({_time: r._time, _value: r.usage_percent * float(v: r.limit) / 100.0 / 1073741824.0}))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "min": 0,
+          "displayName": "記憶體（GiB）",
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line+area"
+            },
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 2.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "最近 7 天：每天尖峰的最低值（核）",
+      "id": 4,
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "description": "告警看的就是這個數：7 個完整的日子（台灣時間）每天的尖峰（5 分鐘平均的最大值）都超過 2 核才算「連續一週超標」。資料不滿 7 天顯示 0。",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          },
+          "query": "import \"date\"\nimport \"experimental\"\nimport \"timezone\"\noption location = timezone.location(name: \"Asia/Taipei\")\n// the last 7 complete days (Taipei): each day's peak = the largest 5-minute mean\nstop = date.truncate(t: now(), unit: 1d)\nstart = experimental.subDuration(d: 7d, from: stop)\nfrom(bucket: \"${bucket}\")\n  |> range(start: start, stop: stop)\n  |> filter(fn: (r) => r._measurement == \"docker_container_cpu\" and r._field == \"usage_percent\" and r.container_name == \"trailruncoach\" and r.cpu == \"cpu-total\")\n  |> group()\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({r with _value: r._value / 100.0}))\n  |> aggregateWindow(every: 1d, fn: max, createEmpty: false)\n  |> reduce(identity: {days: 0, lowest_peak: 1000000.0},\n            fn: (r, accumulator) => ({days: accumulator.days + 1,\n                                      lowest_peak: if r._value < accumulator.lowest_peak then r._value else accumulator.lowest_peak}))\n  // fewer than 7 days of data (Telegraf just started): 0, never an alert\n  |> map(fn: (r) => ({_time: now(), _value: if r.days >= 7 then r.lowest_peak else 0.0}))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1.6
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "最近 7 天：每天尖峰的最低值（GiB）",
+      "id": 5,
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "description": "同左，記憶體：7 天每天的尖峰都超過 2.5 GiB 才告警。",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          },
+          "query": "import \"date\"\nimport \"experimental\"\nimport \"timezone\"\noption location = timezone.location(name: \"Asia/Taipei\")\n// the last 7 complete days (Taipei): each day's peak = the largest 5-minute mean\nstop = date.truncate(t: now(), unit: 1d)\nstart = experimental.subDuration(d: 7d, from: stop)\nfrom(bucket: \"${bucket}\")\n  |> range(start: start, stop: stop)\n  |> filter(fn: (r) => r._measurement == \"docker_container_mem\" and r.container_name == \"trailruncoach\" and (r._field == \"usage_percent\" or r._field == \"limit\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({_time: r._time, _value: r.usage_percent * float(v: r.limit) / 100.0 / 1073741824.0}))\n  |> aggregateWindow(every: 1d, fn: max, createEmpty: false)\n  |> reduce(identity: {days: 0, lowest_peak: 1000000.0},\n            fn: (r, accumulator) => ({days: accumulator.days + 1,\n                                      lowest_peak: if r._value < accumulator.lowest_peak then r._value else accumulator.lowest_peak}))\n  // fewer than 7 days of data (Telegraf just started): 0, never an alert\n  |> map(fn: (r) => ({_time: now(), _value: if r.days >= 7 then r.lowest_peak else 0.0}))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 2.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "gauge",
+      "title": "會員數／封頂",
+      "id": 6,
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "description": "App 每小時寫的 logs/ops/metrics.json（Telegraf 讀）。80 % 起告警（SP-388 完成條件 4）。",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          },
+          "query": "from(bucket: \"${bucket}\")\n  |> range(start: -3h)\n  |> filter(fn: (r) => r._measurement == \"trc_members\" and r._field == \"share\")\n  |> group()\n  |> last()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 0,
+          "displayName": "封頂使用率",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "type": "stat",
+      "title": "會員數",
+      "id": 7,
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          },
+          "query": "from(bucket: \"${bucket}\")\n  |> range(start: -3h)\n  |> filter(fn: (r) => r._measurement == \"trc_members\" and r._field == \"members\")\n  |> group()\n  |> last()"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          },
+          "query": "from(bucket: \"${bucket}\")\n  |> range(start: -3h)\n  |> filter(fn: (r) => r._measurement == \"trc_members\" and r._field == \"cap\")\n  |> group()\n  |> last()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "會員"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "封頂"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    }
+  ]
+}

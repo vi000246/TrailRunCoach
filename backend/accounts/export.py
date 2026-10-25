@@ -8,7 +8,8 @@ files) nor a DERIVED cache.
     manifest.json       app, format, created_at, tenant, tables {name: rows}, files {count, bytes},
                         the classes held and left out
     account.json        the account (e-mail, name, created, plan) and its consent history
-                        (SP-326 §7.1: every acceptance of the terms, every analysis withdrawal)
+                        (SP-326 §7.1: every acceptance of the terms, every analysis withdrawal;
+                        every coach accepted or ended, SP-789) and their coaching (coaching.export_record)
     tables/<name>.json  every USER / IMPORTED table of the tenant DB, a list of rows; a table's
                         secret_fields and EXPORT_OMIT_FIELDS left out, user_settings without the keys
                         that hold a credential (EXPORT_SECRET_SETTINGS: the ICS feed's link token)
@@ -96,9 +97,21 @@ def account_record(user) -> dict:
         if c.get("client"):                     # a link to another project (SP-329)
             row["client"] = c["client"]
         consents.append(row)
-    return {"email": user.email, "display_name": user.display_name, "role": user.role,
-            "created_at": user.created_at, "last_login_at": user.last_login_at, "plan": user.plan,
-            "plan_expires_at": user.plan_expires_at, "consents": consents, "subscription": _subscription(user.id)}
+    out = {"email": user.email, "display_name": user.display_name, "role": user.role,
+           "created_at": user.created_at, "last_login_at": user.last_login_at, "plan": user.plan,
+           "plan_expires_at": user.plan_expires_at, "consents": consents, "subscription": _subscription(user.id)}
+    # the e-mail sign-in (SP-610): the address and when it was confirmed — never the password's hash or a link
+    em = store.email_account_of(user.id)
+    if em:
+        out["email_sign_in"] = {"email": em["email"], "confirmed_at": em["verified_at"], "created_at": em["created_at"]}
+    # coaching (SP-789): their coach profile, coaches and students by name (the accepts / ends are in
+    # consents above, action coach_accept / coach_end) — never an e-mail, an account id or a token
+    from backend.accounts import coaching
+    out["coaching"] = coaching.export_record(user)
+    # SP-765: where the account came from and the 疊石 Cairn card's counts (per day)
+    out["signup_source"] = store.signup_source(user.id)
+    out["cross_product_events"] = store.xp_events_of(user.id)
+    return out
 
 
 def _subscription(uid: int):
@@ -113,7 +126,10 @@ def _subscription(uid: int):
 def _readme() -> bytes:
     from backend.i18n import _
     text = _("這是你在 TrailRunCoach 的資料（{app}，格式 {fmt}）。\n\n"
-             "account.json：你的帳號（e-mail、名稱、建立時間）與同意條款、撤回同意的紀錄。\n"
+             "account.json：你的帳號（e-mail、名稱、建立時間、方案與訂閱）、同意條款與撤回同意的紀錄、"
+             "用 email 登入的確認時間、教練關係，以及註冊來源（signup_source：從疊石 Cairn 的連結來註冊是 cairn、"
+             "從賽事分享頁來是 share，其他是空的）和疊石 Cairn 互推小卡每天的次數（cross_product_events："
+             "xp-card-shown 小卡出現、xp-card-click 按打開、xp-card-dismiss 按不用了、xp-linked 連結了帳號）。\n"
              "tables/：你輸入或匯入的資料，一個資料表一個 JSON 檔（設定、課表、標註、傷病紀錄、活動清單等）。\n"
              "files/：你的檔案，照伺服器上的位置存放：賽季計畫、校正、圖表檢視、上傳的 GPX（.gz 是 gzip 壓縮），"
              "fit/ 底下是同步或匯入的 FIT 原始檔（gzip 壓縮，解壓後就是 .fit）。\n\n"

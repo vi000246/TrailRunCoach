@@ -185,6 +185,7 @@ async def run_status(db: AsyncSession = Depends(get_db)):
     """The last manual fit of this tenant: {job: {state queued | running | done | failed, position,
     written} | null, items} — the page polls it after 「現在重新估算」."""
     from backend import jobs
+    from backend.engine import advanced_params as AP
     job = jobs.find(_job_key())
     repo = SettingsRepository(db, current_athlete_id())
     items = [CAL.describe(n, await repo.get(CAL.key(n))) for n in sorted(CAL._registry())]

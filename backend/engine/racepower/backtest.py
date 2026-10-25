@@ -1260,12 +1260,21 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
         hr_now = A.hr_capacity(ds, today)
     except Exception as e:                  # noqa: BLE001
         hr_now = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+    th_full = None
     try:
-        th_now = {k: v for k, v in A.trail_hr_model(ds, today, race_idx=race_idx, tags=tags).items() if k != "points"}
+        th_full = A.trail_hr_model(ds, today, race_idx=race_idx, tags=tags)
+        th_now = {k: v for k, v in th_full.items() if k != "points"}
     except Exception as e:                  # noqa: BLE001
         th_now = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     trail_hr = summarise_trail_hr(rows)
     trail_hr["model_now"] = th_now
+    # SP-726: the 位置記憶 on the runs that go over earlier ground (with / without, leave-one-out)
+    try:
+        from backend.engine.racepower import memory as MEM
+        trail_hr["memory"] = MEM.memory_backtest(th_full, A.memory_tracks(ds, th_full), A.memory_course) \
+            if th_full else None
+    except Exception as e:                  # noqa: BLE001 — a diagnostic: never fails the back-test
+        trail_hr["memory"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     pc = pass_check([r.get("err_th_race") for r in rows if r.get("category") == "trail" and r.get("th")
                      and r.get("activity_type") == "race"], THRESHOLDS["trail"])
     t_med = trail_hr["races"]["race_level"]["median_abs"]
@@ -1388,11 +1397,16 @@ def capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: 
                 "reason": _("沒有體重：登山能力模型算不出，這項回測跳過；請到 設定 → 個人資料 填寫體重"),
                 "seconds": round(time.time() - t0, 1)}
 
+    fits: dict = {}
+
     def fit_without(a):
+        if a in fits:                       # SP-724: the group-factor check refits the same trips
+            return fits[a]
         keep = lambda ws: [w for w in ws if w.get("a") != a]
-        return CAP.fit_walk_capacity(weight=x["weight"], v_run=x["v_run"], trail=keep(x["trail"]),
-                                     hike=keep(x["hike"]), flat=keep(x["flat"]), hike_down=keep(x["hike_down"]),
-                                     aet_of=x["aet"].get, pack_of=x["pack_of"], boot_reps=boot_reps)
+        fits[a] = CAP.fit_walk_capacity(weight=x["weight"], v_run=x["v_run"], trail=keep(x["trail"]),
+                                        hike=keep(x["hike"]), flat=keep(x["flat"]), hike_down=keep(x["hike_down"]),
+                                        aet_of=x["aet"].get, pack_of=x["pack_of"], boot_reps=boot_reps)
+        return fits[a]
     rows_a, rows_b, rows_bh = [], [], []
     trail_segs = _segments(x["trail"])
     hike_segs = _segments(x["hike"])
@@ -1439,8 +1453,90 @@ def capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: 
            "rows": {"trail": rows_a, "hike": rows_b}}
     if days:
         out["days"] = capacity_days(ds, today, full, x)
+    try:
+        out["group_factor"] = group_factor_backtest(ds, today, x, fit_without, full)
+    except Exception as e:                  # noqa: BLE001 — a diagnostic: never fails the capacity back-test
+        out["group_factor"] = {"error": f"{type(e).__name__}: {e}"[:200]}
     out["seconds"] = round(time.time() - t0, 1)
     return out
+
+
+GF_MIN_SLOPE_N = 5             # SP-724: days before the altitude / pack residual slopes are fitted
+
+
+def _resid_slopes(rows: list[dict]) -> Optional[dict]:
+    """OLS of ln r (actual ÷ capacity) on the day's mean altitude (km) and pack (kg): what the
+    capacity model's altitude and pack corrections leave behind (≈ 0 when they are right). {n,
+    alt_pct_per_km, alt_se_pct, pack_pct_per_kg, pack_se_pct} in % of the time; None below
+    GF_MIN_SLOPE_N days or without spread."""
+    rs = [r for r in rows if r.get("r") and r["r"] > 0 and r.get("z_mean") is not None and r.get("pack_kg") is not None]
+    if len(rs) < GF_MIN_SLOPE_N:
+        return None
+    z = np.array([r["z_mean"] / 1000.0 for r in rs])
+    p = np.array([float(r["pack_kg"]) for r in rs])
+    y = np.log([r["r"] for r in rs])
+    cols = [np.ones(len(rs))]
+    names = []
+    for name, v in (("alt", z), ("pack", p)):
+        if np.ptp(v) > 1e-9:
+            cols.append(v)
+            names.append(name)
+    X = np.column_stack(cols)
+    if len(rs) <= X.shape[1]:
+        return None
+    coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+    res = y - X @ coef
+    s2 = float(res @ res) / (len(rs) - X.shape[1])
+    try:
+        se = np.sqrt(np.diag(s2 * np.linalg.inv(X.T @ X)))
+    except np.linalg.LinAlgError:
+        return None
+    out = {"n": len(rs), "alt_pct_per_km": None, "alt_se_pct": None, "pack_pct_per_kg": None, "pack_se_pct": None}
+    for k, name in enumerate(names, 1):
+        unit = "per_km" if name == "alt" else "per_kg"
+        out[f"{name}_pct_{unit}"] = float(math.exp(coef[k]) - 1.0) * 100.0
+        out[f"{name}_se_pct"] = float(se[k]) * 100.0
+    return out
+
+
+def group_factor_backtest(ds, today: dt.date, x: dict, fit_without: Callable, full) -> dict:
+    """SP-724: the 跟團時間 of every past group day, leave-one-trip-out — the old rule (the day's EP ÷
+    the other trips' median group EP/h) against the capacity model fitted without the trip × the
+    跟團係數 of the other trips (capacity.group_factor). Plus what the full model's altitude and pack
+    corrections leave in the group days' ratios (_resid_slopes) and the solo days' capacity error (自己走:
+    how far the capacity model is from your own pace)."""
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import capacity as CAP
+    days = A.group_day_rows(ds, today, pack_of=x["pack_of"])
+    grp = [d for d in days if not d["solo"]]
+    rows = []
+    for tr in sorted({d["trip"] for d in grp}, key=str):
+        others = [d for d in grp if d["trip"] != tr]
+        eph = [(d["km"] + d["gain_m"] / 100.0) / (d["t_act"] / 3600.0) for d in others if d["t_act"] > 0]
+        cap = fit_without(tr)
+        gf = CAP.group_factor(cap, others)
+        for d in (d for d in grp if d["trip"] == tr):
+            ep = d["km"] + d["gain_m"] / 100.0
+            p_eph = ep / float(np.median(eph)) * 3600.0 if len(eph) >= CAP.GROUP_MIN_DAYS else None
+            tc = CAP.day_capacity_time(cap, d["segs"], float(d["pack_kg"]), int(d["day"])) if cap is not None else math.inf
+            p_gf = tc * gf["median"] if gf and math.isfinite(tc) else None
+            rows.append({"trip": tr, "date": d["date"], "day": d["day"], "label": d.get("label"), "km": d["km"],
+                         "gain_m": d["gain_m"], "z_mean": d.get("z_mean"), "pack_kg": d["pack_kg"], "t_act": d["t_act"],
+                         "err_eph": p_eph / d["t_act"] - 1.0 if p_eph else None,
+                         "err_factor": p_gf / d["t_act"] - 1.0 if p_gf else None,
+                         "factor": gf["median"] if gf else None})
+    both = [r for r in rows if r["err_eph"] is not None and r["err_factor"] is not None]
+    a, b = stats(r["err_eph"] for r in both), stats(r["err_factor"] for r in both)
+    gfull = CAP.group_factor(full, grp, min_days=1)
+    sfull = CAP.group_factor(full, [{**d, "solo": False} for d in days if d["solo"]], min_days=1)
+    return {"n": len(both), "trips": len({r["trip"] for r in both}), "eph": a, "factor": b,
+            "better": None if a["median_abs"] is None or b["median_abs"] is None else b["median_abs"] < a["median_abs"],
+            "factor_full": {k: gfull.get(k) for k in ("median", "p25", "p75", "n", "trips")} if gfull else None,
+            "residual": _resid_slopes(gfull["rows"]) if gfull else None,
+            # 自己走的日子：能力時間 ÷ 實際 − 1（能力模型對你自己步調的誤差）
+            "solo_capacity_err": stats(1.0 / r["r"] - 1.0 for r in (sfull or {}).get("rows") or []),
+            "rows": rows,
+            "source": "跟團時間留一趟回測（推估）：舊＝當天 EP ÷ 其他趟跟團日 EP/h 中位數；新＝不含這趟擬合的能力模型 × 其他趟的跟團係數"}
 
 
 def capacity_days(ds, today: dt.date, cap, x: dict) -> dict:
@@ -1542,6 +1638,26 @@ def surface_split_flag(path=None) -> bool:
     offers no 路況 choice and behaves as before)."""
     r = load(path)
     return bool((((r or {}).get("terrain") or {}).get("surface_split") or {}).get("no_worse"))
+
+
+MEMORY_MIN_N = 3               # SP-726 (推估): runs over earlier ground before the back-test can switch it on
+
+
+def memory_flag(path=None) -> bool:
+    """SP-726: True when the stored back-test found the 位置記憶 no worse on ≥ MEMORY_MIN_N runs that go
+    over earlier ground (memory.memory_backtest: the whole-run error and the cumulative error at the
+    segment ends both not worse);
+    else the plan only says which segments you know and keeps their times."""
+    m = (((load(path) or {}).get("trail_hr") or {}).get("memory") or {})
+    return bool(m.get("better")) and int(m.get("n") or 0) >= MEMORY_MIN_N
+
+
+def group_factor_flag(path=None) -> bool:
+    """SP-724: True when the stored capacity back-test found the 跟團係數 (capacity × factor) better than
+    the old group EP/h on the athlete's own group days (group_factor_backtest, leave-one-trip-out);
+    nothing stored / not better → False: the 跟團時間 stays the group days' EP/h."""
+    r = load(path)
+    return bool((((r or {}).get("hike_capacity") or {}).get("group_factor") or {}).get("better"))
 
 
 def speed_gait_flag(path=None, class_model: bool = False) -> bool:

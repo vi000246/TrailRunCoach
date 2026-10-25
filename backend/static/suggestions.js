@@ -23,6 +23,9 @@
  * ({rows, declined}) follows every GET (static/eptest.js shows the easy-power test rows from it);
  * "suggestions:dismissed" ({id, type, action}) follows a 「不要」 / ✕ (the overview's 測試, SP-503);
  * "suggestions:snoozed" ({id, type, until}) a 稍後提醒 — still the box's (SP-507: the loaded event's `snoozed`).
+ * SP-851: on a page with <html data-sugbox-dock> (the 課表), while it shows on a desktop (≥ 1000 px), <html> has
+ * class `sugbox-docked` and `--sugbox-w` (the room it takes at the right edge): the page pads its right side by it.
+ * SP-913: never below --float-clear (shell.js: a page's own bottom bar it would cover, e.g. the 活動列表's 比較 bar).
  */
 (() => {
   if (window.AppSuggestions) return;
@@ -43,7 +46,7 @@
     altitude: T("kind.altitude") };
 
   const CSS = `
-  .sugbox { --sg-acc: var(--accent, #2563eb); position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 340px;
+  .sugbox { --sg-acc: var(--accent, #2563eb); position: fixed; right: 16px; bottom: max(16px, var(--float-clear, 0px)); z-index: 60; width: 340px;
     max-width: calc(100vw - 32px); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
     color: var(--text, #111); }
   .sugbox[hidden] { display: none; }
@@ -87,7 +90,7 @@
   .sugbox .sg-ok a { color: inherit; }
   .sugbox button:focus-visible, .sugbox select:focus-visible { outline: 2px solid var(--sg-acc); outline-offset: 1px; }
   @media (max-width: 699px) {
-    .sugbox { right: 8px; left: 8px; width: auto; max-width: none; bottom: calc(64px + env(safe-area-inset-bottom)); }
+    .sugbox { right: 8px; left: 8px; width: auto; max-width: none; bottom: max(calc(64px + env(safe-area-inset-bottom)), var(--float-clear, 0px)); }
     .sugbox.collapsed { left: auto; }
     .sugbox .sg-list { max-height: 52vh; }
   }
@@ -152,14 +155,33 @@
     </div>`;
   }
 
+  // SP-851: on a page that asks for it (<html data-sugbox-dock>: the 課表, whose 週統計 column it covered), the
+  // room the box takes at the right edge (its width + its 16px offset) as --sugbox-w on <html> and the class
+  // sugbox-docked, on a desktop (≥ DOCK_MIN wide) while it shows, else 0px / no class: the page pads its right
+  // side by it (askai.js stacks its button above the box then). Other pages: the box floats over them as before.
+  const DOCK_MIN = 1000;
+  const wide = () => !(window.matchMedia && !matchMedia(`(min-width: ${DOCK_MIN}px)`).matches);
+  function dock() {
+    const root = document.documentElement;
+    if (!root || !root.hasAttribute) return;
+    const on = root.hasAttribute("data-sugbox-dock");
+    const w = on && !box.hidden && box.isConnected && wide() ? Math.ceil(box.getBoundingClientRect().width) + 16 : 0;
+    root.style.setProperty("--sugbox-w", `${w}px`);
+    root.classList.toggle("sugbox-docked", w > 0);
+  }
+  const mq = window.matchMedia && matchMedia(`(min-width: ${DOCK_MIN}px)`);
+  if (mq && mq.addEventListener) mq.addEventListener("change", dock);
+  else if (mq && mq.addListener) mq.addListener(dock);        // Safari < 14
+
   function render() {
     box.hidden = !rows.length;
-    if (!rows.length) { box.innerHTML = ""; return; }
+    if (!rows.length) { box.innerHTML = ""; dock(); return; }
     box.classList.toggle("collapsed", ls.get());
     box.innerHTML = `<div class="sg-card"><button type="button" class="sg-head" data-act="toggle" aria-expanded="${!ls.get()}">
         ${ICON}<span>${esc(T("title"))}</span><span class="sg-n" aria-label="${esc(T("n", { n: rows.length }))}">${rows.length}</span>
         <svg class="sg-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
       </button><div class="sg-list">${rows.map(item).join("")}</div></div>`;
+    dock();
   }
 
   async function post(url, body) {

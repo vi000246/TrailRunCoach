@@ -115,6 +115,8 @@ dialog.sd.we-wide { width: min(880px, 96vw); }
 .we-pop button.r[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); }
 .we-pop button.r small { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .we-pop .rn { font-size: 12px; color: var(--muted); padding: 4px 6px; }
+.we-pop button.rmore { width: 100%; text-align: left; border: 0; background: none; color: var(--accent); font: inherit; font-size: 12.5px; padding: 6px; cursor: pointer; border-radius: 6px; }
+.we-pop button.rmore:hover, .we-pop button.rmore:focus-visible { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .we .btn.we-tplbtn { font-weight: 700; }
 .we-sumtpl { margin-left: auto; font-size: 12px; padding: 2px 9px; border-radius: 12px; border: 1px solid var(--accent); color: var(--accent); background: none; cursor: pointer; }
 .we-sumtpl:hover, .we-sumtpl:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -389,28 +391,28 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.sel = null; this.openT = null; this.auto = {};
       this.seq = 0; this.timer = null; this.key = "";
       this.tpls = null; this.tplFull = true; this.tplCat = null; this.tplSub = null; this.tplTT = ttLoad();
-      root.innerHTML = `<details class="we" id="we-box"><summary><b>結構</b><span class="we-sumtxt" id="we-sum">載入中…</span><button type="button" class="we-sumtpl" id="we-sumtpl">範本</button></summary>
+      root.innerHTML = `<details class="we" id="we-box"><summary><b>${esc(tr("workout.frame_title"))}</b><span class="we-sumtxt" id="we-sum">${esc(tr("workout.loading"))}</span><button type="button" class="we-sumtpl" id="we-sumtpl">${esc(tr("workout.sum_tpl"))}</button></summary>
         <div class="we-body">
           <div class="we-tools" id="we-tools">
-            <span class="we-menu" id="we-tpl"><button class="btn primary we-tplbtn" type="button" data-a="tpl" id="we-tplbtn" aria-haspopup="true" aria-expanded="false">＋ 插入範本 ▾</button>${q(TIP.tpl)}
+            <span class="we-menu" id="we-tpl"><button class="btn primary we-tplbtn" type="button" data-a="tpl" id="we-tplbtn" aria-haspopup="true" aria-expanded="false">${esc(tr("workout.tpl_btn"))}</button>${q(TIP.tpl)}
               <div class="we-pop" id="we-pop" hidden></div></span>
             <span class="we-menu" id="we-route"${opts.routes === false ? " hidden" : ""}><button class="btn" type="button" data-a="route" id="we-routebtn" aria-haspopup="true" aria-expanded="false">${esc(tr("workout.route_btn"))}</button>
               <div class="we-pop" id="we-rpop" hidden></div></span>
-            <button class="btn" type="button" data-a="add-step">＋ 步驟</button>
-            <button class="btn" type="button" data-a="add-rep">＋ 重複</button>
+            <button class="btn" type="button" data-a="add-step">${esc(tr("workout.add_step"))}</button>
+            <button class="btn" type="button" data-a="add-rep">${esc(tr("workout.add_rep"))}</button>
             <span class="sp"></span>
-            <button class="btn" type="button" data-a="reset" id="we-reset" hidden>還原成系統排的</button>
+            <button class="btn" type="button" data-a="reset" id="we-reset" hidden>${esc(tr("workout.reset"))}</button>
             <button class="btn" type="button" data-a="savetpl" id="we-savetpl"${opts.saveTemplate === false ? " hidden" : ""}>${esc(tr("workout.save_tpl"))}</button>
             ${q(TIP.basis)}
           </div>
           <div class="we-rline" id="we-rline" hidden></div>
           <div class="we-save" id="we-save" hidden></div>
-          <div class="we-chart" id="we-chart"><svg id="we-svg" role="img" aria-label="區段圖：強度隨時間"></svg><div class="we-tip" id="we-tip" hidden></div></div>
+          <div class="we-chart" id="we-chart"><svg id="we-svg" role="img" aria-label="${esc(tr("workout.chart_aria"))}"></svg><div class="we-tip" id="we-tip" hidden></div></div>
           <div class="we-legend" id="we-legend"></div>
           <div class="we-stats" id="we-stats" aria-live="polite"></div>
           <ul class="we-issues" id="we-issues" aria-live="polite"></ul>
           <div class="we-list" id="we-list" data-cont="root"></div>
-          <details class="we-watch" id="we-watch"><summary>推到手錶會長這樣 ${q(TIP.watch)}</summary><div id="we-wbody"></div></details>
+          <details class="we-watch" id="we-watch"><summary>${esc(tr("workout.watch_title"))} ${q(TIP.watch)}</summary><div id="we-wbody"></div></details>
         </div></details>`;
       this.$ = (id) => root.querySelector("#" + id);
       this.bind();
@@ -446,7 +448,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.key = this.sig(s);
       const r = await req("POST", `${this.o.api}/steps/derive`, { ...s, uid: this.uid, ...extra });
       if (my !== this.seq) return;
-      if (!r.ok) { this.doc = null; this.$("we-sum").textContent = "結構讀取失敗"; return; }
+      if (!r.ok) { this.doc = null; this.$("we-sum").textContent = tr("workout.load_failed"); return; }
       this.ctx = r.body.context; this.stored = !r.body.derived && !extra.rederive;
       this.doc = r.body.steps ? { origin: r.body.steps.origin, items: r.body.steps.items, tpl: r.body.steps.tpl, route: r.body.steps.route } : null;
       this.reason = r.body.reason || "";
@@ -499,7 +501,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const r = await req("POST", `${this.o.api}/steps/check`, { ...this.sess(), uid: this.uid, steps: this.stepsDoc() });
       if (my !== this.seq) return;
       if (r.ok) this.view = r.body;
-      else this.view = { ...(this.view || {}), issues: ((r.body.detail || {}).errors || ["結構有誤"]).map((t) => ({ level: "err", text: t })) };
+      else this.view = { ...(this.view || {}), issues: ((r.body.detail || {}).errors || [tr("workout.invalid")]).map((t) => ({ level: "err", text: t })) };
       this.render();
       this.o.onView && this.o.onView(this.view, this);
     }
@@ -522,8 +524,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const w = this.newStep("work");
       w.dur.value = this.isQ() ? 180 : 20;
       if (this.isQ()) w.target = { type: "auto", intent: "band", lo: 1.06, hi: 1.12, cls: "Z5" };   // Palladino 5 區
-      else { w.kind = "other"; w.target = { type: "auto", intent: "open" }; w.note = "快步跑"; }
-      const r = this.newStep("rest"); r.dur.value = this.isQ() ? 180 : 40; r.note = "慢跑";
+      else { w.kind = "other"; w.target = { type: "auto", intent: "open" }; w.note = tr("workout.note_strides"); }
+      const r = this.newStep("rest"); r.dur.value = this.isQ() ? 180 : 40; r.note = tr("workout.note_jog");
       return { id: nid(), kind: "repeat", times: 4, last_rest: true, note: "", items: [w, r] };
     }
     autoFor(st) {
@@ -546,7 +548,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         return { type, mode: "zone", zone: "3A" };
       }
       if (type === "hr") {
-        if (r.type === "hr" && /輕鬆跑上限|AeT/.test(r.sub || "")) return { type, mode: "zone", zone: "aet" };
+        // SP-906: `ecap` (the band's top is the easy-run cap) — `sub` is in the page's language now
+        if (r.type === "hr" && (r.ecap || /AeT/.test(r.sub || ""))) return { type, mode: "zone", zone: "aet" };
         if (r.type === "hr" && th.lthr) return { type, mode: "pct", lo: rd(r.lo / th.lthr), hi: rd(r.hi / th.lthr) };
         // 課表心率區間 (Z1–Z6) when the context has it, else the Friel ids
         const hz = (((this.ctx || {}).zones || {}).hr || []).some((x) => x.id === "Z4") ? "Z4" : "4";
@@ -583,15 +586,15 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const v = this.view, d = this.doc;
       this.routeLine();
       if (!d) {
-        this.$("we-sum").textContent = this.reason || "沒有結構";
+        this.$("we-sum").textContent = this.reason || tr("workout.none");
         ["we-list", "we-issues", "we-stats", "we-legend", "we-wbody"].forEach((x) => (this.$(x).innerHTML = ""));
         this.$("we-svg").innerHTML = "";
-        this.$("we-list").innerHTML = this.ro ? "" : `<p class="we-empty">${esc(this.reason || "")} 用「＋ 步驟」「＋ 重複」或「插入範本」排一份。</p>`;
+        this.$("we-list").innerHTML = this.ro ? "" : `<p class="we-empty">${esc(this.reason || "")} ${esc(tr("workout.empty_hint"))}</p>`;
         return;
       }
       const t = (v && v.totals) || {};
-      this.$("we-sum").textContent = `${v ? v.structure : ""}${t.sec != null ? ` · ${t.est ? "約 " : ""}${mmss(t.sec)}${t.open ? "＋「直到按下計圈」段" : ""}` : ""}` +
-        (this.dirty ? " · 尚未儲存" : this.stored ? (this.src === "racecalc" ? " · 賽事計算機匯出的結構" : " · 你改過的結構") : "");
+      this.$("we-sum").textContent = `${v ? v.structure : ""}${t.sec != null ? ` · ${t.est ? tr("workout.approx") : ""}${mmss(t.sec)}${t.open ? tr("workout.plus_open") : ""}` : ""}` +
+        (this.dirty ? " · " + tr("workout.unsaved") : this.stored ? " · " + (this.src === "racecalc" ? tr("workout.from_racecalc") : tr("workout.yours")) : "");
       this.$("we-list").innerHTML = d.items.map((it) => this.itemHtml(it, 0)).join("");
       this.legend();
       this.stats();
@@ -607,20 +610,20 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     rowHtml(st) {
       const r = ((this.view || {}).resolved || {})[st.id] || null, dis = this.ro ? " disabled" : "";
       const dt = st.dur.type;
-      const durIn = dt === "time" ? `<input class="dur" data-f="sec" value="${mmss(st.dur.value)}" inputmode="numeric" aria-label="時間（分:秒）"${dis}>`
-        : dt === "distance" ? `<input class="num" type="number" step="0.1" min="0.05" data-f="km" value="${st.dur.value / 1000}" aria-label="距離 km"${dis}><span class="faint">km</span>`
+      const durIn = dt === "time" ? `<input class="dur" data-f="sec" value="${mmss(st.dur.value)}" inputmode="numeric" aria-label="${esc(tr("workout.aria_time"))}"${dis}>`
+        : dt === "distance" ? `<input class="num" type="number" step="0.1" min="0.05" data-f="km" value="${st.dur.value / 1000}" aria-label="${esc(tr("workout.aria_km"))}"${dis}><span class="faint">km</span>`
         : dt === "load" ? this.loadIn(st, r, dis)
-        : st.dur.est ? `<span class="we-lap" title="直到按下計圈；總時間用課表寫的最短時間估">≈ ${mmss(st.dur.est)}</span>` : "";
+        : st.dur.est ? `<span class="we-lap" title="${esc(tr("workout.lap_tip"))}">≈ ${mmss(st.dur.est)}</span>` : "";
       const ov = st.target && st.target.type !== "auto";
-      const tb = r ? `<span class="src${ov ? " ov" : ""}">${ov ? "指定" : "自動"}</span><b>${r.type === "none" ? esc(tr("workout.no_target")) : `${esc(r.label)} ${esc(r.text)}`}</b>${r.sub ? `<span class="s">${esc(r.sub)}</span>` : ""}` +
+      const tb = r ? `<span class="src${ov ? " ov" : ""}">${esc(ov ? tr("workout.set") : tr("workout.auto"))}</span><b>${r.type === "none" ? esc(tr("workout.no_target")) : `${esc(r.label)} ${esc(r.text)}`}</b>${r.sub ? `<span class="s">${esc(r.sub)}</span>` : ""}` +
         (r.err ? `<span class="e">✕ ${esc(r.err)}</span>` : r.warn ? `<span class="w">⚠ ${esc(r.warn)}</span>` : "") : `<span class="s">…</span>`;
       return `<div class="we-row${this.sel === st.id ? " sel" : ""}" draggable="${!this.ro}" tabindex="0" data-id="${st.id}" style="--zc:${this.zc(r, st)}">
-        <span class="grip" aria-hidden="true" title="拖曳排序">⋮⋮</span>
-        <select class="kind" data-f="kind" aria-label="類型"${dis}>${Object.entries(KIND).map(([k, l]) => opt(k, l, st.kind)).join("")}</select>
-        <span class="we-dur"><select data-f="dtype" aria-label="時長類型"${dis}>${this.endOpts(st)}</select>${durIn}</span>
-        <button type="button" class="we-tbtn${this.openT === st.id ? " on" : ""}" data-a="tgt" aria-expanded="${this.openT === st.id}" aria-label="這一段的目標（點一下改這一段）"${dis}>${tb}</button>
-        <input class="note nt" data-f="note" value="${esc(st.note || "")}" maxlength="60" placeholder="名稱（手錶顯示）" aria-label="名稱"${dis}>
-        <span class="we-acts"><button type="button" data-a="up" title="上移" aria-label="上移">↑</button><button type="button" data-a="down" title="下移" aria-label="下移">↓</button><button type="button" data-a="dup" title="複製" aria-label="複製">⧉</button><button type="button" data-a="wrap" title="包成重複" aria-label="包成重複">⟳</button><button type="button" data-a="del" title="刪除" aria-label="刪除">✕</button></span>
+        <span class="grip" aria-hidden="true" title="${esc(tr("workout.drag"))}">⋮⋮</span>
+        <select class="kind" data-f="kind" aria-label="${esc(tr("workout.aria_kind"))}"${dis}>${Object.entries(KIND).map(([k, l]) => opt(k, l, st.kind)).join("")}</select>
+        <span class="we-dur"><select data-f="dtype" aria-label="${esc(tr("workout.aria_dtype"))}"${dis}>${this.endOpts(st)}</select>${durIn}</span>
+        <button type="button" class="we-tbtn${this.openT === st.id ? " on" : ""}" data-a="tgt" aria-expanded="${this.openT === st.id}" aria-label="${esc(tr("workout.aria_tgt"))}"${dis}>${tb}</button>
+        <input class="note nt" data-f="note" value="${esc(st.note || "")}" maxlength="60" placeholder="${esc(tr("workout.name_ph"))}" aria-label="${esc(tr("workout.aria_name"))}"${dis}>
+        <span class="we-acts"><button type="button" data-a="up" title="${esc(tr("workout.up"))}" aria-label="${esc(tr("workout.up"))}">↑</button><button type="button" data-a="down" title="${esc(tr("workout.down"))}" aria-label="${esc(tr("workout.down"))}">↓</button><button type="button" data-a="dup" title="${esc(tr("workout.dup"))}" aria-label="${esc(tr("workout.dup"))}">⧉</button><button type="button" data-a="wrap" title="${esc(tr("workout.wrap"))}" aria-label="${esc(tr("workout.wrap"))}">⟳</button><button type="button" data-a="del" title="${esc(tr("workout.del"))}" aria-label="${esc(tr("workout.del"))}">✕</button></span>
         ${this.openT === st.id && !this.ro ? this.tgHtml(st, r) : ""}
       </div>`;
     }
@@ -632,16 +635,16 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const lk = (this.ctx || {}).load_kinds || ["work"], dt = st.dur.type;
       const list = ends.filter((k) => k !== "load" || lk.includes(st.kind));
       let h = list.map((k) => opt(k, labels[k] || k, dt)).join("");
-      if (!list.includes(dt)) h += opt(dt, `${labels[dt] || dt}（${esc(((this.ctx || {}).provider || {}).label || "這個平台")}不支援）`, dt);
+      if (!list.includes(dt)) h += opt(dt, tr("workout.unsupported", { type: labels[dt] || dt, provider: ((this.ctx || {}).provider || {}).label || tr("workout.this_platform") }), dt);
       return h;
     }
     // a 「負荷」 step: TSS in — or by feel, an RPE level + minutes (SP-57) — and the provider's
     // conversion next to it (COROS TL ± error, else the time; 推估)
     loadIn(st, r, dis) {
       const caps = provCaps(this.ctx), unit = caps ? caps.load_unit : "TL", L = r && r.load, byRpe = !!st.dur.rpe;
-      const conv = !L ? "" : unit ? `≈ ${L.tl} ${esc(unit)}（推估 ±${L.err}）` : `≈ ${mmss(L.sec)}（推估）`;
-      const tip = unit ? `這裡填訓練負荷（Training load）；推到手錶換算成 ${unit}（用你同步的活動擬合，誤差約 ±20%）。圖表和總時間用負荷 ÷（這段強度比² × 100）換成時間：約 ${L ? mmss(L.sec) : "?"}`
-        : "這個平台沒有負荷結束條件：推送時換成預估時間＝負荷 ÷（這段強度比² × 100）";
+      const conv = !L ? "" : unit ? `≈ ${L.tl} ${esc(unit)}${esc(tr("workout.est_pm", { err: L.err }))}` : `≈ ${mmss(L.sec)}${esc(tr("workout.est_paren"))}`;
+      const tip = unit ? tr("workout.load_tip", { unit, t: L ? mmss(L.sec) : "?" })
+        : tr("workout.load_tip_none");
       const mode = `<select data-f="lmode" aria-label="${esc(tr("workout.load_mode"))}"${dis}>${opt("tss", tr("workout.load_by_value"), byRpe ? "rpe" : "tss")}${opt("rpe", tr("workout.load_by_rpe"), byRpe ? "rpe" : "tss")}</select>`;
       if (byRpe) {
         const R = (L && L.rpe) || {}, S = (x) => (x.fitted ? "mine" : x.adjusted ? "adjusted" : "default"), lv = Object.fromEntries((((this.ctx || {}).rpe_load || {}).levels || []).filter((x) => x.tss_h != null).map((x) => [x.id, x]));   // SP-57: each level's TSS/h + source (its option); the step's TSS 推估 / 依相鄰檔調整 / 本人
@@ -656,43 +659,43 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     tgHtml(st, r) {
       const t = st.target || { type: "auto" }, ty = t.type, ctx = this.ctx || {}, th = ctx.thresholds || {};
       const zones = (ctx.zones || {})[ty] || [];
-      const miss = { power: !th.cp && "沒有 CP", hr: !(th.lthr || th.aet) && "沒有 LTHR／AeT", pace: !th.tpace && "沒有閾值配速" };
-      let h = `<div class="we-tg" data-tg="${st.id}"><select data-f="ttype" aria-label="目標類型">` +
-        opt("auto", `自動（依課表類型）`, ty) + ["power", "hr", "pace"].map((k) => opt(k, TYPE[k] + (miss[k] ? `（${miss[k]}）` : ""), ty)).join("") +
-        opt("rpe", "RPE＋爬升（技術地形／下坡）", ty) + opt("none", "無", ty) + `</select>`;
+      const miss = { power: !th.cp && tr("workout.no_cp"), hr: !(th.lthr || th.aet) && tr("workout.no_lthr"), pace: !th.tpace && tr("workout.no_tp") };
+      let h = `<div class="we-tg" data-tg="${st.id}"><select data-f="ttype" aria-label="${esc(tr("workout.aria_ttype"))}">` +
+        opt("auto", tr("workout.auto_by_kind"), ty) + ["power", "hr", "pace"].map((k) => opt(k, TYPE[k] + (miss[k] ? tr("workout.paren", { x: miss[k] }) : ""), ty)).join("") +
+        opt("rpe", tr("workout.rpe_climb_opt"), ty) + opt("none", TYPE.none, ty) + `</select>`;
       if (ty === "rpe") {
         const n = (f, v, l, mx, stp) => `<input class="num" type="number" min="${f === "tlo" || f === "thi" ? 1 : 0}" max="${mx}" step="${stp}" data-f="${f}" value="${v ?? ""}" aria-label="${l}">`;
-        h += `${n("tlo", t.lo, "RPE 下限", 10, 1)}–${n("thi", t.hi, "RPE 上限", 10, 1)}<span class="faint">/ 10</span>` +
-          `<span class="faint">爬升</span>${n("tup", t.up, "爬升 m", 5000, 50)}<span class="faint">m</span>` +
-          `<span class="faint">下降</span>${n("tdown", t.down, "下降 m", 5000, 50)}<span class="faint">m</span>${q(TIP.rpe)}`;
+        h += `${n("tlo", t.lo, esc(tr("workout.rpe_lo")), 10, 1)}–${n("thi", t.hi, esc(tr("workout.rpe_hi")), 10, 1)}<span class="faint">/ 10</span>` +
+          `<span class="faint">${esc(tr("workout.climb"))}</span>${n("tup", t.up, esc(tr("workout.climb_m")), 5000, 50)}<span class="faint">m</span>` +
+          `<span class="faint">${esc(tr("workout.descent"))}</span>${n("tdown", t.down, esc(tr("workout.descent_m")), 5000, 50)}<span class="faint">m</span>${q(TIP.rpe)}`;
       }
       if (["power", "hr", "pace"].includes(ty)) {
-        h += `<select data-f="tmode" aria-label="填法">${opt("zone", "區間", t.mode)}${opt("pct", ty === "power" ? "% CP" : ty === "hr" ? "% LTHR" : "% 閾值配速", t.mode)}${opt("abs", "自訂數字", t.mode)}</select>`;
+        h += `<select data-f="tmode" aria-label="${esc(tr("workout.aria_tmode"))}">${opt("zone", tr("workout.mode_zone"), t.mode)}${opt("pct", ty === "power" ? "% CP" : ty === "hr" ? "% LTHR" : tr("workout.mode_pct_tp"), t.mode)}${opt("abs", tr("workout.mode_abs"), t.mode)}</select>`;
         const zl = (z) => `${z.label}${z.text ? " · " + z.text : ""}`;
         if (t.mode === "zone") {
-          h += `<select data-f="tzone" aria-label="區間">${zones.filter((z) => !z.legacy || z.id === t.zone).map((z) => opt(z.id, zl(z), t.zone)).join("")}</select>`;
+          h += `<select data-f="tzone" aria-label="${esc(tr("workout.mode_zone"))}">${zones.filter((z) => !z.legacy || z.id === t.zone).map((z) => opt(z.id, zl(z), t.zone)).join("")}</select>`;
           // 從–到 (SP-383): the last zone of a run in the same set (「只這一格」 = one zone); none on the easy-run cap
           const set = zoneSet(zones, t.zone);
           if (set.length > 1) h += `<span class="faint">${esc(tr("workout.zone_to"))}</span><select data-f="tzone2" aria-label="${esc(tr("workout.zone_to_label"))}">` +
             opt("", tr("workout.zone_to_none"), t.zone_to || "") + set.map((z) => opt(z.id, zl(z), t.zone_to || "")).join("") + `</select>`;
-        } else if (t.mode === "pct") h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo * 100)}" aria-label="下限 %">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi * 100)}" aria-label="上限 %"><span class="faint">%</span>${ty === "pace" ? q(TIP.pacePct) : ""}`;
-        else if (ty === "pace") h += `<input class="dur" data-f="tlo" value="${mmss(t.lo)}" aria-label="快的一端 分:秒/km">–<input class="dur" data-f="thi" value="${mmss(t.hi)}" aria-label="慢的一端 分:秒/km"><span class="faint">/km</span>`;
-        else h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo)}" aria-label="下限">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi)}" aria-label="上限"><span class="faint">${ty === "power" ? "W" : "bpm"}</span>`;
+        } else if (t.mode === "pct") h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo * 100)}" aria-label="${esc(tr("workout.aria_lo_pct"))}">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi * 100)}" aria-label="${esc(tr("workout.aria_hi_pct"))}"><span class="faint">%</span>${ty === "pace" ? q(TIP.pacePct) : ""}`;
+        else if (ty === "pace") h += `<input class="dur" data-f="tlo" value="${mmss(t.lo)}" aria-label="${esc(tr("workout.aria_fast"))}">–<input class="dur" data-f="thi" value="${mmss(t.hi)}" aria-label="${esc(tr("workout.aria_slow"))}"><span class="faint">/km</span>`;
+        else h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo)}" aria-label="${esc(tr("workout.aria_lo"))}">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi)}" aria-label="${esc(tr("workout.aria_hi"))}"><span class="faint">${ty === "power" ? "W" : "bpm"}</span>`;
       }
       h += r ? `<span class="res">＝ ${r.type === "none" ? esc(tr("workout.no_target")) : esc(`${r.label} ${r.text}`)}${r.sub ? " · " + esc(r.sub) : ""}</span>` : "";
-      if (ty !== "auto") h += `<button type="button" class="btn" data-a="tauto">↺ 回到自動</button>`;
+      if (ty !== "auto") h += `<button type="button" class="btn" data-a="tauto">${esc(tr("workout.back_auto"))}</button>`;
       return h + `</div>`;
     }
     repHtml(it, depth) {
       const dis = this.ro ? " disabled" : "";
       const sec = ((this.view || {}).order || []).filter((o) => o.rep.some((x) => x.id === it.id)).reduce((a, o) => a + (o.sec || 0), 0);
       return `<div class="we-rep" draggable="${!this.ro}" data-id="${it.id}">
-        <div class="we-rep-h"><span class="grip" aria-hidden="true">⋮⋮</span><b>重複</b> ×
-          <input class="num" type="number" min="1" max="99" data-f="times" value="${it.times}" aria-label="次數"${dis}>
-          <label><input type="checkbox" data-f="lastrest"${it.last_rest === false ? " checked" : ""}${dis}>最後一趟不休息</label>${q(TIP.lastRest)}
+        <div class="we-rep-h"><span class="grip" aria-hidden="true">⋮⋮</span><b>${esc(tr("workout.repeat"))}</b> ×
+          <input class="num" type="number" min="1" max="99" data-f="times" value="${it.times}" aria-label="${esc(tr("workout.aria_times"))}"${dis}>
+          <label><input type="checkbox" data-f="lastrest"${it.last_rest === false ? " checked" : ""}${dis}>${esc(tr("workout.last_rest"))}</label>${q(TIP.lastRest)}
           <span class="faint num">${sec ? mmss(sec) : ""}</span>
           <span class="sp"></span>
-          <span class="we-acts"><button type="button" data-a="addin" title="在裡面加一步" aria-label="在裡面加一步">＋</button><button type="button" data-a="up" title="上移" aria-label="上移">↑</button><button type="button" data-a="down" title="下移" aria-label="下移">↓</button><button type="button" data-a="dup" title="複製" aria-label="複製">⧉</button><button type="button" data-a="unwrap" title="拆開" aria-label="拆開重複">⇲</button><button type="button" data-a="del" title="刪除" aria-label="刪除">✕</button></span></div>
+          <span class="we-acts"><button type="button" data-a="addin" title="${esc(tr("workout.add_in"))}" aria-label="${esc(tr("workout.add_in"))}">＋</button><button type="button" data-a="up" title="${esc(tr("workout.up"))}" aria-label="${esc(tr("workout.up"))}">↑</button><button type="button" data-a="down" title="${esc(tr("workout.down"))}" aria-label="${esc(tr("workout.down"))}">↓</button><button type="button" data-a="dup" title="${esc(tr("workout.dup"))}" aria-label="${esc(tr("workout.dup"))}">⧉</button><button type="button" data-a="unwrap" title="${esc(tr("workout.unwrap"))}" aria-label="${esc(tr("workout.unwrap_aria"))}">⇲</button><button type="button" data-a="del" title="${esc(tr("workout.del"))}" aria-label="${esc(tr("workout.del"))}">✕</button></span></div>
         <div class="we-rep-in" data-cont="${it.id}">${it.items.map((x) => this.itemHtml(x, depth + 1)).join("")}</div>
       </div>`;
     }
@@ -733,18 +736,18 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     }
     stats() {
       const v = this.view || {}, t = v.totals || {}, c = this.ctx || {};
-      const cap = c.cap ? `${Math.round(c.cap)} 分（${c.cap_mode === "hard" ? "硬上限" : "軟上限"}）` : "不限";
+      const cap = c.cap ? tr(c.cap_mode === "hard" ? "workout.cap_hard" : "workout.cap_soft", { m: Math.round(c.cap) }) : tr("workout.cap_none");
       // SP-453: a 賽事計算機 export as exported — its TSS is the calculator's (the host says so: calc_tss)
       const fx = !this.dirty && !this.cleared ? this.sess().calc_tss : null;
-      const load = fx ? `<span>預估訓練負荷（Training load）<b>${Math.round(fx.tss)}</b> <span class="faint">${esc(fx.label || "")}</span></span>`
-        : `<span>預估訓練負荷（Training load）<b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span>`;
+      const load = fx ? `<span>${esc(tr("workout.est_load"))}<b>${Math.round(fx.tss)}</b> <span class="faint">${esc(fx.label || "")}</span></span>`
+        : `<span>${esc(tr("workout.est_load"))}<b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span>`;
       this.$("we-stats").innerHTML = t.sec == null ? "" :
-        `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋「直到按下計圈」段" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
+        `<span>${esc(tr("workout.total"))} <b>${t.est ? esc(tr("workout.approx")) : ""}${mmss(t.sec)}</b>${t.open ? esc(tr("workout.plus_open")) : ""}${t.est ? q(tr("workout.total_est") + (t.est_note || "")) : ""}</span>` +
         // SP-646: 中強度 / 高強度 / 5 區 (workout_steps.totals: Palladino's three zones; marathon pace = 中強度)
         `<span>${esc(tr("workout.mod_time"))} <b>${mmss(t.mod_s || 0)}</b></span>` +
         `<span>${esc(tr("workout.hard_time"))} <b>${mmss(t.hard_s)}</b></span>` +
         `<span>${esc(tr("workout.z5_time"))} <b>${mmss(t.z5_s || 0)}</b>${q(tr("workout.intensity_tip"))}</span>` +
-        `${load}<span>這天上限 ${esc(cap)}</span>`;
+        `${load}<span>${esc(tr("workout.day_cap", { cap }))}</span>`;
     }
     issues() {
       const v = this.view || {}, list = v.issues || [];
@@ -759,7 +762,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const hn = "thr_warn" in v && v.thr_warn && v.thr_warn.lthr && !v.thr_warn.lthr.low ? v.thr_warn.lthr.note || "" : "";
       this.$("we-issues").innerHTML = (hw ? `<li class="warn"><span class="ic">!</span><span>${esc(hw)}</span></li>` : "") +
         (hn ? `<li class="info"><span class="ic"></span><span class="faint">${esc(hn)}</span></li>` : "") + list.map((i) => `<li class="${i.level}"${i.id ? ` data-id="${esc(i.id)}"` : ""}><span class="ic">${ic[i.level] || "i"}</span><span>${esc(i.text)}${isNt(i.text) ? tpaceLink(this.ctx) : ""}</span></li>`).join("") +
-        (list.length ? `<li class="info"><span class="ic"></span><span class="faint">檢查規則 ${q(TIP.rules)}</span></li>` : "");
+        (list.length ? `<li class="info"><span class="ic"></span><span class="faint">${esc(tr("workout.rules"))} ${q(TIP.rules)}</span></li>` : "");
     }
     watch() {
       const w = (this.view || {}).watch;
@@ -821,7 +824,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         el("path", { d: `M${a + 2} ${y + 6} V${y} H${b - 2} V${y + 6}`, fill: "none", stroke: "var(--muted)", "stroke-width": 1 });
         if (b - a > 18) el("text", { x: (a + b) / 2, y: y - 2, "text-anchor": "middle", "font-size": 11, fill: "var(--text)", "font-weight": 600 }).textContent = `×${n}`;
       }
-      svg.setAttribute("aria-label", `區段圖：${v.structure || ""}，總長 ${mmss((v.totals || {}).sec || 0)}` +
+      svg.setAttribute("aria-label", tr("workout.chart_aria_v", { s: v.structure || "", t: mmss((v.totals || {}).sec || 0) }) +
         (ev ? tr(tm ? "workout.elev_aria_t" : "workout.elev_aria", { lo: Math.round(ev.z_min), hi: Math.round(ev.z_max), km: kmTxt(ev.total_km) }) : ""));
     }
     // the route GPX's elevation (POST /steps/check elev: d = km covered on the chart's distance axis,
@@ -862,8 +865,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     tip(e, o, r, ev, i) {
       const t = this.$("we-tip"), box = this.$("we-chart").getBoundingClientRect(), f = this.find(o.id);
       const st = f ? f.it : { kind: o.kind, note: "" };
-      const n = o.rep.length ? o.rep.map((x) => `第 ${x.i + 1}/${x.n} 趟`).join(" · ") + " · " : "";
-      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : (o.load ? `負荷 ${o.load.tss} · ` : "") + mmss(o.sec) + (o.est ? "（推估）" : "")}` +
+      const n = o.rep.length ? o.rep.map((x) => tr("workout.rep_of", { i: x.i + 1, n: x.n })).join(" · ") + " · " : "";
+      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${esc(o.open ? tr("workout.end.open") : (o.load ? tr("workout.load_n", { n: o.load.tss }) + " · " : "") + mmss(o.sec) + (o.est ? tr("workout.est_paren") : ""))}` +
         (ev ? ` · ${esc(tr("workout.elev_km", { a: kmTxt(ev.x[i]), b: kmTxt(ev.x[i + 1]) }))}` : "") + this.elevTip(o, st, ev, i) + `<br>` +
         (r ? `${r.type === "none" ? esc(tr("workout.no_target")) : `${esc(r.label)} <b class="num">${esc(r.text)}</b>`}${r.sub ? ` <span class="meta">${esc(r.sub)}</span>` : ""}` : "") +
         (st.note ? `<br><span class="meta">${esc(st.note)}</span>` : "");
@@ -902,6 +905,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       });
       this.$("we-pop").addEventListener("click", (e) => this.onTpl(e));
       this.$("we-rpop").addEventListener("click", (e) => {
+        if (e.target.closest("button[data-rmore]")) { e.stopPropagation(); this.rmore = true; this.routeList(); return; }   // SP-863
         const b = e.target.closest("button[data-rs]"); if (!b) return;
         const [src, ...id] = b.dataset.rs.split(":");
         this.$("we-rpop").hidden = true; this.$("we-routebtn").setAttribute("aria-expanded", "false");
@@ -1077,18 +1081,31 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         const [g, m] = await Promise.all([req("GET", `${this.o.api}/routes/library`), req("GET", `${this.o.api}/routes/mine`)]);
         this.routes = { gpx: g.ok ? g.body.routes : [], mine: m.ok ? m.body.rows : [] };
       }
+      this.routeList();
+      pop.hidden = false; btn.setAttribute("aria-expanded", "true");
+    }
+    // the popup's lists; 我跑過的 shows climbs and whole routes, shared stretches and descents behind 「更多」
+    // (SP-863: `more` from the server; open when the session's route is one of them)
+    routeList() {
+      const pop = this.$("we-rpop");
       const cur = ((this.doc || {}).route || {}).src || {};
       const km = (v) => `${(+v || 0).toFixed(1)} km`;
       const row = (rs, name, sub, on) => `<button type="button" class="r" data-rs="${esc(rs)}" aria-current="${on}"><span>${esc(name)}</span><small>${esc(sub)}</small></button>`;
       const page = "/api/v1/routes/uploaded/page";      // 路線 › 上傳的 (SP-693)
       const G = this.routes.gpx, M = this.routes.mine;
+      const isCur = (r) => cur.kind === "seg" && cur.id === String(r.id);
+      const open = this.rmore || M.some((r) => r.more && isCur(r));
+      const main = M.filter((r) => !r.more), more = M.filter((r) => r.more);
+      const mrow = (r) => row(`seg:${r.id}`, (r.fav ? "★ " : "") + r.name, `${km((r.length_m || 0) / 1000)} · ${(r.gain_m || 0) < 0 ? "−" + Math.round(-r.gain_m) : "+" + Math.round(r.gain_m || 0)} m · ${tr("workout.route_times", { n: r.n_efforts || 0 })}`,
+        isCur(r));
       pop.innerHTML = `<div class="rh"><span>${esc(tr("workout.route_gpx"))}</span><a href="${esc(page)}">${esc(tr("workout.route_page"))}</a></div>` +
         (G.length ? G.map((r) => row(`gpx:${r.id}`, r.name, `${km(r.km)} · +${Math.round(r.gain_m || 0)} m · ${tr("workout.route_nclimbs", { n: r.n_climbs || 0 })}`,
           cur.kind === "gpx" && cur.id === String(r.id))).join("") : `<p class="rn">${esc(tr("workout.route_none_gpx"))}</p>`) +
         `<div class="rh"><span>${esc(tr("workout.route_mine"))}</span></div>` +
-        (M.length ? M.map((r) => row(`seg:${r.id}`, (r.fav ? "★ " : "") + r.name, `${km((r.length_m || 0) / 1000)} · ${(r.gain_m || 0) < 0 ? "−" + Math.round(-r.gain_m) : "+" + Math.round(r.gain_m || 0)} m · ${tr("workout.route_times", { n: r.n_efforts || 0 })}`,
-          cur.kind === "seg" && cur.id === String(r.id))).join("") : `<p class="rn">${esc(tr("workout.route_none_mine"))}</p>`);
-      pop.hidden = false; btn.setAttribute("aria-expanded", "true");
+        (M.length ? main.map(mrow).join("") +
+          (more.length ? (open ? `<div class="rh"><span>${esc(tr("workout.route_more_h"))}</span></div>` + more.map(mrow).join("")
+            : `<button type="button" class="rmore" data-rmore>${esc(tr("workout.route_more", { n: more.length }))}</button>`) : "")
+          : `<p class="rn">${esc(tr("workout.route_none_mine"))}</p>`);
     }
     // pick (null: drop) the route: the server puts it on the structure (POST /steps/route)
     async pickRoute(pick) {
@@ -1103,7 +1120,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         return;
       }
       this.doc = { origin: "user", items: r.body.steps.items, route: r.body.steps.route };
-      this.rinfo = pick ? { climbs: r.body.climbs || [], applied: r.body.applied } : null;
+      this.rinfo = pick ? { climbs: r.body.climbs || [], applied: r.body.applied, last: r.body.last || null } : null;
       this.touch();
     }
     routeLine() {
@@ -1118,7 +1135,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       box.hidden = false;
       box.innerHTML = `<span>▲ <b>${esc(r.name || "")}</b> · ${esc(tr(r.src.kind === "seg" ? "workout.route_kind_seg" : "workout.route_kind_gpx"))}</span>` +
         `<label>${esc(tr("workout.route_climb"))} ${sel}</label>` + (this.ro ? "" : `<button type="button" data-rdel>${esc(tr("workout.route_remove"))}</button>`) +
-        `<span class="meta">${esc(tr(cl ? "workout.route_tip" : "workout.route_tip_noclimb"))}</span>`;
+        `<span class="meta">${esc(tr(cl ? "workout.route_tip" : "workout.route_tip_noclimb"))}` +
+        // SP-863: a 「我的路段」's climb is named with the last time you did it
+        (cl && info.last && info.last.date ? " " + esc(tr("workout.route_last", { date: info.last.date })) : "") + `</span>`;
     }
     // 插入範本: category tabs (default: this session's kind), 強度課 split 有氧間歇／VO2max 間歇／速度
     // (workout_templates.family_of), one row per template with a mini chart, its 訓練目的 and its source
@@ -1179,8 +1198,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         (hw && usesLthr(r.full || r.items, !!(((this.ctx || {}).thresholds) || {}).aet_measured) ? ` <span class="we-tpb" title="${esc(hw)}">⚠ ${esc(tr("workout.thr_low_badge"))}</span>` : "");
       // 技術地形／下坡 rows: how the scheduler counts them (workout_steps.rpe_role)
       const fsub = (r) => (r.mine ? ` <span class="mine">${esc(tr("workout.mine"))}</span>` : "") +         (r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "") +
-        (r.role ? ` <span class="fam">${r.role === "quality" ? "算強度課" : "算輕鬆課"}</span>` : "");
-      const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${fsub(r)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}${tpBadge(r)}</span>` +
+        (r.role ? ` <span class="fam">${esc(r.role === "quality" ? tr("workout.role_quality") : tr("workout.role_easy"))}</span>` : "");
+      const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${fsub(r)}${r.src_kind === "推估" ? ` <span class="faint">${esc(tr("workout.est_paren"))}</span>` : ""}${tpBadge(r)}</span>` +
         `${r.purpose ? `<span class="pur">${esc(r.purpose)}</span>` : ""}<span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
       const rec = recs.length ? `<div class="g rec">${esc(tr("workout.tpl_recs"))} ${q((this.recs || {}).tip || "")}</div>` +
         recs.map((x, n) => btn(rowAt(where[x.key]), where[x.key], `${n + 1}. ${x.reason}`)).join("") : "";

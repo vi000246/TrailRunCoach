@@ -30,6 +30,8 @@ NAMES = (
     "TRC_UPSTREAM_TOKEN", "TRC_PROXY_PASSWORD",   # a local copy pulling from production (SP-373)
     "TRC_CAIRN_LINK_SECRET",          # 疊石 Cairn's calls here (SP-329, accounts/links.py)
     "TRC_CAIRN_OUT_SECRET",           # this app's calls to Cairn (SP-329 Q1-1: one secret per direction)
+    "RESEND_API_KEY",                 # the e-mail sign-in's mails (SP-610, accounts/mailer.py)
+    "TRC_ANTHROPIC_API_KEY",          # the owner's AI 問答 key (SP-785, backend/ai/config.py)
 )
 MIN_REDACT_LEN = 6        # shorter values would blank ordinary words
 
@@ -48,7 +50,18 @@ def secret_env(name: str) -> Optional[str]:
     return None
 
 
+def _extra() -> set:
+    """Secrets kept elsewhere that must be blanked too: the AI key pasted on the settings page
+    (sealed in the owner's ai.json, SP-785)."""
+    try:
+        from backend.ai.config import redact_value
+        v = redact_value()
+    except Exception:                     # noqa: BLE001 — redaction never breaks a log line
+        return set()
+    return {v} if v and len(v) >= MIN_REDACT_LEN else set()
+
+
 def values() -> list[str]:
     """The secrets currently set (for redaction), longest first."""
-    out = {v for n in NAMES if (v := secret_env(n)) and len(v) >= MIN_REDACT_LEN}
+    out = {v for n in NAMES if (v := secret_env(n)) and len(v) >= MIN_REDACT_LEN} | _extra()
     return sorted(out, key=len, reverse=True)

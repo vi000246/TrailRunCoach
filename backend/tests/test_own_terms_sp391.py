@@ -161,7 +161,9 @@ def test_the_guard_catches_sp391_words_replaced_by_sp497():
 # and the manual's chapters.
 _ROOT = Path(__file__).resolve().parents[2]
 _STATIC = _ROOT / "backend" / "static"
-PUBLIC_PAGES = ("intro", "login", "demo", "manual")
+# SP-846: 方案與價格 (/pricing) is public too, and shows the plans page's table (plans.json) as well as its own words
+PUBLIC_PAGES = ("intro", "login", "demo", "manual", "pricing")
+PUBLIC_CATALOGS = {"pricing": ("pricing", "plans")}
 PUBLIC_WORDS = re.compile(r"自動同步|推手錶|推到手錶|推送課表|(?<![A-Za-z])WKO"
                           r"|(?i:auto[- ]?sync|automatic(?:ally)? sync|push(?:ing|es)? workouts)")
 
@@ -177,10 +179,11 @@ def public_texts():
         for n, line in enumerate(html.read_text("utf-8").splitlines(), 1):
             yield f"static/{page}.html:{n}", line
         for loc in ("zh-TW", "en"):
-            cat = json.loads((_STATIC / "i18n" / loc / f"{page}.json").read_text("utf-8"))
-            for k, v in cat.items():
-                for s in (v.values() if isinstance(v, dict) else [v]):
-                    yield f"i18n/{loc}/{page}.{k}", s
+            for ns in PUBLIC_CATALOGS.get(page, (page,)):
+                cat = json.loads((_STATIC / "i18n" / loc / f"{ns}.json").read_text("utf-8"))
+                for k, v in cat.items():
+                    for s in (v.values() if isinstance(v, dict) else [v]):
+                        yield f"i18n/{loc}/{ns}.{k}", s
     for md in sorted((_ROOT / "backend" / "manual").glob("*/*.md")):
         for n, line in enumerate(md.read_text("utf-8").splitlines(), 1):
             yield f"manual/{md.parent.name}/{md.name}:{n}", line

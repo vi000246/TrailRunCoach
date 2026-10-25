@@ -115,19 +115,35 @@ TSB_FLOOR = LG.TSB_DEEP    # week_plan(): TSB < −30 % of CTL -> recovery week 
 FATIGUE_CUT = 0.80         # 推估: easy minutes × 0.8
 OVERHARD_STREAK = 2        # 推估 (SP-404): the last two done easy / long runs both too hard
 
-SRC_SEILER = "Seiler：easy days easy；不補課屬推估"
-SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練（5 區一週最多 2 次、間隔至少 2 天）"
+# SP-905: an adjustment's 出處 is shown in the page's language (engine/stored_text): msgids, or parts
+# joined by 「；」 that are msgids
+SRC_SEILER_PARTS = (N_("Seiler：easy days easy"), N_("不補課屬推估"))
+SRC_SEILER = "；".join(SRC_SEILER_PARTS)
+SRC_SPACING = N_("硬課之間隔 ≥ 2 天：台灣教練（5 區一週最多 2 次、間隔至少 2 天）")
 SRC_OVER = N_("平均功率 > 80% CP（z2 上限，Palladino）或訓練負荷（Training load）> 計畫 +20%（TrainingPeaks 達成度綠燈帶），"
               "任一項；沒有功率時改看平均心率 > 輕鬆跑上限 +3（跟課表、活動判讀同一個上限：課表心率區間的 Z2 上緣，"
               "有實測 AeT 時用實測值；+3 是心率每天自然的落差）；"
               "只標示、不動課表屬推估（使用者決定 2026-10-06）")
 SRC_TOO_HARD = N_("課別分類（Zone 3 閾值或更強）跑成強度課，就當成一堂強度課：Seiler「easy days easy」；"
                   "用課別分類當「太強」的界線屬推估")
+# (SP-905: SRC_TOO_HARD's parts, for the text it starts: each part is read on its own)
+SRC_TOO_HARD_PARTS = (N_("課別分類（Zone 3 閾值或更強）跑成強度課，就當成一堂強度課：Seiler「easy days easy」"),
+                      N_("用課別分類當「太強」的界線屬推估"))
 OVERHARD_RULE = "overhard"
-SRC_FATIGUE = ("長期負荷週增量（Chronic load ramp）到擋線（min(10, max(5, 長期負荷的 15%))，Friel 5–8／10 換算，推估）；"
-               "負荷平衡（Load balance）< −30（Friel／TrainingPeaks）；連續 2 堂輕鬆課跑太強、減 20% 推估")
-SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的負荷平衡（Load balance）下降不觸發減量為推估"
-SRC_RPE = "跑後自評：Nuuttila 2021（心率恢復了、自覺費力仍偏高）；門檻 Hard 是使用者決定；規則與 1–5 級換算推估"
+SRC_FATIGUE_PARTS = (N_("長期負荷週增量（Chronic load ramp）到擋線（min(10, max(5, 長期負荷的 15%))，Friel 5–8／10 換算，推估）"),
+                     N_("負荷平衡（Load balance）< −30（Friel／TrainingPeaks）"), N_("連續 2 堂輕鬆課跑太強、減 20% 推估"))
+SRC_FATIGUE = "；".join(SRC_FATIGUE_PARTS)
+SRC_B2B_PARTS = (N_("Johnston（UA）B2B 後「three or four light days」"),
+                 N_("B2B 造成的負荷平衡（Load balance）下降不觸發減量為推估"))
+SRC_B2B = "；".join(SRC_B2B_PARTS)
+SRC_RPE_PARTS = (N_("跑後自評：Nuuttila 2021（心率恢復了、自覺費力仍偏高）"), N_("門檻 Hard 是使用者決定"),
+                 N_("規則與 1–5 級換算推估"))
+SRC_RPE = "；".join(SRC_RPE_PARTS)
+
+
+def _src(*parts) -> str:
+    """Sources joined by 「；」, each part in the request's language (the generator: zh-TW, as stored)."""
+    return "；".join(_(p) for p in parts)
 RPE_RULE = "rpe_hard"
 
 
@@ -302,7 +318,8 @@ def _downgrade(g: dict, th: dict) -> str:
         prev = IL.PREV_RUNG[rung]
         f = IL.fit(prev, g.get("minutes") or None)
         s = IL.session_for({**f, "equiv": False, "progress": False,
-                            "reason": f"自動調整：降一階到 {IL.RUNG_NAME[prev]}（不算進階）"}, th or {}, swap="auto")
+                            "reason": _("自動調整：降一階到 {rung}（不算進階）", rung=IL.RUNG_NAME[prev])},
+                           th or {}, swap="auto")
         g.update({k: s.get(k) for k in ("title", "minutes", "target", "detail", "tss", "variant_key", "rung_key",
                                         "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks", "variant_adj")})
         return s["title"]
@@ -313,7 +330,8 @@ def _downgrade(g: dict, th: dict) -> str:
         return s["title"]
     rate = 50.0 / 60.0
     m = min(int(g.get("minutes") or 45), 45)
-    g.update(kind="easy", title="輕鬆跑", minutes=m, target="", detail=f"心率不超過{easy_cap_label(th or {})}（原本的強度課改成輕鬆跑）",
+    g.update(kind="easy", title="輕鬆跑", minutes=m, target="",
+             detail=_("心率不超過{cap}（原本的強度課改成輕鬆跑）", cap=easy_cap_label(th or {})),
              tss=round(m * rate, 1), protocol=None, **NO_VARIANT)
     _drop_steps(g)
     return "輕鬆跑"
@@ -348,9 +366,10 @@ def _missed(wk: _Week, stored_missed: list[dict], out: list) -> None:
         if s["kind"] == "easy" and g.get("kind") == "easy":
             wk.remove(g)
             _adj(out, "missed_easy", wk, {**g, "day": was}, "removed",
-                 f"{wd(was)}輕鬆跑沒跑：不補，之後照原本的課表", SRC_SEILER)
+                 _("{day}輕鬆跑沒跑：不補，之後照原本的課表", day=wd(was)), _src(*SRC_SEILER_PARTS))
         elif s["kind"] in HARD and g.get("kind") in HARD:
-            name = "間歇" if g["kind"] == "quality" else "測試"
+            q = g["kind"] == "quality"
+            name = _("間歇") if q else _("測試")
             if g.get("day") and g["day"] >= wk.first and _hard_ok(wk, g, g["day"]):
                 pick = g["day"]
             else:
@@ -358,14 +377,17 @@ def _missed(wk: _Week, stored_missed: list[dict], out: list) -> None:
             if pick is None:
                 wk.remove(g)
                 _adj(out, "missed_quality", wk, {**g, "day": was}, "removed",
-                     f"{wd(was)}{name}沒跑；本週剩下的日子都離長跑或其他強度課不到 48 小時：取消，下週重複同一階、不進階",
-                     SRC_SPACING)
+                     (_("{day}間歇沒跑；本週剩下的日子都離長跑或其他強度課不到 48 小時：取消，下週重複同一階、不進階",
+                        day=wd(was)) if q else
+                      _("{day}測試沒跑；本週剩下的日子都離長跑或其他強度課不到 48 小時：取消，下週重複同一階、不進階",
+                        day=wd(was))),
+                     _(SRC_SPACING))
                 continue
             g["day"] = pick
             lg = sorted(wk.long_days(skip=g))
-            tail = f"；離長跑（{wd(lg[0])}）仍有 {_gap(pick, lg[0])} 天" if lg else ""
-            _adj(out, "missed_quality", wk, g, "moved", f"{name}延到{wd(pick)}：{wd(was)}沒跑{tail}", SRC_SPACING,
-                 before_day=was)
+            tail = ("；" + _("離長跑（{day}）仍有 {n} 天", day=wd(lg[0]), n=_gap(pick, lg[0]))) if lg else ""
+            _adj(out, "missed_quality", wk, g, "moved", _("{name}延到{to}：{day}沒跑", name=name, to=wd(pick), day=wd(was))
+                 + tail, _(SRC_SPACING), before_day=was)
         elif s["kind"] == "long" and g.get("id") == "long":
             if g.get("day") and g["day"] >= wk.first and _long_ok(wk, g, g["day"]):
                 pick = g["day"]
@@ -374,11 +396,12 @@ def _missed(wk: _Week, stored_missed: list[dict], out: list) -> None:
             if pick is None:
                 wk.remove(g)
                 _adj(out, "missed_long", wk, {**g, "day": was}, "removed",
-                     f"{wd(was)}長跑沒跑；本週沒有不靠著強度課的空日：取消，不移到下週", SRC_SPACING + "；不跨週屬推估")
+                     _("{day}長跑沒跑；本週沒有不靠著強度課的空日：取消，不移到下週", day=wd(was)),
+                     _src(SRC_SPACING, N_("不跨週屬推估")))
                 continue
             g["day"] = pick
-            _adj(out, "missed_long", wk, g, "moved", f"長跑延到{wd(pick)}：{wd(was)}沒跑；不和強度課相鄰",
-                 SRC_SPACING, before_day=was)
+            _adj(out, "missed_long", wk, g, "moved", _("長跑延到{to}：{day}沒跑；不和強度課相鄰", to=wd(pick), day=wd(was)),
+                 _(SRC_SPACING), before_day=was)
 
 
 def _done_easy(wk: _Week) -> list[dict]:
@@ -398,7 +421,7 @@ def _as_hard(wk: _Week, day: str, label: str, th: dict, out: list, touched: set,
     after it moves to a free day ≥ 48 h away, else steps down (rule D′ / B's spacing). When the
     generator already moved it off its stored day (week_plan's hard_done), that move gets the
     reason. True when a session was adjusted."""
-    src = _(SRC_TOO_HARD) + "；" + SRC_SPACING
+    src = _src(*SRC_TOO_HARD_PARTS, SRC_SPACING)
     nxt = sorted([h for h in wk.gens() if h.get("kind") in HARD and wk.free(h) and h.get("day")
                   and h.get("id") not in touched and 0 <= (_d(h["day"]) - _d(day)).days < SPACING_DAYS],
                  key=lambda h: h["day"])
@@ -510,14 +533,14 @@ def _rpe_hard(wk: _Week, rated: dict, th: dict, out: list) -> None:
                 _adj(out, RPE_RULE, wk, h, "moved",
                      _("{was} {title}延到{to}：{day}{what}自評 {label}，間隔不到 48 小時",
                        was=wd(was), title=h.get("title") or "", to=wd(pick), day=wd(day), what=what, label=label),
-                     SRC_RPE + "；" + SRC_SPACING, before_day=was, activity=a.get("index"))
+                     _src(*SRC_RPE_PARTS, SRC_SPACING), before_day=was, activity=a.get("index"))
             else:
                 old = h.get("title")
                 became = _downgrade(h, th)
                 _adj(out, RPE_RULE, wk, h, "downgraded",
                      _("{was} {old}改成{became}：{day}{what}自評 {label}，本週沒有隔 48 小時的空日",
                        was=wd(was), old=old or "", became=became, day=wd(day), what=what, label=label),
-                     SRC_RPE, before_title=old, activity=a.get("index"))
+                     _src(*SRC_RPE_PARTS), before_title=old, activity=a.get("index"))
 
 
 def _hr_low(*rows) -> bool:
@@ -575,10 +598,11 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
     b2b_why = _b2b_exempt(ctx.get("b2b"), wk.today) if tsb_hit else None
     if b2b_why:
         _adj(out, "b2b", wk, {"day": wk.today}, "note",
-             f"負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, ctl)} < −30%，但{b2b_why}：這是預期中的下降，不減量（推估）",
-             SRC_B2B)
+             _("負荷平衡（Load balance）{tsb:+.0f}＝{pct} < −30%，但{why}：這是預期中的下降，不減量（推估）",
+               tsb=tsb, pct=LG.tsb_pct_text(tsb, ctl), why=b2b_why),
+             _src(*SRC_B2B_PARTS))
     if tsb_hit and not b2b_why:
-        why, remove = f"負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, ctl)} < −30%", True
+        why, remove = _("負荷平衡（Load balance）{tsb:+.0f}＝{pct} < −30%", tsb=tsb, pct=LG.tsb_pct_text(tsb, ctl)), True
     elif LG.ramp_level(ramp, base) == LG.BLOCK and ctx.get("mode") != "reentry":
         # the re-entry block's 50 → 75 → 100 % steps are planned, not overload (detraining.md §6.5, 推估)
         why, remove = LG.ramp_text(ramp, base, LG.BLOCK), True
@@ -590,20 +614,22 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
     for q in [g for g in wk.gens() if g.get("kind") == "quality" and wk.free(g) and g.get("day") and g["day"] >= wk.today]:
         if remove:
             wk.remove(q)
-            _adj(out, "fatigue", wk, q, "removed", f"{wd(q['day'])}{q['title']}取消：{why}，本週減量", SRC_FATIGUE)
+            # (SP-905: the weekday and the title side by side can't be read back — kept as written)
+            _adj(out, "fatigue", wk, q, "removed", f"{wd(q['day'])}{q['title']}取消：{why}，本週減量",
+                 _src(*SRC_FATIGUE_PARTS))
         else:
             old = q["title"]
             became = _to_recovery(q, th)
-            _adj(out, "fatigue", wk, q, "downgraded", f"{wd(q['day'])}{old}改成{became}：{why}，本週減量", SRC_FATIGUE,
-                 before_title=old)
+            _adj(out, "fatigue", wk, q, "downgraded", f"{wd(q['day'])}{old}改成{became}：{why}，本週減量",
+                 _src(*SRC_FATIGUE_PARTS), before_title=old)
     for g in [g for g in wk.gens() if g.get("kind") == "easy" and wk.free(g) and g.get("day") and g["day"] >= wk.today]:
         before = g.get("minutes") or 0
         m = max(MIN_EASY_MIN, _r5(before * FATIGUE_CUT))
         if m < before:
             _set_minutes(g, m)
             _adj(out, "fatigue", wk, g, "trimmed",
-                 f"{wd(g['day'])}輕鬆跑 {before}→{m} 分：{why}，輕鬆量減 {round((1 - FATIGUE_CUT) * 100)}%", SRC_FATIGUE,
-                 before_minutes=before)
+                 _("{day}輕鬆跑 {before}→{m} 分：{why}，輕鬆量減 {pct}%", day=wd(g['day']), before=before, m=m, why=why,
+                   pct=round((1 - FATIGUE_CUT) * 100)), _src(*SRC_FATIGUE_PARTS), before_minutes=before)
 
 
 def adapt(gen_weeks: list[dict], stored: list[dict], ctx: dict) -> tuple[list[dict], list[dict], dict]:

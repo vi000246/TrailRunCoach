@@ -71,6 +71,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Optional
 
+from backend.i18n import N_, _
 from backend import data_registry as R
 
 log = logging.getLogger(__name__)
@@ -102,19 +103,19 @@ MAX_FIT_BYTES = 256 << 20
 # leftovers of a run that was killed: our temp folders and hidden partial zips (clean_stale)
 STALE_RE = re.compile(r"^(?:\.trc-(?:snap|restore|inspect)-.+|\.trailruncoach-backup-\d{8}-\d{6}\.zip\.partial)$")
 STALE_AGE = timedelta(hours=1)
-SANDBOX = "示範沙盒（資料夾分在不同地方）不能備份或還原"
+SANDBOX = N_("示範沙盒（資料夾分在不同地方）不能備份或還原")
 
 CHUNK = 1 << 20
 # the header of an older version's encrypted backup (.zip.enc) — only to reject it
 LEGACY_MAGIC = b"TRCBAK\x00\x01"
-LEGACY_ENCRYPTED = ("這是舊版建立的加密備份（.zip.enc），現在的版本不再支援加密備份，不能還原。"
-                    "請改選未加密的備份檔（.zip）")
+LEGACY_ENCRYPTED = N_("這是舊版建立的加密備份（.zip.enc），現在的版本不再支援加密備份，不能還原。"
+                      "請改選未加密的備份檔（.zip）")
 
 _LOCK = threading.Lock()
 
 
 class BackupError(RuntimeError):
-    """Shown to the user (Traditional Chinese)."""
+    """Shown to the user, in the request's language (SP-744: the messages go through _())."""
 
 
 class Busy(BackupError):
@@ -262,7 +263,7 @@ def plan(include_fit: bool) -> list:
     parts = R.backup_entries(include_fit)
     unknown = [f.pattern for f in parts if f not in (R.DB, R.FIT) and not _file_entry_ok(f)]
     if unknown or R.DB not in parts:
-        raise BackupError(f"備份不支援這些資料：{unknown or [R.DB.pattern]}")
+        raise BackupError(_("備份不支援這些資料：{x}", x=unknown or [R.DB.pattern]))
     return parts
 
 
@@ -284,9 +285,9 @@ def check_roots(roots: dict) -> dict:
     try:
         one = {os.path.normcase(str(Path(roots[w]).resolve())) for w in FILE_WHERES}
     except (KeyError, OSError):
-        raise BackupError(SANDBOX)
+        raise BackupError(_(SANDBOX))
     if len(one) != 1:
-        raise BackupError(SANDBOX)
+        raise BackupError(_(SANDBOX))
     return roots
 
 
@@ -346,8 +347,8 @@ def build_zip(db_path: Path, zip_path: Path, *, fit_root: Optional[Path] = None,
     sizes = [p.stat().st_size for p, _ in files]
     too_big = [rel for (p, rel), n in zip(files, sizes) if n > MAX_FILE_BYTES]
     if too_big or sum(sizes) > MAX_TOTAL_BYTES or len(files) > MAX_FILES:
-        raise BackupError(f"要備份的檔案太大或太多（單檔上限 {MAX_FILE_BYTES >> 20} MB、合計 "
-                          f"{MAX_TOTAL_BYTES >> 30} GB、{MAX_FILES} 個）：{too_big[:3] or len(files)}")
+        raise BackupError(_("要備份的檔案太大或太多（單檔上限 {mb} MB、合計 {gb} GB、{n} 個）：{x}",
+                            mb=MAX_FILE_BYTES >> 20, gb=MAX_TOTAL_BYTES >> 30, n=MAX_FILES, x=too_big[:3] or len(files)))
     with tempfile.TemporaryDirectory(dir=work_dir, prefix=".trc-snap-") as td:
         snap = Path(td) / DB_ENTRY
         snapshot_db(db_path, snap)
@@ -358,7 +359,7 @@ def build_zip(db_path: Path, zip_path: Path, *, fit_root: Optional[Path] = None,
         finally:
             con.close()
         if not integrity_ok(snap):
-            raise BackupError("資料庫完整性檢查沒通過，這次沒有建立備份")
+            raise BackupError(_("資料庫完整性檢查沒通過，這次沒有建立備份"))
         manifest = {"app": APP, "format": FORMAT, "app_version": app_version(), "tenant": tenant,
                     "schema_version": schema, "created_at": now.astimezone(timezone.utc).isoformat(),
                     "row_counts": counts, "db_sha256": _sha256(snap),
@@ -395,11 +396,11 @@ def create_backup(db_path: Path, dest_dir: Path, *, fit_root: Optional[Path] = N
     renamed at the end, so a cloud client never uploads half a backup). The snapshot
     is made in work_dir (local), so dest_dir only ever sees the finished zip."""
     if not _LOCK.acquire(blocking=False):
-        raise Busy("另一個備份或還原正在進行中")
+        raise Busy(_("另一個備份或還原正在進行中"))
     try:
         db_path, dest_dir = Path(db_path), Path(dest_dir)
         if not db_path.exists():
-            raise BackupError("找不到資料庫檔案")
+            raise BackupError(_("找不到資料庫檔案"))
         dest_dir.mkdir(parents=True, exist_ok=True)
         local = (now or datetime.now(timezone.utc)).astimezone()
         name = backup_name(local)
@@ -546,21 +547,21 @@ def auto_due(last_ok_at: Optional[str], last_attempt_at: Optional[str],
 def check_folder(path: str) -> Path:
     """A folder the user typed / picked: absolute, creatable, writable."""
     if not isinstance(path, str) or not path.strip():
-        raise BackupError("請選擇備份資料夾")
+        raise BackupError(_("請選擇備份資料夾"))
     p = Path(os.path.expandvars(os.path.expanduser(path.strip())))
     if not p.is_absolute():
-        raise BackupError("請輸入完整路徑（例如 C:\\Users\\你\\OneDrive\\TrailRunCoach Backups）")
+        raise BackupError(_("請輸入完整路徑（例如 {eg}）", eg="C:\\Users\\you\\OneDrive\\TrailRunCoach Backups"))
     if p.exists() and not p.is_dir():
-        raise BackupError("這個路徑是檔案，不是資料夾")
+        raise BackupError(_("這個路徑是檔案，不是資料夾"))
     if not p.parent.exists():
-        raise BackupError("上一層資料夾不存在")
+        raise BackupError(_("上一層資料夾不存在"))
     try:
         p.mkdir(exist_ok=True)
         probe = p / ".trailruncoach-write-test"
         probe.write_bytes(b"")
         probe.unlink()
     except OSError as e:
-        raise BackupError(f"這個資料夾不能寫入：{e.strerror or e}")
+        raise BackupError(_("這個資料夾不能寫入：{err}", err=e.strerror or e))
     return p
 
 
@@ -594,15 +595,15 @@ def detect_cloud_folders(env: Optional[dict] = None, home: Optional[Path] = None
         prof = Path(env.get("USERPROFILE") or home)
         cands.append(("icloud", "iCloud Drive", prof / "iCloudDrive"))
         for var, label in (("OneDrive", "OneDrive"), ("OneDriveConsumer", "OneDrive"),
-                           ("OneDriveCommercial", "OneDrive（公司）")):
+                           ("OneDriveCommercial", _("OneDrive（公司）"))):
             if env.get(var):
                 cands.append(("onedrive", label, Path(env[var])))
         cands.append(("onedrive", "OneDrive", prof / "OneDrive"))
         for d in drives:
             for sub in ("My Drive", "我的雲端硬碟"):
-                cands.append(("gdrive", "Google 雲端硬碟", Path(f"{d}:\\") / sub))
-        cands += [("gdrive", "Google 雲端硬碟", prof / "Google Drive"),
-                  ("gdrive", "Google 雲端硬碟", prof / "My Drive")]
+                cands.append(("gdrive", _("Google 雲端硬碟"), Path(f"{d}:\\") / sub))
+        cands += [("gdrive", _("Google 雲端硬碟"), prof / "Google Drive"),
+                  ("gdrive", _("Google 雲端硬碟"), prof / "My Drive")]
         cands += [("dropbox", "Dropbox", p) for p in _dropbox_paths(env)]
         cands.append(("dropbox", "Dropbox", prof / "Dropbox"))
     else:
@@ -618,11 +619,11 @@ def detect_cloud_folders(env: Optional[dict] = None, home: Optional[Path] = None
                     cands.append(("onedrive", "OneDrive", s))
                 elif s.name.startswith("GoogleDrive"):
                     for sub in ("My Drive", "我的雲端硬碟"):
-                        cands.append(("gdrive", "Google 雲端硬碟", s / sub))
+                        cands.append(("gdrive", _("Google 雲端硬碟"), s / sub))
                 elif s.name.startswith("Dropbox"):
                     cands.append(("dropbox", "Dropbox", s))
         cands += [("onedrive", "OneDrive", home / "OneDrive"),
-                  ("gdrive", "Google 雲端硬碟", home / "Google Drive"),
+                  ("gdrive", _("Google 雲端硬碟"), home / "Google Drive"),
                   ("dropbox", "Dropbox", home / "Dropbox")]
     out, seen = [], set()
     for cid, label, root in cands:
@@ -640,7 +641,7 @@ def detect_cloud_folders(env: Optional[dict] = None, home: Optional[Path] = None
 
 
 # ---------------------------------------------------------------- restore
-CORRUPT = "備份檔損毀，不能還原"
+CORRUPT = N_("備份檔損毀，不能還原")
 
 
 def _safe_fit_target(fit_root: Path, entry: str) -> Optional[Path]:
@@ -690,7 +691,7 @@ def _copy_capped(src, dst: Path, cap: int, what: str) -> int:
         for b in iter(lambda: src.read(CHUNK), b""):
             n += len(b)
             if n > cap:
-                raise BackupError(f"備份裡的檔案太大：{what}（上限 {cap >> 20} MB）")
+                raise BackupError(_("備份裡的檔案太大：{what}（上限 {mb} MB）", what=what, mb=cap >> 20))
             out.write(b)
     return n
 
@@ -702,7 +703,7 @@ def _extract_files(z: zipfile.ZipFile, dest: Path) -> dict:
     entries = file_entries()
     infos = [zi for zi in z.infolist() if zi.filename.startswith(FILES_DIR + "/") and not zi.is_dir()]
     if len(infos) > MAX_FILES:
-        raise BackupError(f"備份裡的檔案太多（上限 {MAX_FILES} 個）")
+        raise BackupError(_("備份裡的檔案太多（上限 {n} 個）", n=MAX_FILES))
     out, total, skipped, not_restored = [], 0, 0, 0
     for zi in infos:
         rel = zi.filename[len(FILES_DIR) + 1:]
@@ -711,10 +712,10 @@ def _extract_files(z: zipfile.ZipFile, dest: Path) -> dict:
             skipped += 1
             continue
         if zi.file_size > MAX_FILE_BYTES:
-            raise BackupError(f"備份裡的檔案太大：{rel}（上限 {MAX_FILE_BYTES >> 20} MB）")
+            raise BackupError(_("備份裡的檔案太大：{what}（上限 {mb} MB）", what=rel, mb=MAX_FILE_BYTES >> 20))
         total += zi.file_size
         if total > MAX_TOTAL_BYTES:
-            raise BackupError(f"備份裡的檔案合計太大（上限 {MAX_TOTAL_BYTES >> 30} GB）")
+            raise BackupError(_("備份裡的檔案合計太大（上限 {gb} GB）", gb=MAX_TOTAL_BYTES >> 30))
         if not e.restore:
             not_restored += 1
             continue
@@ -732,36 +733,36 @@ def open_backup(path: Path, work: Path) -> dict:
     zip is a BackupError, never a half-done restore."""
     path, work = Path(path), Path(work)
     if not path.is_file():
-        raise BackupError("找不到備份檔")
+        raise BackupError(_("找不到備份檔"))
     work.mkdir(parents=True, exist_ok=True)
     zpath = path
     if is_legacy_encrypted(path):
-        raise BackupError(LEGACY_ENCRYPTED)
+        raise BackupError(_(LEGACY_ENCRYPTED))
     if not zipfile.is_zipfile(zpath):
-        raise BackupError("不是有效的備份檔（zip 打不開）")
+        raise BackupError(_("不是有效的備份檔（zip 打不開）"))
     try:
         with zipfile.ZipFile(zpath) as z:
             names = set(z.namelist())
             if MANIFEST not in names or DB_ENTRY not in names:
-                raise BackupError("備份檔裡缺少 manifest 或資料庫")
+                raise BackupError(_("備份檔裡缺少 manifest 或資料庫"))
             try:
                 manifest = json.loads(z.read(MANIFEST).decode("utf-8"))
             except (ValueError, UnicodeDecodeError):
-                raise BackupError("manifest 讀不懂，檔案可能損毀")
+                raise BackupError(_("manifest 讀不懂，檔案可能損毀"))
             if not isinstance(manifest, dict) or manifest.get("app") != APP:
-                raise BackupError("這不是 TrailRunCoach 的備份")
+                raise BackupError(_("這不是 TrailRunCoach 的備份"))
             if not isinstance(manifest.get("format"), int) or manifest["format"] > FORMAT:
-                raise BackupError("這個備份是較新版本的 App 建立的，請先更新 App")
+                raise BackupError(_("這個備份是較新版本的 App 建立的，請先更新 App"))
             db = work / "restore.db"
             with z.open(DB_ENTRY) as src, open(db, "wb") as dst:
                 shutil.copyfileobj(src, dst, CHUNK)
             files = _extract_files(z, work / FILES_DIR)
     except (zipfile.BadZipFile, zlib.error, EOFError) as e:
-        raise BackupError(f"{CORRUPT}（{e}）")
+        raise BackupError(_("{msg}（{err}）", msg=_(CORRUPT), err=e))
     if manifest.get("db_sha256") and _sha256(db) != manifest["db_sha256"]:
-        raise BackupError("資料庫檔案的檢查碼不符，檔案已損毀")
+        raise BackupError(_("資料庫檔案的檢查碼不符，檔案已損毀"))
     if not integrity_ok(db):
-        raise BackupError("備份裡的資料庫沒通過完整性檢查（integrity_check）")
+        raise BackupError(_("備份裡的資料庫沒通過完整性檢查（integrity_check）"))
     con = sqlite3.connect(str(db))
     try:
         schema, counts = schema_info(con)
@@ -920,7 +921,7 @@ def merge_local(work_db: Path, live_db: Path, created_at: Optional[str]) -> None
         con.commit()
     except sqlite3.Error as e:
         con.rollback()
-        raise BackupError(f"合併這台電腦的登入資料時出錯，沒有還原（{e}）")
+        raise BackupError(_("合併這台電腦的登入資料時出錯，沒有還原（{err}）", err=e))
     finally:
         con.close()
 
@@ -949,7 +950,7 @@ def _stage_files(pairs: list) -> list:
             staged.append((tmp, target))
     except OSError as e:
         _unstage(staged)
-        raise BackupError(f"準備放回檔案時出錯，沒有還原（{e.strerror or e}）")
+        raise BackupError(_("準備放回檔案時出錯，沒有還原（{err}）", err=e.strerror or e))
     return staged
 
 
@@ -1006,7 +1007,7 @@ def restore(path: Path, live_db: Path, *, local_dir: Path, fit_root: Optional[Pa
     reload) -> rename the files into place -> FIT originals that are missing. `roots`:
     tenant_roots (default: the DB's folder); `tenant`: refuse another tenant's backup."""
     if not _LOCK.acquire(blocking=False):
-        raise Busy("另一個備份或還原正在進行中")
+        raise Busy(_("另一個備份或還原正在進行中"))
     try:
         live_db, local_dir = Path(live_db), Path(local_dir)
         roots = check_roots(roots or tenant_roots(live_db.parent))
@@ -1015,7 +1016,7 @@ def restore(path: Path, live_db: Path, *, local_dir: Path, fit_root: Optional[Pa
             info = open_backup(path, Path(td))
             m = info["manifest"]
             if tenant and m.get("tenant") and m["tenant"] != tenant:
-                raise BackupError(f"這份備份是另一個帳號（{m['tenant']}）的，不能還原到這個帳號")
+                raise BackupError(_("這份備份是另一個帳號（{t}）的，不能還原到這個帳號", t=m["tenant"]))
             pairs, skipped = [], info["files"]["skipped"]
             for rel, e, src in info["files"]["entries"]:
                 target = _safe_file_target(roots, rel, e)
@@ -1028,7 +1029,7 @@ def restore(path: Path, live_db: Path, *, local_dir: Path, fit_root: Optional[Pa
                 local = (now or datetime.now(timezone.utc)).astimezone()
                 pre = local_dir / f"trailruncoach-prerestore-{local:%Y%m%d-%H%M%S}.zip"
                 build_zip(live_db, pre, roots=roots, work_dir=local_dir, tenant=tenant, now=local)
-                for _, old in _ours(local_dir, PRE_RE)[KEEP_PRERESTORE:]:
+                for _when, old in _ours(local_dir, PRE_RE)[KEEP_PRERESTORE:]:
                     try:
                         old.unlink()
                     except OSError:
@@ -1046,8 +1047,8 @@ def restore(path: Path, live_db: Path, *, local_dir: Path, fit_root: Optional[Pa
                 _replace_files(staged)
             except OSError as e:
                 _unstage(staged)
-                raise BackupError(f"資料庫已還原，但放回你改過的檔案時出錯（{e.strerror or e}）；"
-                                  f"還原前的資料在 {pre or '–'}")
+                raise BackupError(_("資料庫已還原，但放回你改過的檔案時出錯（{err}）；還原前的資料在 {pre}",
+                                    err=e.strerror or e, pre=pre or "–"))
             fit_restored, fit_failed = _restore_fit(info["zip"], fit_root, m)
         return {"created_at": m.get("created_at"), "app_version": m.get("app_version"),
                 "schema_version": m.get("schema_version"), "row_counts": info["row_counts"],

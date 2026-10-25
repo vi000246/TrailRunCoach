@@ -18,6 +18,7 @@ from backend.api import achievements as achievements_api
 from backend.api import overview as overview_api
 from backend.api import plan as plan_api
 from backend.api import racepower as racepower_api
+from backend.api import pace as pace_api
 from backend.api import plan_sessions as plan_sessions_api
 from backend.api import plan_auto as plan_auto_api
 from backend.api import routes as routes_api
@@ -31,8 +32,13 @@ from backend.api import calib as calib_api
 from backend.api import region as region_api
 from backend.api import calendar_feed as calendar_api
 from backend.api import debug as debug_api
+from backend.api import ai as ai_api
 from backend.api import account as account_api
+from backend.api import account_email as account_email_api
 from backend.api import link as link_api
+from backend.api import coach as coach_api
+from backend.api import coach_board as coach_board_api
+from backend.api import viewing as viewing_api
 from backend.api import pwa as pwa_api
 from backend.api import weight as weight_api
 from backend.api import manual as manual_api
@@ -42,10 +48,11 @@ from backend.api import admin as admin_api
 from backend.api import change_sync as change_sync_api
 from backend.api import billing as billing_api
 from backend.api import intro as intro_api
+from backend.api import xp as xp_api
 
 
 # pages the demo never serves: the WKO5 comparison, the settings, the injury log and the sign-in page
-DEMO_HIDDEN_PAGES = {"compare", "settings", "injuries", "login", "admin"}
+DEMO_HIDDEN_PAGES = {"compare", "settings", "injuries", "login", "admin", "coach_board"}
 
 # the charts / activities / settings API (wko5views, routes, injuries) and its old prefix (308)
 API_PREFIX = "/api/v1/app"
@@ -212,13 +219,17 @@ def build_app(demo: bool | None = None) -> FastAPI:
                                   archive_api.router,
                                   calendar_api.router, calendar_api.feed_router,
                                   debug_api.router, debug_api.admin_router, weight_api.router,
-                                  intervals_api.router, change_sync_api.router, billing_api.router)}
+                                  intervals_api.router, change_sync_api.router, billing_api.router,
+                                  xp_api.router, ai_api.router)}
     routers = [
         workouts.router,
         sync.router, auth.router,        # owner only (sync, connect)
         wko5views.router, achievements_api.router,
         plan_api.router, plan_auto_api.router, plan_sessions_api.router, overview_api.router,
         racepower_api.router,
+        # 腳程試算 (SP-805): /share/pace (before /share/<id>, which would take "pace" as an id) and
+        # /api/v1/pace/me; never in the demo (like the share pages)
+        pace_api.router,
         racepower_api.share_router,      # /share/<id>: the only path meant to skip the tunnel's password
         routes_api.router, routes_api.workout_router,
         route_library_api.router,        # 課表 › 路線: uploaded routes + 我的路段, picked per day (SP-640)
@@ -243,9 +254,18 @@ def build_app(demo: bool | None = None) -> FastAPI:
         intervals_api.router,
         # Google sign-in, the terms, sign-out (SP-58): 404 unless sign-in is on (accounts/login.py)
         account_api.router,
+        # signing up and in with an e-mail address (SP-610): 404 unless sign-in is on; never in the demo
+        account_email_api.router,
         # linked services (SP-329, 疊石 Cairn): the user's links and the service-to-service routes;
         # 404 unless sign-in is on; never in the demo
         link_api.router,
+        # coaches and their students (SP-789): 404 unless sign-in is on; never in the demo
+        coach_api.router,
+        # 教練看板 (SP-790): the coach's read-only summary of each student; the same rules as coach_api
+        coach_board_api.router,
+        # 代看 a student and what the student lets their coach change (SP-791, SP-792): 404 unless sign-in
+        # is on; never in the demo
+        viewing_api.router,
         # /sw.js and /manifest.webmanifest: the offline copy and 加到主畫面 (SP-314); not in the demo
         pwa_api.router,
         # 操作手冊 (SP-558): public, signed in or not, also in the demo (accounts/login.PUBLIC_PREFIXES)
@@ -262,12 +282,22 @@ def build_app(demo: bool | None = None) -> FastAPI:
         admin_api.router,
         # 介紹頁's examples and small calculator (SP-637): public, the built-in fictional runner only
         intro_api.router,
+        # TrailRunCoach × 疊石 Cairn (SP-763 / 764 / 765): the Cairn card, its counts, a Cairn link brought
+        # here; never in the demo (no account to remember 「不用了」 on)
+        xp_api.router,
+        # AI 問答 (SP-785 / SP-786, backend/ai): the owner's key, the owner only; never in the demo
+        ai_api.router,
     ]
     for r in routers:
         # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),
         # nor the public share pages or the 課表訂閱 feed (it creates no shares), nor sign-in
-        if demo and (id(r) in owner_only or r is racepower_api.share_router or r is account_api.router
-                     or r is link_api.router or r is pwa_api.router or r is admin_api.router):
+        if demo and (id(r) in owner_only or r is racepower_api.share_router or r is pace_api.router
+                     or r is account_api.router
+                     or r is account_email_api.router or r is link_api.router or r is coach_api.router
+                     or r is coach_board_api.router
+                     or r is viewing_api.router
+                     or r is pwa_api.router
+                     or r is admin_api.router):
             continue
         app.include_router(r)
     # the tenant of each request (and the demo's rules): outermost, so every route sees it
@@ -290,6 +320,11 @@ def build_app(demo: bool | None = None) -> FastAPI:
             raise HTTPException(404, "page not found")
         if demo and name in DEMO_HIDDEN_PAGES:
             raise HTTPException(404, "page not found")
+        if name in ("pricing", "plans"):  # SP-846: the plan table (and pricing's prices, buttons) per request
+            from backend.billing import plan_table as _PT
+            if name == "pricing":
+                return _PT.pricing_page()
+            return render_page(name, fill={"plan_rows": _PT.rows_html(name)})
         return render_page(name)
 
 

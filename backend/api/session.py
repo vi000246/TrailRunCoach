@@ -66,7 +66,14 @@ def session_info(had_cookie: bool = False) -> dict:
         body["user"] = {"id": u.id, "name": u.display_name, "email": u.email, "role": u.role}
         if u.is_test:
             body["user"]["test"] = True        # SP-611: a test account (the shell's strip says so)
+        try:                                   # SP-790: a coach's 更多 has 教練看板 (the API still checks)
+            from backend.accounts import coaching
+            if coaching.is_coach(u):
+                body["user"]["coach"] = True
+        except Exception:                      # noqa: BLE001 — no link rather than no page
+            pass
         body["login"] = login
+        body.update(_coaching_view(u, bool(body["user"].get("coach"))))
     # SP-330: role, plan, scopes (what the pages may show), paused data sources, the quotas left
     try:
         from backend import membership as MS
@@ -80,6 +87,14 @@ def session_info(had_cookie: bool = False) -> dict:
             body["membership"]["cooldowns"] = cooldown.active()
         except Exception:                  # noqa: BLE001 — the API still answers 429
             body["membership"]["cooldowns"] = {}
+    # AI 問答 (SP-785 / SP-786): the shell's 「問 AI」 button — the owner only, while it is switched on;
+    # `key`: a key is set (without one the dialog says where to set it)
+    try:
+        from backend.ai import config as AIC
+        if AIC.allowed() and not body.get("viewing"):
+            body["ai"] = {"on": AIC.enabled(), "key": AIC.key_source() != "none"}
+    except Exception:                      # noqa: BLE001 — no button rather than no page
+        pass
     # 站內公告 (SP-351): the admin's notice in the page's language (the other one when only it is set)
     try:
         from backend import i18n, site_config as SC
@@ -105,6 +120,40 @@ def session_info(had_cookie: bool = False) -> dict:
         demo["cta_url"] = _https_url(os.environ.get("WKO5COACH_DEMO_CTA_URL"))
         body["demo"] = demo
     return body
+
+
+COACH_EDIT_DAYS = 14
+
+
+def _coaching_view(u, coach: bool = False) -> dict:
+    """SP-791: `viewing` {student_id, name, perms, back} while this session views a student (the shell's
+    banner, 回到我自己, the locked controls); SP-792: else `coach_edit` {coach, at, action}, the latest
+    change a coach made in this person's data in the last COACH_EDIT_DAYS days (the schedule's line);
+    SP-823: and for a coach, `coach_requests` {n, at} — students waiting for them to say yes (the shell's
+    line on every page, so the coach doesn't have to open 設定 › 教練 to find out)."""
+    out: dict = {}
+    try:
+        from backend.accounts import coaching as CO, store, viewing as VW
+        v = VW.current()
+        if v is not None:
+            out["viewing"] = {"student_id": v.student.id, "name": CO._name(v.student.display_name, v.student.id),
+                              "perms": dict(v.perms), "back": VW.COACH_HOME + "#coach"}
+            return out
+        if coach:
+            try:
+                req = CO.pending_requests(u)
+                if req:
+                    out["coach_requests"] = req
+            except Exception:              # noqa: BLE001 — no line rather than no coach_edit
+                pass
+        since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=COACH_EDIT_DAYS)).replace(microsecond=0).isoformat()
+        for r in store.coach_audit_of(u.id, 20, since):
+            if r["action"] not in ("view_start", "view_end"):
+                out["coach_edit"] = {"coach": r["coach_name"] or "", "at": r["at"], "action": r["action"]}
+                break
+    except Exception:                      # noqa: BLE001 — the page still loads; the gate still checks
+        pass
+    return out
 
 
 def _https_url(raw: Optional[str]) -> Optional[str]:

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model bench</title>
+<style>
+  :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #0a66c2; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #f2f2f2; --muted: #a1a1a6; --line: #333; --accent: #4ea1ff; } }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, system-ui, sans-serif; margin: 0 16px 40px; }
+  h1 { font-size: 20px; margin: 16px 0 4px; }
+  p.note { color: var(--muted); margin: 0 0 12px; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; }
+  label { display: inline-block; margin: 2px 12px 2px 0; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+  button.sec { background: transparent; color: var(--accent); }
+  pre { white-space: pre-wrap; word-break: break-all; background: color-mix(in srgb, var(--fg) 6%, var(--bg)); padding: 8px; border-radius: 8px; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>手機跑計算模型（SP-760）</h1>
+<p class="note">Pyodide 載入後端的 Python，對示範運動員跑單次活動判讀（workout_review）。資料是示範產生器做的，不是任何人的真資料。</p>
+<fieldset>
+  <legend>設定</legend>
+  <div>套件：<label><input type="checkbox" name="pkg" value="numpy" checked> numpy</label>
+    <label><input type="checkbox" name="pkg" value="sqlalchemy" checked> sqlalchemy</label>
+    <label><input type="checkbox" name="pkg" value="web"> fastapi 一套（pydantic、starlette、httpx…）</label></div>
+  <div>程式：<label><input type="radio" name="bundle" value="backend" checked> 整個 backend</label>
+    <label><input type="radio" name="bundle" value="backend-runtime"> 只有跑到的模組</label></div>
+  <div>資料夾狀態：<label><input type="radio" name="home" value="warm" checked> warm（伺服器的快取都在）</label>
+    <label><input type="radio" name="home" value="fit"> fit（只有 FIT 快取）</label>
+    <label><input type="radio" name="home" value="cold"> cold（只有 FIT，要自己解析）</label>
+    <label><input type="radio" name="home" value="opfs"> opfs（上一次跑完存下的資料夾，要先勾下面）</label></div>
+  <div><label><input type="checkbox" name="save" value="1"> 跑完把資料夾存到 OPFS（給下一次用 opfs 跑）</label></div>
+  <div>執行緒：<label><input type="radio" name="thread" value="worker" checked> Web Worker</label>
+    <label><input type="radio" name="thread" value="main"> 主執行緒（只給桌面模擬降速用）</label></div>
+</fieldset>
+<button id="go">開始</button> <button id="copy" class="sec">複製結果</button>
+<pre id="log">準備好了。</pre>
+<script type="module">
+import { handlers } from "./bench-worker.js";
+
+const WEB = ["fastapi", "pydantic", "starlette", "httpx", "anyio"];
+const log = document.getElementById("log");
+let last = null;
+const say = (s) => { log.textContent = s; };
+
+function worker() {
+  const w = new Worker("./bench-worker.js", { type: "module" });
+  let n = 0;
+  const pending = new Map();
+  w.onmessage = (e) => {
+    const { id, ok, r, error } = e.data;
+    if (!pending.has(id)) return;
+    const [res, rej] = pending.get(id);
+    pending.delete(id);
+    ok ? res(r) : rej(new Error(error));
+  };
+  return {
+    call: (cmd, args) => new Promise((res, rej) => { const id = ++n; pending.set(id, [res, rej]); w.postMessage({ id, cmd, ...args }); }),
+    close: () => w.terminate(),
+  };
+}
+
+function mainThread() {
+  return { call: async (cmd, args) => (await handlers[cmd](args)).result, close: () => {} };
+}
+
+async function benchRun(opts) {
+  const o = { packages: ["numpy", "sqlalchemy"], bundle: "backend", home: "warm", thread: "worker", who: [], probe: [], ...opts };
+  const pk = [...o.packages];
+  if (pk.includes("web")) pk.splice(pk.indexOf("web"), 1, ...WEB);
+  const base = new URL(".", location.href).href;
+  const ex = o.thread === "main" ? mainThread() : worker();
+  const res = { opts: o, ua: navigator.userAgent, hardwareConcurrency: navigator.hardwareConcurrency,
+                deviceMemory: navigator.deviceMemory || null };
+  const t0 = performance.now();
+  try {
+    say("載入 Pyodide 與套件…");
+    res.init = await ex.call("init", { packages: pk, bundle: o.bundle, home: o.home, base });
+    if (o.probe.length) res.probe = await ex.call("probe", { modules: o.probe });
+    say("跑模型…");
+    res.run = await ex.call("run", { who: o.who });
+    if (o.saveHome) res.saved = await ex.call("saveHome", {});
+  } catch (e) {
+    res.error = String(e && e.stack || e);
+  }
+  res.total_ms = performance.now() - t0;
+  ex.close();
+  last = res;
+  say(JSON.stringify(res, null, 1));
+  return res;
+}
+
+window.benchRun = benchRun;
+window.__bench = { ready: true };
+document.getElementById("go").onclick = () => {
+  const f = (n) => [...document.querySelectorAll(`input[name=${n}]:checked`)].map((x) => x.value);
+  benchRun({ packages: f("pkg"), bundle: f("bundle")[0], home: f("home")[0], thread: f("thread")[0],
+             saveHome: f("save").length > 0 });
+};
+document.getElementById("copy").onclick = () => last && navigator.clipboard.writeText(JSON.stringify(last));
+</script>
+</body>
+</html>

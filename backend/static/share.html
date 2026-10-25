@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<title>賽事計畫（分享）</title>
+<title data-i18n="share.page_title">賽事計畫（分享）</title>
+<!--fill:og-->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
 <style>
 :root {
@@ -45,13 +46,7 @@ h2 .meta { font-weight: 400; }
 .tile .s { font-size: 11.5px; color: var(--muted); }
 .tile.main { border-color: var(--accent); }
 .profile { width: 100%; height: 300px; }
-.tcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
-.tcard { border: 1px solid var(--line); border-left: 4px solid var(--c-f); border-radius: 8px; padding: 7px 10px; font-size: 13px; }
-.tcard .th { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
-.tc { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 3px; }
-.tc span { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; font-size: 12.5px; }
-.tc span.main { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.fa { font-size: 12px; color: var(--muted); }
+/* 分段目標 (the chart head, the legend, the segment table): static/seg_profile.js, the calculator's (SP-784) */
 .tablewrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
@@ -75,13 +70,14 @@ header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; jus
 </style>
 </head>
 <body>
-<header><div><h1 id="title">賽事計畫</h1><div class="meta" id="sub">唯讀分享</div></div><a class="join-btn" id="join-top" hidden></a></header>
-<main id="main"><section><div class="meta">讀取中…</div></section></main>
+<header><div><h1 id="title" data-i18n="share.heading">賽事計畫</h1><div class="meta" id="sub" data-i18n="share.readonly_share">唯讀分享</div></div><a class="join-btn" id="join-top" hidden></a></header>
+<main id="main"><section><div class="meta" data-i18n="share.loading">讀取中…</div></section></main>
 <!--fill:join-->
+<!--inline:seg_profile.js-->
 <script>
 const $ = (id) => document.getElementById(id);
 // 「用自己的資料算」 (SP-124): {kind: signup | waitlist | demo | about, url} from the server, the same for every visitor
-const JT = (k) => (window.I18N ? window.I18N.t("share." + k) : k);
+const JT = (k, p) => (window.I18N ? window.I18N.t("share." + k, p) : k);
 const JOIN = (() => {
   const j = window.TRC_JOIN;
   if (!j || !["signup", "waitlist", "demo", "about"].includes(j.kind) || typeof j.url !== "string") return null;
@@ -116,8 +112,9 @@ function pace(s) { if (!ok(s)) return "–"; s = Math.round(s); return `${Math.f
 const rng = (v, fmt = n0, unit = "") => !v ? "–" : (fmt(v[0]) === fmt(v[1]) ? fmt(v[0]) : `${fmt(v[0])}–${fmt(v[1])}`) + (unit ? ` <span class="u">${unit}</span>` : "");
 const tile = (k, v, s, main) => `<div class="tile ${main ? "main" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
 const CLS = { steep_down: "--c-sd", down: "--c-d", flat: "--c-f", up: "--c-u", steep_up: "--c-su" };
-const STOP = { water: ["水站", "💧"], aid: ["補給站", "🍌"], big: ["大補給站", "🍲"], medical: ["醫護站", "⛑️"], self: ["自備補給點", "🎒"] };
-const TYPE = { road: "路跑", trail: "越野", baiyue: "登山" };                // SP-738: 百岳 → 登山
+// [name, icon]; the page's text (SP-460: share.stop.* / share.type.*)
+const STOP = Object.fromEntries([["water", "💧"], ["aid", "🍌"], ["big", "🍲"], ["medical", "⛑️"], ["self", "🎒"]].map(([k, i]) => [k, [JT("stop." + k), i]]));
+const TYPE = { road: JT("type.road"), trail: JT("type.trail"), baiyue: JT("type.baiyue") };   // SP-738: 百岳 → 登山
 
 async function init() {
   let S;
@@ -126,55 +123,117 @@ async function init() {
     if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `${r.status}`); }
     S = await r.json();
   } catch (e) { $("main").innerHTML = `<section><div class="err">${esc(e.message)}</div></section>` + joinCard(); showJoin(); return; }
-  document.title = `${S.title}（分享）`;
+  document.title = JT("doc_title", { title: S.title });
   $("title").textContent = S.title;
   const I = S.inputs || {}, s = S.summary || {}, hike = S.type === "baiyue";
   // the built-in examples (SP-637): no calendar date (it would read as a race already run once it passed) —
   // how long before the race it was computed, if anything
-  const when = S.example ? (ok(I.weeks_before) && I.weeks_before > 0 ? `賽前 ${I.weeks_before} 週` : null) : I.date;
-  $("sub").textContent = [TYPE[S.type], when, I.start_time && `出發 ${I.start_time}`, `${f1(s.km)} km ↑${n0(s.gain_m)} m`,
-    S.created && `建立於 ${S.created.slice(0, 10)}`, S.expires && `到期 ${S.expires.slice(0, 10)}`, "唯讀"].filter(Boolean).join(" · ");
-  let h = `<section><h2>預估結果${s.badge ? ` <span class="badge">${esc(s.badge)}</span>` : ""}</h2><div class="tiles">`;
+  const when = S.example ? (ok(I.weeks_before) && I.weeks_before > 0 ? JT("weeks_before", { n: I.weeks_before }) : null) : I.date;
+  $("sub").textContent = [TYPE[S.type], when, I.start_time && JT("start_at", { t: I.start_time }), `${f1(s.km)} km ↑${n0(s.gain_m)} m`,
+    S.created && JT("created", { d: S.created.slice(0, 10) }), S.expires && JT("expires", { d: S.expires.slice(0, 10) }), JT("readonly")].filter(Boolean).join(" · ");
+  let h = `<section><h2>${esc(JT("result"))}${s.badge ? ` <span class="badge">${esc(s.badge)}</span>` : ""}</h2><div class="tiles">`;
   if (hike) {
-    h += tile("移動時間", dur(s.capacity_time_s ?? s.time_s), `${(S.days || []).length || s.days || 1} 天`, true);
-    if (ok(s.clock_s)) h += tile("時鐘時間", dur(s.clock_s), "含休息");
-    if (ok(s.hr_cap)) h += tile("心率上限", n0(s.hr_cap) + " bpm", "AeT");
+    h += tile(esc(JT("moving")), dur(s.capacity_time_s ?? s.time_s), esc(JT("days", { n: (S.days || []).length || s.days || 1 })), true);
+    if (ok(s.clock_s)) h += tile(esc(JT("clock")), dur(s.clock_s), esc(JT("with_rests")));
+    if (ok(s.hr_cap)) h += tile(esc(JT("hr_cap")), n0(s.hr_cap) + " bpm", "AeT");
   } else {
-    h += tile("預估完賽", hms(s.time_s), s.finish_eta ? `抵達 ${esc(s.finish_eta)}` : "", true);
-    h += tile("平均功率", ok(s.power) ? n0(s.power) + " W" : "–", `${pct(s.pct_cp)} CP${ok(s.w_per_kg) ? ` · ${s.w_per_kg.toFixed(2)} W/kg` : ""}`);
-    h += tile("平均配速", pace(s.pace_s_per_km), "");
+    h += tile(esc(JT("finish")), hms(s.time_s), s.finish_eta ? esc(JT("arrive", { t: s.finish_eta })) : "", true);
+    h += tile(esc(JT("avg_power")), ok(s.power) ? n0(s.power) + " W" : "–", `${pct(s.pct_cp)} CP${ok(s.w_per_kg) ? ` · ${s.w_per_kg.toFixed(2)} W/kg` : ""}`);
+    h += tile(esc(JT("avg_pace")), pace(s.pace_s_per_km), "");
   }
-  if (S.effort?.label) h += tile("努力度", esc(S.effort.label), ok(S.effort.f) ? pct(S.effort.f) : ok(S.effort.r) ? pct(S.effort.r) : "");
-  if (ok(I.temp_c)) h += tile("比賽日", `${f1(I.temp_c)} °C`, ok(I.rh_pct) ? `濕度 ${n0(I.rh_pct)} %` : "");
-  if (ok(S.weight)) h += tile("體重", `${f1(S.weight)} kg`, "分享者選擇公開");
+  if (S.effort?.label) h += tile(esc(JT("effort")), esc(S.effort.label), ok(S.effort.f) ? pct(S.effort.f) : ok(S.effort.r) ? pct(S.effort.r) : "");
+  if (ok(I.temp_c)) h += tile(esc(JT("race_day")), `${f1(I.temp_c)} °C`, ok(I.rh_pct) ? esc(JT("humidity", { rh: n0(I.rh_pct) })) : "");
+  if (ok(S.weight)) h += tile(esc(JT("weight")), `${f1(S.weight)} kg`, esc(JT("weight_shared")));
   h += `</div></section>`;
-  if (S.profile || (S.segments || []).length) h += `<section><h2>剖面與分段</h2><div class="profile" id="profile"></div><div id="targets"></div></section>`;
+  const rows = (S.chart_rows || []).length > 0;
+  // SP-784: the calculator's 分段目標 (static/seg_profile.js, written into this page by the server): the target
+  // line over the elevation profile and the segment table; a share with no segments: the elevation only
+  if (rows) h += targetsSection(S);
+  else if (S.profile) h += `<section><h2>${esc(JT("profile"))}</h2><div class="profile" id="profile"></div></section>`;
   h += fuelHtml(S);
-  if (!S.seg_targets) h += splitsHtml(S);
-  $("main").innerHTML = h + joinCard() + `<footer class="meta">這是分享者在建立當下的計算結果，不會重新計算。</footer>`;
+  if (!rows) h += splitsHtml(S);
+  $("main").innerHTML = h + joinCard() + `<footer class="meta">${esc(JT("footer"))}</footer>`;
   showJoin();
-  if ($("profile")) drawProfile(S);
-  if (S.seg_targets && $("targets")) $("targets").innerHTML = targetsHtml(S);
+  if (rows) drawTargets(S);
+  else if ($("profile")) drawProfile(S);
 }
+
+// ---- 分段目標: the calculator's component (SegProfile), its state kept here ----
+const TOUCH = matchMedia("(pointer: coarse)").matches;
+const RT = (k, p) => (window.I18N ? window.I18N.t("racepower." + k, p) : k);
+const TG = { P: null, m: "pace", sel: new Set(), hover: null, chart: null, stops: [] };
+function targetsSection(S) {
+  const help = ` <span class="help" tabindex="0">?<span class="tip">${esc(RT("chart.tip"))}</span></span>`;
+  return `<section class="segp" id="profile-sec"><h2>${esc(JT("targets"))} <span class="meta">${(S.chart_rows || []).length} ${esc(RT("segs"))}</span>${help}</h2>` +
+    `<div class="chead"><div class="seg" id="measure">${SegProfile.buttons(S, TG.m)}</div><div class="legend" id="chart-legend"></div></div>` +
+    `<div class="profile" id="profile"></div><div class="cmp tablewrap" id="segcmp"></div></section>`;
+}
+function drawTargets(S) {
+  const R = S.chart_rows;
+  // the plan as the component reads it: the night column only when the rows know day and night (a start time)
+  TG.P = { type: S.type, summary: S.summary || {}, profile: S.profile, chart_rows: R, night: R.some((r) => r.night != null),
+    climb: S.climb || null };                                          // SP-728: the 攀爬段
+  const km = TG.P.summary.km;
+  TG.stops = (S.inputs?.stops || []).filter((x) => x.km > 0 && (!km || x.km < km)).map((x) => {
+    const [name, icon] = STOP[x.type] || STOP.aid;
+    return { km: x.km, icon, name: `${icon} ${name}${x.name ? " " + x.name : ""} · ${f1(x.km)} km` };
+  });
+  TG.chart = echarts.init($("profile"));
+  new ResizeObserver(() => TG.chart.resize()).observe($("profile"));
+  $("measure").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    TG.m = b.dataset.m;
+    $("measure").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    drawChart(); drawTable();
+  }));
+  // a click on the chart selects that segment (shift: adds / removes), as on the calculator
+  TG.chart.getZr().on("click", (ev) => {
+    const c = TG.chart;
+    if (!c.containPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY])) return;
+    const p = c.convertFromPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY]); if (!p) return;
+    const r = SegProfile.rowAt(TG.P, p[0]); if (!r) return;
+    pick(r.i, !!ev.event?.shiftKey);
+    const row = document.querySelector(`#segcmp [data-row="${r.i}"]`); if (row) row.scrollIntoView({ block: "nearest" });
+  });
+  $("segcmp").onmouseleave = () => hover(null);
+  drawChart(); drawTable();
+}
+function drawChart() {
+  const o = { measure: TG.m, sel: TG.sel, hover: TG.hover, touch: TOUCH, narrow: window.innerWidth < 700, stops: TG.stops };
+  TG.chart.setOption(SegProfile.option(TG.P, o), true);
+  $("chart-legend").innerHTML = SegProfile.legend(TG.P, o);
+}
+function drawTable() {
+  $("segcmp").innerHTML = SegProfile.table(TG.P, { measure: TG.m, sel: TG.sel });
+  $("segcmp").querySelectorAll("tr[data-row]").forEach((e) => {
+    e.addEventListener("click", (ev) => pick(+e.dataset.row, ev.shiftKey));
+    e.addEventListener("mouseenter", () => hover(+e.dataset.row));
+  });
+}
+function pick(i, shift) {
+  if (shift) { if (TG.sel.has(i)) TG.sel.delete(i); else TG.sel.add(i); }
+  else TG.sel = TG.sel.size === 1 && TG.sel.has(i) ? new Set() : new Set([i]);
+  drawChart(); drawTable();
+}
+function hover(i) { if (TG.hover === i) return; TG.hover = i; drawChart(); }
 
 function fuelHtml(S) {
   const F = S.fuel; if (!F || !F.kcal_band) return "";
   const hike = F.category === "hike", c = F.cho || {}, w = F.water || {}, na = F.sodium || {}, ld = F.loading || {};
-  let h = `<section><h2>🍽 補給 <span class="meta">${esc(F.label || "")} · 建議值</span></h2><div class="tiles">`;
-  h += tile(`🔥 ${hike ? "行動熱量" : "消耗熱量"}`, rng(F.kcal_band, n0, "kcal"), `±${Math.round((F.band_rel || 0) * 100)}%`, true);
-  h += tile("🍌 碳水", rng(c.per_h, n0, "g/h"), `共 ${rng(c.total, n0, "g")}`);
-  h += tile("💧 水", hike ? rng((w.total_ml || []).map((x) => x / 1000), (x) => x.toFixed(1), "L") : w.thirst ? "口渴再喝" : rng(w.per_h, n0, "ml/h"),
-    "別喝到體重增加");
-  h += tile("🧂 鈉", na.per_h && na.per_h[1] > 0 ? rng(na.per_h, n0, "mg/h") : "不必另外補", na.total_mg && na.total_mg[1] > 0 ? `共 ${rng(na.total_mg, n0, "mg")}` : "");
+  let h = `<section><h2>${esc(JT("fuel.title"))} <span class="meta">${esc(F.label || "")} · ${esc(JT("fuel.suggested"))}</span></h2><div class="tiles">`;
+  h += tile(`🔥 ${esc(JT(hike ? "fuel.kcal_hike" : "fuel.kcal"))}`, rng(F.kcal_band, n0, "kcal"), `±${Math.round((F.band_rel || 0) * 100)}%`, true);
+  h += tile(esc(JT("fuel.carbs")), rng(c.per_h, n0, "g/h"), JT("fuel.total", { x: rng(c.total, n0, "g") }));
+  h += tile(esc(JT("fuel.water")), hike ? rng((w.total_ml || []).map((x) => x / 1000), (x) => x.toFixed(1), "L") : w.thirst ? esc(JT("fuel.thirst")) : rng(w.per_h, n0, "ml/h"),
+    esc(JT("fuel.no_gain")));
+  h += tile(esc(JT("fuel.sodium")), na.per_h && na.per_h[1] > 0 ? rng(na.per_h, n0, "mg/h") : esc(JT("fuel.no_sodium")), na.total_mg && na.total_mg[1] > 0 ? JT("fuel.total", { x: rng(na.total_mg, n0, "mg") }) : "");
   // when / amount / note: SP-287 (older shares have only the label)
-  if (!hike && ld.label) h += tile("🍚 賽前", ld.g_day ? rng(ld.g_day, n0, "g") : esc(ld.amount || ld.label.replace(/^前一天\s*/, "")),
-    (ld.g_day ? esc(ld.label) : ld.when ? esc(ld.when) : "前一天") + (ld.note ? `<br>${esc(ld.note)}` : ""));
-  if (hike && ok(F.food_kg_mean)) h += tile("🎒 糧食", `${F.food_kg_mean.toFixed(2)} <span class="u">kg/天</span>`, "推估");
+  if (!hike && ld.label) h += tile(esc(JT("fuel.pre")), ld.g_day ? rng(ld.g_day, n0, "g") : esc(ld.amount || ld.label.replace(/^前一天\s*/, "")),
+    (ld.g_day ? esc(ld.label) : ld.when ? esc(ld.when) : esc(JT("fuel.day_before"))) + (ld.note ? `<br>${esc(ld.note)}` : ""));
+  if (hike && ok(F.food_kg_mean)) h += tile(esc(JT("fuel.food")), `${F.food_kg_mean.toFixed(2)} <span class="u">${esc(JT("fuel.kg_day"))}</span>`, esc(JT("fuel.estimate")));
   h += `</div>`;
   const ev = F.schedule || [];
   if (ev.length) {
     const icon = (e) => e.kind === "start" ? "🏁" : e.kind === "aid" ? (STOP[e.stop_type] || STOP.aid)[1] : hike ? "🍙" : "🍬";
-    h += `<h2 style="margin-top:12px">補給時間表 <span class="badge">推估</span></h2><div class="tablewrap"><table><thead><tr>${hike ? "<th>天</th>" : ""}<th>時刻</th><th class="n">移動</th><th class="n">km</th><th></th><th>動作</th></tr></thead><tbody>` +
+    h += `<h2 style="margin-top:12px">${esc(JT("fuel.schedule"))} <span class="badge">${esc(JT("fuel.estimate"))}</span></h2><div class="tablewrap"><table><thead><tr>${hike ? `<th>${esc(JT("th.day"))}</th>` : ""}<th>${esc(JT("th.time"))}</th><th class="n">${esc(JT("th.moving"))}</th><th class="n">km</th><th></th><th>${esc(JT("th.action"))}</th></tr></thead><tbody>` +
       ev.map((e) => `<tr class="k-${e.kind}">${hike ? `<td>${e.day}</td>` : ""}<td>${esc(e.eta || "–")}</td><td class="n">${dur(e.t_s)}</td><td class="n">${f1(e.km)}</td><td>${icon(e)}</td><td class="act">${esc(e.action)}</td></tr>`).join("") +
       `</tbody></table></div>`;
   }
@@ -183,22 +242,9 @@ function fuelHtml(S) {
   return h + `</section>`;
 }
 
-// SP-700: links shared before it still carry the descents' 🛡️ 「控制、安全」 chip (the only 🛡️ one) — not shown any more
-function targetsHtml(S) {
-  const hike = S.type === "baiyue";
-  return `<h2 style="margin-top:10px">分段目標</h2><div class="tcards">` + S.seg_targets.map((t) => {
-    const sg = (S.segments || []).find((x) => x.i === t.i && (x.day || 1) === (t.day || 1)) || {};
-    return `<div class="tcard" style="border-left-color:${css(CLS[sg.cls] || "--c-f")}" title="${esc(t.src)}">
-      <div class="th"><b>${t.mark} ${esc(t.label)}</b><span class="meta">${hike && t.day ? `D${t.day} · ` : ""}${f1(t.start_km)}–${f1(t.end_km)} km · ↑${n0(t.gain_m)} ↓${n0(t.loss_m)}</span></div>
-      <div class="tc">${t.chips.filter((c) => c.icon !== "🛡️").map((c) => `<span class="${c.role === "main" ? "main" : ""}">${c.icon} ${esc(c.text)}</span>`).join("") || "<span>—</span>"}</div>
-      <div class="meta">⏱ ${dur(t.t)} · 累計 ${dur(t.cum_s)}${t.eta ? ` · ETA ${esc(t.eta)}` : ""}${(t.ref || []).length ? " · " + esc(t.ref.join(" · ")) : ""}</div>
-      ${t.fuel_action ? `<div class="fa">🍬 ${esc(t.fuel_action)}</div>` : ""}</div>`;
-  }).join("") + `</div>`;
-}
-
 function splitsHtml(S) {
   const segs = S.segments || []; if (!segs.length) return "";
-  return `<section><h2>分段</h2><div class="tablewrap"><table><thead><tr><th>#</th><th class="n">km</th><th class="n">目標功率</th><th class="n">配速</th><th class="n">分段</th><th class="n">累計</th><th class="n">ETA</th><th>補給</th></tr></thead><tbody>` +
+  return `<section><h2>${esc(JT("splits"))}</h2><div class="tablewrap"><table><thead><tr><th>#</th><th class="n">km</th><th class="n">${esc(JT("th.power"))}</th><th class="n">${esc(JT("th.pace"))}</th><th class="n">${esc(JT("th.split"))}</th><th class="n">${esc(JT("th.cum"))}</th><th class="n">ETA</th><th>${esc(JT("th.fuel"))}</th></tr></thead><tbody>` +
     segs.map((x) => `<tr><td>${x.i}</td><td class="n">${f1(x.start_km)}–${f1(x.end_km)}</td><td class="n">${ok(x.power) ? n0(x.power) + " W" : "–"}</td><td class="n">${pace(x.pace_s_per_km)}</td>
       <td class="n">${dur(x.t)}</td><td class="n">${dur(x.cum_s)}</td><td class="n">${esc(x.eta || "")}</td><td class="act">${esc(x.fuel_action || "")}</td></tr>`).join("") + `</tbody></table></div></section>`;
 }

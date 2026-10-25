@@ -7,11 +7,16 @@
   PUT  /api/v1/admin/config                {values: {key: value | null}, plans: {free: {key: value | null}}}
   PUT  /api/v1/admin/sources               {scope, on}: a data source on / off for the whole server
   GET  /api/v1/admin/users                 the users: plan, role, sign-up / last seen, last sync and its
-                                           trouble, folder size                  (scope admin:users)
+                                           trouble, folder size, coach and students (SP-789) (scope admin:users)
   PUT  /api/v1/admin/users/{id}            {disabled?, plan?, plan_expires_at?}
   GET  /api/v1/admin/waitlist              the waitlist and the cap              (scope admin:users)
   POST /api/v1/admin/waitlist/{id}/admit   let one person in: the account and its tenant folder now
   GET  /api/v1/admin/audit                 the change log, newest first          (either admin scope)
+  GET  /api/v1/admin/ops                   the daily ops reports there (ops_daily.py, SP-388) and the
+                                           member signal now (count / cap / near) (either admin scope)
+  GET  /api/v1/admin/ops/{YYYY-MM-DD}.md   one report, its markdown as text/plain (either admin scope)
+  GET  /api/v1/admin/xp-funnel             the 疊石 Cairn card's monthly funnel and 30-day retention
+                                           (scripts/xp_funnel.py, computed now; SP-877) (either admin scope)
 
 Test accounts (SP-611, accounts/testaccounts.py; scope admin:users):
   GET    /api/v1/admin/test-accounts             every test account, its made-up data's state, the choices
@@ -40,7 +45,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path as Path_, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from backend import membership as MS, site_config as SC, tenancy
@@ -249,7 +254,7 @@ def _quota_view(u, role_now: str) -> dict:
     if u.is_owner:
         return {}
     plan = MS.PAID if role_now == MS.SUBSCRIBER else MS.FREE
-    monthly = [k for k, q in MS.QUOTAS.get(plan, {}).items() if q.period == "month"]
+    monthly = [k for k, q in MS.QUOTAS.get(plan, {}).items() if q.period == "month" and k not in MS.NO_EXTRA]
     return {"extra_this_month": MS.extra_this_month(u.id), "extra_month": MS.month_key(), "extra_quotas": monthly}
 
 
@@ -262,8 +267,20 @@ def get_users():
     seen = store.last_seen()
     users = store.users(include_disabled=True, include_test=True)
     # the cap's count: never a test account (SP-611)
+    coaches = _coach_rows()
     return {"accounts": True, "count": store.count_users(), "max_users": LG.max_users(),
-            "users": [_user_row(u, seen, MS.role_of_user(u)) for u in users]}
+            "coach_default_max": _coach_default(),
+            "users": [{**_user_row(u, seen, MS.role_of_user(u)), "coach": coaches.get(u.id)} for u in users]}
+
+
+def _coach_rows() -> dict:
+    from backend.accounts import coaching
+    return coaching.admin_rows()
+
+
+def _coach_default() -> int:
+    from backend.accounts import coaching
+    return coaching.DEFAULT_MAX_STUDENTS
 
 
 class UserIn(BaseModel):
@@ -366,6 +383,55 @@ def get_audit(limit: int = 200):
     return {"rows": SC.audit_rows(max(1, min(int(limit), SC.AUDIT_READ)))}
 
 
+# ---------------------------------------------------------------------------- 營運報表 (SP-388)
+
+@router.get(API + "/ops", dependencies=[ANY])
+def get_ops():
+    """The daily reports kept (newest first), when the next one is written, and the member signal now.
+    Tenant ids and CPU seconds only — no one's training data, no e-mail."""
+    from backend import ops_daily as OD
+    from backend.accounts import login as LG
+    from backend.scripts import ops_report as R
+    where = OD.folder()
+    return {"on": where is not None, "reports": OD.reports(where), "run_at": OD.RUN_AT.strftime("%H:%M"),
+            "keep_days": OD.KEEP_DAYS, "accounts": _accounts_on(), "members": OD.members(),
+            "max_users": LG.max_users(), "warn_share": R.MEMBERS_WARN_SHARE}
+
+
+@router.get(API + "/ops/{day}.md", dependencies=[ANY])
+def get_ops_report(day: str = Path_(pattern=r"^\d{4}-\d{2}-\d{2}$")):
+    from backend import ops_daily as OD
+    body = OD.read(day)
+    if body is None:
+        raise HTTPException(404, {"code": "NO_REPORT"})
+    # text/plain: a browser shows it (text/markdown would be downloaded)
+    return PlainTextResponse(body, media_type="text/plain; charset=utf-8",
+                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+# ---------------------------------------------------------------------------- 互推漏斗 (SP-877)
+
+XP_MONTHS = 12                     # the months the page lists (newest first)
+
+
+@router.get(API + "/xp-funnel", dependencies=[ANY])
+def get_xp_funnel():
+    """The 疊石 Cairn card's monthly funnel and 30-day retention (SP-765's backend/scripts/xp_funnel.py,
+    the same computation, read-only, on every request: no file written, nothing scheduled) so the
+    site's owner sees it here without running the script on the NAS. Counts only — no one's e-mail,
+    id or training data. `last_month` is the month before today (the app's day); an empty `months`
+    when the site has no accounts (owner mode) or no event yet."""
+    import datetime as _dt
+    from backend.accounts import store
+    from backend.scripts import xp_funnel as XF
+    today = _dt.datetime.now(XF.TZ).date()
+    last = (today.replace(day=1) - _dt.timedelta(days=1)).strftime("%Y-%m")
+    db = store.path()
+    rows = XF.report(XF.read(db), today) if _accounts_on() and db.exists() else []
+    return {"accounts": _accounts_on(), "today": today.isoformat(), "last_month": last,
+            "retain_days": XF.RETAIN_DAYS, "months": list(reversed(rows))[:XP_MONTHS]}
+
+
 # ---------------------------------------------------------------------------- R2 (2026-10-15): admins, deleting, the Google client
 #
 #   PUT  /api/v1/admin/users/{id}/admin      {admin: bool}: make a user an admin or take it back (admin:users).
@@ -402,6 +468,45 @@ def put_user_admin(uid: int = Path_(ge=1, le=2 ** 62), body: AdminIn = Body(...)
         SC.audit("user.admin", uid, u.is_admin, bool(body.admin), _actor())
     nu = store.get_user(uid)
     return _user_row(nu, store.last_seen(), MS.role_of_user(nu))
+
+
+# SP-789 / SP-793: coaches (no payment yet: the admin makes someone one) and how many students each may have
+#   PUT  /api/v1/admin/users/{id}/coach      {coach?: bool, max_students?: int | null}: make a user a coach or
+#                                            take it away (every link of theirs ends, a consents row for each
+#                                            student), their own most students (null: coaching.DEFAULT_MAX_STUDENTS;
+#                                            students they have stay when it goes below)
+
+class CoachIn(BaseModel):
+    coach: Optional[bool] = None
+    max_students: Optional[int] = None
+    default_max: bool = False                  # true: back to the default (max_students ignored)
+
+
+@router.put(API + "/users/{uid}/coach", dependencies=[USERS, WRITE])
+def put_user_coach(uid: int = Path_(ge=1, le=2 ** 62), body: CoachIn = Body(...)):
+    if not _accounts_on():
+        raise HTTPException(404, {"code": "ACCOUNTS_OFF"})
+    from backend.accounts import coaching, store
+    u = store.get_user(uid)
+    if u is None:
+        raise HTTPException(404, {"code": "NO_USER"})
+    actor = _actor()
+    if body.coach is not None:
+        was = store.coach_profile(uid) is not None
+        if coaching.set_coach(uid, bool(body.coach), by=actor):
+            SC.audit("user.coach", uid, was, bool(body.coach), actor)
+    if body.max_students is not None or body.default_max:
+        p = store.coach_profile(uid)
+        if p is None:
+            raise HTTPException(409, {"code": "NOT_A_COACH"})
+        n = None if body.default_max else body.max_students
+        if n is not None and (isinstance(n, bool) or not 0 <= n <= coaching.MAX_STUDENTS_LIMIT):
+            raise HTTPException(400, {"code": "OUT_OF_RANGE", "key": "max_students"})
+        if n != p["max_students"]:
+            coaching.set_max(uid, n)
+            SC.audit("user.coach_max", uid, p["max_students"], n, actor)
+    nu = store.get_user(uid)
+    return {**_user_row(nu, store.last_seen(), MS.role_of_user(nu)), "coach": _coach_rows().get(uid)}
 
 
 class DeleteIn(BaseModel):

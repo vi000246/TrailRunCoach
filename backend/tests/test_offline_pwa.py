@@ -132,8 +132,9 @@ OUT.calls = server.calls;
     assert out["status"] == "api:p0" and out["calendar"] == "api:p0" and out["acts"] == "api:p1"
     assert out["page"] == "page:p0" and out["sched"] == "page:p0" and out["offlineHtml"] == "page:p0"
     assert out["shell"] == "app:p0" and out["echarts"] == "app:p0"
-    for k in ("otherCdn", "session", "fresh", "staticHtml", "settingsPage", "login", "dataset", "samples", "account"):
+    for k in ("otherCdn", "session", "fresh", "staticHtml", "settingsPage", "login", "dataset", "account"):
         assert out[k] is None, k
+    assert out["samples"] == "api:p2"                         # SP-758: an opened activity's samples (kept per activity)
     # writes, sign-in and the shares are left to the browser: never answered, never kept
     for k in ("post", "patch", "loginNav", "oauthNav", "shareNav", "unlisted"):
         assert out[k] is None, k

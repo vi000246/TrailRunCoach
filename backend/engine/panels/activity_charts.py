@@ -12,6 +12,10 @@ hrpower
     average HR), EF (NP ÷ average HR) and the range's Pw:HR halves
     (WKO5's definition: the range cut at half its length). `range_stats`
     is the reference implementation; the viewer mirrors it.
+    On the wire (`render`, SP-757) the totals go as each plotted point's
+    increment — whole numbers in units of the totals' last decimal (`wire`)
+    — and without `x` (point k is at k × step); the viewer adds them back
+    up (`expand`; charts.html ACT.expand) to the very same totals.
     `hr_quality` (SP-267): the stretches engine/hr_quality.py flags as
     suspect (spike, step, cadence lock, flat, high start, out of range) as
     [[x0, x1, kind]] for shading on the HR panel, with plain labels and a
@@ -176,6 +180,11 @@ def grid(ds, w) -> Optional[dict]:
 # hrpower: two stacked panels + running totals for the brushed range
 # ---------------------------------------------------------------------------
 
+def cum_dec(k: str) -> int:
+    """Decimals kept of running total `k`: the NP sums and the distance (km) 4, the rest 1."""
+    return 4 if k in ("n4", "d") else 1
+
+
 def _cum(v: np.ndarray, bounds: np.ndarray) -> list:
     c = np.concatenate([[0.0], np.cumsum(v)])
     return c[bounds]
@@ -225,7 +234,7 @@ def hrpower(ds, w, points: int = POINTS) -> dict:
         "hr": [_r(v, 0) for v in bucket_mean(hr, hv)] if has_hr else None,
         "power": [_r(v, 0) for v in bucket_mean(r30, nv)] if has_p else None,
         "hr_max": [_r(v, 0) for v in hmax] if has_hr else None,
-        "cum": {k: (None if v is None else [_r(x, 4 if k in ("n4", "d") else 1) for x in v]) for k, v in cum.items()},
+        "cum": {k: (None if v is None else [_r(x, cum_dec(k)) for x in v]) for k, v in cum.items()},
         "ref": {"aet": _r(aet, 0), "lthr": _r(lthr, 0), "cp": _r(cp, 0)},
         "has_hr": has_hr, "has_power": has_p, "has_dist": dist is not None,
         "hr_quality": _hr_quality_safe(ds, w, G) if has_hr else None,
@@ -341,6 +350,49 @@ def range_stats(res: dict, ka: int, kb: int) -> dict:
             "pw_hr": p_avg / hr_avg if p_avg is not None and hr_avg else None,
             "ef": npw / hr_avg if npw and hr_avg else None,
             "pw_hr_drift": drift}
+
+
+def wire(res: dict) -> dict:
+    """`hrpower` as sent (SP-757): no `x` (point k is at k × step) and, for `cum`, `inc` — each
+    total in whole units of its last decimal (cum_dec), as its first value then the K steps
+    between points. 87 % of the old JSON was the totals' long running numbers; the steps are
+    short and repeat. Whole numbers add up exactly, so `expand` (and charts.html ACT.expand)
+    gives back the very totals `hrpower` rounded."""
+    if res.get("cum") is None:
+        return res
+    out = {k: v for k, v in res.items() if k not in ("x", "cum")}
+    inc = {}
+    for k, v in res["cum"].items():
+        if v is None:
+            inc[k] = None
+            continue
+        u = [int(round(x * 10 ** cum_dec(k))) for x in v]
+        inc[k] = [u[0]] + [b - a for a, b in zip(u, u[1:])]
+    out["inc"] = inc
+    out["inc_dec"] = {k: cum_dec(k) for k in inc}
+    return out
+
+
+def expand(res: dict) -> dict:
+    """`wire`'s inverse: `x` and `cum` back from `step` and `inc` (a result that has them is
+    returned as it is)."""
+    if res.get("inc") is None or res.get("cum") is not None:
+        return res
+    out = {k: v for k, v in res.items() if k not in ("inc", "inc_dec")}
+    cum = {}
+    for k, v in res["inc"].items():
+        if v is None:
+            cum[k] = None
+            continue
+        s, acc, col = 10 ** res["inc_dec"][k], 0, []
+        for n in v:
+            acc += n
+            col.append(acc / s)
+        cum[k] = col
+    out["cum"] = cum
+    K = len(res["inc"]["mov"]) - 1
+    out["x"] = [float(k * res["step"]) for k in range(K)]
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -671,7 +723,7 @@ def render(ds, w, ch: dict) -> dict:
     if w is None:
         return {**base, "empty": _("要選一筆活動")}
     if name == "hrpower":
-        return {**base, **hrpower(ds, w)}
+        return {**base, **wire(hrpower(ds, w))}
     if name in ("hrzones", "powerzones"):
         return {**base, **zone_times(ds, w, "hr" if name == "hrzones" else "power")}
     if name == "hrtrend":

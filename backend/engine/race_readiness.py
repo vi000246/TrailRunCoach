@@ -401,13 +401,21 @@ def board(race: Optional[dict], today: dt.date, acts: list[dict], *, sport: str 
 
     def mk(w: int, ok: bool, show: str, detail: str, target=None, actual=None, unknown: Optional[str] = None,
            lock: bool = False, aim: Optional[str] = None, **kw) -> dict:
-        """A cell; `aim`: what a later / locked cell shows (its target, SP-672: the card no longer works it out)."""
+        """A cell; `aim`: what a later / locked cell shows (its target, SP-672: the card no longer works it out).
+        `ratio` (SP-672 R2, Q2 = B): how much of the week's target was reached, 0–1 — every item on one scale,
+        the cell's bar; a done cell is full."""
         st, counts, nd = judge(w, ok, unknown, lock)
         if st == "unk":
             detail = nd or unknown or _(NO_DATA)
         if st in ("fut", "tap") and aim is not None:
             show = aim
-        return {"state": st, "show": show, "detail": detail, "target": target, "actual": actual, "counts": counts, **kw}
+        ratio = None
+        if st == "done":
+            ratio = 1.0
+        elif isinstance(actual, (int, float)) and isinstance(target, (int, float)) and target > 0:
+            ratio = round(max(0.0, min(1.0, actual / target)), 3)
+        return {"state": st, "show": show, "detail": detail, "target": target, "actual": actual, "ratio": ratio,
+                "counts": counts, **kw}
 
     def span(begin: dt.date, end: dt.date) -> dict:
         return {"begin": begin.isoformat(), "end": max(begin, end).isoformat()}

@@ -360,3 +360,31 @@ def test_fitness_check_counts_a_run_marked_a_race_by_hand(tmp_path, monkeypatch)
         monkeypatch.setattr(RA, "race_activities", races(kind, prio))
         got = RD.inputs(ds, plan, day + dt.timedelta(days=1), day - dt.timedelta(days=7))["tests"]
         assert (day in got) is counts, (kind, prio, got)
+
+
+# ---- R2 (Q2 = B): every cell is a bar of how much of its target was reached --------------------------
+
+def test_every_judged_cell_carries_how_much_of_its_target_was_reached():
+    rc = race()
+    t = SP.FRAC[7]
+    acts = [act(monday(7) + dt.timedelta(days=5), 6.0 * t * 0.5, 6.0 * t * 0.5 * 9, 50),     # half the long day
+            act(monday(6) + dt.timedelta(days=5), 6.0 * SP.FRAC[6], 6.0 * SP.FRAC[6] * 9, 50)]
+    b = board(acts, rc, first_day=date(2025, 1, 1))
+    half = cell(b, "long", 7)
+    assert half["state"] == "miss" and 0.4 < half["ratio"] < 0.6, half
+    assert half["ratio"] == round(half["actual"] / half["target"], 3)
+    assert cell(b, "long", 6)["state"] == "done" and cell(b, "long", 6)["ratio"] == 1.0
+    assert cell(b, "terrain", 7)["ratio"] == 0.0                         # a count item: empty or full
+    for c in _all_cells(b):
+        if "ratio" in c and c["ratio"] is not None:
+            assert 0.0 <= c["ratio"] <= 1.0, c
+        if c["state"] == "done":
+            assert c["ratio"] == 1.0, c
+
+
+def test_the_card_draws_each_cell_as_a_bar_of_the_boards_ratio():
+    js = (ROOT / "static" / "readiness.js").read_text("utf-8")
+    assert "c.ratio" in js and "function bar(" in js and "shown(" not in js
+    cal = js[js.index("function cal()"):js.index("function gr(")]
+    assert "bar(c," in cal and "bar({ state: s, ratio: r })" in cal                 # cells and the legend
+    assert "bar(c)" in js[js.index("function mob()"):js.index("function foot()")]   # the phone list too

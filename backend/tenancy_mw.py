@@ -12,7 +12,8 @@ above), per request:
   1. a path with dot segments, an empty segment, a backslash or an encoded slash / backslash /
      dot: 400 (no prefix check is trusted with it)
   2. /share/* (public shares and the 課表 feed): /share/<id>[/data] the tenant of the user
-     accounts.db's shares row names (SP-124; a disabled account's: none), anything else under
+     accounts.db's shares row names (SP-124; a disabled account's: none), /share/pace[/…] (SP-805,
+     the 腳程試算: the visitor's own files only) the anonymous one, anything else under
      /share/ the owner's; a real CORS preflight (Origin + Access-Control-Request-Method) passes
      with no tenant
   3. the session cookie (__Host-trc_session over https) -> its user (accounts.db, sha256 of the
@@ -32,11 +33,14 @@ above), per request:
      for another site to forge); that one path only
      — and a GET / HEAD under /api/v1/debug/ with a debug token (SP-406, debug_auth.py): the
      token's user from accounts.db, the owner only (scope debug:*), the owner's tenant, no session;
-     the debug API checks the token against the tenant's own row again. Nothing else opens with it
+     the debug API checks the token against the tenant's own row again; a POST under
+     /api/v1/debug/write/ likewise (SP-802: write:config, previewed, undoable). Nothing else opens with it
      — and everything under /api/v1/link/ (SP-329, accounts/links.py: 疊石 Cairn, server to server),
      which never reads the session cookie: POST /api/v1/link/<project>/token with no tenant (the
-     endpoint checks the project's shared secret); a GET / HEAD of a route in links.ROUTES with
-     `Authorization: Bearer <service token>` whose scopes hold the route's, of a user still linked
+     endpoint checks the project's shared secret); a GET / HEAD of a route in links.ROUTES (a POST of
+     one in links.POST_ROUTES, SP-805) with
+     `Authorization: Bearer <service token>` whose scopes hold the route's (for a scope no token
+     carries, links.CONSENT_PER_REQUEST: the one it maps to — the route checks the consent), of a user still linked
      with that project — and for a feature that asks on its own (links.FEATURES, SP-654) switched
      on by the person (403 CONSENT_REQUIRED) —, bound to that user's tenant (the token's, never one
      the caller names);
@@ -48,6 +52,14 @@ above), per request:
      static files are not counted; the owner and admins are not limited
   7. tenant: the user's (the owner's own for user 1; a new user's folder and DB on first use),
      signed out the anonymous one (no caps; reading its data raises)
+  7b. 代看 (SP-791, SP-792; accounts/viewing.py): a session that views a student (accounts.db
+     coach_views) gets the student's tenant, the coach still the signed-in user, after the link is
+     checked again (withdrawn: 403 COACH_VIEW_ENDED, a page back to the coach's 教練 tab) and the
+     request is held to viewing.check — default deny: reads READ_OPEN only, writes CALC / STOP /
+     signing out and the student's switches' WRITE_OPEN only (403 otherwise, a page back to the
+     overview); a write that went through is a line in the student's coach log
+  7c. a 2xx write that changes a race, the phases or the 課表 (coach_board.changes_plan, SP-826): a
+     coached student's board summary is marked stale and its computation queued (coach_board.mark_stale)
   8. an answer without Cache-Control gets "private, no-store"
 
 Demo mode, per request:
@@ -81,6 +93,7 @@ from starlette.requests import cookie_parser
 MAX_BODY = 6 * 1024 * 1024
 WEIGHT_INGEST = "/api/v1/weight/measurements"   # SP-472: the one path a weight token opens (sign-in mode)
 DEBUG_PREFIX = "/api/v1/debug/"                 # SP-406: the paths a debug token opens (sign-in mode, GET / HEAD)
+DEBUG_WRITE_PREFIX = "/api/v1/debug/write/"     # SP-802: … and the POSTs it opens (engine/debug_write.py)
 INTERVALS_WEBHOOK = "/api/v1/intervals/webhook"  # SP-346: intervals.icu's webhook (its own secret, no session)
 BILLING_WEBHOOK = "/api/v1/billing/webhook"      # SP-328: Polar's webhook (its own signature, no session)
 LINK_PREFIX = "/api/v1/link/"                   # SP-329: another project's calls (accounts/links.py)
@@ -347,11 +360,14 @@ def _volume_error(method: str, path: str, body: bytes, t: Optional[tenancy.Tenan
 
 
 _SHARE_PATH = re.compile(r"/share/([A-Za-z0-9_-]{16,64})(?:/data)?")
+PACE_PAGE = "/share/pace"                       # SP-805 (api/pace.py): the page and its estimate
 
 
 def _share_tenant(path: str) -> tenancy.Tenant:
     """The tenant a public /share/… request reads (sign-in mode, SP-124): /share/<id> and
     /share/<id>/data by accounts.db's shares row; everything else under /share/ the owner's."""
+    if path == PACE_PAGE or path.startswith(PACE_PAGE + "/"):
+        return tenancy.anonymous()         # SP-805 腳程試算: computed from the visitor's files only, no one's tenant
     m = _SHARE_PATH.fullmatch(path)
     if m is None:
         return tenancy.owner()
@@ -438,7 +454,8 @@ class TenancyMiddleware:
             with tenancy.use(tenancy.anonymous()):
                 await self.app(scope, receive, send)
             return
-        if method in ("GET", "HEAD") and path.startswith(DEBUG_PREFIX):
+        if (method in ("GET", "HEAD") and path.startswith(DEBUG_PREFIX)) or \
+                (method == "POST" and path.startswith(DEBUG_WRITE_PREFIX)):
             from backend import debug_auth as DA
             dtok = DA.token_from_headers(_headers(scope))
             if dtok is not None:                   # SP-406: the debug API's own token, no session
@@ -490,9 +507,57 @@ class TenancyMiddleware:
             return
         if found is not None and found[1]:          # the expiry slid: so does the cookie
             set_cookies.append(f"{session_cookie}={token}; {LG.cookie_attrs(found[1])}".encode())
-        tenant = TN.tenant_of(user) if user is not None else tenancy.anonymous()
+            extra = [(b"set-cookie", c) for c in set_cookies]
+        # 7b. 代看 (SP-791, SP-792; accounts/viewing.py): a session viewing a student — the link checked
+        # again now, the request held to viewing's rules, the student's tenant with the coach signed in
+        from backend.accounts import viewing as VW
+        view = verdict = None
+        if user is not None:
+            try:
+                view = await run_in_threadpool(VW.resolve, user, token)
+            except Exception as e:                 # noqa: BLE001 — accounts.db unreadable: nobody is let in
+                import logging
+                logging.getLogger(__name__).warning("coach view lookup failed: %s", type(e).__name__)
+                await _json_response(send, 503, _demo_error("UNAVAILABLE", _("暫時無法確認登入狀態，請稍後再試")),
+                                     [(b"retry-after", b"10")])
+                return
+            if view is VW.ENDED:
+                view = None
+                if path not in (VW.STOP, VW.SESSION, VW.LOGOUT):
+                    if method in ("GET", "HEAD") and _wants_page(scope):
+                        await run_in_threadpool(store.coach_view_drop, token)
+                        await _redirect(send, VW.COACH_HOME + "?coach_view=ended#coach", extra)
+                    else:
+                        await _json_response(send, 403, VW.ended_body(), extra)
+                    return
+            elif view is not None:
+                verdict = VW.check(method, path, view.perms)
+                if not verdict.ok:
+                    if method in ("GET", "HEAD") and _wants_page(scope):
+                        await _redirect(send, VW.HOME + "?coach_view=blocked", extra)
+                    else:
+                        await _json_response(send, 403, VW.refusal(verdict), extra)
+                    return
+        if view is not None:
+            tenant = view.tenant
+        else:
+            tenant = TN.tenant_of(user) if user is not None else tenancy.anonymous()
         if user is not None:
             await TN.ensure_ready(tenant)
+        audit = view is not None and verdict is not None and verdict.action is not None
+        if audit:                                   # SP-792: the write's body, read once and replayed
+            body, msgs = await _read_body(receive)
+            if body is None:
+                await _json_response(send, 413, _demo_error("TOO_LARGE", _("上傳的資料太大")), extra)
+                return
+            pending, first = list(msgs), receive
+
+            async def replay():
+                if pending:
+                    return pending.pop(0)
+                return await first()
+            receive = replay
+        answer = {"status": 0, "body": bytearray()}
 
         mine = f"{session_cookie}=".encode()
 
@@ -506,17 +571,38 @@ class TenancyMiddleware:
                 # one person's answers: never kept by a shared cache (the static files say no-cache)
                 if not any(k.lower() == b"cache-control" for k, _v in headers):
                     headers.append((b"cache-control", b"private, no-store"))
+                if view is not None:           # SP-791: the student's answer — the offline copy never keeps it
+                    headers.append((b"x-trc-viewing", b"1"))
                 message = {**message, "headers": headers}
+                answer["status"] = int(message.get("status") or 0)
+            elif audit and message.get("type") == "http.response.body" and len(answer["body"]) < 262144:
+                answer["body"] += message.get("body", b"")
             await send(message)
 
         ttok = tenancy.set_current(tenant)
         utok = LG.set_user(user)
-        scope.setdefault("state", {})["tenant"] = tenant
+        vtok = VW.set_view(view)
+        st = scope.setdefault("state", {})
+        st["tenant"] = tenant
+        if view is not None:
+            st["coach_view"] = {"coach": int(user.id), "student": int(view.student.id)}
         try:
             await self.app(scope, receive, send_wrapper)
         finally:
+            VW.reset(vtok)
             LG.reset_user(utok)
             tenancy.reset(ttok)
+        if user is not None and 200 <= answer["status"] < 300:
+            from backend import coach_board as CB
+            if CB.changes_plan(method, path):       # SP-826: a coached student's board summary, recomputed now
+                with tenancy.use(tenant):
+                    await run_in_threadpool(CB.mark_stale)
+        if audit and 200 <= answer["status"] < 300:
+            from urllib.parse import parse_qsl
+            query = dict(parse_qsl((scope.get("query_string") or b"").decode("latin-1")))
+            params = VW.summary(verdict.action, verdict.params, VW.parse_json(body), VW.parse_json(bytes(answer["body"])),
+                                query)
+            await run_in_threadpool(VW.record, view, verdict.action, params)
 
     async def _weight_token(self, scope, receive, send, token: str):
         """Sign-in mode, POST /api/v1/weight/measurements with a weight token (SP-472,
@@ -573,11 +659,15 @@ class TenancyMiddleware:
                 await _json_response(send, st, {"detail": {"code": code, **extra_body}},
                                      [(b"www-authenticate", b"Bearer")] if st == 401 else None)
 
-        need = LK.ROUTES.get(path)
+        routes = LK.ROUTES if method in ("GET", "HEAD") else LK.POST_ROUTES if method == "POST" else {}
+        need = routes.get(path)
         tok = LK.service_bearer(_headers(scope))
-        if need is None or method not in ("GET", "HEAD") or tok is None:
+        if need is None or tok is None:
             await refuse(401, "TOKEN_INVALID")
             return
+        # SP-805: a scope no token carries — the organiser's link (CONSENT_PER_REQUEST) and the 報名者's
+        # consent in the request itself, which the route checks
+        route_scope, need = need, LK.CONSENT_PER_REQUEST.get(need, need)
         try:
             got = await run_in_threadpool(store.service_token_full, tok)
         except Exception as e:                     # noqa: BLE001 — accounts.db unreadable
@@ -613,6 +703,7 @@ class TenancyMiddleware:
         utok = LG.set_user(user)
         st = scope.setdefault("state", {})
         st["tenant"], st["link_client"], st["link_scopes"] = tenant, c.id, granted
+        st["link_route_scope"] = route_scope
 
         async def send_wrapper(message):
             if message.get("type") == "http.response.start":

@@ -13,8 +13,9 @@ FIT objects (sync/purge.cleanup_tick, SP-308), the monthly archive of the FITs p
 retention (engine/fit_archive.tick, SP-317: the 1st, 03:00–05:00 local, tenants staggered),
 the nightly apply of the received body weights (api/weight.tick, SP-472: 03:00–06:00 local, not
 while a sync or an automatic plan run of the tenant is going), the background sync's looks for
-new activities (sync/background.tick_all, SP-499) and, once, the rain backfill
-(api/rain_backfill.tick, SP-299).
+new activities (sync/background.tick_all, SP-499), the coach dashboard's summaries of coached
+students (coach_board.tick, SP-790: a missing one soon, then nightly), the daily ops report (ops_daily.tick, SP-388:
+yesterday's after 03:30 local) and, once, the rain backfill (api/rain_backfill.tick, SP-299).
 
 Every tenant (SP-384, SP-374 第 5 條): each minute the loop walks accounts.tenants.sync_tenants()
 — the owner, and in multi-user mode every enabled user — and runs the daily sync and the weekly
@@ -221,6 +222,15 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
             # weight entries once a night (03:00 local + a per-tenant slot), never while a sync runs
             from backend.api import weight as weight_api
             await _each_tenant(lambda: weight_api.tick(sf()), "weight apply")
+            # 教練看板 (SP-790, backend/coach_board.py): a coached student's summary when it has none yet,
+            # and once a night (04:00 local + a per-tenant slot); a queued job each, never at board time
+            try:
+                from backend import coach_board
+                await coach_board.tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:           # noqa: BLE001
+                log.warning("coach summary tick failed: %s", type(e).__name__)
         with tenancy.use(tenancy.owner()):
             # the one-time rain backfill of the last 12 months (api/rain_backfill.py, SP-299)
             try:
@@ -259,4 +269,13 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
                 raise
             except Exception as e:
                 log.warning("server backup tick failed: %s", type(e).__name__)
+            # 每日營運報表 (backend/ops_daily.py, SP-388): yesterday's report after 03:30 local into
+            # logs/ops/, 31 days kept; the member signal for Telegraf hourly
+            try:
+                from backend import ops_daily
+                await ops_daily.tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.warning("ops report tick failed: %s", type(e).__name__)
         await asyncio.sleep(interval)

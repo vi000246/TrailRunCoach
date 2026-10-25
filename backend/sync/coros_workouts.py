@@ -54,6 +54,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import CorosPlanPush
+from backend.i18n import _      # SP-908: why a session is not pushed / a push failed (never the watch's text)
 from backend.engine.zones import EASY_BAND, LONG_BAND, TRAIL_BAND, WORKOUT_TARGETS, watch_band
 from backend.sync import http
 from backend.sync.coros_client import _get_token_and_base, _headers
@@ -297,7 +298,7 @@ def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
     title, detail, target = s.get("title", ""), s.get("detail", ""), s.get("target", "")
     m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*分", title)
     if not m:
-        raise Unsupported(f"看不懂間歇結構：{title}")
+        raise Unsupported(_("看不懂間歇結構：{name}", name=title))
     reps, work = int(m.group(1)), int(m.group(2))
     rest = _num(r"休\s*\d+\s*[–-]\s*(\d+)\s*分", detail) or _num(r"休\s*(\d+)\s*分", detail) or work
     warm = _num(r"暖身\s*(\d+)\s*分", detail, 15)
@@ -330,7 +331,7 @@ def _test_steps(s: dict, th: Thresholds) -> list[StepLike]:
     from backend.engine import cp_protocols as CPP
     proto = CPP.protocol_of(s) or "standard"
     if proto == "race":
-        raise Unsupported("用比賽代替 CP 測試：比賽不推")
+        raise Unsupported(_("用比賽代替 CP 測試：比賽不推"))
     t = CPP.TABLE[proto]
     title, detail = s.get("title", ""), s.get("detail", "")
     warm = _num(r"暖身\s*(\d+)\s*分", detail, t["warm"])
@@ -464,18 +465,18 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: b
     if kind == "rest" or (kind == "race" and not s.get("steps")):
         # a race goes to the watch only with steps: the 賽事計算機's 「匯出至課表」 (its legs);
         # the generator's own 比賽 row has none
-        raise Unsupported("比賽 / 休息不推")
+        raise Unsupported(_("比賽 / 休息不推"))
     if kind == "strength":
-        raise Unsupported("COROS 肌力課要從動作庫挑動作，先不推")
+        raise Unsupported(_("COROS 肌力課要從動作庫挑動作，先不推"))
     if kind == "heat_passive":
-        raise Unsupported("被動熱適應不推")
+        raise Unsupported(_("被動熱適應不推"))
     if s.get("steps") and kind != "notice":
         # the structure the user saved in the editor (engine/workout_steps.py) wins over the text
         from backend.engine import workout_steps as WS
         try:
             st = WS.normalize(s["steps"])
         except WS.StepsError as e:
-            raise Unsupported(f"課表結構有誤：{e}")
+            raise Unsupported(_("課表結構有誤：{err}", err=e))
         c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm,
                    sent_tl=sent_tl, walk=th.walk_of(s), ep=ep, ep_power=bool(s.get("ep_power")))
         return WS.steps_to_coros(st, c)
@@ -496,7 +497,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: b
         from backend.engine.aet_test import is_aet_session
         return _aet_test_steps(s, th) if is_aet_session(s) else _test_steps(s, th)
     if secs <= 0:
-        raise Unsupported("沒有時間長度")
+        raise Unsupported(_("沒有時間長度"))
     from backend.engine import workout_steps as WS
     from backend.engine.warmup import EASY_KINDS, mark_min
     if kind in EASY_KINDS and (mark_min(s) or WS.climb_reps(s) or WS.steep_walk(s)):
@@ -543,7 +544,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: b
                                    Step(EX_REST, recover, None, r_name)], rep_name)]
         it = easy_target(s, th)
         return [Step(EX_TRAIN, secs, it, easy_name(s, th, it))]
-    raise Unsupported(f"不支援的課表類型 {kind}")
+    raise Unsupported(_("不支援的課表類型 {kind}", kind=kind))
 
 
 # ---------------------------------------------------------------------------
@@ -688,11 +689,11 @@ def workout_name(s: dict) -> str:
 def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = None) -> WorkoutSpec:
     """COROS workout for one plan session (raises Unsupported when not pushed)."""
     if s.get("done"):
-        raise Unsupported("已完成")
+        raise Unsupported(_("已完成"))
     if not s.get("day"):
-        raise Unsupported("本週排不進去")
+        raise Unsupported(_("本週排不進去"))
     if today and s["day"] < today:
-        raise Unsupported("日期已過")
+        raise Unsupported(_("日期已過"))
     th = Thresholds.of(thresholds)
     sent = _sent_tl(s)
     steps = session_steps(s, th, sent, ep=True)
@@ -984,7 +985,7 @@ def status_of(s: dict, thresholds: Optional[dict], row: Optional[CorosPlanPush],
             return {**out, "status": "done", "reason": str(e), **_row_view(row)}
         if (row is not None and (row.program_id or row.id_in_plan) and s.get("day") is None
                 and not (today and row.day and row.day < today)):
-            return {**out, "status": "outdated", "reason": f"{e}，推送時會從 COROS 移除", **_row_view(row)}
+            return {**out, "status": "outdated", "reason": _("{why}，推送時會從 COROS 移除", why=str(e)), **_row_view(row)}
         return {**out, "status": "skipped", "reason": str(e), **_row_view(row)}
     if row is None:
         return {**out, "status": "not_pushed", "name": spec.name}
@@ -1128,11 +1129,11 @@ async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,
             check = await _remove_remote(hub, row)
         except Executed:
             # done on the watch but not synced here yet: keep it, don't re-create
-            return {**out, "status": "done", "reason": "COROS 上已完成", **_row_view(row)}
+            return {**out, "status": "done", "reason": _("COROS 上已完成"), **_row_view(row)}
         except CorosAuthError:
             raise
         except CorosError as e:
-            row.status, row.error = "failed", f"更新時刪除舊的失敗：{e}"[:500]
+            row.status, row.error = "failed", _("更新時刪除舊的失敗：{err}", err=e)[:500]
             await db.commit()
             return {**out, "status": "failed", "name": spec.name, "error": row.error, **_row_view(row)}
     if row is None:
@@ -1213,16 +1214,16 @@ async def _remove_row(db: AsyncSession, hub: TrainingHub, r: CorosPlanPush,
     athlete may have done them."""
     out = {"id": r.session_id, "title": r.title, "day": r.day}
     if keep_before and r.day and r.day < keep_before:
-        return {**out, "status": "kept", "reason": "日期已過，保留在 COROS"}
+        return {**out, "status": "kept", "reason": _("日期已過，保留在 COROS")}
     try:
         check = await _remove_remote(hub, r)
     except Executed:
         await db.commit()
-        return {**out, "status": "kept", "reason": "COROS 上已完成，不移除"}
+        return {**out, "status": "kept", "reason": _("COROS 上已完成，不移除")}
     except CorosAuthError:
         raise
     except CorosError as e:
-        r.status, r.error = "failed", f"刪除失敗：{e}"[:500]
+        r.status, r.error = "failed", _("刪除失敗：{err}", err=e)[:500]
         await db.commit()
         return {**out, "status": "failed", "error": r.error}
     await db.delete(r)

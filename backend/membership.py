@@ -32,6 +32,10 @@ Data sources are scopes too, and each can be switched off for the whole server
 scheduler then skips it and the settings page says 暫停中. TrainingPeaks' website login and the
 WKO5 client are the owner's only (owner 2026-10-12: TP's terms §11(e), §23).
 
+A coach viewing a student (代看, SP-791, accounts/viewing.py): the request's tenant is the student's but
+member() answers with the coach's plan (coach_member: their role, quotas counted on them; the owner and
+admins as a subscriber, never their own scopes) — SP-56 Q5.
+
 A test account (SP-611, accounts/testaccounts.py) has its role's scopes but no data source and no
 automatic sync (TEST_DENIED): it never connects a real platform. Its plan can still be set on the
 admin page, to try either tier.
@@ -137,27 +141,66 @@ QUOTAS: dict[str, dict[str, Quota]] = {
     FREE: {
         "calc": Quota("calc", 10, "month", "計算機每月 10 次"),
         "charts": Quota("charts", 5, "day", "圖表每天 5 個"),
+        # SP-805: 疊石 Cairn 揪團報名的腳程估算, counted on the organiser — one 報名者 (a distinct
+        # track) a month; a subscription has no such quota (unlimited)
+        "participants": Quota("participants", 10, "month", "團員腳程估算每月 10 位"),
     },
     PAID: {
         "backtest": Quota("backtest", 2, "month", "回測每月 2 次"),
     },
 }
+# monthly quotas the admin's 本月額外次數 (SP-713) does not raise: counted in people, not in uses (SP-805)
+NO_EXTRA = frozenset({"participants"})
 CHART_DAYS = {"charts:90d": 90, "charts:365d": 365}       # beyond 365: charts:full
 
-# the plan × feature table, for the pages and the docs (docs/plans/membership.md mirrors it)
-PLAN_TABLE = [
-    ("看課表、改課表、手動記錄、活動列表、近 90 天圖表", "✅（圖表每天 ≤ 5 個）", "✅"),
-    ("安全提示、關門判斷、傷病紅燈、熱與寒冷提醒", "✅ 永遠免費", "✅"),
-    ("手動匯入 FIT、下載我的資料", "✅", "✅"),
-    ("自動同步", "每天夜間一次", "有新活動就處理"),
-    ("自動調課表", "夜間同步後", "即時"),
-    ("計算機", "每月 10 次（同一天同一條路線只算 1 次）", "無限"),
-    ("365 天與全歷史圖表", "—", "✅"),
-    ("回測", "—", "每月 2 次、全站排隊"),
-    ("全解析度保留", "1 年（之後只留摘要）", "自選 2／3／5／10 年"),
-    ("離線快取", "省空間", "完整"),
-    ("教練、開團", "—", "第二波另議"),
-]
+# the plan × feature table the pages show: 方案與訂閱 (/plans, signed in) and 方案與價格 (/pricing, public,
+# SP-846) both draw it from these rows (billing/plan_table.py) — one table, not one per page. The words are
+# static/i18n/<locale>/plans.json: row.<key> (the feature), row.<key>.free / .paid (a "text" cell; a cell
+# with a quota reads row.<key>.free_n / .paid_n with the admin's limit), grp.<group> (the heading).
+# SP-846 Q1-4: no row sells the sync itself (SP-321 §8: only unofficial sources are behind it) — the row
+# is what the plan does after an import or a sync.
+@dataclass(frozen=True)
+class PlanRow:
+    key: str
+    group: str
+    free: str = "text"                 # "yes" ✓ | "no" — | "text": row.<key>.free
+    paid: str = "text"
+    free_limit: Optional[str] = None   # a quota of the free plan (QUOTAS[FREE]) that numbers the free cell
+    paid_limit: Optional[str] = None   # a quota of the subscription that numbers the paid cell
+
+
+PLAN_GROUPS = ("plan", "calc", "data", "cairn", "safety")
+PLAN_ROWS: tuple[PlanRow, ...] = (
+    PlanRow("view", "plan", paid="yes", free_limit="charts"),
+    PlanRow("auto", "plan"),                                     # plan:auto (nightly) / plan:auto_realtime
+    PlanRow("calc", "calc", free_limit="calc"),
+    PlanRow("backtest", "calc", free="no", paid_limit="backtest"),
+    PlanRow("charts", "data", free="no", paid="yes"),            # charts:365d / charts:full
+    PlanRow("keep", "data"),                                     # history:full
+    PlanRow("offline", "data"),                                  # offline:full
+    PlanRow("data", "data", free="yes", paid="yes"),             # import:fit, export:data
+    PlanRow("cairn", "cairn", free="no", paid="yes"),            # accounts/links.FEATURES: link:calc, link:gpx_sync
+    PlanRow("participants", "cairn", free_limit="participants"),  # SP-805, SP-892
+    PlanRow("safety", "safety", paid="yes"),                     # never paywalled (SP-321)
+)
+
+
+def _plan_table() -> list[tuple[str, str, str]]:
+    """PLAN_ROWS in Chinese with the default limits: (feature, free, subscription)."""
+    import json
+    from pathlib import Path
+    p = Path(__file__).resolve().parent / "static" / "i18n" / "zh-TW" / "plans.json"
+    try:
+        cat = json.loads(p.read_text("utf-8"))
+    except (OSError, ValueError):
+        cat = {}
+    cell = {"yes": "✅", "no": "—"}
+    return [(cat.get(f"row.{r.key}", r.key), cell.get(r.free) or cat.get(f"row.{r.key}.free", ""),
+             cell.get(r.paid) or cat.get(f"row.{r.key}.paid", "")) for r in PLAN_ROWS]
+
+
+# the same table as text, for the docs (docs/plans/membership.md §1 mirrors it) and the tests
+PLAN_TABLE = _plan_table()
 
 # ---------------------------------------------------------------------------- who is asking
 
@@ -197,6 +240,9 @@ def role_of_user(user, now: Optional[dt.datetime] = None) -> str:
 def member(tenant=None, now: Optional[dt.datetime] = None) -> Member:
     from backend import tenancy
     t = tenant or tenancy.current()
+    v = _viewing(t)
+    if v is not None:                            # SP-791: a coach viewing a student — the coach's plan
+        return coach_member(v.coach, now)
     if t.kind == tenancy.OWNER:
         return Member(OWNER, PAID, 1, admin=True)
     if t.is_demo:
@@ -214,6 +260,25 @@ def member(tenant=None, now: Optional[dt.datetime] = None) -> Member:
     role = role_of_user(u, now)
     return Member(role, PAID if role in (SUBSCRIBER, OWNER) else FREE, uid, u.plan_expires_at,
                   admin=bool(getattr(u, "is_admin", False)), test=bool(getattr(u, "is_test", False)))
+
+
+def _viewing(t):
+    """The request's 代看 (accounts/viewing.py) when `t` is the student's tenant it reads, else None."""
+    from backend.accounts import viewing as VW
+    v = VW.current()
+    return v if v is not None and getattr(v.tenant, "id", None) == t.id else None
+
+
+def coach_member(coach, now: Optional[dt.datetime] = None) -> Member:
+    """SP-791 (SP-56 Q5): a coach viewing a student works with the coach's own plan — its chart range,
+    its quotas, counted on the coach — never the student's. The owner and admins view as a subscriber
+    would: no owner-only scope (the WKO5 folder, TP's client), no admin scope, in someone else's data."""
+    role = role_of_user(coach, now)
+    if role == OWNER:
+        return Member(SUBSCRIBER, PAID, int(coach.id), test=bool(getattr(coach, "is_test", False)))
+    return Member(role, PAID if role == SUBSCRIBER else FREE, int(coach.id),
+                  coach.plan_expires_at if role == SUBSCRIBER else None, admin=False,
+                  test=bool(getattr(coach, "is_test", False)))
 
 
 def user_id_of(t) -> Optional[int]:
@@ -376,7 +441,7 @@ def quota_for(key: str, m: Optional[Member] = None, now: Optional[dt.datetime] =
     limit = plan_limit(m.plan, key)
     if limit is not None and limit != q.limit:
         q = Quota(q.key, limit, q.period, q.label)
-    extra = extra_this_month(m.user_id, now) if q.period == "month" else 0
+    extra = extra_this_month(m.user_id, now) if q.period == "month" and key not in NO_EXTRA else 0
     if extra:
         q = Quota(q.key, q.limit + extra, q.period, q.label)
     return q
@@ -389,7 +454,8 @@ def month_key(now: Optional[dt.datetime] = None) -> str:
 
 def extra_this_month(user_id: Optional[int], now: Optional[dt.datetime] = None) -> int:
     """The extra uses an admin gave `user_id` for this month (SP-713; 0 = none). Added to every
-    monthly quota of their plan (calculator for the free tier, back-test for a subscriber)."""
+    monthly quota of their plan (calculator for the free tier, back-test for a subscriber) but those
+    in NO_EXTRA (SP-805: 團員腳程估算 counts people)."""
     if user_id is None:
         return 0
     try:
@@ -411,7 +477,7 @@ def usage(key: str, now: Optional[dt.datetime] = None, m: Optional[Member] = Non
     pk = _period_key(q.period, now)
     out = {"used": store.usage_get(m.user_id, key, pk), "limit": q.limit, "period": q.period, "label": q.label,
            "resets": pk, "resets_on": _resets_on(q.period, now)}
-    if q.period == "month":
+    if q.period == "month" and key not in NO_EXTRA:
         out["extra"] = extra_this_month(m.user_id, now)
     return out
 

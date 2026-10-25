@@ -7,7 +7,7 @@ Everything is on a 1-s grid (`to_grid`): samples interpolated linearly, gaps
 longer than GAP_S not bridged (NaN).
 
 Cleaning (`clean`) — what every max-HR rule removes before it takes its own
-peak (thresholds.estimate_mhr 5 s, threshold_confidence 60 / 120 s,
+peak (thresholds.estimate_mhr best 10-s mean, threshold_confidence 10-s mean / 60 / 120 s,
 session_stimulus.hr_peak 60 s, racepower.maximal 120 s cumulative):
 
   range   < 30 or > 220 bpm
@@ -241,6 +241,20 @@ def held_peak(y, hold_s: int) -> Optional[float]:
     if not full.any():
         return None
     return float(np.min(win[full], axis=1).max())
+
+
+def rolling_mean_peak(y, win_s: int) -> Optional[float]:
+    """The highest `win_s`-second rolling mean HR (max of the rolling mean over fully valid windows).
+    SP-493 R2 (owner 2026-10-20, Q4): the max-HR estimate and the watch-account check read the best
+    10-s mean — 「撐 10 秒」 (held_peak, every second ≥ the value) was too hard to reach; a mean lets
+    the last seconds of a hard finish count without any one second deciding it."""
+    if y is None or len(y) < win_s:
+        return None
+    win = np.lib.stride_tricks.sliding_window_view(np.asarray(y, float), win_s)
+    full = np.isfinite(win).all(axis=1)
+    if not full.any():
+        return None
+    return float(np.mean(win[full], axis=1).max())
 
 
 # ---------------------------------------------------------------------------

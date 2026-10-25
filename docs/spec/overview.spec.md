@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-14
+> **Last Updated**: 2026-10-24
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -203,6 +203,17 @@ engine config / parity mode is the same everywhere.
   (`stale-badge`, the computed-at time in its hover; strings `overview.stale.*`), keeps the 套用這次的
   AeT / CP buttons from posting while stale (「狀態更新中，幾秒後再套用」), polls `/status/fresh` every
   3 s and reloads the card when done; after 5 min it stops and the badge becomes 「重新整理」.
+  **SP-809 (2026-10-23, SP-361 Q2 / SP-809 Q1 = B):** a switch of 課表心率區間 alone (the settings differ
+  only by the HR stamp `_SK_HR`; the kept record's `settings_but_hr`, `_settings_sig_but_hr`,
+  `backend/api/overview.py:151`) is served stale too, `reason: hr` (`_stale_status`, `:235`), with the
+  測試 card's 「最大心率可信度低」 warning (`thr_check.warn`) re-applied under the new setting at once
+  (`_rewarn`, `:165` → `threshold_confidence.rewarn`, `backend/engine/threshold_confidence.py:1184`,
+  from the max HR's confidence and the 自動 pick `warn.auto` the check keeps); the badge reads
+  「心率區間更新中」 (`overview.stale.hr` / `stale.hr_tip`, `staleWatch`, `backend/static/overview.html:490`).
+  The HR model stays in the Status key (Q1: the 輕鬆跑上限 decides which runs count as Zone 3 — the
+  gate's dose, the 課表's quality sessions), so the rest of the card is the old model's until the
+  background computation is in. A record kept before SP-809 (no `settings_but_hr`), or a 自動
+  setting without the kept pick, computes in the request as before.
 - **COROS push outside the writer lock (B3, 2026-10-08).** COROS takes 20–30 s on the NAS. The
   plan writer lock (`_wlock`) now covers reconcile + save only; every push to the watch runs under
   a separate push lock (`_plock`, `backend/api/plan_sessions.py:472`) and re-reads the stored plan
@@ -542,7 +553,11 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   a week partly inside keeps the strength days before the window. B / C events are unchanged
   (the book's 「主要比賽」; applying it to them would be 推估). week_plan returns the windows as
   `strength_stop` and the projection applies the same rule per week. Removing a stored strength
-  session is a reduction, so auto-adjust does it without asking (plan-auto.spec.md).
+  session is a reduction, so auto-adjust does it without asking (plan-auto.spec.md). SP-671 keeps one
+  short maintenance session in the taper's first 3 days (`taper_strength_days`); SP-866: never the day
+  after a general strength session (the week's, done or kept before the window, or the previous week's —
+  the projection passes those as `before`): a later day of those 3 then, none when no day there fits; the
+  week note says which (zh-TW + en).
 - Easy runs fill the remaining minutes in 40–60 min sessions; in base the first one carries
   8×10 s hill strides.
 - Targets per session come from `zones.training_targets` (CP / LTHR / AeT, estimate-aware),
@@ -626,7 +641,11 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   路跑 a share of the race distance (`ROAD_FRAC`) at long-run pace, and for a race ≤ 21.1 km
   (`ROAD_SHORT_KM`, SP-523) never below the base phase's long run (`base_long_minutes`: 30 % of the week,
   ≥ 60 min, ≤ +10 %; `long_minutes(…, week_min)` from week_plan and the projection), its detail saying
-  「比賽距離短：專項期的長跑不短於基礎期的長跑」; the race GPX's longest climb becomes one 長爬坡反覆 easy run,
+  「比賽距離短：專項期的長跑不短於基礎期的長跑」 — but that lift stops at 130 % of the race
+  (`ROAD_SHORT_MAX_SHARE`, `short_road_ceiling`, SP-523 R1: a 10K's base long run was 183 %; Higdon ≈ 129 %;
+  the ceiling wins over the floor, never cuts the share, ≥ 60 min), 「，最長約比賽距離的 130%」 when it did;
+  the same floor and ceiling for a 主要訓練項目 越野 athlete whose A race is a road race ≤ 21.1 km
+  (`short_road_floor`: the race's kind decides; 越野 path's ceiling = 130 % of the race time); the race GPX's longest climb becomes one 長爬坡反覆 easy run,
   which says how the race climbs it (SP-227, `race_gait`: runwalk.gait on the climb's grade × the
   race day's climbing speed, 「比賽時這段每小時約 N m、G%：用快走／走跑皆可／用跑的」; the old
   「用比賽的走／跑方式」 without a race time); a race simulation is a suggestion
@@ -634,7 +653,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   the last 3 weeks; week 5 is a recovery week), 路跑 第 4、3 週 (`ROAD_SIM_WEEKS`); it is hidden while a
   「賽事模擬」 session is in the plan from the window's first week up to the race (`until`). Its structure (editor and COROS push, SP-409; `workout_steps._climb_items`, read
   from the title 「長爬坡反覆 N×M 分」): 暖身 15 → N ×（上坡 M′＋下坡 M × 0.6′, a COROS group）→ 緩和 (the rest of
-  the session, ≥ 5′; else the old one block). No HR / power target on the watch (target_policy `climb: none`
+  the session, ≥ 5′; else the old one block). The detail's 「緩和 N 分」 is that rest (`specific_phase.climb_cool`,
+  SP-837: `climb_minutes` rounds the total to 5′, so 8–12′ — 2×20 → 11, 3×20 → 9), not a fixed 10. No HR / power target on the watch (target_policy `climb: none`
   unchanged, owner 2026-10-13): the uphill's name is 「上坡 · <the session's HR suggestion> · RPE 4」, the descent
   「下坡用跑的 · RPE 3–4」; the RPE (no watch target) gives the structure's TSS estimate its IF (≈ 0.9 × the
   card's rate × 1.1 × h, 推估) instead of the no-target work step's 1.05 (≈ 2 × the card).
@@ -1006,7 +1026,7 @@ defaults reproduce today's plan exactly.
 |---|---|---|
 | 可練日 | `plan.prefs.days` | 7 bools Mon..Sun, unchecked = rest day (`null` = every day) |
 | 長跑日 | `plan.prefs.long_day` | any weekday `mon`…`sun` / `auto` = the athlete's most frequent long day over 12 weeks (`auto`) |
-| 偏好的星期 | `plan.prefs.pref_days`, `plan.prefs.pref_keep` | `{quality \| aet_test \| cp_test \| strides: [first, second]}` (`{}` = 自動, the planner picks); one type per weekday (the long run's is 長跑日). Breaks of the default rules (`day_conflicts`, `backend/engine/plan_prefs.py:646`: 48 h from the long run, the day after it, not an allowed day, the long-day cap, two Zone 5 days < 2 apart, AeT test on a weekend / next to a hard day) are shown live (`POST /prefs/conflicts`) and after saving; 照我的偏好 stores the code in `pref_keep` and the planner then keeps the day, else it moves the session with a note |
+| 偏好的星期 | `plan.prefs.pref_days`, `plan.prefs.pref_keep` | `{quality \| aet_test \| cp_test \| strides: [first, second]}` (`{}` = 自動, the planner picks); one type per weekday (the long run's is 長跑日). Breaks of the default rules (`day_conflicts`, `backend/engine/plan_prefs.py:646`: 48 h from the long run, the day after it, not an allowed day, the long-day cap, two Zone 5 days < 2 apart, AeT test on a weekend / next to a hard day) are shown live (`POST /prefs/conflicts`) and after saving; 照我的偏好 stores the code in `pref_keep` and the planner then keeps the day, else it moves the session with a note. The conflict texts are `M_()` (SP-907): the dialog gets them in the request's language, a week note quoting one follows the page's language |
 | 單次時間上限（平日） | `plan.prefs.cap_weekday` | 20–300 min (`null` = none) |
 | 長跑日上限 | `plan.prefs.cap_long` | 20–600 min (`null` = 同平日) |
 | 上限模式 | `plan.prefs.cap_mode` | `soft` 盡量不超過 / `hard` 絕對不超過 (`soft`) |
@@ -1045,6 +1065,14 @@ warm-up / cool-down, CP / AeT test, B2B). One control per line, explanations beh
   marked session goes through that structure (`backend/sync/coros_workouts.py:474`): the same steps, targets
   and total as before plus one warm-up lap at the easy-run HR cap. Edited / custom rows keep their mark when
   the preference is switched off (the text and the push agree).
+- **Easy-kind sessions written with their own warm-up** (SP-454, owner 2026-10-20 Q1 A): 長爬坡反覆 (「暖身 15 分」
+  in its text), 陡坡健走 (「暖身 10 分平路」), the 基礎期's 長爬坡有氧 (its structure's 平路暖身 10, id `climb_base`)
+  take the next rule, not this one (`_own_kind` / `_own_text` / `_own_steps`, `backend/engine/warmup.py`): the
+  warm-up is topped up to N, the climbs / steep part / cool-down are not cut, the session gets longer (minutes +
+  TSS at the easy-run rate). The text keeps one warm-up time (no 「含暖身 N 分」; a mark from before is dropped);
+  the 長爬坡有氧's 「暖身、緩和各 10 分」 becomes 「暖身 N 分、緩和 10 分」 and its title 「長爬坡有氧 {m}′」 the new
+  minutes. `workout_steps._climb_items` / `_steep_items` read the warm-up from the text (`own_warm_s`), so the
+  structure and the COROS push have it. Tests: `backend/tests/test_warmup_own_easy_sp454.py`.
 - **Its own warm-up** (intervals, CP / AeT tests, the RPE 6–7 技術地形 structure): topped up to N, a longer one
   kept, the main set never shortened; the extra minutes count in the session (minutes + TSS at the easy-run
   rate). Library intervals: the floor is inside the warm-up block (`interval_library.warm_floor` / `blocks`,
@@ -1100,7 +1128,8 @@ matched to an activity, never pushed (「被動熱適應不推」), rate 0 TSS/h
 main / walk cool-down 5 min; done heat_passive rows still count as a heat dose
 (`heat_data.completed_passive_dates`). The heat itself stays where it is weather, not training: the
 race-day heat in the calculator (S projected automatically, no choice since SP-569) and the 熱適應 card
-(`i_heat`, `heat_data.hot_race`).
+(`i_heat`, `heat_data.hot_race`); a hot A/B race within 30 days with a race-day S < 75 % makes that card watch (黃), not bad — SP-856:
+nothing to train any more, only the race-day reminder.
 
 **Application order** (`shape()`, `backend/engine/plan_prefs.py:504`, then `place()`,
 `backend/engine/plan_prefs.py:715`), in `week_plan` and every projected week:
@@ -1487,9 +1516,12 @@ own sport (`compliance.accepted`, `WALK_OK`, `backend/engine/compliance.py:39-53
 stored rows from before follow without a migration. Shown on the 本週 tiles, the 課表
 chips and week rows, the workout review 「課表」 card and the 課表統計 page — all through
 `session_compliance` + `with_plan_check` + `status_of`, on the same planned TSS: the calendar's
-`est_tss` (stored TSS, else minutes × `tss_rates`); the workout review card gets it from
-`api/plan_sessions.session_est_tss` (`backend/api/plan_sessions.py:2510`; rates from the dataset's
-TSS / h and `plan_store.rate_rows`, only computed for a row without a TSS).
+`est_tss` (stored TSS, else — SP-817 — the TSS of its structure, stored steps or derived from the text,
+by `session_structure.figures` with the plan inputs' thresholds carried on `plan_rates` (`Rates`), an
+all-easy structure of the easy kinds at its time × the kind's `tss_rates`; else minutes × `tss_rates`);
+the workout review card gets it from `api/plan_sessions.session_est_tss` (rates from the dataset's
+TSS / h and `plan_store.rate_rows`, only computed for a row without a TSS; the structure priced with the
+thresholds of the tenant's newest plan inputs already computed, `_inputs_peek`).
 
 SP-402 (2026-10-13; `docs/research/positive-compliance.md` §4 原則 5 「不確定就不扣」): an activity
 row carries `hr_quality` — the whole run's SP-266 HR check (`workout_review.run_hr_quality`,
@@ -1710,7 +1742,16 @@ which one. The response keeps the `coros` field names.
   5 區 card (full width), 待辦與警示 and, left of it, the B2B card (shown only before a multi-day /
   ≥ 6 h A event or once B2B weekends exist; `GET /overview/b2b`). Due tests, B2B weekends and zone
   retests are in the shared floating suggestion box (`static/suggestions.js`); its
-  `suggestions:changed` event reloads the week (`backend/static/overview.html:967`).
+  `suggestions:changed` event reloads the week (`backend/static/overview.html:967`). It floats over a page's
+  right side, except on the 課表 (SP-851, `<html data-sugbox-dock>`): on a desktop (≥ 1000 px) while it shows,
+  open or collapsed, `suggestions.js` sets `--sugbox-w` (its width + 16 px) and the class `sugbox-docked` on
+  `<html>`, the page pads `main`'s right side by it (less the page's own side margin) so the 週統計 column ends
+  left of the box, and 問 AI (`askai.js`) stacks above the box instead of left of it. A phone is unchanged.
+  SP-913: a page's own bottom bar marked `data-float-clear` (the 活動列表's sticky 比較 bar) is never under the
+  box or 問 AI: `shell.js` (`floatClear`, on scroll / resize / the bar's size, and `AppShell.floatClear()`)
+  measures both where they float on their own and, when one would cover the bar, sets `--float-clear` on `<html>`
+  (the bar top's distance from the viewport bottom + 8 px) — both use it as their least `bottom` — and fires
+  `floatclear` (askai.js re-stacks). No such bar, or it is hidden / out of their way: `0px`, nothing moves.
   SP-471: **「心率和功率對不起來：建議做測試」** — a block of its own at the top of the page, above the
   KPI row (`backend/static/overview.html:255`, `static/eptest.js`), and on the 課表 page under its notes
   (`backend/static/schedule.html:623`): the summary with the numbers, each suggested test (AeT / CP) with
@@ -1832,7 +1873,11 @@ which one. The response keeps the `coros` field names.
   then one with no interval work as 強度課 — `FAMILY_ORDER`, `backend/engine/compliance.py:197`;
   each row's own colour, planned → actual TSS on hover, `renderKinds`,
   `backend/static/compliance.html:564`; the session list names the family), planned vs actual TSS / hours and the sessions done per 天／週／月
-  (SP-401: bars of `completed`, no 80 % line, no green / orange dots; the 負荷 tile's bar stops at 100 %, no target mark),
+  (SP-401: bars of `completed`, no 80 % line, no green / orange dots; the 負荷 tile's bar stops at 100 %, no target mark;
+  SP-446: 天 is a grid, not bars — `renderDayGrid`: ≤ 12 weeks a row per week, a cell per day (✓ one done, ✓2 two,
+  跳過 a dashed grey box, nothing planned an empty box, today outlined) and the week's count at the right; longer, the
+  same weeks × days as small cells, a column per week, sized to the card (6–22 px; a phone scrolls with the weekdays
+  pinned), the darker green for 2+; 週／月 stay bars),
   the streak (weeks with ≥ 80 % of the due sessions done, 推估), a compact session list (跳過 grey
   `--faint` with ○, listed after the rest; no red for a status — SP-398), a
   per-phase period filter and a zoned 負荷比 ATL ÷ CTL chart (hover 「值 · 區間（範圍）」, a dashed
@@ -1855,6 +1900,7 @@ which one. The response keeps the `coros` field names.
   `SYNC_BUSY` is a hint, not an error. When it ends the calendar reloads (new activities pair:
   ✓／未完成) and, if anything was downloaded, reloads once more ~5 s later together with the
   自動調整 box (`window.autoPlanRefresh`) for the background `plan_auto.after_sync`.
+  While a coach views a student (代看) the login link and 抓活動 are not shown: coaching.spec.md › 代看.
 - **Calendar cards** (2026-10-13, SP-396; was 「Calendar status glyphs」 2026-10-04 — ✓ before the
   title, the compliance tint over the type colour, ≠ / ◐, 未完成 struck through, ● activity chips,
   a watch on every future chip). `chipHtml` (`backend/static/schedule.html`, block 「session card」)
@@ -2161,8 +2207,12 @@ which one. The response keeps the `coros` field names.
   climb, `rep_km`) and, with a hill repeat (a work leg that ends with the lap button or lasts ≥ 90 s),
   each rep's climb ends with the lap button at the top (its estimated time kept as `est`), named
   「爬 120 m · 約 6′」 (the climb's gain; the time at the step's intensity by Minetti, 推估); the
-  biggest climb unless another is picked, 0 = none. `route_elevation` starts the first repeat at
-  `rep_km` (the climb's foot). Pushing sends the steps and their names only — no route
+  biggest climb unless another is picked, 0 = none. SP-862: the recovery right after that climb (kind
+  rest, timed or a distance) ends with the lap button back at the foot, 「回到坡底按圈 · 約 4′」, its `est`
+  the climb's way down at its intensity (`route_library.descent_secs`: no target = a walk, `WALK_KMH`;
+  Minetti at the climb's grade going down, 推估), its target as it was; one already to the lap button
+  (「走下坡」) stays as written. `route_elevation` starts the first repeat at
+  `rep_km` (the climb's foot) and walks a lap-button recovery all the way down (with or without `est`). Pushing sends the steps and their names only — no route
   (COROS / Garmin step names: the note, ≤ `MAX_NOTE` 60; neither provider's own limit is enforced).
   **SP-641 — a session from a whole route**: the routes page's 「從這條路線產生課」 (an uploaded GPX or
   a 「我的路段」) picks a day and shows the steps POST /steps/from-route makes
@@ -2179,6 +2229,43 @@ which one. The response keeps the `coros` field names.
   (no HR: RPE 3–4 with the climb); descents none (kind other, 「控制、安全」). Every step 「直到按下計圈」
   with `est` walked on the session's route copy at the chart's speed (so each bar sits on its
   stretch), named 「爬 120 m · 約 6′」 / 「下坡 … m」 / 「平路／起伏 … km」. The watch gets steps and targets only.
+  The structure line (`workout_steps.structure_text`: the editor's 「結構」, the calendar feed) folds
+  consecutive lap-button steps into 「16 × 直到按下計圈」 (SP-865; English 「16 × Until lap button」; inside a
+  repeat too; timed steps are never folded) — a route's session and a race export are all of them.
+  **SP-864 — narrower power, fewer steps**: a route session's runnable legs target power in a narrow
+  band centred on the easy intensity the 坡段表 uses (`Ctx.easy_frac` ± `route_session.EASY_HALF_BAND`
+  0.03 × CP; it was the easy level's 65–80 % CP, whose middle is slower than the table's speed); a
+  flat / rolling leg shorter than `FLAT_MIN_M` 500 m becomes part of the neighbouring climb or descent
+  with the nearer grade (its kind kept; other legs keep the 200 m rule). 貓空 17K: 10 → 9 steps.
+  SP-864 Q1 (2026-10-21): one walk for every climb time — `user_templates.route_walk` / `walk_secs` (the
+  session's route copy, piece by piece at each piece's grade, the step chart's): the 坡段表's climb rows
+  (`course_table(…, prof)`: `t_s` and its pace; the segments keep their one grade), a route session's
+  steps and a hill repeat's 「爬 … m · 約 …′」 (`route_library.climb_secs(…, walk)`). A route session's
+  step name says the easy run's time on that walk for every climb / flat leg — a steep leg's HR cap is a
+  guard rail, so its name is the table's time while its `est` stays at the HR target's speed (the chart
+  walks the step at it); descents keep their own. A climb that took in a short stretch (a flat between
+  two climbs, the route's start) says that stretch too: you press the lap at its end.
+  **SP-863 — 「我的路段」 by the last time you did it**: a 「我的路段」 picked on POST /steps/route (the hill
+  repeats' climb) or POST /steps/from-route (every leg) is named with the time of the most recent
+  effort in its own direction (`route_library.last_clock`: the item's ranking time — a segment's
+  elapsed, a route's moving — the whole stretch exactly, a part of it by its share of the length on
+  that effort's compact track, `t` / `cm`), the model's where it can't say; the step's `est` stays the
+  model's (the chart places each bar on its stretch by it, and the session's time / load). The answer
+  carries `last` {date, key}; the editor's route line says 「段名時間是你 {date} 實際爬這段的時間」 and the
+  from-route notes add one line; each leg has `est_src` last | model and `last_s`. The editor's ▲ 路線
+  popup lists climbs and whole routes under 我跑過的; shared stretches and descents (`more`, unless
+  starred) sit behind 「更多（路段、下坡 N 條）」, opened when the session's route is one of them.
+  **SP-861 — descents by the personal grade model**: on the route paths (POST /steps/check with a
+  route, the template 坡段表, every 路線 API through `api/route_library._env`) the step context gets
+  `Ctx.grade` = `user_templates.GradeCurve` of the race calculator's memoised grade models
+  (`plan_sessions._grade_curve` → `racepower._grade_models()["grade_re"].for_trail("race")`, as
+  `calc.plan` uses it; None when the fit has no windows of the athlete's own). `user_templates.speed_on`
+  then times a descent (g < 0) as the calculator does relative to its flat — v_flat × RE(g) / RE(0) ×
+  `pacing.hill_factor(g)` (default β), ≤ the personal trail descent cap `GaitRE.v_max(g)` — in the step
+  chart (`_Walk`), the 坡段表 (`course_table`) and the route session's `est` / ground time; where a
+  ≤ −15 % bin has < 30 own windows SP-639's rule stays the floor (no faster than the flat). Climbs and
+  flats stay Minetti (`_gf`), so the 「爬 … m · 約 …′」 names are unchanged. The chart / table carry
+  `down_model` personal | minetti and the matching note. 推估.
   **我的範本 in 推薦** (2026-10-04 follow-up, the user's decision): GET /steps/templates/recs
   (`backend/api/plan_sessions.py:1700`) ranks the user's templates with the built-ins by the same
   `_score` rules (family, Zone 5, phase, the ladder rung's 同一類 bonus, time, terrain, type); the
@@ -2299,7 +2386,9 @@ which one. The response keeps the `coros` field names.
 - **`i_testing`** (`backend/engine/status.py:864`) — a CP row older than 42 days → watch, 90 →
   bad (`backend/engine/status.py:64`); LTHR is event-driven (an applied estimate is said as one,
   not judged by age) and AeT goes by reason (B3); event-driven retests (`zone_events`: HR shift
-  at the same power, a ≥ 4-week break, the first cool spell) are **suggestions only** — they turn
+  at the same power, a ≥ 4-week break, the first cool spell, SP-848 easy runs above the easy zone by power —
+  `cp_low_easy`: ≥ 5 easy flat road runs of the last 6 weeks, picked by HR ≤ AeT + 3, power IF median > 0.85,
+  no CP test in the window → a CP test, 推估) are **suggestions only** — they turn
   the card watch (「建議測」) and go to the floating box, never into the plan; 10–21 days before
   the A event is named the right time; < 10 days → 「賽前 10 天內不要測，賽後再測」, watch. The
   action names the 課表偏好 protocol (`_cp_protocol`, `backend/engine/status.py:852`); `race` →
@@ -2519,6 +2608,10 @@ The settings writes need a same-origin request (`same_origin`, `backend/api/debu
 type, `requirements.txt`). Both routers are owner-only (`backend/main.py:152`) and out of the OpenAPI
 schema: the demo never mounts them. The settings block is `#debugapi` on 設定 › 進階
 (`backend/static/settings.html`, logic `backend/static/debug_api.js`, strings `settings.debug.*`).
+Its token table is a five-column table on a desktop; at ≤ 560 px (SP-804) each token is a card
+(`tr.tok` as a grid, the header row `tr.hd` hidden): the name with 撤銷 beside it, then 範圍／到期／
+最後使用 each named by its header text (`data-l`, `tokenRow`) — five columns did not fit 390 px and
+the 撤銷 button was cut off at the right edge.
 Data registry: `debug_tokens` SECRET (`token_hash`), `debug_audit` and `debug_auth_failures` DERIVED
 (`backend/data_registry.py:127`).
 
@@ -2597,6 +2690,12 @@ Data registry: `debug_tokens` SECRET (`token_hash`), `debug_audit` and `debug_au
   `test_illness.py` (SP-117), `test_injuries.py`, `test_injury_walkrun.py` (SP-272),
   `test_strength_plan.py` (SP-119), `test_strength_moves.py` (SP-191), `test_balance_plan.py`
   (SP-120), `test_carb_hints.py` (SP-285 – SP-287); the 課表 page's `test_plan_history.py` (SP-71 每週存檔).
+- English: `backend/tests/test_en_prefs_sp907.py` (SP-907) — every 偏好的星期 conflict's text / rule / source /
+  action in English, the Chinese unchanged, a week note quoting one shown in English from the zh-TW cache.
+- English: `backend/tests/test_en_coros_reason_sp908.py` (SP-908) — `coros.reason` / a failed push's error in
+  English, the watch's copy as it is.
+- English: `backend/tests/test_en_editor_sp906.py` (SP-906) — /steps/derive and /steps/check with no Chinese
+  in English but the watch's step names, `summary_src`, a 目標 saved from an English page stored in zh-TW.
 
 ## Domain Model
 
@@ -2686,7 +2785,7 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 
 - [x] Show the stored plan's future TSS / CTL on the charts (SP-219) — decided 2026-10-12 and built on the 圖表分析 PMC charts (above; not the 總覽 card, the 課表 page, plan vs actual or the days after the last planned session)
 - [x] Mark which sessions the system changed, which were left alone, which the user edited (SP-318) — built (課表標記 above)
-- [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361, SP-362 In Progress) — fixed for the 課表 2026-10-13 (owner Q1 = B): after a model switch the calendar answers the previous plan at once, marked 「心率區間更新中」, and the new one is computed in the background. Not done (Q1 = A, planned with SP-362): taking the HR model out of the `Status` / plan-inputs keys so a switch recomputes only the HR targets; the 總覽 status card still computes in the request after a switch
+- [x] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361, SP-362) — fixed for the 課表 2026-10-13 (owner Q1 = B): after a model switch the calendar answers the previous plan at once, marked 「心率區間更新中」, and the new one is computed in the background; the 總覽 status card the same way 2026-10-23 (SP-809 Q1 = B). Not done, by decision (SP-809 Q1, owner 2026-10-21): taking the HR model out of the `Status` / plan-inputs keys — the 輕鬆跑上限 (Z2 上緣) decides which runs count as Zone 3, so both depend on the model
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
 - [x] A warm-up time in 課表偏好 added before every session and template (SP-364; 每堂課前加熱身 above)
 - [x] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57) — done 2026-10-08 (`DEFAULT_IF`, `backend/engine/rpe_load.py:96`; branch feat/rpe-per-level-sp57)
@@ -2859,3 +2958,27 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-14 | bugfix | SP-569 ②–⑤ | 設定 › 心率 ? says the max-HR order the code uses (yours → watch → 365-day runs → age formula); the settings' 資料同步 rows and source boxes, the 課表 toolbar (push ▾, ⋯, status line) and the replan preview read the catalog (English: "Sync now", "Tue 10/27" — `wdl()` = the short weekday, was 「週」 + the narrow letter, 「週T」); the push ▾ items carry `data-range` (they had `data-scope`, which shell.js locked as plan scopes: disabled for everyone since SP-330); a free user's locked TrainingPeaks login says it is the site's own (`scope.site_only`), 「訂閱後可用」 only for `membership.upgrade_scopes`. Tests: `backend/tests/test_sp569_texts.py` |
 | 2026-10-15 | feature | SP-640 | 課表 › 路線: uploaded GPX routes and 「我的路段」 on their own page (profile, 坡段表, upload / rename / delete), apart from the templates; a template's GPX moved there once; the route picked per session in the editor (POST /steps/route): each hill repeat's climb to the top with the lap button, named 「爬 … m · 約 …′」, the repeats drawn from the climb's foot; the watch gets steps only; per-tenant table and folder; zh-TW + en |
 | 2026-10-15 | feature | SP-641 | 課表 › 路線 「從這條路線產生課」: one step per climb (SP-639's rule), legs < 200 m into the nearer-grade neighbour, ≤ 25 steps, each to the lap button named 「爬 … m · 約 …′」; targets by SP-632 (runnable power + Effort Pace, steep HR / RPE, descents none); opens the 課表 editor on the chosen day, saved as the user's own session; the watch gets steps only; zh-TW + en |
+| 2026-10-20 | fix | SP-523 R1 | 專項期 short-road-race long run (owner 2026-10-20, Q1-2 / Q1-3): (1) the base-phase floor now also holds for a 主要訓練項目 越野 athlete whose A race is a road race ≤ 21.1 km (`specific_phase.short_road_floor`: the race's kind decides; a 10K's 賽前第 4 週 on the 越野 path was 0.80 × 50 = 40 min); (2) the floor's lift stops at 130 % of the race (`ROAD_SHORT_MAX_SHARE`, `short_road_ceiling`: 路跑 path the distance at long-run pace, 越野 path the race time — what each detail's % counts; ≥ 60 min) — the ceiling wins over the floor (a 10K: base 105 min = 183 % → 75 min ≈ 13 km, Higdon 8 mi ≈ 129 %), never cuts the share, the +10 % step still last; the detail adds 「，最長約比賽距離的 130%」, `SRC_ROAD` names the ceiling. zh-TW + en. Tests: `backend/tests/test_specific_long_sp523.py` |
+| 2026-10-20 | fix | SP-817 | A session without a stored TSS (a custom one added through the API, no structure saved) is priced by its structure — stored steps, else `workout_steps.derive` from its text — as the structure editor prices it (`session_structure.figures`; owner 2026-10-20, SP-646 Q1-3 「有結構就一律用結構算」): `api/plan_sessions.structure_tss` in `est_tss`, the thresholds / category TSS / h / 課表偏好 carried on `plan_rates`' `Rates`; an all-easy structure of the easy kinds keeps its time × the kind's `tss_rates` (SP-437's all-easy rule); no structure or no thresholds (a plain rates dict) = minutes × the rate as before; a stored TSS still wins, nothing stored changes (nothing re-pushed). `session_est_tss` (the workout review 「課表」 card) uses the tenant's newest computed inputs (`_inputs_peek`). Tests: `backend/tests/test_custom_tss_structure_sp817.py` |
+| 2026-10-20 | fix | SP-856 (from SP-569) | 總覽 熱適應 card: a hot A/B race within 30 days with a projected race-day S < 75 % is `watch` (黃), was `bad` (紅) — since SP-569 there is no 熱適應課 to do, only the race-day reminder (the action text unchanged); also watch when the per-activity weather is missing. `status.i_heat`. Tests: `backend/tests/test_heat_auto_sp569.py`, `backend/tests/test_heat_card_watch_sp856.py` |
+| 2026-10-20 | feature | SP-848 (from SP-511) | The suggestion box says the CP may be set low: `zone_events` detector `cp_low_easy` — the easy flat road runs of the last 6 weeks picked by HR (`intensity_calib.is_easy`: avg HR ≤ AeT + 3, ≤ 15 m/km, ≥ 20 min) with a power IF (NP ÷ that day's CP; `easy_rows` now also gives `src` = `tss_source` and `date`, and takes `weeks`): ≥ 5 runs, median IF > 0.85 (`intensity_calib.EASY_BOUNDS`' top; Palladino's easy zone ≤ 80 % CP), no CP test dated in the 6 weeks → a firm CP-test suggestion (`zone:cp_low_easy`, the 測試 card turns watch); 稍後提醒 / 不要 as every zone row. 0.85 / 6 weeks / 5 runs 推估. zh-TW / en. `backend/tests/test_cp_low_easy_sp848.py` |
+| 2026-10-20 | bugfix | SP-837 | 長爬坡反覆's detail said 「緩和 10 分」 while the structure / COROS push had the rest of the 5′-rounded session (2×20 → 11′, 3×20 → 9′): `specific_phase.climb_text` now says `climb_cool` (the session − 暖身 15 − N × (rep + round(rep × 0.6))), zh-TW + en. The structure and the push are unchanged (only the text). Tests: `backend/tests/test_climb_cool_text_sp837.py`; `test_warmup_own_easy_sp454.py` now expects 「緩和 11 分」 for its 2×20 (the structure's, the reason of this fix) |
+| 2026-10-20 | bugfix | SP-851 | The floating 建議 box covered the 課表's 週統計 column on a desktop (fixed at the right, 340 px). The 課表 asks for room (`<html data-sugbox-dock>`): on ≥ 1000 px while the box shows (open or collapsed) `suggestions.js` sets `--sugbox-w` / `sugbox-docked` on `<html>` and `schedule.html` pads `main`'s right side by it, so the calendar ends left of the box; `askai.js` puts 問 AI above the box there (not left of it, over the page). Other pages and phones unchanged. Tests: `backend/tests/e2e/test_sugbox_dock_sp851_e2e.py` |
+| 2026-10-20 | change | SP-866 | The A-race taper's one maintenance strength session (SP-671) is never the day after a general strength session: `drop_strength_before_a` skips a day of `taper_strength_days` whose previous day holds one (the week's, done or kept before the window, or `before` — the previous week's, which `projection.project_weeks` passes), moving it to a later easy / free day of the window, none when none fits; the week note adds why (zh-TW + en). week_plan passes no `before` (the previous week is not in its input). Tests: `backend/tests/test_taper_strength_no_b2b_sp866.py` |
+| 2026-10-20 | change | SP-865 | `workout_steps.structure_text` folds consecutive lap-button steps (work / rest / other, 「直到按下計圈」) into 「N × 直到按下計圈」 (zh-TW / en through `OPEN_LABEL`; inside a repeat too; a single one and timed steps unchanged): the editor's 「結構」 line of a route's session (SP-641) and of a race export no longer lists every step. Tests: `backend/tests/test_structure_lap_run_sp865.py` |
+| 2026-10-20 | change | SP-862 | Picking a route for a hill repeat (POST /steps/route, `route_library.apply`): the recovery right after each rep's climb (kind rest, timed or a distance) now ends with the lap button back at the foot — 「回到坡底按圈 · 約 N′」 (zh-TW / en), `est` = `descent_secs` (the way down at its intensity, a walk without a target, Minetti going down) — instead of keeping its fixed time (SP-639 Q1-3's 「維持範本原本的時間」, which often ended part-way up). An already lap-button recovery stays; strides / no climb unchanged. The COROS push keeps one group, both legs lap-button. `route_elevation` walks any lap-button recovery to the foot (the `not est` exception gone). The editor's ▲ 路線 tip and the routes page hint say so. Tests: `backend/tests/test_route_back_lap_sp862.py` |
+| 2026-10-20 | feature | SP-861 | The step chart on a route, the template / route 坡段表 and a route session's step times walk descents by the race calculator's personal grade model (`user_templates.GradeCurve`: trail RE(g) / RE(0) × the calculator's downhill power, ≤ the personal descent cap; SP-639's no-bonus rule stays the floor on a ≤ −15 % bin with < 30 own windows); climbs stay Minetti; no own windows → as before; `down_model` + note; zh-TW + en; `backend/tests/test_route_grade_sp861.py` |
+| 2026-10-20 | feature | SP-863 | 「我的路段」 picked on a structure or made into a session: step names carry the most recent effort's time on that stretch (`route_library.last_clock`; the model's where there is none; `est` stays the model's), `last` in the answer + a line on the route line / notes; the editor's 我跑過的 lists climbs and routes, stretches and descents behind 「更多」 (`more`, unless starred); zh-TW + en; `backend/tests/test_route_mine_sp863.py` |
+| 2026-10-20 | feature | SP-864 | Route sessions: runnable legs' power a narrow band on the easy intensity (`Ctx.easy_frac` ± 0.03 × CP, was 65–80 % CP); flat / rolling legs < 500 m become part of the neighbouring climb or descent (貓空 17K 10 → 9 steps); `backend/tests/test_route_session_sp864.py` |
+| 2026-10-23 | bugfix | SP-913 | On a phone the floating 問 AI button (and the collapsed 建議 box) covered the right end of the 活動列表's sticky 比較 bar (「到比較頁挑 B」). A page's bottom bar marked `data-float-clear` now lifts both above it while one would cover it: `shell.js` sets `--float-clear` on `<html>` (measured on scroll / resize / the bar's size, `AppShell.floatClear()`), `suggestions.js` / `askai.js` use it as their least `bottom`, `floatclear` re-stacks 問 AI. Pages without such a bar, and the activity page while no A is picked, unchanged. Tests: `backend/tests/e2e/test_float_clear_sp913_e2e.py` |
+| 2026-10-23 | bugfix | SP-907 | The 課表偏好 conflict texts (`plan_prefs.day_conflicts`: text, rule, source, action) and the one-type-per-weekday error are `M_()` / `_()` texts with the weekday and type names as words of their own: the dialog shows them in the request's language and a week note that quotes one (「… → 這週改排別天」) is shown in English from the zh-TW plan cache. Tests: `backend/tests/test_en_prefs_sp907.py` |
+| 2026-10-23 | bugfix | SP-906 | The structured editor's server texts in the request's language: each step's resolved text / sub / warn / err, the RPE words, the structure line (「暖身 15 分 · 2×(…)」 through stored_text's pieces), the equivalence verdict, the estimate note, the zones table's labels, the watch preview's durations, `context.kinds` / `types`, 「目標用：…」 (`_basis_label`), the derive reason (`workout_steps.py`, `plan_sessions._context`). The 目標 summary comes with `summary_src` (zh-TW, what a session stores; the page sends it back as stored); a resolved HR band capped at the easy-run cap says so in `ecap` (the editor read 「輕鬆跑上限」 off `sub`). The step names (the watch's) stay as stored — SP-908. Tests: `backend/tests/test_en_editor_sp906.py` |
+| 2026-10-23 | bugfix | SP-908 | Why a session is not pushed to COROS (`coros.reason`: 肌力課先不推, 日期已過, 本週排不進去, 看不懂間歇結構 …) and a failed removal's error are msgids (`sync/coros_workouts.py`, zh-TW text unchanged); the 課表 responses show every `coros` dict's reason / error in the request's language (`plan_sessions._shown_coros`; one made in zh-TW by a background push or a handler that stores texts is read back). The workout's name and steps on the watch are not touched — their language is SP-908's open question. Tests: `backend/tests/test_en_coros_reason_sp908.py` |
+| 2026-10-23 | perf | SP-809 | 總覽狀態卡 after switching 課表心率區間 alone: `GET /overview/status` answers the previous status at once, `stale: {reason: hr}`, badge 「心率區間更新中」, the new model's status computed in the background (SP-394's stale path; `settings_but_hr` kept with the previous status); the 測試 card's 「最大心率可信度低」 warning re-applied under the new setting in the answer (`threshold_confidence.rewarn`; the check's `warn` keeps the 自動 pick `auto`). The HR model stays in the Status / 課表 inputs keys (SP-809 Q1: it decides the Zone 3 dose and the quality sessions); `status_but_hr` and the 課表's `_stale_view` reason `hr` stay in use. Tests: `backend/tests/test_status_hr_stale_sp809.py` |
+| 2026-10-23 | bugfix | SP-804 | 設定 › 進階設定 › Debug API on a phone: the token table's 撤銷 button was cut off at the right edge (five columns, the 最後使用 cell four lines high). At ≤ 560 px each token is a card — name + 撤銷 on the first line, 範圍／到期／最後使用 below with their names (`data-l`); a desktop keeps the table. Tests: `backend/tests/e2e/test_debug_tokens_phone_sp804_e2e.py` |
+| 2026-10-23 | feature | SP-864 | Q1 answered: the 坡段表's climbs walked along the profile (`user_templates.route_walk` / `walk_secs`, `course_table(…, prof)` from the routes page, `POST /steps/route` and a template's segments), as a route session's steps and a hill repeat's climb (`route_library.climb_secs(…, walk)`); a route session's step names say the easy run's time (a steep leg's HR cap only a guard rail; its `est` stays the chart's). 貓空 17K: 9 steps (unchanged); 爬坡 1 / 3 / 5 say the table's time, 爬坡 2 / 4 include a short stretch between two climbs. Tests: `backend/tests/test_route_session_sp864.py` |
+| 2026-10-23 | feature | SP-829 (from SP-102) | The 維持期's 24 weeks (SP-102, `planning.MAINTAIN_AFTER_WEEKS`) count from where training last started again: `planning.training_restart` = the first run day after the last gap of ≥ `LAYOFF_WEEKS` (4, 推估; Mujika & Padilla 2000, reentry's 29–56-day category) weeks without a run, else the first day (no layoff), a gap still open today → today. The app's `SINCE_OF` is `training_start_db` (workout_files run days — `sport` containing "run", duplicates left out; every activity when none is a run — cached on the DB stamp and the day) → `(day, restart)`; `phases` passes `since` / `since_restart` to `auto_phases`. Without an A race the anchor is that day; after an A race a restart later than the base after it moves the anchor too. The 維持期 note says which (`maintain_segments(basis="a" / "restart" / "data")`, new msgid 「…從連續 {n} 週以上沒跑、重新開始跑的 {date} 起算…」). A new user importing years of old data is no longer in a 維持期 from day one. Tests: `backend/tests/test_maintenance_restart_sp829.py` |
+| 2026-10-23 | feature | SP-830 (from SP-102) | A road runner's 維持期 rotates 速度 / 閾值 instead of 速度 / 爬坡: `planning.maintain_focus(sport)` (主要訓練項目 road → `MAINTAIN_FOCUS_ROAD`), `maintain_week(phases, monday, sport)` adds `track` (`maintain_track`: 閾值 → z3, else z5) and the 閾值 week's line 「每週一堂 3 區的閾值課（平路）」; `week_plan` (`maintain_context(…, sport)`) and `projection.project_weeks` pass the week's `track` as `quality_gate.week_decision(prefer=)` — the 閾值 block takes the Zone 3 rung (Zone 5 stands in when Zone 3 is locked, `maintain_no_z3_note`), the 速度 block Zone 5 flat; `hill` only for a 爬坡 block, so no uphill interval for a road runner. `maintain_why(sport)` (status / overview: 「（速度、閾值）」, `Status._maintain_why` reads `primary_sport.effective`). The 閾值 block has no session above VT2 when one quality session a week (SP-102's rule now holds in the 速度 block; with 課表偏好 每週品質課 2 both Zone 3 and Zone 5 are planned). Plan page guide `plan.guide.maintain_vt2` says so. A trail runner unchanged. Tests: `backend/tests/test_maintenance_road_sp830.py` |
+| 2026-10-24 | feature | SP-446 | Q1 answered (mock A): 課表統計's 每日完成堂數 is a grid instead of bars (a day holds 0–2 sessions) — `renderDayGrid`: ≤ 12 weeks a row per week (✓ / ✓2, 跳過 a dashed grey box, nothing planned an empty one, today outlined, the week's count at the right); longer the small cells, a column per week (mock C's look), sized to the card, the weekdays pinned when a phone scrolls. 週／月 stay bars. New `compliance.trend.sum_head` / `week_sum` / `rest` / `done_more`. Tests: `backend/tests/e2e/test_smoke_pages.py::test_compliance_day_grid_sp446` |
+| 2026-10-24 | feature | SP-821 (from SP-791) | 課表 while a coach views a student (代看): no 「COROS 未登入 · 到設定頁登入 →」 link and no 抓活動 — the status line says the student logs in to COROS themselves; a push failing on the student's expired login says so without a 設定 link. The student's own page unchanged (`backend/tests/e2e/test_schedule_coros_login_view_sp821_e2e.py`) |
+| 2026-10-24 | maintenance | SP-943 | Coaching moved to its own spec: the 課表 toolbar's 「While a coach views a student」 paragraph (SP-791 / SP-821: no COROS login link or 抓活動, the reworded status line and push error) is now one line pointing to coaching.spec.md › 代看; the rules live there |

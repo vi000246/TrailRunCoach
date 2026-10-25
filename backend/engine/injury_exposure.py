@@ -40,6 +40,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from backend.engine import injuries as INJ
+from backend.i18n import N_, _
 
 WINDOW = 21
 CONTROL_STEP = 7          # Lövdal sensitivity analysis: one day a week
@@ -60,34 +61,44 @@ ALERT_PCT = 85.0          # §4.1: the current window ≥ P85 of the same contro
 ALERT_MEDIAN = 75.0
 ALERT_SHARE = 2.0 / 3.0
 NO_ALERT = ("acwr", "monotony", "step0", "ctl_ramp", "low_share")   # Lövdal / quality_gate already speak
-CAUTION = "同一個人、次數很少，只能看出巧合還是規律的方向，不能證明因果。推估。"
-WRIST = "用手腕光學心率算，誤差比胸帶大"
+CAUTION = N_("同一個人、次數很少，只能看出巧合還是規律的方向，不能證明因果。推估。")
 
-# key, label, unit, decimals, help
+# key, label, unit, decimals, help — msgids (SP-841): META holds them as written, meta_of() in the
+# request's language (the analysis is cached per language, api/injuries._analysis_cached)
 METRICS = (
-    ("run_h", "跑步時間", "h", 1, "傷前 21 天的跑步時間合計（路跑、越野、跑步機）。"),
-    ("run_km", "跑步距離", "km", 0, "傷前 21 天的跑步距離合計。"),
-    ("desc", "下降", "m", 0, "傷前 21 天跑步＋登山的下降公尺。膝蓋痛的主要候選。"),
-    ("climb", "爬升", "m", 0, "傷前 21 天跑步＋登山的爬升公尺。"),
-    ("steep_h", "陡下坡時間", "h", 1, "坡度 < −10% 的移動時間（需要逐秒資料；沒讀到的活動不算 0，算未知）。"),
-    ("impact", "衝擊量", "", 0, "Stryd ILR × 時間的合計，只有 Stryd 的跑步有；其他當未知。"),
-    ("long", "長跑次數", "次", 0, "單次 ≥ 90 分的跑步次數（徐國峰 90 分鐘檢查長度；當長跑的切點是推估）。"),
-    ("b2b", "連續長天", "天", 0, "連兩天以上長時間（和 B2B 同一個判定）的天數。"),
-    ("pack", "負重天", "天", 0, "有記錄背負（kg > 0）的活動天數。"),
-    ("max", "全力天", "天", 0, "你標成「全力」或手錶 RPE ≥ 9 的天數。"),
-    ("sore", "痠的次數", "次", 0, "活動上點「痠」的次數：痛之前是不是先痠了好幾次。"),
-    ("trail", "越野佔比", "%", 0, "越野跑時間 ÷ 跑步時間。"),
-    ("hike_h", "登山／健行時間", "h", 1, "不算進跑步時間，但下降有算進「下降」。"),
-    ("step0", "週增量", "%", 0, "傷前 7 天對再前 7 天的跑步時間。前一週太小（< 4 週平均 60%）不算。"),
-    ("step1", "週增量（延遲一週）", "%", 0, "再前一週的增量：Lövdal 2021 的效果在增量後第 8 天。"),
-    ("inc2", "2 週平均增幅", "%", 0, "(W0 − W2) ÷ (W1 + W2)，Lövdal 2021 驗證過最好的負荷變化指標之一（AUC 0.546）。"),
-    ("ctl_ramp", "長期訓練負荷（Chronic load）增加", "", 1, "傷前 7 天的長期負荷變化。"),
-    ("monotony", "單調度", "", 2, "Foster 單調度：7 天訓練負荷（Training load）平均 ÷ 標準差，前 14 天的最大值。"),
-    ("low_share", "低強度佔比", "%", 0, "心率 < AeT − 3 的時間 ÷（低於 AeT − 3 ＋高於 AeT + 3）。" + WRIST + "。"),
-    ("cad_rel", "步頻差", "%", 1, "傷前 21 天的平均步頻，相對你自己 26 週中位的差（手錶加速度計）。"),
-    ("acwr", "ACWR", "", 2, "7 天 ÷ 前 28 天（uncoupled）。只參考，不預測受傷（Lövdal 2021）。"),
+    ("run_h", N_("跑步時間"), "h", 1, N_("傷前 21 天的跑步時間合計（路跑、越野、跑步機）。")),
+    ("run_km", N_("跑步距離"), "km", 0, N_("傷前 21 天的跑步距離合計。")),
+    ("desc", N_("下降"), "m", 0, N_("傷前 21 天跑步＋登山的下降公尺。膝蓋痛的主要候選。")),
+    ("climb", N_("爬升"), "m", 0, N_("傷前 21 天跑步＋登山的爬升公尺。")),
+    ("steep_h", N_("陡下坡時間"), "h", 1, N_("坡度 < −10% 的移動時間（需要逐秒資料；沒讀到的活動不算 0，算未知）。")),
+    ("impact", N_("衝擊量"), "", 0, N_("Stryd ILR × 時間的合計，只有 Stryd 的跑步有；其他當未知。")),
+    ("long", N_("長跑次數"), N_("次"), 0, N_("單次 ≥ 90 分的跑步次數（徐國峰 90 分鐘檢查長度；當長跑的切點是推估）。")),
+    ("b2b", N_("連續長天"), N_("天"), 0, N_("連兩天以上長時間（和 B2B 同一個判定）的天數。")),
+    ("pack", N_("負重天"), N_("天"), 0, N_("有記錄背負（kg > 0）的活動天數。")),
+    ("max", N_("全力天"), N_("天"), 0, N_("你標成「全力」或手錶 RPE ≥ 9 的天數。")),
+    ("sore", N_("痠的次數"), N_("次"), 0, N_("活動上點「痠」的次數：痛之前是不是先痠了好幾次。")),
+    ("trail", N_("越野佔比"), "%", 0, N_("越野跑時間 ÷ 跑步時間。")),
+    ("hike_h", N_("登山／健行時間"), "h", 1, N_("不算進跑步時間，但下降有算進「下降」。")),
+    ("step0", N_("週增量"), "%", 0, N_("傷前 7 天對再前 7 天的跑步時間。前一週太小（< 4 週平均 60%）不算。")),
+    ("step1", N_("週增量（延遲一週）"), "%", 0, N_("再前一週的增量：Lövdal 2021 的效果在增量後第 8 天。")),
+    ("inc2", N_("2 週平均增幅"), "%", 0, N_("(W0 − W2) ÷ (W1 + W2)，Lövdal 2021 驗證過最好的負荷變化指標之一（AUC 0.546）。")),
+    ("ctl_ramp", N_("長期訓練負荷（Chronic load）增加"), "", 1, N_("傷前 7 天的長期負荷變化。")),
+    ("monotony", N_("單調度"), "", 2, N_("Foster 單調度：7 天訓練負荷（Training load）平均 ÷ 標準差，前 14 天的最大值。")),
+    ("low_share", N_("低強度佔比"), "%", 0,
+     N_("心率 < AeT − 3 的時間 ÷（低於 AeT − 3 ＋高於 AeT + 3）。用手腕光學心率算，誤差比胸帶大。")),
+    ("cad_rel", N_("步頻差"), "%", 1, N_("傷前 21 天的平均步頻，相對你自己 26 週中位的差（手錶加速度計）。")),
+    ("acwr", "ACWR", "", 2, N_("7 天 ÷ 前 28 天（uncoupled）。只參考，不預測受傷（Lövdal 2021）。")),
 )
 META = {k: {"label": l, "unit": u, "dec": d, "help": h} for k, l, u, d, h in METRICS}
+CJK_UNITS = (N_("次"), N_("天"))         # translated (en: a {one, other} entry); h / km / m / % as they are
+
+
+def meta_of(k: str) -> dict:
+    """META[k] in the request's language; `unit_one`: the unit after a value of 1 (en "1 day")."""
+    m = META[k]
+    u = m["unit"]
+    return {**m, "label": _(m["label"]), "help": _(m["help"]),
+            **({"unit": _(u), "unit_one": _(u, n=1)} if u in CJK_UNITS else {})}
 RELEVANT = {           # 推估: which metrics to list first for an area (§3.3)
     "knee": ("desc", "steep_h", "impact", "cad_rel"),
     "achilles": ("climb", "trail", "low_share", "cad_rel"),
@@ -369,13 +380,13 @@ def classify_events(events: list[dict], severities=None, include_recurrence: boo
     for e in events:
         why = None
         if e.get("status") == "draft":
-            why = "補完細節才會進分析"
+            why = _("補完細節才會進分析")
         elif e.get("kind") == "acute":
-            why = "急性傷不進負荷分析"
+            why = _("急性傷不進負荷分析")
         elif e.get("severity") not in sev:
-            why = "不在選的嚴重度"
+            why = _("不在選的嚴重度")
         elif e.get("recurrence_of") and not include_recurrence:
-            why = "復發（同部位、上次好了 42 天內）"
+            why = _("復發（同部位、上次好了 {d} 天內）", d=INJ.RECUR_DAYS)
         (exc if why else inc).append({**e, "why": why} if why else e)
     return inc, exc
 
@@ -473,7 +484,7 @@ def analysis(ds, events: list[dict], today: dt.date, *, severities=None, season:
         inc = [e for e in inc if e.get("area") == area]
     n = len(inc)
     tier = INJ.honesty_tier(n)
-    base = {"tier": tier, "n": n, "caution": CAUTION, "high_pct": HIGH_PCT, "excluded": [
+    base = {"tier": tier, "n": n, "caution": _(CAUTION), "high_pct": HIGH_PCT, "excluded": [
         {"id": e["id"], "label": INJ.full_label(e.get("area"), e.get("side")), "onset_date": e.get("onset_date"),
          "why": e["why"]} for e in exc],
         "drafts": sum(1 for e in events if e.get("status") == "draft"), "season": bool(season), "area": area,
@@ -500,9 +511,9 @@ def analysis(ds, events: list[dict], today: dt.date, *, severities=None, season:
     rel = RELEVANT.get(area or "", ())
     rows = []
     pvals = {}
-    for k, *_ in METRICS:
-        cvals_all = [w[k] for _, w in ctrl if w.get(k) is not None]
-        known = len(cvals_all) + sum(1 for _, _, w in cases if w.get(k) is not None)
+    for k, *_rest in METRICS:
+        cvals_all = [w[k] for _e, w in ctrl if w.get(k) is not None]
+        known = len(cvals_all) + sum(1 for _ev, _o, w in cases if w.get(k) is not None)
         tot = len(ctrl) + len(cases)
         enough = tot > 0 and known / tot >= COVERAGE_MIN
         pts = []
@@ -521,7 +532,7 @@ def analysis(ds, events: list[dict], today: dt.date, *, severities=None, season:
                         "few": len(ref) < FEW_CONTROLS})
             strata.append((x, ref))
         q = np.percentile(cvals_all, [10, 25, 50, 75, 90]).tolist() if len(cvals_all) >= 3 else None
-        row = {"key": k, **META[k], "relevant": k in rel, "enough": enough, "coverage": round(known / tot, 2) if tot else 0,
+        row = {"key": k, **meta_of(k), "relevant": k in rel, "enough": enough, "coverage": round(known / tot, 2) if tot else 0,
                "alertable": k not in NO_ALERT,
                "control": {"n": len(cvals_all), **({"p10": q[0], "p25": q[1], "p50": q[2], "p75": q[3], "p90": q[4]} if q else {})},
                "cases": pts}
@@ -540,7 +551,7 @@ def analysis(ds, events: list[dict], today: dt.date, *, severities=None, season:
                     row["or"] = round(math.exp(b), 2)
                     row["ci"] = [round(math.exp(b - 1.96 * se), 2), round(math.exp(b + 1.96 * se), 2)]
                     row["p"] = _norm_p(b / se)
-                    row["per"] = "每 1 個標準差"
+                    row["per"] = _("每 1 個標準差")
                     pvals[k] = row["p"]
         rows.append(row)
     if pvals:
@@ -563,25 +574,27 @@ def analysis(ds, events: list[dict], today: dt.date, *, severities=None, season:
             "few_controls": len(ctrl) < FEW_CONTROLS,
             "cases": [{"id": ev["id"], "date": ev["onset_date"], "label": INJ.full_label(ev.get("area"), ev.get("side")),
                        "area": ev.get("area"), "severity": ev.get("severity"),
-                       "top": top_pcts(rows, ev["id"])} for ev, _, _ in cases]}
+                       "top": top_pcts(rows, ev["id"])} for ev, _o, _w in cases]}
 
 
 def fmt(k: str, v) -> str:
     if v is None:
-        return "未知"
-    m = META[k]
+        return _("未知")
+    m = meta_of(k)
     s = f"{v:.{m['dec']}f}"
     if m["unit"] == "%":
         return s + "%"
-    return f"{s} {m['unit']}".strip()
+    unit = m.get("unit_one") if m.get("unit_one") and s == "1" else m["unit"]
+    return f"{s} {unit}".strip()
 
 
 def case_text(row: dict, p: dict) -> str:
     """「你受傷前，下降在你自己的第 85 百分位（比平常高）」 — never 造成 / 導致 / 風險."""
     if p.get("pct") is None:
-        return f"{p['date']} {p['label']}：{row['label']}未知"
-    hi = "比平常高" if p["pct"] >= HIGH_PCT else "比平常低" if p["pct"] <= 100 - HIGH_PCT else "跟平常差不多"
-    return f"{p['date']} {p['label']}受傷前，{row['label']}在你自己的第 {p['pct']:.0f} 百分位（{hi}）"
+        return _("{date} {label}：{metric}未知", date=p["date"], label=p["label"], metric=row["label"])
+    hi = _("比平常高") if p["pct"] >= HIGH_PCT else _("比平常低") if p["pct"] <= 100 - HIGH_PCT else _("跟平常差不多")
+    return _("{date} {label}受傷前，{metric}在你自己的第 {pct:.0f} 百分位（{hi}）", date=p["date"], label=p["label"],
+             metric=row["label"], pct=p["pct"], hi=hi)
 
 
 def top_pcts(rows: list[dict], eid: int, n: int = 3) -> list[dict]:
@@ -651,7 +664,7 @@ def timeline(ds, events: list[dict], marks: list[dict], today: dt.date, begin: O
         bands.append({"id": e["id"], "start": o.isoformat(), "end": stop.isoformat(), "open": INJ.is_open(e),
                       "area": e.get("area"), "label": INJ.event_label(e),
                       "category": "illness" if INJ.is_illness(e) else "injury",
-                      "severity": e.get("severity"), "severity_label": INJ.SEVERITIES.get(e.get("severity"), ""),
+                      "severity": e.get("severity"), "severity_label": INJ._label(INJ.SEVERITIES, e.get("severity")),
                       "status": e.get("status"), "kind": e.get("kind")})
     ticks = [m for m in marks if m["pain"] >= 1 and begin.isoformat() <= m["date"] <= end.isoformat()]
     return {"begin": begin.isoformat(), "end": end.isoformat(), "weeks": weeks, "bands": bands,
@@ -716,10 +729,11 @@ def pattern_alerts(an: dict, now: dict, ctrl_values: dict, today: dt.date) -> li
             continue
         areas = sorted({c["area_label"] for c in r["cases"]})
         out.append({"id": f"injury_pattern:{k}:{mon}", "type": "injury_pattern", "pick": None, "metric": k,
-                    "title": f"{r['label']}跟你受傷前很像",
-                    "reason": f"你前 {r['k_known']} 次受傷（{'、'.join(areas)}），有 {r['k_above']} 次之前的{r['label']}"
-                              f"偏高（推估）；這 3 週的{r['label']}在你的第 {pct:.0f} 百分位。",
-                    "help": "只是提醒，不會改課表，也不會擋課。比的是你自己的紀錄，次數很少，不能證明因果（推估）。"})
+                    "title": _("{metric}跟你受傷前很像", metric=r["label"]),
+                    "reason": _("你前 {n} 次受傷（{areas}），有 {k} 次之前的{metric}偏高（推估）；這 3 週的{metric}在你的第 "
+                                "{pct:.0f} 百分位。", n=r["k_known"], areas=_("、").join(areas), k=r["k_above"],
+                                metric=r["label"], pct=pct),
+                    "help": _("只是提醒，不會改課表，也不會擋課。比的是你自己的紀錄，次數很少，不能證明因果（推估）。")})
     return out
 
 

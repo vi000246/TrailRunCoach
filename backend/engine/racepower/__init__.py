@@ -6,6 +6,6 @@ trail / 百岳 extensions (docs/research/superpower-calculator.md).
     cp       CP / W′ from efforts, validity checks, RWC rating
     re       running effectiveness, CVI adjustment, trail RE, activity metrics
     predict  road / trail / 百岳 predictions and scenarios
-    weather  CWA / Open-Meteo providers, cache, key storage, peak lookup
+    weather  CWA / MET Norway / Open-Meteo (archive, heights) providers, cache, key storage, peak lookup
     athlete  reads the Dataset to fill the athlete's defaults
 """

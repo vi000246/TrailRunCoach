@@ -330,14 +330,16 @@ def xu_runs(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
 
 
 def xu_text(r: dict) -> str:
+    # SP-748: in the request's language (the 5 區 card's 90-min row); `why` is the run's own (as stored)
+    sep = _("；")
     if r.get("drift") is None:
-        return f"{r['date']} 90 分鐘跑：" + "；".join(r["why"])
-    head = (f"{r['date']} 90 分鐘：第 10 分 {r['hr10']:.0f} → 第 90 分 {r['hr90']:.0f} bpm，"
-            f"飄移 {r['drift'] * 100:.1f}%")
-    heat = f"（{r['chip']}，熱環境，結果可能偏高；熱天通過仍算數）" if r["ok"] and r.get("heat") else ""
+        return _("{date} 90 分鐘跑：{why}", date=r["date"], why=sep.join(r["why"]))
+    head = _("{date} 90 分鐘：第 10 分 {hr10} → 第 90 分 {hr90} bpm，飄移 {drift}%", date=r["date"],
+             hr10=f"{r['hr10']:.0f}", hr90=f"{r['hr90']:.0f}", drift=f"{r['drift'] * 100:.1f}")
+    heat = _("（{chip}，熱環境，結果可能偏高；熱天通過仍算數）", chip=r["chip"]) if r["ok"] and r.get("heat") else ""
     h = r.get("hold") or {}
-    note = ("；" + hold_text(h)) if r.get("scheduled") and h and h.get("basis") is None else ""
-    return head + ("（< 10%：有氧基礎夠）" + heat if r["ok"] else "：" + "；".join(r["why"])) + note
+    note = (sep + hold_text(h)) if r.get("scheduled") and h and h.get("basis") is None else ""
+    return head + (_("（< 10%：有氧基礎夠）") + heat if r["ok"] else _("：") + sep.join(r["why"])) + note
 
 
 # ---------------------------------------------------------------------------
@@ -475,9 +477,17 @@ def easy_targets(ds, today: dt.date, aet: Optional[float]) -> Optional[dict]:
     kmh = float(np.median(ev)) * aet
     pw = float(np.median(ep)) * aet if len(ep) >= 3 else None
     pace = 3600.0 / kmh if kmh > 0 else None
-    txt = (f"最近 {len(ev)} 次輕鬆跑：AeT {aet:.0f} bpm ≈ "
-           + (f"{int(pace // 60)}:{int(pace % 60):02d}/km" if pace else "")
-           + (f"、{pw:.0f} W" if pw else "") + "（同心率跑更快就自動跟著調；推估）")
+    # SP-905: one msgid per shape (a session's 目標 quotes it; an English page reads it back)
+    ps = f"{int(pace // 60)}:{int(pace % 60):02d}" if pace else ""
+    if pace and pw:
+        txt = _("最近 {n} 次輕鬆跑：AeT {aet:.0f} bpm ≈ {pace}/km、{pw:.0f} W（同心率跑更快就自動跟著調；推估）",
+                n=len(ev), aet=aet, pace=ps, pw=pw)
+    elif pace:
+        txt = _("最近 {n} 次輕鬆跑：AeT {aet:.0f} bpm ≈ {pace}/km（同心率跑更快就自動跟著調；推估）",
+                n=len(ev), aet=aet, pace=ps)
+    else:
+        txt = (f"最近 {len(ev)} 次輕鬆跑：AeT {aet:.0f} bpm ≈ " + (f"、{pw:.0f} W" if pw else "")
+               + "（同心率跑更快就自動跟著調；推估）")
     return {"pace_s_km": pace, "power": pw, "n": len(ev), "text": txt}
 
 

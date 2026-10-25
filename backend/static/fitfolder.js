@@ -31,7 +31,7 @@
 
   if (!root.FitFolder) {
     // the server's picks (backend/sync/upload.py MAX_SELECT / EXTS; a test keeps them equal)
-    const DEF = { max_select: 3000, exts: [".fit", ".fit.gz", ".tcx", ".tcx.gz", ".gpx", ".gpx.gz"] };
+    const DEF = { max_select: 3000, exts: [".fit", ".fit.gz", ".tcx", ".tcx.gz", ".gpx", ".gpx.gz", ".pwx", ".pwx.gz"] };
     const GAP = 10 * 60 * 1000;               // one check per 10 minutes of page opens
     const DEPTH = 4;                           // sub-folders read (Garmin / COROS exports nest by year)
     const FAIL_KEEP = 50;                      // failures kept for the settings page

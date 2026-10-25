@@ -620,7 +620,8 @@ async function j(url, retry = 1) {
 }
 // S.keepRange: a deep link's range is used once (SP-672) — what is saved stays the user's own range until they pick one
 function save() { const kr = S.keepRange; try { localStorage.setItem("charts", JSON.stringify({ mode: S.mode, dash: S.dash, view: S.view,
-  range: kr ? kr.range : S.range, begin: kr ? kr.begin : $("begin").value, end: kr ? kr.end : $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel, workoutPlan: S.workoutPlan || null })); } catch {} }
+  range: kr ? kr.range : S.range, begin: kr ? kr.begin : $("begin").value, end: kr ? kr.end : $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel, workoutPlan: S.workoutPlan || null,
+  workoutKey: S.workoutKey && S.workoutKey[0] === S.workout ? S.workoutKey : null })); } catch {} }
 function restore() { try { return JSON.parse(localStorage.getItem("charts") || "{}"); } catch { return {}; } }
 
 function viewKind(v) {
@@ -724,6 +725,8 @@ async function init() {
   const savedSports = r.sports && r.sports.some((x) => sports.some((s) => s.sport === x)) ? r.sports : null;
   $("sports").innerHTML = sports.map((s) => `<label><input type="checkbox" value="${esc(s.sport)}" ${!savedSports || savedSports.includes(s.sport) ? "checked" : ""}>${esc(kindLabel(s.sport))} <span class="meta">${s.count}</span></label>`).join("");
   S.dash = { ...S.dash, ...(r.dash || {}) }; S.view = r.view || {}; S.workout = r.workout ?? null; S.workoutLabel = r.workoutLabel || null; S.workoutPlan = r.workoutPlan || null;
+  // SP-758: which activity that index was (its start minute), so an answer about another one is never drawn
+  if (Array.isArray(r.workoutKey) && r.workoutKey[0] === S.workout) S.workoutKey = r.workoutKey;
   // deep link from other pages: ?view=<name>&dash=<index or title>
   const qp = new URLSearchParams(location.search), qv = S.views.find((x) => x.name === qp.get("view") && !x.error);
   if (qv) {
@@ -1000,6 +1003,14 @@ function filterSummary() {
     || (isToday && ((+x.dataset.d && +x.dataset.d === days) || (x.dataset.d === "ytd" && b === `${e.slice(0, 4)}-01-01`)))));
 }
 
+// ---- activity check (SP-758) ----
+// A single-activity answer names its activity (`act_key`: its start minute). One about another activity than
+// the one shown — an index shifts when an older activity comes in or one is excluded, e.g. a copy kept offline
+// before that — is never drawn. known = S.workoutKey ([index, key]); unknown on either side: drawn.
+function actMismatch(res, workout, known) {
+  return !!(res && res.act_key && Array.isArray(known) && known[0] === workout && known[1] && res.act_key !== known[1]);
+}
+// ---- end activity check ----
 // an activity's start (already the athlete's local time, naive ISO) -> 26/10/02 07:15
 const actWhen = (s) => String(s || "").slice(2, 16).replaceAll("-", "/").replace("T", " ");
 // the planned session it was matched to (engine/plan_match.py; /workouts "plan"), or ""
@@ -1025,7 +1036,11 @@ function renderActChip() {
   $("act-tag").innerHTML = S.workout == null ? "" : planTag(S.workoutPlan)
     + (dm && dm.garmin ? ` <span class="meta" data-garmin>${esc(dm.garmin)}</span>` : "")
     + (dm && dm.not_original ? ` <span class="meta">${esc(dm.not_original_text || "")}</span>` : "");
+  const prevKey = S.workoutKey;
   if (a?.key) S.workoutKey = [S.workout, a.key];      // the 活動編輯 link: the shown activity's start minute
+  // SP-758: the list says which activity this index is now — cards drawn (or refused) on another belief: again
+  if (a?.key && S.mode === "workout" && (prevKey?.[0] !== S.workout || prevKey?.[1] !== a.key)
+      && [...$("grid").querySelectorAll(".card")].some((c) => c.classList.contains("act-mm") || actMismatch(c._res, S.workout, S.workoutKey))) load();
   const wk = S.workoutKey && S.workoutKey[0] === S.workout ? S.workoutKey[1] : null;
   $("edit-act").href = `/api/v1/app/activities/page${wk ? "?key=" + encodeURIComponent(wk) : ""}`;
   loadPain();
@@ -1149,7 +1164,8 @@ function cmpShow() {
 }
 $("cmp-mode").onclick = () => { CMP.on = !CMP.on; if (!CMP.on) CMP.sel = []; cmpShow(); };
 
-async function load() {
+// opts: renderCard's, for every card of the page ({ stale: false }: no previous drawing, SP-917)
+async function load(opts = {}) {
   save();
   if (ZOOM.card) closeZoom(false);
   const token = ++loadToken;
@@ -1228,7 +1244,7 @@ async function load() {
         if (c.kind === "z5gate" || c.kind === "readiness" || c.kind === "periodzones") card.classList.add("wide");
         if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "readiness", "periodzones", "climbvam", "pdtrend", "polecompare"].includes(c.kind)) { card.querySelector(".loading").textContent = t("viewer.unsupported"); continue; }
         if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = t("viewer.map_needs_act"); continue; }
-        await renderCard(card, v, di, c, q, token);
+        await renderCard(card, v, di, c, q, token, opts);
       } finally { prog.tick(); }
     }
   };
@@ -1438,11 +1454,30 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
       setTimeout(() => { if (token === loadToken) renderCard(card, v, di, c, q, token, opts); }, 15000);
       return;
     }
+    if (S.mode === "workout" && actMismatch(res, S.workout, S.workoutKey)) {
+      disposeCardCharts(card);
+      card.innerHTML = `<h2>${esc(res.title || c.title || c.kind)}</h2><p class="nodata">${esc(t("viewer.act_mismatch"))}</p>`;
+      card.classList.add("act-mm");
+      return;
+    }
+    const again = async (giveUp) => {
+      // gave up waiting: ask without stale, so this request computes it itself
+      const drew = await (giveUp ? renderCard(card, v, di, c, q, token, { stale: false }) : renderCard(card, v, di, c, q, token));
+      if (drew && ZOOM.card === card) fillZoom();
+    };
+    if (res.hide && res.stale) {
+      // SP-917: a card hidden in its previous drawing (the 間歇 cards before 「當作間歇判讀」) may show in the
+      // new one: 計算中 until that is in — removed now, the new drawing would have no card to go into
+      disposeCardCharts(card);
+      card.innerHTML = `<h2>${esc(res.title || c.title || c.kind)}</h2><div class="loading">${esc(t("viewer.computing"))}</div>`;
+      markStale(card, res.stale, again);
+      return true;
+    }
     card._res = res;
     card._ctx = { v, di, c, q };
     disposeCardCharts(card);
     card.innerHTML = `<h2>${esc(res.title || c.title || (c.kind === "map" ? t("viewer.map") : c.kind))}</h2>`;
-    card.classList.remove("is-stale");
+    card.classList.remove("is-stale", "act-mm");
     const zb = document.createElement("button");
     zb.className = "zbtn";
     zb.title = zb.ariaLabel = t("viewer.zoom_tip");
@@ -1508,11 +1543,7 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
     }
     variantToggle(card, res, pkey, () => renderCard(card, v, di, c, q, loadToken));
     drawInto(card, res);
-    if (res.stale) markStale(card, res.stale, async (giveUp) => {
-      // gave up waiting: ask without stale, so this request computes it itself
-      const drew = await (giveUp ? renderCard(card, v, di, c, q, token, { stale: false }) : renderCard(card, v, di, c, q, token));
-      if (drew && ZOOM.card === card) fillZoom();
-    });
+    if (res.stale) markStale(card, res.stale, again);
     if (S.zoomAfter === c.index && token === loadToken) { S.zoomAfter = null; openZoom(card, zb); }
     return true;
   } catch (e) {
@@ -1840,8 +1871,9 @@ function drawAction(card, a) {
       if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
       btn.remove();
       msg.textContent = a.done || t("viewer.applied");
-      // 「當作間歇判讀」 (interval_eval.FLAG_TAG): the dashboard's cards change, so redraw them
-      if (a.reload) load();
+      // 「當作間歇判讀」 (interval_eval.FLAG_TAG): the dashboard's cards change, so redraw them — computed now,
+      // not the previous drawing first (SP-917: that was 「這次不是間歇課」 with this button again)
+      if (a.reload) load({ stale: false });
     } catch (e) { btn.disabled = false; msg.textContent = t("viewer.apply_failed", { msg: e.message }); }
   };
   card.appendChild(wrap);
@@ -3383,7 +3415,7 @@ function drawActivity(card, res) {
     }
   }
   if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
-  if (res.kind === "act_hrpower") drawActHrPower(card, res);
+  if (res.kind === "act_hrpower") drawActHrPower(card, ACT.expand(res));
   else if (res.kind === "act_hrzones" || res.kind === "act_powerzones") drawActZones(card, res);
   else if (res.kind === "act_hrtrend") drawActHrTrend(card, res);
 }
@@ -3404,6 +3436,27 @@ function actChart(card, cls, label) {
   new ResizeObserver(() => chart.resize()).observe(el);
   return chart;
 }
+// ---- act_hrpower totals (SP-757) ----
+// the server sends each running total as whole-number steps in units of its last decimal (inc, inc_dec)
+// and no x (point k is at k × step); adding them up gives the very totals it rounded
+// (activity_charts.wire / expand). A cached answer that still has x and cum is used as it is.
+ACT.expand = (res) => {
+  if (!res || !res.inc || res.cum) return res;
+  const cum = {};
+  for (const [k, v] of Object.entries(res.inc)) {
+    if (v == null) { cum[k] = null; continue; }
+    const s = 10 ** res.inc_dec[k], col = new Array(v.length);
+    let acc = 0;
+    for (let i = 0; i < v.length; i++) { acc += v[i]; col[i] = acc / s; }
+    cum[k] = col;
+  }
+  const K = res.inc.mov.length - 1, x = new Array(K);
+  for (let k = 0; k < K; k++) x[k] = k * res.step;
+  const out = { ...res, cum, x };
+  delete out.inc; delete out.inc_dec;
+  return out;
+};
+// ---- end act_hrpower totals ----
 // stats of plotted buckets ka … kb−1 (activity_charts.range_stats)
 ACT.stats = (r, ka, kb) => {
   const K = r.x.length, c = r.cum;
@@ -4228,6 +4281,7 @@ function ivStyle() {
 }
 const IV_ST = {
   in: { word: t("viewer.iv.in"), short: t("viewer.iv.in_s"), c: "--iv-in" },
+  in_band: { word: t("viewer.iv.in_band"), short: t("viewer.iv.in_band_s"), c: "--iv-in" },     // SP-849: detected reps
   low: { word: t("viewer.iv.low"), short: t("viewer.iv.low_s"), c: "--iv-lo" },
   high: { word: t("viewer.iv.high"), short: t("viewer.iv.high_s"), c: "--iv-hi" },
   even: { word: t("viewer.iv.even"), short: t("viewer.iv.even"), c: "--iv-in" },
@@ -4238,9 +4292,18 @@ const IV_ST = {
 // its own band, drawn above the grid and under the line, labelled 「目標 lo–hi W」 at its right end; the reps'
 // mean power as one line with markers coloured by the verdict and the W printed beside each. The rule sits
 // in one line above. CP / AeT tests: no band — markers green / amber by pacing, CP dashed.
+// the widest line of a (multi-line) canvas label, px
+function textW(text, font) {
+  const c = textW.ctx || (textW.ctx = document.createElement("canvas").getContext("2d"));
+  if (!c) return 0;
+  c.font = font;
+  return Math.max(0, ...String(text).split("\n").map((l) => c.measureText(l).width));
+}
 function drawRepProfile(card, res) {
   ivStyle();
   const P = res.rep_profile, test = P.mode === "test";
+  // SP-849: detected reps (no 課表) — the frame is the band they fell in, named, never 「目標」
+  const det = !test && P.source === "detected" && !!P.band_name;
   draw(card, { ...res, series: [], subtitle: null });
   if (!card.isConnected || res.empty) return;
   card.querySelector(".loading")?.remove();
@@ -4251,6 +4314,8 @@ function drawRepProfile(card, res) {
   for (let k = reps.length + 1; !test && k <= P.n_plan; k++) cols.push({ k, label: String(k), missing: true });
   const bandOf = (r) => r?.band || P.band;                     // [lo, hi | null] W
   const fmtBand = (b) => b[1] != null ? `${Math.round(b[0])}–${Math.round(b[1])}` : `≥ ${Math.round(b[0])}`;
+  const bandWord = (b) => det ? t("viewer.iv.band", { name: P.band_name, band: fmtBand(b) }) : t("viewer.iv.target", { band: fmtBand(b) });
+  const frameText = (b) => det ? t("viewer.iv.band_2l", { name: P.band_name, band: fmtBand(b) }) : t("viewer.iv.target_2l", { band: fmtBand(b) });
   const head = document.createElement("p");
   head.className = "iv-head";
   head.innerHTML = `<b>${esc(res.subtitle || "")}</b><br><span class="iv-rule">${test
@@ -4260,11 +4325,11 @@ function drawRepProfile(card, res) {
   leg.setAttribute("aria-label", t("viewer.legend"));
   const sw = (st) => `<span><i class="dot" style="background:${col(st)}"></i>${IV_ST[st].word}</span>`;
   leg.innerHTML = test ? `${sw("even")}${sw("uneven")}<span><i class="dash" style="border-color:var(--iv-ink2)"></i>CP ${Math.round(P.cp)} W</span>`
-    : `<span><i class="frame"></i>${esc(t("viewer.iv.target", { band: fmtBand(P.band) }))}</span>${sw("in")}${sw("low")}${sw("high")}`;
+    : `<span><i class="frame"></i>${esc(bandWord(P.band))}</span>${sw(det ? "in_band" : "in")}${sw("low")}${sw("high")}`;
   const el = document.createElement("div");
   el.className = "plot iv-reps";
   el.setAttribute("role", "img");
-  el.setAttribute("aria-label", t("viewer.iv.aria", { sub: res.subtitle || "" }));
+  el.setAttribute("aria-label", t(det ? "viewer.iv.aria_band" : "viewer.iv.aria", { sub: res.subtitle || "" }));
   card.append(head, leg, el);
   const chart = echarts.init(el);
   charts.push(chart);
@@ -4275,12 +4340,12 @@ function drawRepProfile(card, res) {
   const tip = (r) => {
     if (!r || r.missing) return r ? cpTipBox(`<b>${esc(t("viewer.rep_n", { n: r.k }))}</b><br>${esc(t("viewer.iv.missing_tip", { n: P.n_plan }))}`) : "";
     const b = bandOf(r);
-    const vs = !test && b ? (r.status === "low" ? t("viewer.iv.under", { w: Math.round(b[0] - r.power) })
-      : r.status === "high" && b[1] != null ? t("viewer.iv.over", { w: Math.round(r.power - b[1]) }) : "") : "";
+    const vs = !test && b ? (r.status === "low" ? t(det ? "viewer.iv.under_band" : "viewer.iv.under", { w: Math.round(b[0] - r.power) })
+      : r.status === "high" && b[1] != null ? t(det ? "viewer.iv.over_band" : "viewer.iv.over", { w: Math.round(r.power - b[1]) }) : "") : "";
     return cpTipBox(`<b>${test ? esc(r.label) : esc(t("viewer.rep_n", { n: r.k }))}</b> · ${cpDur(r.duration_s)}`
       + `<br>${esc(t("viewer.st.power"))} <b>${Math.round(r.power)} W</b>（${cpPct(r.pct_cp)} CP）`
-      + `<br>${IV_ST[r.status].short}${esc(vs)}` + (test && r.pacing ? `（${esc(r.pacing)}）` : "")
-      + (!test && b ? `<br>${esc(t("viewer.iv.target", { band: fmtBand(b) }))}` : "")
+      + `<br>${IV_ST[det && r.status === "in" ? "in_band" : r.status].short}${esc(vs)}` + (test && r.pacing ? `（${esc(r.pacing)}）` : "")
+      + (!test && b ? `<br>${esc(bandWord(b))}` : "")
       + (r.expected ? `<br>${esc(t("viewer.iv.expected", { w: Math.round(r.expected), pct: Math.round(r.power / r.expected * 100) }))}` : "")
       + (r.hr_end != null ? `<br>${esc(t("viewer.iv.hr_end", { hr: Math.round(r.hr_end) }))}` : ""));
   };
@@ -4288,6 +4353,8 @@ function drawRepProfile(card, res) {
     const W = el.clientWidth || card.clientWidth || 600, colW = (W - 136) / Math.max(1, cols.length);
     const tight = colW < 40;                    // many reps on a phone: the bare number, alternating above / below
     const green = col("in"), fill = css("--iv-target");
+    // the frame's label sits in the right gutter: wide enough for a band's name (SP-849), 78 px at least
+    const gutR = !test && P.band ? Math.max(78, Math.ceil(textW(frameText(bandOf(cols[cols.length - 1])), "600 11px system-ui, sans-serif")) + 12) : 78;
     const pw = (i) => cols[i] && !cols[i].missing ? cols[i].power : null;
     const labelPos = (i) => {
       const nb = [pw(i - 1), pw(i + 1)].filter((v) => v != null);
@@ -4296,7 +4363,7 @@ function drawRepProfile(card, res) {
     chart.resize();
     chart.setOption({
       animation: false,
-      grid: { left: 58, right: test ? 16 : 78, top: 26, bottom: 40 },
+      grid: { left: 58, right: test ? 16 : gutR, top: 26, bottom: 40 },
       tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => tip(cols[p.dataIndex]) },
       xAxis: { type: "category", data: cols.map((r) => r.label), boundaryGap: true, axisTick: { show: false },
         axisLine: { lineStyle: { color: line } }, splitLine: { show: false },
@@ -4325,7 +4392,7 @@ function drawRepProfile(card, res) {
               tol.push({ type: "rect", shape: { x: x0, y: yA, width: x1 - x0, height: yB - yA }, style: { fill, opacity: 0.45 } });
             }
             const kids = [...tol, { type: "polygon", shape: { points: pts }, style: { fill, stroke: green, lineWidth: 1.5 } },
-              { type: "text", style: { text: t("viewer.iv.target_2l", { band: fmtBand(last) }), x: xr + 6, y: ym, fill: green,
+              { type: "text", style: { text: frameText(last), x: xr + 6, y: ym, fill: green,
                 font: "600 11px system-ui, sans-serif", verticalAlign: "middle", lineHeight: 14 } }];
             cols.forEach((r, i) => { if (r.missing) kids.push({ type: "text", style: { text: t("viewer.iv.missing"), x: api.coord([i, 0])[0],
               y: api.coord([0, yn.min])[1] - 8, fill: muted, font: "11px system-ui, sans-serif", align: "center" } }); });
@@ -4365,7 +4432,7 @@ function drawIntervalTrace(card, res) {
     + `<span><i style="border-color:${wp};border-top-width:2.5px"></i>${esc(t("viewer.it.leg_wp"))}</span>`
     + (hasHr ? `<span><i class="thin" style="border-color:${T.hr}"></i>${esc(t("viewer.it.leg_hr"))}</span>` : "")
     + `<span><i class="dash" style="border-color:${ink2}"></i>CP ${Math.round(R.cp)} W</span>`
-    + (R.band ? `<span><i class="band"></i>${esc(t("viewer.it.leg_band"))}</span>` : "");
+    + (R.band ? `<span><i class="band"></i>${esc(R.band_name ? t("viewer.it.leg_band_det", { name: R.band_name }) : t("viewer.it.leg_band"))}</span>` : "");
   const el = document.createElement("div");
   el.className = "plot iv-trace";
   el.setAttribute("role", "img");

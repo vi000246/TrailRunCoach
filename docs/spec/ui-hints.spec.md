@@ -1,6 +1,6 @@
 # Module Spec: ui-hints (提示分類、提示多寡與每頁上限)
 
-> **Last Updated**: 2026-10-14
+> **Last Updated**: 2026-10-20
 > **Status**: Active（共用底層 SP-482；各頁掛上是 SP-483～488）
 > **Domain Layer**: Supporting
 > **Source**: [docs/research/ui-hint-audit.md](../research/ui-hint-audit.md)（SP-305 調查）§1 盤點、§4 提示多寡、§5 聰明顯示、§7 T1
@@ -83,7 +83,7 @@
 |---|---|---|
 | 總覽 → 本週備註 | 全部週備註走 `Hints.render`：第 1 類一個框（總覽不另加紅框，各則自己的左色條，SP-551）、最多 3 則提醒、「還有 N 則提醒」、▷ 和知道了的放「詳細」（`backend/static/overview.html:848` `drawNotes`）；`smart` 由 weekplan API 算（見「總覽（SP-483）」） | SP-482、SP-483 |
 | 總覽 → 指標、待辦、5 區、B2B、強度分配、PMC、課卡 hover | 見「總覽（SP-483）」（`overview.html:506` `OVH`） | SP-483 |
-| 課表（SP-484） | 週提醒列走 `Hints.render`（`backend/static/schedule.html:1386` `renderNotes`）：第 1 類一個框、最多 3 則、「還有 N 則提醒」、▷／知道了／條件不成立放「詳細」。課卡照 `window.HINT_STATE`（`Hints.state()`，跟日曆一起要一次）：SC4 規則 D 偏強＝環旁一個小點，理由只在完整當說明行、其他在 hover；SC5 太強＝⚠＋一行說明，三段都顯示；SC7 上坡改走：完整整句當說明行、標準「≥ X% 走」短標籤放在說明行前、精簡只在 hover；說明行最多 1 行（太強可換行）。R3：最近 3 堂輕鬆跑 2 堂偏強（或 7 天內 2 次）→ 本週一則 SC4 週提醒（`api/plan_sessions._streak_note`、`adapt.overhard_streak`），條件指紋＝那幾堂的日期 | SP-484 |
+| 課表（SP-484） | 週提醒列走 `Hints.render`（`backend/static/schedule.html:1386` `renderNotes`）：第 1 類一組（不加紅框，各則左邊一條 level 色條，跟總覽一致，SP-854）、最多 3 則、「還有 N 則提醒」、▷／知道了／條件不成立放「詳細」。課卡照 `window.HINT_STATE`（`Hints.state()`，跟日曆一起要一次）：SC4 規則 D 偏強＝環旁一個小點，理由只在完整當說明行、其他在 hover；SC5 太強＝⚠＋一行說明，三段都顯示；SC7 上坡改走：完整整句當說明行、標準「≥ X% 走」短標籤放在說明行前、精簡只在 hover；說明行最多 1 行（太強可換行）。R3：最近 3 堂輕鬆跑 2 堂偏強（或 7 天內 2 次）→ 本週一則 SC4 週提醒（`api/plan_sessions._streak_note`、`adapt.overhard_streak`），條件指紋＝那幾堂的日期 | SP-484 |
 | 賽季計畫 → 賽事評估卡（SP-486） | pill（PL7）、關門／撤退（PL14）三段都在；數字照等級（`backend/static/feasibility.js` `chipOn`）：跨級「分級 a → b」完整一律、標準在跳 ≥ 2 級或藏 × 2 時、精簡只在跳 ≥ 2 級；EP 倍數（PL11，R13）完整一律、標準 ≥ 2 倍才接在分級後、精簡不顯示；Koop 週時數（PL17）只在完整當數字、其他在「詳細」；其他數字（週量、長天、最大週量、B2B、百岳）完整／標準都在，精簡只留有點趕／不足的。卡下的句子是 `race_feasibility.card_hints`（`backend/engine/race_feasibility.py`）的提示物件走 `Hints.render`：第一條建議和第 1 類建議（PL8 只剩 N 天、PL9 報短組、PL10 跳太多、PL14 超過關門）、× 2 提醒（PL12，第 1 類）、PL6、PL15、PL19、PL20；其餘建議（里程碑 PL13、有點趕的配速「照分段的心率上限跑」——SP-486 Q1-1 降成第 2 類，不出紅框，只在它是第一條建議時上卡——、第二條有點趕的建議）照舊在「詳細」。條件指紋帶賽事 id | SP-486 |
 | 比賽計算機結果（結果卡、補給卡、分段卡算一頁） | `static/racehints.js`（`RaceHints.page`）：第 1 類一個框放在結果卡標題下（RC2 照 R1、RC3、RC3w／h、RC6、RC14、RC16、RC19–21，含補給卡的 RC20／RC21）；最多 3 則提醒；方法說明（RC1、RC7、RC8、RC9、RC11、RC15、RC22）和 ▷／條件不成立的放「這次怎麼算的」收合區。R1：`weather.rain_alert` 的 `top`，較小的雨放環境卡一行；R8：分段卡上方一句，逐段只在完整的精簡表；R10：完整每個數字標「推估」、標準每張卡一個「推估 ?」、精簡只在卡片的 `?`；R11：熱適應區塊 ≥ 1 %；R12：RC10 的 `smart`（`planner.extrap_share` ≥ 15 %）；GAP、30 秒功率改成欄名的 `?`；GPX 警告只留上傳處 | SP-485 |
 | 活動列表與編輯、分析頁（單次活動） | 見「活動與分析頁（SP-487）」 | SP-487 |
@@ -426,3 +426,4 @@
 | 2026-10-14 | bugfix | SP-551 | 總覽強度提醒（OV8e）：不再寫內部等級名「是 bad」（中英都白話；心率飄移、非基礎期結論同修），列上一句、「展開」是 `warn_detail`（`quality_gate.low_share_detail`：為什麼、AeT 估計值、3 區 5 區照排）；週備註沒有 detail 就是不能展開的一列（`overview.html` `noteHtml`，以前展開是把同一句再抄一次）；`#wk-notes .hint-must` 不畫紅框；點擊不留框、鍵盤用 `:focus-visible`。測試：`backend/tests/test_overview_intensity_note_sp551.py` |
 | 2026-10-15 | feature | SP-542 | 課表週統計欄：期別滑過（手機點一下）顯示那週為什麼這樣排——本週（`week_plan` 的 `why`）和未來週（`projection` 的 `weeks[].why`，含恢復週「比例是推估」），`GET /calendar` 的 `week_rows[].why`；新增 SC15（●●▷）：精簡時收進週提醒列的「詳細」（`week_why_hint`＝`hints.flag("SC15")`，`Hints.where`）。plan inputs 不分語系快取，原因改成 `M_()`（記得 msgid），週列用 `i18n.relocalize` 換成頁面語言。測試：`backend/tests/test_week_why_sp542.py`、`backend/tests/e2e/test_schedule_week_why_sp542_e2e.py` |
 | 2026-10-19 | feature | SP-486 | Q1-1（使用者選 B）：週量有點趕時的配速建議「照分段的心率上限跑，補給站少停」（PL9）降成第 2 類，不再出紅色第 1 類框；只在它是第一條建議時上卡，否則在「詳細」。Q1-2（超馬沒 GPX 變 9 則）接受、Q1-3（C 賽留 PL6）留著，程式不變。測試：`backend/tests/test_feasibility_card_sp486.py` |
+| 2026-10-20 | bugfix | SP-854 | 課表週提醒第 1 類（`hints.js` `.hint-must`）拿掉紅框，跟總覽（SP-551）一致：框線歸零，每則一條 4px 左色條，顏色照 level（bad 紅、watch 橘、good 綠、其他灰；`backend/static/schedule.html` `.pnotes .hint-must`）；第 2、3 類照舊。Tests: `backend/tests/e2e/test_schedule_must_bar_sp854_e2e.py` |

@@ -1,0 +1,250 @@
+{
+  "title": "trailruncoach-ops",
+  "folderUid": "<FOLDER_UID>",
+  "interval": 3600,
+  "rules": [
+    {
+      "uid": "trc-cpu-week",
+      "title": "TrailRunCoach：CPU 連續一週尖峰超過 2 核",
+      "ruleGroup": "trailruncoach-ops",
+      "folderUID": "<FOLDER_UID>",
+      "orgID": 1,
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 691200,
+            "to": 0
+          },
+          "datasourceUid": "<INFLUX_DS_UID>",
+          "model": {
+            "refId": "A",
+            "query": "import \"date\"\nimport \"experimental\"\nimport \"timezone\"\noption location = timezone.location(name: \"Asia/Taipei\")\n// the last 7 complete days (Taipei): each day's peak = the largest 5-minute mean\nstop = date.truncate(t: now(), unit: 1d)\nstart = experimental.subDuration(d: 7d, from: stop)\nfrom(bucket: \"<INFLUX_BUCKET>\")\n  |> range(start: start, stop: stop)\n  |> filter(fn: (r) => r._measurement == \"docker_container_cpu\" and r._field == \"usage_percent\" and r.container_name == \"trailruncoach\" and r.cpu == \"cpu-total\")\n  |> group()\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({r with _value: r._value / 100.0}))\n  |> aggregateWindow(every: 1d, fn: max, createEmpty: false)\n  |> reduce(identity: {days: 0, lowest_peak: 1000000.0},\n            fn: (r, accumulator) => ({days: accumulator.days + 1,\n                                      lowest_peak: if r._value < accumulator.lowest_peak then r._value else accumulator.lowest_peak}))\n  // fewer than 7 days of data (Telegraf just started): 0, never an alert\n  |> map(fn: (r) => ({_time: now(), _value: if r.days >= 7 then r.lowest_peak else 0.0}))",
+            "intervalMs": 60000,
+            "maxDataPoints": 43200
+          }
+        },
+        {
+          "refId": "B",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "B",
+            "type": "reduce",
+            "expression": "A",
+            "reducer": "last",
+            "settings": {
+              "mode": "dropNN"
+            }
+          }
+        },
+        {
+          "refId": "C",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "B",
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    2
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "0s",
+      "isPaused": false,
+      "labels": {
+        "project": "trailruncoach",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "trailruncoach 容器最近 7 天每天的 CPU 尖峰都超過 2 核",
+        "description": "7 天裡最低的那天尖峰是 {{ printf \"%.2f\" $values.B.Value }} 核。該升級主機了（SP-321：Hetzner CX33，約 NT$345／月）。",
+        "__dashboardUid__": "trailruncoach-ops",
+        "__panelId__": "4"
+      }
+    },
+    {
+      "uid": "trc-mem-week",
+      "title": "TrailRunCoach：記憶體連續一週尖峰超過 2.5 GiB",
+      "ruleGroup": "trailruncoach-ops",
+      "folderUID": "<FOLDER_UID>",
+      "orgID": 1,
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 691200,
+            "to": 0
+          },
+          "datasourceUid": "<INFLUX_DS_UID>",
+          "model": {
+            "refId": "A",
+            "query": "import \"date\"\nimport \"experimental\"\nimport \"timezone\"\noption location = timezone.location(name: \"Asia/Taipei\")\n// the last 7 complete days (Taipei): each day's peak = the largest 5-minute mean\nstop = date.truncate(t: now(), unit: 1d)\nstart = experimental.subDuration(d: 7d, from: stop)\nfrom(bucket: \"<INFLUX_BUCKET>\")\n  |> range(start: start, stop: stop)\n  |> filter(fn: (r) => r._measurement == \"docker_container_mem\" and r.container_name == \"trailruncoach\" and (r._field == \"usage_percent\" or r._field == \"limit\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({_time: r._time, _value: r.usage_percent * float(v: r.limit) / 100.0 / 1073741824.0}))\n  |> aggregateWindow(every: 1d, fn: max, createEmpty: false)\n  |> reduce(identity: {days: 0, lowest_peak: 1000000.0},\n            fn: (r, accumulator) => ({days: accumulator.days + 1,\n                                      lowest_peak: if r._value < accumulator.lowest_peak then r._value else accumulator.lowest_peak}))\n  // fewer than 7 days of data (Telegraf just started): 0, never an alert\n  |> map(fn: (r) => ({_time: now(), _value: if r.days >= 7 then r.lowest_peak else 0.0}))",
+            "intervalMs": 60000,
+            "maxDataPoints": 43200
+          }
+        },
+        {
+          "refId": "B",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "B",
+            "type": "reduce",
+            "expression": "A",
+            "reducer": "last",
+            "settings": {
+              "mode": "dropNN"
+            }
+          }
+        },
+        {
+          "refId": "C",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "B",
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    2.5
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "0s",
+      "isPaused": false,
+      "labels": {
+        "project": "trailruncoach",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "trailruncoach 容器最近 7 天每天的記憶體尖峰都超過 2.5 GiB",
+        "description": "7 天裡最低的那天尖峰是 {{ printf \"%.2f\" $values.B.Value }} GiB。該升級主機了（SP-321：Hetzner CX33，約 NT$345／月）。",
+        "__dashboardUid__": "trailruncoach-ops",
+        "__panelId__": "5"
+      }
+    },
+    {
+      "uid": "trc-members-near-cap",
+      "title": "TrailRunCoach：會員數到封頂的 80 %",
+      "ruleGroup": "trailruncoach-ops",
+      "folderUID": "<FOLDER_UID>",
+      "orgID": 1,
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 10800,
+            "to": 0
+          },
+          "datasourceUid": "<INFLUX_DS_UID>",
+          "model": {
+            "refId": "A",
+            "query": "from(bucket: \"<INFLUX_BUCKET>\")\n  |> range(start: -3h)\n  |> filter(fn: (r) => r._measurement == \"trc_members\" and r._field == \"share\")\n  |> group()\n  |> last()",
+            "intervalMs": 60000,
+            "maxDataPoints": 43200
+          }
+        },
+        {
+          "refId": "B",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "B",
+            "type": "reduce",
+            "expression": "A",
+            "reducer": "last",
+            "settings": {
+              "mode": "dropNN"
+            }
+          }
+        },
+        {
+          "refId": "C",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "B",
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    0.799
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "0s",
+      "isPaused": false,
+      "labels": {
+        "project": "trailruncoach",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "會員數到了封頂的 80 % 以上",
+        "description": "目前是封頂的 {{ humanizePercentage $values.B.Value }}。到管理 › 全站設定 › 會員封頂調高上限，或準備升級主機；滿了新註冊會進候補名單。",
+        "__dashboardUid__": "trailruncoach-ops",
+        "__panelId__": "6"
+      }
+    }
+  ]
+}

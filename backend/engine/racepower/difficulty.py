@@ -15,6 +15,8 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from backend.i18n import N_, _
+
 SHORT_MAX_S = 1200.0          # F2 range upper end (≈ 2–20 min)
 CP_UNCERTAINTY = 0.03         # ±3 % CP band on the bar (§5.1)
 K_UNCERTAINTY = 0.01          # ±0.01 k band (the table's own likely range)
@@ -24,11 +26,11 @@ K_UNCERTAINTY = 0.01          # ±0.01 k band (the table's own likely range)
 # the lower bounds 0.80 / 0.90 / 0.97 are inclusive (0.80 → 穩定), and
 # 1.00 itself is still 極限 — 超出 is strictly above 100 %.
 LABELS = (
-    ("easy", "輕鬆", 0.0),
-    ("steady", "穩定", 0.80),
-    ("hard", "吃力", 0.90),
-    ("max", "極限", 0.97),
-    ("over", "超出", 1.00),
+    ("easy", N_("輕鬆"), 0.0),               # msgids, shown through _() (SP-831: a share's effort word too)
+    ("steady", N_("穩定"), 0.80),
+    ("hard", N_("吃力"), 0.90),
+    ("max", N_("極限"), 0.97),
+    ("over", N_("超出"), 1.00),
 )
 _OVER_EPS = 1e-9
 
@@ -77,7 +79,7 @@ def t_lim(power: float, cp: float, w_prime: Optional[float], tte: float, k: floa
     lo, hi = 1.0, t_max
     if power >= p_sus(lo, cp, w_prime, tte, k, m, cp2):
         return lo
-    for _ in range(200):
+    for _i in range(200):
         mid = math.sqrt(lo * hi)
         if p_sus(mid, cp, w_prime, tte, k, m, cp2) > power:
             lo = mid
@@ -94,12 +96,12 @@ def label_of(f: float) -> dict:
     (amateur marathoners finish at 84.8 % ± 13.6 % of critical speed) and the
     ±0.01 k band — and stay 待驗證 until the §3B A-race check passes."""
     if f > 1.0 + _OVER_EPS:
-        key, name, _ = LABELS[-1]
-        return {"key": key, "label": name}
+        key, name, _lo = LABELS[-1]
+        return {"key": key, "label": _(name)}
     for key, name, lo in reversed(LABELS[:-1]):
         if f >= lo - _OVER_EPS:
-            return {"key": key, "label": name}
-    return {"key": LABELS[0][0], "label": LABELS[0][1]}
+            return {"key": key, "label": _(name)}
+    return {"key": LABELS[0][0], "label": _(LABELS[0][1])}
 
 
 def endurance_multiple(f: float, k: float) -> Optional[float]:
@@ -137,7 +139,7 @@ def effort(p_train: float, t_s: float, cp: float, w_prime: Optional[float], tte:
     out = {"f": f, **label_of(f), "p_sus": ps, "multiple": endurance_multiple(f, k),
            "t_lim_s": tl, "band": [min(fs), max(fs)], "band_cp": cps,
            "band_source": "資料中的 CP 範圍（各來源＋下限）" if cp_spread else "CP ± 3 %",
-           "cuts": [{"key": key, "label": name, "from": lo} for key, name, lo in LABELS],
+           "cuts": [{"key": key, "label": _(name), "from": lo} for key, name, lo in LABELS],
            "inconsistent": bool(lower_bound and lower_bound > cp * (1 + 1e-9)), "lower_bound": lower_bound}
     return out
 
@@ -193,8 +195,8 @@ def hike_cuts(q25: float, med: float, q75: float, p90: float) -> list[float]:
 def hike_effort(r: float, cuts: list[float]) -> dict:
     """r = speed needed ÷ your usual speed (1.0 = your median day). Labels:
     輕鬆 ≤ q25, 穩定 ≤ 1.0, 吃力 ≤ q75, 極限 ≤ p90, 超出 > p90 (§5.2)."""
-    names = [(k_, n) for k_, n, _ in LABELS]
+    names = [(k_, n) for k_, n, _lo in LABELS]
     for (key, name), c in zip(names, cuts):
         if r <= c + _OVER_EPS:
-            return {"r": r, "key": key, "label": name, "cuts": cuts}
-    return {"r": r, "key": names[-1][0], "label": names[-1][1], "cuts": cuts}
+            return {"r": r, "key": key, "label": _(name), "cuts": cuts}
+    return {"r": r, "key": names[-1][0], "label": _(names[-1][1]), "cuts": cuts}

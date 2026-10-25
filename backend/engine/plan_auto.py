@@ -74,12 +74,15 @@ log = logging.getLogger(__name__)
 BIG_TSS_UP = 0.20           # a week's planned TSS + > 20 %
 RACE_GUARD_DAYS = 14        # removing a long / quality / test this close to an A race
 MAX_CHANGED = 3             # > 3 non-reducing changes in the push window
-BIG_TEXT = {"tss": "單週計畫訓練負荷（Training load）比上次推送 +20% 以上（推估）",
-            "race": "A 賽前 14 天內拿掉長跑／強度課／測試（推估）",
-            "rpe": "A 賽前 14 天內因為跑後自評延後或降階強度課（推估）",
+# N_ (SP-909): GET /auto sends them in the request's language (api/plan_auto.py)
+BIG_TEXT = {"tss": N_("單週計畫訓練負荷（Training load）比上次推送 +20% 以上（推估）"),
+            "race": N_("A 賽前 14 天內拿掉長跑／強度課／測試（推估）"),
+            "rpe": N_("A 賽前 14 天內因為跑後自評延後或降階強度課（推估）"),
             "too_hard": N_("A 賽前 14 天內因為輕鬆跑跑成強度課，延後或降階強度課（推估）"),
-            "phase": "訓練周期改變（推估）",
-            "many": "推送範圍內超過 3 堂課改變、而且不是單純減量（推估）"}
+            "phase": N_("訓練周期改變（推估）"),
+            "many": N_("推送範圍內超過 3 堂課改變、而且不是單純減量（推估）")}
+# a change-log item's push state (stored as written; compared below — shown translated, SP-909)
+PUSHED, TO_PUSH, APP_ONLY = N_("已重新推送"), N_("待推送"), N_("只在 app")
 HARD_LONG = ("long", "quality", "test")
 RPE_RULE = "rpe_hard"       # engine/adapt.py: the self-rating trigger of rule D (SP-231)
 OVERHARD_RULE = "overhard"  # engine/adapt.py rule D: only its 太強 tier changes sessions (SP-301)
@@ -232,8 +235,9 @@ def classify(stored: list[dict], new: list[dict], items: list[dict], today: str,
         before, n0 = _week_tss(stored, ws)
         after, _n1 = _week_tss(new, ws)          # not `_`: that is the i18n function
         if n0 and before > 0 and after > before * (1 + BIG_TSS_UP):
-            out.append({"rule": "tss", "text": f"{_md(ws)} 那週計畫負荷 {before:.0f} → {after:.0f}"
-                                               f"（+{(after / before - 1) * 100:.0f}%，> +{BIG_TSS_UP * 100:.0f}%）"})
+            out.append({"rule": "tss", "text": _("{md} 那週計畫負荷 {a:.0f} → {b:.0f}（+{pct:.0f}%，> +{lim:.0f}%）",
+                                                 md=_md(ws), a=before, b=after, pct=(after / before - 1) * 100,
+                                                 lim=BIG_TSS_UP * 100)})
     if days_to_race is not None and days_to_race >= 0:
         race = (dt.date.fromisoformat(today) + dt.timedelta(days=days_to_race)).isoformat()
         start = (dt.date.fromisoformat(race) - dt.timedelta(days=RACE_GUARD_DAYS)).isoformat()
@@ -242,7 +246,8 @@ def classify(stored: list[dict], new: list[dict], items: list[dict], today: str,
                                                 and i.get("kind") not in HARD_LONG)
             k = (i.get("before") or {}).get("kind") or i.get("kind")
             if gone and k in HARD_LONG and start <= (i.get("day") or "") <= race:
-                out.append({"rule": "race", "text": f"A 賽前 {RACE_GUARD_DAYS} 天內拿掉 {_md(i['day'])} {i['title']}"})
+                out.append({"rule": "race", "text": _("A 賽前 {n} 天內拿掉 {md} {name}", n=RACE_GUARD_DAYS,
+                                                      md=_md(i["day"]), name=i["title"])})
             # the self-rating rule (SP-231) and rule D's 太強 (SP-301) only move / step down:
             # still the user's call this close to the A race (research §4.3: tired in a taper is common)
             elif i.get("rule") in (RPE_RULE, OVERHARD_RULE) and any(start <= (d or "") <= race for d in
@@ -252,16 +257,16 @@ def classify(stored: list[dict], new: list[dict], items: list[dict], today: str,
                                       reason=i.get("reason") or i.get("title") or "")})
     for i in [x for x in items if x["action"] == "dropped" and x.get("kind") in HARD_LONG]:
         if days_to_race is not None and 0 <= days_to_race <= RACE_GUARD_DAYS + 7:
-            out.append({"rule": "race", "text": f"A 賽前取消 {_md(i['day'])} {i['title']}"})
+            out.append({"rule": "race", "text": _("A 賽前取消 {md} {name}", md=_md(i["day"]), name=i["title"])})
     if last_phase and phase and last_phase != phase:
-        out.append({"rule": "phase", "text": f"周期 {last_phase} → {phase}"})
+        out.append({"rule": "phase", "text": _("周期 {a} → {b}", a=last_phase, b=phase)})
     # a week generated for the first time (nothing stored yet) is not a change
     known = {s.get("week_start") for s in stored if s["kind"] != NOTICE_KIND}
     win = [i for i in fw if (i.get("day") or "9999") <= window_end
            and not (i["action"] == "added" and monday_of(i["day"]) not in known)
            and i.get("rule") != STRUCTURE_RULE]           # SP-437's one-time relabel (mark_structure)
     if len(win) > MAX_CHANGED and not all(is_reduction(i) for i in win):
-        out.append({"rule": "many", "text": f"未來 {len(win)} 堂課改變（> {MAX_CHANGED}），不全是減量"})
+        out.append({"rule": "many", "text": _("未來 {n} 堂課改變（> {max}），不全是減量", n=len(win), max=MAX_CHANGED)})
     return out
 
 
@@ -311,13 +316,15 @@ def summary(items: list[dict], held: bool = False) -> str:
     if hist:
         nd = sum(1 for i in hist if i["action"] == "done")
         nm = len(hist) - nd
-        parts.append("、".join(x for x in (f"完成 {nd} 堂" if nd else "", f"沒跑 {nm} 堂" if nm else "") if x))
+        # one msgid per combination: a page shows the stored line in its language (SP-909)
+        parts.append(_("完成 {a} 堂、沒跑 {b} 堂", a=nd, b=nm) if nd and nm else
+                     _("完成 {n} 堂", n=nd) if nd else _("沒跑 {n} 堂", n=nm))
     if fw:
-        parts.append(f"調整 {len(fw)} 堂" + ("（待你確認）" if held else ""))
+        parts.append(_("調整 {n} 堂（待你確認）", n=len(fw)) if held else _("調整 {n} 堂", n=len(fw)))
     for i in items:
         if i["action"] == "note":
             parts.append(i["reason"])
-    return "；".join(p for p in parts if p) or "沒有變更"
+    return "；".join(p for p in parts if p) or _("沒有變更")
 
 
 # ---------------------------------------------------------------------------
@@ -399,8 +406,9 @@ def rescale_sessions(stored: list[dict], old: float, new: float, today: str) -> 
 
 
 def cp_summary(old: float, new: float, n: int, pushed: bool) -> str:
-    return (f"CP {old:.0f} → {new:.0f} W：未來 {n} 堂課的功率目標已更新" +
-            ("並重新推送" if pushed else "，待推送"))
+    if pushed:
+        return _("CP {old:.0f} → {new:.0f} W：未來 {n} 堂課的功率目標已更新並重新推送", old=old, new=new, n=n)
+    return _("CP {old:.0f} → {new:.0f} W：未來 {n} 堂課的功率目標已更新，待推送", old=old, new=new, n=n)
 
 
 HR_ZONE_KEY = "plan.hr_zone_auto"          # SP-493: the 課表心率區間 in effect last seen (check_hr_model)
@@ -430,10 +438,12 @@ def hr_name(model: Optional[str]) -> str:
 
 def hr_summary(old: str, new: str, reason: str, n: int, pushed: bool) -> str:
     """The change-log row of a switch the 自動 課表心率區間 made (SP-493)."""
-    head = _("課表心率區間（自動）：{a} → {b}", a=hr_name(old), b=hr_name(new)) + (_("（{why}）", why=reason) if reason else "")
-    if not n:
-        return head + _("：課表的心率目標已更新")
-    return head + (_("：已推到手錶的 {n} 堂課已重新推送", n=n) if pushed else _("：已推到手錶的 {n} 堂課待重新推送", n=n))
+    # one msgid with fields (SP-909: a stored line is read back to show it in another language)
+    tail = _("課表的心率目標已更新") if not n else \
+        _("已推到手錶的 {n} 堂課已重新推送", n=n) if pushed else _("已推到手錶的 {n} 堂課待重新推送", n=n)
+    if reason:
+        return _("課表心率區間（自動）：{a} → {b}（{why}）：{tail}", a=hr_name(old), b=hr_name(new), why=reason, tail=tail)
+    return _("課表心率區間（自動）：{a} → {b}：{tail}", a=hr_name(old), b=hr_name(new), tail=tail)
 
 
 async def check_hr_model(db, inp: dict) -> Optional[dict]:
@@ -628,7 +638,7 @@ async def _remove_remote(db, uids: list, errors: list) -> list:
                     raise RuntimeError(f"{uid} not removed")      # kept pending, reported below
             done.append(uid)
         except Exception as e:              # noqa: BLE001 — logged, never fatal
-            errors.append(f"移除課表待確認失敗：{type(e).__name__}: {e}"[:300])
+            errors.append(_("移除課表待確認失敗：{err}", err=f"{type(e).__name__}: {e}")[:300])
     return done
 
 
@@ -833,7 +843,8 @@ def state_changes(inp: dict, state: dict) -> list[str]:
     rp = cur.get("reentry")
     rkey = f"{rp['return']}|{rp['days']}" if rp else None
     if rp and rkey != state.get("reentry"):
-        out.append(f"恢復期：{rp['text']}" + ("（不排課日期，事前排好）" if rp.get("planned") else "（從活動資料偵測）"))
+        out.append(_("恢復期：{text}（不排課日期，事前排好）", text=rp["text"]) if rp.get("planned") else
+                   _("恢復期：{text}（從活動資料偵測）", text=rp["text"]))
         state["reentry"] = rkey
     return out
 
@@ -870,11 +881,11 @@ async def _log_cp(db, old: float, new: float, items: list[dict], cfg: dict, out:
         s = cur.get(i["uid"])
         if i["uid"] in rows and s is not None:
             st = prov.status_of(PS.push_dict(s, th=th), th, rows[i["uid"]], today)["status"]
-            label = "已重新推送" if st == "pushed" else "待推送"
+            label = PUSHED if st == "pushed" else TO_PUSH
         else:
-            label = "只在 app"
+            label = APP_ONLY
         marked.append({**i, "push": label})
-    pending_n = sum(1 for i in marked if i["push"] == "待推送")
+    pending_n = sum(1 for i in marked if i["push"] == TO_PUSH)
     pushed = bool(cfg.get("push")) and out.get("status") in ("applied", "noop") and not pending_n \
         and (out.get("push") or {}).get("status") != "failed"
     push = out.get("push") if cfg.get("push") else {"status": "off"}
@@ -883,7 +894,7 @@ async def _log_cp(db, old: float, new: float, items: list[dict], cfg: dict, out:
                      summary=cp_summary(old, new, len(marked), pushed), items=marked,
                      push={**(push or {"status": "held"}), "pending": pending_n})
     return {"old": old, "new": new, "n": len(marked), "pushed": pushed, "pending": pending_n,
-            "status": "已重新推送" if pushed else "待推送"}
+            "status": PUSHED if pushed else TO_PUSH}
 
 
 async def _log_hr(db, old: str, new: str, reason: str, uids: set, cfg: dict, out: dict, th: dict,
@@ -906,8 +917,8 @@ async def _log_hr(db, old: str, new: str, reason: str, uids: set, cfg: dict, out
             continue
         st = prov.status_of(PS.push_dict(s, th=th), th, rows[uid], today)["status"]
         marked.append({"uid": uid, "action": "changed", "day": s.get("day"), "title": s.get("title"),
-                       "reason": _("心率目標換成新的區間"), "push": "已重新推送" if st == "pushed" else "待推送"})
-    pending_n = sum(1 for i in marked if i["push"] == "待推送")
+                       "reason": _("心率目標換成新的區間"), "push": PUSHED if st == "pushed" else TO_PUSH})
+    pending_n = sum(1 for i in marked if i["push"] == TO_PUSH)
     pushed = bool(cfg.get("push")) and not pending_n and (out.get("push") or {}).get("status") != "failed"
     push = out.get("push") if cfg.get("push") else {"status": "off"}
     await _add_entry(db, trigger="hr_model", status="applied", summary=hr_summary(old, new, reason, len(marked), pushed),
@@ -998,7 +1009,7 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
             await _set_state(db, {**state, **({"cp": cp_new} if cp_new else {}),
                                   **({"hr_model": hr_new} if hr_new else {}),
                                   **({"power_zone": pz_new} if pz_new else {})})
-        out = {"status": "noop", "reason": "沒有新的活動"}
+        out = {"status": "noop", "reason": _("沒有新的活動")}
         if state.get("remote"):
             # 課表待確認 copies an interrupted push left on the watch (review M2): off now
             return out, {"remote_only": True, "remote": list(state["remote"]), "errors": [], "entry": None}
@@ -1011,7 +1022,7 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
         r = await db.get(PlanChangeLog, approve_id)
         if r is not None and r.status == "approved":
             return {"status": "already_approved", "id": approve_id}, None
-        raise ValueError("找不到待確認的提案")
+        raise ValueError(_("找不到待確認的提案"))
     await _stale_notices(db, today, p.notice_uid if p is not None else None, errors, remote)
     stored = await PS.load(db)
     cp_items: list = []
@@ -1045,7 +1056,7 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
     if held:
         if fp in (state.get("rejected") or []):
             await PS.save(db, history_only(stored, new))
-            out = {"status": "rejected_before", "reason": "與你拒絕過的提案相同，略過"}
+            out = {"status": "rejected_before", "reason": _("與你拒絕過的提案相同，略過")}
         elif p is not None and p.fingerprint == fp:
             await PS.save(db, history_only(stored, new))
             out = {"status": "pending", "id": p.id}
@@ -1200,7 +1211,7 @@ async def reject(db, entry_id: int) -> dict:
     async with API._wlock():
         r = await db.get(PlanChangeLog, entry_id)
         if r is None or r.status != "pending":
-            raise ValueError("找不到待確認的提案")
+            raise ValueError(_("找不到待確認的提案"))
         errors: list = []
         remote: list = []
         r.status = "rejected"
@@ -1215,7 +1226,7 @@ async def reject(db, entry_id: int) -> dict:
         async with API._plock():                 # the watch after the writer lock (SP-362 B3)
             done = await _remove_remote(db, remote, errors)
         await _forget_remote(db, done)
-    await _add_entry(db, trigger="reject", status="rejected", summary="你拒絕了這次的課表調整：維持原本的課表",
+    await _add_entry(db, trigger="reject", status="rejected", summary=_("你拒絕了這次的課表調整：維持原本的課表"),
                      items=json.loads(r.items_json or "[]"), ref_id=r.id,
                      push={"status": "notice_removed", "errors": errors or None})
     return {"status": "rejected", "id": r.id}
@@ -1230,7 +1241,7 @@ async def approve(db, entry_id: int) -> dict:
     if r is not None and r.status == "approved":
         return {"status": "already_approved", "id": entry_id}
     if r is None or r.status != "pending":
-        raise ValueError("找不到待確認的提案")
+        raise ValueError(_("找不到待確認的提案"))
     return await run(db, trigger="approve", force=True, approve_id=entry_id)
 
 
@@ -1242,7 +1253,7 @@ async def undo(db, entry_id: int) -> dict:
     async with API._wlock():
         r = await db.get(PlanChangeLog, entry_id)
         if r is None or r.status != "applied":
-            raise ValueError("這筆紀錄不能復原")
+            raise ValueError(_("這筆紀錄不能復原"))
         before = json.loads(r.before_json or "[]")
         after = json.loads(r.after_json or "[]")
         cur = await PS.load(db)
@@ -1276,7 +1287,7 @@ async def undo(db, entry_id: int) -> dict:
             push = await push_window(db, await PS.load(db), inp, API._today(inp), int(cfg["push_days"] or 7))
     n = len({s["uid"] for s in before + after})
     e = await _add_entry(db, trigger="undo", status="restore",
-                         summary=f"復原 {n} 堂課到調整前（改為你的課，自動調整不再動它們）",
+                         summary=_("復原 {n} 堂課到調整前（改為你的課，自動調整不再動它們）", n=n),
                          items=json.loads(r.items_json or "[]"), before=after, after=before, ref_id=r.id,
                          push=push)
     return {"status": "undone", "id": e.id, "push": push}
@@ -1334,7 +1345,7 @@ async def run_safe(trigger: str) -> dict:
                 try:
                     await db.rollback()
                     await _add_entry(db, trigger=trigger, status="failed",
-                                     summary=f"自動調整失敗：{type(e).__name__}", items=[],
+                                     summary=_("自動調整失敗：{err}", err=type(e).__name__), items=[],
                                      push={"status": "failed", "error": f"{type(e).__name__}: {e}"[:500]})
                 except Exception:           # noqa: BLE001
                     pass

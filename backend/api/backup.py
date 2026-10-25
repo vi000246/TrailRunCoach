@@ -108,7 +108,7 @@ async def run_backup(db: AsyncSession, trigger: str, athlete_id: int = 1) -> dic
     try:
         d = await repo.get("backup.dir")
         if not d:
-            raise B.BackupError("還沒選備份資料夾")
+            raise B.BackupError(_("還沒選備份資料夾"))
         folder = await asyncio.to_thread(B.check_folder, d)
         made = await asyncio.to_thread(
             B.create_backup, _db_path(), folder, fit_root=_fit_root(),
@@ -218,14 +218,14 @@ async def post_upload(request: Request):
             if size > MAX_UPLOAD:
                 f.close()
                 dst.unlink()
-                raise HTTPException(413, "檔案太大")
+                raise HTTPException(413, _("檔案太大"))
             f.write(chunk)
     if not size:
         dst.unlink()
         raise HTTPException(400, _("檔案是空的"))
     if B.is_legacy_encrypted(dst):
         dst.unlink()
-        raise HTTPException(400, B.LEGACY_ENCRYPTED)
+        raise HTTPException(400, _(B.LEGACY_ENCRYPTED))
     return {"upload_id": uid, "size": size}
 
 
@@ -237,19 +237,19 @@ class SourceBody(BaseModel):
 async def _source(body: SourceBody, repo: SettingsRepository) -> Path:
     if body.upload_id:
         if not UPLOAD_RE.match(body.upload_id):
-            raise HTTPException(400, "upload_id 不正確")
+            raise HTTPException(400, _("upload_id 不正確"))
         p = _local_dir() / "staging" / f"{body.upload_id}.bin"
     elif body.name and B.PRE_RE.match(body.name):
         p = _local_dir() / body.name             # a copy a restore saved first (SP-355 M2)
     elif body.name:
         d = await repo.get("backup.dir")
         if d and body.name.endswith(".zip.enc"):
-            raise HTTPException(400, B.LEGACY_ENCRYPTED)
+            raise HTTPException(400, _(B.LEGACY_ENCRYPTED))
         if not d or not B.NAME_RE.match(body.name):
-            raise HTTPException(400, "只能還原備份資料夾裡由這個功能建立的檔案")
+            raise HTTPException(400, _("只能還原備份資料夾裡由這個功能建立的檔案"))
         p = Path(d) / body.name
     else:
-        raise HTTPException(400, "請選擇備份檔")
+        raise HTTPException(400, _("請選擇備份檔"))
     if not p.is_file():
         raise HTTPException(404, _("找不到備份檔"))
     return p
@@ -267,18 +267,50 @@ async def post_inspect(body: SourceBody, athlete_id: int = 1, db: AsyncSession =
     return info
 
 
+# SP-744: the in-memory caches built from the DB or the restored files — emptied after a restore so the
+# server needs no restart (a page reload shows the restored data; each is rebuilt when next asked for).
+# (module, attribute): a dict / TenantSlots / TenantLRU with .clear(), or an lru_cache with .cache_clear()
+RESTORE_CACHES = (
+    ("backend.engine.activity_tags", "_memo"), ("backend.engine.activity_tags", "_rec_memo"),
+    ("backend.api.overview", "_status_cache"),
+    ("backend.api.plan_sessions", "_cache"), ("backend.api.plan_sessions", "_tp_cache"),
+    ("backend.api.plan_sessions", "_wh_cache"), ("backend.api.plan_sessions", "_eq_cache"),
+    ("backend.api.racepower", "_cache"),
+    ("backend.engine.event_gpx", "_memo"), ("backend.engine.coros_tl", "_MEMO"),
+    ("backend.engine.injuries", "_memo"), ("backend.engine.rpe_load", "_MEMO"),
+    ("backend.engine.heat_calib", "_MEMO"), ("backend.engine.racepower.pack_defaults", "_MEMO"),
+    ("backend.api.plan", "_wko5_settings"), ("backend.api.plan", "_wko5_profile"),
+)
+
+
+def drop_caches() -> list[str]:
+    """Empty RESTORE_CACHES and the tenant's cached Datasets (as a threshold edit does: they carry
+    the DB's thresholds and settings). Returns what could not be emptied (logged, never raised)."""
+    import importlib
+    failed = []
+    for mod, attr in RESTORE_CACHES:
+        try:
+            c = getattr(importlib.import_module(mod), attr)
+            (c.cache_clear if hasattr(c, "cache_clear") else c.clear)()
+        except Exception:                   # noqa: BLE001 — a cache renamed or gone: the rest still go
+            failed.append(f"{mod}.{attr}")
+    try:
+        from backend.api.wko5views import drop_tenant_datasets
+        drop_tenant_datasets()
+    except Exception:                       # noqa: BLE001
+        failed.append("backend.api.wko5views.drop_tenant_datasets")
+    if failed:
+        log.warning("after restore, caches not emptied: %s", ", ".join(failed))
+    return failed
+
+
 async def after_restore() -> None:
     """Drop pooled connections (they'd keep the old pages cached), upgrade an
-    older schema, clear in-memory caches that read the DB."""
+    older schema, clear in-memory caches that read the DB or the restored files (drop_caches)."""
     from backend.db import database
     await database.dispose()
     await database.init_db()
-    try:
-        from backend.engine import activity_tags
-        activity_tags._memo.clear()
-        activity_tags._rec_memo.clear()
-    except Exception:
-        pass
+    drop_caches()
 
 
 @router.post("/restore")
@@ -300,4 +332,5 @@ async def post_restore(body: SourceBody, athlete_id: int = 1):
             p.unlink()
         except OSError:
             pass
-    return {**r, "restart_recommended": True}
+    # SP-744: after_restore empties the caches — a page reload is enough, no restart
+    return {**r, "restart_recommended": False}

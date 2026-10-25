@@ -25,7 +25,8 @@ STATIC = Path(__file__).resolve().parents[1] / "static"
 BODY = {"type": "road", "distance_km": 10, "course": {"manual": {"km": 10, "split": "km"}},
         "start_time": "07:00", "date": "2027-03-01", "stops": []}
 SNAP_KEYS = {"v", "title", "created", "expires", "type", "inputs", "summary", "effort", "cp", "weight",
-             "segments", "seg_targets", "days", "profile", "fuel"}
+             "segments", "seg_targets", "days", "profile", "fuel",
+             "chart_rows"}       # SP-784: the 分段目標 rows (share.ROW_KEYS, test_share_targets_sp784.py)
 
 
 def _fake_plan(tag: str) -> dict:
@@ -169,9 +170,10 @@ def test_join_goes_to_sign_up_then_the_waitlist_when_full(c, app, plans, monkeyp
     sid = _share(c)
     anyone = browser(app, ip="198.51.100.12")
     j = _join(anyone.get(f"/share/{sid}", headers=HTML).text)
-    assert j == {"kind": "signup", "url": "/login?next=%2Fapi%2Fv1%2Fracepower%2Fpage"}
+    # SP-765 (SP-389 Q1-2): the share page's link marks the sign-up as from=share; /join stays plain
+    assert j == {"kind": "signup", "url": "/login?next=%2Fapi%2Fv1%2Fracepower%2Fpage%3Ffrom%3Dshare"}
     r = anyone.get("/join", headers=HTML)
-    assert r.status_code == 303 and location(r) == j["url"]
+    assert r.status_code == 303 and location(r) == "/login?next=%2Fapi%2Fv1%2Fracepower%2Fpage"
     # signing up from there lands on the calculator
     r = sign_in(anyone, "g-carol", "carol@example.com", nxt="/api/v1/racepower/page")
     assert location(r) == "/signup"
@@ -244,7 +246,8 @@ def test_the_pages_carry_the_entry_in_both_languages():
     for loc in ("zh-TW", "en"):
         cat = json.loads((STATIC / "i18n" / loc / "share.json").read_text("utf-8"))
         assert {"join.button", "join.title", "join.signup", "join.waitlist", "join.demo", "join.about"} <= set(cat), loc
-        assert all(v.strip() for v in cat.values())
+        # SP-460: a plural entry ({"one", "other"}) has every form filled in
+        assert all(all(x.strip() for x in (v.values() if isinstance(v, dict) else [v])) for v in cat.values())
         assert "waitlist" in json.loads((STATIC / "i18n" / loc / "login.json").read_text("utf-8"))
     zh = json.loads((STATIC / "i18n" / "zh-TW" / "share.json").read_text("utf-8"))
     sh = json.loads((STATIC / "i18n" / "zh-TW" / "shell.json").read_text("utf-8"))

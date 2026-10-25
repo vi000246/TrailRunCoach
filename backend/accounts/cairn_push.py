@@ -10,6 +10,11 @@ with; no Cairn user token exists or is kept):
                the trip id is kept with the event (table cairn_push in the tenant's app DB)
   later        PUT  <TRC_CAIRN_URL>/api/internal/trc/trips/<id>?sub=   the same trip updated
                (Cairn's POST does not deduplicate, so a kept id is never POSTed again)
+  imported     SP-816: a GPX imported from a Cairn trip (event_gpx source kind "cairn") is never
+               POSTed: the first push PUTs the trip it came from — pace and night points only, not
+               its GPX or name — and that id is kept like any other. Cairn's 404 there (not this
+               person's trip, or deleted) creates nothing by itself: CAIRN_ORIGIN_GONE, and the
+               person may ask for a new trip ({new: true})
 
 The body (payload): {name, gpx (the stored file as text, byte for byte), pace_config: {model:
 {kind: "curve", curve}} (pace_config, below), points}. The curve is SP-653's cairn-curve v1 of the
@@ -232,6 +237,43 @@ def payload(eid: str) -> dict:
             "points": night_points(curve, _names(eid, scale))}
 
 
+def origin(eid: str) -> Optional[dict]:
+    """SP-816: the Cairn trip the event's GPX was imported from (event_gpx source kind "cairn":
+    SP-537's share link, SP-676's import from the person's own trips) — {trip_id, url, name} — or
+    None for an uploaded GPX. Cairn's trip id is its gpx id, the one PUT /trips/<id> takes."""
+    from backend.engine import cairn as CA
+    from backend.engine import event_gpx as EG
+    try:
+        src = (EG.get(eid) or {}).get("source") or {}
+    except Exception:                       # noqa: BLE001 — no row / no table: not imported
+        return None
+    tid = src.get("gpx_id") if src.get("kind") == "cairn" else None
+    if not isinstance(tid, str) or not _ID.match(tid):
+        return None
+    # SP-577 / SP-582: a trip answered 「這是團的時刻表」 is the group's, read only — never written back
+    group = bool((src.get("schedule") or {}).get("group"))
+    return {"trip_id": tid, "url": src.get("url") or CA.route_url(tid), "name": src.get("name") or "", "group": group}
+
+
+def target(eid: str, new: bool = False) -> tuple[str, Optional[str]]:
+    """Which Cairn trip the next push writes: ("kept", id) the trip pushed before; ("origin", id)
+    the trip the GPX came from, not pushed yet (or pushed to that very trip before) — updated, not
+    duplicated — unless it was answered 「這是團的時刻表」 (the group's: never written back, a trip
+    of our own as before); ("new", None) a trip to create. `new`: the person asked for a new trip after the
+    origin could not be updated (not theirs / deleted in Cairn)."""
+    kept = get(eid)
+    org = None if new else origin(eid)
+    if org and org["group"]:                # the group's timetable: read only (SP-575 Q1), a trip of our own
+        if kept and kept["trip_id"] == org["trip_id"]:
+            return "new", None              # pushed there before it was marked the group's: not again
+        org = None
+    if kept and not (org and kept["trip_id"] == org["trip_id"]):
+        return "kept", kept["trip_id"]
+    if org:
+        return "origin", org["trip_id"]
+    return "new", None
+
+
 # ---------------------------------------------------------------------------- who may
 
 def status(user, eid: str) -> dict:
@@ -244,11 +286,16 @@ def status(user, eid: str) -> dict:
     _event(eid)
     linked = LK.is_linked(user, c)
     m = MS.member()
-    out = {"available": bool(LK.out_secret(c) and LK.base_url(c) and user.google_sub),
+    site_ok = bool(LK.out_secret(c) and LK.base_url(c))
+    out = {"available": site_ok and bool(user.google_sub),
+           # SP-610: an account without Google (e-mail sign-in, a test account) can't link Cairn for now
+           "reason": "no_google" if site_ok and not user.google_sub else None,
            "linked": linked, "allowed": linked and LK.allowed(user, c, SCOPE),
            "plan_ok": m.role in (MS.SUBSCRIBER, MS.OWNER), "upgrade": m.role == MS.USER,
            "consent_text": _(LK.SCOPE_TEXT[SCOPE]), "link_url": LK.link_url(c),
-           "allow_url": LK.link_url(c, SCOPE), "pushed": None, "ready": False, "why": None}
+           "allow_url": LK.link_url(c, SCOPE), "pushed": None, "ready": False, "why": None,
+           # SP-816: the Cairn trip the GPX came from, and whether the next push updates it
+           "origin": origin(eid), "target": target(eid)[0]}
     got = get(eid)
     if got:
         out["pushed"] = {"trip_id": got["trip_id"], "at": got["at"], "url": CA.route_url(got["trip_id"])}
@@ -265,8 +312,13 @@ def _lock(user, eid: str) -> threading.Lock:
         return _LOCKS.setdefault((user.id, eid), threading.Lock())
 
 
-def push(user, eid: str, consent: bool = False) -> dict:
-    """Create or update the event's trip in Cairn. {action: created | updated, trip_id, url}."""
+def push(user, eid: str, consent: bool = False, new: bool = False) -> dict:
+    """Create or update the event's trip in Cairn. {action: created | updated, trip_id, url, points,
+    origin}. SP-816: a GPX imported from Cairn updates the trip it came from (origin: true) instead
+    of creating a second one — only its pace and TRC's own night points: never its GPX file or its
+    name (the person's trip; Cairn leaves their points and times alone either way). When Cairn
+    answers that trip is not there for this person (someone else's shared trip, or deleted), nothing
+    is created by itself (CAIRN_ORIGIN_GONE); `new` = the person then asked for a new trip."""
     from backend.accounts import link_calc as LC, links as LK
     c = LK.CAIRN
     url, key = LK.base_url(c), LK.out_secret(c)
@@ -287,32 +339,34 @@ def push(user, eid: str, consent: bool = False) -> dict:
     try:
         body = payload(eid)
         sha = str(_curve_of(body)["gpx_sha256"]).lower()
-        kept = get(eid)
+        kind, tid = target(eid, new)
+        if kind == "origin":                # the person's own trip: its file and name stay theirs
+            body = {k: v for k, v in body.items() if k not in ("gpx", "name")}
         headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
         params = {"sub": user.google_sub}
         try:
             with httpx.Client(transport=LK.TRANSPORT, timeout=TIMEOUT_S, follow_redirects=False) as cl:
-                if kept:
-                    r = cl.put(f"{url}/api/internal/trc/trips/{kept['trip_id']}", params=params, json=body,
-                               headers=headers)
+                if tid:
+                    r = cl.put(f"{url}/api/internal/trc/trips/{tid}", params=params, json=body, headers=headers)
                 else:
                     r = cl.post(f"{url}/api/internal/trc/trips", params=params, json=body, headers=headers)
         except httpx.HTTPError as e:
             log.info("Cairn push: %s", type(e).__name__)
             raise UserError(N_("疊石 Cairn 暫時連不上，稍後再試"), code="CAIRN_DOWN", status=502)
-        trip_id = _answer(r, eid, updating=bool(kept))
-        if kept and trip_id is None:
-            trip_id = kept["trip_id"]
+        trip_id = _answer(r, eid, updating=bool(tid), origin=kind == "origin")
+        if tid and trip_id is None:
+            trip_id = tid
         remember(eid, trip_id, sha)
-        log.info("event pushed to Cairn (%s)", "updated" if kept else "created")
+        log.info("event pushed to Cairn (%s)", {"kept": "updated", "origin": "the trip it came from updated",
+                                                "new": "created"}[kind])
         from backend.engine import cairn as CA
-        return {"action": "updated" if kept else "created", "trip_id": trip_id, "url": CA.route_url(trip_id),
-                "points": len(body["points"])}
+        return {"action": "updated" if tid else "created", "trip_id": trip_id, "url": CA.route_url(trip_id),
+                "points": len(body["points"]), "origin": kind == "origin"}
     finally:
         lock.release()
 
 
-def _answer(r: httpx.Response, eid: str, updating: bool) -> Optional[str]:
+def _answer(r: httpx.Response, eid: str, updating: bool, origin: bool = False) -> Optional[str]:
     """Cairn's answer → the trip id, or the plain hint for its refusal."""
     try:
         j = r.json()
@@ -338,6 +392,9 @@ def _answer(r: httpx.Response, eid: str, updating: bool) -> Optional[str]:
             raise UserError(N_("疊石 Cairn 找不到你的帳號：先用同一個 Google 帳號登入 Cairn 一次"),
                             code="CAIRN_NO_ACCOUNT", status=409)
         forget(eid)
+        if origin:                          # SP-816: someone else's shared trip, or deleted there
+            raise UserError(N_("沒辦法更新 Cairn 上原本那條行程：它不是你的（例如別人分享給你的），或已經刪掉了。"
+                               "要的話可以在你的 Cairn 另外建一條。"), code="CAIRN_ORIGIN_GONE", status=409)
         raise UserError(N_("疊石 Cairn 上的這條行程找不到了（可能已經刪掉）。再按一次會建一條新的。"),
                         code="CAIRN_TRIP_GONE", status=409)
     if r.status_code == 400:

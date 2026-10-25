@@ -9,6 +9,7 @@
  *
  *   t("overview.ramp.good", { ramp: 2.4 })        // "{ramp}" placeholders
  *   t("schedule.n_sessions", { n: 3 })             // {"one": "…", "other": "…"} picks by n
+ *   t("x.days", { days: 1 })                       // "{days} {days|day|days}" -> "1 day" (SP-762)
  *   t("shell.brand", "訓練教練")                    // fallback when the key isn't in the catalog
  *   I18N.fmt.date("2026-10-02", "mdw")             // 10/2（週四） · en: Thu 10/2
  *   I18N.setLocale("en")                           // cookie `lang` (1 year), then reload
@@ -42,7 +43,14 @@
   const locale = SUPPORTED.includes(boot.locale) ? boot.locale : (htmlLang.startsWith("en") ? "en" : "zh-TW");
   const catalog = boot.catalog || {};
 
-  const fill = (s, p) => (p ? String(s).replace(/\{(\w+)\}/g, (m, k) => (p[k] != null ? p[k] : m)) : String(s));
+  // SP-762: `{days|day|days}` is the word for the days parameter — the first form when it is exactly 1
+  // (1 or "1"), else the second; the same rule as backend/i18n plural_words
+  const one = (v) => v === 1 || (typeof v === "string" && v.trim() === "1");
+  const words = (s, p) => s.replace(/\{(\w+)\|([^{}|]*)\|([^{}|]*)\}/g, (m, k, a, b) => (p && one(p[k]) ? a : b));
+  const fill = (s, p) => {
+    const t = words(String(s), p);
+    return p ? t.replace(/\{(\w+)\}/g, (m, k) => (p[k] != null ? p[k] : m)) : t;
+  };
 
   function t(key, a, b) {
     let params = a, fallback;

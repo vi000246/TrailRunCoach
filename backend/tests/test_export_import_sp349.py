@@ -164,15 +164,17 @@ def test_a_route_without_times_or_an_entity_declaration_is_refused():
 
 def test_a_trainingpeaks_folder_of_fit_fit_gz_tcx_and_gpx_goes_through_the_folder_pick(tmp_path):
     """TrainingPeaks exports each workout file in the format it was uploaded in (.fit, a .fit.gz,
-    .tcx, .gpx; its own .pwx): SP-323's folder pick takes them, the .pwx is skipped and listed."""
+    .tcx, .gpx; its own .pwx): SP-323's folder pick takes them. SP-833: a .pwx is read too (a real
+    one: test_export_formats_sp833.py); one without samples is no activity."""
     async def go():
         s = await make_session(tmp_path)
         r = await UP.import_files(s, 1, [
             UP.Incoming("TP/2026-09-02_run.fit", _run(0), 1), UP.Incoming("TP/2026-09-03_run.fit.gz", gzip.compress(_run(1)), 1),
             UP.Incoming("TP/2026-09-04_run.tcx", _tcx(3), 1), UP.Incoming("TP/2026-09-05_run.gpx.gz", gzip.compress(_gpx(4)), 1),
             UP.Incoming("TP/2026-09-06_old.pwx", b"<pwx/>", 6), UP.Incoming("TP/again.tcx", _tcx(3), 1)])
-        assert (r["added"], r["duplicate"], r["failed"], r["skipped"]) == (4, 1, 0, 1)
-        assert [i["status"] for i in r["items"]] == ["added"] * 4 + ["skipped", "duplicate"]
+        assert (r["added"], r["duplicate"], r["failed"], r["skipped"]) == (4, 1, 1, 0)
+        assert [i["status"] for i in r["items"]] == ["added"] * 4 + ["failed", "duplicate"]
+        assert r["items"][4]["reason"] == UP.NOT_ACTIVITY
         rows = await _rows(s)
         assert [x.workout_date.isoformat() for x in rows] == ["2026-09-02", "2026-09-03", "2026-09-05", "2026-09-06"]
         assert all(x.source == "upload" and x.file_format == "fit" for x in rows)
@@ -269,13 +271,15 @@ def test_bad_files_fail_alone(tmp_path, imports):
 
 
 def test_polar_and_apple_health_exports_are_recognised_and_said_so(tmp_path, imports):
+    """Recognised by their layout. SP-833: their workouts are imported (test_export_formats_sp833.py);
+    an empty training session is no activity, a route no workout refers to is listed."""
     async def go():
         s = await make_session(tmp_path)
         polar = _upload(_zip({"polar-user-data-export/training-session-2024-05-01-123-abc.json": b"{}",
                               "polar-user-data-export/account-data.json": b"{}"}), name="polar.zip")
         await _process_all(s, polar)
         st = AR.status(polar)
-        assert st["kind"] == "polar" and st["total"] == 0 and st["skipped_files"]["polar_json"]["n"] == 1
+        assert st["kind"] == "polar" and st["total"] == 1 and _counts(st) == (0, 0, 0, 2)
         apple = _upload(_zip({"apple_health_export/export.xml": b"<HealthData/>",
                               "apple_health_export/export_cda.xml": b"<x/>",
                               "apple_health_export/workout-routes/route_2024-05-01_6.30am.gpx": _gpx(0)}),

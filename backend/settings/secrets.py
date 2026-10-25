@@ -74,6 +74,12 @@ def ciphertext_exists() -> bool:
             return True
     except Exception:                     # noqa: BLE001 — no server root yet
         pass
+    try:                                  # the owner's AI key pasted on the settings page (SP-785)
+        from backend.ai import config as _ai
+        if _ai.sealed_saved():
+            return True
+    except Exception:                     # noqa: BLE001
+        pass
     db = _db_path()
     if db is None or not Path(db).exists():
         return False

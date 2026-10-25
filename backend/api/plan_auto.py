@@ -23,13 +23,22 @@ THRESHOLDS = {"big_tss_up": PA.BIG_TSS_UP, "race_guard_days": PA.RACE_GUARD_DAYS
               "texts": PA.BIG_TEXT}
 
 
+# the change log's texts a page shows (SP-909): stored as the run wrote them (mostly zh-TW, the runs
+# start in the background), shown in the request's language (engine/stored_text)
+LOG_KEYS = frozenset({"summary", "title", "reason", "text", "push", "error", "errors"})
+
+
 @router.get("")
 async def get_auto(limit: int = 10, db: AsyncSession = Depends(get_db)):
+    from backend.engine import stored_text as ST
+    from backend.i18n import _
     cfg = await PA.settings(db)
     cfg.pop("state", None)
     p = await PA.pending(db)
-    return {"settings": cfg, "pending": PA.entry_dict(p) if p is not None else None,
-            "log": await PA.entries(db, max(1, min(50, limit))), "thresholds": THRESHOLDS}
+    out = {"pending": PA.entry_dict(p) if p is not None else None, "log": await PA.entries(db, max(1, min(50, limit)))}
+    out = ST.shown_tree(out, keys=LOG_KEYS, skip=frozenset({"before", "after"}))
+    return {"settings": cfg, **out,
+            "thresholds": {**THRESHOLDS, "texts": {k: _(v) for k, v in PA.BIG_TEXT.items()}}}
 
 
 @router.put("/settings")

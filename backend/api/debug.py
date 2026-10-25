@@ -11,6 +11,11 @@ with a dedicated token (backend/debug_auth.py: `X-TRC-Debug-Token`, or `Authoriz
   GET /api/v1/debug/sync[?lines=200]                                                       read:sync
   GET /api/v1/debug/export/config                                                      export:config
   GET /api/v1/debug/export/plan                                                          export:plan
+  POST /api/v1/debug/write/preview  {changes}  → diff + preview id, nothing written       write:config
+  POST /api/v1/debug/write/apply    {preview_id}                                          write:config
+  POST /api/v1/debug/write/undo     {change_id?}                                          write:config
+  GET  /api/v1/debug/write/log[?n=10]                                                     write:config
+  (SP-802, engine/debug_write.py: thresholds, events, 課表偏好 only)
 
   (web, 設定 › 進階 › Debug API — the page's own session, never a debug token; the owner only
   (SP-373: no server PIN); writes need a same-origin request: Sec-Fetch-Site / Origin)
@@ -22,7 +27,7 @@ with a dedicated token (backend/debug_auth.py: `X-TRC-Debug-Token`, or `Authoriz
   GET    /api/v1/settings/debug-api/upstream             this copy pulls from a production server?
   POST   /api/v1/settings/debug-api/upstream/pull        {what, apply} → preview / apply (engine/upstream.py)
 
-Read-only for real: the plan views never call plan_sessions.sessions() (it takes the writer lock,
+Read-only for real, apart from /write/* (SP-802): the plan views never call plan_sessions.sessions() (it takes the writer lock,
 reconciles and records snapshots); they compute the same thing in memory — plan_store.match_only
 for the matches, plan_store.reconcile_with_adapt for 「what a page load would change」 — and only
 the debug tables (debug_tokens / debug_audit / debug_auth_failures) are written. Never a COROS /
@@ -53,6 +58,7 @@ from starlette.concurrency import run_in_threadpool
 from backend import debug_auth as DA
 from backend.db.database import get_db
 from backend.engine import debug_view as DV
+from backend.engine import debug_write as DW
 from backend.i18n import _
 
 log = logging.getLogger("backend.api.debug")
@@ -592,6 +598,64 @@ async def export_plan(ctx: DA.Ctx = Depends(DA.need("export:plan")), db: AsyncSe
 
 
 # ---------------------------------------------------------------------------
+# writes (SP-802, engine/debug_write.py): a whitelist, previewed, logged, undoable
+# ---------------------------------------------------------------------------
+
+async def _write_error(ctx: DA.Ctx, db: AsyncSession, e) -> HTTPException:
+    await DA.audit(db, ctx, e.status)
+    return HTTPException(e.status, {"code": e.code, "message": str(e)})
+
+
+@router.post("/write/preview")
+async def write_preview(body: dict = Body(...), ctx: DA.Ctx = Depends(DA.need(DA.WRITE_SCOPE)),
+                        db: AsyncSession = Depends(get_db)):
+    """{changes: [{target: threshold | event | prefs, …}]} → the diff and a preview id; nothing written."""
+    from backend.engine import debug_write as DW
+    try:
+        out = await DW.preview(db, body.get("changes"), ctx.token_id)
+    except DW.WriteError as e:
+        raise await _write_error(ctx, db, e)
+    return await finish(ctx, db, out)
+
+
+@router.post("/write/apply")
+async def write_apply(body: dict = Body(...), ctx: DA.Ctx = Depends(DA.need(DA.WRITE_SCOPE)),
+                      db: AsyncSession = Depends(get_db)):
+    """{preview_id} → writes the previewed state (while it is still what was previewed)."""
+    from backend.engine import debug_write as DW
+    try:
+        out = await DW.apply(db, body.get("preview_id"), ctx.token_id, ctx.name)
+    except DW.WriteError as e:
+        raise await _write_error(ctx, db, e)
+    log.info("debug API: write #%s applied by %s", out["change_id"], ctx.name)
+    return await finish(ctx, db, out)
+
+
+@router.post("/write/undo")
+async def write_undo(body: dict = Body(default={}), ctx: DA.Ctx = Depends(DA.need(DA.WRITE_SCOPE)),
+                     db: AsyncSession = Depends(get_db)):
+    """{change_id?} → puts back what that write (default: the newest not undone) replaced."""
+    from backend.engine import debug_write as DW
+    cid = body.get("change_id")
+    if cid is not None and (isinstance(cid, bool) or not isinstance(cid, int)):
+        raise await _bad(ctx, db, 400, "change_id must be an integer")
+    try:
+        out = await DW.undo(db, cid, ctx.name)
+    except DW.WriteError as e:
+        raise await _write_error(ctx, db, e)
+    log.info("debug API: write #%s undone by %s", out["undone"], ctx.name)
+    return await finish(ctx, db, out)
+
+
+@router.get("/write/log")
+async def write_log(n: int = Query(10, ge=1, le=30), ctx: DA.Ctx = Depends(DA.need(DA.WRITE_SCOPE)),
+                    db: AsyncSession = Depends(get_db)):
+    """The newest writes with what each replaced (before / after)."""
+    from backend.engine import debug_write as DW
+    return await finish(ctx, db, {"writes": await DW.recent(db, n, full=True)})
+
+
+# ---------------------------------------------------------------------------
 # settings page (the web session; owner only — not mounted in the demo)
 # ---------------------------------------------------------------------------
 
@@ -608,7 +672,8 @@ async def _state(db: AsyncSession) -> dict:
             "scopes": list(DA.SCOPES), "default_scopes": list(DA.DEFAULT_SCOPES), "days": list(DA.DAYS),
             "default_days": DA.DEFAULT_DAYS, "tokens": await DA.list_tokens(db),
             "audit": await DA.audit_rows(db), "failures": await DA.failure_rows(db), "dropped": DA.dropped(),
-            "rate_per_min": 60}
+            "rate_per_min": 60, "write_scope": DA.WRITE_SCOPE, "write_max_days": DA.WRITE_MAX_DAYS,
+            "writes": await DW.recent(db, 10)}       # SP-802: 「最近 AI 改了什麼」 (the diff only)
 
 
 @admin_router.get("", dependencies=[Depends(owner_only)])

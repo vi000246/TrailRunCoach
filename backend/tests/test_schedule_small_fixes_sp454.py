@@ -50,12 +50,17 @@ def test_the_dialog_and_the_editor_name_the_exports_source():
     sub = re.search(r"\nfunction subOrigin\(s\) \{\n(.*?)\n\}\n", src, re.S)
     assert sub, "subOrigin not found"
     body = sub.group(1)
-    assert 'if (fromCalc(s)) return ` · ${tt("sd.from_calc")}${s.ext_edited ? " · 已修改" : ""}`;' in body
-    assert 'return s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : "";' in body      # the rest as before
+    # the words through the catalog since SP-839 (zh-TW: 已修改 / 自訂 / 賽事計算機匯出的結構 / 你改過的結構)
+    zh = json.loads((STATIC / "i18n" / "zh-TW" / "schedule.json").read_text("utf-8"))
+    common = json.loads((STATIC / "i18n" / "zh-TW" / "common.json").read_text("utf-8"))
+    assert zh["sd.edited"] == "已修改" and zh["sd.custom"] == "自訂"
+    assert common["workout.from_racecalc"] == "賽事計算機匯出的結構" and common["workout.yours"] == "你改過的結構"
+    assert 'if (fromCalc(s)) return ` · ${tt("sd.from_calc")}${s.ext_edited ? " · " + tt("sd.edited") : ""}`;' in body
+    assert 'return s.origin === "custom" ? " · " + tt("sd.custom") : s.edited ? " · " + tt("sd.edited") : "";' in body      # the rest as before
     assert '${subOrigin(s)}`;' in src and 'const fromCalc = (s) => !!(s && String(s.ext_key || "").startsWith("racecalc:"));' in src
     assert 'src: fromCalc(s) && !s.ext_edited ? "racecalc" : null' in src
     we = (STATIC / "workout_editor.js").read_text("utf-8")
-    assert 'this.stored ? (this.src === "racecalc" ? " · 賽事計算機匯出的結構" : " · 你改過的結構")' in we
+    assert 'this.stored ? " · " + (this.src === "racecalc" ? tr("workout.from_racecalc") : tr("workout.yours"))' in we
     assert "touch() { this.dirty = true; this.cleared = false; this.src = null;" in we          # an edit: yours now
     for loc in ("zh-TW", "en"):
         cat = json.loads((STATIC / "i18n" / loc / "schedule.json").read_text("utf-8"))

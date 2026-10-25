@@ -28,6 +28,10 @@ Each feature beyond the account asks on its own (FEATURES, SP-654): GET /api/v1/
 (link:calc, link_calc.py) answers only once the person switched 「允許 Cairn 讀取」 on in 設定; the
 race page's 「推到 Cairn」 (link:gpx_sync, cairn_push.py, SP-655) pushes only once it is on.
 
+SP-805: POST /api/v1/link/cairn/pace (link:participant_ability, POST_ROUTES) estimates a 報名者's pace
+from the one track they uploaded to Cairn. That scope is in no token (CONSENT_PER_REQUEST): the
+organiser's linked token (link:account) and the 報名者's own consent in each request.
+
 No call to Cairn is made unless TRC_CAIRN_URL and the secret are set; tests use a fake (TRANSPORT).
 """
 from __future__ import annotations
@@ -75,6 +79,18 @@ ROUTES: dict[str, str] = {
     "/api/v1/link/account": "link:account",
     "/api/v1/link/cairn/curves": "link:calc",            # SP-654 (SP-570 TRC-4): link_calc.py
 }
+# the POST routes a service token opens (an upload, no cookie, no CSRF header: a request without a
+# cookie cannot be forged by another site), and the scope each needs
+POST_ROUTES: dict[str, str] = {
+    "/api/v1/link/cairn/pace": "link:participant_ability",   # SP-805: 揪團報名的腳程估算 (api/pace.py)
+}
+# a scope no token ever carries (docs/plans/cairn-link.md §4: 連結不會給): the request needs the
+# organiser's token with the scope here (their link) and, in the request itself, the 報名者's own
+# consent (SP-326: they ticked 「用這份紀錄估腳程，算完就刪」 on Cairn's form; the route checks it)
+CONSENT_PER_REQUEST: dict[str, str] = {
+    "link:participant_ability": "link:account",
+}
+PARTICIPANT_CONSENT = N_("報名者要勾選「用這份紀錄估腳程，算完就刪」才能估算")
 
 # features that ask on their own (SP-329 Q1-3: each feature asks again when it launches, SP-571 Q4
 # B): linking does not allow them; the person switches each on (or off again) in 設定 › 已連結的
@@ -205,6 +221,9 @@ def state(user, c: Client) -> dict:
     linked = bool(st.get("linked"))
     return {"id": c.id, "name": _(c.name), "linked": linked, "at": st.get("at"),
             "available": bool(secret(c)) and bool(user.google_sub),
+            # SP-610: why not — "no_google" (an e-mail sign-in or a test account: no Cairn link until
+            # SP-329 settles how those accounts match), "not_open" (the site has no secret yet)
+            "reason": None if secret(c) and user.google_sub else ("no_google" if secret(c) else "not_open"),
             "scopes": [_scope_view(s) for s in link_scopes(c)],
             "features": [{**_scope_view(s),
                           "allowed": linked and store.link_scope_allowed(user.id, c.id, s),

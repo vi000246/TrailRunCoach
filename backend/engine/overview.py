@@ -370,8 +370,10 @@ SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；系統性回顧找不
 SRC_31 = ("3:1 週期（三週加量、一週恢復；Friel / Uphill Athlete 常見做法，沒有試驗比較過 3:1 和 2:1）；"
           "恢復週是前 3 週平均的 70%（減 30%，推估，沒有研究）：查證過的 11 位教練與做法最常見減 30%"
           "（中位數也是 30%），範圍減 10–60%：跑步教練多在 15–35%，Uphill Athlete 登山課表約減一半")
-SRC_RECOVERY_WEEK = ("恢復週保留次數和強度、每堂縮短（挪威教練）；一段加量最多 6 週（Koop）；"
-                     "長跑縮到平常的 65%、專項期恢復週排在賽前第 5、3 週為推估")
+# SP-905: the parts are msgids (a session's 出處 is read part by part, engine/stored_text)
+SRC_RECOVERY_WEEK_PARTS = (N_("恢復週保留次數和強度、每堂縮短（挪威教練）"), N_("一段加量最多 6 週（Koop）"),
+                           N_("長跑縮到平常的 65%、專項期恢復週排在賽前第 5、3 週為推估"))
+SRC_RECOVERY_WEEK = "；".join(SRC_RECOVERY_WEEK_PARTS)
 
 # ---- 恢復週 (SP-97; periodization-cross-sport.md §4.3, §6.1 SP-97) -------------------------------
 # * 專項期: the recovery weeks are counted back from the race (specific_phase.EASY_WEEKS, FRAC's low
@@ -592,9 +594,10 @@ def b_prep_long(s, ev, road: bool) -> None:
     trail the race's fuelling practised (owner 2026-10-15: 越野 長爬坡、比賽配速、補給演練; 路跑 比賽配速)."""
     pace = b_race_pace(ev)
     pc = _("（目標 {p}/km）", p=_mmss(pace)) if pace else ""
+    # (SP-905: the parts around 「；」 are msgids of their own — the detail is read part by part)
     add = (_("B 賽輕量準備：最後 20–30 分用比賽配速{pace}", pace=pc) if road else
-           _("B 賽輕量準備：選有長爬坡的路線，最後 20–30 分用比賽配速{pace}；全程照比賽的補給計畫吃喝（補給演練）",
-             pace=pc))
+           _("B 賽輕量準備：選有長爬坡的路線，最後 20–30 分用比賽配速{pace}", pace=pc) + "；"
+           + _("全程照比賽的補給計畫吃喝（補給演練）"))
     is_d = isinstance(s, dict)
     det = s.get("detail") if is_d else s.detail
     det = add + ("；" + det if det else "")
@@ -618,13 +621,14 @@ def _b_prep_weeks() -> int:
     return P.B_PREP_WEEKS
 
 
-def maintain_context(status, phs: list, monday: dt.date) -> Optional[dict]:
+def maintain_context(status, phs: list, monday: dt.date, sport: Optional[str] = None) -> Optional[dict]:
     """The 維持期 week of `monday` (SP-102, planning.maintain_week) from the status's phase (the one holding
-    today), else the plan's phases `phs`; None when it isn't one or on any error."""
+    today), else the plan's phases `phs`; None when it isn't one or on any error. `sport`: 主要訓練項目
+    (road → 速度 / 閾值, SP-830)."""
     from backend.engine import planning as P
     try:
         ph = getattr(status, "phase", None)
-        return P.maintain_week([ph] if ph is not None else (), monday) or P.maintain_week(phs, monday)
+        return P.maintain_week([ph] if ph is not None else (), monday, sport) or P.maintain_week(phs, monday, sport)
     except Exception:                       # noqa: BLE001 — the plan must still build
         return None
 
@@ -640,6 +644,14 @@ def maintain_no_z5_note(z3: bool) -> str:
     if z3:
         return _("維持期每週要有一堂高於 VT2 的課（5 區），但 5 區還沒開放或這週被護欄擋下：先用 3 區那一堂代替")
     return _("維持期每週要有一堂高於 VT2 的課（5 區），但 5 區還沒開放、3 區也還沒解鎖：這週只排輕鬆跑和長跑")
+
+
+def maintain_no_z3_note(z5: bool) -> str:
+    """Why a 維持期 閾值 week (SP-830, a road runner) has no Zone 3 session: its gate isn't open (or a
+    guardrail took it)."""
+    if z5:
+        return _("維持期這幾週的重點是閾值（3 區），但 3 區還沒解鎖或這週被護欄擋下：先排 5 區那一堂")
+    return _("維持期這幾週的重點是閾值（3 區），但 3 區還沒解鎖、5 區也還沒開放：這週只排輕鬆跑和長跑")
 
 
 def recovery_share_note() -> str:
@@ -667,7 +679,7 @@ def recovery_long(s) -> None:
     det = s.get("detail") if is_d else s.detail
     src = s.get("source") if is_d else s.source
     det = _("恢復週：長跑縮短到平常的 {share:.0%}、全程輕鬆", share=RECOVERY_LONG_SHARE) + ("；" + det if det else "")
-    src = (src + "；" if src else "") + SRC_RECOVERY_WEEK
+    src = (src + "；" if src else "") + "；".join(_(p) for p in SRC_RECOVERY_WEEK_PARTS)
     if is_d:
         s["detail"], s["source"] = det, src
     else:
@@ -693,12 +705,13 @@ def _phase_kind_on(phases: list, day: dt.date) -> Optional[str]:
             return g("kind")
     return None
 
-SRC_BOSQUET = "Bosquet 2007、Wang 2023 統合分析：減量 8–14 天（app 預設 10 天）、量減 41–60%、強度與次數維持"
+# SP-905: msgids (a session's 出處 is shown in the page's language, engine/stored_text); `_()` where used
+SRC_BOSQUET = N_("Bosquet 2007、Wang 2023 統合分析：減量 8–14 天（app 預設 10 天）、量減 41–60%、強度與次數維持")
 SRC_UA = "Uphill Athlete"
-SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
-SRC_PALLADINO = "Palladino 功率區間"
-SRC_PFITZ = "Pfitzinger & Douglas《Advanced Marathoning》"
-SRC_DANIELS = "Daniels《Daniels' Running Formula》"
+SRC_KOOP = N_("Koop《Training Essentials for Ultrarunning》")
+SRC_PALLADINO = N_("Palladino 功率區間")
+SRC_PFITZ = N_("Pfitzinger & Douglas《Advanced Marathoning》")
+SRC_DANIELS = N_("Daniels《Daniels' Running Formula》")
 SRC_TRANSITION = "Friel（Transition 3–4 週，for fun rather than fitness）；Canova（4 週輕鬆跑 ≤ 1 小時）"
 
 # ---- 轉換期 (SP-73; coach-schools-zones-periodization.md R5) ---------------------------------
@@ -1083,6 +1096,20 @@ def _fmt_range(a, unit: str) -> str:
     return f"{lo:.0f}–{hi:.0f} {unit}"
 
 
+def _range_text(a, hr: bool) -> str:
+    """「心率 lo–hi bpm」 / 「功率 < hi W」 … (_fmt_range with its word) as one msgid (SP-905: a session's
+    目標 is shown in the page's language)."""
+    lo, hi = a
+    if lo is None and hi is None:
+        return _("心率 ") if hr else _("功率 ")
+    if lo is None:
+        return _("心率 < {hi} bpm", hi=f"{hi:.0f}") if hr else _("功率 < {hi} W", hi=f"{hi:.0f}")
+    if hi is None:
+        return _("心率 > {lo} bpm", lo=f"{lo:.0f}") if hr else _("功率 > {lo} W", lo=f"{lo:.0f}")
+    return (_("心率 {lo}–{hi} bpm", lo=f"{lo:.0f}", hi=f"{hi:.0f}") if hr else
+            _("功率 {lo}–{hi} W", lo=f"{lo:.0f}", hi=f"{hi:.0f}"))
+
+
 def _targets(tt: dict) -> dict[str, str]:
     """Human text per workout type from zones.training_targets()."""
     out = {}
@@ -1090,14 +1117,14 @@ def _targets(tt: dict) -> dict[str, str]:
         parts = []
         if r["primary"] == "心率":
             if any(v is not None for v in r["hr"]):
-                parts.append("心率 " + _fmt_range(r["hr"], "bpm"))
+                parts.append(_range_text(r["hr"], True))
             if any(v is not None for v in r["power"]):
-                parts.append("功率 " + _fmt_range(r["power"], "W"))
+                parts.append(_range_text(r["power"], False))
         else:
             if any(v is not None for v in r["power"]):
-                parts.append("功率 " + _fmt_range(r["power"], "W"))
+                parts.append(_range_text(r["power"], False))
             if any(v is not None for v in r["hr"]):
-                parts.append("心率 " + _fmt_range(r["hr"], "bpm"))
+                parts.append(_range_text(r["hr"], True))
         out[r["id"]] = " · ".join(parts)
     return out
 
@@ -1140,7 +1167,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         dose = dose[track]                      # the track's own state machine (SP-31)
     if dose.get("faded") and spec not in (QG.RECOVERY, QG.SUB):
         # the progression state machine's verdict (quality_gate.dose_step)
-        pre = (dose.get("note") or "上次間歇沒有達標：") + pre
+        pre = (dose.get("note") or _("上次間歇沒有達標：")) + pre
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
     tth = {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet"), "hr_model": th.get("hr_model"),
            "power_model": th.get("power_model")}
@@ -1148,32 +1175,38 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         # a ramp week (CTL ramp at load_guard's watch line): T1's content, never a ladder step (neutral)
         f = IL.fit("z3a", cap, (), prefs, mountain)
         s = IL.session_for({**f, "equiv": False, "progress": False, "rung": "sub",
-                            "reason": "長期負荷週增量（Chronic load ramp）≥ +5（Friel）：本週只排閾值，不算進階"}, tth, pre, lthr_default, prefs)
+                            "reason": _("長期負荷週增量（Chronic load ramp）≥ +5（Friel）：本週只排閾值，不算進階")},
+                           tth, pre, lthr_default, prefs)
         s["title"] = QG.SUB[1]
         s["source"] = QG.source(gate, spec)
         return s
     rung = spec[0]
     budget = QG.z3_budget_min(hours, bool(dec.get("first"))) if rung in IL.Z3_TRACK else None
-    what = f"週量的 {'5%，3 區第一堂' if dec.get('first') else '10%'}"
+    what = _("週量的 5%，3 區第一堂") if dec.get("first") else _("週量的 10%")
     if budget is not None and dec.get("budget") is not None and dec["budget"] < budget:
         # the week's interval total (quality_sessions: Zone 3 + Zone 5 ≤ 20 %) leaves less
-        budget, what = float(dec["budget"]), f"間歇總量 ≤ 週量 {QG.QUALITY_SHARE_MAX:.0%} 扣掉 5 區"
+        budget, what = float(dec["budget"]), _("間歇總量 ≤ 週量 {share:.0%} 扣掉 5 區", share=QG.QUALITY_SHARE_MAX)
     canon = IL.canonical(rung) if rung in IL.LIBRARY else None
     if budget is not None and canon is not None and IL.tiz_s(canon) / 60.0 > budget + 1e-6:
         # the week's Zone 3 cap (≤ 10 %: Daniels' per-session, by-mileage T cap used per week, coach; UA ~5 % to start): the 巡航版 of the same position
         cr = QG.cruise_for(rung, budget)
         f = IL.fit(cr, cap, history or (), prefs, mountain, alt_caps, hill=bool(dec.get("hill")))
         counts = f["action"] in ("ok", "move") and bool(f["equiv"])
-        why = (f"本週 {hours:.1f} h：3 區上限 {budget:.0f} 分（{what}）"
-               f"< {IL.RUNG_NAME[rung]} {IL.structure(canon)} 的 {IL.tiz_s(canon) / 60:.0f} 分 → 巡航版 "
-               f"{IL.structure(f['variant'])}" + ("（算這一階）" if counts else ""))
+        kw = dict(hours=hours, budget=budget, what=what, rung=IL.RUNG_NAME[rung], canon=IL.structure(canon),
+                  tiz=IL.tiz_s(canon) / 60, variant=IL.structure(f['variant']))
+        why = (_("本週 {hours:.1f} h：3 區上限 {budget:.0f} 分（{what}）< {rung} {canon} 的 {tiz:.0f} 分 → 巡航版 "
+                 "{variant}（算這一階）", **kw) if counts else
+               _("本週 {hours:.1f} h：3 區上限 {budget:.0f} 分（{what}）< {rung} {canon} 的 {tiz:.0f} 分 → 巡航版 "
+                 "{variant}", **kw))
         s = IL.session_for({**f, "rung": rung if counts else f.get("rung"), "equiv": counts, "progress": counts,
                             "reason": f"{why}；{f['reason']}"}, tth, pre, lthr_default, prefs, swap="cap")
         if f["action"] == "move" and f.get("move_wd") is not None:
             s["prefer_days"] = [f["move_wd"]]
         s["source"] = QG.source(gate, (f"{s['source']}；{QG.SRC_Z3['volume']}",))
         if notes is not None:
-            notes.append({"level": "info", "src": "z3", "text": why + "（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算；UA：起步約 5%）"})
+            notes.append({"level": "info", "src": "z3",
+                          "text": _("{why}（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算；UA：起步約 5%）",
+                                    why=why)})
         return s
     if rung in IL.LIBRARY:
         f = IL.fit(rung, cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"), hill=bool(dec.get("hill")))
@@ -1183,8 +1216,9 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
             # cap above (owner 2026-10-04: symmetric); else fit's own fallback (縮量版 / the step before)
             fc = _cruise_for_cap(rung, cap, history, prefs, mountain)
             if fc is not None:
-                why = (f"平日上限 {cap:.0f} 分放不下 {IL.RUNG_NAME[rung]} {IL.structure(canon)}"
-                       f"（需要 {f.get('need_min') or 0:.0f} 分）→ 巡航版 {IL.structure(fc['variant'])}（算這一階）")
+                why = _("平日上限 {cap:.0f} 分放不下 {rung} {canon}（需要 {need:.0f} 分）→ 巡航版 {variant}（算這一階）",
+                        cap=cap, rung=IL.RUNG_NAME[rung], canon=IL.structure(canon), need=f.get('need_min') or 0,
+                        variant=IL.structure(fc['variant']))
                 s = IL.session_for({**fc, "rung": rung, "equiv": True, "progress": True, "action": "ok",
                                     "reason": f"{why}；{fc['reason']}"}, tth, pre, lthr_default, prefs, swap="cap")
                 s["source"] = QG.source(gate, (s["source"],))
@@ -1378,16 +1412,21 @@ def _second_z3(gate: dict, built: dict, it: dict, th: dict, hours: Optional[floa
                     best = (key, r, base, n, v)
     fits = best is not None
     if fits:
-        _, rung, canon, n, v = best
-    head = f"每週 2 堂、5 區還沒開：第二堂排不同的 3 區課（巡航版），不重複「{first['title']}」" if first else ""
+        _key, rung, canon, n, v = best
+    head = _("每週 2 堂、5 區還沒開：第二堂排不同的 3 區課（巡航版），不重複「{title}」", title=first['title']) \
+        if first else ""
     if not fits:
         if notes is not None:
             notes.append({"level": "info", "src": "z3",
-                          "text": f"{head}——但 3 區每週上限（週量 10%；教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算）／間歇總量（20%）或平日上限放不下"
-                                  f"（剩 {max(0.0, budget):.0f} 分）：本週排 1 堂"})
+                          "text": _("{head}——但 3 區每週上限（週量 10%；教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、"
+                                    "以時間算）／間歇總量（20%）或平日上限放不下（剩 {left:.0f} 分）：本週排 1 堂",
+                                    head=head, left=max(0.0, budget))})
         return None
-    why = (f"{head}：{IL.RUNG_NAME[rung]} {IL.structure(v)}，目標區 {IL.tiz_s(v) / 60:.0f} 分"
-           f"（第一堂 {want:.0f} 分；3 區合計 ≤ 週量 10%）")
+    # (one msgid with the head's words: 「{head}：{rung} …」 can't be read back — the head has a 「：」 of its own)
+    kw = dict(rung=IL.RUNG_NAME[rung], variant=IL.structure(v), tiz=IL.tiz_s(v) / 60, want=want)
+    why = (_("每週 2 堂、5 區還沒開：第二堂排不同的 3 區課（巡航版），不重複「{title}」：{rung} {variant}，目標區 {tiz:.0f} 分"
+             "（第一堂 {want:.0f} 分；3 區合計 ≤ 週量 10%）", title=first['title'], **kw)
+           if head else _("：{rung} {variant}，目標區 {tiz:.0f} 分（第一堂 {want:.0f} 分；3 區合計 ≤ 週量 10%）", **kw))
     f = {"variant": v, "level": "min" if cap is not None else "std", "reps": n if n != canon.n else None,
          "equiv": True, "progress": False, "reason": why, "action": "ok", "rung": rung, "base": canon}
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
@@ -1425,16 +1464,18 @@ def _shorten(s: dict, left: float, total: float, hours: float, th: dict, gate: d
     from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
     v = IL.resolve(s.get("variant_key"), s.get("variant_reps"), s.get("variant_adj")) if s.get("variant_key") else None
-    head = (f"本週 {hours:.1f} h：間歇總量上限 {total:.0f} 分（週量 {QG.QUALITY_SHARE_MAX:.0%}；教練中位數：80/20 Endurance 約 20%、Campos 2022 ≤ 30%、UA 和 Koop 約 10%）"
-            f"，{s['title']} 的 {session_tiz_min(s):.0f} 分放不下")
+    head = _("本週 {hours:.1f} h：間歇總量上限 {total:.0f} 分（週量 {share:.0%}；教練中位數：80/20 Endurance 約 20%、"
+             "Campos 2022 ≤ 30%、UA 和 Koop 約 10%），{title} 的 {tiz:.0f} 分放不下", hours=hours, total=total,
+             share=QG.QUALITY_SHARE_MAX, title=s['title'], tiz=session_tiz_min(s))
     if v is None or v.n <= 1 or v.sets > 1:
         if notes is not None:
-            notes.append({"level": "info", "src": "quality_share", "text": head + "：照排，這週其他輕鬆跑別加速"})
+            notes.append({"level": "info", "src": "quality_share",
+                          "text": _("{head}：照排，這週其他輕鬆跑別加速", head=head)})
         return s
     floor = IL.MIN_REPS.get(v.cls, 2)
     n = max(floor, min(v.n - 1, int(left * 60 // max(1, max(v.works)))))
     r = IL.with_reps(v, n)
-    why = f"{head} → 減成 {n} 趟（縮量版，不算進階）"
+    why = _("{head} → 減成 {n} 趟（縮量版，不算進階）", head=head, n=n)
     out = IL.session_for({"variant": r, "level": s.get("variant_blocks") or "std", "reps": n, "equiv": False,
                           "progress": False, "reason": why, "rung": s.get("rung_key")},
                          {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet"),
@@ -1535,56 +1576,64 @@ def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rat
         why = (_("比賽 10 公里以內：長跑全程輕鬆，不加馬拉松配速段") if mp.get("short") else
                _("這週長跑全程輕鬆：馬拉松配速段隔週排，逐週加長（推估）"))
         return dict(id="long", kind="long", title="LSD（路跑）", minutes=m, terrain="road",
-                    detail=f"{why}；平路或緩坡；全程心率壓在{below(cap)}",
-                    source=SRC_PFITZ, tss=long_min / 60.0 * road_rate)
+                    detail="；".join((why, _("平路或緩坡"), _("全程心率壓在{cap}", cap=below(cap)))),
+                    source=_(SRC_PFITZ), tss=long_min / 60.0 * road_rate)
     if kind == "specific" and m >= 60:
         share = mp["share"] if mp is not None else MP_SHARE
         mp = min(mp_minutes(m, share), m - 25)
         easy = m - mp
+        # SP-905: one msgid (the bracket is a field: 「目標配速 m:ss/km」 is what the step builders read)
+        pace = (_("（目標配速 {p}/km）", p=_mmss(goal_pace)) if goal_pace else _("（約閾值配速 × 1.06，推估）"))
         return dict(id="long", kind="long", title=f"長跑＋馬拉松配速 {mp} 分", minutes=m, terrain="road",
-                    detail=f"平路；前 {easy - 10} 分輕鬆（心率 ≤ {cap}），接著 {mp} 分馬拉松配速"
-                           + (f"（目標配速 {_mmss(goal_pace)}/km）" if goal_pace else "（約閾值配速 × 1.06，推估）")
-                           + "，最後 10 分輕鬆收操",
-                    source=f"{SRC_PFITZ}（馬拉松配速長跑）；{SRC_DANIELS}（M 配速）",
+                    detail=_("平路") + "；" + _("前 {easy} 分輕鬆（心率 ≤ {cap}），接著 {mp} 分馬拉松配速{pace}，最後 10 分輕鬆收操",
+                                              easy=easy - 10, cap=cap, mp=mp, pace=pace),
+                    source=_("{src}（馬拉松配速長跑）", src=_(SRC_PFITZ)) + "；" + _("{src}（M 配速）", src=_(SRC_DANIELS)),
                     tss=easy / 60.0 * road_rate + mp / 60.0 * max(road_rate, WS.mp_tss_per_hour(goal_pace, tpace)))
     return dict(id="long", kind="long", title="LSD（路跑）", minutes=m, terrain="road",
-                detail=f"平路或緩坡；全程心率壓在{below(cap)}",
-                source=SRC_PFITZ if kind == "specific" else SRC_UA, tss=long_min / 60.0 * road_rate)
+                detail=_("平路或緩坡") + "；" + _("全程心率壓在{cap}", cap=below(cap)),
+                source=_(SRC_PFITZ) if kind == "specific" else SRC_UA, tss=long_min / 60.0 * road_rate)
 
 
 # the old fixed 專項期 sessions: not generated any more (SP-75 — the 專項期 climbs the ladders); kept for
 # the stored rows they name and their title tests
+# SP-905: a constant session's 說明 / 出處 are msgids joined by 「；」 (each part is shown in the page's
+# language, engine/stored_text) — the stored text is the zh-TW one as before
+_WARM_COOL = WU.EACH_TEXT.format(n=15, c=10)      # 「暖身 15 分、緩和 10 分」 (read back by its msgid)
 ROAD_SPECIFIC_Q = dict(id="quality", kind="quality", title="有氧間歇 2×15 分（平路）", minutes=60, terrain="road",
-                       detail="平路或跑步機；休 3 分慢跑；暖身 15 分、緩和 10 分",
-                       source=f"{SRC_PFITZ}（乳酸閾值跑）；{SRC_DANIELS}（T 配速）", tss=70.0)
+                       detail="；".join((N_("平路或跑步機"), N_("休 3 分慢跑"), _WARM_COOL)),
+                       source="；".join((N_("Pfitzinger & Douglas《Advanced Marathoning》（乳酸閾值跑）"),
+                                        N_("Daniels《Daniels' Running Formula》（T 配速）"))), tss=70.0)
 # the 專項期 Zone 5 session for 越野 (the Zone 5 track's trail variant, SP-31)
 TRAIL_SPECIFIC_Z5 = dict(id="quality", kind="quality", title="VO2max 間歇 5×4 分上坡", minutes=60,
-                         detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
-                         source=SRC_PALLADINO + "（Supra-threshold）", tss=60 / 60 * 75)
+                         detail="；".join((N_("上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復"), _WARM_COOL)),
+                         source=N_("Palladino 功率區間（Supra-threshold）"), tss=60 / 60 * 75)
 # 減量期: TAPER_Q (Zone 5 / no track open; 98–102 % CP short reps = 有氧間歇・巡航, ex-「短強度 4×3 分」) and a
 # Zone 3 one — the volume about halved, the intensity kept (Bosquet 2007; Daniels Phase IV keeps T running)
 TAPER_Q = dict(id="quality", kind="quality", title="有氧間歇（巡航）4×3 分", minutes=45,
-               detail="保留強度、不累積疲勞（98–102% CP）", source=SRC_BOSQUET, tss=45 / 60 * 65)
+               detail=N_("保留強度、不累積疲勞（98–102% CP）"), source=SRC_BOSQUET, tss=45 / 60 * 65)
 TAPER_Z3 = dict(id="quality", kind="quality", title="有氧間歇（巡航）2×8 分", minutes=45,
-                detail="保留強度、量減半（88–95% CP）；休 2 分慢跑；暖身 15 分、緩和 10 分",
-                source=f"{SRC_BOSQUET}；{SRC_DANIELS}（Phase IV 保留 T）", tss=45 / 60 * 62)
+                detail="；".join((N_("保留強度、量減半（88–95% CP）"), N_("休 2 分慢跑"), _WARM_COOL)),
+                source="；".join((SRC_BOSQUET, N_("Daniels《Daniels' Running Formula》（Phase IV 保留 T）"))),
+                tss=45 / 60 * 62)
 # TAPER_Z3's target (SP-478, as SP-408's 越野 上坡節奏跑): its 88–95 % CP = the library's Z3sub, so the
 # card says the template's % CP in watts and the Zone 3 row's HR (taper_q_target / z3_hr_text), not the
 # week's threshold row (Zone 4) TAPER_Q keeps; the structure and the push read the same
 TAPER_Z3_TARGET = dict(power_pct=(0.88, 0.95), hr_cls="Z3sub")
 # the base-phase strides for 路跑 (instead of hill sprints): title, detail, source suffixes
-ROAD_STRIDES = ("＋加速跑 6×20 秒", "；最後 6 趟 20 秒平路加速跑（快而放鬆，不是衝刺），慢跑回來",
-                f"；{SRC_DANIELS} strides")
-HILL_STRIDES = ("＋坡道衝刺 8×10 秒", "；最後 8 趟 10 秒上坡衝刺，走下來恢復", "；Palladino 基礎中期坡衝刺")
+# (SP-905: the detail / source parts after 「；」 are msgids)
+ROAD_STRIDES = ("＋加速跑 6×20 秒", "；" + N_("最後 6 趟 20 秒平路加速跑（快而放鬆，不是衝刺），慢跑回來"),
+                "；" + N_("Daniels《Daniels' Running Formula》 strides"))
+HILL_STRIDES = ("＋坡道衝刺 8×10 秒", "；" + N_("最後 8 趟 10 秒上坡衝刺，走下來恢復"), "；" + N_("Palladino 基礎中期坡衝刺"))
 # 轉換期 (SP-103; periodization-cross-sport.md §4.7, §4.7.1): from its 2nd week, the week's first easy
 # run ends with 4 × 15 s strides at about 5K pace (Jay Johnson: 3–5 × 15 s after 20–30 min easy from
 # week 2, 教練級; most coaches run once or not at all in week 1). Once a week as in the cyclists' trials
 # (one short-sprint session a week in the transition kept the 20-min power, +7.3 % 6 weeks into the
 # next preparation — Almquist 2020, Taylor 2021); carrying it over to running is 推估. Not in the 恢復期.
 TRANSITION_STRIDES = ("＋加速跑 4×15 秒",
-                      "；跑完 20–30 分輕鬆跑後 4 趟 15 秒加速（約 5K 比賽配速，快而放鬆，不是衝刺），每趟之間走或慢跑到呼吸平順",
-                      "；Jay Johnson（轉換期第 2 週起每次輕鬆跑後 3–5×15 秒，教練級）；Almquist 2020、Taylor 2021"
-                      "（自行車選手轉換期每週一次短衝刺）；套到跑步為推估")
+                      "；" + N_("跑完 20–30 分輕鬆跑後 4 趟 15 秒加速（約 5K 比賽配速，快而放鬆，不是衝刺），每趟之間走或慢跑到呼吸平順"),
+                      "；" + "；".join((N_("Jay Johnson（轉換期第 2 週起每次輕鬆跑後 3–5×15 秒，教練級）"),
+                                       N_("Almquist 2020、Taylor 2021（自行車選手轉換期每週一次短衝刺）"),
+                                       N_("套到跑步為推估"))))
 TRANSITION_STRIDES_WEEK = 2
 
 
@@ -1754,7 +1803,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     phs = _plan_phases(status, monday)
     # 維持期 (SP-102, planning.maintain_week): no A race for > 24 weeks — CTL held, a Zone 5 session a week,
     # the 輪替重點 block's focus; None = a normal week
-    mw = maintain_context(status, phs, monday) if kind == "base" else None
+    mw = maintain_context(status, phs, monday, sport) if kind == "base" else None
     # B 賽輕量準備 (SP-102, planning.MAINTAIN_B_POLICY): no A race ahead, the B race's 專項塊 / 減量 — the B race
     bp = b_prep_event(status, phs, monday) if kind in ("specific", "taper") else None
     t_ctx = taper_context(phs, getattr(getattr(status, "plan", None), "events", None) or (), monday)
@@ -2077,8 +2126,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # 課表偏好 每週品質課 2 → one Zone 3 + one Zone 5 when both tracks are open (SP-31); the
     # guardrail mode keeps the base phase at one
     q_n = quality_per_week(PR, kind, mode, gate)
-    dec = QG.week_decision(gate, kind, mode, monday, n=q_n, prefer="z5" if mw else None)
-    if mw and dec.get("items") and {it.get("track") for it in dec["items"]} == {"z5"} and dec.get("z3_note"):
+    dec = QG.week_decision(gate, kind, mode, monday, n=q_n, prefer=mw.get("track", "z5") if mw else None)
+    if mw and mw.get("track", "z5") == "z5" and dec.get("items") and {it.get("track") for it in dec["items"]} == {"z5"}             and dec.get("z3_note"):
         dec = {**dec, "z3_note": _("維持期：每週的強度課排 5 區（高於第二換氣閾值 VT2），3 區這段時間先不排")}
     if cs is not None:
         # SP-288 (cold-start.md §4.1): a new runner's first weeks are easy runs only — also no 3:1 fartlek
@@ -2171,8 +2220,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             long_min = min(long_min, max(30.0, (rp.get("prev_long_min") or long_min) * fr))
             if rp["category"] == "6-13":
                 long_min = min(long_min, float(RE.LONG_CAP_MIN))
-        terrain = (f"挑每公里爬升 ≥ {goal_d * 0.7:.0f} m 的路線" if goal_d else
-                   "有山路就走山路，陡坡用走的" if mountain_goal else "平路或緩坡")
+        terrain = (_("挑每公里爬升 ≥ {m:.0f} m 的路線", m=goal_d * 0.7) if goal_d else
+                   _("有山路就走山路，陡坡用走的") if mountain_goal else _("平路或緩坡"))
         # a due CP / AeT test is SUGGESTED, never put into the plan (the user, 2026-10-01): the
         # athlete picks the day (test_suggestions below → 「排入」 on the overview / 課表 page)
         if no_long:
@@ -2186,8 +2235,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         else:
             add(id="long", kind="long", title="LSD" + ("（山路）" if mountain_goal else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
-                detail=f"{terrain}；全程心率壓在{below(cap_txt)}，爬坡可以走",
-                source=SRC_KOOP if kind == "specific" else SRC_UA,
+                detail=terrain + "；" + _("全程心率壓在{cap}，爬坡可以走", cap=below(cap_txt)),
+                source=_(SRC_KOOP) if kind == "specific" else SRC_UA,
                 tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
         if rec_wk:
             recovery_long(sessions[-1])
@@ -2227,16 +2276,19 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             lm = taper_long_minutes(minutes_total)
             add(id="long", kind="long", title=_("長跑（減量期，≤ {max} 分）", max=TAPER_LONG_MAX_MIN),
                 minutes=int(round(lm / 5) * 5), target=tgt.get("long", ""),
-                detail=f"心率不超過{cap_txt}；" + ("平路或緩坡，不跑長下坡" if t_ctx.get("sore") else "輕鬆跑"),
-                source=SRC_TAPER_WEEK, tss=lm / 60.0 * tph["road"])
+                detail=_("心率不超過{cap}", cap=cap_txt) + "；"
+                + (_("平路或緩坡，不跑長下坡") if t_ctx.get("sore") else _("輕鬆跑")),
+                source=_(SRC_TAPER_WEEK), tss=lm / 60.0 * tph["road"])
     if bp is not None and kind == "specific":
         notes.append({"level": "info", "src": "phase", "text": b_prep_week_note(bp, road)})
     if mw:
         # 維持期 (SP-102): what the week is and why, the 輪替重點 block; Zone 5 not open → Zone 3 stands in
         notes.append({"level": "info", "src": "maintain", "text": mw["text"]})
         tracks = {it.get("track") for it in dec.get("items") or ()}
-        if allow_quality and not rec_wk and "z5" not in tracks and not in_reentry:
-            notes.append({"level": "info", "src": "maintain", "text": maintain_no_z5_note(bool(tracks))})
+        want = mw.get("track", "z5")
+        if allow_quality and not rec_wk and want not in tracks and not in_reentry:
+            notes.append({"level": "info", "src": "maintain",
+                          "text": maintain_no_z3_note(bool(tracks)) if want == "z3" else maintain_no_z5_note(bool(tracks))})
     if kind in ("base", "specific", "taper") and dec.get("z3_note") and not in_reentry:
         # why there is no Zone 3 session this week (SP-31: the gate / a guardrail / the 1-a-week turn)
         notes.append({"level": "info", "src": "z3", "text": dec["z3_note"]})
@@ -2288,7 +2340,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         st_t, st_d, st_s = st or ("", "", "")
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
-            detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
+            detail=_("心率不超過{cap}", cap=cap_txt) + (st_d if strides else ""),
             source=SRC_UA + (st_s if strides else ""), tss=m / 60.0 * tph["easy"])
     if PR is not None:
         # 課表偏好: counts, caps, terrain, interval target (engine/plan_prefs.py)
@@ -2974,9 +3026,12 @@ def illness_apply(ss: list, events: list, cap_txt: str = "") -> list:
         elif r["rule"] == "off" and (s.kind in RUN_KINDS or s.kind == "strength"):
             continue
         elif r["rule"] == "z1" and s.kind in RUN_KINDS:
+            # (SP-905: one msgid with and one without the cap — an empty field can't be read back; the
+            # source stays a field: it has a 「；」 of its own)
             recover(s, INJ.ILL_RUN_MAX_MIN, _("恢復跑（心率 1 區）"),
-                    _("{label}：心率 1 區{cap}，不加速、不衝坡；{src}", label=r["label"],
-                      cap=_("（不超過{cap}）", cap=cap_txt) if cap_txt else "", src=r["src"]))
+                    _("{label}：心率 1 區（不超過{cap}），不加速、不衝坡；{src}", label=r["label"], cap=cap_txt,
+                      src=r["src"]) if cap_txt
+                    else _("{label}：心率 1 區，不加速、不衝坡；{src}", label=r["label"], src=r["src"]))
             out.append(s)
         else:
             out.append(s)
@@ -2997,8 +3052,9 @@ def illness_apply(ss: list, events: list, cap_txt: str = "") -> list:
                     and s.day and s.day >= f), None)
         if nxt is not None:
             recover(nxt, INJ.FIRST_RUN_MAX_MIN, _("恢復跑（發燒後第一次）"),
-                    _("發燒好了之後的第一次跑：恢復配速、心率 1 區{cap}，之後照停跑天數排；{src}",
-                      cap=_("（不超過{cap}）", cap=cap_txt) if cap_txt else "", src=_(INJ.SRC_FEVER)))
+                    _("發燒好了之後的第一次跑：恢復配速、心率 1 區（不超過{cap}），之後照停跑天數排；{src}", cap=cap_txt,
+                      src=_(INJ.SRC_FEVER)) if cap_txt
+                    else _("發燒好了之後的第一次跑：恢復配速、心率 1 區，之後照停跑天數排；{src}", src=_(INJ.SRC_FEVER)))
     return out
 
 
@@ -3108,7 +3164,7 @@ def light_apply(ss: list, lt: Optional[dict], today: dt.date, last_min: float, d
     if lt["color"] == "red":
         for s in ss:
             if g(s, "kind") == "strength" and not g(s, "done"):
-                put(s, detail=(g(s, "detail") or "") + _("；會痛的動作先不做"))
+                put(s, detail=(g(s, "detail") or "") + "；" + _("會痛的動作先不做"))
         if notes is not None:
             notes.append({"level": "bad", "src": "injury_light",
                           "text": head + _("。這週先不排跑步；交叉訓練和肌力照做，會痛的動作先不做")})
@@ -3130,7 +3186,7 @@ def light_apply(ss: list, lt: Optional[dict], today: dt.date, last_min: float, d
         elif g(s, "kind") == "long" and m:
             nm = int(m * INJ.YELLOW_LONG // 5 * 5)
             put(s, minutes=nm, tss=round(float(g(s, "tss") or 0.0) * nm / m, 1),
-                detail=(g(s, "detail") or "") + _("；疼痛黃燈：長跑縮短一階（× {f:.2f}，推估）", f=INJ.YELLOW_LONG))
+                detail=(g(s, "detail") or "") + "；" + _("疼痛黃燈：長跑縮短一階（× {f:.2f}，推估）", f=INJ.YELLOW_LONG))
     allowed = max(0.0, last_min - done_min) if last_min > 0 else None
     tot = sum(int(g(s, "minutes") or 0) for s in todo)
     gone: list = []
@@ -3288,13 +3344,16 @@ def taper_strength_days(stop: dict) -> list[str]:
 
 
 def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Optional[list] = None,
-                           today: Optional[dt.date] = None, blocked=None, allowed=None) -> list:
+                           today: Optional[dt.date] = None, blocked=None, allowed=None, before=()) -> list:
     """`ss` without the not-done strength sessions on a day in an A event's no-strength window
     (strength_stops; one with no day is dropped when the window touches the week) — except the one
     short maintenance session of the taper's first days (SP-671, taper_strength_days): the week's
     strength session on one of them, else one from the window moved to an easy-run day of them (not
     before `today`, not a `blocked` day; a free day only when `allowed(date)`); none when a done one is
-    there. A week note when any went or was kept. Session objects or dicts."""
+    there. SP-866: never the day after a general strength session (the week's, done or planned, kept
+    before the window, or one of `before` — ISO days of the previous week's, projection passes them):
+    a later day of the window then, none when no day of it fits. A week note when any went or was kept.
+    Session objects or dicts."""
     days = [(monday + dt.timedelta(days=i)).isoformat() for i in range(7)]
     hit = {d: x for x in stops or () for d in days if x["from"] <= d <= x["to"]}
     if not hit:
@@ -3314,11 +3373,17 @@ def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Option
     def strength(s):
         return g(s, "kind") == "strength" and g(s, "id") != "balance"
     gone = [s for s in ss if g(s, "kind") == "strength" and not g(s, "done") and (g(s, "day") in hit or not g(s, "day"))]
-    maint = None
+    # SP-866: the days a general strength session stays on (done or kept, this week's or `before`) — the
+    # maintenance session never comes the day after one (no two strength days in a row before a race)
+    prior = {g(s, "day") for s in ss if strength(s) and g(s, "day") and not any(s is x for x in gone)} | set(before or ())
+
+    def ok(d: str) -> bool:
+        return (dt.date.fromisoformat(d) - dt.timedelta(days=1)).isoformat() not in prior
+    maint, after_strength = None, False
     if keep and not any(strength(s) and g(s, "done") and g(s, "day") in keep for s in ss):
         cand = sorted((s for s in gone if strength(s) and g(s, "day")), key=lambda s: g(s, "day"))
         on = [s for s in cand if g(s, "day") in keep]
-        if on:
+        if on and ok(g(on[0], "day")):
             maint = on[0]
         elif cand:
             rest = [s for s in ss if not any(s is x for x in gone) and not g(s, "done") and g(s, "day")]
@@ -3326,9 +3391,11 @@ def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Option
             easy = [d for d in sorted(keep) if "easy" in kinds[d]]
             free = [d for d in sorted(keep) if not kinds[d] and allowed is not None
                     and allowed(dt.date.fromisoformat(d))]
-            day = (easy or free or [None])[0]
+            day = ([d for d in easy if ok(d)] or [d for d in free if ok(d)] or [None])[0]
+            # the day it would have had without the rule: the note says why it moved / is not there
+            after_strength = (g(on[0], "day") if on else (easy or free or [None])[0]) not in (None, day)
             if day:
-                maint = cand[0]
+                maint = (on or cand)[0]
                 put(maint, day=day)
     if maint is not None:
         m0 = int(g(maint, "minutes") or 0)
@@ -3339,13 +3406,17 @@ def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Option
     out = [s for s in ss if s is maint or not any(s is x for x in gone)]
     if (len(out) < len(ss) or maint is not None) and notes is not None:
         x = keep[g(maint, "day")] if maint is not None else hit[min(hit)]
-        notes.append({"level": "info", "src": "strength",
-                      "text": _("A 賽事「{race}」賽前 {days} 天是減量期（{start} 起）：肌力只在開始 3 天內留 1 堂 {m} 分內的"
-                                "維持課（不做到力竭、不加新動作、不做大量離心），賽前 7 天起不排；課表偏好的每週肌力／肌力日也一樣。"
-                                "依據：Bompa & Buzzichelli 減量章（第 1 週 2 堂短課、第 2 週停）；Berryman 2020"
-                                "（停 2–4 週肌力，跑步經濟性沒有掉）",
-                                race=x["race"], days=x.get("days", STRENGTH_STOP_DAYS), start=x["from"][5:],
-                                m=TAPER_STRENGTH_MAX_MIN)})
+        text = _("A 賽事「{race}」賽前 {days} 天是減量期（{start} 起）：肌力只在開始 3 天內留 1 堂 {m} 分內的"
+                 "維持課（不做到力竭、不加新動作、不做大量離心），賽前 7 天起不排；課表偏好的每週肌力／肌力日也一樣。"
+                 "依據：Bompa & Buzzichelli 減量章（第 1 週 2 堂短課、第 2 週停）；Berryman 2020"
+                 "（停 2–4 週肌力，跑步經濟性沒有掉）",
+                 race=x["race"], days=x.get("days", STRENGTH_STOP_DAYS), start=x["from"][5:],
+                 m=TAPER_STRENGTH_MAX_MIN)
+        if after_strength:
+            # SP-866: why the maintenance session is later in the window, or not there
+            text += (_("。前一天剛做完肌力的日子不排維持課，往後挪，不連兩天做肌力") if maint is not None
+                     else _("。開始 3 天內放得下的日子前一天都有肌力，這次不留維持課，不連兩天做肌力"))
+        notes.append({"level": "info", "src": "strength", "text": text})
     return out
 
 
@@ -3381,9 +3452,9 @@ TAPER_LONG_MAX_MIN = 90
 SORE_DESCENT_M_PER_KM = 40.0        # 推估: steeper than most trail races' average descent (~25–35 m/km)
 TAPER_RUN_DROP = 1
 TAPER_RUN_MIN = 20                  # no taper easy run shorter (plan_prefs.MIN_EASY)
-SRC_TAPER_WEEK = ("減量期課表：最後一次完整強度課在賽前 10 天以前（減量期 10 天時是專項期最後一堂）、之後保留種類縮短、"
-                  "最後一次短強度賽前 3–5 天量減半、最後一次長跑賽前 ≥ 7 天且 ≤ 90 分（Gaudette、Koop、Mujika；"
-                  "教練級／世界級選手）")
+SRC_TAPER_WEEK = N_("減量期課表：最後一次完整強度課在賽前 10 天以前（減量期 10 天時是專項期最後一堂）、之後保留種類縮短、"
+                    "最後一次短強度賽前 3–5 天量減半、最後一次長跑賽前 ≥ 7 天且 ≤ 90 分（Gaudette、Koop、Mujika；"
+                    "教練級／世界級選手）")
 # power_pct (SP-408): the template's band × CP — the card's target (taper_rules.as_q), the structure
 # and the push read the same % (the % CP in the text; a template without one parsed as threshold)
 # minutes (SP-411, the owner 2026-10-13 option A): the structure's total — the trail ones have no
@@ -3392,25 +3463,28 @@ SRC_TAPER_WEEK = ("減量期課表：最後一次完整強度課在賽前 10 天
 # structure's estimate (workout_steps.totals 81.4 / 61.5): ~57 an hour, the added time being jog-downs.
 # hr_cls (SP-408, the user 2026-10-13): the trail ones are 88–95 % CP = the library's Z3sub, so their HR
 # is the Zone 3 row (z3_hr_text), not the threshold (Zone 4) row the others keep
+# (SP-905: each 說明 is msgids joined by 「；」)
 TAPER_FULL = {
     "road": dict(kind="quality", title="有氧間歇 2×15 分（平路）", minutes=60, terrain="road",
-                 detail="減量期最後一次完整強度課：專項期熟悉的課，不加量、不做新的課；休 3 分慢跑；暖身 15 分、緩和 10 分",
+                 detail="；".join((N_("減量期最後一次完整強度課：專項期熟悉的課，不加量、不做新的課"), N_("休 3 分慢跑"),
+                                  _WARM_COOL)),
                  tss=60 / 60 * 70, power_pct=(0.95, 1.01)),
     "trail": dict(kind="quality", title="上坡節奏跑 3×10 分（緩坡）", minutes=85,
-                  detail="減量期最後一次完整強度課：4–8% 緩坡、3 區（88–95% CP），慢跑下來恢復、下坡放鬆不衝；"
-                         "暖身 15 分、緩和 10 分",
+                  detail="；".join((N_("減量期最後一次完整強度課：4–8% 緩坡、3 區（88–95% CP），慢跑下來恢復、下坡放鬆不衝"),
+                                   _WARM_COOL)),
                   tss=85 / 60 * 57, power_pct=(0.88, 0.95), hr_cls="Z3sub"),
 }
 TAPER_CUT = {
     "road": dict(kind="quality", title="有氧間歇 2×10 分（平路）", minutes=50, terrain="road",
-                 detail="減量期：同一種課、量縮短（少一段、每段變短）；休 3 分慢跑；暖身 15 分、緩和 10 分",
+                 detail="；".join((N_("減量期：同一種課、量縮短（少一段、每段變短）"), N_("休 3 分慢跑"), _WARM_COOL)),
                  tss=50 / 60 * 65, power_pct=(0.95, 1.01)),
     "trail": dict(kind="quality", title="上坡節奏跑 2×10 分（緩坡）", minutes=65,
-                  detail="減量期：同一種課、量縮短（少一段）；4–8% 緩坡、3 區（88–95% CP），下坡放鬆不衝；暖身 15 分、緩和 10 分",
+                  detail="；".join((N_("減量期：同一種課、量縮短（少一段）"),
+                                   N_("4–8% 緩坡、3 區（88–95% CP），下坡放鬆不衝"), _WARM_COOL)),
                   tss=65 / 60 * 57, power_pct=(0.88, 0.95), hr_cls="Z3sub"),
 }
 TAPER_SHORT = dict(kind="quality", title="短強度 2×3 分（平路）", minutes=35, terrain="road",
-                   detail="賽前 3–5 天最後一次短強度：量減半，98–102% CP，休 2 分慢跑；暖身 15 分、緩和 10 分",
+                   detail="；".join((N_("賽前 3–5 天最後一次短強度：量減半，98–102% CP，休 2 分慢跑"), _WARM_COOL)),
                    tss=35 / 60 * 60, power_pct=(0.98, 1.02))
 _VARIANT_KEYS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
                  "variant_adj", "progress", "steps", "distance_km", "climb_m")
@@ -3532,7 +3606,7 @@ def z3_hr_text(hrz: Optional[dict], aet: Optional[float], lthr: Optional[float])
     b = work_band(hrz, "Z3sub")
     if b is None and aet and lthr and aet < lthr:
         b = (round(aet), round(lthr))
-    return f"心率 {b[0]}–{b[1]} bpm" if b else ""
+    return _("心率 {lo}–{hi} bpm", lo=b[0], hi=b[1]) if b else ""
 
 
 def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=None, z3_target: str = "") -> str:
@@ -3546,7 +3620,8 @@ def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=No
     parts = []
     lo, hi = tmpl.get("power_pct") or (None, None)
     if cp and lo is not None and hi is not None:
-        parts.append(f"功率 {lo * cp:.0f}–{hi * cp:.0f} W（{lo * 100:.0f}–{hi * 100:.0f}% CP）")
+        parts.append(_("功率 {lo:.0f}–{hi:.0f} W（{plo:.0f}–{phi:.0f}% CP）", lo=lo * cp, hi=hi * cp, plo=lo * 100,
+                       phi=hi * 100))
     hr_src = z3_target if tmpl.get("hr_cls") == "Z3sub" else q_target
     parts += [p.strip() for p in (hr_src or "").split("·") if p.strip().startswith("心率")]
     text = " · ".join(parts)
@@ -3616,7 +3691,7 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
 
     def as_q(s, tmpl: dict):
         t = {k: v for k, v in tmpl.items() if k not in ("power_pct", "hr_cls")}
-        put(s, **{**{k: None for k in _VARIANT_KEYS}, "source": SRC_TAPER_WEEK, "terrain": None, **t,
+        put(s, **{**{k: None for k in _VARIANT_KEYS}, "source": _(SRC_TAPER_WEEK), "terrain": None, **t,
                   "target": taper_q_target(tmpl, cp, q_target, prefs, z3_target)})
 
     # SP-668: the week the taper starts in keeps one quality session — when the 專項期 days before the taper
@@ -3646,8 +3721,9 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
                 m = int(g(s, "minutes") or 0)
                 nm = min(m, TAPER_LONG_MAX_MIN)
                 put(s, minutes=nm, tss=round(float(g(s, "tss") or 0.0) * nm / m, 1) if m else g(s, "tss"),
-                    detail=_("減量期最後一次長跑：≤ {max} 分輕鬆跑", max=TAPER_LONG_MAX_MIN)
-                    + (_("，平路或緩坡、不跑長下坡") if tc.get("sore") else ""), climb_m=None, distance_km=None)
+                    detail=_("減量期最後一次長跑：≤ {max} 分輕鬆跑，平路或緩坡、不跑長下坡", max=TAPER_LONG_MAX_MIN)
+                    if tc.get("sore") else _("減量期最後一次長跑：≤ {max} 分輕鬆跑", max=TAPER_LONG_MAX_MIN),
+                    climb_m=None, distance_km=None)
                 if tc.get("sore"):
                     put(s, terrain="road")
                 said.append(_("最後一次長跑 ≤ {max} 分", max=TAPER_LONG_MAX_MIN))

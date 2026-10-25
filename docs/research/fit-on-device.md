@@ -144,7 +144,7 @@
 | Pyodide（瀏覽器裡跑 Python） | 示範版已在用 314.0.7（`backend/demo/static_racepower.py`）。實際下載量：`pyodide.asm.wasm` 9.6 MB、`python_stdlib.zip` 2.5 MB、numpy 套件 3.0 MB，**合計約 15 MB**（未壓縮）。SQLAlchemy 有現成套件；`fitdecode` 不在 Pyodide 套件清單裡，要另外從 PyPI 裝（它是純 Python，應該可以） | 已驗證（CDN 實際下載量測、`pyodide-lock.json`）；`fitdecode` 能裝是推估 |
 | 解析速度 | NAS 上 Python 解析：中位數檔 0.65 秒、最大 12.3 秒。800 個檔第一次全量解析，用 Python 估計要 10–20 分鐘；JS SDK 應該比較快，但沒測。**SP-313 實測（2026-10-15，桌面 Chrome＋CPU 節流模擬手機）**：800 個檔 JS SDK 桌面 6 秒、模擬手機 26–39 秒；Pyodide＋`fitdecode` 桌面 4.2 分、模擬手機 17–22 分。`fitdecode` 把原始碼 zip 解開就能在 Pyodide 跑。見 `local-first-sync.md` §7.1。**定案（SP-313 問答 Q1 第 2 題，使用者 2026-10-15）**：裝置端解析 FIT 用 Garmin JS SDK（上線前讀它的 FIT 授權條款），Pyodide 只在要跑 Python 模型時才載入；手機跑模型要多久另開 SP-760 量 | NAS 數字已驗證（SP-307）；桌面與模擬數字已驗證（SP-313）；真手機待測 |
 | 平常每天 | 只解析新的那 1–2 個檔，幾秒內完成。前提是快取 key 用 FIT 雜湊（SP-308）、彙總能增量更新（SP-320） | 推估 |
-| 整套模型搬到瀏覽器 | 引擎約 8.1 萬行 Python。用 Pyodide 可以沿用，但要拿掉檔案 I/O 與資料庫的部分；改寫成 JS／TS 等於維護兩份模型，會越差越遠 | 推估（SP-307 §7） |
+| 整套模型搬到瀏覽器 | 引擎約 8.1 萬行 Python。用 Pyodide 可以沿用，但要拿掉檔案 I/O 與資料庫的部分；改寫成 JS／TS 等於維護兩份模型，會越差越遠。**SP-760 實測（2026-10-20，桌面＋模擬手機）**：後端程式不改就能在 Pyodide 跑出單次活動判讀，結果和 CPython 完全一樣（檔案 I/O、sqlite 都不用拿掉）；但第一次打開模擬中階手機要約 4.5 分鐘、判讀一筆 wasm 記憶體就到約 460 MB，伺服器的快取在 Pyodide 裡全部失效。見 `model-on-device.md` | 推估（SP-307 §7）；SP-760 數字已驗證（模擬） |
 | 手機記憶體 | iPhone 分頁的記憶體上限官方沒公布 | 未找到來源 |
 
 ---

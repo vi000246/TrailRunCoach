@@ -13,8 +13,11 @@ Debug API authentication (SP-371, SP-373, docs/debug-api.md): who may call /api/
     free for the owner's password proxy) or as `Authorization: Bearer trcd_…`. The web session
     (cookies) is never read, so a page hit by XSS / CSRF cannot call these, and a leaked token
     reaches nothing else.
+  * writes (SP-802, engine/debug_write.py): WRITE_SCOPE, never a default, a token holding it expires
+    within WRITE_MAX_DAYS; the POSTs under /api/v1/debug/write/ only.
   * sign-in mode (SP-58, SP-406): the login gate (tenancy_mw) lets a GET / HEAD under
-    /api/v1/debug/ through on a debug token, without a session, after finding the token's user in
+    /api/v1/debug/ (and a POST under /api/v1/debug/write/, SP-802) through on a debug token, without
+    a session, after finding the token's user in
     accounts.db (api_tokens, client CLIENT, scope SCOPE_ALL; registered when the token is made,
     removed when it is revoked) — the owner only; this gate then checks the tenant's own row.
   * limits (backend/security/ratelimit.py, as tenancy_mw): the token is checked FIRST — a valid
@@ -55,8 +58,10 @@ ENABLED_KEY = "debug.api.enabled"
 
 TOKEN_PREFIX = "trcd_"
 TOKEN_HEADER = "x-trc-debug-token"
-SCOPES = ("read:activity", "read:plan", "read:sync", "read:gps", "export:config", "export:plan")
-DEFAULT_SCOPES = ("read:activity", "read:plan", "read:sync")      # read:gps / export:* only when ticked
+SCOPES = ("read:activity", "read:plan", "read:sync", "read:gps", "export:config", "export:plan", "write:config")
+DEFAULT_SCOPES = ("read:activity", "read:plan", "read:sync")      # read:gps / export:* / write:* only when ticked
+WRITE_SCOPE = "write:config"                      # SP-802: engine/debug_write.py (thresholds, events, 課表偏好)
+WRITE_MAX_DAYS = 7                                # a token that can write expires within a week (never "never")
 DAYS = (7, 30, 90, 365, 0)                        # 0 = never expires (revoke it instead)
 DEFAULT_DAYS = 90
 NEVER = dt.datetime(9999, 12, 31)                 # expires_at of a token that never expires (NOT NULL column)
@@ -138,6 +143,8 @@ async def create_token(db: AsyncSession, name: str, scopes, days) -> tuple[str, 
         raise ValueError(f"days must be one of {list(DAYS)}")
     if days not in DAYS:
         raise ValueError(f"days must be one of {list(DAYS)}")
+    if WRITE_SCOPE in sc and not 0 < days <= WRITE_MAX_DAYS:
+        raise ValueError(f"a {WRITE_SCOPE} token expires within {WRITE_MAX_DAYS} days")
     t = tenancy.current().id
     now = _now()
     n = (await db.execute(select(func.count(DebugToken.id)).where(

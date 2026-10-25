@@ -127,11 +127,11 @@ def ols_fe(rows, cols, group="route"):
 
 def fit_beta_rows(rows: list[dict]) -> Optional[CAL.Fit]:
     """β from effort rows (power basis when most rows have power, else speed);
-    None below MIN_N or a Hadley span < MIN_SPAN."""
+    only the count below MIN_N (SP-807), None for a Hadley span < MIN_SPAN."""
     pw = [r for r in rows if r.get("p")]
     basis, use = ("p", pw) if len(pw) >= max(MIN_N, len(rows) / 2) else ("v", [r for r in rows if r.get("v")])
     if len(use) < MIN_N:
-        return None
+        return CAL.count_only(len(use))
     h = [r["hadley"] for r in use]
     if max(h) - min(h) < MIN_SPAN:
         return None
@@ -172,7 +172,7 @@ def _weather_acts(root: Optional[Path] = None) -> list[dict]:
 def _med_fit(vals: list, min_n: int) -> Optional[CAL.Fit]:
     vals = [float(v) for v in vals if v is not None and math.isfinite(float(v))]
     if len(vals) < min_n:
-        return None
+        return CAL.count_only(len(vals))                # SP-807: the count below min_n
     m = median(vals)
     sd = float(np.std(vals)) if len(vals) > 1 else 0.0
     return CAL.Fit(m, 1.2533 * sd / math.sqrt(len(vals)), len(vals))      # SE of a median ≈ 1.25·σ/√n

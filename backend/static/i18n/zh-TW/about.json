@@ -56,8 +56,10 @@
   "d.google.desc": "地形與道路圖磚，地圖資料 © Google。",
   "d.cwa.name": "中央氣象署開放資料",
   "d.cwa.desc": "登山與鄉鎮天氣預報（賽事計算機與課表的天氣），依政府資料開放授權條款－第 1 版使用；資料來源：交通部中央氣象署。",
+  "d.metno.name": "挪威氣象局（MET Norway）",
+  "d.metno.desc": "中央氣象署沒有提供的天氣預報（9 天內、台灣以外的地點）。Data from MET Norway，以 CC BY 4.0 授權提供。",
   "d.openmeteo.name": "Open-Meteo",
-  "d.openmeteo.desc": "中央氣象署沒有提供的天氣預報、過去的氣候資料與海拔，以 CC BY 4.0 授權提供。海拔資料部分來自 Copernicus GLO-90 DEM：© DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.",
+  "d.openmeteo.desc": "過去的氣候資料（比賽日的近 10 年同月平均、每次跑步當時的天氣）與海拔，以 CC BY 4.0 授權提供。海拔資料部分來自 Copernicus GLO-90 DEM：© DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA.",
   "software.h": "開放原始碼軟體",
   "software.lead": "本服務使用下列開放原始碼軟體，依各自的授權使用；授權條款全文見各專案的網站。",
   "software.name": "軟體",
@@ -65,5 +67,11 @@
   "trademarks.h": "商標聲明",
   "trademarks.registered": "TrainingPeaks®、TSS®、Training Stress Score®、NP®、Normalized Power®、IF®、Intensity Factor® 是 TrainingPeaks, LLC 的註冊商標。",
   "trademarks.others": "COROS、Garmin、Stryd、Strava、Google 及其他名稱是各自所有人的商標。TrailRunCoach 與上述公司沒有任何關係，也沒有獲得它們的授權或背書。",
-  "trademarks.own": "本服務的「訓練負荷（Training load）」「強度比（Intensity）」「加權功率（Weighted power）」「長期訓練負荷（Chronic load）／短期負荷（Acute load）／負荷平衡（Load balance）」是我們自己的指標；提到上述名稱，只是為了說明資料來源、檔案相容性，或讓你對照數字。"
+  "trademarks.own": "本服務的「訓練負荷（Training load）」「強度比（Intensity）」「加權功率（Weighted power）」「長期訓練負荷（Chronic load）／短期負荷（Acute load）／負荷平衡（Load balance）」是我們自己的指標；提到上述名稱，只是為了說明資料來源、檔案相容性，或讓你對照數字。",
+  "cairn.h": "疊石 Cairn",
+  "cairn.what": "疊石 Cairn 是我們另一個登山行程服務：每天走到哪、住哪裡排成時間軸，看 3D 地形與鋪面，出發後把即時位置分享給留在山下的家人，也可以揪團。TrailRunCoach 管出發前的練習和這趟要走多久、怎麼配速、吃多少，兩邊互補。Cairn 用 Google 帳號登入就自動免費註冊。",
+  "cairn.routes": "路線可以兩邊互帶：在賽事管理貼上 Cairn 行程的分享連結，路線和每天的過夜點會存成那一場賽事的 GPX；算好之後可以把路線、配速曲線和過夜點推到 Cairn（要先連結帳號，付費方案的功能）。做法見操作手冊的「疊石 Cairn」一節。",
+  "cairn.link": "同一個 Google 帳號不會自動連結兩邊：要你自己在設定的「疊石 Cairn」分頁連結，或第一次要推資料時才會問；連結後 Cairn 只讀得到列出的項目，不讀活動、心率或其他健康資料，隨時可以解除。",
+  "legal.h": "服務條款與隱私權",
+  "legal.lead": "註冊時同意的文件：使用本服務的規則、我們怎麼處理你的資料，以及健康風險與第三方串接的聲明。"
 }

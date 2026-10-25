@@ -178,6 +178,80 @@ def band_bouts(t, power, cp: Optional[float], lo: float, min_s: float) -> list[d
             for a, b in segs if b - a >= min_s]
 
 
+# SP-801 (user 2026-10-20): Zone 3 is power OR heart rate, either one is enough. The HR side is
+# the session classifier's (session_stimulus: 30-s HR ≥ 0.95 × LTHR, not downhill, not cadence
+# locked, each HR stretch minus its first 3 min for the HR lag) — a long descent of a hike keeps
+# the HR up while the effort isn't threshold (10/18 北插天山: 80 min downhill at 111 % LTHR).
+Z3_HR = 0.95            # session_stimulus.Z3_HR
+Z3_HR_SKIP_S = 180      # session_stimulus.Z3_HR_SKIP_S
+Z3_GRADE_DOWN = -0.03   # session_stimulus.GRADE_DOWN
+
+
+def z3_on(t, power, hr, cp: Optional[float], lthr: Optional[float], grade=None,
+          cadence_spm=None) -> Optional[dict]:
+    """The Zone 3 seconds of a run on one 1-s grid: {"g", "p", "h", "grade", "power_on", "hr_on", "on"}
+    (`on` = power_on | hr_on; arrays per grid second). power_on: 10-s power ≥ REP_TOL × Z3_FLOOR × CP
+    (band_bouts' line); hr_on: see Z3_HR above. None without a time axis or anything to judge."""
+    from backend.engine import session_stimulus as SS
+    from backend.engine.hr_quality import cadence_lock
+    t = np.asarray(t, dtype=float) if t is not None else None
+    if t is None or np.isfinite(t).sum() < 60:
+        return None
+    g = np.arange(float(np.nanmin(t)), float(np.nanmax(t)) + 1.0)
+    n = len(g)
+    p, h = SS._grid(t, power, g), SS._grid(t, hr, g)
+    gr = SS._roll(SS._grid(t, grade, g), 30)
+    p_on = np.zeros(n, dtype=bool)
+    if p is not None and cp:
+        p_on = np.convolve(np.nan_to_num(p), np.ones(10) / 10, "same") >= REP_TOL * Z3_FLOOR * cp
+    h_on = np.zeros(n, dtype=bool)
+    if h is not None and lthr:
+        h30 = SS._roll(h, 30)
+        c = SS._grid(t, cadence_spm, g)
+        lock = cadence_lock(h, c) if c is not None else np.zeros(n, dtype=bool)
+        down = np.isfinite(gr) & (gr < Z3_GRADE_DOWN) if gr is not None else np.zeros(n, dtype=bool)
+        raw = np.isfinite(h30) & (h30 >= Z3_HR * lthr) & ~lock & ~down
+        for a, b in SS.runs_of(raw, BRIDGE_S):
+            if b - a - Z3_HR_SKIP_S > 0:
+                h_on[a + Z3_HR_SKIP_S:b] = True
+    if not p_on.any() and not h_on.any() and p is None and h is None:
+        return None
+    return {"g": g, "p": p, "h": h, "grade": gr, "power_on": p_on, "hr_on": h_on, "on": p_on | h_on}
+
+
+def z3_bouts(t, power, hr, cp: Optional[float], lthr: Optional[float], grade=None, cadence_spm=None,
+             min_s: float = Z3_MIN_S, bridge_s: int = BRIDGE_S, z=None) -> list[dict]:
+    """Stretches in Zone 3 by power or HR (z3_on) lasting ≥ min_s, gaps < bridge_s joined:
+    [{"start_s", "duration_s", "power", "hr", "by": "power" | "hr" | "both", "source": "z3"}];
+    start_s counts from the run's first sample (band_bouts' origin)."""
+    from backend.engine.session_stimulus import runs_of
+    z = z or z3_on(t, power, hr, cp, lthr, grade, cadence_spm)
+    if z is None:
+        return []
+    out = []
+    for a, b in runs_of(z["on"], bridge_s):
+        if b - a < min_s:
+            continue
+        ps = z["power_on"][a:b].mean()
+        hs = z["hr_on"][a:b].mean()
+        pw = None if z["p"] is None or not np.isfinite(z["p"][a:b]).any() else float(np.nanmean(z["p"][a:b]))
+        hm = None if z["h"] is None or not np.isfinite(z["h"][a:b]).any() else float(np.nanmean(z["h"][a:b]))
+        by = "both" if ps >= 0.5 and hs >= 0.5 else "power" if ps >= hs else "hr"
+        out.append({"start_s": float(a), "duration_s": float(b - a), "power": pw if pw is not None else 0.0,
+                    "hr": hm, "by": by, "source": "z3"})
+    return out
+
+
+def z3_reps_of(ds, w, s: Optional[dict], cp: Optional[float]) -> list[dict]:
+    """z3_bouts on an activity: the LTHR in effect (workout_review.measure), rgrade, cadence (spm)."""
+    from backend.engine import workout_review as WR
+    if s is None:
+        return []
+    m = WR.measure(ds, w) or {}
+    cad = None if s.get("cadence") is None else np.asarray(s["cadence"], dtype=float) * 2.0
+    return z3_bouts(s["t"], s.get("power"), s.get("hr"), cp, m.get("lthr"), WR._rgrade(ds, w, s), cad)
+
+
 def works_of(spec) -> list[int]:
     """Planned work seconds per rep of a ladder tuple or a library variant."""
     if spec is None:
@@ -205,9 +279,11 @@ def lo_of(spec) -> Optional[float]:
     return getattr(spec, "lo", None) if hasattr(spec, "lo") else spec[5]
 
 
-def find_reps(ds, w, s: Optional[dict], cp: Optional[float], spec=None) -> dict:
+def find_reps(ds, w, s: Optional[dict], cp: Optional[float], spec=None, hr_z3: bool = False) -> dict:
     """{"bouts": [...], "source": "lap" | "power" | "short" | "z3" | None}. `s` =
-    workout_review._samples(ds, w); `spec` = the planned ladder tuple / variant."""
+    workout_review._samples(ds, w); `spec` = the planned ladder tuple / variant.
+    `hr_z3` (SP-801, the 間歇 page only): the Zone 3 reps by power or HR (z3_bouts); off for
+    the dose / ladder / hard-day count (quality_gate), which keep the power line."""
     t = s["t"] if s is not None else None
     pw = s["power"] if s is not None else None
     works, lo = works_of(spec), lo_of(spec)
@@ -236,7 +312,7 @@ def find_reps(ds, w, s: Optional[dict], cp: Optional[float], spec=None) -> dict:
     short = count_reps(t, pw, cp)
     if len(short) >= DOSE_MIN_REPS:
         return {"bouts": [{**r, "source": "short"} for r in short], "source": "short"}
-    z3 = band_bouts(t, pw, cp, Z3_FLOOR, Z3_MIN_S)
+    z3 = z3_reps_of(ds, w, s, cp) if hr_z3 else band_bouts(t, pw, cp, Z3_FLOOR, Z3_MIN_S)
     if len(z3) >= 2:
         return {"bouts": [{**r, "source": "z3"} for r in z3], "source": "z3"}
     return {"bouts": [{**r, "source": "short"} for r in short], "source": "short" if short else None}

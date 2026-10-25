@@ -32,10 +32,12 @@
     const nip = k.new_ip_at && k.active
       ? ` <span class="meta" title="${esc(t("settings.debug.new_ip_tip"))}">⚠ ${esc(t("settings.debug.new_ip"))}</span>` : "";
     const btn = k.active ? `<button data-dbg-revoke="${k.id}" data-name="${esc(k.name)}">${esc(t("settings.debug.revoke"))}</button>` : esc(status);
-    return `<tr><td>${esc(k.name)} <span class="meta">${esc(k.prefix)}…</span></td>
-      <td class="meta">${k.scopes.map((s) => `<span title="${esc(scopeTitle(s))}">${esc(s)}</span>`).join(" ")}</td>
-      <td class="meta">${k.never_expires ? esc(t("settings.debug.no_expiry")) : esc(new Date(k.expires_at).toLocaleDateString())}</td>
-      <td class="meta">${esc(when(k.last_used_at))}${k.last_ip ? " · " + esc(k.last_ip) : ""}${nip}</td><td>${btn}</td></tr>`;
+    // SP-804: data-l = the column's header — on a phone the row is a card (settings.html #dbg-tokens
+    // tr.tok) and each cell says what it is; the 撤銷 button sits beside the name instead of off the edge
+    return `<tr class="tok"><td>${esc(k.name)} <span class="meta">${esc(k.prefix)}…</span></td>
+      <td class="meta" data-l="${esc(t("settings.debug.col_scopes"))}">${k.scopes.map((s) => `<span title="${esc(scopeTitle(s))}">${esc(s)}</span>`).join(" ")}</td>
+      <td class="meta" data-l="${esc(t("settings.debug.col_expires"))}">${k.never_expires ? esc(t("settings.debug.no_expiry")) : esc(new Date(k.expires_at).toLocaleDateString())}</td>
+      <td class="meta" data-l="${esc(t("settings.debug.col_used"))}">${esc(when(k.last_used_at))}${k.last_ip ? " · " + esc(k.last_ip) : ""}${nip}</td><td>${btn}</td></tr>`;
   }
 
   function auditRow(a) {
@@ -45,11 +47,27 @@
       <td>${esc(a.status)}</td><td class="meta">${esc(a.ip || "")}${nip}</td><td class="meta">${a.bytes ? esc(Math.round(a.bytes / 102.4) / 10 + " kB") : ""}</td></tr>`;
   }
 
+  // SP-802: one write through /api/v1/debug/write/* — what changed (part · key · field: before → after)
+  const val = (v) => (v === null || v === undefined ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v));
+  function writeRow(w) {
+    const items = (w.diff || []).slice(0, 6).map((d) => `${d.part} · ${d.key}${d.field ? " · " + d.field : ""}: ${val(d.before)} → ${val(d.after)}`);
+    if ((w.diff || []).length > 6) items.push(`… +${w.diff.length - 6}`);
+    const tag = w.kind === "undo" ? t("settings.debug.undo_of", { id: w.undoes })
+      : w.undone_at ? t("settings.debug.undone") : "";
+    // the 已復原 / 復原第 n 次 tag under the time: a 4th column wrapped one letter a line on a phone
+    return `<tr><td class="meta">#${esc(w.id)} ${esc(when(w.at))}${tag ? `<br><b>${esc(tag)}</b>` : ""}</td>
+      <td>${esc(w.by || "—")}</td><td class="meta">${items.map(esc).join("<br>")}</td></tr>`;
+  }
+
   function show(s) {
     state = s;
+    const wh = `<tr><th>${esc(t("settings.debug.col_time"))}</th><th>${esc(t("settings.debug.col_name"))}</th>
+      <th>${esc(t("settings.debug.col_change"))}</th></tr>`;
+    el("dbg-writes").innerHTML = (s.writes || []).length ? wh + s.writes.map(writeRow).join("")
+      : `<tr><td class="meta">${esc(t("settings.debug.writes_empty"))}</td></tr>`;
     el("dbg-on").checked = !!s.enabled;
     el("dbg-body").hidden = !s.enabled;
-    const head = `<tr><th>${esc(t("settings.debug.col_name"))}</th><th>${esc(t("settings.debug.col_scopes"))}</th>
+    const head = `<tr class="hd"><th>${esc(t("settings.debug.col_name"))}</th><th>${esc(t("settings.debug.col_scopes"))}</th>
       <th>${esc(t("settings.debug.col_expires"))}</th><th>${esc(t("settings.debug.col_used"))}</th><th></th></tr>`;
     el("dbg-tokens").innerHTML = s.tokens.length ? head + s.tokens.map(tokenRow).join("")
       : `<tr><td class="meta">${esc(t("settings.debug.no_tokens"))}</td></tr>`;
@@ -89,6 +107,14 @@
     el("dbg-scopes").innerHTML = (s.scopes || []).map((sc) =>
       `<label title="${esc(scopeTitle(sc))}"><input type="checkbox" name="dbg-scope" value="${esc(sc)}"${(s.default_scopes || []).includes(sc) ? " checked" : ""}> ${esc(sc)}</label>`).join(" ");
     el("dbg-msg").textContent = "";
+    // SP-802: a token that can write lasts at most write_max_days (never 「不過期」)
+    const ws = document.querySelector(`input[name="dbg-scope"][value="${s.write_scope || "write:config"}"]`);
+    if (ws) ws.onchange = () => {
+      const max = s.write_max_days || 7;
+      [...el("dbg-days").options].forEach((o) => { const n = Number(o.value); o.disabled = ws.checked && !(n > 0 && n <= max); });
+      if (ws.checked && el("dbg-days").selectedOptions[0]?.disabled) el("dbg-days").value = String(max);
+      el("dbg-msg").textContent = ws.checked ? t("settings.debug.write_days") : "";
+    };
     el("dbg-dlg").showModal(); el("dbg-name").focus();
   };
   el("dbg-cancel").onclick = () => el("dbg-dlg").close();

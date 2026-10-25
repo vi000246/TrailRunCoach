@@ -165,9 +165,10 @@ def test_the_menu_links_to_the_page_last_in_more_and_for_signed_out_visitors():
     assert more[-1] == "about"
     assert re.findall(r'"(\w+)"', re.search(r'const PUBLIC_PAGES = new Set\(\[([^\]]*)\]\)', js).group(1)) == [
         "manual", "about"]
-    # a page for reading: no floating suggestion box (like the manual)
-    assert "if (!cur || !PUBLIC_PAGES.has(cur.id)) {" in js
-    sg = js.index("if (!cur || !PUBLIC_PAGES.has(cur.id)) {")
+    # a page for reading: no floating suggestion box (like the manual; the coach board neither, SP-790)
+    gate = 'if ((!cur || !PUBLIC_PAGES.has(cur.id)) && me?.dataset.page !== "coach_board") {'
+    assert gate in js
+    sg = js.index(gate)
     assert js.index('"/api/v1/static/suggestions.js"') > sg
     for loc in LOCALES:
         sh = json.loads((STATIC / "i18n" / loc / "shell.json").read_text("utf-8"))

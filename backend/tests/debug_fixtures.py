@@ -9,7 +9,8 @@ from backend import debug_auth as DA
 
 ADMIN = "/api/v1/settings/debug-api"
 DBG = "/api/v1/debug"
-ALL_SCOPES = list(DA.SCOPES)
+# every read / export scope (the read-only endpoints' tests); write:config has its own 7-day rule (SP-802)
+ALL_SCOPES = [s for s in DA.SCOPES if s != DA.WRITE_SCOPE]
 ENDPOINTS = ("/activity?date=2026-10-01", "/plan", "/day?date=2026-10-01", "/thresholds?date=2026-10-01",
              "/sync", "/export/config", "/export/plan")
 

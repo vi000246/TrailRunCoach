@@ -14,6 +14,8 @@ file backend/demo/athlete.py
 file backend/demo/course.py
 file backend/demo/linked.py
 file backend/demo/build.py
+# the AI 問答's medical words (SP-785): matched against the question in any language, never shown
+file backend/ai/medical.py
 re 推薦 blocks|區間時數 charts|season-plan event edit
 # the bare word 測試: added for the race calculator's CSV sample name (gone, SP-365); it now only
 # hides the UI label 測試 (activity_tags, plan_store, planning, status, overview.html) — drop it
@@ -35,3 +37,5 @@ re ^(?:山路|越野)$
 # the legal documents' draft banner (backend/accounts/terms.py DRAFT_MARK): it matches the Chinese texts
 # themselves (backend/legal/*.md, Chinese until SP-78), not UI text
 re ^【草稿】$
+# SP-839: the units and punctuation engine/stored_text reads a stored zh-TW title by (its words are N_() msgids)
+file backend/engine/stored_text.py

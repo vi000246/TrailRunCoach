@@ -38,7 +38,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from backend.i18n import _
+from backend.i18n import N_, _
 
 ID = "climb_base"                   # the session id (gen_key); not 「climb」 = the 專項期's race-climb repeats
 WARM, COOL = 10, 10                 # 推估: flat warm-up / walking down (the template's 15 / 15 for 90′)
@@ -46,8 +46,11 @@ MIN_WORK = 20                       # 推估: a shorter climb is not worth takin
 MIN_MINUTES = WARM + MIN_WORK + COOL
 CLIMB_M_PER_H = 400.0               # 推估: easy-HR walk-run on 8–15 % (stairs / treadmill) — the planned climb only
 SKIP_IDS = ("climb", "steep", "tech", ID)
-SRC = ("Uphill Athlete（基礎期 90% 以上在一、二區；沒有山就用跑步機坡度、樓梯）；Scott Johnston（樓梯機、陡坡健行）；"
-       "CTS（跑步機適合上坡課）；每週一堂、取代一次輕鬆跑、爬升速度為推估")
+# SP-905: a session's 出處 is read part by part (engine/stored_text) — the parts are msgids
+SRC_PARTS = (N_("Uphill Athlete（基礎期 90% 以上在一、二區；沒有山就用跑步機坡度、樓梯）"),
+             N_("Scott Johnston（樓梯機、陡坡健行）"), N_("CTS（跑步機適合上坡課）"),
+             N_("每週一堂、取代一次輕鬆跑、爬升速度為推估"))
+SRC = "；".join(SRC_PARTS)
 # 跑下山 (SP-442; the old 基礎期 downhill dose, SP-87 decision 3)
 DOWN_FIRST_WORK = 10                # 推估: the base phase's first week (the first bout damages most)
 DOWN_WORK = 15                      # 推估: the report's 10–15′
@@ -57,8 +60,13 @@ DOWN_M_PER_MIN = 10.0               # 推估: −5～−10 % at an easy jog
 MIN_DESCENT_M_PER_KM = 20.0         # 推估: a race descending ≥ 20 m/km has a clear descent (trail ~25–35 m/km)
 LAST_WEEKS = 2                      # SP-87: no downhill in 賽前第 1–2 週 (owner 2026-10-05)
 DOWN_LAST_DAYS = 14                 # 推估: never closer than 14 days to the race (the 減量期 has none, SP-96)
-SRC_DOWN = ("下山用跑的：下坡跑的保護效果（重複回合效應）維持 3–6 週、9 週消失（Bontemps 2020）；10 次下坡跑才降低痠痛、"
-            "5 次不夠（Bontemps 2025）；每週一次、10–15 分為推估")
+SRC_DOWN_PARTS = (N_("下山用跑的：下坡跑的保護效果（重複回合效應）維持 3–6 週、9 週消失（Bontemps 2020）"),
+                  N_("10 次下坡跑才降低痠痛、5 次不夠（Bontemps 2025）"), N_("每週一次、10–15 分為推估"))
+SRC_DOWN = "；".join(SRC_DOWN_PARTS)
+
+
+def _src(*parts) -> str:
+    return "；".join(_(p) for p in parts)
 
 
 def _d(x) -> Optional[dt.date]:
@@ -230,20 +238,22 @@ def session_fields(minutes: int, aet: Optional[float] = None, aet_measured: bool
     if down:
         work = m - WARM - down
         climb = climb_of(work)
+        # SP-905: the detail's parts (「；」「。」) are msgids — warmup tops 「暖身 N 分」 up in place, so the
+        # whole text is no one msgid any more; each part is read on its own (engine/stored_text)
         return {"title": _("長爬坡有氧 {m}′（跑下山 {d}′）", m=m, d=down), "terrain": "trail",
-                "steps": steps(work, down), "climb_m": climb, "source": SRC + "；" + SRC_DOWN,
-                "detail": _("找穩定、好走的長坡持續往上（階梯步道、樓梯，或跑步機坡度 8–15%），跑走混合，心率不超過{cap}；"
-                            "上坡約 {work} 分、爬升約 {climb:.0f} m（推估）。下山用跑的：−5～−10% 的緩下坡 {d} 分、"
-                            "約 ↓{down} m，RPE 3–5、放鬆小步不衝，心率、功率在下坡不準，看 RPE；有下坡路就用跑的下來，"
-                            "在跑步機或樓梯就走下來，這週不算下坡。暖身 {wc} 分",
-                            cap=cap, work=work, climb=climb, d=down, down=descent_of(down), wc=WARM)}
+                "steps": steps(work, down), "climb_m": climb, "source": _src(*SRC_PARTS, *SRC_DOWN_PARTS),
+                "detail": _("找穩定、好走的長坡持續往上（階梯步道、樓梯，或跑步機坡度 8–15%），跑走混合，心率不超過{cap}", cap=cap)
+                + "；" + _("上坡約 {work} 分、爬升約 {climb:.0f} m（推估）", work=work, climb=climb) + "。"
+                + _("下山用跑的：−5～−10% 的緩下坡 {d} 分、約 ↓{down} m，RPE 3–5、放鬆小步不衝，心率、功率在下坡不準，看 RPE",
+                    d=down, down=descent_of(down))
+                + "；" + _("有下坡路就用跑的下來，在跑步機或樓梯就走下來，這週不算下坡") + "。" + _("暖身 {n} 分", n=WARM)}
     work = m - WARM - COOL
     climb = climb_of(work)
     return {"title": _("長爬坡有氧 {m}′（穩定地形）", m=m), "terrain": "trail", "steps": steps(work),
-            "climb_m": climb, "source": SRC,
-            "detail": _("找穩定、好走的長坡持續往上（階梯步道、樓梯，或跑步機坡度 8–15%），跑走混合，心率不超過{cap}；"
-                        "上坡約 {work} 分、爬升約 {climb:.0f} m（推估）；下坡用走的，不衝。暖身、緩和各 {wc} 分",
-                        cap=cap, work=work, climb=climb, wc=WARM)}
+            "climb_m": climb, "source": _src(*SRC_PARTS),
+            "detail": _("找穩定、好走的長坡持續往上（階梯步道、樓梯，或跑步機坡度 8–15%），跑走混合，心率不超過{cap}", cap=cap)
+            + "；" + _("上坡約 {work} 分、爬升約 {climb:.0f} m（推估）", work=work, climb=climb) + "；"
+            + _("下坡用走的，不衝") + "。" + _("暖身、緩和各 {wc} 分", wc=WARM)}
 
 
 def _walk_day(info: dict, day: dt.date, b2b: Optional[dict]) -> Optional[str]:

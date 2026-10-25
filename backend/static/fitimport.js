@@ -23,12 +23,12 @@
   // the server's caps (backend/sync/upload.py limits()); GET answers the real ones. batch_bytes:
   // what one request carries (its parsing must end well inside a proxy's response time limit)
   const DEF = { max_file_bytes: 20 * 1048576, max_files: 20, max_request_bytes: 100 * 1048576, batch_bytes: 2 * 1048576,
-    max_select: 3000, exts: [".fit", ".fit.gz", ".tcx", ".tcx.gz", ".gpx", ".gpx.gz"], max_track_bytes: 64 * 1048576 };
-  // TCX / GPX too (SP-349: what Garmin's and TrainingPeaks' exports hold besides FIT; the server
+    max_select: 3000, exts: [".fit", ".fit.gz", ".tcx", ".tcx.gz", ".gpx", ".gpx.gz", ".pwx", ".pwx.gz"], max_track_bytes: 64 * 1048576 };
+  // TCX / GPX too (SP-349: what Garmin's and TrainingPeaks' exports hold besides FIT; .pwx SP-833; the server
   // turns them into FIT). The inputs carry data-cap themselves: shell.js's demo lock finds FIT
   // inputs by an accept without .gpx (the course GPX inputs stay open there)
-  const ACCEPT = ".fit,.fit.gz,.tcx,.tcx.gz,.gpx,.gpx.gz";
-  const TRACK = [".tcx", ".tcx.gz", ".gpx", ".gpx.gz"];
+  const ACCEPT = ".fit,.fit.gz,.tcx,.tcx.gz,.gpx,.gpx.gz,.pwx,.pwx.gz";
+  const TRACK = [".tcx", ".tcx.gz", ".gpx", ".gpx.gz", ".pwx", ".pwx.gz"];
   const LIST_MAX = 200;                 // names shown per list (the rest as 「還有 N 個」)
   const SRC = { coros: "COROS", garmin: "Garmin", trainingpeaks: "TrainingPeaks", tp: "TrainingPeaks" };
 

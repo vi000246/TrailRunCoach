@@ -1,6 +1,6 @@
 # Spec Roadmap
 
-> Auto-updated index. Last updated: 2026-10-13
+> Auto-updated index. Last updated: 2026-10-24
 >
 > **AI Agents**: Read this file first to decide which specs to load. Load only what's relevant to your task to avoid context bloat.
 
@@ -18,7 +18,9 @@
 | workouts | [workouts.spec.md](./workouts.spec.md) | Supporting | 單次活動中繼資料：地形分類、活動類型／努力程度／名稱／標籤／傷痛標記（自動值＋使用者覆寫）、登山杖、路況與下雨提示、COROS 跑後自評、壞檔排除、活動編輯頁 | — |
 | route-progress | [route-progress.spec.md](./route-progress.spec.md) | Supporting | 自動偵測重複路段與路線（類 Strava segments），自動命名（最近的百岳），逐次比較時間、VAM、心率、功率與天氣 | — |
 | ui-hints | [ui-hints.spec.md](./ui-hints.spec.md) | Supporting | 提示分類（第 1／2／3 類、§5.2 排序）、提示多寡設定（完整／標準／精簡／自動）、每頁上限 3 與「還有 N 則提醒」、「知道了」與條件指紋；盤點表每個 id 的三段顯示方式 | — |
+| ai-qa | [ai-qa.spec.md](./ai-qa.spec.md) | Supporting | AI 問答：全站一顆「問 AI」、自動帶入正在看的卡、預設問題；只送彙總（狀態規則、週量、卡片文字，清掉軌跡與座標）；回答標 App 規則／AI 推論與出處；只給擁有者、key 加密、每日上限與快取 | — |
 | offline-pwa | [offline-pwa.spec.md](./offline-pwa.spec.md) | Supporting | 離線唯讀快取與加到主畫面：service worker 依 P0／P1／P2 分層存目前登入者的課表與摘要（20 MB 預算、被清掉依序補回、超過從 P2 丟），離線標資料時間、停用修改；登出或換人清掉；manifest 與圖示 | — |
+| coaching | [coaching.spec.md](./coaching.spec.md) | Supporting | 教練與學員：邀請連結／教練代碼、學員接受才生效、隨時撤回、學員上限；教練看板（學員租戶裡預先算的彙總、改課表後立即重算、排序篩選）；代看（讀寫預設全擋＋白名單、教練的方案與次數）；學員開關允許的代改與修改紀錄；學員申請提示 | — |
 
 ## Loading Guide
 
@@ -32,6 +34,8 @@
 
 | Date | Module | Feature SRS | One-line Summary |
 |------|--------|-------------|-----------------|
+| 2026-10-24 | coaching | — | SP-943：新增 module spec（SP-789～793、SP-821、SP-823、SP-826、SP-827）。`accounts/coaching.py`、`accounts/viewing.py`、`coach_board.py`、`api/coach*.py`、`api/viewing.py`、登入閘 7b／7c；overview.spec.md 的代看段落改成指過來 |
+| 2026-10-20 | ai-qa | — | SP-785／SP-786：新增 module spec。`backend/ai`、`/api/v1/ai/*`、`static/askai.js`、設定頁 AI 問答 |
 | 2026-10-13 | ui-hints | — | SP-482：新增 module spec。`engine/hints.py` 目錄與提示物件、`ui.hint_level`／`ui.hint_ack`、`/profile/hint-level`、`static/hints.js` 五步過濾與上限 3、設定頁三選一、總覽週備註示範；計算機 warnings 改成物件 |
 | 2026-10-13 | offline-pwa | — | SP-314：新增 module spec。`/sw.js`、`/manifest.webmanifest`（登入模式公開、完全比對；示範模式不掛）；P0 課表＋總覽＋設定＋近 90 天摘要、P1 活動列表與成就、P2 介面先留；離線列與寫入攔截；登出、換人、401 清快取 |
 | 2026-10-08 | 全部 9 個模組 | — | code-sync（Obsidian tickets）：prp-spec Phase 1.5，逐模組對 code 與 Obsidian 的單（commit 帶的單號＋提到模組檔名的開著的單）；錨點全面重新核對（overview 510、workout-review 276、wko5-engine 139 處等），合併 main 的 SP-362／SP-371／SP-218 後再依 diff 平移並逐字比對；各 spec 新增 Decisions Log（使用者拍板的取捨）與 Open Questions（決定了但還沒做、還開著的單）；單上要求與 code 不符的不寫進 spec，另行回報 |

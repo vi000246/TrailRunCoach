@@ -121,7 +121,7 @@ def test_the_defaults_match_the_server():
     # the archive's own reasons the page names (the per-file ones are fitimport's)
     own = set(re.findall(r'"(\w+)"', re.search(r"const OWN = new Set\(\[([^\]]+)\]", JS).group(1)))
     assert own == {AR.NOT_ACTIVITY_FILE, AR.UNSUPPORTED, AR.POLAR_JSON, AR.APPLE_ROUTE, AR.TOO_DEEP, AR.TOO_MANY,
-                   AR.BOMB, AR.NOT_ZIP, AR.TOO_MANY_ENTRIES}
+                   AR.BOMB, AR.NOT_ZIP, AR.TOO_MANY_ENTRIES, AR.APPLE_UNREADABLE}         # SP-833
 
 
 def test_settings_mounts_it_in_the_sync_section_and_the_demo_lock_finds_it():

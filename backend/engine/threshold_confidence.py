@@ -113,11 +113,12 @@ SRC_TEST_AGE = N_("教練共識：8 週")
 # HRmax plausibility (all 推估)
 HRMAX_DAYS = 365
 HOLD_LONG_S, HOLD_SHORT_S = 120, 60
-PEAK_HOLD_S, PEAK_HOLD_LONG_S = 5, 10   # a test's peak: held ≥ 5–10 s
+PEAK_HOLD_S = 5                         # a test's peak: held ≥ 5 s
+PEAK_MEAN_S = 10                        # SP-493 R2: the best 10-s mean (s10; thresholds.MHR_MEAN_S, the same peak)
 # the spike / range / gap / cadence-lock numbers: engine/hr_quality.py (SP-265, the one place)
 HRMAX_GAP_BPM = 8.0
 HRMAX_LOW_BPM = 3.0
-HRMAX_OUTLIER_BPM = 5.0                 # thresholds.MHR_OUTLIER: a lone top run is dropped
+HRMAX_OUTLIER_BPM = 5.0                 # hrmax_check's candidate: a lone top run is dropped (estimate_mhr no longer does, SP-493 R2)
 HRMAX_MIN_RUNS = 3
 RHR_RANGE = (30.0, 90.0)
 # test conditions
@@ -136,13 +137,14 @@ LOW_LTHR_SOURCES = ("estimate", "watch", "default", "prior")      # prior: 0.90 
 MID_SOURCES = ("manual", "wko5")
 LOW_HRMAX_SOURCES = ("watch", "estimate", "age")                   # age: Tanaka 208 − 0.7 × age (SP-289)
 # SP-493 R1 (owner 2026-10-14:「近 90 天跑步有接近它的心率就算可信」): a watch-account max HR is believable
-# when a run of the last WATCH_SEEN_DAYS held ≥ value − WATCH_SEEN_BPM for PEAK_HOLD_LONG_S (10 s).
+# when a run of the last WATCH_SEEN_DAYS had a best PEAK_MEAN_S (10-s) mean ≥ value − WATCH_SEEN_BPM
+# (SP-493 R2, owner 2026-10-20 Q4: the 10-s mean, was 「held 10 s」 — every second ≥ it, too hard).
 # 5 bpm (推估): a retested HRmax differs by about 3 bpm (test–retest within 48 h: technical error 2.85 bpm,
 # CV 1.5 % — a search summary, the study not read in full; HERITAGE: day-to-day variation of the maximal
 # values is small), a field effort that is not an all-out test usually stops a few bpm short of it, and
 # the wrist sensor is least accurate at high intensity (Gillinov 2017) — about 2 × the retest error;
 # beyond it the run no longer says the value was reached.
-# The same 5 bpm as HRMAX_OUTLIER_BPM / SUPPORT_BPM. A 10-s hold after the shared cleaning: not a spike.
+# The same 5 bpm as HRMAX_OUTLIER_BPM / SUPPORT_BPM. A 10-s mean after the shared cleaning: not a spike.
 WATCH_SEEN_DAYS = 90
 WATCH_SEEN_BPM = 5.0
 WATCH_SEEN = "watch_seen"               # the confidence source kind of such a value (not low)
@@ -156,7 +158,7 @@ SRC_WATCH = N_("手錶 LTHR 平均誤差 9–11 bpm（COROS 8.9；Lu 2025）")
 SRC_MICHELI = N_("CP 心率與 MLSS 心率平均差 0.6 bpm，但個人誤差 −16～+17 bpm（Micheli 2025）：只當交叉檢查")
 SRC_FRIEL = N_("Friel：每 4–8 週測一次；30 分鐘獨跑測試的第 10–30 分平均心率＝LTHR（McGehee 2005 驗證：SEE 8 bpm）")
 SRC_SEEN = N_("最大心率重測的差異約 3 bpm（48 小時內重測：誤差 2.85 bpm、CV 1.5%），一般跑步不是全力測試、"
-              "腕式心率在高強度也比較不準（Gillinov 2017）：近 90 天撐 10 秒的心率離它 5 bpm 以內，"
+              "腕式心率在高強度也比較不準（Gillinov 2017）：近 90 天跑步 10 秒平均心率的最高值離它 5 bpm 以內，"
               "就當作真的跑到過（5 bpm 是推估）")
 SRC_HRMAX = N_("撐 120 秒的最高心率（濾掉 3 秒內跳 ≥ 15 bpm 的尖峰和步頻鎖定）；8 bpm 是推估。腕式對胸帶 rc 0.67–0.92 vs 0.996（Gillinov 2017）")
 
@@ -237,8 +239,9 @@ def cp_band_stretches(g: np.ndarray, y: np.ndarray, t, power, cp: Optional[float
 
 def run_summary(t, hr, power=None, cadence_spm=None, cp: Optional[float] = None,
                 speed_kmh=None) -> Optional[dict]:
-    """One run's HR evidence: held peaks (5 / 10 / 60 / 120 s), the best 20- / 60-min
-    mean HR, the mean HR, the duration, the CP-band stretches."""
+    """One run's HR evidence: held peaks (5 / 60 / 120 s), the best 10-s mean (s10, SP-493 R2), the
+    best 20- / 60-min mean HR, the mean HR, the duration, the CP-band stretches."""
+    from backend.engine import hr_quality as HQ
     c = clean_hr(t, hr, cadence_spm, speed_kmh)
     if c is None:
         return None
@@ -246,7 +249,7 @@ def run_summary(t, hr, power=None, cadence_spm=None, cp: Optional[float] = None,
     fin = y[np.isfinite(y)]
     if fin.size < 60:
         return None
-    return {"s5": held_peak(y, PEAK_HOLD_S), "s10": held_peak(y, PEAK_HOLD_LONG_S),
+    return {"s5": held_peak(y, PEAK_HOLD_S), "s10": HQ.rolling_mean_peak(y, PEAK_MEAN_S),
             "s60": held_peak(y, HOLD_SHORT_S), "s120": held_peak(y, HOLD_LONG_S),
             "hr20": best_mean(y, 20 * 60), "hr60": best_mean(y, 60 * 60), "avg_hr": float(fin.mean()),
             "dur_s": float(len(g)), "cp_band": cp_band_stretches(g, y, t, power, cp), "cp": cp}
@@ -337,14 +340,23 @@ def estimate_effort_warning(value, mhr: Optional[dict], rhr: Optional[dict]) -> 
     own max HR / HR reserve (the typical ranges of consistency_signals: < 85 % HRmax or < 80 % HRR)
     says the runs were not hard enough. {text, signals, test} — the settings card then shows the
     warning instead of 「套用」 — or None. No max HR, or only the age formula's: None (no own data)."""
-    v, mv = _f(value), _f((mhr or {}).get("value"))
-    if not v or not mv or (mhr or {}).get("source_kind") == "age":
-        return None
-    sigs = [s for s in consistency_signals(v, mv, _f((rhr or {}).get("value")), {})
-            if s.get("direction") == "up"]
+    sigs = estimate_low_effort(value, mhr, rhr)
     if not sigs:
         return None
     return {"text": _(EST_LOW_EFFORT), "signals": [s["text"] for s in sigs], "test": schedule_link("tt30")}
+
+
+def estimate_low_effort(value, mhr: Optional[dict], rhr: Optional[dict]) -> list[dict]:
+    """The rule of estimate_effort_warning (SP-749), without the card's texts: the consistency_signals
+    pointing up (the estimate < 85 % of the runner's own max HR or < 80 % of the HR reserve); [] when it
+    is believable, or without a max HR of the runner's own (none, or only the age formula). Also what
+    the Dataset's daily LTHR leaves out (fitdataset._drop_low_effort_lthr, SP-874), on each grid day
+    against the max / resting HR of that day."""
+    v, mv = _f(value), _f((mhr or {}).get("value"))
+    if not v or not mv or (mhr or {}).get("source_kind") == "age":
+        return []
+    return [s for s in consistency_signals(v, mv, _f((rhr or {}).get("value")), {})
+            if s.get("direction") == "up"]
 
 
 def effort_signals(lthr: float, runs: list[dict]) -> tuple[list[dict], dict]:
@@ -431,8 +443,8 @@ def event_signals(lthr: dict, today: dt.date, cp_now: Optional[float], brk: Opti
 
 def watch_seen(mhr: dict, runs: list[dict], today: Optional[dt.date]) -> Optional[dict]:
     """SP-493 R1: the run of the last WATCH_SEEN_DAYS that came closest to a watch-account max HR, when
-    it held ≥ the value − WATCH_SEEN_BPM for 10 s (the 60-s hold when a row has no 10-s one; it is
-    never higher): {"value", "date", "gap", "days"}; None otherwise or for any other source."""
+    its best 10-s mean (s10, SP-493 R2) was ≥ the value − WATCH_SEEN_BPM (the 60-s hold when a row has
+    no s10; it is never higher): {"value", "date", "gap", "days"}; None otherwise or for any other source."""
     v = _f(mhr.get("value"))
     if not v or mhr.get("source_kind") != "watch" or today is None:
         return None
@@ -459,7 +471,7 @@ def hrmax_check(mhr: dict, runs: list[dict], today: Optional[dt.date] = None) ->
     seen = watch_seen(mhr, runs, today)
     if v and seen:
         out.append(signal("source", "hrmax", "weak",
-                          _("最大心率 {v:.0f} 來自手錶帳號；近 {days} 天 {date} 的跑步撐 10 秒到 {s}（差 {d} bpm，"
+                          _("最大心率 {v:.0f} 來自手錶帳號；近 {days} 天 {date} 的跑步 10 秒平均最高 {s}（差 {d} bpm，"
                             "≤ {lim:.0f} 算接近，推估），當作可信", v=v, days=seen["days"], date=seen["date"],
                             s=seen["value"], d=max(seen["gap"], 0), lim=WATCH_SEEN_BPM),
                           source=_(SRC_SEEN), evidence=seen))
@@ -641,7 +653,8 @@ def assess(lthr: dict, mhr: dict, rhr: dict, today: dt.date, runs: list[dict], e
     warn = {"lthr": lthr_warn(lthr.get("source_kind"), lconf, lsig),
             "hrmax": {"low": hconf == "low" and eff in ("hrr", "hrmax"),
                       "text": _("最大心率可信度低：儲備心率／最大心率區間的目標可能不準，測準之前建議改用乳酸閾區間")},
-            "model": eff, "setting": hr_model}
+            # SP-809: the 自動 pick too — rewarn() re-applies the warning under another setting
+            "model": eff, "setting": hr_model, "auto": auto["model"]}
     return {"lthr": {**lthr, "confidence": lconf, "signals": lsig},
             "hrmax": {**mhr, "confidence": hconf, "signals": hsig, "candidate": cand},
             "rhr": {**rhr, "confidence": rconf, "signals": rsig},
@@ -659,7 +672,7 @@ AUTO_WHY = {
     "lthr_estimate": N_("LTHR {v:.0f} 是自動估算，跑步資料沒有跟它矛盾的地方"),
     "hrr": N_("{lthr}；最大心率 {mhr:.0f}、靜息心率 {rhr:.0f} 可信"),
     # SP-493 R1: a watch-account max HR believed because a recent run came close to it
-    "hrr_seen": N_("{lthr}；最大心率 {mhr:.0f}（手錶，{date} 的跑步撐 10 秒到 {s}）、靜息心率 {rhr:.0f} 可信"),
+    "hrr_seen": N_("{lthr}；最大心率 {mhr:.0f}（手錶，{date} 的跑步 10 秒平均最高 {s}）、靜息心率 {rhr:.0f} 可信"),
     "hrmax": N_("{lthr}；{why}"),
     "lthr_only": N_("{lthr}；沒有最大心率，只能用乳酸閾值區間"),
 }
@@ -670,6 +683,25 @@ AUTO_NO_LTHR = {
     "estimate": N_("LTHR 是自動估算、有跟它矛盾的資料"),
     "source": N_("LTHR 沒有測過（{src}）"),
 }
+
+
+# SP-806: why a max HR is 低, in one short sentence for the 自動 reason — its full source (the age
+# formula's long one, SP-294) is on the 最大心率 row of the same card, so the reason never repeats it
+MHR_LOW_WHY = {
+    "age": N_("最大心率 {v:.0f} 是年齡公式推估"),
+    "estimate": N_("最大心率 {v:.0f} 是跑步紀錄推估"),
+    "watch": N_("最大心率 {v:.0f} 來自手錶，近 {days} 天沒有跑步 10 秒平均到 {lo:.0f} 以上"),
+    "other": N_("最大心率 {v:.0f} 跟跑步紀錄對不上"),
+}
+
+
+def _mhr_low_why(mhr: dict, mv: float) -> str:
+    """MHR_LOW_WHY for a 低 max HR: by its source when that alone makes it 低 (LOW_HRMAX_SOURCES; a
+    watch value the last WATCH_SEEN_DAYS came close to is not), else the runs' evidence against it."""
+    kind = mhr.get("source_kind")
+    if kind == "watch" and mhr.get("seen"):
+        kind = "other"
+    return _(MHR_LOW_WHY.get(kind, MHR_LOW_WHY["other"]), v=mv, days=WATCH_SEEN_DAYS, lo=mv - WATCH_SEEN_BPM)
 
 
 def auto_pick(lthr: dict, lconf: str, lsig: list[dict], mhr: dict, hconf: str, rhr: dict,
@@ -716,11 +748,8 @@ def auto_pick(lthr: dict, lconf: str, lsig: list[dict], mhr: dict, hconf: str, r
                                                                 date=seen["date"], s=seen["value"])}
         return {"model": "hrr", "why": "hrr", "reason": _(AUTO_WHY["hrr"], lthr=no, mhr=mv, rhr=rv)}
     if mv:
-        if hconf == "low" and mhr.get("source_kind") == "watch" and not mhr.get("seen"):
-            why = _("最大心率 {v:.0f} 可信度低（{src}；近 {days} 天沒有跑步撐 10 秒到 {lo:.0f} 以上）", v=mv,
-                    src=mhr.get("label") or "", days=WATCH_SEEN_DAYS, lo=mv - WATCH_SEEN_BPM)
-        elif hconf == "low":
-            why = _("最大心率 {v:.0f} 可信度低（{src}）", v=mv, src=mhr.get("label") or "")
+        if hconf == "low":
+            why = _mhr_low_why(mhr, mv)
         elif not rv:
             why = _("沒有靜息心率")
         else:
@@ -810,11 +839,13 @@ def tt30_result(t, hr, power=None, speed=None, cp: Optional[float] = None) -> Op
 
 
 def hrmax_result(t, hr, cadence_spm=None, speed_kmh=None) -> Optional[dict]:
-    """The filtered peak: the highest HR held ≥ 5 s (and ≥ 10 s) after spikes / cadence lock."""
+    """The filtered peak: the highest HR held ≥ 5 s (and the best 10-s mean, s10 — SP-493 R2, the same
+    peak as estimate_mhr / watch_seen) after spikes / cadence lock."""
+    from backend.engine import hr_quality as HQ
     c = clean_hr(t, hr, cadence_spm, speed_kmh)
     if c is None:
         return None
-    s5, s10 = held_peak(c[1], PEAK_HOLD_S), held_peak(c[1], PEAK_HOLD_LONG_S)
+    s5, s10 = held_peak(c[1], PEAK_HOLD_S), HQ.rolling_mean_peak(c[1], PEAK_MEAN_S)
     if s5 is None:
         return None
     return {"value": round(s5), "s10": None if s10 is None else round(s10)}
@@ -846,7 +877,8 @@ def test_kind(titles: list[str]) -> Optional[str]:
 # the dataset side
 # ---------------------------------------------------------------------------
 
-RUN_KEY = "thr_conf_run_v2"      # v2 (SP-265): the shared HR cleaning (hr_quality.clean, with speed)
+RUN_KEY = "thr_conf_run_v3"      # v2 (SP-265): the shared HR cleaning (hr_quality.clean, with speed);
+                                 # v3 (SP-493 R2): s10 is the best 10-s mean
 
 
 def _ch(ds, w, name):
@@ -1156,6 +1188,22 @@ def lthr_warn(source_kind: Optional[str], conf: str, sigs: list[dict]) -> dict:
 
 
 EDITOR_BADGE = False     # SP-493 (owner 2026-10-14): the LTHR / max-HR reminder is the box's one row only
+
+
+def rewarn(chk: Optional[dict], setting: str) -> Optional[dict]:
+    """SP-809: check()'s `warn` under another 課表心率區間 setting (auto | lthr | hrr | hrmax), from what
+    the check kept — the max HR's confidence and the 自動 pick, neither depends on the setting. For the
+    overview status shown stale after a model switch (api/overview._stale_status). None when it
+    cannot be told (no warn, or a 自動 setting without the pick: a status kept before SP-809)."""
+    w = (chk or {}).get("warn")
+    if not isinstance(w, dict):
+        return None
+    eff = w.get("auto") if setting == "auto" else setting
+    if eff not in ("lthr", "hrr", "hrmax"):
+        return None
+    hconf = ((chk or {}).get("hrmax") or {}).get("confidence")
+    return {**w, "hrmax": {**(w.get("hrmax") or {}), "low": hconf == "low" and eff in ("hrr", "hrmax")},
+            "model": eff, "setting": setting}
 
 
 def warn_of(chk: Optional[dict]) -> Optional[dict]:

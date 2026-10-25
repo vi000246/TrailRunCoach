@@ -60,10 +60,11 @@ def test_one_floating_busy_box_and_the_last_click_wins(app):
     expect(busy).to_have_text("計算中…")
     # floating over the middle of the card, the card not taller, no 「計算中」 line under the chart
     assert busy.evaluate("(b) => getComputedStyle(b).position") == "absolute"
-    bb = busy.bounding_box()
+    # (the card's box now, not box0's place: a card above that is still loading can move it down the page)
+    bb, cb = busy.bounding_box(), card.bounding_box()
     mid_x, mid_y = bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2
-    assert abs(mid_x - (box0["x"] + box0["width"] / 2)) < 4 and abs(mid_y - (box0["y"] + box0["height"] / 2)) < 4
-    assert abs(card.bounding_box()["height"] - box0["height"]) < 1
+    assert abs(mid_x - (cb["x"] + cb["width"] / 2)) < 4 and abs(mid_y - (cb["y"] + cb["height"] / 2)) < 4, (bb, cb)
+    assert abs(cb["height"] - box0["height"]) < 1
     expect(card.locator(".loading")).to_have_count(0)
     # the button picked shows at once
     expect(seg.locator('button[data-p="power"]')).to_have_class("on")

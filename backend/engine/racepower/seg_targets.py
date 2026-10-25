@@ -35,7 +35,8 @@ DESCENT = -0.03
 POWER_BAND = 0.03               # ± 3 % around the segment power (the COROS step band, planner.coros_steps)
 LONG_RACE_H = 3.0               # longer: HR cap at AeT (「長距離壓在 AeT 附近」, §2.3 推估); else LTHR
 CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
-KIND_LABEL = {"run_climb": "可跑的爬坡", "steep_climb": "陡坡（走）", "descent": "下坡", "flat": "平路／可跑"}
+KIND_LABEL = {"run_climb": N_("可跑的爬坡"), "steep_climb": N_("陡坡（走）"), "descent": N_("下坡"), "flat": N_("平路／可跑")}
+FLAT_HIKE = N_("平緩")                      # a 百岳 plan's flat segment
 # a steep_climb by its gait (SP-226): > 8 % keeps the HR cap + VAM target whatever the gait
 STEEP_LABEL = {"walk": N_("陡坡（走）"), "either": N_("陡坡（走跑皆可）"), "run": N_("陡坡（跑）")}
 WALKED_CLIMB_LABEL = N_("爬坡（走）")       # 3–8 % but slower than the walk–run transition speed
@@ -78,13 +79,13 @@ def label_of(seg: dict, k: str, hike: bool = False) -> str:
     (陡坡（跑） when the predicted speed is above the transition speed), 百岳
     as before (no gait: the pack trip is walked)."""
     if hike:
-        return "平緩" if k == "flat" else KIND_LABEL[k]
+        return _(FLAT_HIKE) if k == "flat" else _(KIND_LABEL[k])
     gait = seg.get("gait")
     if k == "steep_climb" and gait in STEEP_LABEL:
         if gait == "walk" and float(seg.get("grade") or 0.0) <= RUN_CLIMB[1]:
             return _(WALKED_CLIMB_LABEL)
         return _(STEEP_LABEL[gait])
-    return KIND_LABEL[k]
+    return _(KIND_LABEL[k])
 
 
 def vam(seg: dict) -> Optional[float]:
@@ -128,7 +129,7 @@ def fuel_summary(plan: dict, seg: dict) -> str:
         txt = _("行動糧") if plan.get("type") == "baiyue" else _("吃")
         parts.append(_("{what} {n} 次", what=txt, n=len(eats)) + (_("（每次約 {g:.0f} g 碳水）", g=dose) if dose else ""))
     parts += [e["action"] for e in ev if e["kind"] == "aid"]
-    return "；".join(parts)
+    return _("；").join(parts)
 
 
 def pole_hint(seg: dict, k: str, plan_type: Optional[str]) -> Optional[dict]:
@@ -208,6 +209,7 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
             "night": s.get("night"),             # SP-254: run in the dark (None without a start time / sun)
             # SP-632: what the watch export's Effort Pace legs read (watch_export.ep_ok / _target)
             "gap_pace_s_per_km": s.get("gap_pace_s_per_km"), "z_mean": s.get("z_mean"), "tech_f": s.get("tech_f"),
+            "memory": s.get("memory"),           # SP-726: the segment you ran before (位置記憶), else None
         })
     return out
 

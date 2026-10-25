@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from backend.db.database import get_db
 from backend.db.models import SyncState
-from backend.i18n import N_, UserError
+from backend.i18n import N_, UserError, _
 from backend.settings.repository import SettingsRepository
 from backend.sync.tp_client import sync_workouts, fetch_tp_settings
 from backend.sync import coros_client, dedup, purge, runner, storage, upload
@@ -372,7 +372,7 @@ async def _power_source() -> tuple[str, str]:
         ds = await asyncio.to_thread(_dataset)
         return AP.effective_power_source(prof, ds)
     except Exception:                       # noqa: BLE001
-        return "stryd", "預設"
+        return "stryd", N_("預設")
 
 
 async def _sync_settings(repo: SettingsRepository) -> dict:
@@ -381,7 +381,8 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     out = {k: await repo.get(v) for k, v in _SETTING_KEYS.items()}
     # 使用功率 None = auto: from the power source (一般設定, else detected; engine/athlete_profile.py)
     out["use_power_stored"] = out["use_power"]
-    out["power_source"], out["power_source_how"] = await _power_source()
+    out["power_source"], how = await _power_source()
+    out["power_source_how"] = _(how)          # SP-748: the settings page's 「自動：功率來源 Stryd（設定）」
     if out["use_power"] is None:
         from backend.engine import athlete_profile as AP
         out["use_power"] = AP.use_power(out["power_source"], bool(out["accept_watch_power"]))

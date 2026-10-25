@@ -13,12 +13,21 @@ Call the debug API (SP-371, docs/debug-api.md) without hand-building HTTP: an AI
     python -m backend.scripts.debug_fetch export -o config.json
     python -m backend.scripts.debug_fetch export-plan -o plan.json
 
+Writes (SP-802's /write/*, a token with write:config; SP-890) — preview first, read the diff, then apply:
+    python -m backend.scripts.debug_fetch preview --changes '[{"target": "threshold", "date": "2026-09-30", "set": {"lthr": 166}}]'
+    python -m backend.scripts.debug_fetch preview -f changes.json        # a list or {"changes": [...]}; - = stdin
+    python -m backend.scripts.debug_fetch apply pv_…                      # the preview_id the preview printed
+    python -m backend.scripts.debug_fetch undo                            # the newest write; --change-id N for one
+    python -m backend.scripts.debug_fetch write-log -n 10                 # the newest writes, before / after
+
 The token goes in its own header (X-TRC-Debug-Token) and is read from the environment only (never
 a command-line argument: it would sit in the shell history and the process list); the proxy's
 credentials, when set, go in Authorization (Basic). HTTPS only (http only to localhost); a
 redirect is never followed (it could carry the headers elsewhere). Prints the JSON (indented) or
 writes it to -o. Exit 1 on an HTTP error, with the server's answer on stderr (401 = token missing /
-revoked / expired, 403 = scope, 404 = the debug API is off, 429 = rate limit). Read-only: GET only.
+revoked / expired, 403 = scope, 404 = the debug API is off / NO_PREVIEW / NOTHING_TO_UNDO, 409 =
+CHANGED since the preview, 429 = rate limit); exit 2 for a bad command line (changes that are not
+JSON). GET for everything but preview / apply / undo, which POST a JSON body.
 """
 from __future__ import annotations
 
@@ -34,7 +43,11 @@ from typing import Optional
 
 PATHS = {"activity": "/api/v1/debug/activity", "plan": "/api/v1/debug/plan", "day": "/api/v1/debug/day",
          "thresholds": "/api/v1/debug/thresholds", "sync": "/api/v1/debug/sync",
-         "export": "/api/v1/debug/export/config", "export-plan": "/api/v1/debug/export/plan"}
+         "export": "/api/v1/debug/export/config", "export-plan": "/api/v1/debug/export/plan",
+         # SP-890: SP-802's writes
+         "preview": "/api/v1/debug/write/preview", "apply": "/api/v1/debug/write/apply",
+         "undo": "/api/v1/debug/write/undo", "write-log": "/api/v1/debug/write/log"}
+POSTS = ("preview", "apply", "undo")
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
@@ -69,6 +82,8 @@ def build_url(base: str, what: str, a: argparse.Namespace) -> str:
         q["date"] = a.date
     elif what == "sync" and a.lines:
         q["lines"] = a.lines
+    elif what == "write-log" and a.n:
+        q["n"] = a.n
     url = base.rstrip("/") + PATHS[what]
     return url + ("?" + urllib.parse.urlencode(q) if q else "")
 
@@ -85,6 +100,36 @@ def fetch(url: str, hdrs: dict, timeout: float = 120.0) -> dict:
     opener = urllib.request.build_opener(_NoRedirect())
     with opener.open(urllib.request.Request(url, headers=hdrs), timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8"))
+
+
+def send(url: str, hdrs: dict, body: dict, timeout: float = 120.0) -> dict:
+    """POST `body` as JSON (the /write/* calls); the same no-redirect opener as fetch."""
+    opener = urllib.request.build_opener(_NoRedirect())
+    req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), method="POST",
+                                 headers={**hdrs, "Content-Type": "application/json"})
+    with opener.open(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def write_body(a: argparse.Namespace) -> dict:
+    """The JSON body of a preview / apply / undo (ValueError for changes that are not JSON or not a
+    list of objects)."""
+    if a.what == "apply":
+        return {"preview_id": a.preview_id}
+    if a.what == "undo":
+        return {"change_id": a.change_id} if a.change_id is not None else {}
+    if a.file is not None:
+        raw = sys.stdin.read() if a.file == "-" else open(a.file, encoding="utf-8").read()
+    else:
+        raw = a.changes
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"the changes are not JSON: {e}") from None
+    changes = data.get("changes", [data]) if isinstance(data, dict) else data   # a dict: {changes} or one change
+    if not isinstance(changes, list) or not changes or not all(isinstance(c, dict) for c in changes):
+        raise ValueError('the changes must be a list of objects, e.g. [{"target": "threshold", …}]')
+    return {"changes": changes}
 
 
 def parser() -> argparse.ArgumentParser:
@@ -109,6 +154,17 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--lines", type=int)
     sub.add_parser("export", help="the athlete's settings (needs export:config)")
     sub.add_parser("export-plan", help="the stored plan, every row (needs export:plan)")
+    # SP-890: the writes (needs write:config) — preview, read the diff, apply; undo puts it back
+    p = sub.add_parser("preview", help="the diff of some changes and a preview_id; nothing written")
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--changes", help='JSON: a list of changes or {"changes": [...]}')
+    g.add_argument("-f", "--file", help="a JSON file of the same (- = stdin)")
+    p = sub.add_parser("apply", help="write what a preview showed (while it is still what was previewed)")
+    p.add_argument("preview_id")
+    p = sub.add_parser("undo", help="put back what a write replaced (default: the newest)")
+    p.add_argument("--change-id", type=int)
+    p = sub.add_parser("write-log", help="the newest writes with what each replaced")
+    p.add_argument("-n", type=int, help="how many (1-30, default 10)")
     return ap
 
 
@@ -123,10 +179,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 2
+    try:
+        body = write_body(a) if a.what in POSTS else None
+    except (ValueError, OSError) as e:
+        print(str(e), file=sys.stderr)
+        return 2
     url = build_url(base, a.what, a)
     hdrs = headers(token, os.environ.get("TRC_PROXY_USER"), os.environ.get("TRC_PROXY_PASSWORD"))
     try:
-        data = fetch(url, hdrs)
+        data = send(url, hdrs, body) if body is not None else fetch(url, hdrs)
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:2000] if e.fp else ""
         print(f"HTTP {e.code}: {e.msg} {body}", file=sys.stderr)

@@ -29,7 +29,7 @@ def _owner_client(monkeypatch, tmp_path):
 def _core() -> dict:
     """offline_core.js's lists, read by node itself (what the worker really uses)."""
     js = ("const O = require(process.argv[1]); console.log(JSON.stringify({APP_FILES: O.APP_FILES, CDN: O.CDN, "
-          "PAGES: O.PAGES, API: O.API, WARM: O.WARM}));")
+          "CDN_ON_USE: O.CDN_ON_USE, PAGES: O.PAGES, API: O.API, WARM: O.WARM}));")
     r = subprocess.run([NODE, "-e", js, str(STATIC / "offline_core.js")], capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout)
@@ -121,7 +121,8 @@ def test_the_build_id_follows_the_files_contents(tmp_path):
 # ---------------------------------------------------------------------------- the wiring
 
 PAGE_FILES = {"/api/v1/overview/page": "overview.html", "/api/v1/overview/plan/schedule/page": "schedule.html",
-              "/api/v1/static/offline.html": "offline.html", "/api/v1/app/activities/page": "activity.html"}
+              "/api/v1/static/offline.html": "offline.html", "/api/v1/app/activities/page": "activity.html",
+              "/api/v1/app/viewer": "charts.html"}              # 單次活動, kept offline since SP-758
 
 
 @pytest.mark.skipif(NODE is None, reason="node not installed")
@@ -132,10 +133,17 @@ def test_the_program_kept_is_what_the_cached_pages_load():
     for p in app_files:
         assert (STATIC / p.removeprefix("/api/v1/static/")).is_file(), p
     want = set()
-    for f in PAGE_FILES.values():
+    for page, f in PAGE_FILES.items():
         html = (STATIC / f).read_text("utf-8")
+        cdns = re.findall(r'<script[^>]*\bsrc="(https://[^"]+)"', html)
+        if core["PAGES"][page] == "p2":
+            # 單次活動 (SP-758): kept only once opened — its program and libraries are kept as it loads them
+            # (any /api/v1/static/ file is; a library only when listed in CDN_ON_USE)
+            for cdn in cdns:
+                assert cdn in core["CDN"] + core["CDN_ON_USE"], (f, cdn)
+            continue
         want |= set(re.findall(r'<script[^>]*\bsrc="(/api/v1/static/[^"?]+)"', html))
-        for cdn in re.findall(r'<script[^>]*\bsrc="(https://[^"]+)"', html):
+        for cdn in cdns:
             assert cdn in core["CDN"], (f, cdn)
     want |= set(re.findall(r'\.src = "(/api/v1/static/[^"]+\.js)"', (STATIC / "shell.js").read_text("utf-8")))
     want.add("/api/v1/static/i18n/i18n.js")                # every rendered page loads it (i18n/pages.py)
@@ -144,9 +152,9 @@ def test_the_program_kept_is_what_the_cached_pages_load():
 
 @pytest.mark.skipif(NODE is None, reason="node not installed")
 def test_every_listed_path_is_a_get_route():
-    from backend.api import achievements, overview, plan, plan_sessions, region, sync, wko5views
-    # plan: 提示多寡 GET /plan/profile/hint-level (static/hints.js, SP-482)
-    gets = {r.path for m in (achievements, overview, plan, plan_sessions, region, sync, wko5views)
+    from backend.api import achievements, injuries, overview, plan, plan_sessions, region, sync, wko5views
+    # plan: 提示多寡 GET /plan/profile/hint-level (static/hints.js, SP-482); injuries: /injuries/meta (SP-758 P2)
+    gets = {r.path for m in (achievements, injuries, overview, plan, plan_sessions, region, sync, wko5views)
             for r in m.router.routes if "GET" in (getattr(r, "methods", None) or set())}
     core = _core()
     for p in list(core["API"]) + [x for x in core["PAGES"] if not x.startswith("/api/v1/static/")]:

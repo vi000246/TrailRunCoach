@@ -27,6 +27,11 @@ def clean():
     jobs.reset()
 
 
+# the most a test waits for a gate, a thread or a condition (SP-394 Q2-3, owner 2026-10-20: 10 → 30 s — 10 s timed
+# out on a very busy machine, load ~167; only the waits' ceiling, no assertion changed)
+WAIT = 30.0
+
+
 def _wait(cond, s=5.0):
     end = time.monotonic() + s
     while not cond() and time.monotonic() < end:
@@ -40,7 +45,7 @@ def _hold(**kw):
 
     def body(job):
         started.set()
-        assert release.wait(10)
+        assert release.wait(WAIT)
     return jobs.submit(body, **kw), release, started
 
 
@@ -84,7 +89,7 @@ def test_call_with_a_key_shares_one_job_and_its_result():
 
     def build():
         runs.append(jobs.current().id)
-        assert gate.wait(10)
+        assert gate.wait(WAIT)
         return object()
     got, errs = [], []
 
@@ -107,7 +112,7 @@ def test_call_with_a_key_shares_one_job_and_its_result():
     gate.clear()
 
     def bad():
-        assert gate.wait(10)
+        assert gate.wait(WAIT)
         raise Bad("x")
 
     def ask_bad():
@@ -145,7 +150,7 @@ class _Builds:
             self.now += 1
             self.most = max(self.most, self.now)
         try:
-            assert self.gate.wait(10)
+            assert self.gate.wait(WAIT)
             return SimpleNamespace(shared=shared, workouts=[])
         finally:
             with self.lock:
@@ -181,7 +186,7 @@ def test_a_request_builds_the_dataset_in_a_build_job_once_per_tenant(views, tmp_
     assert len(builds.runs) == 2                         # 10 idle tenants at once: two builds at a time
     builds.gate.set()
     for t in ts:
-        t.join(10)
+        t.join(WAIT)
     assert builds.most == jobs.CAPS["build"] == 2
     assert len(builds.runs) == 10                        # one build per tenant, however many requests
     assert {r[1] for r in builds.runs} == {("build", jobs.PRIORITIES["user"])}
@@ -291,7 +296,7 @@ def _spy_steps(AA, monkeypatch, gate=None):
                                                              key=lambda w: w.entry.start, reverse=True)]
         steps.append((names, j.cls, j.priority))
         if gate is not None and len(steps) == 2:
-            assert gate.wait(10)
+            assert gate.wait(WAIT)
         return real(ds, progress=progress, recorded=recorded, only=only, context=context)
     monkeypatch.setattr(AA, "compute_blocking", spy)
     return steps
@@ -350,7 +355,7 @@ def test_a_few_to_compute_stay_one_job_and_the_list_page_promotes_only_the_hot_t
     AA.status(ds2)
     assert job2.thread.priority == jobs.PRIORITIES["user"]
     release.set()
-    assert job2.join(10) or job2.snapshot()["state"] == "ready"
+    assert job2.join(WAIT) or job2.snapshot()["state"] == "ready"
     assert [s[2] for s in steps[1:]] == [jobs.PRIORITIES["user"], jobs.PRIORITIES["warm"], jobs.PRIORITIES["cold"]]
 
 
@@ -423,7 +428,7 @@ def test_the_warm_up_sweeps_the_old_series_rows_only_after_the_last_tier(tmp_pat
     WV._warm_slot()["low_again"] = False
     WV._low_priority("startup")
     job = AA.job_for(ds2)
-    assert job.join(10)
+    assert job.join(WAIT)
     assert [s[2] for s in steps] == [jobs.PRIORITIES["deploy_hot"], jobs.PRIORITIES["warm"], jobs.PRIORITIES["cold"]]
     assert order[-1] == ("sweep", [str(ds2._series_home() / "series.db")], 3)    # after the cold tier, this store
     assert [o for o in order if o[0] == "sweep"] == [order[-1]]
@@ -453,10 +458,10 @@ def test_the_warm_up_itself_no_longer_sweeps(monkeypatch):
     monkeypatch.setattr(AA, "job_for", lambda d, **kw: None)
     monkeypatch.setattr(RP, "warm_charts", lambda job=None: None)
     t = WV.warm_up("startup")
-    t.join(10)
+    t.join(WAIT)
     assert t.state == "done" and swept == []
     low = WV._warm_slot().get("low")
-    low and low.join(10)
+    low and low.join(WAIT)
     assert swept == []                                           # no classification job: nothing to wait for
 
 
@@ -522,14 +527,14 @@ def test_a_first_import_parses_the_last_90_days_first_and_back_fills_the_rest(fi
         j = jobs.current()
         events.append(("parse", _age(path), None if j is None else (j.cls, j.priority)))
         if sum(1 for e in events if e[0] == "parse") == len(HOT_AGES) + 1:
-            assert chunk_gate.wait(10)                   # the first back-fill chunk: held
+            assert chunk_gate.wait(WAIT)                 # the first back-fill chunk: held
         return real_parse(path, npz)
 
     def build(*key, hot_first=None):
         if hot_first is False:
             j = jobs.current()
             events.append(("complete build", (j.cls, j.priority)))
-            assert final_gate.wait(10)
+            assert final_gate.wait(WAIT)
         return real_build(*key, hot_first=hot_first)
     monkeypatch.setattr(fitcache, "parse_file", parse)
     monkeypatch.setattr(WV, "_build_dataset", build)
@@ -553,7 +558,7 @@ def test_a_first_import_parses_the_last_90_days_first_and_back_fills_the_rest(fi
                      tenant="u3", label="dataset warm-up (sync-coros)")
     assert u3.state == "queued"
     chunk_gate.set()
-    assert _wait(lambda: any(e[0] == "complete build" for e in events), 10)
+    assert _wait(lambda: any(e[0] == "complete build" for e in events), WAIT)
     # the complete build holds a `build` place at `cold`: another tenant's request builds at once
     u4, rel4, st4 = _hold(cls="build", priority="user", tenant="u4")
     assert st4.wait(5)
@@ -561,7 +566,7 @@ def test_a_first_import_parses_the_last_90_days_first_and_back_fills_the_rest(fi
     with tenancy.use(F.u2):
         assert WV._dataset() is ds                       # until the complete one is in: the hot-first one
     final_gate.set()
-    assert _wait(lambda: F.warmed == [("u2", "backfill")], 10)
+    assert _wait(lambda: F.warmed == [("u2", "backfill")], WAIT)
     parses = [e for e in events if e[0] == "parse"]
     assert [e[1] for e in parses[3:]] == list(OLD_AGES)  # each file once, the older ones newest first
     assert [e[2] for e in parses[3:]] == [("full", jobs.PRIORITIES["warm"])] * 6 + [("full", jobs.PRIORITIES["cold"])] * 2
@@ -584,7 +589,7 @@ def test_the_back_fill_progress_is_on_the_dataset_status_and_the_page_shows_it(f
     F = first_import
     gate = threading.Event()
     real = F.backfill._chunk
-    monkeypatch.setattr(F.backfill, "_chunk", lambda bf, part: gate.wait(10) and real(bf, part))
+    monkeypatch.setattr(F.backfill, "_chunk", lambda bf, part: gate.wait(WAIT) and real(bf, part))
     with tenancy.use(F.u2):
         F.WV._dataset()
     monkeypatch.setattr(F.backfill, "_tid", lambda: "u2")
@@ -592,7 +597,7 @@ def test_the_back_fill_progress_is_on_the_dataset_status_and_the_page_shows_it(f
         bf = c.get("/api/v1/app/dataset/status").json()["backfill"]
     assert bf["state"] == "running" and (bf["n_done"], bf["n_total"]) == (0, len(OLD_AGES))
     gate.set()
-    assert _wait(lambda: F.warmed, 10)
+    assert _wait(lambda: F.warmed, WAIT)
     static = Path(__file__).resolve().parents[1] / "static"
     shell = (static / "shell.js").read_text("utf-8")
     assert "s.backfill" in shell and 'T("build.backfill"' in shell and 'T("build.backfill_done")' in shell
@@ -645,16 +650,16 @@ def test_after_the_first_sync_the_overview_and_plan_inputs_come_before_the_back_
     monkeypatch.setattr(RP, "warm_charts", lambda job=None: None)
     with tenancy.use(F.u2):
         t = WV.warm_up("sync-coros")
-    t.join(10)
+    t.join(WAIT)
     assert t.state == "done" and t.priority == jobs.PRIORITIES["sync_hot"]
     assert [x for x in seen if x[0] != "parse"][:2] == [("status", 3, 0), ("inputs", 3)]
     assert {x[2] for x in seen if x[0] == "parse" and x[1] in HOT_AGES} == {"dataset warm-up (sync-coros)"}
-    assert _wait(lambda: F.warmed == [("u2", "backfill")], 10)
+    assert _wait(lambda: F.warmed == [("u2", "backfill")], WAIT)
     first_chunk = next(i for i, x in enumerate(seen) if x[0] == "parse" and x[1] not in HOT_AGES)
     assert seen.index(("inputs", 3)) < first_chunk          # the pages' Dataset, status and inputs first
     assert ("classify", 3, "sync_hot") in seen               # the hot-first Dataset's classification: hot tier first
     low = WV._warm_slot(F.u2.id).get("low")
-    low and low.join(10)
+    low and low.join(WAIT)
 
 
 def test_a_failed_hot_first_build_releases_what_it_held(first_import, monkeypatch):
@@ -730,7 +735,7 @@ def test_a_first_import_stays_hot_first_until_its_back_fill_is_done(first_import
     F = first_import
     gate = threading.Event()
     real = F.backfill._chunk
-    monkeypatch.setattr(F.backfill, "_chunk", lambda bf, part: gate.wait(10) and real(bf, part))
+    monkeypatch.setattr(F.backfill, "_chunk", lambda bf, part: gate.wait(WAIT) and real(bf, part))
     with tenancy.use(F.u2):
         ds = F.WV._dataset()
     with tenancy.use(F.u2):
@@ -740,7 +745,7 @@ def test_a_first_import_stays_hot_first_until_its_back_fill_is_done(first_import
         again = F.WV._dataset()                          # a later build before the back-fill: hot first still
     assert len(again.workouts) == len(HOT_AGES) and len(again.deferred) == len(OLD_AGES)
     gate.set()
-    assert _wait(lambda: F.warmed, 10)
+    assert _wait(lambda: F.warmed, WAIT)
     with tenancy.use(F.u2):
         assert fitcache.FitStore(F.dir).first_import is False
 
@@ -813,7 +818,7 @@ def test_during_the_back_fill_the_pmc_and_the_ctl_wait_and_the_auto_plan_too(fir
     F = first_import
     gate = threading.Event()
     real = F.backfill._chunk
-    monkeypatch.setattr(F.backfill, "_chunk", lambda bf, part: gate.wait(10) and real(bf, part))
+    monkeypatch.setattr(F.backfill, "_chunk", lambda bf, part: gate.wait(WAIT) and real(bf, part))
     with tenancy.use(F.u2):
         ds = F.WV._dataset()
         assert ds.deferred
@@ -838,7 +843,7 @@ def test_during_the_back_fill_the_pmc_and_the_ctl_wait_and_the_auto_plan_too(fir
         assert asyncio.run(plan_auto.run(None, trigger="sync:coros"))["status"] == "history_pending"
     assert ran == []
     gate.set()
-    assert _wait(lambda: F.warmed and ran == ["sync:coros"], 10)
+    assert _wait(lambda: F.warmed and ran == ["sync:coros"], WAIT)
     with tenancy.use(F.u2):
         p = OV.pmc(begin=(F.today - dt.timedelta(days=30)).isoformat(), end=today)
     assert "pending" not in p and len(p["series"]) == 31                               # the complete Dataset
@@ -885,7 +890,7 @@ def test_a_failed_back_fill_is_tried_again_by_the_next_request(first_import, mon
                             else real(*key, hot_first=hot_first))
         ds = F.WV._dataset()
         assert ds.deferred
-    assert _wait(lambda: F.backfill._STATE and next(iter(F.backfill._STATE.values())).state == "error", 10)
+    assert _wait(lambda: F.backfill._STATE and next(iter(F.backfill._STATE.values())).state == "error", WAIT)
     monkeypatch.setattr(F.WV, "_build_dataset", real)
     with tenancy.use(F.u2):
         again = F.WV._dataset()                          # not the hot-first one kept for good

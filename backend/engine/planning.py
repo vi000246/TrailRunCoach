@@ -131,8 +131,8 @@ A_GAP_HINT_WEEKS = 12
 # (Koop [211]) and C races as the week's hard session (SP-95, ≤ 1 a month, CTS [433]). Why: well-trained
 # distance runners stopped improving vVO2max / vVT2 after ~6 months of continuous training (Alves 2021,
 # 已驗證) — 24 weeks ≈ 6 months is 推估. Counted from the start of that base (the day after the last A
-# race's 恢復期 / 轉換期 / 回量期), or — no A race on record — from the first day of training data
-# (SINCE_OF, installed by the app). It stays `kind` "base" (every base rule — strides, strength 2×, the
+# race's 恢復期 / 轉換期 / 回量期), or — no A race on record — from where training last started again
+# (SP-829: after a LAYOFF_WEEKS+ layoff, else the first day of data; SINCE_OF, installed by the app). It stays `kind` "base" (every base rule — strides, strength 2×, the
 # AeT test, the gate — still applies); Phase.maintain_from marks it. A new A race brings the 專項期 and the
 # 減量期 back (the base before it is a normal base again). Never a peak: no taper inside it, the peak
 # window is only 2–3 weeks [432].
@@ -141,13 +141,35 @@ MAINTAIN_AFTER_WEEKS = 24
 # 維持期's first Monday, the weekly Zone 5 session alternating its focus — 速度 (flat reps) and 爬坡 (the
 # rung's uphill version, as the 越野 專項期 uses: Koop ~80 % of intervals uphill). 4 weeks = the 3:1 cycle,
 # inside Koop's ≤ 6-week block [211].
+# SP-830: a road runner (主要訓練項目 路跑, engine/primary_sport.py) rotates 速度 / 閾值 instead — no uphill
+# intervals; the 閾值 block's weekly session is the Zone 3 rung (threshold, flat), the 速度 block's Zone 5 flat
+# reps (Pfitzinger / Daniels: the road runner's T and I work).
 MAINTAIN_BLOCK_WEEKS = 4
 MAINTAIN_FOCUS = ("speed", "hill")
-MAINTAIN_FOCUS_LABEL = {"speed": N_("速度"), "hill": N_("爬坡")}
+MAINTAIN_FOCUS_ROAD = ("speed", "threshold")
+MAINTAIN_FOCUS_LABEL = {"speed": N_("速度"), "hill": N_("爬坡"), "threshold": N_("閾值")}
+
+
+def maintain_focus(sport: Optional[str] = None) -> tuple:
+    """The 維持期's 輪替重點 blocks for the athlete's 主要訓練項目 (SP-830): road → 速度 / 閾值, else 速度 / 爬坡."""
+    return MAINTAIN_FOCUS_ROAD if sport == "road" else MAINTAIN_FOCUS
+
+
+def maintain_track(focus: Optional[str]) -> str:
+    """The track a 維持期 week's interval session prefers (quality_gate.week_decision's `prefer`): the
+    閾值 block Zone 3, else Zone 5 (the session above VT2)."""
+    return "z3" if focus == "threshold" else "z5"
 MAINTAIN_LABEL = N_("維持期")
-# The first day of training data of the current tenant (the app installs it: install_size_inputs); None
-# = not known (tests, a pure engine) → without any A race on record there is no 維持期
-SINCE_OF = None              # Callable[[], Optional[dt.date]]
+# Where the 24 weeks start without an A race (SP-829): the day running started again after the last
+# LAYOFF_WEEKS+ weeks without a run, else the first day of training data — so a new user importing years
+# of old data isn't in a 維持期 from day one. After an A race too: a layoff after its base started moves
+# the start (the 24 weeks are ~6 months of continuous training). LAYOFF_WEEKS 推估 (detraining.md: recent
+# gains are lost after > 4 weeks off, Mujika & Padilla 2000; reentry.py's 29–56-day category starts there).
+LAYOFF_WEEKS = 4
+# The current tenant's training start (the app installs it: install_size_inputs) → (day, restart: True =
+# after a layoff, False = the first day of data) or None; None = not known (tests, a pure engine) →
+# without any A race on record there is no 維持期
+SINCE_OF = None              # Callable[[], Optional[tuple[dt.date, bool]]]
 
 PHASES = {
     "transition": N_("轉換期"),
@@ -165,7 +187,7 @@ PHASES = {
 }
 # SP-504 R2: an A 百岳 trip's (kind baiyue) days are a 行程, not a 賽事 (phase_label)
 TRIP_PHASE = N_("行程")
-KINDS = {"race": "越野賽", "baiyue": "登山", "road": "路跑賽", "other": "其他"}   # SP-738: 百岳 → 登山 (the stored kind stays baiyue)
+KINDS = {"race": N_("越野賽"), "baiyue": N_("登山"), "road": N_("路跑賽"), "other": N_("其他")}   # SP-738: 百岳 → 登山 (the stored kind stays baiyue)
 PRIORITIES = ("A", "B", "C")
 EVENT_HEAT = ("auto", "hot", "cool")      # Event.heat (heat-acclimation.md §5.4)
 PACK_MAX_KG = 40.0                         # Event.pack_kg: as athlete.set_hike_meta's 0–40 kg check
@@ -621,9 +643,28 @@ def transition_weeks_for(ev, weeks: Optional[int]) -> int:
 _SINCE_CACHE: dict = {}
 
 
-def first_activity_day() -> Optional[dt.date]:
-    """The first day with an activity in the current tenant's database (workout_files, duplicates of
-    another source left out), read-only, cached on the file's stamp; None without one (SP-102)."""
+def training_restart(days, today: Optional[dt.date] = None,
+                     weeks: int = LAYOFF_WEEKS) -> Optional[tuple[dt.date, bool]]:
+    """Where continuous training started (SP-829): (the first run day after the last gap of ≥ `weeks`
+    weeks without a run, True), else (the first day, False); a gap still open today (no run in the last
+    `weeks` weeks) → (today, True) — running starts again from now at the earliest. None without days."""
+    ds = sorted({_d(x) for x in days or () if x})
+    if not ds:
+        return None
+    gap = dt.timedelta(weeks=weeks)
+    today = today or dt.date.today()
+    if today - ds[-1] > gap:                     # ≥ `weeks` weeks of days without a run up to today
+        return today, True
+    for a, b in zip(reversed(ds[:-1]), reversed(ds)):
+        if b - a > gap:                          # (b − a − 1) days without a run ≥ 7 × weeks
+            return b, True
+    return ds[0], False
+
+
+def training_start_db(today: Optional[dt.date] = None) -> Optional[tuple[dt.date, bool]]:
+    """training_restart() of the current tenant's run days (workout_files, duplicates of another source
+    left out; every activity when no file says it is a run), read-only, cached on the file's stamp and
+    the day; None without any activity (SP-102, SP-829)."""
     import sqlite3
     from backend.db.filestamp import db_stamp
     from backend.engine.wko5expr.datasource import _db_path
@@ -633,22 +674,25 @@ def first_activity_day() -> Optional[dt.date]:
     mt = db_stamp(p)
     if mt is None:
         return None
+    today = today or dt.date.today()
     hit = _SINCE_CACHE.get(str(p))
-    if hit and hit[0] == mt:
+    if hit and hit[0] == (mt, today):
         return hit[1]
     try:
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
         try:
-            row = con.execute("SELECT MIN(workout_date) FROM workout_files WHERE duplicate_of IS NULL").fetchone()
+            q = "SELECT DISTINCT workout_date FROM workout_files WHERE duplicate_of IS NULL AND workout_date IS NOT NULL"
+            rows = con.execute(q + " AND lower(coalesce(sport, '')) LIKE '%run%'").fetchall() or \
+                con.execute(q).fetchall()
         finally:
             con.close()
     except sqlite3.Error:
         return None
-    day = _d(row[0]) if row and row[0] else None
+    out = training_restart([r[0] for r in rows], today)
     if len(_SINCE_CACHE) > 256:
         _SINCE_CACHE.clear()
-    _SINCE_CACHE[str(p)] = (mt, day)
-    return day
+    _SINCE_CACHE[str(p)] = ((mt, today), out)
+    return out
 
 
 def install_size_inputs() -> None:
@@ -688,8 +732,8 @@ def install_size_inputs() -> None:
         return terrain_calib.divisor()
 
     HOURS_OF, DIVISOR_OF = hours_of, divisor_of
-    # SP-102: the first day of training data (the 維持期 without any A race counts from it)
-    SINCE_OF = first_activity_day
+    # SP-102 / SP-829: where training started (the 維持期 without any A race counts from it)
+    SINCE_OF = training_start_db
     # 下坡升級 (SP-111 phase 1, SP-98): the race's and the athlete's downhill impact
     from backend.engine import downhill_recovery
     downhill_recovery.install()
@@ -801,7 +845,9 @@ def threshold_row(plan: "Plan", name: str, day: dt.date) -> Optional[dict]:
     t = rows[-1]
     m = threshold_method(t, name)
     d = t.date[:10]
-    label = f"自動估算（已套用 {d}）" if m == "estimate" else f"{METHOD_LABEL.get(m, '手動輸入')} {d}"
+    # SP-460: in the request's language (the season plan's 「目前區間用的門檻」 card)
+    label = _("自動估算（已套用 {day}）", day=d) if m == "estimate" else \
+        _("{method} {day}", method=_(METHOD_LABEL.get(m, N_("手動輸入"))), day=d)
     return {"value": float(getattr(t, name)), "date": d, "method": m, "measured": m != "estimate",
             "label": label}
 
@@ -966,7 +1012,8 @@ class Plan:
 
 def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
                 transition_weeks: int = TRANSITION_WEEKS, taper_pref: Optional[int] = None,
-                since: Optional[dt.date] = None, _maintain: bool = True) -> list[Phase]:
+                since: Optional[dt.date] = None, _maintain: bool = True,
+                since_restart: bool = False) -> list[Phase]:
     """Phases covering [begin, end], built backwards from each A event; each taper taper_days(ev,
     `taper_pref`) long (SP-96: 7 for a 2–3 day 百岳, up to 21 by 課表偏好).
     After each A event's recovery: `transition_weeks` of 轉換期 (0 = none), ending before
@@ -981,7 +1028,9 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
 
     SP-102: the open-ended base after the last A race (none ahead) becomes a 維持期 MAINTAIN_AFTER_WEEKS
     after it started (maintain_start: the day after that race's post-race phases, whatever `begin`;
-    without any A race `since`, the first day of training data; None = no 維持期)."""
+    without any A race `since`, where training started; None = no 維持期). SP-829: `since_restart` =
+    `since` is the first run after a layoff (training_restart), else the first day of data; after an A
+    race a later restart moves the start too."""
     one = dt.timedelta(days=1)
     a_events = sorted((e for e in events if e.priority == "A"), key=lambda e: e.start)
     out: list[Phase] = []
@@ -1093,11 +1142,13 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
     if cursor <= end:
         # no A event ahead: open-ended base — a 維持期 from MAINTAIN_AFTER_WEEKS after it started (SP-102);
         # maintain_segments is the one place deciding when it starts and what a B race in it does
-        anchor = None
+        anchor, basis = None, "a" if a_events else ("restart" if since_restart else "data")
         if _maintain:
             anchor = cursor if prev is not None else \
                 trailing_base_start(events, transition_weeks, taper_pref) if a_events else since
-        for x in maintain_segments(events, cursor, end, anchor, bool(a_events)):
+            if a_events and anchor is not None and since_restart and since is not None and since > anchor:
+                anchor, basis = since, "restart"    # SP-829: a layoff after the A race's base started
+        for x in maintain_segments(events, cursor, end, anchor, basis):
             p = add(x["kind"], x["start"], x["end"], x.get("event_id"), note=x.get("note") or "")
             if p is not None and x.get("maintain_from"):
                 p.maintain_from = x["maintain_from"].isoformat()
@@ -1160,20 +1211,25 @@ def b_prep_note(e) -> str:
 
 
 def maintain_segments(events: list, start: dt.date, end: dt.date, anchor: Optional[dt.date],
-                      after_a: bool) -> list[dict]:
+                      basis="a") -> list[dict]:
     """The open-ended base [start, end] after the last A race (none ahead) as phases [{"kind", "start",
     "end", "maintain_from", "note", "event_id", "light"}] (SP-102) — the one place deciding when the 維持期
     starts (maintain_entry(anchor); only outside a B race's 專項塊) and what a B race does
-    (MAINTAIN_B_POLICY: b_prep_blocks). `after_a`: the anchor is the base after an A race (else the first
-    day of data) — the 維持期 note says which."""
+    (MAINTAIN_B_POLICY: b_prep_blocks). `basis`: what the anchor is — "a" the base after an A race,
+    "restart" the first run after a LAYOFF_WEEKS+ layoff (SP-829), "data" the first day of data (True /
+    False: "a" / "data") — the 維持期 note says which."""
     if start > end:
         return []
+    basis = basis if isinstance(basis, str) else ("a" if basis else "data")
     one = dt.timedelta(days=1)
     m = maintain_entry(anchor)
     note = "" if m is None else (
         _("沒有 A 賽事已超過 {w} 週（從上一場 A 賽事恢復後的 {date} 起算）：改成維持＋輪替重點，"
           "不再每週加量（{w} 週為推估）", w=MAINTAIN_AFTER_WEEKS, date=anchor.isoformat())
-        if after_a else
+        if basis == "a" else
+        _("沒有 A 賽事已超過 {w} 週（從連續 {n} 週以上沒跑、重新開始跑的 {date} 起算）：改成維持＋輪替重點，"
+          "不再每週加量（{w} 週為推估）", w=MAINTAIN_AFTER_WEEKS, n=LAYOFF_WEEKS, date=anchor.isoformat())
+        if basis == "restart" else
         _("沒有 A 賽事已超過 {w} 週（從訓練資料的第一天 {date} 起算）：改成維持＋輪替重點，"
           "不再每週加量（{w} 週為推估）", w=MAINTAIN_AFTER_WEEKS, date=anchor.isoformat()))
     out: list[dict] = []
@@ -1220,11 +1276,12 @@ def trailing_base_start(events: list, transition_weeks: int = TRANSITION_WEEKS,
     return _d(tail.start) if tail is not None and tail.kind == "base" else None
 
 
-def maintain_week(phases_: list, monday: dt.date) -> Optional[dict]:
+def maintain_week(phases_: list, monday: dt.date, sport: Optional[str] = None) -> Optional[dict]:
     """The 維持期 week of `monday` (SP-102), or None when the phase holding it isn't one: {"from" (ISO, the
     維持期's first day), "week" (0 = its first week), "block" (1-based), "week_in_block" (1-based),
-    "focus" (MAINTAIN_FOCUS), "label" (its name, translated), "text" (the week's line)}. The 輪替重點 blocks
-    count MAINTAIN_BLOCK_WEEKS weeks from the Monday of its first day. `phases_`: Phase objects or dicts."""
+    "focus" (maintain_focus(sport)), "track" (maintain_track), "label" (its name, translated), "text" (the
+    week's line)}. The 輪替重點 blocks count MAINTAIN_BLOCK_WEEKS weeks from the Monday of its first day.
+    `phases_`: Phase objects or dicts. `sport`: 主要訓練項目 (road → 速度 / 閾值, SP-830)."""
     def get(p, k):
         return p.get(k) if isinstance(p, dict) else getattr(p, k, None)
     ph = next((p for p in phases_ or () if get(p, "maintain_from") and _d(get(p, "start")) <= monday + dt.timedelta(days=6)
@@ -1235,22 +1292,34 @@ def maintain_week(phases_: list, monday: dt.date) -> Optional[dict]:
     m0 -= dt.timedelta(days=m0.weekday())
     week = max(0, (monday - m0).days // 7)
     block = week // MAINTAIN_BLOCK_WEEKS
-    focus = MAINTAIN_FOCUS[block % len(MAINTAIN_FOCUS)]
+    foci = maintain_focus(sport)
+    focus = foci[block % len(foci)]
     label = _(MAINTAIN_FOCUS_LABEL[focus])
-    nxt = _(MAINTAIN_FOCUS_LABEL[MAINTAIN_FOCUS[(block + 1) % len(MAINTAIN_FOCUS)]])
+    nxt = _(MAINTAIN_FOCUS_LABEL[foci[(block + 1) % len(foci)]])
     left = MAINTAIN_BLOCK_WEEKS - week % MAINTAIN_BLOCK_WEEKS
-    text = (_("維持期：這 {n} 週的重點是「{focus}」（第 {i}/{n} 週，之後換「{next}」）：每週一堂 5 區的課（{what}），"
-              "其他照輕鬆跑；量不再往上加。沒有 A 賽事超過 {w} 週，繼續加量已經練不太上去，先維持體能、"
-              "等下一場 A 賽事再走專項期和減量（輪替方式、週數為推估）",
-              n=MAINTAIN_BLOCK_WEEKS, focus=label, i=week % MAINTAIN_BLOCK_WEEKS + 1, next=nxt,
-              what=_("平路間歇") if focus == "speed" else _("上坡間歇"), w=MAINTAIN_AFTER_WEEKS))
+    common = dict(n=MAINTAIN_BLOCK_WEEKS, focus=label, i=week % MAINTAIN_BLOCK_WEEKS + 1, next=nxt,
+                  w=MAINTAIN_AFTER_WEEKS)
+    if focus == "threshold":
+        text = _("維持期：這 {n} 週的重點是「{focus}」（第 {i}/{n} 週，之後換「{next}」）：每週一堂 3 區的閾值課（平路），"
+                 "其他照輕鬆跑；量不再往上加。沒有 A 賽事超過 {w} 週，繼續加量已經練不太上去，先維持體能、"
+                 "等下一場 A 賽事再走專項期和減量（輪替方式、週數為推估）", **common)
+    else:
+        text = _("維持期：這 {n} 週的重點是「{focus}」（第 {i}/{n} 週，之後換「{next}」）：每週一堂 5 區的課（{what}），"
+                 "其他照輕鬆跑；量不再往上加。沒有 A 賽事超過 {w} 週，繼續加量已經練不太上去，先維持體能、"
+                 "等下一場 A 賽事再走專項期和減量（輪替方式、週數為推估）",
+                 what=_("平路間歇") if focus == "speed" else _("上坡間歇"), **common)
     return {"from": get(ph, "maintain_from"), "week": week, "block": block + 1,
             "week_in_block": week % MAINTAIN_BLOCK_WEEKS + 1, "weeks_left": left, "focus": focus,
-            "label": label, "text": text}
+            "track": maintain_track(focus), "label": label, "text": text}
 
 
-def maintain_why() -> str:
-    """The 維持期 in one plain sentence (SP-102), for the plan page and the overview."""
+def maintain_why(sport: Optional[str] = None) -> str:
+    """The 維持期 in one plain sentence (SP-102), for the plan page and the overview; `sport` road → the
+    速度 / 閾值 rotation (SP-830)."""
+    if sport == "road":
+        return _("沒有 A 賽事超過 {w} 週：量維持、不再每週往上加，每週保留一堂強度課，重點每 {n} 週輪替一次（速度、閾值）。"
+                 "持續加量約半年後體能就不太會再進步；加一場 A 賽事，就會照常排專項期和減量",
+                 w=MAINTAIN_AFTER_WEEKS, n=MAINTAIN_BLOCK_WEEKS)
     return _("沒有 A 賽事超過 {w} 週：量維持、不再每週往上加，每週保留一堂高強度課，重點每 {n} 週輪替一次（速度、爬坡）。"
              "持續加量約半年後體能就不太會再進步；加一場 A 賽事，就會照常排專項期和減量",
              w=MAINTAIN_AFTER_WEEKS, n=MAINTAIN_BLOCK_WEEKS)
@@ -1359,19 +1428,32 @@ def phases(plan: Plan, begin: dt.date, end: dt.date, transition_weeks: Optional[
         return plan.phases
     tw = transition_weeks_setting() if transition_weeks is None else transition_weeks
     tp = taper_days_setting() if taper_pref is None else taper_pref
-    return auto_phases(plan.events, begin, end, tw, tp, since=training_since())
+    st = training_start()
+    return auto_phases(plan.events, begin, end, tw, tp, since=st[0] if st else None,
+                       since_restart=bool(st and st[1]))
 
 
-def training_since() -> Optional[dt.date]:
-    """SINCE_OF (the first day of training data, installed by the app); None when not installed or on
-    any error (SP-102: then no 維持期 without an A race on record)."""
+def training_start() -> Optional[tuple[dt.date, bool]]:
+    """SINCE_OF (where training started, installed by the app: (day, after a layoff?); a bare date = the
+    first day of data); None when not installed or on any error (SP-102: then no 維持期 without an A race
+    on record)."""
     if SINCE_OF is None:
         return None
     try:
         v = SINCE_OF()
     except Exception:                       # noqa: BLE001 — phases must still build
         return None
-    return _d(v) if v else None
+    if not v:
+        return None
+    if isinstance(v, tuple):
+        return (_d(v[0]), bool(v[1])) if v[0] else None
+    return _d(v), False
+
+
+def training_since() -> Optional[dt.date]:
+    """The day of training_start() (SP-102, SP-829); None without one."""
+    st = training_start()
+    return st[0] if st else None
 
 
 def phase_on(plan: Plan, day: dt.date, begin: Optional[dt.date] = None,

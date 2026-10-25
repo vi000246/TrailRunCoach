@@ -1,12 +1,12 @@
 {
   "pmc.title": "Training load chart",
   "pmc.range": "Range",
-  "pmc.days": "{n} days",
+  "pmc.days": "{n} {n|day|days}",
   "pmc.ctl": "Chronic load",
   "pmc.atl": "Acute load",
   "pmc.tsb": "Load balance",
-  "pmc.aria": "Chronic and acute load lines with load balance bars over the last {n} days",
-  "pmc.tip": "Chronic load, acute load and load balance over the last {n} days (switch to 7, 42 or 90 days next to the title; the choice is remembered).\nHow to read: blue = chronic load (42-day average load), orange = acute load (7 days); bars = load balance, coloured by load balance ÷ chronic load: red < −30% High Risk, green −30 to −10% Optimal, light purple −10 to +10% grey zone, purple +10 to +35% Fresh, yellow > +35% Transition (under a chronic load of 30, of 30).\nLoad balance = yesterday's chronic load − acute load: positive = room to spare, negative = still building fatigue.\nLook for: blue rising = getting fitter; orange above blue = training more than usual lately; negative load balance is not bad.\nMethod: the Banister model, as applied to power training by Coggan; bands from Friel, rules of thumb, a direction only. Other platforms often call these CTL, ATL and TSB.\nTraining load is on the same scale as TrainingPeaks' TSS® (one hour at threshold = 100), so the numbers are roughly comparable, but details differ (e.g. moving time only, a climbing bonus), so they will not match exactly. TSS® is a registered trademark of TrainingPeaks, LLC.",
+  "pmc.aria": "Chronic and acute load lines with load balance bars over the last {n} {n|day|days}",
+  "pmc.tip": "Chronic load, acute load and load balance over the last {n} {n|day|days} (switch to 7, 42 or 90 days next to the title; the choice is remembered).\nHow to read: blue = chronic load (42-day average load), orange = acute load (7 days); bars = load balance, coloured by load balance ÷ chronic load: red < −30% High Risk, green −30 to −10% Optimal, light purple −10 to +10% grey zone, purple +10 to +35% Fresh, yellow > +35% Transition (under a chronic load of 30, of 30).\nLoad balance = yesterday's chronic load − acute load: positive = room to spare, negative = still building fatigue.\nLook for: blue rising = getting fitter; orange above blue = training more than usual lately; negative load balance is not bad.\nMethod: the Banister model, as applied to power training by Coggan; bands from Friel, rules of thumb, a direction only. Other platforms often call these CTL, ATL and TSB.\nTraining load is on the same scale as TrainingPeaks' TSS® (one hour at threshold = 100), so the numbers are roughly comparable, but details differ (e.g. moving time only, a climbing bonus), so they will not match exactly. TSS® is a registered trademark of TrainingPeaks, LLC.",
   "thr.conf_high": "high",
   "thr.conf_medium": "medium",
   "thr.conf_low": "low",
@@ -16,7 +16,7 @@
   "drift.ref_badge": "Reference only",
   "drift.ref_runs": {
     "one": "{n} run under 40 min after warm-up",
-    "other": "{n} runs under 40 min after warm-up"
+    "other": "{n} {n|run|runs} under 40 min after warm-up"
   },
   "drift.value": "HR drift {v}%",
   "drift.basis_power": "HR drift from power (power ÷ HR, Pw:HR)",
@@ -45,6 +45,8 @@
   "stale.reload": "Refresh",
   "stale.reload_tip": "Showing the status computed at {at}; the new one isn't ready yet. Click to refresh",
   "stale.wait": "The status is updating — apply again in a few seconds",
+  "stale.hr": "Updating HR zones",
+  "stale.hr_tip": "The plan's HR zones changed: showing the status computed at {at}; the new one replaces it by itself when ready",
   "jump.aria": "Sections on this page",
   "jump.status": "Status",
   "jump.log": "Log",
@@ -97,7 +99,7 @@
   "unit.year": "Year",
   "now": "Back to now",
   "to_sched": "Edit schedule →",
-  "todo_n": {"one": "{n} item", "other": "{n} items"},
+  "todo_n": {"one": "{n} item", "other": "{n} {n|item|items}"},
   "ind_n": {"one": "{n} indicator · all sports together", "other": "{n} indicators · all sports together"},
   "sec.numbers": "Numbers in detail",
   "wk.race_mark": "{p} race: {name}",

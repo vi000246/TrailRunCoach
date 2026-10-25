@@ -39,7 +39,7 @@ def test_early_and_tail_values():
 
 
 def test_fit_needs_twenty_runs():
-    assert DC._p95_fit([800.0] * 19) is None
+    assert DC._p95_fit([800.0] * 19) == CAL.count_only(19)                # SP-807: only the count
     f = DC._p95_fit([600.0 + 10 * i for i in range(30)])
     assert f.n == 30 and 850 < f.value < 900
     item = CAL._registry()["drift_early_s"]

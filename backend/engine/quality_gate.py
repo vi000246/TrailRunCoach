@@ -90,18 +90,21 @@ from backend.i18n import N_, _
 # auto (plan_prefs.from_settings; evaluate() maps any unknown mode to auto too)
 MODES = ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none")
 WEEKS_RANGE = (2, 16)
-LABEL = {"auto": "自動", "ua_gap": "Uphill Athlete 差距法", "friel_drift": "Friel 飄移法",
-         "xu_drift": "徐國峰 90 分鐘法", "plateau": "有氧停滯法", "weeks": "週數法",
-         "none": "不設門檻（Seiler）"}
+LABEL = {"auto": N_("自動"), "ua_gap": N_("Uphill Athlete 差距法"), "friel_drift": N_("Friel 飄移法"),
+         "xu_drift": N_("徐國峰 90 分鐘法"), "plateau": N_("有氧停滯法"), "weeks": N_("週數法"),
+         "none": N_("不設門檻（Seiler）")}
 
-SRC_UA = "Uphill Athlete：When to add intensity（AnT/AeT − 1 ≤ 10%，先加 Zone 3）"
-SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%，跑步在 AeT 1–2 小時）"
-SRC_XU = "徐國峰《跑者都該懂的跑步數據》"
-SRC_SEILER = "Seiler 2010；Seiler & Tønnessen 2009（整個週期都有少量高強度，每週 1–3 次）"
-SRC_PALLADINO = "Palladino 基礎期訓練"
-SRC_KOOP = "Koop／CTS（6×3 分 RI、上坡）"
-SRC_HELGERUD = "Helgerud 2007（4×4 分）"
-SRC_OWN = "自訂"
+# msgids (SP-905): source() joins them with 「；」 into a session's 出處 — an English page shows each part
+SRC_UA = N_("Uphill Athlete：When to add intensity（AnT/AeT − 1 ≤ 10%，先加 Zone 3）")
+SRC_FRIEL = N_("Friel（TrainingPeaks：Aerobic decoupling < 5%，跑步在 AeT 1–2 小時）")
+SRC_XU = N_("徐國峰《跑者都該懂的跑步數據》")
+SRC_SEILER = N_("Seiler 2010；Seiler & Tønnessen 2009（整個週期都有少量高強度，每週 1–3 次）")
+SRC_PALLADINO = N_("Palladino 基礎期訓練")
+SRC_KOOP = N_("Koop／CTS（6×3 分 RI、上坡）")
+SRC_HELGERUD = N_("Helgerud 2007（4×4 分）")
+SRC_OWN = N_("自訂")
+# SRC_SEILER's second part: in a 出處 joined by 「；」 each part is read back on its own
+SRC_SEILER_TAIL = N_("Seiler & Tønnessen 2009（整個週期都有少量高強度，每週 1–3 次）")
 
 # ---- numbers (the doc's §7 lists which are ours) ----------------------------
 UA_GAP_MAX = 0.10
@@ -188,7 +191,7 @@ LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 
 # (plan_store._plan_rows) don't; both must match the same. The legacy set holds both spellings.
 LEGACY_ANY = frozenset(LEGACY_TITLES) | frozenset(_IL.renamed(t) for t in LEGACY_TITLES)
 DOSE = Z3                      # kept for callers that read the first rungs
-RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
+RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, N_("Palladino 恢復週保留 98–101% CP fartlek"))
 # SP-647: how the recovery fartlek is judged done — neither a Zone 3 nor a Zone 5 session, so not by the session
 # classifier's bars (plan_match.dose) and not by its 3 %-wide band second by second (interval_eval.tiz_lower):
 # by Palladino Zone 3B's lower edge (zones.PALLADINO_POWER_ZONES, 95–101 % CP), the ≥ 95 % CP line the
@@ -196,8 +199,9 @@ RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Pal
 RECOVERY_JUDGE_LO = 0.95
 # the ramp-week session (CTL ramp at the watch line: threshold only) — T1's content under its own key / title so
 # it is never mistaken for a ladder rung (planned_spec: neutral)
-SUB = ("sub", "有氧間歇（巡航）3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "長期負荷週增量（Chronic load ramp）到注意線（長期負荷的 10%，Friel 換算）：只排閾值；90–95% CP")
-ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, "Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%")
+SUB = ("sub", N_("有氧間歇（巡航）3×6 分（只排閾值）"), 3, 6, 1.5, 0.90, 0.95, False,
+       "；".join((N_("長期負荷週增量（Chronic load ramp）到注意線（長期負荷的 10%，Friel 換算）：只排閾值"), "90–95% CP")))
+ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, N_("Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%"))
 TRACK_LABEL = {"z3": "3 區（有氧間歇）", "z5": "5 區（VO2max 間歇）"}
 
 
@@ -352,16 +356,18 @@ def ua_gap_method(ae: dict, lt: dict) -> dict:
     """The ua_gap method on aet_info / lthr_info: unlocked / locked / missing
     (evaluate's method("ua_gap") and the Zone 5 path aet_ua_gap)."""
     if not ae.get("measured"):
-        return {"state": "missing", "verdict": "沒有實測 AeT，差距法算不出來"}
+        return {"state": "missing", "verdict": _("沒有實測 AeT，差距法算不出來")}
     if lt.get("value") is None or lt.get("default"):
-        return {"state": "missing", "verdict": "LTHR 還是出廠預設值，差距法算不出來"}
+        return {"state": "missing", "verdict": _("LTHR 還是出廠預設值，差距法算不出來")}
     g = ua_gap(ae["value"], lt["value"])
-    txt = f"AeT {ae['value']:.0f} / LTHR {lt['value']:.0f}：差距 {g * 100:.0f}%"
+    # SP-748: in the request's language (the 5 區 card's 「UA 差距法」 row)
+    txt = _("AeT {aet} / LTHR {lthr}：差距 {gap}%", aet=f"{ae['value']:.0f}", lthr=f"{lt['value']:.0f}",
+            gap=f"{g * 100:.0f}")
     if g <= UA_GAP_MAX:
-        return {"state": "unlocked", "verdict": f"{txt} ≤ 10%：可以加 Zone 3",
-                "prefix": f"AeT–LTHR 差距 {g * 100:.0f}% ≤ 10%：", "gap": g}
-    return {"state": "locked", "verdict": f"{txt}（> 10%，有氧不足）",
-            "action": "繼續基礎：輕鬆跑壓在 AeT 以下＋坡衝刺（3 區照排）；聚合估計不準或偏移時再測 AeT", "gap": g}
+        return {"state": "unlocked", "verdict": _("{txt} ≤ 10%：可以加 Zone 3", txt=txt),
+                "prefix": _("AeT–LTHR 差距 {gap}% ≤ 10%：", gap=f"{g * 100:.0f}"), "gap": g}
+    return {"state": "locked", "verdict": _("{txt}（> 10%，有氧不足）", txt=txt),
+            "action": _("繼續基礎：輕鬆跑壓在 AeT 以下＋坡衝刺（3 區照排）；聚合估計不準或偏移時再測 AeT"), "gap": g}
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +430,8 @@ def friel_check(ds, today: dt.date, aet: Optional[float]) -> dict:
                       **_band_fields(dr)})
     WR._flush(ds)
     if not cands:
-        return {"state": "missing", "reason": f"8 週內沒有 ≥ 60 分鐘、平均心率 {lo:.0f}–{hi:.0f} 的平路穩定跑"}
+        return {"state": "missing", "reason": _("8 週內沒有 ≥ 60 分鐘、平均心率 {lo}–{hi} 的平路穩定跑",
+                                                lo=f"{lo:.0f}", hi=f"{hi:.0f}")}
     good = [c for c in cands if c["drift"] < FRIEL_GOOD]
     if good:
         return {"state": "unlocked", "run": good[-1]}
@@ -895,7 +902,7 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     its rows are skipped. {"outcome": None} without CP / a %CP band."""
     planned, lo = int(spec[2]), spec[5]
     if not cp or lo is None or not planned:
-        return {"outcome": None, "why": "沒有 CP 或目標功率帶"}
+        return {"outcome": None, "why": _("沒有 CP 或目標功率帶")}
     from backend.engine import interval_calib as IC
     last_fade = last_fade_for(spec[3])            # SP-526: Allen's table by the rep length (spec[3], min)
     floor = IC.in_band_tol() * lo * cp            # IN_BAND_TOL or the athlete's own
@@ -912,19 +919,21 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     # SP-110: the power part alone — every rep in band, or only the last one ≤ the allowed fall off
     power_ok = done >= 1 and (miss is None or (miss == planned and (vfade is None or vfade >= -last_fade)))
     base = {"first_miss": miss, "done": round(done, 2), "fade": fade, "last_fade": last_fade, "power_ok": power_ok}
+    # the why texts are msgids: the week's dose note quotes one in a session's 說明 (SP-905)
     if miss == 1:
-        return {**base, "outcome": "too_high", "why": f"第 1 趟就沒到 {floor:.0f} W：目標功率下修 5%"}
+        return {**base, "outcome": "too_high", "why": _("第 1 趟就沒到 {w:.0f} W：目標功率下修 5%", w=floor)}
     if done < 1 or (miss is not None and 2 <= miss <= planned - 1):
         return {**base, "outcome": "unadapted",
-                "why": f"第 {miss} 趟掉出目標帶（共 {planned} 趟）" if done >= 1 else f"只完成 {len(ps)}/{planned} 趟"}
+                "why": _("第 {i} 趟掉出目標帶（共 {n} 趟）", i=miss, n=planned) if done >= 1
+                else _("只完成 {k}/{n} 趟", k=len(ps), n=planned)}
     at60 = [b.get("hr_at60") for b in bouts[:planned] if b.get("hr_at60") is not None]
     if aet and at60:
         share = sum(1 for h in at60 if h <= aet) / len(at60)
         if share < AET60_MIN_SHARE:
-            return {**base, "outcome": "border", "why": f"休息 60 秒心率回到 AeT 以下只有 {share * 100:.0f}% 的趟"}
+            return {**base, "outcome": "border", "why": _("休息 60 秒心率回到 AeT 以下只有 {pct:.0f}% 的趟", pct=share * 100)}
     if miss == planned and vfade is not None and vfade < -last_fade:
-        return {**base, "outcome": "border", "why": f"只有最後一趟沒到、掉 {-vfade * 100:.0f}%：同一份課表再做一次"}
-    return {**base, "outcome": "met", "why": "每一趟都在目標帶" if miss is None else
+        return {**base, "outcome": "border", "why": _("只有最後一趟沒到、掉 {pct:.0f}%：同一份課表再做一次", pct=-vfade * 100)}
+    return {**base, "outcome": "met", "why": _("每一趟都在目標帶") if miss is None else
             _("只有最後一趟略掉（≤ {p:.0%}，{basis}）", p=last_fade, basis=_(SRC_LAST_FADE))}
 
 
@@ -1052,7 +1061,7 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
         if h.get("bouts") and h.get("cp"):
             o = interval_outcome(h["bouts"], judged_spec(spec, h.get("judge")), h["cp"], aet)
         else:
-            o = {"outcome": "unknown", "why": "沒有功率或 CP，無法判定達標：同一階再做一次"}
+            o = {"outcome": "unknown", "why": _("沒有功率或 CP，無法判定達標：同一階再做一次")}
         oc = o.get("outcome") or "unknown"
         r = h.get("tiz_ratio")
         if oc == "met" and r is not None and r < tiz_goal:
@@ -1096,8 +1105,13 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
            "faded": bool(last and last["outcome"] != "met"), "step": step, "met": met}
     if last is not None:
         out.update(outcome=last["outcome"], adjust=adjust,
-                   note="" if last["outcome"] == "met" else f"上次 {TRACK_LABEL[track].split('（')[0]}間歇"
-                                                            f"{OUTCOME_LABEL[last['outcome']]}（{last.get('why') or ''}）：")
+                   # the session's 說明 starts with it (interval_library.session_for; PREFIX_READ)
+                   # (未適應（目標太高）: its own msgid — a bracket inside {outcome} can't be read back)
+                   note="" if last["outcome"] == "met" else
+                   _("上次 {track}間歇未適應（目標太高）（{why}）：", track=TRACK_LABEL[track].split("（")[0],
+                     why=last.get("why") or "") if last["outcome"] == "too_high" else
+                   _("上次 {track}間歇{outcome}（{why}）：", track=TRACK_LABEL[track].split("（")[0],
+                     outcome=_(OUTCOME_LABEL[last["outcome"]]), why=last.get("why") or ""))
         if last.get("fatigue"):
             out["fatigue"] = {**last["fatigue"], "date": last.get("date")}
     return out
@@ -1298,7 +1312,8 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
             if r["state"] == "unlocked":
                 return {"state": "unlocked", "verdict": f"{run['date']} 在 AeT 附近跑 ≥ 60 分鐘，飄移 {run['drift'] * 100:.1f}% < 5%"
                                                         + heat_suffix(run, True),
-                        "prefix": f"Friel 飄移 {run['drift'] * 100:.1f}% < 5%（{run['date']}）：", "run": run}
+                        "prefix": _("Friel 飄移 {d:.1f}% < 5%（{date}）：", d=run["drift"] * 100, date=run["date"]),
+                        "run": run}
             return {"state": "locked", "verdict": f"8 週內在 AeT 附近 ≥ 60 分鐘的平路跑，飄移都 ≥ 5%（最近 {run['drift'] * 100:.1f}%）"
                                                   + heat_suffix(run, False),
                     "action": "排一次 60–90 分鐘平路跑，心率壓在 AeT 附近" + ("，選氣溫 25 °C 以下的時段" if run.get("heat") else ""),
@@ -1311,7 +1326,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
             if r["state"] == "unlocked":
                 return {"state": "unlocked", "verdict": f"{run['date']} 90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}% < 10%"
                                                         + heat_suffix(run, True),
-                        "prefix": f"90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}% < 10%：", "run": run}
+                        "prefix": _("90 分鐘 E 跑飄移 {d:.0f}% < 10%：", d=run["drift"] * 100), "run": run}
             return {"state": "locked", "verdict": f"最近一次 90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}%（≥ 10%）"
                                                   + heat_suffix(run, False),
                     "action": "繼續低強度長跑，下次選 < 25 °C 的日子再測", "run": run}
@@ -1323,14 +1338,14 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
             if ef >= EF_PLATEAU:
                 return {"state": "locked", "info": True, "verdict": f"EF 還在進步（{ef * 100:+.0f}%）：基礎還在長，先不加"}
             return {"state": "unlocked", "verdict": f"基礎期第 {base_weeks} 週、EF 持平（{ef * 100:+.1f}%）：可以加間歇",
-                    "prefix": "EF 持平，基礎差不多了："}
+                    "prefix": _("EF 持平，基礎差不多了：")}
         if m == "weeks":
             if base_weeks is None:
                 return {"state": "missing", "verdict": "沒有基礎期起點，週數法算不出來"}
             if base_weeks <= need_weeks:
                 return {"state": "locked", "info": True, "verdict": f"基礎期第 {base_weeks} 週 / {need_weeks} 週"}
             return {"state": "unlocked", "verdict": f"基礎期第 {base_weeks} 週 > {need_weeks} 週：可以加間歇",
-                    "prefix": f"基礎期已過 {need_weeks} 週："}
+                    "prefix": _("基礎期已過 {n} 週：", n=need_weeks)}
         return {"state": "none"}
 
     # ---- resolve the mode --------------------------------------------------
@@ -1423,10 +1438,12 @@ SRC_Z3 = {
     "ratio": "推估（研究 Finding 6 的週內配置：UA 專項期 1 堂 Z3＋1 堂 Z4、Daniels 主課＋T 次課）："
              "每週 1 堂時，目標 ≤ 10 km 路跑 3 區：5 區 = 1:1，半馬以上／越野／沒有 A 賽 2:1；"
              "專項期後段（賽前第 6–3 週）往比賽強度偏（Koop、Uphill Athlete、Haugen 2022；比例為推估）",
-    "volume": "Uphill Athlete：3 區往週量 10% 進展、起步約週有氧量 5%；TftNA：每週 3 區約總時間 10%（都是每週、以時間算）；"
-              "Daniels 單次 T 課不超過週里程 10% 當旁證",
-    "share": "一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%：教練中位數（80/20 Endurance 約 20%、Campos 2022 ≤ 30%；"
-             "UA、Koop 約 10% 是保守的一端，Koop 是時數 10%、堂數 20%）",
+    # volume / share go into a session's 出處 (overview): msgids, joined by 「；」 (SP-905)
+    "volume": "；".join((N_("Uphill Athlete：3 區往週量 10% 進展、起步約週有氧量 5%"),
+                        N_("TftNA：每週 3 區約總時間 10%（都是每週、以時間算）"),
+                        N_("Daniels 單次 T 課不超過週里程 10% 當旁證"))),
+    "share": N_("一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%：教練中位數（80/20 Endurance 約 20%、Campos 2022 ≤ 30%；"
+                "UA、Koop 約 10% 是保守的一端，Koop 是時數 10%、堂數 20%）"),
 }
 
 
@@ -1648,38 +1665,41 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
     pause = z5.get("pause") or {}
     short = [r for r in cons.get("rows") or [] if not r["ok"]]
     tests = [
-        {"key": "weeks", "label": f"連續 {need} 週，每週跑 ≥ {rule['runs']} 次、沒有 ≥ {rule['gap']} 天沒跑（{tag}）",
+        # SP-748: the 5 區 card shows these rows: in the request's language
+        {"key": "weeks", "label": _("連續 {w} 週，每週跑 ≥ {runs} 次、沒有 ≥ {gap} 天沒跑（{tag}）", w=need,
+                                    runs=rule["runs"], gap=rule["gap"], tag=tag),
          "ok": bool(cons["open"]),
-         "value": (f"{cons['since']} 起達成" if cons["open"] else f"{min(cons['weeks'], need)}/{need} 週"
-                   + (f"（{short[-1]['monday'][5:]} 那週跑 {short[-1]['runs']} 次）" if short else "")),
-         "need": f"{need} 週", "src": SRC_Z3["weeks"]},
-        {"key": "xu90", "label": "徐國峰 90 分鐘測試：飄移 < 10%", "ok": True if xu_ok else (False if xs else None),
+         "value": (_("{d} 起達成", d=cons["since"]) if cons["open"] else _("{w}/{need} 週", w=min(cons["weeks"], need), need=need)
+                   + (_("（{d} 那週跑 {n} 次）", d=short[-1]["monday"][5:], n=short[-1]["runs"]) if short else "")),
+         "need": _("{n} 週", n=need), "src": SRC_Z3["weeks"]},
+        {"key": "xu90", "label": _("徐國峰 90 分鐘測試：飄移 < 10%"), "ok": True if xu_ok else (False if xs else None),
          "value": _xu_value(xu_ok or (xs[-1] if xs else None)), "need": "< 10%", "src": SRC_Z3["xu90"]},
-        {"key": "ua_gap", "label": "UA 差距法：實測 AeT，LTHR ÷ AeT − 1 ≤ 10%",
+        {"key": "ua_gap", "label": _("UA 差距法：實測 AeT，LTHR ÷ AeT − 1 ≤ 10%"),
          "ok": True if ua_ok else (False if ua["state"] == "locked" else None),
          "value": ua.get("verdict") or "", "need": "≤ 10%", "src": SRC_Z3["ua_gap"]},
     ]
     path, label = None, ""
+    # (SP-748: the 5 區 card shows the label: in the request's language)
     if mode == "none":
-        path, label = "none", "不設門檻（Seiler）"
+        path, label = "none", _("不設門檻（Seiler）")
     elif resting:
         path = None
     elif cons["open"] and not rb_from:
-        path, label = "weeks", f"連續 {need} 週規律訓練（{cons['since']} 起）"
+        path, label = "weeks", _("連續 {w} 週規律訓練（{d} 起）", w=need, d=cons["since"])
     elif xu_ok:
-        path, label = "xu90", f"90 分鐘飄移 {xu_ok['drift'] * 100:.1f}% < 10%（{xu_ok['date']}）"
+        path, label = "xu90", _("90 分鐘飄移 {drift}% < 10%（{d}）", drift=f"{xu_ok['drift'] * 100:.1f}", d=xu_ok["date"])
     elif ua_ok:
-        path, label = "ua_gap", f"UA 差距 {ua['gap'] * 100:.0f}% ≤ 10%"
+        path, label = "ua_gap", _("UA 差距 {gap}% ≤ 10%", gap=f"{ua['gap'] * 100:.0f}")
     elif state == "unlocked" and not brk:
         # under a rebuild the method was already held to evidence after it (evaluate: _rebased)
-        path, label = "method", f"間歇門檻已解鎖（{LABEL.get(mode, mode)}）"
+        path, label = "method", _("間歇門檻已解鎖（{m}）", m=_(LABEL.get(mode, mode)))
     elif (z5.get("since") and ok_after(z5.get("since"))) or z5.get("open"):
         # (SP-628 R2: the card is 「強度課表解鎖條件」 since SP-678, no longer the 5 區開放流程)
-        path, label = "z5", "有氧基礎已確認（強度課表解鎖條件的 5 區）"
+        path, label = "z5", _("有氧基礎已確認（強度課表解鎖條件的 5 區）")
     elif pause.get("kind") == "reentry_z3":
-        path, label = "reentry", "恢復期後先排 3 區"
+        path, label = "reentry", _("恢復期後先排 3 區")
     elif not brk and not rb_from and int(d3.get("met") or 0) + int(d3.get("step") or 0) > 0:
-        path, label = "track", "8 週內有 3 區達標，繼續階梯"
+        path, label = "track", _("8 週內有 3 區達標，繼續階梯")
     if resting:
         reason = f"3 區還沒解鎖：已經 {brk['days']} 天沒跑（≥ {rule['relock']} 天要重新累積；{tag}）"
     elif path:
@@ -1700,7 +1720,7 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
 
 def _xu_value(x: Optional[dict]) -> str:
     if not x:
-        return "—（還沒做過：半年內沒有 ≥ 90 分鐘的跑步）"
+        return _("—（還沒做過：半年內沒有 ≥ 90 分鐘的跑步）")
     from backend.engine import base_check as BC
     try:
         return BC.xu_text(x)
@@ -2039,7 +2059,8 @@ SRC_Z5 = {
     "xu90": "徐國峰部落格（2016-12）：平路、停 ≤ 30 秒、心率 1 區，飄移 < 10%；≤ 25 °C：台灣教練",
     "ua": SRC_UA,
     "friel": SRC_FRIEL,
-    "z3": "推估（coach-schools-zones-periodization.md R3）：近 6 週 ≥ 2 堂 3 區——UA「Start with Zone 3」、"
+    # coach-schools-zones-periodization.md R3 (the repo note stays here, not in the card's text)
+    "z3": "推估：近 6 週 ≥ 2 堂 3 區——UA「Start with Zone 3」、"
           "Pfitzinger 先 LT 後 VO2max、台灣教練先 3 區後 5 區；Daniels／CTS 順序相反，沒有 RCT，所以是軟條件",
     "aet": "Uphill Athlete（AnT/AeT − 1 ≤ 10%，AeT 用 40–60 分飄移測試量）；Friel（在 AeT 跑 ≥ 60 分，decoupling < 5%）",
     "keep": "Hickson 1982：1 區時間保有 2/3 就維持耐力；連 3 週是推估",
@@ -2215,10 +2236,10 @@ def z5_card(gate: dict, today: dt.date) -> dict:
     z = gate.get("z5") or {}
     state = z.get("state") or "unconfirmed"
     zt = gate.get("z5_gate") if isinstance(gate.get("z5_gate"), dict) else z5_track(gate)
-    out = {"state": state, "label": z.get("label") or BC.STATE_LABEL.get(state, state), "open": bool(zt["open"]),
+    out = {"state": state, "label": _(z.get("label") or BC.STATE_LABEL.get(state, state)), "open": bool(zt["open"]),
            "aet_ok": bool(zt["aet_ok"]), "since": z.get("since"), "path": z.get("path"),
            "path_label": z.get("path_label") or "", "reason": z.get("reason") or "", "text": z.get("text") or "",
-           "mode": gate.get("mode"), "mode_label": LABEL.get(gate.get("mode") or "auto", ""),
+           "mode": gate.get("mode"), "mode_label": _(LABEL.get(gate.get("mode") or "auto", "")),
            "test": gate.get("aet_test_reason"), "reentry": None, "keep": None, "z5_gate": zt}
     brk = z.get("reentry") or None
     if brk:
@@ -2360,7 +2381,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
 
     def need_src(label, need, src):
         return "\n".join(x for x in (label or "", _("需要 {x}", x=need) if need else "",
-                                     _("來源：{x}", x=src) if src else "") if x)
+                                     _("來源：{x}", x=_(src)) if src else "") if x)
 
     def item(text, ok, value="", todo="", tip="", action=None):
         return {"text": text, "ok": ok, "value": value or "", "todo": "" if ok is True else (todo or ""),
@@ -2369,7 +2390,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
     LEAD = {_("停跑後的恢復期結束")}
 
     def ladder(rows, at: int, active: bool):
-        return [item(r[1], at > i, "", _("完成 1 堂「{t}」，達標就往上一階", t=r[1]) if at == i else "", "",
+        return [item(_(r[1]), at > i, "", _("完成 1 堂「{t}」，達標就往上一階", t=_(r[1])) if at == i else "", "",
                      _rung_action(r[0]) if at == i and active else None) for i, r in enumerate(rows)]
 
     # ---- 三區軌 -------------------------------------------------------------------------
@@ -2378,7 +2399,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
     if state == "reentry" and R:
         s1.append(item(_("停跑後的恢復期結束"), False, _("停跑 {d} 天", d=R["days"]),
                        _("還剩 {n} 天：{date} 前只排輕鬆跑", n=R["days_left"], date=R["quality_from"]),
-                       (R.get("text") or "") + "\n" + _("來源：") + R["src"]))
+                       (R.get("text") or "") + "\n" + _("來源：") + _(R["src"])))
     if G.get("open"):
         if G.get("path_label"):
             s1.append(item(_("3 區已解鎖"), True, G["path_label"]))
@@ -2395,7 +2416,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
         note1 = _("3 區解鎖：三選一")
     lo, hi = z1_target_min()
     tip1 = _("輕鬆跑（1 區）打底。參考：每週約 {lo}–{hi} 分鐘 1 區", lo=f"{lo:.0f}", hi=f"{hi:.0f}") + \
-        "\n" + _("來源：") + SRC_Z5["week"]
+        "\n" + _("來源：") + _(SRC_Z5["week"])
     done1 = state != "reentry" and bool(G.get("open"))
     s2 = ladder(Z3, step, done1)
     tip2 = (_("3 區解鎖後、護欄通過就照排，5 區開放後也照排") + "\n"
@@ -2414,7 +2435,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
     if state == "reentry" and R:
         s3.append(item(_("停跑後的恢復期結束"), False, _("停跑 {d} 天", d=R["days"]),
                        _("還剩 {n} 天：{date} 前只排輕鬆跑", n=R["days_left"], date=R["quality_from"]),
-                       (R.get("text") or "") + "\n" + _("來源：") + R["src"]))
+                       (R.get("text") or "") + "\n" + _("來源：") + _(R["src"])))
     short = {"aet_ua_gap": _("AeT＋LTHR 實測：差距 ≤ 10%"), "aet_friel_drift": _("AeT 附近 Friel 飄移 < 5%")}
     if B.get("ok") or state == "open":
         s3.append(item(_("不設門檻（Seiler）") if state == "open" else _("實測 AeT 已通過"), True,
@@ -2427,9 +2448,9 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
     # the soft 「3 區先」 (推估): the Zone 3 track's next session is what ticks it
     soft_val = (_("5 區階梯進行中") if Z3s.get("under_way") and Z3s["done"] < Z3s["need"]
                 else f"{Z3s['done']}/{Z3s['need']}")
-    soft_todo = (_("完成 1 堂 3 區（「{t}」）", t=Z3[min(step, len(Z3) - 1)][1]) if done1 else _("先解鎖 3 區"))
+    soft_todo = (_("完成 1 堂 3 區（「{t}」）", t=_(Z3[min(step, len(Z3) - 1)][1])) if done1 else _("先解鎖 3 區"))
     s3.append(item(_("近 {w} 週做過 ≥ {n} 堂 3 區（推估）", w=Z5_Z3_DAYS // 7, n=Z5_Z3_NEED), bool(Z3s["ok"]),
-                   soft_val, soft_todo, _("來源：") + Z3s["src"],
+                   soft_val, soft_todo, _("來源：") + _(Z3s["src"]),
                    _rung_action(Z3[min(step, len(Z3) - 1)][0]) if done1 else None))
     if pk == "reentry_z3":
         left = max(0, int(pause.get("need") or 1) - int(pause.get("done") or 0))
@@ -2442,7 +2463,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
         lw = K.get("last_week")
         s3.append(item(_("維持：每週 1 區 ≥ {m} 分", m=f"{K['line_min']:.0f}"), bool(K.get("ok")),
                        _("上週 {m} 分", m=f"{lw['z1_min']:.0f}") if lw else "",
-                       _("1 區時間連 3 週低於這條線，5 區會暫停"), _("來源：") + K["src"]))
+                       _("1 區時間連 3 週低於這條線，5 區會暫停"), _("來源：") + _(K["src"])))
     if pk == "z1":
         line = f"{K['line_min']:.0f}" if K and K.get("line_min") else "?"
         note3 = _("暫停：每週 1 區時間連 3 週低於確認時的 2/3（{m} 分），要重新做 AeT 測試", m=line)
@@ -2466,7 +2487,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
         {"key": "z5_gate", "title": _("5 區解鎖"), "sub": _("一定要實測 AeT") if not done3 else "", "items": s3,
          "done": done3, "any": any3, "any_label": _("實測 AeT：二選一，做了且達標") if len(any3) > 1 else "",
          "unlocks": _("5 區間歇可以排：每趟 2–5 分、一週最多 2 次、隔 ≥ 2 天"),
-         "tip": _("90 分鐘測試量不出 AeT 數字，只算 3 區的關卡") + "\n" + _("來源：{x}", x=SRC_Z5["aet"]),
+         "tip": _("90 分鐘測試量不出 AeT 數字，只算 3 區的關卡") + "\n" + _("來源：{x}", x=_(SRC_Z5["aet"])),
          "note": note3, "note_tip": tip_note3, "notes": notes3},
         {"key": "z5", "title": _("5 區階梯"), "sub": _("V1–V4"), "items": s4, "done": False,
          "unlocks": _("之後維持：V3／V4 輪替；3 區照排"), "tip": _("每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天"), "note": ""},
@@ -2958,38 +2979,50 @@ def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = No
     use_hr = bool(lthr) and not lthr_default          # LTHR still WKO5's default → power / RPE only
     from backend.engine.hr_profile import class_hr
     zb = class_hr(th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None, _HR_CLASS.get(key))
+    hr_txt = lambda a, b: _("心率 {lo}–{hi} bpm", lo=a, hi=b)
     if key == "z3":
         work = zone3_work(hours, reps)
         title = f"Zone 3 間歇 {reps}×{work} 分"
-        parts = [f"心率 {zb[0]}–{zb[1]} bpm"] if zb else [f"心率 {aet:.0f}–{lthr:.0f} bpm"] if aet and lthr \
-            else ["心率 AeT–LTHR"]
-        what = (f"心率在 Zone 3（{zb[0]}–{zb[1]} bpm），總量約 {reps * work} 分（週有氧量的 5%）" if zb else
-                f"心率在 AeT–LTHR（Zone 3），總量約 {reps * work} 分（週有氧量的 5%）")
+        parts = [hr_txt(zb[0], zb[1])] if zb else [hr_txt(f"{aet:.0f}", f"{lthr:.0f}")] if aet and lthr \
+            else [_("心率 AeT–LTHR")]
+        what = (_("心率在 Zone 3（{lo}–{hi} bpm），總量約 {m} 分（週有氧量的 5%）", lo=zb[0], hi=zb[1], m=reps * work)
+                if zb else _("心率在 AeT–LTHR（Zone 3），總量約 {m} 分（週有氧量的 5%）", m=reps * work))
     else:
         what = f"{lo * 100:.0f}–{hi * 100:.0f}% CP"
-        parts = [f"功率 {lo * cp:.0f}–{hi * cp:.0f} W（{what}）"] if cp else [f"RPE 8（{what}）"]
+        parts = [_("功率 {lo}–{hi} W（{band}）", lo=f"{lo * cp:.0f}", hi=f"{hi * cp:.0f}", band=what)] if cp \
+            else [f"RPE 8（{what}）"]
         if zb and use_hr:
-            parts.append(f"心率 {zb[0]}–{zb[1]} bpm")    # SP-493: the class's zone of the 課表心率區間 in effect
+            parts.append(hr_txt(zb[0], zb[1]))          # SP-493: the class's zone of the 課表心率區間 in effect
         elif zb:
             pass
         elif key in ("z3a", "z3b", "sub") and aet and use_hr:
-            parts.append(f"心率 {aet:.0f}–{lthr:.0f} bpm")
+            parts.append(hr_txt(f"{aet:.0f}", f"{lthr:.0f}"))
         elif key in _HR_FRAC and use_hr:
             a, b = _HR_FRAC[key]
-            parts.append(f"心率 {a * lthr:.0f}–{b * lthr:.0f} bpm")
+            parts.append(hr_txt(f"{a * lthr:.0f}", f"{b * lthr:.0f}"))
     fmt = lambda x: f"{x:g}"
     # Buchheit & Laursen 2013: rests < 2–3 min passive — a Zone 5 rest ≤ 2.5 min is a walk
-    how = "走路或極慢跑" if key.startswith("z5") and rest <= 2.5 else "慢跑"
+    how = _("走路或極慢跑") if key.startswith("z5") and rest <= 2.5 else _("慢跑")
+    # parts joined by 「；」, each a msgid (SP-905); the gate's prefix reads what follows it as a field (PREFIX_READ)
     if uphill:
-        body = f"上坡 {fmt(work)} 分鐘（6–10% 坡），慢跑或走下來恢復；{what}；休 {fmt(rest)} 分鐘"
+        body = (_("上坡 {m} 分鐘（6–10% 坡），慢跑或走下來恢復", m=fmt(work)) + f"；{what}；"
+                + _("休 {m} 分鐘", m=fmt(rest)))
     else:
-        body = f"{what}；休 {fmt(rest)} 分鐘（{how}）"
+        body = f"{what}；" + _("休 {m} 分鐘（{how}）", m=fmt(rest), how=how)
     # no rest after the last rep (interval-prescription.md §A5.2-3)
     minutes = int(round(15 + reps * work + (reps - 1) * rest + 10))
     rate = {"z3": 60.0, "z3a": 65.0, "z3b": 65.0, "sub": 65.0, "z3c": 68.0, "r1": 55.0}.get(key, 72.0)
     return {"id": "quality", "kind": "quality", "title": title, "minutes": minutes,
-            "target": " · ".join(parts), "detail": f"{prefix}{body}；暖身 15 分、緩和 10 分",
+            "target": " · ".join(parts), "detail": f"{prefix}{body}；" + _("暖身 15 分、緩和 10 分"),
             "source": src, "tss": minutes / 60.0 * rate}
+
+
+# 「（<the mode's LABEL>缺資料，先照護欄排）」 — one msgid per mode (no {label} field: the prefix sits a few
+# fields deep when an English page reads a session's 說明 back, SP-905)
+FALLBACK_PREFIX = {"auto": N_("（自動缺資料，先照護欄排）"), "ua_gap": N_("（Uphill Athlete 差距法缺資料，先照護欄排）"),
+                   "friel_drift": N_("（Friel 飄移法缺資料，先照護欄排）"),
+                   "xu_drift": N_("（徐國峰 90 分鐘法缺資料，先照護欄排）"), "plateau": N_("（有氧停滯法缺資料，先照護欄排）"),
+                   "weeks": N_("（週數法缺資料，先照護欄排）"), "none": N_("（不設門檻（Seiler）缺資料，先照護欄排）")}
 
 
 def prefix(gate: dict) -> str:
@@ -2997,15 +3030,34 @@ def prefix(gate: dict) -> str:
     if gate.get("state") == "unlocked":
         return gate.get("prefix", "")
     if gate.get("fallback"):
-        return f"（{LABEL.get(gate.get('mode'), '')}缺資料，先照護欄排）"
-    return "沒有 AeT 實測：照 80/20 原則每週 1 次間歇，" if gate.get("mode") == "auto" else "不設門檻：照 80/20 原則每週 1 次間歇，"
+        return _(FALLBACK_PREFIX.get(gate.get("mode"), N_("（缺資料，先照護欄排）")))
+    return _("沒有 AeT 實測：照 80/20 原則每週 1 次間歇，") if gate.get("mode") == "auto" \
+        else _("不設門檻：照 80/20 原則每週 1 次間歇，")
+
+
+# the session's 說明 is 「<prefix><what follows>」 (interval_library.session_for, session() above: no 「；」 between):
+# an English page reads such a text back by these, whose {rest} is the text after the prefix (SP-905;
+# engine/stored_text). The prefixes above, the dose note (dose_step) and overview's fallback note.
+PREFIX_READ = (
+    N_("AeT–LTHR 差距 {gap}% ≤ 10%：{rest}"), N_("Friel 飄移 {d:.1f}% < 5%（{date}）：{rest}"),
+    N_("90 分鐘 E 跑飄移 {d:.0f}% < 10%：{rest}"), N_("EF 持平，基礎差不多了：{rest}"), N_("基礎期已過 {n} 週：{rest}"),
+    N_("（自動缺資料，先照護欄排）{rest}"), N_("（Uphill Athlete 差距法缺資料，先照護欄排）{rest}"),
+    N_("（Friel 飄移法缺資料，先照護欄排）{rest}"), N_("（徐國峰 90 分鐘法缺資料，先照護欄排）{rest}"),
+    N_("（有氧停滯法缺資料，先照護欄排）{rest}"), N_("（週數法缺資料，先照護欄排）{rest}"),
+    N_("（不設門檻（Seiler）缺資料，先照護欄排）{rest}"), N_("（缺資料，先照護欄排）{rest}"),
+    N_("沒有 AeT 實測：照 80/20 原則每週 1 次間歇，{rest}"),
+    N_("不設門檻：照 80/20 原則每週 1 次間歇，{rest}"), N_("上次 {track}間歇{outcome}（{why}）：{rest}"),
+    N_("上次 {track}間歇未適應（目標太高）（{why}）：{rest}"),
+    N_("上次間歇沒有達標：{rest}"),
+)
 
 
 def source(gate: dict, spec: tuple) -> str:
     via = gate.get("via")
-    head = {"ua_gap": SRC_UA, "friel_drift": SRC_FRIEL, "xu_drift": SRC_XU, "plateau": SRC_XU + "；自訂（EF 代替 VO2max）",
-            "weeks": SRC_PALLADINO + "；Cusick 第一階段 4–8 週"}.get(via, SRC_SEILER)
-    return f"{head}；{spec[-1]}"
+    head = {"ua_gap": (SRC_UA,), "friel_drift": (SRC_FRIEL,), "xu_drift": (SRC_XU,),
+            "plateau": (SRC_XU, N_("自訂（EF 代替 VO2max）")),
+            "weeks": (SRC_PALLADINO, N_("Cusick 第一階段 4–8 週"))}.get(via, (SRC_SEILER,))
+    return "；".join([_(h) for h in head] + [spec[-1]])
 
 
 def guardrail_mode(gate: Optional[dict]) -> bool:

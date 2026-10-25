@@ -14,6 +14,15 @@ How the minutes are counted (decided for SP-364; 推估 where it says so):
     one (none under 5′); a run trimmed / edited after it was marked is split the same way at push
     time (workout_steps.carve_warm). The same for an easy-type generated structure (技術地形 RPE
     3–4); a downhill part (RPE ≥ 5) gives nothing, its own 10′ stays.
+  * **Easy-kind sessions written with their own warm-up** (SP-454, owner 2026-10-20 Q1 A): 長爬坡反覆
+    (暖身 15 in its text), 陡坡健走 (暖身 10 分平路), the 基礎期's 長爬坡有氧 (its structure's 平路暖身 10)
+    follow the next rule, not this one: the warm-up is topped up to N, the climbs / the steep part / the
+    cool-down are not cut, the session gets longer (minutes + TSS at the easy-run rate). The text says
+    the one warm-up time (no 「含暖身 N 分」; a mark from before is dropped), the 長爬坡有氧's title
+    「{m}′」 its new minutes, and the structure the watch gets has that warm-up (workout_steps
+    _climb_items / _steep_items read it from the text). Before, they were taken for easy runs: two
+    warm-up times in the text, the climbs' pushed warm-up stayed 15′, the others lost 10′ of their
+    main part.
   * **The easy-run count never changes** (owner 2026-10-08): the minutes the warm-up adds to the
     week's other sessions (apply_sized) come out of the easy runs evenly, but their number is counted
     on the minutes they would have without the preference (week_plan, projection.week_sessions,
@@ -125,6 +134,79 @@ def _carve(s: dict, n: int) -> bool:
     return True
 
 
+def _own_kind(s: dict) -> Optional[str]:
+    """SP-454: an easy-kind session written with a warm-up of its own — "climb" 長爬坡反覆 (暖身 15 in
+    its text), "steep" 陡坡健走 (暖身 10 分平路), "base_climb" the 基礎期's 長爬坡有氧 (its stored
+    structure's 平路暖身) — or None."""
+    from backend.engine import workout_steps as WS
+    from backend.engine.base_climb import ID as BASE_CLIMB_ID
+    if s.get("kind") != "easy":
+        return None
+    if WS.climb_reps(s):
+        return "climb"
+    if WS.steep_walk(s):
+        return "steep"
+    st = s.get("steps")
+    if isinstance(st, dict) and s.get("id") == BASE_CLIMB_ID:
+        return "base_climb"
+    return None
+
+
+def _unmark(s: dict) -> bool:
+    """Drop a 「含暖身 N 分」 a session with its own warm-up got before SP-454; True when there was one."""
+    det = s.get("detail") or ""
+    if not MARK_RE.search(det):
+        return False
+    s["detail"] = re.sub(r"；?" + MARK_RE.pattern, "", det, count=1)
+    return True
+
+
+def _own_text(s: dict, n: int, rate: float, own: int) -> bool:
+    """長爬坡反覆 / 陡坡健走 (SP-454, owner 2026-10-20 Q1 A — the 「已有暖身的課」 rule): the text's
+    「暖身 N 分」 (`own` minutes when it has none) topped up to `n`; the main part and the cool-down
+    stay, the session is longer by the minutes added (workout_steps._climb_items / _steep_items read
+    the warm-up from the text, so the structure the watch gets has it)."""
+    unmarked = _unmark(s)
+    det = s.get("detail") or ""
+    m = WARM_RE.search(det)
+    cur = int(m.group(1)) if m else own
+    if cur >= n:
+        return unmarked
+    s["detail"] = (WARM_RE.sub(WARM_TEXT.format(n=n), det, count=1) if m
+                   else (det + "；" if det else "") + WARM_TEXT.format(n=n))
+    _grow(s, n - cur, rate)
+    return True
+
+
+EACH_RE = re.compile(r"暖身、緩和各\s*(\d+)\s*分")      # base_climb.session_fields' walking-down text
+EACH_TEXT = N_("暖身 {n} 分、緩和 {c} 分")           # the token the parsers read, as WARM_TEXT (SP-905: a msgid)
+BASE_TITLE_RE = re.compile(r"(長爬坡有氧\s*)(\d+)(′)")   # base_climb.session_fields' 「長爬坡有氧 {m}′」
+
+
+def _own_steps(s: dict, n: int, rate: float) -> bool:
+    """The 長爬坡有氧 (SP-454, the same rule): its structure's warm-up topped up in front
+    (workout_steps.ensure_warm), the climb / run-down / walk down not cut; the minutes, the TSS, the
+    title's 「{m}′」 and the detail's warm-up follow."""
+    from backend.engine import workout_steps as WS
+    unmarked = _unmark(s)
+    st = s["steps"]
+    items, add = WS.ensure_warm(st.get("items") or [], n * 60)
+    if not add:
+        return unmarked
+    s["steps"] = {**st, "items": items}
+    _grow(s, add / 60.0, rate)
+    warm = int(round((WS.lead_warm_s(items) or 0) / 60.0))
+    det = s.get("detail") or ""
+    if EACH_RE.search(det):
+        det = EACH_RE.sub(lambda x: EACH_TEXT.format(n=warm, c=x.group(1)), det, count=1)
+    elif WARM_RE.search(det):
+        det = WARM_RE.sub(WARM_TEXT.format(n=warm), det, count=1)
+    s["detail"] = det
+    s["title"] = BASE_TITLE_RE.sub(lambda x: f"{x.group(1)}{s['minutes']}{x.group(3)}", s.get("title") or "",
+                                   count=1)
+    return True
+
+
 def _text(s: dict, n: int, rate: float) -> bool:
     """An interval / test whose warm-up is in its text (「暖身 N 分」): top it up to `n`."""
     det, tgt = s.get("detail") or "", s.get("target") or ""
@@ -223,6 +305,12 @@ def apply_one(s: dict, prefs, rates: Optional[dict] = None) -> bool:
     if not n or s.get("done") or kind in SKIP_KINDS or str(s.get("id") or "").startswith("walkrun"):
         return False
     rate = _rate(rates)
+    own = _own_kind(s)                  # SP-454: an easy-kind session with a warm-up of its own
+    if own == "base_climb":
+        return _own_steps(s, n, rate)
+    if own in ("climb", "steep"):
+        from backend.engine import workout_steps as WS
+        return _own_text(s, n, rate, (WS.CLIMB_WARM_S if own == "climb" else WS.STEEP_WARM_S) // 60)
     if s.get("steps"):
         return _steps(s, n, rate)
     if kind == "quality" and s.get("variant_key"):
@@ -257,7 +345,7 @@ def apply_sized(sessions: list, prefs, rates: Optional[dict] = None) -> float:
     return extra
 
 
-FIELDS = ("minutes", "tss", "detail", "target", "variant_adj", "steps")
+FIELDS = ("minutes", "tss", "detail", "target", "variant_adj", "steps", "title")    # title: 長爬坡有氧 {m}′ (SP-454)
 
 
 def apply_objs(sessions: list, prefs, rates: Optional[dict] = None) -> float:
@@ -267,7 +355,7 @@ def apply_objs(sessions: list, prefs, rates: Optional[dict] = None) -> float:
         return 0.0
     extra = 0.0
     for s in sessions:
-        d = {k: getattr(s, k, None) for k in ("id", "kind", "title", "done", "heat", "protocol", "variant_key",
+        d = {k: getattr(s, k, None) for k in ("id", "kind", "done", "heat", "protocol", "variant_key",
                                               "variant_reps", "variant_blocks") + FIELDS}
         if d.get("done") or not isinstance(d.get("kind"), str):
             continue

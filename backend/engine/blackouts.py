@@ -38,6 +38,8 @@ import uuid
 from dataclasses import asdict, dataclass
 from typing import Callable, Iterable, Optional
 
+from backend.i18n import M_, N_
+
 KEY = "plan.blackouts"
 KINDS = ("", "rest")
 REST = "rest"
@@ -46,9 +48,10 @@ MAX_SPAN = 62                     # days in one range
 MAX_LABEL = 30
 HARD = {"long", "quality", "test", "hike"}
 
-NOTE = "{rng} 不排課{lbl}，本週少 {h} 小時"
-NOTE_STEP = ("上週 {rng} 不排課，實際只練了 {done:.1f} 小時：本週依「週量增幅 ≤ 10%（至少 +0.5 h）」"
-             "從實際量起算，上限 {cap:.1f} 小時，不直接跳回原本的量")
+NOTE = N_("{rng} 不排課，本週少 {h} 小時")
+NOTE_LABEL = N_("{rng} 不排課（{lbl}），本週少 {h} 小時")          # lbl: the ranges' own labels, as written
+NOTE_STEP = N_("上週 {rng} 不排課，實際只練了 {done:.1f} 小時：本週依「週量增幅 ≤ 10%（至少 +0.5 h）」"
+               "從實際量起算，上限 {cap:.1f} 小時，不直接跳回原本的量")
 
 
 @dataclass(frozen=True)
@@ -197,9 +200,9 @@ def week_note(bmap: dict, lost: list[dt.date], lost_h: float, extra: str = "") -
         lb = bmap[d.isoformat()].label
         if lb and lb not in labels:
             labels.append(lb)
-    lbl = f"（{'、'.join(labels)}）" if labels else ""
-    return {"level": "info", "src": "blackout",
-            "text": NOTE.format(rng=range_text(lost), lbl=lbl, h=f"{lost_h:.1f}") + extra}
+    text = M_(NOTE_LABEL, rng=range_text(lost), lbl="、".join(labels), h=f"{lost_h:.1f}") if labels else \
+        M_(NOTE, rng=range_text(lost), h=f"{lost_h:.1f}")
+    return {"level": "info", "src": "blackout", "text": text + extra if extra else text}
 
 
 def step_cap(last_done: float) -> float:
@@ -209,7 +212,7 @@ def step_cap(last_done: float) -> float:
 
 def step_note(prev_lost: list[dt.date], last_done: float, cap: float) -> dict:
     return {"level": "info", "src": "blackout",
-            "text": NOTE_STEP.format(rng=range_text(prev_lost), done=last_done, cap=cap)}
+            "text": M_(NOTE_STEP, rng=range_text(prev_lost), done=last_done, cap=cap)}
 
 
 # ---------------------------------------------------------------------------

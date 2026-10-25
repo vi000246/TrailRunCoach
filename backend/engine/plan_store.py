@@ -56,6 +56,10 @@ LEGACY_TITLES = {"長時間輕鬆": "LSD", "長時間輕鬆（山路）": "LSD�
 FAMILIES = ("aerobic", "vo2max", "speed")
 # a new 強度課's title by the family picked in the editor (until you type your own or insert a template)
 FAMILY_TITLES = {"aerobic": DEFAULT_TITLES["quality"], "vo2max": "VO2max 間歇", "speed": "速度"}
+# the 課表 dialog's title by type and terrain while the title is still an automatic one (plan_prefs'
+# titles; the page shows them in its language, SP-839)
+AUTO_TITLES = {"easy": {"road": "輕鬆跑", "trail": "輕鬆越野跑"}, "long": {"road": "LSD（路跑）", "trail": "LSD（山路越野）"},
+               "hike": {"trail": "越野跑"}}
 
 
 def display_title(title, kind: Optional[str] = None):

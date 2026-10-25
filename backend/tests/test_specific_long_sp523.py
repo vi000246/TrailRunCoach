@@ -54,14 +54,19 @@ def _long(ss):
 @pytest.mark.parametrize("km,hours", [(10.0, 50 / 60), (21.0975, 1.75)])
 def test_short_road_race_long_run_not_below_the_base_phase(km, hours):
     """Reproduction: a 10K at 賽前第 4 週 was 45 min / 7.9 km (half marathon 95 min) while the same
-    week as a base week has a 105-min long run."""
+    week as a base week has a 105-min long run. SP-523 R1 (owner 2026-10-20, Q1-3): the lift stops at 130 %
+    of the race distance — the half marathon gets the base long run (105 min < its 157-min ceiling), the 10K
+    stops at the ceiling (75 min ≈ 13 km, the base 105 min was 183 %)."""
     _, base = _wp(km, hours, RACE_BASE)
     plan, wp = _wp(km, hours, RACE_W4)
     assert base["phase"] == "base" and wp["phase"] == "specific" and wp["specific"]["weeks_out"] == 4
     assert wp["target"]["hours"] == pytest.approx(base["target"]["hours"])     # same week volume
     b, s = _long(base["sessions"]), _long(wp["sessions"])
-    assert s["minutes"] >= b["minutes"]
+    top = SP.ROAD_SHORT_MAX_SHARE * hours * 60 * SP.ROAD_EASY_SLOW            # 130 % of the km at long-run pace
+    assert s["minutes"] >= min(b["minutes"], top) - 2.5                         # sessions round to 5 min
+    assert s["minutes"] <= top + 2.5
     assert s["distance_km"] > 0.8 * km                                         # more than the old 80 % share
+    assert s["distance_km"] <= SP.ROAD_SHORT_MAX_SHARE * km + 0.5
     assert "賽事距離的" in s["detail"] and "基礎期" in s["detail"]
     # the projected 專項期 build weeks keep it too (a recovery week stays shorter on purpose)
     weeks = P.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 25))
@@ -77,7 +82,9 @@ def test_long_minutes_floor_only_for_short_road_races():
     assert SP.long_minutes(info, 150) == pytest.approx(old)                   # no week given: as before
     base = SP.base_long_minutes(400, 150)
     assert base == pytest.approx(min(0.30 * 400, 150 * 1.10))
-    assert SP.long_minutes(info, 150, week_min=400) == pytest.approx(base)
+    # lifted to the base long run, ≤ 130 % of the 10 km at long-run pace (SP-523 R1: the ceiling wins, 75 < 120)
+    top = SP.ROAD_SHORT_MAX_SHARE * 10.0 * 5.0 * SP.ROAD_EASY_SLOW
+    assert SP.long_minutes(info, 150, week_min=400) == pytest.approx(min(base, top)) == pytest.approx(top)
     # ≤ the +10 % step all the same (SP-66): a short history caps it
     assert SP.long_minutes(info, 40, week_min=400) == pytest.approx(60 * SP.STEP)
     # the marathon: its share is already longer — unchanged
@@ -89,6 +96,71 @@ def test_long_minutes_floor_only_for_short_road_races():
     # a short 越野賽 (≤ 3 h) is left as it was (owner 2026-10-14)
     tr = {"active": True, "frac": SP.FRAC[4], "race": {"day": {"hours": 1.0, "km": 10.0}}, "sport": "trail"}
     assert SP.long_minutes(tr, 150, week_min=400) == SP.long_minutes(tr, 150) == pytest.approx(60 * 0.80)
+
+
+# ---- 1b. SP-523 R1 (owner 2026-10-20): a 越野 athlete's road A race; the 130 % ceiling -------------------
+
+@pytest.mark.parametrize("km,hours", [(10.0, 50 / 60), (21.0975, 1.75)])
+def test_trail_athlete_short_road_a_race_gets_the_floor(km, hours):
+    """Q1-2: 主要訓練項目 越野, A race a road race ≤ 21.1 km — the 越野 path (FRAC × the race time) gave a 10K's
+    賽前第 4 週 0.80 × 50 = 40 min; the race's kind decides, so it gets the same floor (≤ 130 % of the race)."""
+    _, base = _wp(km, hours, RACE_BASE, sport="trail")
+    _, wp = _wp(km, hours, RACE_W4, sport="trail")
+    assert wp["specific"]["sport"] == "trail" and wp["specific"]["weeks_out"] == 4
+    b, s = _long(base["sessions"]), _long(wp["sessions"])
+    old = SP.FRAC[4] * hours * 60                                              # 40 / 84 min before
+    top = SP.ROAD_SHORT_MAX_SHARE * hours * 60                                 # 越野 path: 130 % of the race time
+    assert s["minutes"] > old + 5
+    assert s["minutes"] == pytest.approx(min(b["minutes"], top), abs=2.5)       # 10K 65 (ceiling), half 105 (base)
+    assert "基礎期" in s["detail"]
+    # a short 越野賽 (kind 'race') on the same path is left alone (owner 2026-10-14: ≤ 3-h trail races unchanged)
+    tr = {"active": True, "frac": SP.FRAC[4], "sport": "trail",
+          "race": {"kind": "race", "day": {"hours": hours, "km": km}}}
+    assert SP.long_minutes(tr, 150, week_min=400) == SP.long_minutes(tr, 150)
+    road = {**tr, "race": {"kind": "road", "day": {"hours": hours, "km": km}}}
+    assert SP.long_minutes(road, 150, week_min=400) > SP.long_minutes(road, 150)
+    # a road race over 21.1 km on the 越野 path: no floor (as on the 路跑 path)
+    mar = {**tr, "race": {"kind": "road", "day": {"hours": 3.5, "km": 42.195}}}
+    assert SP.long_minutes(mar, 150, week_min=900) == SP.long_minutes(mar, 150)
+
+
+def test_short_road_ceiling_wins_over_the_base_floor():
+    """Q1-3: the base floor put a 10K's long run at 183 % of the race distance (105 min); it now stops at
+    ROAD_SHORT_MAX_SHARE (130 %, Higdon's 8 mi ≈ 129 %). When the two disagree the ceiling wins (it exists to stop
+    that lift), but it never cuts the ROAD_FRAC share, never goes under 60 min, and the +10 % step still wins."""
+    assert SP.ROAD_SHORT_MAX_SHARE == 1.30
+    pace = 5.0 * SP.ROAD_EASY_SLOW                                             # 10K in 50 min, long-run pace
+    info = {"active": True, "frac": SP.ROAD_FRAC[4], "sport": "road", "race": {"day": {"hours": 50 / 60, "km": 10.0}}}
+    base = SP.base_long_minutes(400, 150)                                      # 120 min
+    top = SP.short_road_ceiling(info)
+    assert top == pytest.approx(1.30 * 10.0 * pace)                            # 74.75 min ≈ 13 km
+    assert base > top and SP.long_minutes(info, 150, week_min=400) == pytest.approx(top)
+    # the floor below the ceiling: the floor (a small week: 30 % of 220 = 66 min)
+    assert SP.long_minutes(info, 150, week_min=220) == pytest.approx(66.0)
+    # never under 60 min: a 30-min 10K's 130 % is 45 min → the ceiling is the base phase's 60-min minimum
+    fast = {**info, "race": {"day": {"hours": 0.5, "km": 10.0}}}
+    assert SP.short_road_ceiling(fast) == SP.BASE_LONG_MIN
+    assert SP.long_minutes(fast, 150, week_min=400) == pytest.approx(60.0)
+    # never cuts the share: the share (80 % of the km) stays when it is above the floor
+    assert SP.short_road_lift(info, 80.0, 150, 100) == 80.0
+    # the +10 % step (SP-66) still has the last word
+    assert SP.long_minutes(info, 40, week_min=400) == pytest.approx(60 * SP.STEP)
+    # the half marathon: base 105 min < its ceiling (1.3 × 21.1 km at long-run pace ≈ 157 min) — the floor holds
+    half = {**info, "race": {"day": {"hours": 1.75, "km": 21.0975}}}
+    assert SP.short_road_ceiling(half) == pytest.approx(1.30 * 1.75 * 60 * SP.ROAD_EASY_SLOW)
+    assert SP.long_minutes(half, 150, week_min=350) == pytest.approx(SP.base_long_minutes(350, 150))
+    # the detail says the ceiling stopped it, in English too
+    from backend.i18n import use_locale
+    _, wp = _wp(10.0, 50 / 60, RACE_W4)
+    s = _long(wp["sessions"])
+    assert "最長約比賽距離的 130%" in s["detail"]
+    assert "130%" in SP.SRC_ROAD
+    with use_locale("en"):
+        _, wp_en = _wp(10.0, 50 / 60, RACE_W4)
+    assert "at most about 130% of the race distance" in _long(wp_en["sessions"])["detail"]
+    # the half marathon's detail has no ceiling note (the base floor, not the ceiling, set it)
+    _, wp_h = _wp(21.0975, 1.75, RACE_W4)
+    assert "最長約比賽距離" not in _long(wp_h["sessions"])["detail"]
 
 
 # ---- 2. 越野 FRAC --------------------------------------------------------------------------------------

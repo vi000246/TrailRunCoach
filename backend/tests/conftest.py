@@ -51,6 +51,36 @@ def _no_live_sync_calls():
 
 
 @pytest.fixture(autouse=True)
+def _no_live_mail(monkeypatch):
+    """Never a real mail (SP-610): no Resend key from the developer's shell, and the HTTPS POST to
+    Resend refuses unless the test installs its own fake (test_email_signup_sp610.py)."""
+    from backend.accounts import mailer
+
+    def refuse(url, headers, body, timeout):
+        raise ConnectionError(f"no live network in tests: {url}")
+    monkeypatch.delenv(mailer.ENV_KEY, raising=False)
+    monkeypatch.delenv(mailer.ENV_KEY + "_FILE", raising=False)
+    monkeypatch.setattr(mailer, "_post", refuse)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _no_live_ai(monkeypatch):
+    """Never a real (paid) model call (SP-785): no Anthropic key from the developer's shell, and the
+    HTTPS POST to the Messages API refuses unless the test installs its own fake (test_ai_qa_sp785.py)."""
+    from backend.ai import config as ai_config, qa as ai_qa
+
+    def refuse(url, headers, body, timeout):
+        raise ConnectionError(f"no live network in tests: {url}")
+    for name in (ai_config.ENV_KEY, ai_config.ENV_KEY + "_FILE", ai_config.ENV_MODEL, ai_config.ENV_LIMIT):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(ai_qa, "_post", refuse)
+    ai_qa.clear_cache()
+    yield
+    ai_qa.clear_cache()
+
+
+@pytest.fixture(autouse=True)
 def _no_live_google(monkeypatch):
     """Never a live Google sign-in call (SP-58): the token exchange and the JWKS fetch go to a
     transport that refuses, unless the test installs its own fake (test_login_sp58.py). The

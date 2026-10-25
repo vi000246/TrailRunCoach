@@ -64,8 +64,9 @@ class RawWorkout:
 
     @property
     def total_distance_m(self) -> float:
-        if len(self.distance_m) > 0:
+        if len(self.distance_m) > 0 and (np.nanmax(self.distance_m) > 0 or "total_distance" not in self.session):
             return float(np.nanmax(self.distance_m))
+        # no distance on any record (SP-833: an indoor Apple Health workout writes it on the session only)
         if "total_distance" in self.session:
             return float(self.session["total_distance"])
         return 0.0

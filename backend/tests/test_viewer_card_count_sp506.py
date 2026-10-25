@@ -77,7 +77,7 @@ def test_season_pages_ignore_the_activity():
 def test_the_header_and_load_use_the_count():
     crumb = re.search(r"function renderCrumb\(\) \{.*?\n\}", PAGE, re.S).group(0)
     assert 'n: shownCharts(d)' in crumb and "visCharts(d).length" not in crumb
-    load = re.search(r"async function load\(\) \{.*?\n\}", PAGE, re.S).group(0)
+    load = re.search(r"async function load\([^)]*\) \{.*?\n\}", PAGE, re.S).group(0)   # load(opts): SP-917
     # the old page's cards are not this page's count; the new ones are once they are on the grid
     assert load.index("delete grid.dataset.page") < load.index('grid.innerHTML = ""')
     assert load.index("grid.appendChild(card)") < load.index("grid.dataset.page = gridPage()")
