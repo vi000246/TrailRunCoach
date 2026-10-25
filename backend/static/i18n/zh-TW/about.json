@@ -52,6 +52,8 @@
   "d.nlsc.desc": "臺灣通用電子地圖、正射影像與路網圖磚，依政府資料開放授權條款－第 1 版使用。",
   "d.rudy.name": "魯地圖",
   "d.rudy.desc": "登山用地圖圖磚與等高線疊圖，依魯地圖的使用規定；底圖資料包含 OpenStreetMap。",
+  "d.baiyue.name": "百岳與小百岳",
+  "d.baiyue.desc": "成就頁的登頂偵測、路線的山名與賽事計算機的天氣地點所用的山名、海拔與座標。百岳與小百岳點位：地圖產生器（happyman，twmap.happyman.idv.tw）；百岳名單：中華民國山岳協會。",
   "d.google.name": "Google 地圖",
   "d.google.desc": "地形與道路圖磚，地圖資料 © Google。",
   "d.cwa.name": "中央氣象署開放資料",

@@ -52,6 +52,8 @@
   "d.nlsc.desc": "Taiwan e-Map, orthophoto and road tiles, used under the Open Government Data License, version 1.0 (Taiwan).",
   "d.rudy.name": "Rudy Map",
   "d.rudy.desc": "Hiking map tiles and the contour overlay, used under Rudy Map's terms; the map data includes OpenStreetMap.",
+  "d.baiyue.name": "Taiwan's 100 Peaks (Baiyue) and Little 100 Peaks",
+  "d.baiyue.desc": "Peak names, elevations and coordinates for summit detection on the achievements page, peak names on routes and the weather location in the race calculator. Points of Taiwan's 100 Peaks (Baiyue) and the Little 100 Peaks: Map Generator by happyman (twmap.happyman.idv.tw); the Baiyue list: Chinese Taipei Mountaineering Association.",
   "d.google.name": "Google Maps",
   "d.google.desc": "Terrain and road tiles; map data © Google.",
   "d.cwa.name": "Central Weather Administration (CWA) open data",

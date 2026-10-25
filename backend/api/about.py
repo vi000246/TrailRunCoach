@@ -113,6 +113,8 @@ DATA: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
              ("ODbL 1.0", "https://opendatacommons.org/licenses/odbl/1-0/"))),
     ("nlsc", (("maps.nlsc.gov.tw", "https://maps.nlsc.gov.tw/"), OGDL)),
     ("rudy", (("rudy.basecamp.tw", "https://rudy.basecamp.tw/"),)),
+    # SP-946 (SP-844 Q1 option A): data/baiyue.json — happyman's points, the 百岳 list by the 山岳協會
+    ("baiyue", (("twmap.happyman.idv.tw", "https://twmap.happyman.idv.tw/"),)),
     ("google", (("Google Maps", "https://www.google.com/maps"),)),
     ("cwa", (("opendata.cwa.gov.tw", "https://opendata.cwa.gov.tw/"), OGDL)),
     # SP-797: the forecast CWA does not give; terms ask for 「Data from MET Norway」 and the licence

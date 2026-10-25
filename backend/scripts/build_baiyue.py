@@ -3,10 +3,18 @@ Build backend/data/baiyue.json — Taiwan's 百岳 (and 小百岳) with elevatio
 coordinates, read by the achievements page (summit detection) and the race-power
 page (weather location for a 百岳 target).
 
-Source: a peak list file (e.g. a TypeScript / JSON snapshot of the published
-百岳 and 小百岳 lists) with rows `[name, ele_m, lng, lat, flags]` and
-flag bits 1 = 百岳, 2 = 小百岳 (8 = 溫泉, 16 = 古道遺跡 are not peaks and are
-skipped). The file is only *parsed* as data here — nothing in it is executed.
+Provenance (SP-946, from the SP-844 research; written into the file's `source`):
+  百岳與小百岳點位：地圖產生器（happyman，twmap.happyman.idv.tw）；百岳名單：中華民國山岳協會
+The points come from the Map Generator's point API
+(https://twmap.happyman.idv.tw/gen/api/pointdata.php?id=ALL, its `mt100` bits); the
+100 百岳 are the list drawn up by the 中華民國山岳協會 (Chinese Taipei Mountaineering
+Association). The upstream states no licence: the file keeps the attribution, the
+About page lists it (api/about.py DATA "baiyue"), see backend/data/README.md.
+
+Input: a peak list file (a TypeScript / JSON snapshot of that point API) with rows
+`[name, ele_m, lng, lat, flags]` and flag bits 1 = 百岳, 2 = 小百岳 (8 = 溫泉,
+16 = 古道遺跡 are not peaks and are skipped). The file is only *parsed* as data
+here — nothing in it is executed.
 
 Usage:
     .venv/Scripts/python.exe -m backend.scripts.build_baiyue path/to/peaks-data.ts
@@ -19,6 +27,10 @@ import sys
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[1] / "data" / "baiyue.json"
+
+SOURCE = "百岳與小百岳點位：地圖產生器（happyman，twmap.happyman.idv.tw）；百岳名單：中華民國山岳協會"
+ROWS = ("peak list rows [name, ele_m, lng, lat, flags] (flags: 1 = 百岳, 2 = 小百岳); "
+        "rank = order by elevation")
 
 FLAG_BAIYUE, FLAG_XIAO = 1, 2
 ROW = re.compile(r'\[\s*"([^"]+)"\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(\d+)\s*\]')
@@ -46,8 +58,8 @@ def build(rows) -> dict:
         raise ValueError(f"expected exactly 100 百岳, found {n}")
     peaks.sort(key=lambda p: (not p["baiyue"], -p["elevation_m"], p["name"]))
     return {
-        "source": "peak list rows [name, ele_m, lng, lat, flags] (flags: 1 = 百岳, 2 = 小百岳); "
-                  "rank = order by elevation",
+        "source": SOURCE,
+        "rows": ROWS,
         "count": {"baiyue": n, "xiaobaiyue": sum(1 for p in peaks if p["xiaobaiyue"])},
         "peaks": peaks,
     }
