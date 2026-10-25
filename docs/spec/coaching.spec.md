@@ -119,7 +119,9 @@
 
 不含：課表範本庫、路線庫、自動調整的設定與核准、賽事計算機存檔、基本資料（體重、性別、年齡）、功率來源。
 
-**看傷病紀錄關著時**，活動的回答也不帶疼痛標記：活動列表的 `pain`／`pain_area`／`injury_id`／`pain_score`、單次活動的同名欄位與 `pain_state`（`viewing.hides_injury`，`backend/accounts/viewing.py:187`；`backend/api/wko5views.py` 的 `_pain_part`、`_pain_state`、`_activity_json`），跟示範站一樣頁面不顯示疼痛欄。課表與建議裡由傷病紀錄推出來的說明（例如「右膝進行中」、傷後恢復期）不在這個開關裡（Known limits）。
+**看傷病紀錄關著時**，活動的回答也不帶疼痛標記：活動列表的 `pain`／`pain_area`／`injury_id`／`pain_score`、單次活動的同名欄位與 `pain_state`（`viewing.hides_injury`，`backend/accounts/viewing.py:189`；`backend/api/wko5views.py` 的 `_pain_part`、`_pain_state`、`_activity_json`），跟示範站一樣頁面不顯示疼痛欄。課表與建議裡由傷病紀錄推出來的說明（例如「右膝進行中」、傷後恢復期）不在這個開關裡（Known limits）。
+
+**傷病紀錄對教練一律唯讀，三個開關怎麼開都一樣**（SP-947）：建議框「看起來好了？」（`injury_done`）的「好了」會把學員的傷病標成好了，所以代看時 `POST /api/v1/overview/plan/suggestions/accept` 對 `injury_done:*` 回 403 `COACH_VIEW_READONLY`（`viewing.readonly`，`backend/accounts/viewing.py:196`；`accept_suggestion`，`backend/api/plan_sessions.py:1766`），雖然這條路由在 `plan` 開關底下；建議框那一列帶 `owner_only`，頁面把「好了」換成「只有學員本人能標成好了」（`viewing.owner_only`，`backend/accounts/viewing.py:206`；`backend/static/suggestions.js` 的 `item`）。「還沒」、✕ 只改建議框的狀態，不碰傷病紀錄，照 `plan` 開關。
 
 **修改紀錄**：每筆成功（2xx）的代改，登入閘讀一次請求與回答，摘幾個短欄位（日期、名稱、門檻數值、改了哪些欄位，不存整個請求；`summary`，`backend/accounts/viewing.py:269`）寫進 accounts.db `coach_audit`（`record`，`backend/accounts/viewing.py:294`；`coach_audit_add`，`backend/accounts/store.py:2047`）；開始／結束代看也記。每位學員留最近 500 筆（`COACH_AUDIT_KEEP`，`backend/accounts/store.py:2011`）；教練帳號刪掉時名字拿掉、紀錄留著。學員在設定 › 教練看最近 50 筆（`GET /api/v1/account/coach/edits`；`backend/static/coach_settings.js:106`）；總覽與課表頁導覽列下一行「教練 X 於 … 修改」：最近 14 天內最後一筆修改（不含開始／結束代看；`COACH_EDIT_DAYS`，`backend/api/session.py:125`），可關閉，關掉記在這台瀏覽器（`backend/static/shell.js:358`）。
 
@@ -236,6 +238,7 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 | `backend/tests/test_coach_view_sp791.py` | 代看的讀寫白名單（走過每一條路由）、撤回、站主、方案、稽核 |
 | `backend/tests/test_coach_edits_sp792.py` | 開關、代改的路由、修改紀錄、推到手錶 |
 | `backend/tests/test_coach_injury_sp822.py` | 看傷病紀錄：預設關、打開後只開讀（讀與寫各走一次全部路由）、關掉／撤回／解除後又看不到、回來的教練是關的、只影響那一條關係、活動回答的疼痛欄位跟著開關 |
+| `backend/tests/test_coach_injury_done_sp947.py` | 代看時「看起來好了？」的「好了」403、傷病沒被改、不進修改紀錄；建議框那一列的 `owner_only`；學員本人照舊能按 |
 | `backend/tests/test_coach_requests_sp823.py` | `coach_requests` |
 | e2e（`backend/tests/e2e/`） | `test_settings_coach_tab_sp789_e2e.py`、`test_coach_board_sp790_e2e.py`、`test_coach_view_sp791_e2e.py`、`test_coach_injury_sp822_e2e.py`、`test_schedule_coros_login_view_sp821_e2e.py`、`test_coach_requests_sp823_e2e.py`、`test_coach_board_sp826_e2e.py`、`test_coach_board_sort_sp827_e2e.py` |
 
@@ -249,7 +252,7 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 
 ## Open Questions
 
-- [ ] 看傷病紀錄關著時，課表與建議裡由傷病紀錄推出來的說明要不要也藏；代看時接受「看起來好了？」建議會改到傷病紀錄（SP-947，Bug，Backlog）
+- [ ] 看傷病紀錄關著時，課表與建議裡由傷病紀錄推出來的說明要不要也藏（SP-947，Needs Input；代看時「好了」會改到傷病紀錄的那一半已修）
 - [ ] 學員也是站主（user 1）時的代看範圍——程式現在一律擋（`COACH_VIEW_OWNER`，SP-791 的決定）；單還開著（SP-824，Todo）
 - [ ] 量正式站夜間重算的負載，再決定要不要只在同步過的日子算（SP-828，Todo，尚未實作）
 - [ ] 教練代管、沒有自己帳號的學員（SP-794，Backlog，尚未實作）
@@ -270,3 +273,4 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 | 2026-10-24 | feature | SP-827 | 看板排序（警示／賽事日期／課表完成度）與「只看有紅燈的」，在頁面上做、存 localStorage。commit `21affb3b` |
 | 2026-10-24 | maintenance | SP-943 | 新增 module spec：照程式反推，整理上面各張單的規則；overview.spec.md 的代看段落改成指到這裡 |
 | 2026-10-25 | feature | SP-822 | 學員可另外允許教練看傷病紀錄：`PERMS` 第三個開關 `injury`（預設關、只開讀，`READ_PERM`），關著時活動回答不帶疼痛欄位；代看時的選單與傷病紀錄頁唯讀鎖。不改資料表 |
+| 2026-10-25 | fix | SP-947 | 代看時建議框「看起來好了？」的「好了」403 `COACH_VIEW_READONLY`（不論開關，傷病紀錄對教練唯讀），那一列顯示「只有學員本人能標成好了」。由傷病推出來的課表說明要不要藏還在問 |

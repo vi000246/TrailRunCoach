@@ -1708,6 +1708,10 @@ async def suggestions(db: AsyncSession = Depends(get_db)):
     rows = await _all_suggestions(db, inp)
     kept = await _edit_dismissed(db, lambda dis: SG.prune(dis, rows, _today(inp)))
     vis = await _visible(db, inp, rows, kept)
+    from backend.accounts import viewing as VW
+    owner_only = VW.owner_only()                # SP-947: a viewing coach can't say the student's injury is healed
+    if owner_only:
+        vis = [{**r, "owner_only": owner_only} if r["type"] == "injury_done" else r for r in vis]
     shown = {r["id"] for r in vis}
     # SP-507 R1: the tests 稍後提醒 holds, whole — the 課表's 排入測試 ▸ still offers them (schedule.html sugCount)
     held = [r for r in SG.visible(rows, kept, snoozes=False) if r["id"] not in shown and r["type"] in SG.TEST_TYPES]
@@ -1759,8 +1763,21 @@ async def restore_test(body: dict = Body(...), db: AsyncSession = Depends(get_db
 
 
 @router.post("/suggestions/accept")
-@_stored_texts
 async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    # SP-947: 「好了」 on 「看起來好了？」 writes the injury log (_accept_injury_done) — the student's own, read only
+    # to a viewing coach whatever the switches (the gate lets this route through on 「改課表」). Checked out here,
+    # before _stored_texts, so the refusal is in the request's language.
+    from backend.accounts import viewing as VW
+    if str(body.get("id") or "").split(":", 1)[0] == "injury_done":
+        refused = VW.readonly()
+        if refused is not None:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(refused, status_code=403)
+    return await _accept_suggestion(body, db)
+
+
+@_stored_texts
+async def _accept_suggestion(body: dict, db: AsyncSession):
     from backend.engine import suggestions as SG
     sid, day = str(body.get("id") or ""), body.get("day")
     tpl = body.get("template") or None          # 排入測試 ▸ a template (the calendar's context menu)

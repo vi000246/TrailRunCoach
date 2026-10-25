@@ -13,7 +13,9 @@ the signed-in user (login.current_user) — but only through these rules, defaul
   writes               CALC (computations that store nothing: the race calculator, the step editor's
                        previews), STOP and signing out; SP-792's WRITE_OPEN, each under the student's
                        switch (coaching.PERMS: "plan" 課表／賽事／不排課日, "training" 門檻與訓練設定) —
-                       403 COACH_PERM_OFF while that switch is off. Any other write 403 COACH_VIEW_READONLY
+                       403 COACH_PERM_OFF while that switch is off. Any other write 403 COACH_VIEW_READONLY —
+                       inside an open route too where it would write the injury log (SP-947: the
+                       suggestion box's 「好了」 on 「看起來好了？」, injury_done; owner_only() on the row)
   every request        the link checked again (coaching: active, both accounts enabled, the coach still a
                        coach): withdrawn -> 403 COACH_VIEW_ENDED from the very next request (a page: the
                        coach's own 教練 tab, which says so)
@@ -189,6 +191,23 @@ def hides_injury() -> bool:
     that carry a run's pain mark (the activity list, an activity's card) leave INJURY_FIELDS out."""
     v = current()
     return v is not None and v.perms.get("injury") is not True
+
+
+def readonly() -> Optional[dict]:
+    """SP-947: the 403 body of a write only the student may make (the injury log), inside a route the gate
+    lets through on a switch (WRITE_OPEN) — None when nobody is viewed. Whatever the switches: 「看傷病紀錄」
+    opens reads, never a write."""
+    return None if current() is None else refusal(Verdict(False, "COACH_VIEW_READONLY"))
+
+
+OWNER_ONLY = N_("只有學員本人能標成好了")
+
+
+def owner_only() -> Optional[str]:
+    """SP-947: what the suggestion box shows a viewing coach in place of 「好了」 on 「看起來好了？」 (None when
+    nobody is viewed)."""
+    from backend.i18n import _
+    return None if current() is None else _(OWNER_ONLY)
 
 
 def caps_for(perms: dict) -> frozenset:

@@ -135,8 +135,10 @@
   // SP-515: 「不要」 on a test holds that test in every later week (settings: 不再建議的測試 → 恢復)
   const declineTip = (r) => (["test", "baseline"].includes(r.type) ? ` title="${esc(T("decline_tip_test"))}"` : "");
 
+  // SP-947: `owner_only` (a coach viewing a student, on 「看起來好了？」): only the student says it is healed — the
+  // text in place of 「好了」 (the server refuses that accept while viewing)
   function item(r) {
-    const canPick = (r.pick === "pair" || r.pick === "day") ? (r.options || []).length > 0
+    const canPick = r.owner_only ? false : (r.pick === "pair" || r.pick === "day") ? (r.options || []).length > 0
       : r.pick === "test_day" ? (r.tests || []).some((t) => (t.options || []).length) : r.pick === "confirm";
     return `<div class="sg-item" data-id="${esc(r.id)}">
       <div class="sg-tools">
@@ -148,7 +150,7 @@
       ${r.help ? `<div class="sg-help" hidden>${esc(r.help)}</div>` : ""}
       ${(r.links || []).length ? `<div class="sg-act">${r.wait_cool ? `<span class="sg-none" style="flex-basis:100%">${esc(T("wait_cool"))}</span>` : ""}
         ${r.links.map((l) => `<a class="sg-btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join("")}${r.pick ? "" : snoozeBtn(r)}</div>` : ""}
-      ${r.pick ? `<div class="sg-act">${picker(r)}
+      ${r.pick ? `<div class="sg-act">${picker(r)}${r.owner_only ? `<span class="sg-none">${esc(r.owner_only)}</span>` : ""}
         ${canPick ? `<button type="button" class="sg-btn pri" data-act="accept">${esc(r.accept_label || T("accept"))}</button>` : ""}
         <button type="button" class="sg-btn" data-act="decline"${declineTip(r)}>${esc(r.decline_label || T("decline"))}</button>${snoozeBtn(r)}</div>`
         : (r.links || []).length || !snoozeBtn(r) ? "" : `<div class="sg-act">${snoozeBtn(r)}</div>`}

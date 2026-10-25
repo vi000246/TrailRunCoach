@@ -584,7 +584,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.env.tip">From = 你平常訓練的條件（你功率量到的地方）：近 90 天跑步的中位海拔，溫濕度取那些跑步當下的歷史天氣，沒有時用你所有活動的中位溫濕度。To = 比賽日：選了賽事、日期和地點（山名、座標或 GPX 起點）就自動查預報（先用中央氣象署：登山預報 → 鄉鎮預報；中央氣象署沒有的日期或地點才用挪威氣象局），超過 9 天的日期用近 10 年同一個月（比賽日前後 15 天）的平均，含一天裡每個小時的冷熱。兩邊的差換成環境係數 M。要自己改按 ✎。</span></span></h2>
       <div class="envchips">
         <div class="echip"><span class="k"><span data-i18n="racepower.env.from">From 訓練</span> <span class="badge" id="from-badge"></span></span><b id="from-v">–</b><span class="s" id="from-s"></span></div>
-        <div class="echip"><span class="k"><span data-i18n="racepower.env.to">To 比賽日</span> <span class="badge" id="to-badge">未取得</span></span><b id="to-v">–</b><span class="s" id="wx-meta"></span><span class="s hidden" id="to-clim"></span></div>
+        <div class="echip"><span class="k"><span data-i18n="racepower.env.to">To 比賽日</span> <span class="badge" id="to-badge" data-i18n="racepower.env.not_fetched">未取得</span></span><b id="to-v">–</b><span class="s" id="wx-meta"></span><span class="s hidden" id="to-clim"></span></div>
         <button class="btn icon" id="env-edit" type="button" title="自己改 From / To" data-i18n-attr="title:racepower.env.edit">✎</button>
       </div>
       <div class="kv" id="env-kv" style="margin-top:8px"></div>
@@ -593,17 +593,17 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <a class="note hidden" id="cairn-link" target="_blank" rel="noopener noreferrer" data-i18n="racepower.env.cairn">在疊石 Cairn 看這條路線的行程與即時天氣圖層 ↗</a>
       <details id="env-adv"><summary data-i18n="racepower.env.adv">進階：自己改 From / To（藍框 = 你改過的值，清空回到自動）</summary>
       <div class="envgrid">
-        <div class="envbox"><b>From 訓練</b>
+        <div class="envbox"><b data-i18n="racepower.env.from">From 訓練</b>
           <div class="row3">
-            <label>海拔 m<input id="f-alt" type="number" step="10"></label>
-            <label>溫度 °C<input id="f-t" type="number" step="0.5"></label>
-            <label>濕度 %<input id="f-rh" type="number" step="1" min="1" max="100"></label>
+            <label><span data-i18n="racepower.env.alt_m">海拔 m</span><input id="f-alt" type="number" step="10"></label>
+            <label><span data-i18n="racepower.env.temp_c">溫度 °C</span><input id="f-t" type="number" step="0.5"></label>
+            <label><span data-i18n="racepower.env.rh_pct">濕度 %</span><input id="f-rh" type="number" step="1" min="1" max="100"></label>
           </div><div class="kv" id="f-kv"></div></div>
-        <div class="envbox"><b>To 比賽日</b>
+        <div class="envbox"><b data-i18n="racepower.env.to">To 比賽日</b>
           <div class="row3">
-            <label>海拔 m<input id="t-alt" type="number" step="10"></label>
-            <label>溫度 °C<input id="t-t" type="number" step="0.5"></label>
-            <label>濕度 %<input id="t-rh" type="number" step="1" min="1" max="100"></label>
+            <label><span data-i18n="racepower.env.alt_m">海拔 m</span><input id="t-alt" type="number" step="10"></label>
+            <label><span data-i18n="racepower.env.temp_c">溫度 °C</span><input id="t-t" type="number" step="0.5"></label>
+            <label><span data-i18n="racepower.env.rh_pct">濕度 %</span><input id="t-rh" type="number" step="1" min="1" max="100"></label>
           </div><div class="kv" id="t-kv"></div>
           <div class="toolbar" style="margin:0"><button class="btn" id="wx" data-i18n="racepower.env.refetch">重新取得比賽日天氣</button></div>
         </div>
@@ -611,7 +611,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <div id="wx-tried" class="note"></div>
       <details data-tw-only><summary data-i18n="racepower.env.cwa_summary">中央氣象署授權碼（站主設定，全站共用）</summary>
         <div class="toolbar" style="margin-top:6px"><input id="cwakey" placeholder="CWA-XXXXXXXX-…" style="max-width:260px" autocomplete="off">
-          <button class="btn" id="cwasave">儲存</button><span class="meta" id="cwastatus"></span></div>
+          <button class="btn" id="cwasave" data-i18n="racepower.env.save">儲存</button><span class="meta" id="cwastatus"></span></div>
         <div class="note" data-i18n="racepower.env.cwa_note">到 opendata.cwa.gov.tw 免費註冊 → 會員 → API 授權碼。只有站主能設定（存在站台資料夾的 weather.json，或環境變數 CWA_API_KEY）。站上所有人的賽事天氣都先用中央氣象署，同一份預報全站只下載一次、共用快取；沒有授權碼時改用挪威氣象局預報（9 天內）。</div>
       </details>
       </details>
@@ -1382,15 +1382,15 @@ function renderEnvChips() {
 }
 function renderEnv() {
   const e = LAST?.env; if (!e) { renderEnvChips(); return; }
-  const kv = (s) => `<span>氣壓 <b>${f1(s.torr)} torr</b></span><span>海拔係數 <b>${s.altitude_factor.toFixed(3)}</b></span>
-    <span>露點 <b>${f1(s.dew_c)} °C</b></span><span>熱負荷 <b>${s.heat_applies ? s.heat_penalty_pct.toFixed(1) + "%" : "無"}</b></span>`;
+  const kv = (s) => `<span>${esc(T("env.kv_torr"))} <b>${f1(s.torr)} torr</b></span><span>${esc(T("env.kv_alt"))} <b>${s.altitude_factor.toFixed(3)}</b></span>
+    <span>${esc(T("env.kv_dew"))} <b>${f1(s.dew_c)} °C</b></span><span>${esc(T("env.kv_heat"))} <b>${s.heat_applies ? s.heat_penalty_pct.toFixed(1) + "%" : esc(T("env.kv_none"))}</b></span>`;
   $("f-kv").innerHTML = kv(e.from); $("t-kv").innerHTML = kv(e.to);
   const set = (id, v, d) => { if ($(id).value === "" || $(id).dataset.auto === "1") { $(id).value = ok(v) ? v.toFixed(d) : ""; $(id).dataset.auto = "1"; } };
   set("f-alt", e.from.altitude_m, 0); set("f-t", e.from.temp_c, 1); set("f-rh", e.from.rh_pct, 0);
   $("t-alt").placeholder = f1(e.to.altitude_m); $("t-t").placeholder = f1(e.to.temp_c); $("t-rh").placeholder = f1(e.to.rh_pct);
   const M = PLAN?.summary?.M ?? e.M;
-  $("env-kv").innerHTML = `<span>環境係數 M <b class="${M < 0.97 ? "wn" : ""}">${M.toFixed(3)}</b>（功率 × M${PLAN?.course_source === "gpx" ? "，GPX 逐段海拔的平均" : ""}）</span>
-    <span>海拔影響 <b>${spct(e.altitude_pct)}</b></span><span>熱影響 <b>${spct(e.heat_pct)}</b></span>`;
+  $("env-kv").innerHTML = `<span>${esc(T("env.m_label"))} <b class="${M < 0.97 ? "wn" : ""}">${M.toFixed(3)}</b>${esc(T(PLAN?.course_source === "gpx" ? "env.m_note_gpx" : "env.m_note"))}</span>
+    <span>${esc(T("env.alt_effect"))} <b>${spct(e.altitude_pct)}</b></span><span>${esc(T("env.heat_effect"))} <b>${spct(e.heat_pct)}</b></span>`;
   renderEnvChips();
 }
 // fetch the race-day weather whenever the date and a location are known (once per date + place)
@@ -1434,16 +1434,16 @@ async function getWeather() {
       if (!$("t-alt").classList.contains("ovr")) $("t-alt").value = S.csrc === "gpx" && COURSE ? "" : v.altitude_m != null ? Math.round(v.altitude_m) : "";
     } else if (loc?.elevation != null && !loc.gpx && !$("t-alt").classList.contains("ovr")) { $("t-alt").value = Math.round(loc.elevation); }
     const d = w.detail || {};
-    $("wx-meta").textContent = v ? `白天 06–18 平均${w.fetched_at ? "，取得於 " + w.fetched_at.slice(5, 16).replace("T", " ") : ""}` +
+    $("wx-meta").textContent = v ? T("env.daytime") + (w.fetched_at ? T("env.fetched_on", { at: w.fetched_at.slice(5, 16).replace("T", " ") }) : "") +
       // SP-234: which 鄉鎮 and how far its temperature was moved (公所 height → race height)
       (d.town ? T("env.town_meta", { name: d.cwa_location, km: d.distance_km.toFixed(1), from: Math.round(d.town_elevation_m),
         to: Math.round(d.target_elevation_m), dz: (d.lapse_m >= 0 ? "+" : "−") + Math.abs(Math.round(d.lapse_m)),
         dc: (d.offset_c > 0 ? "+" : d.offset_c < 0 ? "−" : "±") + Math.abs(d.offset_c).toFixed(1) }) :
-      d.cwa_location ? `，CWA 地點 ${d.cwa_location}${d.match === "nearest" ? `（最近 ${d.distance_km.toFixed(1)} km）` : ""}` : "") +
+      d.cwa_location ? T("env.cwa_point", { name: d.cwa_location }) + (d.match === "nearest" ? T("env.cwa_nearest", { km: d.distance_km.toFixed(1) }) : "") : "") +
       (d.years ? T("env.clim_meta", { years: d.years, models: (d.models || []).length || 1 }) + (d.partial ? T("env.clim_partial") : "") : "") +
       (w.provider === "climatology" && w.hourly?.length ? T("env.clim_hourly")
-        : w.hourly?.length ? `；逐時 ${w.hourly.length} 筆，可逐段修正熱` : "；沒有逐時資料，熱用這個平均值") : T("env.none");
-    $("wx-tried").innerHTML = "嘗試：" + w.tried.map((t) => `<span class="${t.ok ? "ok" : "faint"}">${esc(t.provider)} ${t.ok ? "✓" : "✕ " + esc(t.reason || "")}</span>`).join(" → ");
+        : w.hourly?.length ? T("env.hourly_n", { n: w.hourly.length }) : T("env.no_hourly")) : T("env.none");
+    $("wx-tried").innerHTML = esc(T("env.tried")) + w.tried.map((t) => `<span class="${t.ok ? "ok" : "faint"}">${esc(t.provider)} ${t.ok ? "✓" : "✕ " + esc(t.reason || "")}</span>`).join(" → ");
     $("attrib").textContent = (d.attribution || "");
     renderWxRoute(w);
     renderEnvChips();
@@ -3226,7 +3226,7 @@ async function keyStatus() {
 }
 $("cwasave").onclick = async () => {
   try { const s = await post(`${API}/weather/key`, { key: $("cwakey").value }); $("cwakey").value = "";
-    $("cwastatus").textContent = s.configured ? `已設定 ${s.masked}` : "已清除"; } catch (e) { $("cwastatus").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+    $("cwastatus").textContent = s.configured ? T("env.cwa_saved", { masked: s.masked }) : T("env.cwa_cleared"); } catch (e) { $("cwastatus").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 };
 
 // ---------------- wiring ----------------

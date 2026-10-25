@@ -1408,27 +1408,28 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
 
     # 1. CWA
     if not use_cwa:
-        tried.append({"provider": "cwa", "ok": False, "reason": "未使用"})
+        tried.append({"provider": "cwa", "ok": False, "reason": _("未使用")})
     elif lead < 0 or lead > 6:
-        tried.append({"provider": "cwa", "ok": False, "reason": f"日期不在一週預報範圍（還有 {lead} 天）"})
+        tried.append({"provider": "cwa", "ok": False, "reason": _("日期不在一週預報範圍（還有 {n} 天）", n=lead)})
     else:
         ckey = get_key()
         if not ckey and not have_files((CWA_HOURLY, CWA_WEEKLY)):
-            tried.append({"provider": "cwa", "ok": False, "reason": "未設定 CWA 授權碼"})
+            tried.append({"provider": "cwa", "ok": False, "reason": _("未設定 CWA 授權碼")})
         else:
             for ds_id, prov in ((CWA_HOURLY, "cwa_hourly"), (CWA_WEEKLY, "cwa_weekly")):
                 if ds_id == CWA_HOURLY and lead + max(1, days) - 1 > 2:
-                    tried.append({"provider": prov, "ok": False, "reason": "超出三天預報範圍"})
+                    tried.append({"provider": prov, "ok": False, "reason": _("超出三天預報範圍")})
                     continue
                 try:
                     doc = fetch_cwa(ds_id, ckey, cache_dir=cwa_dir, get=get)
                     m = match_location(doc["locations"], name, lat, lon)
                     if m is None:
-                        tried.append({"provider": prov, "ok": False, "reason": f"{CWA_MATCH_KM:g} km 內沒有 CWA 登山預報點"})
+                        tried.append({"provider": prov, "ok": False,
+                                          "reason": _("{km:g} km 內沒有 CWA 登山預報點", km=CWA_MATCH_KM)})
                         break
                     c = cwa_day_conditions(m, date, days)
                     if c is None:
-                        tried.append({"provider": prov, "ok": False, "reason": "預報沒有涵蓋這些日期"})
+                        tried.append({"provider": prov, "ok": False, "reason": _("預報沒有涵蓋這些日期")})
                         continue
                     tried.append({"provider": prov, "ok": True})
                     return done(prov, c, {"cwa_location": m["name"], "cwa_id": m.get("id"),
@@ -1571,7 +1572,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
         c = fetch_climatology(lat, lon, elevation_m, date, days, today=today, get=get, cache_dir=cwa_dir,
                               legacy_dir=None if cache_dir else home())
     except Exception as e:                   # noqa: BLE001
-        tried.append({"provider": "climatology", "ok": False, "reason": str(e)[:120] or "沒有資料"})
+        tried.append({"provider": "climatology", "ok": False, "reason": str(e)[:120] or _("沒有資料")})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
                 "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None,
                 "sun": sun_rows(lat, lon, want)}

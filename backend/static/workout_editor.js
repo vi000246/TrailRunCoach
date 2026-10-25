@@ -239,8 +239,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   // (new strings: tr(key) / tr(key, params) with no Chinese fallback — the common catalog is always inlined)
   const KIND = { warm: tr("workout.kind.warm"), work: tr("workout.kind.work"), rest: tr("workout.kind.rest"), cool: tr("workout.kind.cool"), other: tr("workout.kind.other") };
   const TYPE = { auto: tr("workout.type.auto"), power: tr("workout.type.power"), hr: tr("workout.type.hr"), pace: tr("workout.type.pace"), rpe: "RPE", none: tr("workout.type.none") };
-  // ≈ % CP of RPE 1–10 (workout_steps.RPE_FRAC; the mini chart's height only, 推估)
-  const RPE_F = [0, 0.55, 0.62, 0.70, 0.76, 0.82, 0.88, 0.94, 1.00, 1.05, 1.10];
+  // ≈ % CP of RPE 1–10 (a copy of workout_steps.RPE_FRAC, rpe_load's five levels interpolated, SP-945;
+  // the mini chart's height only, 推估; test_rpe_frac_sp945 keeps the two equal)
+  const RPE_F = [0, 0.70, 0.74, 0.78, 0.82, 0.88, 0.92, 0.95, 1.00, 1.05, 1.10];
   const opt = (v, l, cur, extra = "") => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}${extra}>${esc(l)}</option>`;
   const q = (tip) => `<button type="button" class="qtip" aria-label="${esc(tr("workout.help"))}" data-tip="${esc(tip)}">?</button>`;
   const noTpaceText = () => tr("workout.no_tpace");

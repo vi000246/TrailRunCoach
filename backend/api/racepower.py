@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.engine.localtime import today_local
-from backend.i18n import _
+from backend.i18n import _, relocalize
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -114,7 +114,12 @@ def get_inputs(refresh: bool = False):
             cooldown.mark("racepower_inputs")
         else:
             refresh = False
-    return inputs(refresh)
+    d = inputs(refresh)
+    # SP-944: the cache is shared by every language; the From label is an M_() text shown in the request's
+    tc = d.get("training_conditions")
+    if tc and tc.get("label"):
+        d = {**d, "training_conditions": {**tc, "label": relocalize(tc["label"])}}
+    return d
 
 
 @router.get("/peaks")

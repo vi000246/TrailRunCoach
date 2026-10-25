@@ -100,8 +100,10 @@ DEFAULT_IF = {
     "very_hard": 0.95,   # session RPE rates the whole main set; 7 = start of zone 3 (≈ CP); 20–60 min can't
                          # be held at 106–120 % FTP, so just under CP; point 推估
     "max": 1.10,         # CR-10 10 maximal: above CP (Coggan L5 106–120 %, running-power interval 100–115 %);
-                         # an all-out 10–20 min ≈ 1.05–1.15; = workout_steps.RPE_FRAC[10]; point 推估
+                         # an all-out 10–20 min ≈ 1.05–1.15; point 推估
 }
+# workout_steps.RPE_FRAC (an RPE target's ≈ % CP, RPE 1–10) is these five interpolated (SP-945): change a
+# value here and the RPE target steps move with it
 IF_SRC = {
     "easy": N_("session RPE ≤ 4 是 Seiler 第一區（低於 VT1）；跑步功率輕鬆區 65–80 % CP，輕鬆跑多在上半段，取 0.74（範圍有出處，取點推估）"),
     "moderate": N_("CR-10 4 是第一區上緣（約 VT1）；Coggan 節奏區 RPE 3–4 對 76–90 % FTP，取 VT1 附近的 0.82（範圍有出處，取點推估）"),

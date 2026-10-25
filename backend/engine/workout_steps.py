@@ -168,7 +168,28 @@ REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "�
 RPE_MIN, RPE_MAX = 1, 10
 RPE_WORD = {1: N_("很輕鬆"), 2: N_("輕鬆"), 3: N_("中等"), 4: N_("有點吃力"), 5: N_("吃力"), 6: N_("吃力"), 7: N_("很累"),
             8: N_("很累"), 9: N_("很累"), 10: N_("極限")}
-RPE_FRAC = {1: 0.55, 2: 0.62, 3: 0.70, 4: 0.76, 5: 0.82, 6: 0.88, 7: 0.94, 8: 1.00, 9: 1.05, 10: 1.10}   # 推估
+
+
+def _rpe_frac_table() -> dict:
+    """RPE 1–10 → ≈ % CP, interpolated from engine/rpe_load's five levels (SP-945, SP-808 option A,
+    the user 2026-10-21): the same RPE means the same intensity as an RPE target here and as an
+    RPE-entered load. The anchors are rpe_load.DEFAULT_IF at its CR-10 values (2 0.74, 4 0.82,
+    5 0.88, 7 0.95, 10 1.10, sourced bands, points 推估); between them linear, below the lowest the
+    first segment's slope (RPE 1 0.70); rounded half up to 0.01 → 1 0.70, 2 0.74, 3 0.78 (= EASY_F),
+    4 0.82, 5 0.88, 6 0.92, 7 0.95, 8 1.00, 9 1.05, 10 1.10. The editor's chart has a copy
+    (static/workout_editor.js RPE_F; backend/tests/test_rpe_frac_sp945.py keeps the two equal)."""
+    from backend.engine.rpe_load import CR10, DEFAULT_IF
+    pts = sorted((CR10[k], DEFAULT_IF[k] * 100.0) for k in DEFAULT_IF)       # (RPE, % CP)
+    out = {}
+    for r in range(RPE_MIN, RPE_MAX + 1):
+        i = max(1, min(len(pts) - 1, next((j for j, (x, _f) in enumerate(pts) if x >= r), len(pts) - 1)))
+        (x0, f0), (x1, f1) = pts[i - 1], pts[i]
+        pct = f0 + (f1 - f0) * (r - x0) / (x1 - x0)
+        out[r] = int(pct + 0.5 + 1e-9) / 100.0          # half up (0.915 → 0.92, not banker's / float 0.91)
+    return out
+
+
+RPE_FRAC = _rpe_frac_table()     # 推估 (see _rpe_frac_table)
 RPE_EASY_MAX = 4                 # ≤ 4: below LT1 (Seiler's zone 1 by session RPE, 推估)
 RPE_HARD_MIN = 7                 # ≥ 7 很累: a hard session (workout_templates.technical_role)
 MAX_CLIMB_M = 5000

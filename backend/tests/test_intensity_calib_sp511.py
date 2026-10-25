@@ -111,7 +111,8 @@ def test_easy_never_leaves_its_bounds():
 
 def test_scale_shrinks_toward_1_and_stays_in_bounds():
     item = CAL._registry()[ICAL.SCALE]
-    rows = [{"rpe": 2, "if": 0.62 * 1.10}] * 5 + [{"rpe": 5, "if": 0.82 * 1.10}] * 5     # 10 % above the table
+    rows = ([{"rpe": 2, "if": WS.RPE_FRAC[2] * 1.10}] * 5
+            + [{"rpe": 5, "if": WS.RPE_FRAC[5] * 1.10}] * 5)            # 10 % above the table (SP-945: was 0.62 / 0.82)
     f = ICAL.fit_scale_rows(rows)
     assert f.n == 10 and f.value == pytest.approx(1.10)
     e = CAL.shrink(item, f)
@@ -123,10 +124,10 @@ def test_scale_shrinks_toward_1_and_stays_in_bounds():
 
 
 def test_scale_is_the_run_weighted_mean_of_each_values_median():
-    rows = ([{"rpe": 2, "if": x} for x in (0.60, 0.62, 0.70)]            # median 0.62 → ratio 1.0
-            + [{"rpe": 7, "if": x} for x in (0.80, 0.85, 0.90, 0.85, 0.85, 0.85)])   # median 0.85 → 0.85 / 0.94
+    rows = ([{"rpe": 2, "if": x} for x in (0.60, 0.62, 0.70)]            # median 0.62 → 0.62 / RPE_FRAC[2]
+            + [{"rpe": 7, "if": x} for x in (0.80, 0.85, 0.90, 0.85, 0.85, 0.85)])   # median 0.85 → 0.85 / RPE_FRAC[7]
     f = ICAL.fit_scale_rows(rows)
-    want = (3 * 1.0 + 6 * 0.85 / 0.94) / 9
+    want = (3 * 0.62 / WS.RPE_FRAC[2] + 6 * 0.85 / WS.RPE_FRAC[7]) / 9        # SP-945: was (3 × 1.0 + 6 × 0.85 / 0.94) / 9
     assert f.n == 9 and f.value == pytest.approx(want)
 
 

@@ -3390,6 +3390,7 @@
   "代看學員時只能看，不能改這裡": "While viewing a student you can look, not change this",
   "學員關掉了「{what}」，教練現在不能改": "The student has switched off “{what}”: their coach cannot change it now",
   "學員已撤回授權（或教練關係已結束），代看已經結束": "The student withdrew (or the coaching ended): viewing has ended",
+  "只有學員本人能標成好了": "Only the student can mark it healed",
   "站主的資料不開放代看": "The site's own account can't be viewed by a coach",
   "用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（功率 ≥ 0.95 × 88% CP 或心率 ≥ 95% LTHR，下坡不算）≥ 2.5 分的段": "Effort = a short rep ≥ 95% CP lasting ≥ 40 s (at least 3 reps), otherwise a stretch of zone 3 or above (power ≥ 0.95 × 88% CP or heart rate ≥ 95% LTHR, downhill not counted) lasting ≥ 2.5 min",
   "功率 ≥ 0.95 × 88% CP 或心率 ≥ 95% LTHR": "power ≥ 0.95 × 88% CP or heart rate ≥ 95% LTHR",
@@ -4345,5 +4346,11 @@
   "維持期這幾週的重點是閾值（3 區），但 3 區還沒解鎖或這週被護欄擋下：先排 5 區那一堂": "These maintenance weeks focus on threshold (zone 3), but zone 3 is still locked or a guardrail took it this week: the zone 5 session goes in instead",
   "維持期這幾週的重點是閾值（3 區），但 3 區還沒解鎖、5 區也還沒開放：這週只排輕鬆跑和長跑": "These maintenance weeks focus on threshold (zone 3), but zone 3 is still locked and zone 5 is not open: easy runs and the long run only this week",
   "天氣資料來源：中央氣象署；風：MET Norway（CC BY 4.0）；海拔：Open-Meteo.com（CC BY 4.0）": "Weather data: Central Weather Administration (CWA), Taiwan; wind: MET Norway (CC BY 4.0); heights: Open-Meteo.com (CC BY 4.0)",
-  "超出 {n} 天預報範圍": "Beyond the {n}-day forecast"
+  "超出 {n} 天預報範圍": "Beyond the {n}-day forecast",
+  "{km:g} km 內沒有 CWA 登山預報點": "No CWA mountain forecast point within {km:g} km",
+  "本人 {n} 次活動的中位 {t:.0f} °C／{rh:.0f} %": "median of your {n} {n|activity|activities}: {t:.0f} °C / {rh:.0f} %",
+  "預設 {t:.0f} °C／{rh:.0f} %（參考條件）": "default {t:.0f} °C / {rh:.0f} % (reference conditions)",
+  "{alt:.0f} m（預設）／{wx}": "{alt:.0f} m (default) / {wx}",
+  "近 {days} 天 {n} 次跑步的中位海拔；溫濕度：{wx}": "median altitude of {n} {n|run|runs} in the last {days} days; temperature and humidity: {wx}",
+  "Open-Meteo 歷史資料：近 {days} 天 {n} 次跑步當下的平均溫濕度": "Open-Meteo historical weather: the mean temperature and humidity during {n} {n|run|runs} in the last {days} days"
 }

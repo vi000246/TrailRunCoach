@@ -12211,6 +12211,10 @@
     "draft": false,
     "src": "backend/accounts/viewing.py:57"
   },
+  "只有學員本人能標成好了": {
+    "draft": false,
+    "src": "backend/accounts/viewing.py:203"
+  },
   "站主的資料不開放代看": {
     "draft": false,
     "src": "backend/api/viewing.py:55"
@@ -15878,5 +15882,29 @@
   "超出 {n} 天預報範圍": {
     "draft": true,
     "src": "SP-552"
+  },
+  "{km:g} km 內沒有 CWA 登山預報點": {
+    "draft": true,
+    "src": "SP-944"
+  },
+  "本人 {n} 次活動的中位 {t:.0f} °C／{rh:.0f} %": {
+    "draft": true,
+    "src": "SP-944"
+  },
+  "預設 {t:.0f} °C／{rh:.0f} %（參考條件）": {
+    "draft": true,
+    "src": "SP-944"
+  },
+  "{alt:.0f} m（預設）／{wx}": {
+    "draft": true,
+    "src": "SP-944"
+  },
+  "近 {days} 天 {n} 次跑步的中位海拔；溫濕度：{wx}": {
+    "draft": true,
+    "src": "SP-944"
+  },
+  "Open-Meteo 歷史資料：近 {days} 天 {n} 次跑步當下的平均溫濕度": {
+    "draft": true,
+    "src": "SP-944"
   }
 }

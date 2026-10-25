@@ -22,7 +22,7 @@ from backend.engine.racepower import difficulty as DF
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
-from backend.i18n import _
+from backend.i18n import M_, _
 
 CP_WINDOW_DAYS = 90
 RIEGEL_WINDOW_DAYS = 365
@@ -402,11 +402,17 @@ def fallback_training() -> dict:
     from backend.engine import heat_calib as HC
     t, rh = HC.current("home_temp_c"), HC.current("home_rh_pct")
     own = t.get("source") == "fitted" and rh.get("source") == "fitted"
-    wx = (f"本人 {t.get('n')} 次活動的中位 {t['value']:.0f} °C／{rh['value']:.0f} %" if own
-          else f"預設 {t['value']:.0f} °C／{rh['value']:.0f} %（參考條件）")
+    # M_(): the labels go into /inputs, one cache for every language (api/racepower.get_inputs relocalizes; SP-944)
+    wx = (M_("本人 {n} 次活動的中位 {t:.0f} °C／{rh:.0f} %", n=t.get("n"), t=t["value"], rh=rh["value"]) if own
+          else M_("預設 {t:.0f} °C／{rh:.0f} %（參考條件）", t=t["value"], rh=rh["value"]))
     alt = HC.HOME_DEFAULTS["home_alt_m"]
     return {"altitude_m": alt, "temp_c": float(t["value"]), "rh_pct": float(rh["value"]), "label_wx": wx,
-            "label": f"{alt:.0f} m（預設）／{wx}"}
+            "label": M_("{alt:.0f} m（預設）／{wx}", alt=alt, wx=wx)}
+
+
+def _archive_label(n: int) -> str:
+    """The From label of the Open-Meteo archive answer (the daily cache keeps `activities`, not this text)."""
+    return M_("Open-Meteo 歷史資料：近 {days} 天 {n} 次跑步當下的平均溫濕度", days=CP_WINDOW_DAYS, n=n)
 
 
 def _training_conditions(ds, runs, metrics, today: dt.date, fetch: bool = True) -> dict:
@@ -422,14 +428,16 @@ def _training_conditions(ds, runs, metrics, today: dt.date, fetch: bool = True) 
             "provider": "fallback", "label": fb["label"], "runs": len(ms),
             "lat": float(median(lats)) if lats else None, "lon": float(median(lons)) if lons else None}
     if elevs:
-        base["label"] = f"近 {CP_WINDOW_DAYS} 天 {len(elevs)} 次跑步的中位海拔；溫濕度：{fb['label_wx']}"
+        base["label"] = M_("近 {days} 天 {n} 次跑步的中位海拔；溫濕度：{wx}", days=CP_WINDOW_DAYS, n=len(elevs),
+                           wx=fb["label_wx"])
     if base["lat"] is None or not fetch:
         return base
     stamp = f"{today.isoformat()}|{len(ms)}|{base['lat']:.3f},{base['lon']:.3f}"
     try:
         c = json.loads(_training_env_cache().read_text("utf-8"))
         if c.get("stamp") == stamp:
-            return {**base, **c["values"]}
+            v = c["values"]
+            return {**base, **v, **({"label": _archive_label(v["activities"])} if "activities" in v else {})}
     except (OSError, ValueError, KeyError):
         pass
     windows = []
@@ -447,7 +455,7 @@ def _training_conditions(ds, runs, metrics, today: dt.date, fetch: bool = True) 
     if not r:
         return base
     vals = {"temp_c": r["temp_c"], "rh_pct": r["rh_pct"], "provider": "open_meteo_archive",
-            "label": f"Open-Meteo 歷史資料：近 {CP_WINDOW_DAYS} 天 {r['activities']} 次跑步當下的平均溫濕度",
+            "activities": r["activities"],
             "fetched_at": dt.datetime.now(WX.TZ).isoformat(timespec="seconds"),
             "attribution": WX.ATTRIBUTION}
     try:
@@ -455,7 +463,7 @@ def _training_conditions(ds, runs, metrics, today: dt.date, fetch: bool = True) 
         _training_env_cache().write_text(json.dumps({"stamp": stamp, "values": vals}, ensure_ascii=False), "utf-8")
     except OSError:
         pass
-    return {**base, **vals}
+    return {**base, **vals, "label": _archive_label(r["activities"])}
 
 
 def _aet(ds, today: dt.date) -> dict:
