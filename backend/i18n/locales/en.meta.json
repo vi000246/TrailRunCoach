@@ -15906,5 +15906,29 @@
   "Open-Meteo 歷史資料：近 {days} 天 {n} 次跑步當下的平均溫濕度": {
     "draft": true,
     "src": "SP-944"
+  },
+  "發燒": {
+    "draft": true,
+    "src": "SP-948"
+  },
+  "疼痛分數 {n}/10 以上": {
+    "draft": true,
+    "src": "SP-948"
+  },
+  "上一次的疼痛分數超過上限": {
+    "draft": true,
+    "src": "SP-948"
+  },
+  "上一次的疼痛分數比再前一次高": {
+    "draft": true,
+    "src": "SP-948"
+  },
+  "上一次有標疼痛分數": {
+    "draft": true,
+    "src": "SP-948"
+  },
+  "暫時無法顯示，請稍後再試": {
+    "draft": true,
+    "src": "SP-948"
   }
 }

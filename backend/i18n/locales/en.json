@@ -4352,5 +4352,11 @@
   "預設 {t:.0f} °C／{rh:.0f} %（參考條件）": "default {t:.0f} °C / {rh:.0f} % (reference conditions)",
   "{alt:.0f} m（預設）／{wx}": "{alt:.0f} m (default) / {wx}",
   "近 {days} 天 {n} 次跑步的中位海拔；溫濕度：{wx}": "median altitude of {n} {n|run|runs} in the last {days} days; temperature and humidity: {wx}",
-  "Open-Meteo 歷史資料：近 {days} 天 {n} 次跑步當下的平均溫濕度": "Open-Meteo historical weather: the mean temperature and humidity during {n} {n|run|runs} in the last {days} days"
+  "Open-Meteo 歷史資料：近 {days} 天 {n} 次跑步當下的平均溫濕度": "Open-Meteo historical weather: the mean temperature and humidity during {n} {n|run|runs} in the last {days} days",
+  "發燒": "fever",
+  "疼痛分數 {n}/10 以上": "pain score {n}/10 or more",
+  "上一次的疼痛分數超過上限": "last run's pain score above the limit",
+  "上一次的疼痛分數比再前一次高": "last run's pain score higher than the run before",
+  "上一次有標疼痛分數": "last run has a pain score",
+  "暫時無法顯示，請稍後再試": "Can't show this right now. Please try again later."
 }

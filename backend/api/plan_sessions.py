@@ -1712,6 +1712,9 @@ async def suggestions(db: AsyncSession = Depends(get_db)):
     owner_only = VW.owner_only()                # SP-947: a viewing coach can't say the student's injury is healed
     if owner_only:
         vis = [{**r, "owner_only": owner_only} if r["type"] == "injury_done" else r for r in vis]
+    if VW.hides_injury():                       # SP-948: without 「看傷病紀錄」 the injury rows aren't the coach's
+        rows = [r for r in rows if r["type"] not in VW.INJURY_ROWS]
+        vis = [r for r in vis if r["type"] not in VW.INJURY_ROWS]
     shown = {r["id"] for r in vis}
     # SP-507 R1: the tests 稍後提醒 holds, whole — the 課表's 排入測試 ▸ still offers them (schedule.html sugCount)
     held = [r for r in SG.visible(rows, kept, snoozes=False) if r["id"] not in shown and r["type"] in SG.TEST_TYPES]

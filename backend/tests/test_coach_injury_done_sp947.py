@@ -54,8 +54,9 @@ def test_a_viewing_coach_cannot_mark_the_injury_healed(app, healed_row, perms):
 
 def test_the_box_tells_the_coach_only_the_student_can_say_so(app, healed_row):
     """驗收 2: the coach's box row carries owner_only (the page shows it instead of 「好了」); the student's
-    own row does not."""
-    coach, stu, _link = _pair(app)
+    own row does not. (SP-948: the coach sees the row at all only with 「看傷病紀錄」 on — off, the box's injury
+    rows are left out: test_coach_injury_words_sp948.)"""
+    coach, stu, _link = _pair(app, {**SEE, "plan": True})
     eid = _injury(stu, "學員的右膝")["id"]
     healed_row.append(eid)
     mine = next(r for r in stu.get(SUG).json()["suggestions"] if r["type"] == "injury_done")

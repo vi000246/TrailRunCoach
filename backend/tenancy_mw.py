@@ -558,10 +558,34 @@ class TenancyMiddleware:
                 return await first()
             receive = replay
         answer = {"status": 0, "body": bytearray()}
+        # SP-948: a viewing coach without 「看傷病紀錄」 reads the plan's texts without the injury's words — the JSON
+        # answer held whole, rewritten (viewing.redact_body), then sent
+        redact = view is not None and VW.redacts(method, path, view.perms)
+        held: dict = {"start": None, "body": bytearray()}
 
         mine = f"{session_cookie}=".encode()
 
+        async def send_held(message):
+            held["body"] += message.get("body", b"")
+            if message.get("more_body"):
+                return
+            start = held["start"]
+            try:
+                out = await run_in_threadpool(VW.redact_body, bytes(held["body"]))
+            except Exception as e:                  # noqa: BLE001 — never the unredacted answer
+                import logging
+                logging.getLogger(__name__).warning("coach view redaction failed: %s", type(e).__name__)
+                start = {**start, "status": 503}
+                out = json.dumps(_demo_error("UNAVAILABLE", _("暫時無法顯示，請稍後再試"))).encode()
+            headers = [(k, v) for k, v in start.get("headers", []) if k.lower() != b"content-length"]
+            headers.append((b"content-length", str(len(out)).encode()))
+            await send({**start, "headers": headers})
+            await send({"type": "http.response.body", "body": out})
+
         async def send_wrapper(message):
+            if held["start"] is not None and message.get("type") == "http.response.body":
+                await send_held(message)
+                return
             if message.get("type") == "http.response.start":
                 headers = list(message.get("headers", []))
                 # the route set the session cookie itself (signed in, out): its cookie wins, ours
@@ -575,6 +599,9 @@ class TenancyMiddleware:
                     headers.append((b"x-trc-viewing", b"1"))
                 message = {**message, "headers": headers}
                 answer["status"] = int(message.get("status") or 0)
+                if redact and any(k.lower() == b"content-type" and v.startswith(b"application/json") for k, v in headers):
+                    held["start"] = message
+                    return
             elif audit and message.get("type") == "http.response.body" and len(answer["body"]) < 262144:
                 answer["body"] += message.get("body", b"")
             await send(message)

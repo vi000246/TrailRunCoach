@@ -5,7 +5,8 @@ the signed-in user (login.current_user) — but only through these rules, defaul
 
   reads (GET / HEAD)   READ_OPEN only (the pages and data of 總覽, 課表, 圖表, 活動, 路線, 賽事, 賽事計算機
                        and 設定's 生理數據 tab), never READ_BLOCK; READ_PERM under the student's switch
-                       (SP-822: "injury", the injury log and a run's pain, off unless turned on). Everything
+                       (SP-822: "injury", the injury log and a run's pain, off unless turned on; while it is
+                       off the plan's texts say 「傷病」 for what the injury is, SP-948 redact). Everything
                        else — the account, the platform connections and their passwords, deleting,
                        下載我的資料 and every file download, payment, 疊石 Cairn, the admin page, the debug
                        API, the backups, the calendar feed's address — 403 COACH_VIEW_BLOCKED (a page: back
@@ -190,7 +191,7 @@ def hides_injury() -> bool:
     """SP-822: this request views a student who has not let their coach see the injury log — the answers
     that carry a run's pain mark (the activity list, an activity's card) leave INJURY_FIELDS out."""
     v = current()
-    return v is not None and v.perms.get("injury") is not True
+    return v is not None and hides_injury_of(v.perms)
 
 
 def readonly() -> Optional[dict]:
@@ -208,6 +209,183 @@ def owner_only() -> Optional[str]:
     nobody is viewed)."""
     from backend.i18n import _
     return None if current() is None else _(OWNER_ONLY)
+
+
+# ---------------------------------------------------------------------------- SP-948: the injury words
+# With 「看傷病紀錄」 off, the texts the plan and its cards build from the injury log (the week notes 「右膝進行中
+# （第 5 天…）」, a session's 「右膝・膝前痛進行中：…改成平路輕鬆跑」, the light 「疼痛黃燈（右膝）：上一次 6/10…」,
+# 「傷停 12 天（右膝，傷病紀錄 #12）」, a cold's rule, 賽前完備 「進行中：右膝」, …) still say the reason to a viewing
+# coach but not what it is: the body part, the injury type, the pain score and the illness type become 「傷病」
+# (SP-947 Q1 = b). Most of them are stored in the plan when it is built (plan_store: one cache whoever asks), so
+# this is done on the way out — the gate rewrites the JSON answers of REDACT_READS (redact_body); the plan is
+# computed as before, the student and a coach with the switch on read the original. The words come from the
+# student's own injury log, in both languages (a stored zh-TW text is shown in English on the way out); the
+# box's injury rows (INJURY_ROWS: questions about the student's own body) are left out of the coach's box.
+INJURY_ROWS = frozenset({"injury_rest", "injury_hold", "injury_done", "injury_pattern"})
+REDACT_READS = _rx(r"/api/v1/overview/.+", r"/api/v1/app/views/.+", r"/api/v1/app/races(?:/.*)?",
+                   r"/api/v1/plan(?:/.*)?")
+# fields an answer carries that its page doesn't show but that name the injury: weekplan's light (its label,
+# condition, the walk-run episodes) goes; reentry's injury / illness ({id, label, illness}) are emptied
+_DROP_KEYS = frozenset({"injury_light"})
+_EMPTY_IN = {"reentry": ("injury", "illness")}
+WORD = N_("傷病")
+WORD_EN = "injury"          # en: the catalog's 「傷病」 is a page title (Injuries), not a word inside a sentence
+FEVER = N_("發燒")          # inside 「發燒好了之後的第一次跑」「恢復跑（發燒後第一次）」
+# a pain score (engine/injuries._mark_light) -> what it says without the score
+SCORES = (
+    (N_("{s}/10，{n}/10 以上"), N_("疼痛分數 {n}/10 以上")),
+    (N_("上一次 {s}/10，超過{name}的 {lim}/10"), N_("上一次的疼痛分數超過上限")),
+    (N_("上一次 {s}/10，比再前一次（{p}/10）高 {d} 分"), N_("上一次的疼痛分數比再前一次高")),
+    (N_("上一次 {s}/10，比再前一次（{p}/10）高"), N_("上一次的疼痛分數比再前一次高")),
+    (N_("上一次 {s}/10"), N_("上一次有標疼痛分數")),
+)
+_NUMERIC = ("s", "n", "p", "d", "lim")
+# a condition's study names it (膝前痛 Esculier 2016, 髂脛束 Fredericson 2005: injuries.CONDITION_NOTE)
+_CITES = re.compile(r"\s*[（(](?:Esculier 2016|Fredericson 2005)[）)]")
+_CASE = object()            # a _TIDY replacement: the word, its first letter's case kept
+# what is left around a 「傷病」 put in
+_TIDY = {
+    "zh-TW": [(re.compile(r"傷病紀錄 #\d+（傷病）"), _CASE),
+              (re.compile(r"（傷病，傷病紀錄 #\d+(?:；傷病，#\d+)?）"), ""),
+              (re.compile(r"傷病(?:[・：、]傷病(?!紀錄))+"), _CASE)],
+    "en": [(re.compile(r"\binjury log #\d+ \(injury\)", re.I), _CASE),
+           (re.compile(r"\s*\(injury, injury log #\d+(?:; injury, #\d+)?\)", re.I), ""),
+           (re.compile(r"\b(injury)(?:\s*(?:·|:|,)\s*injury\b(?! log))+", re.I), r"\1"),
+           (re.compile(r"\ba injury\b"), "an injury")],
+}
+_TIDY_ANY = [(re.compile(r"\s*[（(]\s*[）)]"), ""), (re.compile(r"[；;，,]\s*(?=[）)。]|$)"), ""),
+             (re.compile(r"；{2,}"), "；"), (re.compile(r"(?<=\S) {2,}"), " ")]
+
+
+def hides_injury_of(perms: Optional[dict]) -> bool:
+    return (perms or {}).get("injury") is not True
+
+
+def redacts(method: str, path: str, perms: Optional[dict]) -> bool:
+    """SP-948: the gate rewrites this read's answer (redact_body) — a viewing coach without 「看傷病紀錄」."""
+    return method.upper() in READS and hides_injury_of(perms) and bool(REDACT_READS.fullmatch(path))
+
+
+def _tpl_rx(entry: str) -> Optional[re.Pattern]:
+    """A catalog entry (「上一次 {s}/10，比再前一次（{p}/10）高 {d} 分」; en with 「{d|point|points}」) as a regex
+    that finds it inside a text, its fields named."""
+    out, seen = [], set()
+    for tok in re.split(r"(\{[^{}]*\})", entry):
+        if not (tok.startswith("{") and tok.endswith("}")):
+            out.append(re.escape(tok))
+            continue
+        body = tok[1:-1]
+        if "|" in body:                         # a count's words
+            out.append("(?:" + "|".join(re.escape(w) for w in body.split("|")[1:]) + ")")
+            continue
+        name = body.split(":")[0].split("!")[0]
+        if not re.fullmatch(r"[A-Za-z_]\w*", name):
+            return None
+        if name in seen:
+            out.append(f"(?P={name})")
+            continue
+        seen.add(name)
+        out.append(rf"(?P<{name}>[-+]?\d+(?:\.\d+)?)" if name in _NUMERIC else f"(?P<{name}>.+?)")
+    return re.compile("".join(out))
+
+
+def _rules(loc: str, events: list) -> dict:
+    """What redact changes in a text of `loc`: {"scores": [(regex, msgid)], "terms": a regex of the words that
+    become WORD (the student's injuries as labelled, their conditions, every illness type), "drop": a regex of
+    what goes (an illness's sources: they say which one), "word", "loc"}."""
+    from backend.engine import injuries as INJ
+    from backend.i18n import catalog, translate, use_locale
+    cat = catalog(loc)
+
+    def entry(msgid: str) -> str:
+        e = cat.get(msgid) if cat else msgid
+        return e if isinstance(e, str) and e else msgid
+    scores = [(rx, rep) for src, rep in SCORES if (rx := _tpl_rx(entry(src))) is not None]
+    terms, raw = set(), set()
+    with use_locale(loc):
+        for e in events or ():
+            if INJ.is_illness(e):
+                continue
+            terms.add(INJ.full_label(e.get("area"), e.get("side")))
+            # 百岳 multi-day's English label (baiyue_multiday: the stored keys)
+            raw.add(" ".join(str(x).replace("_", " / ") for x in (e.get("side"), e.get("area")) if x))
+            if e.get("condition") in INJ.CONDITIONS and e.get("condition") != "other":
+                terms.add(translate(INJ.CONDITIONS[e["condition"]], loc))
+        for k in [*INJ.ILLNESS, None]:
+            terms.add(INJ.illness_label(k))
+        terms |= {translate(v, loc) for v in INJ.ILLNESS.values()} | {translate(FEVER, loc)}
+        drop = {translate(INJ.SRC_COLD, loc), translate(INJ.SRC_FEVER, loc)}
+    if loc != "zh-TW":
+        terms |= raw
+    alts = []
+    for t in sorted({t.strip() for t in terms if t and t.strip()}, key=len, reverse=True):
+        if t.isascii():
+            alts.append(rf"(?<![\w-]){re.escape(t)}(?![\w-])")
+        elif len(t) == 1:                       # 「膝」 alone (no side): not the 膝 of 「膝主導」
+            alts.append(re.escape(t) + r"(?=[進・：:，,、）)\s]|$)")
+        else:
+            alts.append(re.escape(t))
+    return {"scores": scores, "loc": loc,
+            "terms": re.compile("|".join(alts), re.I if loc == "en" else 0) if alts else None,
+            "drop": re.compile(r"[；;]?\s*(?:" + "|".join(re.escape(d) for d in sorted(drop, key=len, reverse=True)) + ")"),
+            "word": WORD_EN if loc == "en" else translate(WORD, loc)}
+
+
+def _redact_text(s: str, rules: list) -> str:
+    from backend.i18n import translate
+    if not s:
+        return s
+    was = s
+    for r in rules:
+        loc, word = r["loc"], r["word"]
+
+        def cased(m, word=word):
+            return word[:1].upper() + word[1:] if m.group(0)[:1].isupper() else word
+        before = s
+        for rx, rep in r["scores"]:
+            s = rx.sub(lambda m, rep=rep, loc=loc: translate(rep, loc, **m.groupdict()), s)
+        s = r["drop"].sub("", s)
+        if r["terms"] is not None:
+            s = r["terms"].sub(cased, s)
+        if s != before:
+            for rx, rep in _TIDY.get(loc, ()):
+                s = rx.sub(cased if rep is _CASE else rep, s)
+    if s == was:                                # nothing of the injury's: the text as it was
+        return s
+    s = _CITES.sub("", s)
+    for rx, rep in _TIDY_ANY:
+        s = rx.sub(rep, s)
+    return s
+
+
+def redact(obj: Any, events: Optional[list] = None) -> Any:
+    """SP-948: `obj` (an answer) as a viewing coach without 「看傷病紀錄」 reads it — its texts' injury words
+    replaced (see above), _DROP_KEYS left out, INJURY_ROWS out of every list. `events`: the student's injury
+    log (default: this tenant's)."""
+    from backend.i18n import SUPPORTED
+    if events is None:
+        from backend.engine import injuries as INJ
+        events = INJ.load_events()
+    rules = [_rules(loc, events) for loc in SUPPORTED]
+
+    def walk(x, key=None):
+        if isinstance(x, str):
+            return _redact_text(x, rules)
+        if isinstance(x, dict):
+            return {k: (None if k in _EMPTY_IN.get(key, ()) else walk(v, k)) for k, v in x.items() if k not in _DROP_KEYS}
+        if isinstance(x, (list, tuple)):
+            return [walk(v) for v in x if not (isinstance(v, dict) and v.get("type") in INJURY_ROWS)]
+        return x
+    return walk(obj)
+
+
+def redact_body(body: bytes) -> bytes:
+    """A JSON answer's bytes, redacted (redact); anything that isn't JSON as it is."""
+    try:
+        doc = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return body
+    return json.dumps(redact(doc), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 def caps_for(perms: dict) -> frozenset:

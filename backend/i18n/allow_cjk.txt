@@ -39,3 +39,5 @@ re ^(?:山路|越野)$
 re ^【草稿】$
 # SP-839: the units and punctuation engine/stored_text reads a stored zh-TW title by (its words are N_() msgids)
 file backend/engine/stored_text.py
+# SP-948: accounts/viewing's regexes over the redacted injury texts (they match 「傷病」 put in, and the 膝 of a label)
+re 傷病紀錄 #\\d|^傷病\(\?:|^\(\?=\[進
