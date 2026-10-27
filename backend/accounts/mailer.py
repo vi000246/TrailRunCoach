@@ -50,7 +50,7 @@ class Mail:
     to: str
     subject: str
     text: str
-    kind: str = "mail"             # verify | exists | reset — what the log line says, never the content
+    kind: str = "mail"             # verify | exists | reset | google | changed — what the log line says, never the content
 
 
 def api_key() -> Optional[str]:

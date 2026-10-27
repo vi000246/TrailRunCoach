@@ -321,7 +321,8 @@ def test_activities_stats_and_recorded_rpe(tmp_path, no_plan, monkeypatch):
     run = next(a for a in V.activities_list()["activities"] if a["file"] == "2025/0.fit")
     assert run["rpe"] == 4.0 and run["feel"] == 75
     st = _run(V.activities_stats())
-    assert st["2025-12-13T01:00"] == {"avg_hr": 140.0, "avg_power": None}     # build_run: 140 bpm, no power
+    # build_run: 140 bpm, no power; SP-954: the row carries that day's power state (`pw`, none here)
+    assert st["2025-12-13T01:00"] == {"avg_hr": 140.0, "avg_power": None, "pw": "none"}
     assert _run(V.activities_stats()) == st                                     # second call: from the cache
 
 

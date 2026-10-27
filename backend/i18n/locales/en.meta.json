@@ -12019,6 +12019,22 @@
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
+  "你的 TrailRunCoach 密碼已經改了": {
+    "draft": true,
+    "src": "backend/accounts/email_login.py"
+  },
+  "你的 TrailRunCoach 帳號剛在設定頁改了密碼。其他已登入的裝置都已登出，改密碼的這台維持登入。": {
+    "draft": true,
+    "src": "backend/accounts/email_login.py"
+  },
+  "如果是你改的，不用做任何事。": {
+    "draft": true,
+    "src": "backend/accounts/email_login.py"
+  },
+  "如果不是你改的，請馬上用「忘記密碼」重設密碼（重設後所有已登入的裝置都會登出）：": {
+    "draft": true,
+    "src": "backend/accounts/email_login.py"
+  },
   "請輸入有效的 email": {
     "draft": true,
     "src": "backend/api/account_email.py"

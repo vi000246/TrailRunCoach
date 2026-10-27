@@ -23,7 +23,10 @@ API = "/api/v1/overview/plan"
 EVENT = {"name": "新排的 50K", "date": "2027-03-14", "priority": "A", "kind": "trail"}
 
 # every write that marks the summary (spelled out: widening or narrowing coach_board.PLAN_WRITES without
-# changing this fails the walk below — and a new plan route has to be put on one side or the other)
+# changing this fails the walk below — and a new plan route has to be put on one side or the other).
+# SP-972: PATCH /prefs (SP-955 設定 › 訓練依據: 目標依據 / 可跑坡目標 / 測試方式, fields PUT /prefs used to
+# write) marks it too — a new 目標依據 re-plans the upcoming 課表 (plan_auto.after_thresholds) without
+# rebuilding the Dataset, unlike the thresholds / zones SP-826 left out
 CHANGES = {tuple(x.split()) for x in """
 PUT /api/v1/plan/events|DELETE /api/v1/plan/events/x|POST /api/v1/plan/events/x/gpx|DELETE /api/v1/plan/events/x/gpx
 PUT /api/v1/plan/events/x/gpx/splits|PUT /api/v1/plan/events/x/gpx/group|POST /api/v1/plan/events/x/gpx/cairn
@@ -34,6 +37,7 @@ POST /api/v1/overview/plan/sessions/x/revert|POST /api/v1/overview/plan/sessions
 DELETE /api/v1/overview/plan/sessions/x/link
 POST /api/v1/overview/plan/test-suggestions/schedule|POST /api/v1/overview/plan/suggestions/accept
 POST /api/v1/overview/plan/reconcile|PUT /api/v1/overview/plan/prefs|PUT /api/v1/overview/plan/blackouts
+PATCH /api/v1/overview/plan/prefs
 POST /api/v1/overview/plan/rest-days|POST /api/v1/overview/plan/rest-days/move|DELETE /api/v1/overview/plan/rest-days/x
 POST /api/v1/overview/plan/auto/run|POST /api/v1/overview/plan/auto/proposal/x/approve
 POST /api/v1/overview/plan/auto/log/x/undo

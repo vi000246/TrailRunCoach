@@ -23,12 +23,13 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _folder(tmp_path, n=3):
+def _folder(tmp_path, n=3, stryd=False):
     d = tmp_path / "fit" / "coros" / "2026"
     d.mkdir(parents=True)
     for i in range(n):
         (d / f"{i}.fit").write_bytes(build_run(datetime(2026, 9, 1 + i, 8, tzinfo=timezone.utc), seconds=900,
-                                               power=200 + 10 * i, hr=140 + i, speed_m_s=3.0, climb_m_per_s=0.1))
+                                               power=200 + 10 * i, hr=140 + i, speed_m_s=3.0, climb_m_per_s=0.1,
+                                               stryd=stryd))
     (d / "broken.fit").write_bytes(b"not a fit")
     return tmp_path / "fit" / "coros"
 
@@ -267,23 +268,38 @@ def test_pd_refits_are_memoised_per_day_window(tmp_path, monkeypatch):
     from backend.engine.racepower import athlete as A
     from backend.engine.racepower import weather as WX
     monkeypatch.setattr(WX, "HOME", tmp_path / "home")          # no real synced FIT folder
-    root = _folder(tmp_path)
+    # SP-950: only Stryd power is fitted (watch power never counts), so the runs carry the Stryd fields
+    root = _folder(tmp_path, stryd=True)
     fits = []
     monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False, stryd_only=False:
                         fits.append(day) or {"mftp": 200.0 + len(runs)})
     a = _build(root)
     d1, d2 = dt.date(2026, 9, 5), dt.date(2026, 8, 1)
-    assert A._pd_mftp(a, d1) == 203.0 and A._pd_mftp(a, d2) == 200.0     # 3 runs / none in the window
+    # 3 runs / none in the window: no fit at all (SP-950: no fallback to every power)
+    assert A._pd_mftp(a, d1) == 203.0 and A._pd_mftp(a, d2) is None and fits == [d1]
     a.flush_series()
     n = len(fits)
     b = _build(root)
-    assert A._pd_mftp(b, d1) == 203.0 and len(fits) == n        # from disk, no refit
+    assert A._pd_mftp(b, d1) == 203.0 and A._pd_mftp(b, d2) is None and len(fits) == n   # from disk, no refit
     # a new run inside d1's window: refit d1 only
     (root / "2026" / "8.fit").write_bytes(build_run(datetime(2026, 9, 4, 8, tzinfo=timezone.utc), seconds=600,
-                                                    power=210))
+                                                    power=210, stryd=True))
     c = _build(root)
     assert A._pd_mftp(c, d1) == 204.0 and len(fits) == n + 1
     assert A._pd_mftp(c, dt.date(2026, 9, 2)) is not None
+
+
+def test_pd_refit_without_stryd_power_has_no_cp(tmp_path, monkeypatch):
+    """SP-950 (owner 2026-10-27): watch power is no power source — a window with watch power only has no
+    CP (it used to fall back to fitting every power, the wrist's included)."""
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import weather as WX
+    monkeypatch.setattr(WX, "HOME", tmp_path / "home")
+    root = _folder(tmp_path)                                      # power, but no Stryd fields: watch power
+    fits = []
+    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False, stryd_only=False:
+                        fits.append(day) or {"mftp": 200.0 + len(runs)})
+    assert A._pd_mftp(_build(root), dt.date(2026, 9, 5)) is None and fits == []
 
 
 def test_chart_cp_fits_use_the_pd_cache_and_the_estimate_memo(tmp_path, monkeypatch):

@@ -527,10 +527,12 @@ def _scan_apple(zf: zipfile.ZipFile, info: zipfile.ZipInfo, d: Path, cap: int) -
         _write_json(out / f"{k}.json", w)
         if w.get("route"):
             routes.add(w["route"])
-        size = 16 * (len(w.get("hr") or ()) + len(w.get("power") or ())) + 24 * len(w.get("cad") or ()) + 1024
+        size = 16 * (len(w.get("hr") or ()) + len(w.get("power") or ()) + len(w.get("rpm") or ())
+                  + len(w.get("speed") or ())) \
+            + 24 * len(w.get("cad") or ()) + 1024
         entries.append([APPLE, f"{k}.json", AH.name_of(w), size])
-    log.info("export import: Apple Health export.xml read, %d workouts, %d heart-rate and %d power / step "
-             "samples (%d dropped)", len(entries), res["hr_samples"], res.get("more_samples", 0), res["dropped"])
+    log.info("export import: Apple Health export.xml read, %d workouts, %d heart-rate and %d power / cadence / "
+             "step / speed samples (%d dropped)", len(entries), res["hr_samples"], res.get("more_samples", 0), res["dropped"])
     return entries, routes, got[0]
 
 

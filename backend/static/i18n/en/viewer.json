@@ -544,8 +544,8 @@
   "readiness.ramp_z_fast": "Fast",
   "readiness.ramp_z_high": "Watch",
   "readiness.pts": "{p} pts",
-  "pw.stale_note": "The CP was {n} days old on that day: this run shows the power line, average power and NP only — no % CP or power zones, and its intensity is judged by heart rate / pace.",
-  "pw.stale_note_never": "There was no CP test or race yet on that day: this run shows the power line, average power and NP only — no % CP or power zones, and its intensity is judged by heart rate / pace.",
+  "pw.stale_note": "The CP was {n} {n|day|days} old on that day: this run shows the power line, average power and weighted power only — no % CP or power zones, and its intensity is judged by heart rate / pace.",
+  "pw.stale_note_never": "There was no CP test or race yet on that day: this run shows the power line, average power and weighted power only — no % CP or power zones, and its intensity is judged by heart rate / pace.",
   "pw.page_stale": "Every chart on this page is about power (% CP, power zones). The CP was stale on the day of this activity, so they are not shown; the power line and average power are in the first page's heart rate and power chart.",
   "pw.page_none": "Every chart on this page is about power. This activity has no usable power (no Stryd, or no power meter now), so they are not shown."
 }

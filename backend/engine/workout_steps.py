@@ -2091,8 +2091,8 @@ def quality_auto_basis(prefs=None) -> str:
     """What a 強度課 with no 目標用 of its own runs on at plan time — "power" (% CP) or "hr"
     (% LTHR) — asked of the planner's own rule, target_policy.target_policy (SP-84, owner
     2026-10-13: the filter's 「自動」 follows it): 課表偏好 target_basis first (hr, or the old
-    interval_target hr → HR; power → power), else 自動 (間歇／爬坡 → power) unless the 一般設定
-    power source is not Stryd (→ HR). No thresholds are passed: a missing CP / LTHR is a fallback
+    interval_target hr → HR; power → power), else 自動 (間歇／爬坡 → power); without power in effect
+    (SP-950: no Stryd, a stored 功率 overridden) a flat interval runs by "pace" (SP-951). No thresholds are passed: a missing CP / LTHR is a fallback
     of the day's numbers, not of the template. `prefs` None: 課表偏好 read now (plan_prefs.load)."""
     from backend.engine import target_policy as TP
     if prefs is None:

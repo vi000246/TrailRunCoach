@@ -138,7 +138,7 @@ def test_api_field_built_in_and_user(monkeypatch):
 
 # ---------------------------------------------------------------------------
 # a 強度課's 「自動」 follows what the planner runs it on (owner 2026-10-13, SP-84): the same
-# target_policy.target_policy call — 課表偏好 hr, or a non-Stryd power source → % LTHR
+# target_policy.target_policy call — 課表偏好 hr → % LTHR; no power meter → 配速 (SP-950 / SP-951)
 # ---------------------------------------------------------------------------
 
 def _source(monkeypatch, src):
@@ -159,8 +159,13 @@ def test_quality_auto_follows_the_plan_basis(monkeypatch):
     assert WS.quality_auto_basis(PP.Prefs(interval_target="hr")) == "hr"          # the old 間歇目標 hr
     assert WS.quality_auto_basis(PP.Prefs(target_basis="power")) == "power"
     _source(monkeypatch, "none")                                                   # power not from a Stryd
-    assert WS.quality_auto_basis(PP.Prefs()) == "hr"
-    assert WS.quality_auto_basis(PP.Prefs(target_basis="power")) == "power"       # an explicit 功率 still wins
+    # SP-951: without power a flat interval runs by % threshold pace (the planner's own call, as above)
+    assert WS.quality_auto_basis(PP.Prefs()) == "pace"
+    assert WS.quality_auto_basis(PP.Prefs()) == TP.target_policy({"kind": "quality", "title": "Z5 間歇 5×3 分"},
+                                                                 PP.Prefs())["basis"]
+    # SP-950 Q1-2 (owner 2026-10-27): no power meter overrides a stored 功率 (kept, not deleted)
+    assert WS.quality_auto_basis(PP.Prefs(target_basis="power")) == "pace"
+    assert WS.quality_auto_basis(PP.Prefs(target_basis="hr")) == "hr"             # 心率 picked stays
     items = wrap(st("work", 300, BAND))
     assert WS.target_types(items, None, quality=True, qbasis="hr") == ["hr_pct"]
     assert WS.target_types(items, None, quality=True, qbasis="power") == ["power_pct"]
@@ -210,7 +215,9 @@ def test_api_hr_basis_both_lists_agree(monkeypatch):
         check("hr_pct")                                           # 課表偏好 心率: % LTHR
         prefs["p"] = PP.Prefs()
         check("power_pct")
-        _source(monkeypatch, "none")                              # 自動, power not from a Stryd: HR
-        check("hr_pct")
+        _source(monkeypatch, "none")                              # 自動, no power meter: pace (SP-951)
+        check("pace")
         prefs["p"] = PP.Prefs(target_basis="power")
-        check("power_pct")                                        # 課表偏好 功率
+        check("pace")                                             # 課表偏好 功率 overridden (SP-950 Q1-2)
+        prefs["p"] = PP.Prefs(target_basis="hr")
+        check("hr_pct")                                           # 課表偏好 心率 stays

@@ -23,7 +23,9 @@ Only in sign-in mode (login.required()), next to Google's, under the same rules 
   forgot(email) / reset(token, pw)  a reset link (1 h, taken once); the new password ends every
                                     session of the account and counts as confirming the address
   change_password(uid, cur, new, t) signed in (設定 › 帳號, SP-858): the current password, then the
-                                    new one; every other session of the account ends, this one stays
+                                    new one; every other session of the account ends, this one stays;
+                                    a notice mailed to the address (SP-959; a refused change mails
+                                    nothing, a mail that fails leaves the change as it is)
   resolve(row)                      who a confirmed address is, login.resolve's rules: its account
                                     (disabled -> refused; the terms accepted -> a session; else the
                                     terms again); no account yet: the owner not signed in -> "setup";
@@ -164,6 +166,19 @@ def _mail_google_only(email: str) -> None:
           + _("如果不是你，請忽略這封信，你的帳號沒有任何變更。"))
 
 
+def _mail_password_changed(email: str, name: Optional[str]) -> None:
+    """The notice after a password change (SP-959): no password, no time or device, the reset link's
+    page. Not held back by MAIL_ADDRESS_LIMIT — otherwise three reset requests to the address would
+    let a change go by unannounced; the change itself needs the current password and is limited."""
+    mailer.send(mailer.Mail(
+        to=email, kind="changed", subject=_("你的 TrailRunCoach 密碼已經改了"),
+        text=_hello(name) + "\n\n"
+        + _("你的 TrailRunCoach 帳號剛在設定頁改了密碼。其他已登入的裝置都已登出，改密碼的這台維持登入。") + "\n\n"
+        + _("如果是你改的，不用做任何事。") + "\n\n"
+        + _("如果不是你改的，請馬上用「忘記密碼」重設密碼（重設後所有已登入的裝置都會登出）：") + "\n\n"
+        + _url("/forgot-password")))
+
+
 def _google_owned(email: str) -> bool:
     """The address is an account's that signs in another way (Google, or the owner): not one an
     admin let in from the waitlist and nobody has signed in to yet."""
@@ -287,6 +302,10 @@ def change_password(uid: int, current, new, keep_token: Optional[str]) -> int:
     if ended < 0:
         raise Refused("NO_EMAIL_SIGN_IN")
     log.info("a password was changed (%d other session(s) ended)", ended)
+    try:
+        _mail_password_changed(row["email"], row.get("display_name"))
+    except Exception as e:                   # noqa: BLE001 — the change stands whatever the mail does
+        log.warning("mail (changed) not handed over: %s", type(e).__name__)
     return ended
 
 

@@ -16,6 +16,14 @@ altitude, speed; no heart rate, no sport). What a workout needs is spread over b
     (steps over a span: the cadence, as strides per minute like a watch's FIT, from spans of at most
     MAX_STEP_SPAN_S). Both kept with their source (sourceName): a workout takes the ones of its own
     source when it has any (the watch's steps, not the phone's counted again), else all.
+  * SP-960: <Record type="HKQuantityTypeIdentifierCyclingPower" unit="W" …/> and
+    <Record type="HKQuantityTypeIdentifierCyclingCadence" unit="count/min" …/> (iOS 17+: a ride's
+    power and cadence, the cadence in revolutions per minute as a bike FIT has it), each at the middle
+    of its span, kept as the running ones are; a workout with some of them takes them over the running
+    power and the step cadence.
+  * SP-961: <Record type="HKQuantityTypeIdentifierRunningSpeed" unit="m/s" …/> (the watch's measured
+    running speed), at the middle of its span, kept the same way: an indoor workout's FIT (no route)
+    carries it on its points; no per-point distance is made from it (the session keeps the workout's).
 
 So export.xml is read once, streamed (scan_export: expat on pieces of the ZIP entry, never the
 whole file in memory, never a tree): the workouts are kept (small), every heart-rate sample goes to
@@ -32,7 +40,7 @@ parses from there on: the header, then the rest of the file, to a new parser.
 
 Untrusted input: expat with no entity declarations (one refuses the file — Apple's internal DTD
 declares elements and attributes only), no external entities, no parameter entities; at most
-MAX_WORKOUTS workouts, MAX_HR_SAMPLES heart-rate samples and MAX_MORE_SAMPLES power / step samples
+MAX_WORKOUTS workouts, MAX_HR_SAMPLES heart-rate samples and MAX_MORE_SAMPLES power / cadence / step / speed samples
 (past them: dropped, counted).
 Formats from Apple's export as described publicly (推估: no real export at hand).
 """
@@ -61,21 +69,31 @@ HR_TYPE = "HKQuantityTypeIdentifierHeartRate"
 # SP-912: running power and cadence (from the step count)
 POWER_TYPE = "HKQuantityTypeIdentifierRunningPower"
 STEP_TYPE = "HKQuantityTypeIdentifierStepCount"
-POWER, STEPS = 0, 1                     # the channel of a sample in the scratch file
-MAX_MORE_SAMPLES = 30_000_000           # power and step samples together; 18 bytes each on disk
+# SP-960: a ride's power and cadence (iOS 17+)
+CYCLE_POWER_TYPE = "HKQuantityTypeIdentifierCyclingPower"
+CYCLE_CAD_TYPE = "HKQuantityTypeIdentifierCyclingCadence"
+# SP-961: an indoor run's measured speed
+SPEED_TYPE = "HKQuantityTypeIdentifierRunningSpeed"
+POWER, STEPS, CYCLE_POWER, CYCLE_CAD, SPEED = 0, 1, 2, 3, 4     # the channel of a sample in the scratch file
+MAX_MORE_SAMPLES = 30_000_000           # power, cadence, step and speed samples together; 18 bytes each on disk
 MAX_STEP_SPAN_S = 600                   # a step sample over a longer span says nothing of the cadence
 MAX_POWER_W = 3000
 MAX_STEPS_PER_MIN = 300
+MAX_RPM = 250                           # a bike's cadence (FIT: one byte)
+MAX_SPEED_MS = 15.0                     # 54 km/h: past it, not running
+_SPEEDS = {"m/s": 1.0, "km/hr": 1 / 3.6, "km/h": 1 / 3.6, "mi/hr": 0.44704, "mi/h": 0.44704, "mph": 0.44704}
 MAX_SOURCES = 255                       # source names told apart (more: one "other")
 _UNITS = {"km": 1000.0, "m": 1.0, "mi": 1609.344, "yd": 0.9144, "ft": 0.3048, "cm": 0.01}
 _PREFIX = "HKWorkoutActivityType"
 # a pass in parts (SP-911)
 CHECK_BYTES = 128 * 1024 * 1024         # a checkpoint every this much of export.xml (a restart loses less)
 MAX_HEADER = 4 * 1024 * 1024            # the prolog kept to go on from (Apple's DTD: a few kB)
-FORMAT = "2"                            # of the checkpoint and the scratch files: another one starts over
+FORMAT = "4"                            # of the checkpoint and the scratch files: another one starts over
 CHECKPOINT, HEADER, PAIRS, MORE = "checkpoint.json", "header.xml", "hr.bin", "more.bin"
 _PAIR = np.dtype([("t", "<f8"), ("v", "<u2")])
-# power: t, 0, watts; steps: t (start), span s, strides per minute; c: the channel, s: the source
+# power: t, 0, watts; steps: t (start), span s, strides per minute; a ride's power / cadence: t
+# (start), span s, watts / revolutions per minute; speed: t (start), span s, m/s; c: the channel,
+# s: the source
 _MORE = np.dtype([("t", "<f8"), ("e", "<f4"), ("v", "<f4"), ("c", "u1"), ("s", "u1")])
 
 
@@ -221,7 +239,8 @@ def scan_export(read: Callable[[int], bytes], scratch: Path, base: str = "", key
                 budget: Optional[int] = None) -> dict:
     """Stream export.xml (`read(n)` gives the next ≤ n bytes from its start, b"" at its end) ->
     {"workouts": [{start, end, type, distance_m, route, source, hr: [[t, bpm], …], power: [[t, W], …],
-    cad: [[t0, t1, strides/min], …]}] by start, "hr_samples": n, "more_samples": n, "dropped": n}.
+    cad: [[t0, t1, strides/min], …], rpm: [[t, rev/min], …] (a ride's, SP-960), speed: [[t, m/s], …]
+    (SP-961)}] by start, "hr_samples": n, "more_samples": n, "dropped": n}.
     `route`: the ZIP member of its GPX (`base` + the FileReference path), or None. `scratch`: a
     folder for the samples (removed after). AppleError(unreadable) for no XML / no HealthData / a
     declared entity.
@@ -357,6 +376,30 @@ def scan_export(read: Callable[[int], bytes], scratch: Path, base: str = "", key
                 if rate <= MAX_STEPS_PER_MIN:
                     more(t, e - t, rate / 2.0, STEPS, attrs)     # strides per minute, a watch FIT's cadence
                 return
+            if kind == CYCLE_POWER_TYPE or kind == CYCLE_CAD_TYPE:              # SP-960
+                t, e = apple_time(attrs.get("startDate")), apple_time(attrs.get("endDate"))
+                v = _num(attrs.get("value"))
+                if t is None:
+                    return
+                e = t if e is None or e < t else e
+                unit = attrs.get("unit")
+                if kind == CYCLE_POWER_TYPE:
+                    ok, channel = 0 <= v <= MAX_POWER_W and (unit or "W") == "W", CYCLE_POWER
+                else:
+                    ok, channel = 0 <= v <= MAX_RPM and (unit or "count/min") in ("count/min", "rpm"), CYCLE_CAD
+                if ok and e - t <= MAX_STEP_SPAN_S:
+                    more(t, e - t, v, channel, attrs)
+                return
+            if kind == SPEED_TYPE:                                             # SP-961
+                t, e = apple_time(attrs.get("startDate")), apple_time(attrs.get("endDate"))
+                k = _SPEEDS.get((attrs.get("unit") or "m/s").strip().lower())
+                if t is None or k is None:
+                    return
+                e = t if e is None or e < t else e
+                v = _num(attrs.get("value")) * k
+                if 0 <= v <= MAX_SPEED_MS and e - t <= MAX_STEP_SPAN_S:
+                    more(t, e - t, v, SPEED, attrs)
+                return
             if kind != HR_TYPE:
                 return
             t = apple_time(attrs.get("startDate"))
@@ -445,7 +488,7 @@ def scan_export(read: Callable[[int], bytes], scratch: Path, base: str = "", key
         raise AppleError(TF.NOT_TRACK)
     workouts.sort(key=lambda w: (w["start"], w["end"]))
     for w in workouts:
-        w["hr"], w["power"], w["cad"] = [], [], []
+        w["hr"], w["power"], w["cad"], w["rpm"], w["speed"] = [], [], [], [], []
     _give_samples(pairs, workouts)
     _give_more(scratch / MORE, workouts, sources)
     clear(scratch)
@@ -485,10 +528,13 @@ def _give_samples(pairs: Path, workouts: list[dict]) -> None:
 
 
 def _give_more(path: Path, workouts: list[dict], sources: dict) -> None:
-    """Each power / step sample whose middle is inside a workout's span goes to it (the latest-
-    starting one of overlapping workouts); of a workout's samples of one kind, only those of its own
-    source when it has any (the watch that recorded it — the phone's steps over the same minutes
-    are not the cadence twice). From the scratch file in pieces."""
+    """Each power / cadence / step sample whose middle is inside a workout's span goes to it (the
+    latest-starting one of overlapping workouts); of a workout's samples of one kind, only those of
+    its own source when it has any (the watch that recorded it — the phone's steps over the same
+    minutes are not the cadence twice). SP-960: a ride's power, when the workout has some, is its
+    power instead of the running one; a ride's cadence ("rpm": [[t, rev/min], …], at the middle of
+    each span) instead of the steps'. SP-961: the running speed ("speed": [[t, m/s], …], at the
+    middle of each span). From the scratch file in pieces."""
     if not workouts:
         return
     starts = np.array([w["start"] for w in workouts])
@@ -518,15 +564,23 @@ def _give_more(path: Path, workouts: list[dict], sources: dict) -> None:
             continue
         w = workouts[int(part_i[0])]
         own = sources.get(w.get("source") or "", -1)
-        for channel in (POWER, STEPS):
+        got = {}
+        for channel in (POWER, STEPS, CYCLE_POWER, CYCLE_CAD, SPEED):
             s = part[part["c"] == channel]
             if (s["s"] == own).any():
                 s = s[s["s"] == own]
-            if channel == POWER:
-                w["power"] = [[float(t), round(float(v), 1)] for t, v in zip(s["t"], s["v"])]
-            else:
-                w["cad"] = [[float(t), float(t) + float(e), round(float(v), 2)]
-                            for t, e, v in zip(s["t"], s["e"], s["v"])]
+            got[channel] = s
+        s = got[CYCLE_POWER] if len(got[CYCLE_POWER]) else got[POWER]
+        w["power"] = [[float(t) + float(e) / 2.0, round(float(v), 1)] for t, e, v in zip(s["t"], s["e"], s["v"])]
+        s = got[SPEED]
+        w["speed"] = [[float(t) + float(e) / 2.0, round(float(v), 3)] for t, e, v in zip(s["t"], s["e"], s["v"])]
+        if len(got[CYCLE_CAD]):
+            s = got[CYCLE_CAD]
+            w["rpm"] = [[float(t) + float(e) / 2.0, round(float(v), 1)] for t, e, v in zip(s["t"], s["e"], s["v"])]
+        else:
+            s = got[STEPS]
+            w["cad"] = [[float(t), float(t) + float(e), round(float(v), 2)]
+                        for t, e, v in zip(s["t"], s["e"], s["v"])]
 
 
 def _nearest(samples: np.ndarray, tt: np.ndarray) -> np.ndarray:
@@ -557,14 +611,20 @@ def _sorted(rows, width: int) -> np.ndarray:
 
 def to_fit(workout: dict, gpx: Optional[bytes]) -> bytes:
     """One workout (scan_export's) and its route GPX (or None) as a FIT: the route's points with
-    the nearest heart-rate and power samples and the cadence of the step span holding them (SP-912);
-    without a route, the times of those samples alone (no per-point distance — none is made up — and
-    the workout's distance on the session). The session spans the workout's start and end.
-    TrackError when there is nothing to write."""
+    the nearest heart-rate and power samples and the cadence of the step span holding them (SP-912)
+    — of a ride, the nearest cadence sample (SP-960); without a route, the times of those samples
+    alone with the nearest measured speed (SP-961) — no per-point distance (none is made up, not even
+    from the speed) and the workout's distance on the session. The session spans the workout's start
+    and end. TrackError when there is nothing to write."""
     start, end = float(workout["start"]), float(workout["end"])
     hr = _sorted(workout.get("hr"), 2)
     power = _sorted(workout.get("power"), 2)
     cad = _sorted(workout.get("cad"), 3)
+    rpm = _sorted(workout.get("rpm"), 2)
+    speed = _sorted(workout.get("speed"), 2)
+
+    def cadence(tt: np.ndarray) -> np.ndarray:
+        return _nearest(rpm, tt) if len(rpm) else _covering(cad, tt)
     pts: list = []
     if gpx:
         try:
@@ -574,17 +634,17 @@ def to_fit(workout: dict, gpx: Optional[bytes]) -> bytes:
         if t is not None:
             keep = np.flatnonzero((t >= start - 60) & (t <= end + 60))
             tt = t[keep]
-            beat, watts, steps = _nearest(hr, tt), _nearest(power, tt), _covering(cad, tt)
+            beat, watts, steps = _nearest(hr, tt), _nearest(power, tt), cadence(tt)
             watts = np.where(np.isfinite(gpw[keep]), gpw[keep], watts)       # the route's own first
             steps = np.where(np.isfinite(gcad[keep]), gcad[keep], steps)
             pts = [(t[k], lat[k], lon[k], alt[k], dist[k], beat[n], steps[n], spd[k], watts[n])
                    for n, k in enumerate(keep)]
     if not pts:
-        tt = np.unique(np.concatenate([hr[:, 0], power[:, 0], cad[:, 0]]))
+        tt = np.unique(np.concatenate([hr[:, 0], power[:, 0], cad[:, 0], rpm[:, 0], speed[:, 0]]))
         tt = tt[(tt >= start) & (tt <= end)]
-        beat, watts, steps = _nearest(hr, tt), _nearest(power, tt), _covering(cad, tt)
-        pts = [(float(a), math.nan, math.nan, math.nan, math.nan, float(b), float(c), math.nan, float(w))
-               for a, b, c, w in zip(tt, beat, steps, watts)]
+        beat, watts, steps, ms = _nearest(hr, tt), _nearest(power, tt), cadence(tt), _nearest(speed, tt)
+        pts = [(float(a), math.nan, math.nan, math.nan, math.nan, float(b), float(c), float(v), float(w))
+               for a, b, c, v, w in zip(tt, beat, steps, ms, watts)]
         if len(pts) < 2:
             pts += [(start,) + (math.nan,) * 8, (end,) + (math.nan,) * 8]
     cols, sport = TF.columns(pts, sport_of(workout.get("type")))

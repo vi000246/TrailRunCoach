@@ -1065,7 +1065,7 @@
   "basis.st_cp_never": "No CP test or race yet",
   "basis.tl_today": "today",
   "basis.tl_until": "valid to {d}",
-  "basis.tl_aria": "CP valid for {n} days: {from} to {until}, {left} {left|day|days} left",
+  "basis.tl_aria": "CP valid for {n} {n|day|days}: {from} to {until}, {left} {left|day|days} left",
   "basis.st_sport": "Main sport: {sport} ({how}) · targets by: {basis}",
   "basis.k_now": "Now",
   "basis.k_unlock": "Hard sessions",

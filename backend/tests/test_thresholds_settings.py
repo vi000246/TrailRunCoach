@@ -74,7 +74,11 @@ def test_settings_page_edits_the_table_without_max_hr():
     assert 'id="thr"' in sec and 'id="thr-save"' in sec and 'id="thr-est"' in sec and 'id="thr-pz"' in sec
     thead = sec[sec.index("<thead>"):sec.index("</thead>")]
     assert "最大心率" not in thead and "settings.thr.lthr" in thead       # 最大心率 only in 心率 (one place)
-    assert s.index('<section id="hr">') < s.index('<section id="thresholds">') < s.index('<section id="sync">')
+    # SP-955 (layout B, owner 2026-10-27): the 心率 block is part of 訓練依據 › 門檻與測試, below the table
+    # (the table's ? says 「在下面的『最大心率／靜息心率』」); the 訓練依據 tab comes before 資料同步
+    assert 'class="sub" id="hr"' in sec and sec.index("</table>") < sec.index('class="sub" id="hr"')
+    assert sec.count('id="hr-max"') == 1 and s.count('id="hr-max"') == 1
+    assert s.index('<section id="basis">') < s.index('<section id="thresholds">') < s.index('<section id="sync">')
     js = s[s.index("// ---- 閾值測試紀錄"):]
     assert 'const THR = "/api/v1/plan/thresholds"' in js and 'method: "PUT"' in js
     assert 'data-f="mhr"' not in s and '"mhr"' not in js.split("$(\"thr\").addEventListener(\"click\"")[0]

@@ -79,9 +79,15 @@ def test_target_basis_auto_without_stryd(monkeypatch):
     assert TP.target_policy(easy, None, th)["basis"] == "power"
     monkeypatch.setattr(PL.Plan, "load", classmethod(lambda cls, path=None: PL.Plan(profile={"power_source": "none"})))
     p = TP.target_policy(easy, None, th)
-    assert p["basis"] == "hr" and "Stryd" in p["fallback"]
+    # SP-950 (owner 2026-10-27): the equipment is Stryd or none — the reason names 沒有功率計
+    assert p["basis"] == "hr" and "沒有功率計" in p["fallback"]
     from backend.engine import plan_prefs as PP
-    assert TP.target_policy(easy, PP.Prefs(target_basis="power"), th)["basis"] == "power"   # an explicit choice wins
+    # SP-950 Q1-2: without a power meter an explicit 功率 is overridden (kept, not deleted) …
+    p = TP.target_policy(easy, PP.Prefs(target_basis="power"), th)
+    assert p["basis"] == "hr" and p["chosen"] == "power" and "沒有功率計" in p["fallback"]
+    # … while with a Stryd an explicit choice still wins over 自動
+    monkeypatch.setattr(PL.Plan, "load", classmethod(lambda cls, path=None: PL.Plan(profile={"power_source": "stryd"})))
+    assert TP.target_policy(easy, PP.Prefs(target_basis="hr"), th)["basis"] == "hr"
 
 
 def test_coros_lthr_is_the_prior_without_hard_runs(tmp_path, monkeypatch):
