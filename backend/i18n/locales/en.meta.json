@@ -16102,5 +16102,21 @@
   "不用功率時，路跑用比賽成績推估：{reason}": {
     "draft": false,
     "src": "backend/engine/racepower/nopower.py:41"
+  },
+  "這次不用功率判讀（當天 CP 過期或沒有功率計）：看心率和配速": {
+    "draft": true,
+    "src": "SP-952"
+  },
+  "沒有目標帶": {
+    "draft": true,
+    "src": "SP-952"
+  },
+  "第 1 趟配速就沒到目標帶（{pct:.0f}% 閾值配速）：目標下修 5%": {
+    "draft": true,
+    "src": "SP-952"
+  },
+  "CP 已過期：不用 CP 判斷哪幾次跑步夠硬，所以一般跑步估不出 LTHR；LTHR 沿用目前的值，可以手動輸入、用比賽成績，或做一次 CP 測試切回功率": {
+    "draft": true,
+    "src": "SP-952"
   }
 }

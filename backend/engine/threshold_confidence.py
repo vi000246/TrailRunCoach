@@ -895,15 +895,18 @@ def _cad_spm(ds, w):
     return [None if v is None else float(v) * 2.0 for v in c]      # strides → steps (workout_review)
 
 
-def _summary(ds, w) -> Optional[dict]:
+def _summary(ds, w, pon: bool = True) -> Optional[dict]:
+    """run_summary of one run; `pon` False (SP-952: not judged by power — its date's CP stale, no power
+    meter, watch power): no power and no CP, so no CP-band evidence from it."""
     cp = None
-    try:
-        cp = _f(ds.cp(w))
-    except Exception:                       # noqa: BLE001
-        cp = None
+    if pon:
+        try:
+            cp = _f(ds.cp(w))
+        except Exception:                   # noqa: BLE001
+            cp = None
     road = "runningtrail" not in (w.tags or [])
     return run_summary(_ch(ds, w, "elapsedtime"), _ch(ds, w, "heartrate"),
-                       _ch(ds, w, "power") if road else None, _cad_spm(ds, w), cp, _ch(ds, w, "speed"))
+                       _ch(ds, w, "power") if road and pon else None, _cad_spm(ds, w), cp, _ch(ds, w, "speed"))
 
 
 def _temp_class(h: Optional[dict]) -> Optional[str]:
@@ -947,7 +950,17 @@ def gather_runs(ds, today: dt.date, acts: Optional[list] = None) -> list[dict]:
     out = []
     for w in runs:
         cached = getattr(ds, "cached_series", None)
-        s = cached(RUN_KEY, w, lambda w=w: _summary(ds, w)) if cached else _summary(ds, w)
+        try:
+            from backend.engine import power_state as PST
+            pon = PST.activity_power(ds, w)
+        except Exception:                   # noqa: BLE001
+            pon = True
+        if not cached:
+            s = _summary(ds, w, pon)
+        elif pon:
+            s = cached(RUN_KEY, w, lambda w=w: _summary(ds, w))
+        else:                               # SP-952: a run not judged by power keys its own row
+            s = cached(RUN_KEY, w, lambda w=w: _summary(ds, w, False), extra={"power_on": False})
         if not s:
             continue
         title = WR._title(w)
@@ -1095,7 +1108,15 @@ def test_results(ds, plan, today: dt.date, days: int = RESULT_DAYS) -> list[dict
 
 
 def _cp_now(ds, plan, today: dt.date) -> Optional[float]:
-    """The plan's CP on `today`, else the dataset's CP of the latest run."""
+    """The plan's CP on `today`, else the dataset's CP of the latest run. SP-952: None when power is
+    not in effect today (power_state.day_power: no power meter, or the CP stale) — no CP evidence
+    (premise, cp_change) for or against the LTHR then."""
+    try:
+        from backend.engine import power_state as PST
+        if not PST.day_power(ds, today):
+            return None
+    except Exception:                       # noqa: BLE001 — can't tell: as before
+        pass
     cp_now = plan.threshold_on("cp", today) if plan is not None else None
     if cp_now is None:
         rs = [w for w in ds.workouts if w.sport == "run"]

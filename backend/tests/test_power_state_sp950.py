@@ -237,16 +237,21 @@ def test_zone_event_suggestions_drop_the_cp_test_without_a_meter():
 
 # ---- 4. the threshold estimate in ③ ----------------------------------------------------------------
 
-def test_the_estimate_without_a_meter_suggests_no_test():
+def test_the_estimate_without_a_meter_suggests_no_test(monkeypatch):
+    from backend.engine import power_state as PST
     from backend.engine import thresholds as THR
     from backend.engine.planning import Plan
-    from backend.tests.test_lthr_without_power_sp294 import STRYD_CP, TODAY, _DS, _history
+    from backend.tests.test_lthr_without_power_sp294 import STRYD_CP, TODAY, _DS, _history, fresh_cp_days
     stryd = _DS(_history("trained", scale_of=lambda d: 1.0), src_of=lambda w: PS.STRYD, cp_charts=STRYD_CP,
                 plan=Plan(profile={"power_source": "none"}))
     lt = THR.estimate(stryd, TODAY)["lthr"]
     assert lt["value"] is None and lt["no_meter"] and lt["links"] == []
     assert THR.estimate(stryd, TODAY)["cp"] is None
-    stryd.plan.profile = {"power_source": "stryd"}                    # a meter again: the old Stryd runs count
+    stryd.plan.profile = {"power_source": "stryd"}                    # a meter again …
+    # … SP-952: but no CP test or race in 42 days (②) — the old CP judges nothing, no LTHR from runs
+    lt = THR.estimate(stryd, TODAY)["lthr"]
+    assert lt["value"] is None and lt.get("stale") and THR.estimate(stryd, TODAY)["cp"] is None
+    monkeypatch.setattr(PST, "cp_days", fresh_cp_days)                # CP tests kept current (①): the runs count
     assert THR.estimate(stryd, TODAY)["lthr"]["value"] is not None
 
 

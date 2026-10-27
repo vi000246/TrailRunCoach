@@ -537,7 +537,8 @@ def activity_rows(ds, a: dt.date, b: dt.date, recorded: Optional[list] = None) -
     for w in ws:
         r = O.activity_row(w, ds)          # + `session` (workout_review.classify: type, label, icon)
         if w in runs:
-            r["hard_s"] = hard.get(w.idx, 0.0) if hard else None
+            # SP-952: a run not judged by power (stale CP that day / no power meter) — HR or flat-road pace
+            r["hard_s"] = O._hard_done_s(ds, w, hard) if hard else None
         if recorded:
             sr = CR.self_rating(AT.recorded_of(recorded, w.entry.start, getattr(w.entry, "file", None)))
             if sr:
@@ -571,7 +572,8 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
                     if O.category(w) != "hike":
                         m = WR.measure(ds, w) or {}
                         sess = O.session_of(ds, w)
-                        reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "cp", "easy_cap")}
+                        reviews[w.idx] = {**{k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "easy_cap")},
+                                  "cp": WR.judge_cp(m)}        # SP-952: no CP when not judged by power
                         reviews[w.idx].update(tss=O._n(w.metrics.get("tss")), session_type=sess.get("type"),
                                               stimulus=sess.get("stimulus"))
                     continue
@@ -587,7 +589,8 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
                     rated[w.idx] = rec
                 m = WR.measure(ds, w) or {}
                 # rule D (SP-301): 偏強 reads power (else HR vs the easy cap, SP-565) and TSS; 太強 the session class
-                reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "cp", "easy_cap")}
+                reviews[w.idx] = {**{k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "easy_cap")},
+                                  "cp": WR.judge_cp(m)}        # SP-952: no CP when not judged by power
                 reviews[w.idx]["tss"] = O._n(w.metrics.get("tss"))
                 reviews[w.idx]["session_type"] = sess.get("type")
                 reviews[w.idx]["stimulus"] = sess.get("stimulus")

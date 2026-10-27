@@ -61,7 +61,7 @@ import numpy as np
 from backend.engine.algorithms.classify import TRAIL_CLIMB_RATE_M_PER_KM
 from backend.engine.algorithms.climbs import detect_climbs
 from backend.engine.algorithms.threshold_estimate import (
-    AET_MAX_OF_CP, AET_MAX_POWER_CV, WARMUP_S,
+    AET_MAX_OF_CP, AET_MAX_OF_LTHR, AET_MAX_POWER_CV, WARMUP_S,
 )
 from backend.engine import hints as H
 from backend.engine.panels.workout import MAX_DT, durability, grade_bins
@@ -185,6 +185,9 @@ AET_MARGIN = 3.0              # "easy" = avg HR ≤ AeT + 3: the +3 is HR's natu
 OVER_AET_SHARE = 0.10
 LONG_MIN_S = 75 * 60
 TEST_AET_MIN_S = 55 * 60
+DRIFT_MAX_OF_LTHR = AET_MAX_OF_LTHR   # 推估 (SP-952, 0.92): the drift test's HR gate without power — the > 90 % CP
+                              # gate's stand-in; above Friel's tempo zone top (89 % LTHR) and the default AeT
+                              # (0.89 × LTHR) so the runs around AeT stay (their drift is the AeT estimate)
 EFFORT_MIN_S = 60
 EFFORT_GAP_S = 30
 FADE = 0.05
@@ -979,7 +982,8 @@ def ramp_contrast(gh: np.ndarray, gv: np.ndarray, gp: Optional[np.ndarray], gd: 
 def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
              climb_m_per_km: Optional[float] = None, trail: bool = False,
              temp_c: Optional[float] = None, temp_src: Optional[str] = None,
-             dist=None, elev=None, cadence_spm=None) -> dict:
+             dist=None, elev=None, cadence_spm=None, lthr: Optional[float] = None,
+             tspeed: Optional[float] = None) -> dict:
     """Pa:HR decoupling (r = speed / HR, (r1 − r2) / r1 over the halves of the
     moving time after a 10-minute warm-up). Positive = HR drifted up for the
     same pace. `ok` False (with `reason`) when the run is not a fair test —
@@ -1029,7 +1033,12 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     window (seconds / events per kind; `cadence_spm` in steps / min for the
     lock); suspect seconds > 3 % or a moving step → `hr_ref` and a strict
     result becomes the reference tier with the plain reason (hr_downgrade).
-    Marked only — the HR is never changed or interpolated."""
+    Marked only — the HR is never changed or interpolated.
+
+    Without power (SP-952: no power channel, or a run not judged by power — its date's CP stale, no
+    power meter) the > 90 % CP gate has an HR / pace stand-in, so a steady tempo is no AeT test:
+    the window's mean HR ≤ DRIFT_MAX_OF_LTHR × `lthr`, and with a threshold speed (`tspeed`, km/h)
+    its mean moving speed ≤ AET_MAX_OF_CP × it (threshold pace = CP's intensity, thresholds.py)."""
     out = {"drift": None, "ok": False, "ref_ok": False, "tier": None, "reason": "", "hr1": None, "hr2": None,
            "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_ref_ok": False, "pw_reason": "",
            "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None, "measured_s": None,
@@ -1122,6 +1131,18 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         pm = _wmean(pw, d, m0 & np.isfinite(pw) & (pw > 0))
         if cp and pm and pm > AET_MAX_OF_CP * cp:
             out["reason"] = f"強度 {pm / cp * 100:.0f}% CP（> 90%），不是有氧跑，飄移不採用"
+            return out
+    else:
+        # SP-952: the intensity gate without power — HR against LTHR, pace against the threshold pace
+        hm_ = _wmean(h, d, win)
+        if lthr and hm_ and hm_ > DRIFT_MAX_OF_LTHR * lthr:
+            out["reason"] = (f"強度：平均心率 {hm_ / lthr * 100:.0f}% LTHR（> {DRIFT_MAX_OF_LTHR * 100:.0f}%，推估），"
+                             "不是有氧跑，飄移不採用")
+            return out
+        sm_ = _wmean(s, d, win)
+        if tspeed and sm_ and sm_ > AET_MAX_OF_CP * tspeed:
+            out["reason"] = (f"強度：配速是閾值配速的 {sm_ / tspeed * 100:.0f}%（> {AET_MAX_OF_CP * 100:.0f}%），"
+                             "不是有氧跑，飄移不採用")
             return out
     hx = _halves_drift(h, pw if pw_same else s, d, win)
     if hx is not None:
@@ -1223,7 +1244,8 @@ def band_of(pct_cp: Optional[float]) -> Optional[tuple[str, float, float]]:
 
 
 def detect_efforts(t, power, hr=None, cp: Optional[float] = None,
-                   min_s: int = EFFORT_MIN_S, gap_s: int = EFFORT_GAP_S, aet: Optional[float] = None) -> list[dict]:
+                   min_s: int = EFFORT_MIN_S, gap_s: int = EFFORT_GAP_S, aet: Optional[float] = None,
+                   speed=None) -> list[dict]:
     """Work bouts: 30-s power ≥ max(0.85 CP, 1.12 × session median) for at
     least `min_s`, gaps < `gap_s` bridged. Seconds are from the workout start.
 
@@ -1233,7 +1255,16 @@ def detect_efforts(t, power, hr=None, cp: Optional[float] = None,
     between two bouts (owner 2026-10-06: the cool-down after the last bout
     is not a rest), `aet60` = hr_at60 ≤ AeT, `t_to_aet` = seconds from the
     end to the first HR ≤ AeT before the next bout and `aet_back` = whether
-    that happened (None: last bout / no AeT / no HR to look at)."""
+    that happened (None: last bout / no AeT / no HR to look at).
+
+    SP-952: without power, `speed` (a flat road run judged without power) finds them the same way
+    on 30-s speed ≥ 1.15 × the session's median moving speed (the no-CP power line, 推估); such a
+    bout has `speed` (km/h), `power` / `pct_cp` None and `basis` "pace"."""
+    if (power is None or not _has(power)) and speed is not None and _has(speed):
+        out = []
+        for e in detect_efforts(t, speed, hr, None, min_s, gap_s, aet):
+            out.append({**e, "speed": e["power"], "power": None, "pct_cp": None, "basis": "pace"})
+        return out
     if power is None or not _has(power):
         return []
     grid, p = _grid1(t, power)
@@ -1318,7 +1349,11 @@ def interval_summary(efforts: list[dict]) -> dict:
     """Band of the set (median %CP), reps inside it, fade (last vs first)."""
     reps = [e for e in efforts if e.get("pct_cp") is not None]
     if not reps:
-        return {"n": len(efforts), "band": None, "in_band": 0, "fade": None, "rest_aet": rest_aet_summary(efforts)}
+        # SP-952: efforts found on speed (no power) fade by their speed, last ÷ first
+        sp = [e["speed"] for e in efforts if e.get("speed")]
+        fade = (sp[-1] / sp[0] - 1.0) if len(sp) >= 2 else None
+        return {"n": len(efforts), "band": None, "in_band": 0, "fade": fade, "rest_aet": rest_aet_summary(efforts),
+                **({"basis": "pace"} if sp else {})}
     med = statistics.median(e["pct_cp"] for e in reps)
     b = band_of(med)
     inb = sum(1 for e in reps if b and b[1] - 0.01 <= e["pct_cp"] < b[2] + 0.01)
@@ -1805,6 +1840,56 @@ def _thresholds(ds, w) -> tuple[Optional[float], Optional[float], Optional[float
     return aet, lthr, cp
 
 
+def activity_power(ds, w) -> bool:
+    """SP-952: judge this activity by power (power_state.activity_power: a trusted Stryd power and the
+    CP fresh on its date); False when that can't be read."""
+    try:
+        from backend.engine import power_state as PST
+        return PST.activity_power(ds, w)
+    except Exception:                       # noqa: BLE001
+        return False
+
+
+def power_on(m: Optional[dict]) -> bool:
+    """measure()'s `power_on` (SP-952): the run was judged by power; rows cached before it: True."""
+    return bool((m or {}).get("power_on", True))
+
+
+def judge_cp(m: Optional[dict]) -> Optional[float]:
+    """The CP intensity is judged against (SP-952): measure()'s `cp` when the run was judged by power,
+    else None — `cp` itself stays the CP on file (CP-test recognition, display)."""
+    return _f((m or {}).get("cp")) if power_on(m) else None
+
+
+def tpace_of(ds, w) -> Optional[float]:
+    """The threshold pace (min/km) on the activity's date: the run setting (`runtpace`), else
+    thresholds.estimate_tpace (memoised per date in ds.memo). None without either."""
+    try:
+        v = _f(ds.sport_setting("tpace", w)) if hasattr(ds, "sport_setting") else None
+    except Exception:                       # noqa: BLE001
+        v = None
+    if v:
+        return v
+    memo = getattr(ds, "memo", None)
+    day = _wdate(w)
+    key = ("sp952_tpace", day.isoformat())
+    if isinstance(memo, dict) and key in memo:
+        return memo[key]
+    try:
+        from backend.engine.thresholds import estimate_tpace
+        v = _f((estimate_tpace(ds, day) or {}).get("value"))
+    except Exception:                       # noqa: BLE001 — a dataset without the channels (tests)
+        v = None
+    if isinstance(memo, dict):
+        memo[key] = v
+    return v
+
+
+def tspeed_kmh(tpace_min: Optional[float]) -> Optional[float]:
+    """Threshold pace (min/km) → speed (km/h, the speed channel's unit)."""
+    return 60.0 / tpace_min if tpace_min and tpace_min > 0 else None
+
+
 def _hr_hist(h: np.ndarray, d: np.ndarray) -> dict:
     """{"<bpm>": seconds} of the moving HR time per whole bpm, ceil'd (SP-565: over_cap_s)."""
     u, inv = np.unique(np.ceil(np.asarray(h, float)).astype(int), return_inverse=True)
@@ -1947,16 +2032,35 @@ def _grade_rows(ds, w, s: dict, g: Optional[np.ndarray] = None) -> list:
     return [{k: r.get(k) for k in keep} for r in rows]
 
 
-def _measure(ds, w) -> Optional[dict]:
-    """Per-workout raw measurements (JSON; disk-memoised by `measure`)."""
+def _judge_inputs(ds, w) -> tuple[bool, Optional[float]]:
+    """(power_on, threshold pace) measure() judges this run with (SP-952) — part of its cache key:
+    power only when the activity_power rule says so; the threshold pace only for a road run judged
+    without power (its hard seconds and the drift test's intensity gate)."""
+    from backend.engine.overview import category
+    pon = activity_power(ds, w)
+    tp = None
+    if not pon and category(w) == "road":
+        tp = tpace_of(ds, w)
+    return pon, tp
+
+
+def _measure(ds, w, judge: Optional[tuple] = None) -> Optional[dict]:
+    """Per-workout raw measurements (JSON; disk-memoised by `measure`). `judge` = _judge_inputs
+    (SP-952): without power the intensity (hard seconds, the drift gates, efforts, the session
+    stimulus) is judged by heart rate / pace; `cp` stays the CP on file (`power_on` says which)."""
     s = _samples(ds, w)
     if s is None:
         return None
     from backend.engine.overview import category
+    pon, tpace = judge if judge is not None else _judge_inputs(ds, w)
     t = s["t"]
     n = len(t)
     d = _dt(t)
-    aet, lthr, cp = _thresholds(ds, w)
+    aet, lthr, cp_file = _thresholds(ds, w)
+    # SP-952: the power and CP intensity is judged with (None when the run is judged by HR / pace)
+    cp = cp_file if pon else None
+    pw_j = s["power"] if pon else None
+    tsp = tspeed_kmh(tpace)
     mov = moving_mask(t, s["speed"])
     h = _arr(s["hr"], n)
     p = _arr(s["power"], n)
@@ -1964,7 +2068,8 @@ def _measure(ds, w) -> Optional[dict]:
     dist, climb = _f(m.get("distance")), _f(m.get("climbing"))
     cat = category(w)
     out = {"category": cat, "moving_s": float(d[mov].sum()), "elapsed_s": float(np.nanmax(t) - np.nanmin(t)),
-           "avg_hr": _wmean(h, d, mov), "avg_power": _wmean(p, d, mov), "aet": aet, "lthr": lthr, "cp": cp}
+           "avg_hr": _wmean(h, d, mov), "avg_power": _wmean(p, d, mov), "aet": aet, "lthr": lthr, "cp": cp_file,
+           "power_on": bool(pon)}
     hm = mov & np.isfinite(h) & (h > 0)
     out["hr_s"] = float(d[hm].sum())
     out["over_aet_s"] = float(d[hm & (h > (aet or 1e9) + AET_MARGIN)].sum()) if aet else None
@@ -1987,20 +2092,33 @@ def _measure(ds, w) -> Optional[dict]:
         if p1 is not None and len(p1) > 30:
             p30 = np.convolve(np.nan_to_num(p1), np.ones(30) / 30, "same")
             hard_p = float((p30 >= 0.95 * cp).sum())
-    out["hard_s"] = max(hard_hr, hard_p)
+    hard_pace = 0.0
+    if not pon and cat == "road" and tsp and _has(s["speed"]):
+        # SP-952: a flat road run judged without power — 30-s speed ≥ 95 % of the threshold speed (the power
+        # rule's 95 % on threshold pace, the same intensity as CP: thresholds.py 「threshold pace (推估)」)
+        _, v1 = _grid1(t, s["speed"])
+        if v1 is not None and len(v1) > 30:
+            v30 = np.convolve(np.nan_to_num(v1), np.ones(30) / 30, "same")
+            hard_pace = float((v30 >= 0.95 * tsp).sum())
+    out["hard_s"] = max(hard_hr, hard_p, hard_pace)
     out["hard_power_s"] = hard_p if power_q else None
+    out["hard_pace_s"] = hard_pace if not pon and cat == "road" and tsp else None
     cpm = (climb / dist) if dist and dist > 0.5 and climb is not None else None
     out["climb_m_per_km"] = cpm
     out["watch_temp_c"] = _watch_temp(ds, w, t, s["speed"])
     if w.sport == "run" or cat in ("road", "trail"):
         # the temperature band is left to heat_band in measure(): the archive can fill after this is cached
-        out["drift"] = drift_of(t, s["hr"], s["speed"], s["power"], cp, cpm, trail=cat == "trail",
+        out["drift"] = drift_of(t, s["hr"], s["speed"], pw_j, cp, cpm, trail=cat == "trail",
                                 dist=s["dist"], elev=s["elev"],
-                                cadence_spm=None if s["cadence"] is None else np.asarray(s["cadence"], float) * 2.0)
+                                cadence_spm=None if s["cadence"] is None else np.asarray(s["cadence"], float) * 2.0,
+                                lthr=None if pon else lthr, tspeed=None if pon else tsp)
     else:
         out["drift"] = {"drift": None, "ok": False, "reason": "不是跑步"}
-    # hikes too: session_type needs a detected effort next to hard_power_s
-    efforts = detect_efforts(t, s["power"], s["hr"], cp, aet=aet) if (w.sport == "run" or power_q) else []
+    # hikes too: session_type needs a detected effort next to hard_power_s; SP-952: a road run judged
+    # without power finds its efforts on speed (a climb's pace says nothing of the effort: road only)
+    efforts = detect_efforts(t, pw_j, s["hr"], cp, aet=aet,
+                             speed=s["speed"] if not pon and cat == "road" else None) \
+        if (w.sport == "run" or power_q) else []
     out["efforts"] = efforts[:40]
     out["intervals"] = interval_summary(efforts)
     out["cp_test"] = cp_test(t, s["power"]) if w.sport == "run" else None
@@ -2027,7 +2145,7 @@ def _measure(ds, w) -> Optional[dict]:
         from backend.engine import power_zone_plan as PZP
         pm = PZP.model_on(ds, _wdate(w), cp)
         edges = PZP.class_edges(pm) if pm is not None else None
-    out["stim"] = SS.measure(t, s["hr"], s["power"], s["speed"],
+    out["stim"] = SS.measure(t, s["hr"], pw_j, s["speed"],
                              None if s["cadence"] is None else np.asarray(s["cadence"], dtype=float) * 2.0,
                              rg, cp, lthr, cat, edges) if cat in QUALITY_CATEGORIES else None
     hp = [c["hr_per_100m"] for c in climbs if c.get("hr_per_100m")]
@@ -2203,10 +2321,16 @@ def measure(ds, w) -> Optional[dict]:
     bias is part of the cache stamp, so a new bias needs no cache flush)."""
     suffix = apply_calibration()
     cache = getattr(ds, "cached_series", None)
+    # SP-952: whether the run is judged by power (its date's CP fresh, its power trusted) and the
+    # threshold pace it is then judged with are inputs of the measurements: part of the cache key
+    judge = _judge_inputs(ds, w)
     if cache is None:
-        m = _nan_free(_measure(ds, w))
+        m = _nan_free(_measure(ds, w, judge))
+    elif judge[0]:
+        m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure(ds, w, judge)))
     else:
-        m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure(ds, w)))
+        m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure(ds, w, judge)),
+                  extra={"power_on": False, "tpace": judge[1]})
     if m and isinstance(m.get("drift"), dict):
         # the band (and the same-band baseline's peers, each through here) follows the dataset's
         # wrist bias too: it is read here, never cached with the measurements
@@ -2382,6 +2506,39 @@ def _planned_quality(ds, w) -> bool:
         return False
 
 
+def _planned_spec(ds, w, m: Optional[dict] = None):
+    """The planned interval structure of the 課表 session done by this activity (interval_eval._spec:
+    a library variant or a ladder tuple), None without one."""
+    try:
+        from backend.engine import interval_eval as IE
+        row = IE._planned(ds, w)
+        if not row or row.get("kind") != "quality":
+            return None
+        return IE._spec(ds, w, row, m or {})[1]
+    except Exception:                       # noqa: BLE001 — no plan / an unreadable row
+        return None
+
+
+def _planned_no_power_z3(ds, w, m: dict, st: Optional[dict]) -> Optional[dict]:
+    """SP-952: a 課表 interval session judged without power — the stimulus' Zone 3 time recounted for
+    the planned reps (interval_reps.no_power_reps: lap pace on a flat road, else the HR stretches with
+    the lag skip shortened), so 4×4′ / 5×3′ run as planned don't read 0 s of Zone 3. None: nothing to
+    change (judged by power, no plan, nothing found)."""
+    if power_on(m) or not st:
+        return None
+    spec = _planned_spec(ds, w, m)
+    if spec is None:
+        return None
+    from backend.engine import interval_reps as IR
+    try:
+        z = IR.no_power_reps(ds, w, spec, m).get("z3_s")
+    except Exception:                       # noqa: BLE001 — never breaks the classifier
+        z = None
+    if not z or z <= float(st.get("z3_s") or 0.0):
+        return None
+    return {**st, "z3_s": float(st.get("z3_power_s") or 0.0) + float(z), "z3_planned_s": float(z)}
+
+
 def _planned_mp_s(ds, w) -> int:
     """SP-646: the marathon-pace seconds of the 課表 long run done by this activity (0 = none):
     `ds.plan_mp_rows` when set (tests), else plan_store.done_mp_long."""
@@ -2412,6 +2569,9 @@ def _stimulus(ds, w, m: dict, cat: str) -> dict:
         # §3.2's power exception). Before, the planner's own 5×4′ hill set run as planned
         # read 「輕鬆跑」 and the 課表 said 「沒照課表：排強度課，實際跑輕鬆」.
         easy_hr = False
+    if not power_on(m) and st and (st.get("z3_s") or 0.0) < SS.Z3_NEED_S:
+        # SP-952: a planned interval session judged without power — Zone 3 for its known reps
+        st = _planned_no_power_z3(ds, w, m, st) or st
     hp, src = None, None
     if st and cat in ("road", "trail") and (st.get("t_vo2_power_s") or 0) < SS.Z5_MIN_S \
             and any((st.get("hr_path") or {}).get("secs") or []):

@@ -128,7 +128,9 @@ def test_palladino_zone_table_counts_runs_before_the_plan_test(tmp_path):
 
 def test_threshold_pace_at_cp_from_stryd_road_runs(tmp_path):
     from backend.engine.thresholds import estimate_tpace
-    plan = Plan(thresholds=[Threshold(date="2026-09-01", cp=200.0, lthr=160.0)])
+    # SP-952: pace at CP only while power is in effect — a Stryd runner (3 runs are too few to detect one,
+    # power_state: ≥ 5) whose CP test of 09-01 is fresh on TODAY
+    plan = Plan(thresholds=[Threshold(date="2026-09-01", cp=200.0, lthr=160.0)], profile={"power_source": "stryd"})
     runs = [dict(start=datetime(2026, 9, d, 0, tzinfo=UTC), seconds=2400, hr=160, power=200, stryd=True,
                  speed_m_s=3.0) for d in (5, 12, 19)]
     ds = _ds(tmp_path, runs, plan)

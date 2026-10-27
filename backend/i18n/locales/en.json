@@ -4401,5 +4401,9 @@
   "，移動時間退回舊的功率模型（CP＋Riegel），越野上常算得太快": ", so the moving time falls back to the old power model (CP + Riegel), which often runs fast on trails",
   "，移動時間用賽季計畫填的預估時間": ", so the moving time is the estimate entered in the season plan",
   "賽事計算機用比賽成績推估的時間（還沒有越野心率配速模型）": "The Race calculator's estimate from your race results (no trail heart-rate pace model yet)",
-  "不用功率時，路跑用比賽成績推估：{reason}": "Without power, a road race is estimated from your race results: {reason}"
+  "不用功率時，路跑用比賽成績推估：{reason}": "Without power, a road race is estimated from your race results: {reason}",
+  "這次不用功率判讀（當天 CP 過期或沒有功率計）：看心率和配速": "Not judged by power this time (the CP was out of date that day, or no power meter): read heart rate and pace",
+  "沒有目標帶": "No target band",
+  "第 1 趟配速就沒到目標帶（{pct:.0f}% 閾值配速）：目標下修 5%": "Rep 1 already missed the pace band ({pct:.0f}% of threshold pace): target down 5%",
+  "CP 已過期：不用 CP 判斷哪幾次跑步夠硬，所以一般跑步估不出 LTHR；LTHR 沿用目前的值，可以手動輸入、用比賽成績，或做一次 CP 測試切回功率": "CP out of date: it no longer tells which runs were hard enough, so ordinary runs can't give an LTHR; the current LTHR stays — enter it by hand, use a race result, or do a CP test to switch back to power"
 }

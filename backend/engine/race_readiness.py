@@ -932,6 +932,13 @@ def _safe(f, default):
         return default
 
 
+def _power_run(ds, w) -> bool:
+    """SP-952: the run's power curve counts only when the run is judged by power (power_state.activity_power:
+    Stryd power and the CP fresh on its date) — no wrist power, no power of a stale-CP / no-meter day."""
+    from backend.engine import power_state as PST
+    return _safe(lambda: PST.activity_power(ds, w), True)
+
+
 UPHILL_KEY = "readiness_uphill_v1"
 
 
@@ -981,7 +988,7 @@ def inputs(ds, plan, today: dt.date, since: dt.date, start: Optional[dt.date] = 
             v, v20 = _uphill(ds, st, w)
             if v is not None:
                 vam.append({"date": day, "vam": v, "vam20": v20})
-        if O.category(w) in O.FOOT and day >= perf_lo:
+        if O.category(w) in O.FOOT and day >= perf_lo and _power_run(ds, w):
             cur = _safe(lambda w=w: ds.workout_curve(w.idx, "power"), None)
             if cur and cur[0]:
                 xs, ys = cur

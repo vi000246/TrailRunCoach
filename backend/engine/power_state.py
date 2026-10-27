@@ -248,3 +248,147 @@ def of(th: Optional[dict]) -> Optional[dict]:
     """The power state a thresholds dict carries (week_plan's thresholds["power_state"]); None."""
     ps = (th or {}).get("power_state")
     return ps if isinstance(ps, dict) and ps.get("state") in STATES else None
+
+
+# ---------------------------------------------------------------------------
+# per activity (SP-952): judge by power only when power was in effect THAT day
+# ---------------------------------------------------------------------------
+# Owner 2026-10-27 (SP-950 Q2-3; docs/research/no-power-meter-audit.md 「活動判讀…照那次活動當天」):
+# an activity is judged by power when the runner has a power meter (not ③), the activity's power is
+# trusted (Dataset.power_ok: Stryd — watch power never) and the CP was fresh on its date (fresh_on);
+# otherwise by heart rate / pace. A Dataset that cannot tell (no power_ok: test doubles) keeps the
+# long-standing behaviour (power whenever there is a CP), as equipment() reads an unknown source.
+
+def _can_tell(ds) -> bool:
+    return callable(getattr(ds, "power_ok", None))
+
+
+def _memo(ds) -> Optional[dict]:
+    m = getattr(ds, "memo", None)
+    return m if isinstance(m, dict) else None
+
+
+def _plan_sig(ds) -> tuple:
+    plan = getattr(ds, "plan", None)
+    return (id(plan), len(getattr(plan, "thresholds", None) or []), len(getattr(plan, "events", None) or []),
+            len(getattr(ds, "workouts", None) or []))
+
+
+def _data_test_days(ds) -> list[str]:
+    """The CP tests in the data beyond the plan's CP rows, read WITHOUT measuring the runs (measure()
+    asks activity_power, so it can't be asked back): a run with trusted power that a stored CP-test
+    session was marked done by (workout_review.scheduled_test's done_by), that the user tagged 測試,
+    or whose title says CP test (workout_review.session_class's title rule: 「CP」/「測試」, not an AeT /
+    max-HR test). A run on a plan race day is a race (plan_days)."""
+    import re
+    from backend.engine import workout_review as WR
+    out: set[str] = set()
+    try:
+        from backend.engine.threshold_confidence import HRMAX_TITLE
+    except Exception:                       # noqa: BLE001
+        HRMAX_TITLE = None
+    done = {}
+    try:
+        from backend.engine.aet_test import is_aet_session
+        for s in WR._plan_test_sessions(ds):
+            db = s.get("done_by") or {}
+            if s.get("state") == "done" and db.get("index") is not None and not is_aet_session(s) \
+                    and not (HRMAX_TITLE and HRMAX_TITLE.search(s.get("title") or "")):
+                done[db.get("index")] = str(db.get("date") or s.get("day") or "")[:10]
+    except Exception:                       # noqa: BLE001 — no plan store: nothing scheduled
+        done = {}
+    try:
+        from backend.engine import activity_tags as AT
+        tags = AT.load()                    # once: user_of reads the store on every call otherwise
+    except Exception:                       # noqa: BLE001 — no tag store
+        AT, tags = None, []
+    for w in getattr(ds, "workouts", None) or []:
+        if w.sport != "run":
+            continue
+        try:
+            title = WR._title(w)
+        except Exception:                   # noqa: BLE001
+            title = ""
+        hit = w.idx in done
+        if not hit and title and not WR.AET_TITLE.search(title) and re.search(r"\bCP\b|測試", title) \
+                and not (HRMAX_TITLE and HRMAX_TITLE.search(title)):
+            hit = True
+        if not hit and tags:
+            try:
+                hit = AT.user_type(AT.user_of(w, tags)) == "test" and not WR.AET_TITLE.search(title or "")
+            except Exception:               # noqa: BLE001
+                hit = False
+        if not hit:
+            continue
+        try:
+            if not ds.power_ok(w):
+                continue
+        except Exception:                   # noqa: BLE001
+            continue
+        out.add(WR._wdate(w).isoformat())
+    return sorted(out)
+
+
+def cp_days(ds) -> tuple[list[str], list[str]]:
+    """(CP test days, race days) for fresh_on on this Dataset: plan_days + _data_test_days (memoised
+    in ds.memo per plan / workout count)."""
+    import time
+    memo = _memo(ds)
+    key = ("sp952_cp_days", _plan_sig(ds))
+    hit = memo.get(key) if memo is not None else None
+    # the stored test sessions and activity tags aren't in the key: re-read after CP_DAYS_TTL_S
+    if hit is not None and time.monotonic() - hit[0] < CP_DAYS_TTL_S:
+        return hit[1]
+    tests, races = plan_days(getattr(ds, "plan", None))
+    try:
+        tests = sorted(set(tests) | set(_data_test_days(ds)))
+    except Exception:                       # noqa: BLE001 — unreadable data: the plan's rows only
+        pass
+    out = (tests, races)
+    if memo is not None:
+        memo[key] = (time.monotonic(), out)
+    return out
+
+
+CP_DAYS_TTL_S = 60.0
+
+
+def _no_meter_memo(ds) -> bool:
+    memo = _memo(ds)
+    prof = getattr(getattr(ds, "plan", None), "profile", None) or {}
+    key = ("sp952_no_meter", _plan_sig(ds)[0], len(getattr(ds, "workouts", None) or []),
+           repr(sorted((k, str(v)) for k, v in prof.items() if "power" in str(k))))
+    if memo is not None and key in memo:
+        return memo[key]
+    try:
+        v = no_meter(ds)
+    except Exception:                       # noqa: BLE001
+        v = False
+    if memo is not None:
+        memo[key] = v
+    return v
+
+
+def day_power(ds, day) -> bool:
+    """Power is in effect on `day` for this Dataset's runner: not ③ and the CP fresh on that day
+    (fresh_on over cp_days). True for a Dataset that cannot tell (see above)."""
+    if not _can_tell(ds):
+        return True
+    if _no_meter_memo(ds):
+        return False
+    tests, races = cp_days(ds)
+    return fresh_on(day, tests, races)
+
+
+def activity_power(ds, w) -> bool:
+    """SP-952: judge this activity by power — day_power on its date and its power trusted
+    (Dataset.power_ok: Stryd only). True for a Dataset that cannot tell (test doubles)."""
+    if not _can_tell(ds):
+        return True
+    try:
+        if not ds.power_ok(w):
+            return False
+    except Exception:                       # noqa: BLE001
+        return False
+    from backend.engine.wko5expr.dataset import day_to_date
+    return day_power(ds, day_to_date(w.day))

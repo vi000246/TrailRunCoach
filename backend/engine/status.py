@@ -592,7 +592,10 @@ class Status:
         # power view for runs (Palladino 3-zone: <80% CP low, ≥95% high)
         plow = self.ws("athleterange(today-27, today, sum(if(power > 0 and power < 0.8*cp, deltatime)))")
         ptot = self.ws("athleterange(today-27, today, sum(if(power > 0, deltatime)))")
-        runs = {i for i in ptot if self.ds.workouts[i].sport == "run"}
+        from backend.engine import power_state as PST
+        # SP-952: only the runs judged by power (their date's CP fresh, Stryd power)
+        runs = {i for i in ptot if self.ds.workouts[i].sport == "run"
+                and PST.activity_power(self.ds, self.ds.workouts[i])}
         p_all = sum(v for i, v in ptot.items() if i in runs)
         pshare = None if p_all < 3600 else sum(v for i, v in plow.items() if i in runs) / p_all
         if pshare is not None and not self.power_state()["power"]:

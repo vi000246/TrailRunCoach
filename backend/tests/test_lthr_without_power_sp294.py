@@ -113,8 +113,16 @@ class _DS(FakeDataset):
         return self._curves[(idx, channel)]
 
 
+def fresh_cp_days(ds=None):
+    """SP-952: these synthetic Stryd runners keep their CP current — a CP test every 30 days over the
+    whole history (power_state.cp_days), so every run is judged by power as these tests assume."""
+    return [(TODAY - dt.timedelta(days=d)).isoformat() for d in range(0, 400, 30)], []
+
+
 @pytest.fixture(autouse=True)
 def _isolated(monkeypatch):
+    from backend.engine import power_state as PST
+    monkeypatch.setattr(PST, "cp_days", fresh_cp_days)          # SP-952: the CP fresh on every run's day
     monkeypatch.setattr(CT, "curves", lambda *a, **k: [])       # never the synced FIT folder
     monkeypatch.setattr(HP, "account", lambda user_id=1: None)  # no COROS account HR settings
     A._cp_memo.clear()
@@ -171,7 +179,11 @@ def test_hr_only_runs_give_no_lthr_and_no_aet_estimate(cp_of):
     else:
         assert lt["value"] is None and lt["no_cp"] and lt["reason"] == TH.NO_CP_REASON
         assert "Stryd" in lt["reason"] and "CP 測試" in lt["reason"] and "30 分鐘 LTHR 測試" in lt["reason"]
-    assert est["aethr"]["value"] is None and est["aethr"]["n"] == 0   # the drift test needs power too
+    if cp_of == "dataset":
+        # SP-952 (owner 2026-10-27): without a power meter the AeT comes from Pa:HR drift (pace), not power
+        assert est["aet_basis"] == "pace" and est["aethr"]["n"] > 0
+    else:
+        assert est["aethr"]["value"] is None and est["aethr"]["n"] == 0   # the load-time grid: power only
 
 
 # ---- 2. what fills the gap today: the SP-289 prior 0.90 × max HR ---------------------

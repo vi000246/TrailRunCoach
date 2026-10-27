@@ -1129,6 +1129,31 @@ def _targets(tt: dict) -> dict[str, str]:
     return out
 
 
+def _hard_done_s(ds: Dataset, w: Workout, hard: dict) -> float:
+    """SP-952: a run's seconds at threshold for a quality session's done rule — the expressions'
+    (HR ≥ LTHR or power ≥ 95 % CP) when the run is judged by power, else workout_review's hard_s
+    (HR ≥ LTHR or, on a flat road, pace ≥ 95 % of the threshold pace; never the power of a stale CP)."""
+    from backend.engine import workout_review as WR
+    if WR.activity_power(ds, w):
+        return hard.get(w.idx, 0)
+    return float((WR.measure(ds, w) or {}).get("hard_s") or 0.0)
+
+
+def _z3_done_s(ds: Dataset, w: Workout, hard_z3: dict, s) -> float:
+    """SP-952: a run's Zone 3 seconds for a planned Zone 3 variant — Z3_EXPR (10-s power ≥ 85 % CP) when
+    the run is judged by power; else the planned reps without power (interval_reps.no_power_reps: lap
+    pace on a flat road, else HR with the lag skip shortened), at least the classifier's Zone 3 time."""
+    from backend.engine import workout_review as WR
+    if WR.activity_power(ds, w):
+        return hard_z3.get(w.idx, 0)
+    from backend.engine import interval_library as IL
+    from backend.engine import interval_reps as IR
+    m = WR.measure(ds, w) or {}
+    v = IL.resolve(s.variant_key, s.variant_reps) if s.variant_key else None
+    z = IR.no_power_reps(ds, w, v, m).get("z3_s") if v is not None else None
+    return max(float(z or 0.0), float((m.get("stim") or {}).get("z3_s") or 0.0))
+
+
 def _hard_seconds(ds: Dataset, ws: list[Workout], b: int, e: int, exprs=None) -> dict[int, float]:
     if not ws:
         return {}
@@ -2434,12 +2459,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             if hard_z3 is None:
                 hard_z3 = _hard_seconds(ds, [w for w in week_ws if category(w) in ENDURANCE],
                                         int(date_to_day(monday)), int(date_to_day(sunday)), (Z3_EXPR,))
-            return lambda w, h=hard_z3: h.get(w.idx, 0) >= need
+            return lambda w, h=hard_z3, s=s: _z3_done_s(ds, w, h, s) >= need
         if s.kind == "quality" and (QG.is_z5_variant(s.variant_key) or str(s.rung_key or "").startswith("z5")):
             # the Zone 5 slot: only a run classified Z5 (equivalent T@VO2max ≥ 4 min; owner
             # 2026-10-02) — a threshold climb with 10′ ≥ LTHR no longer ticks it
             return lambda w: session_of(ds, w).get("stimulus") == "z5"
-        return lambda w: hard.get(w.idx, 0) >= need
+        return lambda w: _hard_done_s(ds, w, hard) >= need
 
     def interval_run(s: Session, w: Workout) -> bool:
         """SP-649: a run long enough for the long slot (≥ 80 % of it) that is this week's interval

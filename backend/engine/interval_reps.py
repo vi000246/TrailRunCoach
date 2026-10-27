@@ -78,8 +78,14 @@ def _fit_laps(raw: bytes) -> list[dict]:
             a = (st - t0).total_seconds()
         except TypeError:
             continue
+        spd = lp.get("enhanced_avg_speed") if lp.get("enhanced_avg_speed") is not None else lp.get("avg_speed")
+        try:
+            spd = float(spd) * 3.6 if spd is not None else None          # m/s → km/h (the speed channel's unit)
+        except (TypeError, ValueError):
+            spd = None
         out.append({"start_s": float(a), "duration_s": float(dur),
-                    "power": float(lp["avg_power"]) if lp.get("avg_power") is not None else None})
+                    "power": float(lp["avg_power"]) if lp.get("avg_power") is not None else None,
+                    "speed": spd})
     return out
 
 
@@ -149,7 +155,8 @@ def lap_bouts(laps: list[dict], works: list[int], lo: Optional[float], cp: Optio
             break
     if len(works) > 1 and len(best) < 2 and rest_s:
         return []                            # one lap of the right length is not a set of reps
-    return [{"start_s": lp["start_s"], "duration_s": lp["duration_s"], "power": lp.get("power"), "source": "lap"}
+    return [{"start_s": lp["start_s"], "duration_s": lp["duration_s"], "power": lp.get("power"), "source": "lap",
+             **({"speed": lp["speed"]} if lp.get("speed") is not None else {})}
             for lp in best]
 
 
@@ -316,6 +323,81 @@ def find_reps(ds, w, s: Optional[dict], cp: Optional[float], spec=None, hr_z3: b
     if len(z3) >= 2:
         return {"bouts": [{**r, "source": "z3"} for r in z3], "source": "z3"}
     return {"bouts": [{**r, "source": "short"} for r in short], "source": "short" if short else None}
+
+
+# ---------------------------------------------------------------------------
+# SP-952: the reps of a planned session judged without power (owner 2026-10-27, SP-950 Q1-4)
+# ---------------------------------------------------------------------------
+# A run judged without power (no power meter, or its date's CP stale — power_state.activity_power):
+#   1. a flat road run with laps: the laps matching the planned work (lap_bouts on durations and the
+#      planned rest), each judged by its pace against the threshold pace — `rel` = lap speed ÷ threshold
+#      speed, the same scale as % CP (threshold pace is CP's intensity, thresholds.py);
+#   2. otherwise the heart rate: the run's HR stretches ≥ 95 % LTHR (session_stimulus `z3_hr_runs`) that
+#      are ≥ half a planned rep, a stretch that spans several reps (HR stayed up over a short rest) split
+#      by the planned rep + rest; each counts as a rep done (HR in Zone 3 is the evidence; no `rel`).
+# `z3_s`: the Zone 3 seconds — the laps at ≥ REP_TOL × Z3_FLOOR of the threshold speed, or
+# session_stimulus.z3_hr_planned (the HR lag skip shortened for the known reps).
+
+def _lap_speed(b: dict, s: Optional[dict]) -> Optional[float]:
+    """A lap's mean speed (km/h): the lap's own (FIT avg speed), else from the distance channel."""
+    if b.get("speed"):
+        return float(b["speed"])
+    if s is None or s.get("dist") is None or s.get("t") is None:
+        return None
+    grid, dk = _grid(s["t"], s["dist"])
+    if grid is None:
+        return None
+    a, e = int(round(b["start_s"])), int(round(b["start_s"] + b["duration_s"]))
+    if a < 0 or a >= len(dk):
+        return None
+    km = float(dk[min(e, len(dk) - 1)] - dk[a])
+    return km / (b["duration_s"] / 3600.0) if km > 0 and b["duration_s"] > 0 else None
+
+
+def no_power_reps(ds, w, spec, m: Optional[dict] = None, s: Optional[dict] = None) -> dict:
+    """{"bouts": [...], "source": "lap_pace" | "hr" | None, "z3_s": seconds | None} of a run judged
+    without power against the planned `spec` (see above). A lap_pace bout: {"start_s", "duration_s",
+    "speed", "rel", "power": None}; an hr bout: {"start_s", "duration_s", "power": None}."""
+    from backend.engine import session_stimulus as SS
+    from backend.engine import workout_review as WR
+    from backend.engine.overview import category
+    works, rest = works_of(spec), rest_of(spec) or 0.0
+    none = {"bouts": [], "source": None, "z3_s": None}
+    if not works:
+        return none
+    m = m if m is not None else (WR.measure(ds, w) or {})
+    rep_s, n = float(min(works)), len(works)
+    if category(w) == "road":
+        tsp = WR.tspeed_kmh(WR.tpace_of(ds, w))
+        lb = lap_bouts(laps_of(ds, w), works, None, None, rest or None) if tsp else []
+        bouts = []
+        for b in lb:
+            v = b.get("speed")
+            if not v:
+                s = s if s is not None else WR._samples(ds, w)
+                v = _lap_speed(b, s)
+            if not v:
+                bouts = []
+                break
+            bouts.append({"start_s": b["start_s"], "duration_s": b["duration_s"], "power": None,
+                          "speed": float(v), "rel": float(v) / tsp, "source": "lap_pace"})
+        if bouts:
+            z3 = float(sum(b["duration_s"] for b in bouts if b["rel"] >= REP_TOL * Z3_FLOOR))
+            return {"bouts": bouts, "source": "lap_pace", "z3_s": z3}
+    stim = m.get("stim") or {}
+    runs = stim.get("z3_hr_runs")
+    if runs is None:
+        return none
+    bouts = []
+    for a, d in runs:
+        a, d = float(a), float(d)
+        if d < SS.PLANNED_MIN_SHARE * rep_s:
+            continue
+        k = max(1, int(round((d + rest) / (rep_s + rest))))
+        for i in range(k):
+            bouts.append({"start_s": a + i * (rep_s + rest), "duration_s": min(rep_s, d / k), "power": None,
+                          "source": "hr"})
+    return {"bouts": bouts[:n], "source": "hr" if bouts else None, "z3_s": SS.z3_hr_planned(stim, rep_s, n, rest)}
 
 
 

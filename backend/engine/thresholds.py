@@ -44,6 +44,45 @@ def _per_run(ds: Dataset, w, cp: Optional[float] = None, use_ds_cp: bool = True)
     return {"lt": asdict(rt), "dp": None if dp is None else asdict(dp), "cp": cp}
 
 
+def _per_run_pace(ds: Dataset, w) -> Optional[dict]:
+    """SP-952: a run not judged by power (no power meter, its date's CP stale, watch power): no LTHR
+    numbers (they need a CP) and the AeT drift point from Pa:HR (steady_drift_pace) on a flat road run —
+    gated by the run's LTHR and its threshold-pace setting (both in the cache stamp, _settings_sig)."""
+    from backend.engine.algorithms.classify import TRAIL_CLIMB_RATE_M_PER_KM
+    from backend.engine.algorithms.threshold_estimate import steady_drift_pace
+    t = ds.channel(w.idx, "elapsedtime")
+    hr = ds.channel(w.idx, "heartrate")
+    sp = ds.channel(w.idx, "speed")
+    if t is None or hr is None:
+        return None
+    empty = RunThreshold(None, None, None, 0)
+    m = w.metrics or {}
+    dist, climb = m.get("distance"), m.get("climbing")
+    hilly = bool(dist and climb is not None and float(dist) > 0.5 and float(climb) / float(dist) >= TRAIL_CLIMB_RATE_M_PER_KM)
+    dp = None
+    if sp is not None and "runningtrail" not in w.tags and not hilly:
+        lthr = ds.sport_setting("thr", w) if hasattr(ds, "sport_setting") else None
+        tp = ds.sport_setting("tpace", w) if hasattr(ds, "sport_setting") else None
+        dp = steady_drift_pace(list(t), list(hr), list(sp), lthr, 60.0 / tp if tp else None)
+    return {"lt": asdict(empty), "dp": None if dp is None else asdict(dp), "cp": None, "dp_basis": "pace"}
+
+
+def _activity_power(ds: Dataset, w) -> bool:
+    try:
+        from backend.engine import power_state as PST
+        return PST.activity_power(ds, w)
+    except Exception:                       # noqa: BLE001
+        return True
+
+
+def _day_power(ds: Dataset, today: dt.date) -> bool:
+    try:
+        from backend.engine import power_state as PST
+        return PST.day_power(ds, today)
+    except Exception:                       # noqa: BLE001
+        return True
+
+
 def _nan_free(x):
     if isinstance(x, float) and math.isnan(x):
         return None
@@ -79,14 +118,17 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
     tday = int(math.floor(date_to_day(today)))
     runs = [w for w in ds.workouts if w.sport == "run" and tday - WINDOWS[-1] < math.floor(w.day) <= tday]
     off = cp_of is None and _no_meter(ds, today)
-    if off:
-        # SP-950 ③ (no power meter, engine/power_state.py): no power and no CP in today's estimate — no
-        # LTHR from ordinary runs (no_meter_lthr), the AeT not from Pw:HR drift. The load-time grid
-        # (fitdataset._estimate_settings, cp_of given: the history the TSS stands on) is left as it was
-        runs = []
+    # SP-950 ③ (no power meter) / SP-952 ② (the CP stale today): no CP in today's estimate — no LTHR from
+    # ordinary runs (no_meter_lthr / stale_lthr: CP evidence never moves the LTHR then), the AeT from Pa:HR
+    # drift (steady_drift_pace). Each run is judged by power only when it was that day
+    # (power_state.activity_power). The load-time grid (fitdataset._estimate_settings, cp_of given: the
+    # history the TSS stands on) is left as it was
+    use_power = cp_of is not None or (not off and _day_power(ds, today))
     data = {}
     for w in runs:
-        if cp_of is None:
+        if cp_of is None and (not use_power or not _activity_power(ds, w)):
+            v = ds.cached_series(_KEY, w, lambda w=w: _nan_free(_per_run_pace(ds, w)), extra={"power_on": False})
+        elif cp_of is None:
             v = ds.cached_series(_KEY, w, lambda w=w: _nan_free(_per_run(ds, w)))
         else:
             cp_w = cp_of(w.entry.start.date())
@@ -107,10 +149,10 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
         # the CP in effect on `today` (a plan test dated today counts even when
         # the last WKO5 run is older), else the last run's
         plan = getattr(ds, "plan", None)
-        cp_now = plan.threshold_on("cp", today) if plan is not None and not off else None
-        if cp_now is None and not off:
+        cp_now = plan.threshold_on("cp", today) if plan is not None and use_power else None
+        if cp_now is None and use_power:
             cp_now = ds.cp(runs[-1]) if runs else None
-        if cp_now is None and _has_power(ds, runs):
+        if cp_now is None and use_power and _has_power(ds, runs):
             # SP-573: no plan test and no Stryd fit (Dataset.cp) but runs with power — a watch-power
             # history. The estimate made at load (fitdataset._estimate_settings → runthr) measures
             # them against cp_as_of, the wrist-power fit; the suggestion (threshold-estimate API,
@@ -126,20 +168,30 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
         ws = [w for w in runs if math.floor(w.day) > tday - days and w.idx in data]
         # the LTHR side only: AeT's drift points are measured against each run's own-date CP
         lts = [RunThreshold(**data[w.idx]["lt"]) for w in ws if judged(w)]
-        dps = [DriftPoint(**data[w.idx]["dp"]) for w in ws if data[w.idx]["dp"]]
+        # SP-952: one basis for the AeT line — Pw:HR while power is in effect today, Pa:HR otherwise
+        want = "pace" if not use_power else None
+        dps = [DriftPoint(**data[w.idx]["dp"]) for w in ws if data[w.idx]["dp"]
+               and data[w.idx].get("dp_basis") == want]
         return ws, lts, dps
 
     out = {"cp": cp_now, "today": today.isoformat()}
+    if not use_power:
+        out["aet_basis"] = "pace"
     for days in WINDOWS:
         ws, lts, dps = pick(days)
         if not cp_now:
-            out["lthr"] = no_meter_lthr() if off else no_cp_lthr()
+            out["lthr"] = no_meter_lthr() if off else stale_lthr() if not use_power else no_cp_lthr()
             break
         lt = estimate_lthr(lts, cp_now)
         if lt.value is not None or days == WINDOWS[-1]:
             out["lthr"] = {**asdict(lt), "days": days, "hr_at_cp_note": HR_AT_CP_NOTE}
             break
     lthr_v = (out.get("lthr") or {}).get("value")
+    if lthr_v is None and not use_power and runs:
+        try:                                # SP-952: the LTHR in effect bounds the Pa:HR AeT line
+            lthr_v = ds.sport_setting("thr", runs[-1])
+        except Exception:                   # noqa: BLE001
+            lthr_v = None
     for days in WINDOWS:
         ws, lts, dps = pick(days)
         ae = estimate_aet(dps, lthr=lthr_v)
@@ -185,6 +237,16 @@ def no_meter_lthr() -> dict:
     (owner 2026-10-27: no 30-min test; the LTHR in effect stays, manual entry / races)."""
     return {"value": None, "n": 0, "hr_at_cp": None, "n_at_cp": 0, "spread": None,
             "reason": _(NO_METER_REASON), "days": None, "no_cp": True, "no_meter": True, "links": []}
+
+
+STALE_REASON = N_("CP 已過期：不用 CP 判斷哪幾次跑步夠硬，所以一般跑步估不出 LTHR；LTHR 沿用目前的值，"
+                  "可以手動輸入、用比賽成績，或做一次 CP 測試切回功率")
+
+
+def stale_lthr() -> dict:
+    """SP-952 ②: the `lthr` of today's estimate while the CP is stale — no value, no CP evidence."""
+    return {"value": None, "n": 0, "hr_at_cp": None, "n_at_cp": 0, "spread": None,
+            "reason": _(STALE_REASON), "days": None, "no_cp": True, "stale": True, "links": []}
 
 
 def no_cp_lthr() -> dict:
@@ -318,7 +380,8 @@ def estimate_tpace(ds: Dataset, today: dt.date) -> dict:
     import statistics
     tday = int(math.floor(date_to_day(today)))
     runs = _road_runs(ds, tday)
-    at_cp = _tpace_at_cp(ds, today, runs)
+    # SP-952: pace at CP only while power is in effect that day (not with a stale CP / no power meter)
+    at_cp = _tpace_at_cp(ds, today, runs) if _day_power(ds, today) else None
     if at_cp:
         return at_cp
     per = {}

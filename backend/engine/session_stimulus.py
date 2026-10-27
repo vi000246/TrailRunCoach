@@ -209,16 +209,51 @@ def measure(t, hr=None, power=None, speed=None, cadence_spm=None, grade=None,
     if pvalid.any():
         z3_p = float(sum(b - a for a, b in runs_of(pvalid & (p30 >= z3_edge * cp), BRIDGE_S) if b - a >= Z3_MIN_S))
     z3_h = 0.0
+    hr_runs = []
     if h30 is not None and lthr:
         ok = np.isfinite(h30) & ~lock & ~pvalid & ~down
         for a, b in runs_of(ok & (h30 >= Z3_HR * lthr), BRIDGE_S):
             if b - a - Z3_HR_SKIP_S >= Z3_MIN_S:
                 z3_h += b - a - Z3_HR_SKIP_S
+            if b - a >= HR_MIN_S:
+                hr_runs.append([float(a), float(b - a)])     # SP-952: kept for z3_hr_planned
     return {"t_vo2_power_s": float(t_p), "vo2_bouts": bouts[:20], "top_pct_cp": top,
             "best_bout_pct_cp": best, "hr_path": {"lo": HR_BPM_LO, "secs": hr_secs}, "hr_peak60": hr_peak60,
-            "z3_s": z3_p + z3_h, "z3_power_s": z3_p, "z3_hr_s": z3_h,
+            "z3_s": z3_p + z3_h, "z3_power_s": z3_p, "z3_hr_s": z3_h, "z3_hr_runs": hr_runs[:40],
             "power_valid_share": float(pvalid.mean()) if n else 0.0, "lock_s": float(lock.sum()),
             **({"edges": {"z3": z3_edge, "p_lo": lo_edge, "p_hi": hi_edge}} if edges else {})}
+
+
+# SP-952 (owner 2026-10-27, SP-950 Q1-4): with the plan's reps known, the HR Zone 3 skips less. The
+# 3-min skip per HR stretch is for a run nobody planned (a long climb, a drifting tempo); a 4′ / 3′ rep
+# can't keep 150 s after it, so 4×4′ and 5×3′ read 0 s of Zone 3 by HR. With the reps known the skip
+# drops to PLANNED_SKIP_S = 0 (推估): a stretch only starts once HR is over 95 % LTHR, so the lag at the
+# rep's start is already outside it — it is shorter than the rep by that lag and longer only by the few
+# seconds HR stays up into the rest (on synthetic 3′ reps, τ 30 s: ≈ 135 s of 180). A stretch counts from
+# PLANNED_MIN_SHARE of the planned rep (推估, interval_reps.MIN_SHARE); a stretch that spans k reps (HR
+# stayed up over a short rest) counts at most k reps; the total is capped at the planned work.
+PLANNED_SKIP_S = 0
+PLANNED_MIN_SHARE = 0.5
+
+
+def z3_hr_planned(stim: Optional[dict], rep_s: Optional[float], reps: Optional[int],
+                  rest_s: float = 0.0) -> Optional[float]:
+    """The HR Zone 3 seconds of a run with planned reps of `rep_s` × `reps` (`rest_s` between; the
+    stored HR stretches, `z3_hr_runs`): each stretch ≥ PLANNED_MIN_SHARE × rep_s counts its length −
+    PLANNED_SKIP_S, at most the reps it spans × rep_s; the sum capped at reps × rep_s. None when there
+    is nothing to recount (no stretches stored, no plan)."""
+    runs = (stim or {}).get("z3_hr_runs")
+    if runs is None or not rep_s or not reps:
+        return None
+    rest_s = float(rest_s or 0.0)
+    tot = 0.0
+    for _a, d in runs:
+        d = float(d)
+        if d < PLANNED_MIN_SHARE * rep_s:
+            continue
+        k = max(1, int(round((d + rest_s) / (rep_s + rest_s))))
+        tot += min(max(0.0, d - PLANNED_SKIP_S), k * float(rep_s))
+    return float(min(tot, float(reps) * float(rep_s)))
 
 
 def hr_path_s(stim: Optional[dict], thr_bpm: Optional[float]) -> float:

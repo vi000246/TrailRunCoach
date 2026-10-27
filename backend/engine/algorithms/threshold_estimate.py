@@ -158,6 +158,34 @@ def steady_drift(t, hr, power, cp: Optional[float] = None) -> Optional[DriftPoin
     return DriftPoint(float(h[:half].mean()), float((r1 - r2) / r1), float(p.mean()))
 
 
+AET_MAX_OF_LTHR = 0.92          # 推估 (SP-952): the HR stand-in for AET_MAX_OF_CP (workout_review.DRIFT_MAX_OF_LTHR)
+
+
+def steady_drift_pace(t, hr, speed, lthr: Optional[float] = None,
+                      tspeed: Optional[float] = None) -> Optional[DriftPoint]:
+    """Pa:HR decoupling of one steady run (SP-952: a run not judged by power — no power meter, or its
+    date's CP stale): steady_drift with speed in place of power. The intensity gate without a CP: mean
+    HR ≤ AET_MAX_OF_LTHR × `lthr`, and with a threshold speed (`tspeed`, the speed's unit) mean speed
+    ≤ AET_MAX_OF_CP × it. DriftPoint.power then holds the mean speed."""
+    if speed is None:
+        return None
+    h1, v1 = _grid(t, hr, speed)
+    if h1 is None or len(h1) < AET_MIN_S:
+        return None
+    h, v = h1[WARMUP_S:], v1[WARMUP_S:]
+    v30 = np.convolve(v, np.ones(30) / 30, "valid")
+    if v30.mean() <= 0 or v30.std() / v30.mean() > AET_MAX_POWER_CV:
+        return None
+    if lthr and h.mean() > AET_MAX_OF_LTHR * lthr:
+        return None
+    if tspeed and v.mean() > AET_MAX_OF_CP * tspeed:
+        return None
+    half = len(h) // 2
+    r1 = v[:half].mean() / h[:half].mean()
+    r2 = v[half:].mean() / h[half:].mean()
+    return DriftPoint(float(h[:half].mean()), float((r1 - r2) / r1), float(v.mean()))
+
+
 @dataclass
 class AetEstimate:
     value: Optional[int]

@@ -532,7 +532,8 @@ def _with_hr_at60(reps: list[dict], s: Optional[dict]) -> list[dict]:
             if np.isfinite(win).any():
                 drop = float(np.nanmax(win)) - v
         out.append({"power": r["power"], "duration_s": r["duration_s"], "start_s": r["start_s"], "hr_at60": v,
-                    "hr_drop60": drop, **({"source": r["source"]} if r.get("source") else {})})
+                    "hr_drop60": drop, **({"source": r["source"]} if r.get("source") else {}),
+                    **({"rel": r["rel"]} if r.get("rel") is not None else {})})       # SP-952: lap pace
     return out
 
 
@@ -620,18 +621,30 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
         row = planned.get(w.idx) or {}
         spec = planned_variant_spec(row)
         judge = None
-        if spec is not None and not user_steps(row) and getattr(spec, "opt", -1) < 0 and m.get("cp"):
+        # SP-952: the CP the reps are judged against — None when the run is judged without power
+        # (no power meter, or its date's CP stale: power_state.activity_power)
+        cpj = WR.judge_cp(m)
+        if spec is not None and not user_steps(row) and getattr(spec, "opt", -1) < 0 and cpj:
             # SP-618: the reps, the 達標 line and the time in zone in the 課表功率區間 in effect
             # (Palladino: as planned; a 個人化間歇 is already the model's band; a structure you set: yours)
             from backend.engine import power_zone_plan as PZP
-            j = PZP.judge_spec(spec, PZP.model_on(ds, WR._wdate(w), m["cp"]))
+            j = PZP.judge_spec(spec, PZP.model_on(ds, WR._wdate(w), cpj))
             if j is not spec:
                 judge = {"from": [lo_band(spec)[0], lo_band(spec)[1]], "to": [lo_band(j)[0], lo_band(j)[1]]}
                 spec = j
         c = WR.classify(ds, w, m)
-        s = WR._samples(ds, w) if m.get("cp") else None
-        found = IR.find_reps(ds, w, s, m.get("cp"), spec) if m.get("cp") and (
-            category(w) == "road" or spec is not None) else {"bouts": [], "source": None}
+        s = WR._samples(ds, w) if cpj else None
+        basis = "power"
+        if not WR.power_on(m) and spec is not None:
+            # SP-952 (owner, SP-950 Q1-4): lap pace on a flat road, else the HR reps (interval_reps.no_power_reps)
+            np_ = IR.no_power_reps(ds, w, spec, m)
+            found = {"bouts": np_["bouts"], "source": np_["source"]}
+            basis = {"lap_pace": "pace", "hr": "hr"}.get(np_["source"])
+            if found["bouts"]:
+                s = WR._samples(ds, w)         # the HR 60 s after each rep (_with_hr_at60)
+        else:
+            found = IR.find_reps(ds, w, s, cpj, spec) if cpj and (
+                category(w) == "road" or spec is not None) else {"bouts": [], "source": None}
         reps = found["bouts"]
         z3 = found["source"] == "z3" and len(reps) >= 2
         if not row and c["type"] == "hard_long":
@@ -644,6 +657,8 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
         fade = None
         if len(reps) >= 2 and reps[0].get("power"):
             fade = reps[-1]["power"] / reps[0]["power"] - 1.0
+        elif len(reps) >= 2 and reps[0].get("rel"):
+            fade = reps[-1]["rel"] / reps[0]["rel"] - 1.0          # SP-952: lap pace
         elif not reps:
             fade = (m.get("intervals") or {}).get("fade")
         if reps:
@@ -656,7 +671,7 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
         else:
             bouts = []                         # planned, nothing found: 無法判定 (dose_step), not 「目標太高」
         tiz_ratio = None
-        if spec is not None and s is not None and m.get("cp"):
+        if spec is not None and s is not None and cpj:
             from backend.engine import interval_eval as IE
             from backend.engine.interval_reps import lo_of, works_of
             lo = lo_of(spec)
@@ -664,9 +679,18 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             plan_tiz = sum(works_of(spec))
             # Zone 5 by the band middle on Palladino (≥ 106 % CP; interval_library.CLASS_RANGE)
             z5 = (lo + (hi if hi is not None else lo)) / 2 >= _IL.CLASS_RANGE["Z5"][0]
-            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], IE.tiz_lower(spec, lo), hi, z5,    # SP-647
+            t_in = IE.tiz_seconds(s["t"], s["power"], cpj, IE.tiz_lower(spec, lo), hi, z5,    # SP-647
                                   min(works_of(spec), default=None))
             tiz_ratio = (t_in / plan_tiz) if t_in is not None and plan_tiz else None
+        elif spec is not None and basis == "pace" and reps:
+            # SP-952: time in zone without power — the laps in the band. By HR (basis "hr") none: the
+            # HR lag cuts every rep short of its time in zone, so the reps done decide (interval_outcome)
+            from backend.engine import interval_calib as IC
+            from backend.engine.interval_reps import lo_of, works_of
+            plan_tiz = sum(works_of(spec))
+            fl = IC.in_band_tol() * (lo_of(spec) or 0.0)
+            t_in = sum(b["duration_s"] for b in reps if (b.get("rel") or 0.0) >= fl)
+            tiz_ratio = (t_in / plan_tiz) if plan_tiz else None
         out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": row.get("title"),
                     **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps",
                                                "variant_adj", "variant_blocks", "steps")
@@ -674,7 +698,8 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
                     "reps": len(reps) or (m.get("intervals") or {}).get("n") or 0,
                     # informational only now: dose_step judges the bouts (interval_outcome)
                     "faded": fade is not None and fade < -FADE,
-                    "bouts": bouts[:20], "cp": m.get("cp"), "rep_source": found["source"], "tiz_ratio": tiz_ratio,
+                    "bouts": bouts[:20], "cp": cpj, "rep_source": found["source"], "tiz_ratio": tiz_ratio,
+                    **({"basis": basis} if basis != "power" else {}),
                     "stimulus": c.get("stimulus"),
                     **({"judge": judge} if judge else {}),
                     # the stored plan is in use and this run matched none of its quality sessions:
@@ -895,18 +920,35 @@ OUTCOME_LABEL = {"met": N_("達標"), "border": N_("邊界"), "unadapted": N_("�
                  "unknown": N_("無法判定")}
 
 
-def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: Optional[float] = None) -> dict:
+def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: Optional[float] = None,
+                     basis: str = "power") -> dict:
     """未適應 / 邊界 / 達標 for one interval session against the planned `spec`
     (DOSE row). `bouts`: [{"power", "hr_at60"?}] in order. Checked in the
     doc's order: 未適應 first, then 邊界, else 達標. RPE is not recorded, so
-    its rows are skipped. {"outcome": None} without CP / a %CP band."""
+    its rows are skipped. {"outcome": None} without CP / a %CP band.
+    SP-952 `basis` without power: "pace" — each bout's `rel` (lap speed ÷ threshold speed, the % CP
+    scale) against the band; "hr" — each HR rep found is a rep done (HR in Zone 3), so only the count
+    and the rests judge it (no 目標太高: HR can't say the target was too high)."""
     planned, lo = int(spec[2]), spec[5]
-    if not cp or lo is None or not planned:
+    if basis in ("pace", "hr"):
+        if lo is None or not planned:
+            return {"outcome": None, "why": _("沒有目標帶")}
+    elif not cp or lo is None or not planned:
         return {"outcome": None, "why": _("沒有 CP 或目標功率帶")}
     from backend.engine import interval_calib as IC
     last_fade = last_fade_for(spec[3])            # SP-526: Allen's table by the rep length (spec[3], min)
-    floor = IC.in_band_tol() * lo * cp            # IN_BAND_TOL or the athlete's own
-    ps = [float(b.get("power") or 0.0) for b in bouts[:planned]]
+    if basis == "pace":
+        floor = IC.in_band_tol() * lo
+        ps = [float(b.get("rel") or 0.0) for b in bouts[:planned]]
+    elif basis == "hr":
+        floor = 0.0
+        ps = [1.0 for _b in bouts[:planned]]
+        if planned >= 3 and len(ps) == planned - 1:
+            # 推估: one rep short by HR is the first rep's lag (HR not yet at 95 % LTHR), not a rep missed
+            ps.append(1.0)
+    else:
+        floor = IC.in_band_tol() * lo * cp        # IN_BAND_TOL or the athlete's own
+        ps = [float(b.get("power") or 0.0) for b in bouts[:planned]]
     inb = [p >= floor for p in ps]
     done = len(ps) / planned
     miss = next((i + 1 for i, ok in enumerate(inb) if not ok), None)
@@ -920,6 +962,9 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     power_ok = done >= 1 and (miss is None or (miss == planned and (vfade is None or vfade >= -last_fade)))
     base = {"first_miss": miss, "done": round(done, 2), "fade": fade, "last_fade": last_fade, "power_ok": power_ok}
     # the why texts are msgids: the week's dose note quotes one in a session's 說明 (SP-905)
+    if miss == 1 and basis == "pace":
+        return {**base, "outcome": "too_high",
+                "why": _("第 1 趟配速就沒到目標帶（{pct:.0f}% 閾值配速）：目標下修 5%", pct=floor * 100)}
     if miss == 1:
         return {**base, "outcome": "too_high", "why": _("第 1 趟就沒到 {w:.0f} W：目標功率下修 5%", w=floor)}
     if done < 1 or (miss is not None and 2 <= miss <= planned - 1):
@@ -1060,6 +1105,9 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
             continue
         if h.get("bouts") and h.get("cp"):
             o = interval_outcome(h["bouts"], judged_spec(spec, h.get("judge")), h["cp"], aet)
+        elif h.get("bouts") and h.get("basis") in ("pace", "hr"):
+            # SP-952: judged without power — the laps' pace against the band, or the HR reps done
+            o = interval_outcome(h["bouts"], spec, None, aet, basis=h["basis"])
         else:
             o = {"outcome": "unknown", "why": _("沒有功率或 CP，無法判定達標：同一階再做一次")}
         oc = o.get("outcome") or "unknown"
