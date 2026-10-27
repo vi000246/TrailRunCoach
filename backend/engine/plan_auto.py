@@ -290,6 +290,20 @@ def mark_power_zone(items: list[dict], old: str, new: str) -> int:
     return n
 
 
+def mark_power_state(items: list[dict], old: Optional[str], new: str) -> int:
+    """SP-950: the changed items of a run after a power-state switch whose change is the target text
+    (+ minutes / TSS / title / detail): rule POWER_STATE_RULE, the reason names the switch."""
+    from backend.engine import power_state as PST
+    why = _("功率狀態：{a} → {b}，課表目標照新的狀態", a=_(PST.LABEL.get(old, old or "–")), b=_(PST.LABEL.get(new, new)))
+    n = 0
+    for i in items:
+        b = i.get("before") or {}
+        if i["action"] == "changed" and "target" in b and set(b) <= POWER_ZONE_KEYS and not i.get("rule"):
+            i["rule"], i["reason"] = POWER_STATE_RULE, why
+            n += 1
+    return n
+
+
 def mark_structure(items: list[dict]) -> int:
     """SP-437: the items of the first run on the structure rule that only rewrote minutes / TSS / target
     (no adapt rule): rule STRUCTURE_RULE + its reason. The number marked."""
@@ -422,6 +436,24 @@ def hr_of(inp: dict) -> Optional[dict]:
         return None
     return {"model": hrz["model"], "setting": hrz.get("setting") or hrz.get("requested") or hrz["model"],
             "reason": ((hrz.get("auto") or {}).get("reason") or "")}
+
+
+def ps_of(inp: dict) -> Optional[str]:
+    """SP-950: the power state of the inputs (week_plan thresholds' power_state: power | stale | none)."""
+    ps = (inp.get("thresholds") or {}).get("power_state")
+    return ps.get("state") if isinstance(ps, dict) else None
+
+
+POWER_STATE_RULE = "power_state"
+
+
+def ps_summary(old: str, new: str, n: int, pushed: bool) -> str:
+    """The change-log row of a power-state switch (SP-950: the equipment changed, or the CP went stale /
+    fresh): the sessions on the watch from today on re-sent with the new targets."""
+    from backend.engine import power_state as PST
+    tail = _("課表目標已更新") if not n else \
+        _("已推到手錶的 {n} 堂課已重新推送", n=n) if pushed else _("已推到手錶的 {n} 堂課待重新推送", n=n)
+    return _("功率狀態：{a} → {b}：{tail}", a=_(PST.LABEL.get(old, old)), b=_(PST.LABEL.get(new, new)), tail=tail)
 
 
 def pz_of(inp: dict) -> Optional[str]:
@@ -926,6 +958,35 @@ async def _log_hr(db, old: str, new: str, reason: str, uids: set, cfg: dict, out
     return {"old": old, "new": new, "n": len(marked), "pushed": pushed, "pending": pending_n}
 
 
+async def _log_ps(db, old: Optional[str], new: str, uids: set, cfg: dict, out: dict, th: dict,
+                  today: str) -> dict:
+    """SP-950: the change-log row of a power-state switch — the sessions on the watch from today on,
+    each 已重新推送 / 待推送 (as _log_hr)."""
+    from backend.engine import plan_store as PS
+    from backend.sync import workout_targets as WT
+    cur = {s["uid"]: s for s in await PS.load(db)}
+    prov = WT.get(WT.DEFAULT)
+    try:
+        prov = await WT.active(db)
+        rows = await prov.all_rows(db)
+    except Exception:                       # noqa: BLE001
+        rows = {}
+    marked = []
+    for uid in sorted(uids):
+        s = cur.get(uid)
+        if uid not in rows or s is None or s.get("state") != "active" or (s.get("day") or "") < today:
+            continue
+        st = prov.status_of(PS.push_dict(s, th=th), th, rows[uid], today)["status"]
+        marked.append({"uid": uid, "action": "changed", "day": s.get("day"), "title": s.get("title"),
+                       "reason": _("課表目標照新的功率狀態"), "push": PUSHED if st == "pushed" else TO_PUSH})
+    pending_n = sum(1 for i in marked if i["push"] == TO_PUSH)
+    pushed = bool(cfg.get("push")) and not pending_n and (out.get("push") or {}).get("status") != "failed"
+    push = out.get("push") if cfg.get("push") else {"status": "off"}
+    await _add_entry(db, trigger="power_state", status="applied", summary=ps_summary(old, new, len(marked), pushed),
+                     items=marked, push={**(push or {"status": "held"}), "pending": pending_n})
+    return {"old": old, "new": new, "n": len(marked), "pushed": pushed, "pending": pending_n}
+
+
 RUN_TRIES = 3               # inputs out of date inside the lock: recompute outside twice, then inside
 
 
@@ -1003,12 +1064,19 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
     # new set, the pushed ones go out of date by fingerprint and are re-pushed (push_window)
     pz_new, pz_old = pz_of(inp), state.get("power_zone")
     pz_changed = bool(pz_new and pz_old and pz_new != pz_old)
-    if not force and state.get("stamp") == stp and not cp_changed and not hr_changed and not pz_changed:
-        if (cp_new and cp_old is None) or (hr_new and hr_old != hr_new) or (pz_new and pz_old is None):
+    # SP-950: the power state (① power / ② stale / ③ none) switched — the equipment changed (put_profile's
+    # run, trigger power_source: also without a baseline) or the CP went stale / fresh: re-plan, re-send
+    ps_new, ps_old = ps_of(inp), state.get("power_state")
+    ps_changed = bool(ps_new and ps_new != ps_old and (ps_old or trigger == "power_source"))
+    if not force and state.get("stamp") == stp and not cp_changed and not hr_changed and not pz_changed \
+            and not ps_changed:
+        if (cp_new and cp_old is None) or (hr_new and hr_old != hr_new) or (pz_new and pz_old is None) \
+                or (ps_new and ps_old is None):
             # the baselines, no event (a model the user picked: put_hr_profile's run re-plans it)
             await _set_state(db, {**state, **({"cp": cp_new} if cp_new else {}),
                                   **({"hr_model": hr_new} if hr_new else {}),
-                                  **({"power_zone": pz_new} if pz_new else {})})
+                                  **({"power_zone": pz_new} if pz_new else {}),
+                                  **({"power_state": ps_new} if ps_new else {})})
         out = {"status": "noop", "reason": _("沒有新的活動")}
         if state.get("remote"):
             # 課表待確認 copies an interrupted push left on the watch (review M2): off now
@@ -1048,10 +1116,15 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
     held = bool(big and cfg["confirm_big"] and not force)
     hr_uids = {s["uid"] for s in new if s.get("state") == "active" and (s.get("day") or "") >= today} \
         if hr_changed else set()
+    if ps_changed:
+        mark_power_state(items, ps_old, ps_new)
+    ps_uids = {s["uid"] for s in new if s.get("state") == "active" and (s.get("day") or "") >= today} \
+        if ps_changed else set()
     job: dict = {"inp": inp, "today": today, "cfg": cfg, "trigger": trigger, "errors": errors, "remote": remote,
                  "held": held, "notice": None, "entry": None, "window": False, "days": days, "items": items,
                  "cp_items": cp_items, "cp": (cp_old, cp_new) if cp_changed else None,
-                 "hr": (hr_old, hr_new, (hr or {}).get("reason") or "", hr_uids) if hr_changed else None}
+                 "hr": (hr_old, hr_new, (hr or {}).get("reason") or "", hr_uids) if hr_changed else None,
+                 "ps": (ps_old, ps_new, ps_uids) if ps_changed else None}
 
     if held:
         if fp in (state.get("rejected") or []):
@@ -1100,6 +1173,8 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
         state["hr_model"] = hr_new
     if pz_new:
         state["power_zone"] = pz_new
+    if ps_new:
+        state["power_state"] = ps_new
     state["stamp"] = stp
     if not held:
         # the phase baseline moves only once a plan is applied: a held phase
@@ -1170,7 +1245,8 @@ async def _push_phase(db, job: dict, out: dict) -> dict:
                         else {"status": "held"}
                 elif job.get("window"):
                     push = await push_window(db, await PS.load(db), job["inp"], job["today"], job["days"],
-                                             {i["uid"] for i in job["cp_items"]} | (job["hr"][3] if job.get("hr") else set()))
+                                             {i["uid"] for i in job["cp_items"]} | (job["hr"][3] if job.get("hr") else set())
+                                             | (job["ps"][2] if job.get("ps") else set()))
             except Exception as e:          # noqa: BLE001 — the push never breaks the run / the sync
                 log.warning("auto plan push failed: %s", type(e).__name__)
                 push = {"status": "failed", "error": f"{type(e).__name__}: {e}"[:500]}
@@ -1189,7 +1265,8 @@ async def _push_phase(db, job: dict, out: dict) -> dict:
             await _set_push(db, job["entry"], push)
             out = {**out, "push": push}
         # a push that only re-sends a CP change is logged by _log_cp (below), not twice (an HR-zone switch: _log_hr)
-        elif push.get("status") not in ("unchanged", "off") and not job["cp_items"] and not job.get("hr"):
+        elif push.get("status") not in ("unchanged", "off") and not job["cp_items"] and not job.get("hr") \
+                and not job.get("ps"):
             e = await _add_entry(db, trigger=job["trigger"], status="applied", summary=summary(job["items"]),
                                  items=job["items"], before=[], after=[], big=job["big"] or None,
                                  fingerprint=job["fp"], push=push, ref_id=job["ref"])
@@ -1203,6 +1280,9 @@ async def _push_phase(db, job: dict, out: dict) -> dict:
     if job.get("hr"):
         old, new, reason, uids = job["hr"]
         out["hr_change"] = await _log_hr(db, old, new, reason, uids, cfg, out, inp.get("thresholds") or {}, today)
+    if job.get("ps"):
+        old, new, uids = job["ps"]
+        out["power_state_change"] = await _log_ps(db, old, new, uids, cfg, out, inp.get("thresholds") or {}, today)
     return out
 
 
@@ -1443,6 +1523,13 @@ def _after_hr_model() -> None:
     _start_run("hr_model")
 
 
+def _after_power_source() -> None:
+    """api/plan.py put_profile calls this when the 一般設定 功率來源 changed (SP-950, owner 2026-10-27:
+    「改裝備 → 立刻重排、重推」, every tier — the free tier's nightly-only rule is the sync hook's): a run
+    re-plans with the new power state and re-sends the sessions on the watch (trigger power_source)."""
+    _start_run("power_source")
+
+
 def _after_settings() -> None:
     """api/calib.py calls this after a 進階設定 value the plan reads changed (the Zone 3
     unlock rule, SP-295): a background run re-plans with it, like a sync would."""
@@ -1473,3 +1560,4 @@ after_thresholds = _after_thresholds     # the hook api/plan.py calls (tests rep
 after_settings = _after_settings         # the hook api/calib.py calls (tests replace it)
 after_cp_moved = _after_cp_moved         # the hook check_cp calls (tests replace it)
 after_hr_model = _after_hr_model         # the hook check_hr_model calls (tests replace it)
+after_power_source = _after_power_source  # the hook api/plan.py put_profile calls (tests replace it)

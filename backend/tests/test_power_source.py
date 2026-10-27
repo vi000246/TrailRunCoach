@@ -148,9 +148,11 @@ def test_envelope_and_run_metrics_skip_watch_power(tmp_path, no_plan):
     assert 1 in A.envelope(ds2, ds2.workouts)["who"]
 
 
-def test_cp_as_of_prefers_stryd_and_falls_back_to_watch_power(tmp_path, no_plan, monkeypatch):
+def test_cp_as_of_uses_stryd_only_never_watch_power(tmp_path, no_plan, monkeypatch):
     """The LTHR estimate's CP: the usable power when the 90-day window has
-    any (a junk watch file stays out), else every power (pre-Stryd era)."""
+    any (a junk watch file stays out). SP-950 (owner 2026-10-27): watch power
+    never counts — a window with watch power only has no CP (it used to read
+    every power, the pre-Stryd era)."""
     from backend.engine.racepower import athlete as A
     seen = []
 
@@ -163,8 +165,9 @@ def test_cp_as_of_prefers_stryd_and_falls_back_to_watch_power(tmp_path, no_plan,
     assert A._pd_mftp(ds, dt.date(2026, 9, 10)) == 200.0
     assert seen[-1] == ([0], False)                       # Stryd only; the 400 W watch run out
     ds2 = _ds(tmp_path / "w", RUNS[1:])                     # watch power + no power only
-    A._pd_mftp(ds2, dt.date(2026, 9, 10))
-    assert seen[-1] == ([0, 1], True)                     # every run, watch power read
+    n = len(seen)
+    assert A._pd_mftp(ds2, dt.date(2026, 9, 10)) is None
+    assert len(seen) == n                                 # no fit at all: watch power is not read
 
 
 def test_cptest_curves_and_scan_skip_watch_files(tmp_path):

@@ -383,9 +383,18 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     out["use_power_stored"] = out["use_power"]
     out["power_source"], how = await _power_source()
     out["power_source_how"] = _(how)          # SP-748: the settings page's 「自動：功率來源 Stryd（設定）」
+    from backend.engine import athlete_profile as AP
+    from backend.engine import power_state as PST
+    from backend.engine.planning import Plan
+    # SP-950: watch power follows the 功率來源 when it is set (手錶功率 = accepted); the stored 進階 value
+    # stays as it is (accept_watch_power) and only decides while no source is set
+    out["accept_watch_power_effective"] = PST.accept_watch(Plan.load().profile, bool(out["accept_watch_power"]))
     if out["use_power"] is None:
-        from backend.engine import athlete_profile as AP
-        out["use_power"] = AP.use_power(out["power_source"], bool(out["accept_watch_power"]))
+        out["use_power"] = AP.use_power(out["power_source"], out["accept_watch_power_effective"])
+    if out["power_source"] == "none":
+        # ③ 沒有功率計: a stored 使用功率 on is ignored (kept, not deleted — choosing a meter again restores it)
+        out["use_power"] = False
+    out["power_meter"] = PST.has_meter(out["power_source"])
     # 資料來源: the one source in use (an old 自動 / unset value is migrated here)
     out["primary_source"] = await P.current(repo.db, repo.user_id)
     out["primary_label"] = P.LABELS[out["primary_source"]]

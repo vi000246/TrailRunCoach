@@ -34,7 +34,15 @@ def test_goal_basis_endpoint(client, monkeypatch):   # noqa: F811
     monkeypatch.setattr(RP, "_goal_settings", lambda: ("auto", False, False))
     assert client.get("/api/v1/racepower/goal-basis").json()["basis"] == "hr"
     monkeypatch.setattr(RP, "_goal_settings", lambda: ("power", False, False))
+    from backend.api import sync as SY
+
+    async def src(v):
+        return v, "設定"
+    monkeypatch.setattr(SY, "_power_source", lambda: src("stryd"))
     assert client.get("/api/v1/racepower/goal-basis").json() == {"basis": "power", "how": "target_basis"}
+    # SP-950 ③ 沒有功率計: a stored 目標依據 = 功率 is ignored (kept, not deleted)
+    monkeypatch.setattr(SY, "_power_source", lambda: src("none"))
+    assert client.get("/api/v1/racepower/goal-basis").json() == {"basis": "hr", "how": "use_power"}
 
 
 def test_plan_without_goal_has_no_goal_block(client):   # noqa: F811

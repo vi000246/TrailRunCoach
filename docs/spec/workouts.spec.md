@@ -197,6 +197,15 @@ power feeds no power-based model and no power TSS; HR and pace paths still use t
 reads every power (WKO5 does not tell them apart). The channel itself is never hidden (charts and
 the activity view still show it).
 
+SP-950 (owner 2026-10-27): watch power never counts. `power_source.effective_accept()` is always
+false (the stored `power.accept_watch_power` is kept but ignored — the Dataset and its cache stamp
+read this), the 一般設定 功率來源 「手錶推估功率」 and the legacy coros / garmin / other meter read as
+沒有功率計 (`athlete_profile.profile_power_source`), detection counts Stryd only, and the LTHR
+estimate's CP (`racepower.athlete._pd_mftp`) no longer falls back to wrist power in a window without
+Stryd power (`thresholds._judged_against_cp` judges only the runs whose power the models use).
+Whether power is in effect at all — a meter and a fresh CP — is `engine/power_state.py`
+(plan-auto.spec.md › 功率狀態).
+
 ## Bad activity files (`backend/engine/bad_activity.py`, 2026-10-01)
 
 A "run" that was not a run — the watch left recording on a bike or in a car (e.g. a file of
@@ -511,3 +520,4 @@ the app-type table and the filter kinds.
 | 2026-10-12 | perf | SP-394 (SP-338 follow-up) | `/activities/auto`'s background computation is a job of the server's queue (`backend/jobs.py`): `full` when ≥ `FULL_FROM` (100) activities lack a stored value of the current code (`to_compute`; `activity_auto.json` now records `code`), else `single`; `warm` from the warm-up, `user` from the page (a queued job is promoted). Tests: `backend/tests/test_queue_followups_sp394.py` |
 | 2026-10-14 | perf | SP-394 第 5 條 | A classification step of `FULL_FROM` or more activities computes in a worker process (`backend/workproc.py`; `activity_auto._compute` / `compute_in_worker`), values back by file — measured, in the server it made the calendar / status 2.8–4.7× slower (p50), with the worker ×0.8–1.5; smaller steps, a Dataset not kept, a hot-first one being back-filled and `TRC_PROCESS_JOBS=0` stay in the server. Tests: `backend/tests/test_workproc_sp394.py` |
 | 2026-10-14 | perf | SP-394 第 6 條 | A job's done callbacks go when it ends (`Job._end`): the warm-up's series sweep (`wko5views._sweep_when_done`, now holding the Dataset weakly too) stayed in the done job, the value of `_JOBS` (a WeakKeyDictionary on the Dataset), and kept every tenant's Dataset alive past the Dataset cache's budget; so did the job's key builder between two tiers (`_Keys.detach`: the Dataset by a weak proxy once the keys are built) and the warm-up's low-priority thread waiting in the queue again with the previous Dataset in a local. A job whose Dataset the cache dropped now stops before its next tier (its `ds_ref` was always weak); the next page open computes the rest. 10 tenants at once: 3,164 → 1,961 MB (wko5-engine.spec.md 「Memory of many tenants」). Tests: `backend/tests/test_memory_sp394.py` |
+| 2026-10-27 | feature | SP-950 | Watch power is no power source (owner 2026-10-27): `power.accept_watch_power` ignored (`power_source.effective_accept`), a stored 「手錶推估功率」 / legacy watch meter reads as 沒有功率計, detection counts Stryd only, no wrist-power CP for the LTHR estimate (`_pd_mftp`, `_judged_against_cp`). Stored values untouched. Tests: `backend/tests/test_power_state_sp950.py`, `test_lthr_without_power_sp294.py`, `test_power_source.py`, `test_general_settings.py` |

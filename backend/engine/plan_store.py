@@ -1018,7 +1018,8 @@ def push_dict(s: dict, prefs=PREFS_UNREAD, th: Optional[dict] = None) -> dict:
     """A stored session in the shape coros_workouts expects (key = uid). `prefs`: 課表偏好 read
     once by a caller with many sessions (the 課表 calendar, SP-462: one plan_prefs.load per
     session was ~4.5 ms each); None = could not be read; left out = read here. `th`: the plan
-    thresholds the push uses — only its cp_stale is read here (SP-493: auto road intervals by HR)."""
+    thresholds the push uses — only its power_state / cp_stale are read here (SP-950 / SP-493: power
+    only when it is in effect, engine/power_state.py)."""
     return {"id": s["uid"], "key": s["uid"], "week_start": s["week_start"], "kind": s["kind"],
             "title": s["title"], "minutes": s["minutes"], "target": s.get("target") or "",
             "detail": s.get("detail") or "", "source": s.get("source") or "", "day": s.get("day"),
@@ -1028,7 +1029,7 @@ def push_dict(s: dict, prefs=PREFS_UNREAD, th: Optional[dict] = None) -> dict:
                                      "target_basis", "steps")
                if s.get(k) is not None},
             # 目標用: the session's own choice, else 課表偏好 目標依據, else 自動 (engine/target_policy.py)
-            "basis": _basis_for(s, prefs, bool((th or {}).get("cp_stale"))),
+            "basis": _basis_for(s, prefs, bool((th or {}).get("cp_stale")), th),
             # SP-632: 課表偏好「可跑坡目標」 = Effort Pace — COROS sends it over power too (workout_steps.ep_intensity)
             **({"ep_power": True} if s.get("steps") and _ep_power(prefs) else {})}
 
@@ -1049,11 +1050,11 @@ def load_prefs_safe():
         return None
 
 
-def _basis_for(s: dict, prefs=PREFS_UNREAD, cp_stale: bool = False) -> str:
+def _basis_for(s: dict, prefs=PREFS_UNREAD, cp_stale: bool = False, th: Optional[dict] = None) -> str:
     from backend.engine import target_policy as TP
     if prefs is PREFS_UNREAD:
         prefs = load_prefs_safe()
-    return TP.target_policy(s, prefs, cp_stale=cp_stale)["basis"]
+    return TP.target_policy(s, prefs, cp_stale=cp_stale, power_state=(th or {}).get("power_state"))["basis"]
 
 
 # ---------------------------------------------------------------------------

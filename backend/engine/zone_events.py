@@ -919,7 +919,27 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
                 due, None, {"bound": val.get("bound"), "value": x},
                 SRC + "；下限規則與 8 週提醒為推估")
             out.append({**sg, "priority": "low"})
-    return {"suggestions": out, "events": applied_events(plan, today), "checks": checks}
+    return {"suggestions": without_cp_tests(out, ds, today), "events": applied_events(plan, today), "checks": checks}
+
+
+def without_cp_tests(out: list[dict], ds, today: dt.date) -> list[dict]:
+    """SP-950 ③ (no power meter, engine/power_state.py): no CP test is suggested — the CP test leaves every
+    suggestion's tests (and its condition line); one left with no test is dropped (cp_low_easy)."""
+    try:
+        from backend.engine import power_state as PST
+        if not PST.no_meter(ds, today):
+            return out
+    except Exception:                               # noqa: BLE001 — cannot tell: as before
+        return out
+    kept = []
+    for s in out:
+        tests = [t for t in s.get("tests") or [] if t != "cp"]
+        if not tests:
+            continue
+        if len(tests) != len(s.get("tests") or []):
+            s = {**s, "tests": tests, "conditions": [f"{TEST_LABEL[t]}：{CONDITIONS[t]}" for t in tests]}
+        kept.append(s)
+    return kept
 
 
 BOUND_REMIND_DAYS = 56          # 推估: one AeT test every 8 weeks while the AeT is only a lower bound

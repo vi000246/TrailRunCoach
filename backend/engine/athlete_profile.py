@@ -19,14 +19,15 @@ Stored in the season plan's `profile` (engine/planning.py, ~/.wko5coach/plan.jso
                  stryd / coros / garmin / other — reads as stryd / watch)
 
 Power source → models (§4 owner decision): only Stryd power feeds the
-power models by default; a runner without Stryd is coached by heart rate.
-Watch-estimated power counts only when 進階設定 「採用手錶推估功率」
-(power.accept_watch_power) is on. 「使用功率」 (charts.power.enabled, None =
-auto) follows from it: on for Stryd, for watch power only when accepted.
+power models; a runner without Stryd is coached by heart rate. SP-950 (owner
+2026-10-27): watch-estimated power never counts — a stored 「手錶推估功率」 reads
+as none and 進階 「採用手錶推估功率」 (power.accept_watch_power) is ignored (the
+stored values stay). 「使用功率」 (charts.power.enabled, None = auto) follows
+from it: on for Stryd. Power in effect also needs a fresh CP: engine/power_state.py.
 
 Detection (pre-fill, `detect_power_source`): the last 90 days of runs by
-engine/power_source.py's per-run label — ≥ 5 Stryd runs → stryd, else ≥ 5
-runs with watch power → watch, else none (thresholds 推估, as plan S1).
+engine/power_source.py's per-run label — ≥ 5 Stryd runs → stryd, else none
+(thresholds 推估, as plan S1; the watch count is still reported).
 """
 from __future__ import annotations
 
@@ -80,11 +81,12 @@ def power_labels() -> dict:
 
 
 def profile_power_source(profile: dict) -> Optional[str]:
-    """The power source the runner entered (power_source, else the legacy power_meter)."""
+    """The power source the runner entered (power_source, else the legacy power_meter).
+    SP-950 (owner 2026-10-27): watch power is no power source — a stored 「手錶推估功率」 (and the legacy
+    coros / garmin / other meter) reads as none. Read-time only: the stored value is not changed."""
     p = profile or {}
-    if p.get("power_source") in POWER_SOURCES:
-        return p["power_source"]
-    return LEGACY_METER.get(p.get("power_meter"))
+    s = p["power_source"] if p.get("power_source") in POWER_SOURCES else LEGACY_METER.get(p.get("power_meter"))
+    return "none" if s == "watch" else s
 
 
 def detect_power_source(ds, today: Optional[dt.date] = None, days: int = DETECT_DAYS) -> dict:
@@ -107,7 +109,8 @@ def detect_power_source(ds, today: Optional[dt.date] = None, days: int = DETECT_
         except Exception:               # noqa: BLE001 — one unreadable file
             s = "none"
         counts[s if s in counts else "none"] += 1
-    src = "stryd" if counts["stryd"] >= DETECT_MIN_RUNS else "watch" if counts["watch"] >= DETECT_MIN_RUNS else "none"
+    # SP-950 (owner 2026-10-27): watch power is no power meter — only Stryd counts
+    src = "stryd" if counts["stryd"] >= DETECT_MIN_RUNS else "none"
     out = {"source": src, "counts": counts, "days": days}
     if isinstance(memo, dict):
         memo[mk] = out
@@ -124,9 +127,10 @@ def effective_power_source(profile: dict, ds=None, today: Optional[dt.date] = No
     return detect_power_source(ds, today)["source"], N_("自動偵測")
 
 
-def use_power(source: str, accept_watch_power: bool) -> bool:
-    """「使用功率」 in auto: Stryd yes; watch power only when 進階 accepts it; none no."""
-    return source == "stryd" or (source == "watch" and bool(accept_watch_power))
+def use_power(source: str, accept_watch_power: bool = False) -> bool:
+    """「使用功率」 in auto: Stryd yes; none no. SP-950 (owner 2026-10-27): watch power never counts —
+    `accept_watch_power` is ignored (kept for the callers' signature)."""
+    return source == "stryd"
 
 
 def setup_missing(weight: Optional[float], sex: Optional[str], birth_year: Optional[int]) -> list[str]:

@@ -63,10 +63,10 @@ def _judged_against_cp(ds: Dataset, runs: list, tday: int):
     Stryd (~1.3–1.8 ×), so a wrist easy run judged against a Stryd CP looked
     hard and its HR pulled the estimate down (146 for a true 170 on synthetic
     runs, test_lthr_without_power_sp294 §5). Returns a predicate."""
+    # SP-950 (owner 2026-10-27): watch power never counts — only the runs whose power the models use
+    # (Stryd) are judged, also when the window has none (it used to judge every run then)
     from backend.engine.racepower import athlete as A
-    usable = any(tday - A.CP_WINDOW_DAYS < w.day < tday + 1 and A.power_ok(ds, w)
-                 and A.power_source(ds, w) != "none" for w in runs)
-    return (lambda w: A.power_ok(ds, w)) if usable else (lambda w: True)
+    return lambda w: A.power_ok(ds, w)
 
 
 def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
@@ -78,6 +78,12 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
     today = today or dt.date.today()
     tday = int(math.floor(date_to_day(today)))
     runs = [w for w in ds.workouts if w.sport == "run" and tday - WINDOWS[-1] < math.floor(w.day) <= tday]
+    off = cp_of is None and _no_meter(ds, today)
+    if off:
+        # SP-950 ③ (no power meter, engine/power_state.py): no power and no CP in today's estimate — no
+        # LTHR from ordinary runs (no_meter_lthr), the AeT not from Pw:HR drift. The load-time grid
+        # (fitdataset._estimate_settings, cp_of given: the history the TSS stands on) is left as it was
+        runs = []
     data = {}
     for w in runs:
         if cp_of is None:
@@ -101,8 +107,8 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
         # the CP in effect on `today` (a plan test dated today counts even when
         # the last WKO5 run is older), else the last run's
         plan = getattr(ds, "plan", None)
-        cp_now = plan.threshold_on("cp", today) if plan is not None else None
-        if cp_now is None:
+        cp_now = plan.threshold_on("cp", today) if plan is not None and not off else None
+        if cp_now is None and not off:
             cp_now = ds.cp(runs[-1]) if runs else None
         if cp_now is None and _has_power(ds, runs):
             # SP-573: no plan test and no Stryd fit (Dataset.cp) but runs with power — a watch-power
@@ -127,7 +133,7 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
     for days in WINDOWS:
         ws, lts, dps = pick(days)
         if not cp_now:
-            out["lthr"] = no_cp_lthr()
+            out["lthr"] = no_meter_lthr() if off else no_cp_lthr()
             break
         lt = estimate_lthr(lts, cp_now)
         if lt.value is not None or days == WINDOWS[-1]:
@@ -147,12 +153,21 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
     return out
 
 
+def _no_meter(ds: Dataset, today: dt.date) -> bool:
+    """SP-950 ③ for this Dataset's runner (power_state.no_meter); False when it cannot tell."""
+    try:
+        from backend.engine import power_state as PST
+        return PST.no_meter(ds, today)
+    except Exception:                       # noqa: BLE001
+        return False
+
+
 def _has_power(ds: Dataset, runs: list) -> bool:
-    """Some run of the window has power (Stryd or watch), the kind cp_as_of can fit. False for a
-    Dataset that cannot tell (no power_source)."""
+    """Some run of the window has power the models use (Stryd; SP-950: never watch power), the kind
+    cp_as_of can fit. False for a Dataset that cannot tell (no power_source)."""
     from backend.engine import power_source as PS
     from backend.engine.racepower import athlete as A
-    return any(A.power_source(ds, w) in (PS.STRYD, PS.WATCH) for w in runs)
+    return any(A.power_source(ds, w) == PS.STRYD and A.power_ok(ds, w) for w in runs)
 
 
 # SP-573 (docs/research/lthr-without-power.md §5 單 3): without a CP no LTHR comes from ordinary
@@ -160,6 +175,16 @@ def _has_power(ds: Dataset, runs: list) -> bool:
 # or a lower bound only (§3.2). Say so, and point at the 30-minute test
 NO_CP_REASON = N_("沒有 CP（沒有 Stryd 功率，也沒有 CP 測試），所以不能從一般跑步估 LTHR；"
                   "可以做一次 30 分鐘 LTHR 測試")
+
+
+NO_METER_REASON = N_("沒有功率計：一般跑步估不出 LTHR（要用功率判斷哪幾次夠硬）；LTHR 沿用目前的值，可以手動輸入或用比賽成績")
+
+
+def no_meter_lthr() -> dict:
+    """SP-950 ③: the `lthr` of today's estimate without a power meter — no value, no test suggested
+    (owner 2026-10-27: no 30-min test; the LTHR in effect stays, manual entry / races)."""
+    return {"value": None, "n": 0, "hr_at_cp": None, "n_at_cp": 0, "spread": None,
+            "reason": _(NO_METER_REASON), "days": None, "no_cp": True, "no_meter": True, "links": []}
 
 
 def no_cp_lthr() -> dict:

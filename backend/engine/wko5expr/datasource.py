@@ -190,7 +190,7 @@ def source_stamp(source: str, wko5_dir: Path) -> str:
     (it changes power TSS, so the Dataset must be rebuilt), or which bad
     activity files are left out (activities.exclude_bad and the per-activity
     keep / exclude overrides, engine/bad_activity.py)."""
-    from backend.engine.power_source import read_setting as accept_watch
+    from backend.engine.power_source import effective_accept as accept_watch     # SP-950: always off
     from backend.engine import bad_activity as BA
     return (f"{_files_stamp(source, wko5_dir)}|pw:{int(accept_watch())}"
             f"|ex:{int(BA.read_setting())}:{BA.overrides_stamp()}")

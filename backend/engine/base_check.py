@@ -447,12 +447,13 @@ EF_RUNS = 6                          # 推估: the last 6 easy road runs (the dr
 EF_DAYS = 56
 
 
-def easy_targets(ds, today: dt.date, aet: Optional[float]) -> Optional[dict]:
+def easy_targets(ds, today: dt.date, aet: Optional[float], power: bool = True) -> Optional[dict]:
     """Pace and power at the AeT HR from the median EF (speed / HR, power /
     HR) of the last EF_RUNS easy road runs (avg HR ≤ AeT + 3, ≥ 30 min) in 8
     weeks — when the athlete gets faster at the same HR the easy targets
     follow without a retest (the AeT HR itself is unchanged). Method 推估.
-    {"pace_s_km", "power", "n", "text"}; None with < 3 runs or no AeT."""
+    {"pace_s_km", "power", "n", "text"}; None with < 3 runs or no AeT.
+    `power` False (SP-950: power not in effect, engine/power_state.py): pace only."""
     from backend.engine import workout_review as WR
     from backend.engine.overview import category
     if not aet:
@@ -467,7 +468,7 @@ def easy_targets(ds, today: dt.date, aet: Optional[float]) -> Optional[dict]:
         dist = _f(w.metrics.get("distance"))
         if dist and m["moving_s"]:
             ev.append(dist / (m["moving_s"] / 3600.0) / m["avg_hr"])
-        if m.get("avg_power"):
+        if power and m.get("avg_power"):
             ep.append(m["avg_power"] / m["avg_hr"])
         if len(ev) >= EF_RUNS:
             break

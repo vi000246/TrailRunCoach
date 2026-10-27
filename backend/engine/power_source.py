@@ -95,6 +95,13 @@ def read_setting(default: bool = False) -> bool:
     return bool(v) if isinstance(v, bool) else default
 
 
+def effective_accept(default: bool = False) -> bool:
+    """Whether watch power feeds the models now: never (SP-950, owner 2026-10-27 — watch power is no
+    power source; the stored power.accept_watch_power is ignored, not changed). The one place the
+    Dataset (and its cache stamp) asks; parity mode reads every power by itself."""
+    return False
+
+
 def counts(sources: Iterable[str]) -> dict:
     out = {s: 0 for s in SOURCES}
     for s in sources:

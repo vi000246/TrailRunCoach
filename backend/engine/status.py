@@ -149,6 +149,18 @@ class Status:
         self.indicators: list[Indicator] = []
         self.actions: list[Action] = []
 
+    def power_state(self) -> dict:
+        """SP-950: ① power / ② stale / ③ none of `today` (engine/power_state.current), once."""
+        ps = getattr(self, "_pstate", None)
+        if ps is None:
+            from backend.engine import power_state as PST
+            try:
+                ps = PST.current(self.ds, self.today, self.plan)
+            except Exception:                   # noqa: BLE001 — a dataset without runs: as before (a meter)
+                ps = PST.state(self.today, None, source="stryd", how=PST.N_("預設"))
+            self._pstate = ps
+        return ps
+
     @property
     def ev(self) -> Evaluator:
         """The 400-day evaluator (made again after detach())."""
@@ -583,6 +595,8 @@ class Status:
         runs = {i for i in ptot if self.ds.workouts[i].sport == "run"}
         p_all = sum(v for i, v in ptot.items() if i in runs)
         pshare = None if p_all < 3600 else sum(v for i, v in plow.items() if i in runs) / p_all
+        if pshare is not None and not self.power_state()["power"]:
+            pshare = None       # SP-950 ② / ③: the raw (wrist) power against an old CP blocks nothing
         txt = _pct(share)
         why = f"4 週：低強度（< AeT）{_pct(share)}，高強度（≥ LTHR）{hi_h:.1f} h"
         if pshare is not None:
@@ -951,7 +965,10 @@ class Status:
         # SP-748: the card's words in the request's language (the status is cached per language)
         SEP = _("；")
         from backend.engine.planning import threshold_row
-        for label, d in (("CP", cp), ("LTHR", lt), ("AeT", ae)):
+        # SP-950 ③ (no power meter, engine/power_state.py): no CP to keep fresh — the CP is left out and no
+        # test stands in for it (owner 2026-10-27: LTHR / threshold pace from the estimates and manual entry)
+        meter = self.power_state()["meter"]
+        for label, d in (("CP", cp), ("LTHR", lt), ("AeT", ae)) if meter else (("LTHR", lt), ("AeT", ae)):
             if label == "AeT":
                 # B3 (unsourced-rules.md): no fixed expiry — the AeT test is due for a reason
                 # (quality_gate.aet_test_reason, below), not by age
@@ -984,8 +1001,8 @@ class Status:
         days_to = self.goals["days_to_next_a"]
         act = ""
         # which test week_plan should schedule: the CP test measures CP only; the
-        # AeT test (engine/aet_test.py) has its own cadence
-        cp_due = cp is None or (self.today - cp).days > TEST_DAYS_WATCH
+        # AeT test (engine/aet_test.py) has its own cadence; ③: never a CP test
+        cp_due = meter and (cp is None or (self.today - cp).days > TEST_DAYS_WATCH)
         # a break of ~8 weeks or more: redo the CP baseline after the re-entry block
         # (WKO5 seminar notes: about two months off → new baseline; detraining.md §4.7)
         try:
@@ -993,7 +1010,7 @@ class Status:
             brk = RE.find(self.ds, self.today)
         except Exception:                   # noqa: BLE001
             brk = None
-        if brk and brk.get("cp_retest") and brk["end"] <= self.today.isoformat() and \
+        if meter and brk and brk.get("cp_retest") and brk["end"] <= self.today.isoformat() and \
                 (cp is None or cp.isoformat() < brk["return"]):
             cp_due = True
             worst = WATCH if worst == GOOD else worst
@@ -1014,6 +1031,7 @@ class Status:
         extra = {}
         if ct:
             extra["cp_test"] = ct
+        if ct and meter:
             why += SEP + (_("最近一次 CP 測試 {d}：這次測試後的模型閾值功率（Modelled threshold power）{cp} W（課表自動採用）",
                             d=ct["date"], cp=f"{ct['cp']:.0f}") if ct.get("cp") is not None else
                           _("最近一次 CP 測試 {d}：算不出模型閾值功率（Modelled threshold power）", d=ct["date"]))

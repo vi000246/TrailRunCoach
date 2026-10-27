@@ -33,6 +33,10 @@ A forced basis the thresholds can't fill falls back (power without CP → HR, HR
 without LTHR/AeT → none) with the reason. SP-493 (owner 2026-10-14): the road intervals' auto
 power goes to HR when the CP is stale — no CP test and no race in base_check.EP_ALL_OUT_DAYS
 (`cp_stale`, week_plan's thresholds; base_check.cp_stale) — the trail rules above stay HR.
+SP-950 (owner 2026-10-27) widens it to one site-wide rule (engine/power_state.py): power only with a
+power meter AND a fresh CP. ② a meter but a stale CP, ③ no meter: every power session (road easy /
+long → HR ≤ the easy cap, intervals, hill repeats) is run by HR (SP-951: flat intervals by pace), a
+chosen 功率 included; in ③ the stored choice is ignored, not deleted.
 """
 from __future__ import annotations
 
@@ -66,7 +70,9 @@ TIP = ("課表的目標用心率還是功率。\n自動：路跑的輕鬆跑、�
        "測試和下坡照它們自己的規則。\n每次課表也可以在編輯時改「目標用：自動／心率／功率」，只影響這次課表。")
 
 
-CP_STALE = N_("CP 太舊（最近沒有 CP 測試或比賽）：間歇改用心率")
+CP_STALE = N_("CP 太舊（最近沒有 CP 測試或比賽）：間歇改用心率")      # SP-493's (kept: stored texts)
+# SP-950 ②, when the caller has only the cp_stale flag (no power_state with the CP's age)
+CP_STALE_ALL = N_("CP 太舊（最近沒有 CP 測試或比賽）：用心率；做一次 CP 測試就切回功率")
 
 
 def pref_basis(prefs) -> str:
@@ -142,25 +148,51 @@ AUTO = {"easy": ("power", "power_easy"), "long": ("power", "power_easy"), "trail
 
 
 def _auto_power_ok() -> bool:
-    """False when the 一般設定 power source is watch (not accepted) or none;
-    unset = the data decides (no CP falls back to HR below)."""
+    """A power meter per the 一般設定 power source (SP-950: Stryd; a stored 手錶推估功率 reads as 沒有功率計,
+    athlete_profile.profile_power_source); False for 沒有功率計. Unset = the data decides (no CP falls
+    back to HR below). Used when the caller has no power state
+    (power_state.of(th) — week_plan's thresholds carry one)."""
     try:
         from backend.engine import athlete_profile as AP
         from backend.engine.planning import Plan
-        src = AP.profile_power_source(Plan.load().profile)
-        if src is None or src == "stryd":
-            return True
-        from backend.engine.power_source import read_setting
-        return src == "watch" and bool(read_setting())
+        return AP.profile_power_source(Plan.load().profile) != "none"
     except Exception:                       # noqa: BLE001
         return True
 
 
-def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Optional[bool] = None) -> dict:
+def _state(th: Optional[dict], cp_stale: Optional[bool], power_state: Optional[dict] = None) -> tuple[str, Optional[dict]]:
+    """(power | stale | none, the power state dict or None): `power_state`, else th["power_state"]
+    (engine/power_state.py, week_plan), else the 一般設定 power source and `cp_stale` / th["cp_stale"] (SP-493)."""
+    from backend.engine import power_state as PST
+    ps = PST.of({"power_state": power_state}) or PST.of(th)
+    if ps is not None:
+        return ps["state"], ps
+    if not _auto_power_ok():
+        return PST.NONE, None
+    stale = cp_stale if cp_stale is not None else bool((th or {}).get("cp_stale"))
+    return (PST.STALE if stale else PST.POWER), None
+
+
+def _no_power_basis(t: str, th: dict) -> str:
+    """The basis of a would-be power session when power is not in effect (② / ③): heart rate (road
+    easy / long: HR ≤ the easy-run cap; intervals and hill repeats: the HR targets).
+    Hook for SP-951: the flat Zone 3 / Zone 5 intervals and tempo go to "pace" (% threshold pace,
+    th["tpace"]) with the HR cap in the text; without a threshold pace they stay HR (+ RPE)."""
+    return "hr"
+
+
+def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Optional[bool] = None,
+                  power_state: Optional[dict] = None) -> dict:
     """{"basis": hr | power | none, "chosen": auto | hr | power (where it came from),
         "type", "why", "source", "hr_cap": bool (an HR cap note on power sessions),
-        "fallback": "" | reason}. `cp_stale` (SP-493; default th["cp_stale"]): an auto road interval
-    is run by HR."""
+        "fallback": "" | reason, "power_state": power | stale | none}.
+
+    SP-950 (owner 2026-10-27, engine/power_state.py): power is in effect only with a power meter and a
+    fresh CP. ② (a meter, the CP stale — th["power_state"], else `cp_stale` / th["cp_stale"]) and
+    ③ (no meter): no session is run by power, whatever was chosen — the CP test keeps its open bouts
+    in ② (it is what brings power back) and an AeT test its fixed power in ② (SP-949 moves it); in ③
+    a stored 目標依據 = 功率 (課表偏好 or the session's own) is ignored, not deleted."""
+    from backend.engine import power_state as PST
     t = session_type(s)
     own = s.get("target_basis")
     chosen = own if own in ("hr", "power") else pref_basis(prefs)
@@ -175,15 +207,14 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Opti
         how = "own" if own in ("hr", "power") else "pref"
     fb = ""
     th = th or {}
-    # generalize-athlete P12 / owner decision: auto power only for a Stryd runner — the
-    # 一般設定 power source watch / none means HR (watch power only when 進階 accepts it)
-    if basis == "power" and chosen not in ("hr", "power") and not _auto_power_ok():
-        basis, fb = "hr", _("功率來源不是 Stryd：用心率")
-    if basis == "power" and th and not th.get("cp"):
+    state, ps = _state(th, cp_stale, power_state)
+    keep = state == PST.STALE and t in ("cp_test", "aet_test")      # ②: the tests keep their power
+    if basis == "power" and state != PST.POWER and not keep:
+        basis = _no_power_basis(t, th)
+        fb = PST.short_reason(ps) if ps is not None else \
+            _("沒有功率計：用心率") if state == PST.NONE else _(CP_STALE_ALL)
+    if basis == "power" and th and not th.get("cp") and not (keep and t == "cp_test"):
         basis, fb = "hr", _("沒有 CP：改用心率")
-    stale = cp_stale if cp_stale is not None else bool((th or {}).get("cp_stale"))
-    if basis == "power" and stale and t == "interval" and chosen not in ("hr", "power"):
-        basis, fb = "hr", _(CP_STALE)
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):
         basis, fb = "none", _("沒有 AeT／LTHR：不設目標")
     if how == "auto":
@@ -196,7 +227,8 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Opti
         why = _("課表偏好：{basis}（{fb}）", basis=_(LABEL[chosen]), fb=fb) if fb \
             else _("課表偏好：{basis}", basis=_(LABEL[chosen]))
     return {"basis": basis, "chosen": own if own in ("hr", "power") else chosen, "type": t, "why": why,
-            "source": _(SRC[key]), "hr_cap": basis == "power" and t in ("interval", "hill", "easy", "long"), "fallback": fb}
+            "source": _(SRC[key]), "hr_cap": basis == "power" and t in ("interval", "hill", "easy", "long"), "fallback": fb,
+            "power_state": state}
 
 
 def target_text(target: str, basis: str) -> str:

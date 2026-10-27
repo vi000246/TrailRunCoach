@@ -272,20 +272,25 @@ def test_a_stale_cp_runs_the_road_intervals_by_hr(stryd):
     p = TP.target_policy(iv, None, {**th, "cp_stale": True})
     assert p["basis"] == "hr" and "CP 太舊" in p["why"]
     assert TP.target_policy(iv, None, th, cp_stale=True)["basis"] == "hr"
-    # the rest keeps its rule: road easy / long power, hill repeats power, trail HR, climbs none
-    for s, b in (({"kind": "easy", "title": "輕鬆跑"}, "power"), ({"kind": "long", "title": "長跑"}, "power"),
-                 ({"kind": "quality", "title": "上坡 6×2 分"}, "power"),
+    # SP-950 (owner 2026-10-27) widened the rule to every session type: road easy / long and hill repeats
+    # by HR too; trail HR, climbs / downhill none as before
+    for s, b in (({"kind": "easy", "title": "輕鬆跑"}, "hr"), ({"kind": "long", "title": "長跑"}, "hr"),
+                 ({"kind": "quality", "title": "上坡 6×2 分"}, "hr"),
                  ({"kind": "easy", "title": "越野輕鬆跑", "terrain": "trail"}, "hr"),
                  ({"kind": "hike", "title": "越野跑"}, "hr"), ({"kind": "long", "title": "長爬坡"}, "none"),
                  ({"kind": "easy", "title": "下坡練習"}, "none")):
         assert TP.target_policy(s, None, {**th, "cp_stale": True})["basis"] == b, s["title"]
 
 
-def test_a_chosen_power_basis_stays_with_a_stale_cp(stryd):
+def test_a_chosen_power_basis_goes_to_hr_with_a_stale_cp(stryd):
+    # SP-950 (owner 2026-10-27): 「其他情況一律心率／配速」 — a chosen 功率 no longer wins over a stale CP
     from backend.engine import plan_prefs as PP
     th = {"cp": 260.0, "lthr": LTHR, "aet": 140.0, "cp_stale": True}
-    assert TP.target_policy({"kind": "quality", "title": "閾值", "target_basis": "power"}, None, th)["basis"] == "power"
-    assert TP.target_policy({"kind": "quality", "title": "閾值"}, PP.Prefs(target_basis="power"), th)["basis"] == "power"
+    p = TP.target_policy({"kind": "quality", "title": "閾值", "target_basis": "power"}, None, th)
+    assert p["basis"] == "hr" and "CP 測試就切回功率" in p["why"]
+    assert TP.target_policy({"kind": "quality", "title": "閾值"}, PP.Prefs(target_basis="power"), th)["basis"] == "hr"
+    assert TP.target_policy({"kind": "quality", "title": "閾值", "target_basis": "power"}, None,
+                            {**th, "cp_stale": False})["basis"] == "power"
 
 
 def test_push_dict_carries_the_stale_cp(stryd):

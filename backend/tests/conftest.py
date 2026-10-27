@@ -302,6 +302,8 @@ def _no_auto_plan_after_sync(monkeypatch):
     monkeypatch.setattr(plan_auto, "after_cp_moved", lambda *a, **k: None)
     # nor a switch of the 自動 課表心率區間 (plan_auto.check_hr_model, SP-493)
     monkeypatch.setattr(plan_auto, "after_hr_model", lambda *a, **k: None)
+    # …nor after a new 功率來源 (api/plan.put_profile, SP-950)
+    monkeypatch.setattr(plan_auto, "after_power_source", lambda *a, **k: None)
     # nor a background calibration run (engine/calibrate.py; test_calibrate calls it itself)
     from backend.engine import calibrate
     monkeypatch.setattr(calibrate, "after_sync", lambda *a, **k: None)

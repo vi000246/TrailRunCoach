@@ -648,6 +648,22 @@ def _app_weight() -> Optional[float]:
     return round(float(row[0]), 1) if row and row[0] else None
 
 
+@router.get("/power-state")
+def get_power_state():
+    """SP-950: 功率狀態 — ① power (a power meter and a fresh CP) / ② stale (a meter, no CP test or race in
+    42 days) / ③ none (no power meter), with the equipment, the CP on file, its days and the day it goes
+    stale, and one line why (engine/power_state.py). The pages read this instead of re-deriving it
+    (the 課表's week plan carries the same dict in thresholds.power_state)."""
+    from backend.engine import power_state as PST
+    today = today_local()
+    plan = P.Plan.load()
+    try:
+        from backend.api.wko5views import _dataset
+        return PST.current(_dataset(), today, plan)
+    except Exception:                       # noqa: BLE001 — no data yet: the equipment only
+        return PST.state(today, plan.profile)
+
+
 @router.get("/profile/detect")
 def detect_profile():
     """What the data says, for the 一般設定 pre-fill: the power source over the
@@ -853,6 +869,7 @@ def put_profile(body: ProfileIn):
         if v is not None and v not in P.PROFILE_FIELDS[k]:
             raise HTTPException(400, f"{k} must be one of {P.PROFILE_FIELDS[k]}")
     plan = P.Plan.load()
+    src_before = AP.profile_power_source(plan.profile)
     # who wrote each entry (SP-472): an entry sent back unchanged (same day, same kg) keeps its source
     # (the nightly apply's apple_health, an accepted COROS weight); a new or edited one is the user's
     kept = {(w.date[:10], round(w.kg, 1)): w.source for w in plan.weights}
@@ -863,7 +880,16 @@ def put_profile(body: ProfileIn):
                                       ("power_meter", None if body.power_source else body.power_meter))
                     if v is not None}
     plan.save()
-    _notify(True)     # weight feeds W/kg everywhere
+    if AP.profile_power_source(plan.profile) != src_before:
+        # SP-950 (owner 2026-10-27): a new 功率來源 changes the power state (engine/power_state.py) — the
+        # Datasets are rebuilt (watch power follows the equipment) and a run re-plans and re-sends the
+        # sessions on the watch right away, every tier (plan_auto.after_power_source)
+        from backend.api.wko5views import plan_changed
+        from backend.engine import plan_auto as PA
+        plan_changed(True)
+        PA.after_power_source()
+    else:
+        _notify(True)     # weight feeds W/kg everywhere
     return get_profile()
 
 

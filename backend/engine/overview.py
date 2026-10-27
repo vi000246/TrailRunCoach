@@ -2050,6 +2050,23 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         notes.append({"level": "info", "src": "reentry",
                       "text": _("恢復期：心率區間為主；功率、配速目標 × {f:.3f}（停跑 {days} 天的 FVDOT{cross}）",
                                 f=f, days=rp["days"], cross=_("，有交叉訓練") if rp.get("cross") else "")})
+    # ---- 功率狀態 (SP-950, engine/power_state.py): power only with a power meter AND a fresh CP (a CP
+    # test or a race in base_check.EP_ALL_OUT_DAYS). ② (stale) / ③ (no meter): the plan has no CP —
+    # no watts in any target text, no 個人化 power zone set, no % CP test intensity; the CP on file
+    # stays in power_state (shown, never used). Nothing is deleted: the next fresh CP / meter brings it back.
+    from backend.engine import power_state as PST
+    tx = getattr(by.get("testing"), "extra", None) or {}
+    pst = PST.state(today, getattr(getattr(status, "plan", None), "profile", None), ds=ds,
+                    last_cp_test=last_cp_test_day(status.plan, today, (tx.get("cp_test") or {}).get("date")),
+                    last_race=last_race_day(status.plan, today), cp=tt.get("cp"), cp_date=tt.get("cp_date"),
+                    cp_source=tt.get("cp_source"))
+    if not pst["power"]:
+        tt = {**tt, "cp": None, "power_model": None,
+              "rows": [{**r, "power": [None, None]} for r in tt.get("rows") or []]}
+        if pst["state"] == PST.STALE and cs is None:
+            # ② (owner 2026-10-27): always say how old the CP is and that one CP test brings power back —
+            # not in a new runner's first weeks (SP-288: no CP test is suggested there either)
+            notes.append({"level": "watch", "src": "power_state", "text": pst["reason"]})
     tgt = _targets(tt)
     # the easy-run cap of every session: 課表心率區間 (設定; engine/hr_profile.py) — a measured AeT,
     # else the chosen COROS model's Z2 top; an estimated AeT no longer caps (owner 2026-10-03).
@@ -2088,7 +2105,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                       + _("課表心率用{label}：輕鬆跑上限 {aet:.0f} bpm（{src}）", label=hrz["label"], aet=aet, src=aet_src)})
     try:
         from backend.engine import base_check as BC
-        et = BC.easy_targets(ds, today, aet) if not ds.config.parity else None
+        et = BC.easy_targets(ds, today, aet, power=pst["power"]) if not ds.config.parity else None
     except Exception:                       # noqa: BLE001
         et = None
     en = None                               # SP-449's easy-power note (SP-471: its test suggestion below)
@@ -2139,8 +2156,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # Daniels: E days only inside the block — no Zone 3, no Zone 5, no test
         allow_quality = False
         dec = {**dec, "allow": False, "spec": None, "advance": False}
-    tx = getattr(by.get("testing"), "extra", None) or {}
-    cp_due = tx.get("cp_due", lvl("testing") in ("bad", "watch"))      # the CP test measures CP only
+    # the CP test measures CP only; SP-950 ③ (no power meter): never (the testing indicator suggests the
+    # 30-min LTHR test instead) — and with no CP test the AeT test below is never held back by one
+    cp_due = tx.get("cp_due", lvl("testing") in ("bad", "watch")) and pst["meter"]
     test_due = cp_due and lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10) \
         and not (in_reentry and not RE.quality_ok(rp, monday)) and kind not in ("transition", "rebuild", "recovery")   # 轉換期 / 回量期: no hard session (SP-73, SP-98)
     # 課表偏好 CP 測試方式 (engine/cp_protocols.py) — read even when the other
@@ -2762,12 +2780,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # ---- 課表結構是唯一來源 (SP-437, engine/session_structure.py): each run session's minutes and TSS
     # are its structure's (what the watch gets), the easy steps at this runner's own TSS / h; last, so
     # every pass above is in it, and before the projection below reads the TSS
-    # SP-493: no CP test and no race in base_check.EP_ALL_OUT_DAYS → the road intervals by HR (target_policy)
-    from backend.engine import base_check as _BCK
-    cp_old = _BCK.cp_stale(today, last_cp_test_day(status.plan, today, (tx.get("cp_test") or {}).get("date")),
-                           last_race_day(status.plan, today))
+    # SP-493: no CP test and no race in base_check.EP_ALL_OUT_DAYS → no power targets (target_policy);
+    # SP-950: the power state above says it for every session type (power_state)
+    cp_old = not pst["fresh"]
     st_th = {"cp": tt.get("cp"), "lthr": tt.get("lthr"), "aet": aet, "hr_model": hrz, "walk_cap": walk, "tpace": tpace,
-             "cp_stale": cp_old, "power_model": tt.get("power_model")}
+             "cp_stale": cp_old, "power_model": tt.get("power_model"), "power_state": pst}
     SST.apply_objs(sessions, st_th, tph, prefs)
 
     # ---- projection to Sunday -------------------------------------------
@@ -2817,7 +2834,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         ti = by.get("testing")
         test_suggestions.append({
             "kind": "cp", "protocol": test_s.get("protocol"), "title": test_s["title"], "minutes": test_s["minutes"],
-            "reason": _("{why}：區間、訓練負荷（Training load）、賽事計算機都靠 CP", why=getattr(ti, "verdict", "") or _("門檻過期或沒測過")),
+            "reason": _("{why}：區間、訓練負荷（Training load）、賽事計算機都靠 CP", why=getattr(ti, "verdict", "") or _("門檻過期或沒測過"))
+            # SP-950 ②: the CP's age and that this test brings power back (owner 2026-10-27)
+            + (" · " + pst["reason"] if pst["state"] == PST.STALE else ""),
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
     def aet_session() -> dict:
@@ -2904,6 +2923,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                        # SP-493: the CP has no recent all-out effort (base_check.cp_stale) — target_policy
                        # runs the auto road intervals by HR
                        "cp_stale": cp_old,
+                       # SP-950: ① power / ② stale / ③ none (engine/power_state.py) — the one field the
+                       # pages read (cp: None unless power is in effect; the CP on file is power_state.cp)
+                       "power_state": pst,
                        # 登山爬坡的心率上限 (hr_profile.walk_cap, SP-115): the walking sessions' texts and push
                        "walk_cap": walk,
                        # SP-274: the 90-minute test's pace / power (aet_test.xu_target)

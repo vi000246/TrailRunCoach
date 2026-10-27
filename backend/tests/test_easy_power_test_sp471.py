@@ -164,9 +164,12 @@ def _week_ds():
     from backend.tests.test_aet_weekday import _build_week_ds
     from backend.tests.test_quality_gate import TODAY as QT
     ds, plan = _build_week_ds()
-    for t in plan.thresholds:                                         # the CP test 9/20 → 7/1: 91 days old
+    # the CP test 9/20 → 8/26: 35 days old — SP-950: still fresh (≤ 42 days, power in effect: the easy-power
+    # note needs the plan's CP) but past EP_RETEST_DAYS (28), so the CP test may be suggested again
+    # (was 7/1, 91 days: now ② — no CP in the plan, the ② note and the CP test instead)
+    for t in plan.thresholds:
         if t.cp is not None:
-            t.date = "2026-07-01"
+            t.date = "2026-08-26"
     return ds, plan, QT
 
 
@@ -177,7 +180,8 @@ def _week_plan(monkeypatch, power, days_to=None):
     if days_to is not None:
         st.goals = {**st.goals, "days_to_next_a": days_to}
     ds.config = types.SimpleNamespace(parity=False)                  # easy_targets runs outside the parity mode
-    monkeypatch.setattr(BC, "easy_targets", lambda ds, today, aet: {"power": power, "n": 6, "text": "", "pace_s_km": None})
+    monkeypatch.setattr(BC, "easy_targets", lambda ds, today, aet, **kw: {"power": power, "n": 6, "text": "",
+                                                                           "pace_s_km": None})
     return O.week_plan(ds, st, qt, prefs=PP.Prefs())
 
 

@@ -893,10 +893,16 @@ async def goal_basis():
     pace, power → a target power."""
     from backend.engine import athlete_profile as AP
     from backend.engine.racepower import goal as GOAL
+    from backend.api.sync import _power_source
+    from backend.engine import power_state as PST
+    from backend.engine.planning import Plan
     tb, up, watch = _goal_settings()
+    src = (await _power_source())[0]
+    if src == "none":
+        # SP-950 ③ 沒有功率計: a stored 目標依據 = 功率 / 使用功率 on is ignored (kept, not deleted)
+        return GOAL.basis(None, False)
     if up is None and tb not in ("hr", "power"):
-        from backend.api.sync import _power_source
-        up = AP.use_power((await _power_source())[0], watch)
+        up = AP.use_power(src, PST.accept_watch(Plan.load().profile, watch))
     return GOAL.basis(tb, up)
 
 

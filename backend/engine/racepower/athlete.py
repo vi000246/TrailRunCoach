@@ -504,12 +504,11 @@ def _pd_mftp(ds, day: dt.date) -> Optional[float]:
         try:
             # this CP only locates the Friel window of the LTHR estimate
             # (thresholds.estimate, an HR threshold): the power the models use
-            # when the window has any (a junk watch file, e.g. a TP car ride
-            # read as an 899 W "run", must not break the fit), else every power — before
-            # a Stryd the history may have watch power only, measured
-            # against a CP from the same watch power (推估)
+            # (a junk watch file, e.g. a TP car ride read as an 899 W "run", must not break the fit).
+            # SP-950 (owner 2026-10-27): watch power never counts — a window without usable (Stryd)
+            # power has no CP (it used to fall back to every power, the wrist's included)
             pw = [w for w in runs if power_ok(ds, w) and power_source(ds, w) != "none"]
-            pdm = pd_model(ds, day, pw, None) if pw else pd_model(ds, day, runs, None, any_power=True)
+            pdm = pd_model(ds, day, pw, None) if pw else None
         except Exception:                   # noqa: BLE001
             pdm = None
         _cp_memo[key] = pdm["mftp"] if pdm else None

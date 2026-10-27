@@ -4358,5 +4358,19 @@
   "上一次的疼痛分數超過上限": "last run's pain score above the limit",
   "上一次的疼痛分數比再前一次高": "last run's pain score higher than the run before",
   "上一次有標疼痛分數": "last run has a pain score",
-  "暫時無法顯示，請稍後再試": "Can't show this right now. Please try again later."
+  "暫時無法顯示，請稍後再試": "Can't show this right now. Please try again later.",
+  "功率生效": "Power in effect",
+  "有功率計，CP 過期": "Power meter, CP out of date",
+  "沒有功率計：課表、模型和門檻都用心率／配速": "No power meter: the plan, the models and the thresholds use heart rate / pace",
+  "CP 已 {n} 天沒測，目前用心率／配速；做一次 CP 測試就切回功率": "CP last tested {n} {n|day|days} ago, so heart rate / pace are used for now; one CP test switches back to power",
+  "還沒有 CP 測試或比賽，目前用心率／配速；做一次 CP 測試就切回功率": "No CP test or race yet, so heart rate / pace are used for now; one CP test switches to power",
+  "用功率：最近一次 CP 測試或比賽在 {n} 天前（{lim} 天內有效）": "Using power: the last CP test or race was {n} {n|day|days} ago (valid for {lim} days)",
+  "用功率": "Using power",
+  "沒有功率計：用心率": "No power meter: by heart rate",
+  "CP 太舊（最近沒有 CP 測試或比賽）：用心率；做一次 CP 測試就切回功率": "CP out of date (no recent CP test or race): by heart rate; one CP test switches back to power",
+  "功率狀態：{a} → {b}：{tail}": "Power status: {a} → {b}: {tail}",
+  "課表目標已更新": "the plan's targets are updated",
+  "功率狀態：{a} → {b}，課表目標照新的狀態": "Power status: {a} → {b}, the targets follow the new status",
+  "課表目標照新的功率狀態": "Targets follow the new power status",
+  "沒有功率計：一般跑步估不出 LTHR（要用功率判斷哪幾次夠硬）；LTHR 沿用目前的值，可以手動輸入或用比賽成績": "No power meter: ordinary runs can't give an LTHR (power tells which runs were hard enough); the current LTHR stays — enter it by hand or use a race result"
 }

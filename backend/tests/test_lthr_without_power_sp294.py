@@ -163,8 +163,14 @@ def test_hr_only_runs_give_no_lthr_and_no_aet_estimate(cp_of):
     # 8 tempo blocks at exactly LTHR, and still no value: without a CP no run says 「hard enough」.
     # SP-573: it says why and points at the 30-minute test (no longer a bare null)
     lt = est["lthr"]
-    assert lt["value"] is None and lt["no_cp"] and lt["reason"] == TH.NO_CP_REASON
-    assert "Stryd" in lt["reason"] and "CP 測試" in lt["reason"] and "30 分鐘 LTHR 測試" in lt["reason"]
+    if cp_of == "dataset":
+        # SP-950: no power in the data and no 功率來源 set → 沒有功率計 (③): it says so and suggests no
+        # test (owner 2026-10-27: no 30-min test in its place)
+        assert lt["value"] is None and lt["no_cp"] and lt["no_meter"] and lt["reason"] == TH.NO_METER_REASON
+        assert lt["links"] == []
+    else:
+        assert lt["value"] is None and lt["no_cp"] and lt["reason"] == TH.NO_CP_REASON
+        assert "Stryd" in lt["reason"] and "CP 測試" in lt["reason"] and "30 分鐘 LTHR 測試" in lt["reason"]
     assert est["aethr"]["value"] is None and est["aethr"]["n"] == 0   # the drift test needs power too
 
 
@@ -206,19 +212,16 @@ def _watch_only():
     return _DS(_history("trained", scale_of=lambda d: WATCH_SCALE), src_of=lambda w: PS.WATCH)
 
 
-def test_watch_power_only_cp_as_of_fits_the_watch_power_and_the_lthr_estimate_works():
+def test_watch_power_only_gives_no_cp_and_no_lthr_estimate():
+    # SP-950 (owner 2026-10-27): watch power never counts — SP-573's wrist-power CP (pd_model any_power)
+    # is gone, so a watch-power-only history has no CP and no LTHR from ordinary runs, on both paths
     ds = _watch_only()
-    assert not ds.power_ok(ds.workouts[0])                     # power.accept_watch_power off (default)
-    cp = A.cp_as_of(ds, TODAY)
-    # _pd_mftp: no usable (Stryd) power in the window → pd_model(any_power=True) on the wrist power
-    assert cp is not None and 1.15 * STRYD_CP <= cp <= 1.45 * STRYD_CP
+    assert not ds.power_ok(ds.workouts[0])
+    assert A.cp_as_of(ds, TODAY) is None
     est = TH.estimate(ds, TODAY, cp_of=lambda d: A.cp_as_of(ds, d))
-    assert abs(est["lthr"]["value"] - TRUE_LTHR) <= 2          # same scale in and out: it works
-    # the as-of path (fitdataset._estimate_settings → runthr) has it. Dataset.cp (charts, 課表) has no
-    # Stryd fit; SP-573: the default path (threshold-estimate API, overview) then takes the as-of route
-    # too, so it gives the same value (it used to give none: SP-294 §2)
-    est0 = TH.estimate(ds, TODAY)
-    assert est0["cp"] == est["cp"] and est0["lthr"] == est["lthr"]
+    assert est["cp"] is None and est["lthr"]["value"] is None
+    est0 = TH.estimate(ds, TODAY)                                 # ③ (detected: no Stryd)
+    assert est0["cp"] is None and est0["lthr"]["value"] is None and est0["lthr"]["no_meter"]
 
 
 def test_watch_power_only_no_cp_for_the_charts_or_the_plan_even_with_watch_power_accepted():
@@ -271,16 +274,19 @@ def test_with_watch_power_accepted_the_wrist_runs_still_count():
     assert est["lthr"]["n"] > ok["lthr"]["n"]                         # the wrist runs are judged too
 
 
-def test_a_window_without_usable_power_judges_the_wrist_runs():
-    """Stryd runs only before the CP's 90-day window: cp_as_of fits the wrist power (no usable power
-    in its window), so the wrist runs are what the estimate judges (the watch-only case)."""
+def test_a_window_without_usable_power_judges_no_wrist_run():
+    """Stryd runs only before the CP's 90-day window. SP-950 (owner 2026-10-27): watch power never
+    counts — the CP is the last Stryd fit (cp_as_of's 30 days back), never the wrist-power fit, and no
+    wrist run is judged against it."""
     switch = TODAY - dt.timedelta(days=100)
     ws = _history("trained", days=170, scale_of=lambda d: 1.0 if d < switch else WATCH_SCALE)
     src = {fw.start: PS.STRYD if fw.start.date() < switch else PS.WATCH for fw in ws}
     ds = _DS(ws, src_of=lambda w: src[w.entry.start])
     est = TH.estimate(ds, TODAY, cp_of=lambda d: A.cp_as_of(ds, d))
-    assert est["cp"] > 1.15 * STRYD_CP                                # the wrist-power fit
-    assert abs(est["lthr"]["value"] - TRUE_LTHR) <= 2 and est["lthr"]["days"] == 90
+    assert est["cp"] is None or est["cp"] < 1.15 * STRYD_CP          # not the wrist-power fit (> 1.15 × CP)
+    from backend.engine.wko5expr.dataset import date_to_day
+    judged = TH._judged_against_cp(ds, ds.workouts, int(date_to_day(TODAY)))
+    assert not any(judged(w) for w in ds.workouts if src[w.entry.start] == PS.WATCH)
 
 
 def test_the_estimate_cache_follows_the_rule():
@@ -403,7 +409,9 @@ def test_the_age_formula_max_hr_is_low_and_easy_runs_are_no_spike_evidence():
 
 def test_without_a_cp_the_estimate_says_why_and_links_the_lthr_test():
     from backend.i18n import use_locale
-    ds = _DS(_history("trained"))
+    # a Stryd runner (功率來源 set) without any CP yet — SP-950: a runner with no power meter (③) gets
+    # no_meter_lthr instead (no test suggested; test 1)
+    ds = _DS(_history("trained"), plan=Plan(profile={"power_source": "stryd"}))
     lt = TH.estimate(ds, TODAY)["lthr"]
     # the link of threshold_confidence's test suggestion (「安排課表：LTHR 測試…」, the Friel 30-min template)
     assert lt["links"] == [TC.schedule_link("tt30")]
@@ -432,7 +440,8 @@ def test_a_stryd_cp_keeps_the_default_path(monkeypatch):
     assert est["cp"] == STRYD_CP and abs(est["lthr"]["value"] - TRUE_LTHR) <= 2
 
 
-@pytest.mark.parametrize("accept", [False, True])
+# SP-950: the app never accepts watch power any more (power_source.effective_accept) — only the stored-off case
+@pytest.mark.parametrize("accept", [False])
 def test_the_threshold_estimate_api_gives_the_load_time_value_for_watch_power_only(monkeypatch, accept):
     """GET /plan/threshold-estimate (設定 › 閾值's 「從活動估計」) for a watch-power-only runner: the value
     fitdataset._estimate_settings writes into runthr on a grid day — thresholds.estimate(ds, day,
@@ -440,13 +449,16 @@ def test_the_threshold_estimate_api_gives_the_load_time_value_for_watch_power_on
     from backend.api import plan as PL
     ds = _DS(_history("trained", scale_of=lambda d: WATCH_SCALE), src_of=lambda w: PS.WATCH, accept_watch=accept)
     at_load = TH.estimate(ds, TODAY, cp_of=lambda d: A.cp_as_of(ds, d))["lthr"]["value"]
-    assert abs(at_load - TRUE_LTHR) <= 2
+    # SP-950 (owner 2026-10-27): no wrist-power CP without accepted watch power, so no value at load
+    # either — the card and the load agree (no value) instead of agreeing on a wrist-power value
+    assert (at_load is None) if not accept else abs(at_load - TRUE_LTHR) <= 2
     A._cp_memo.clear()
     monkeypatch.setattr(PL, "_estimate_dataset", lambda: ds)
     monkeypatch.setattr(PL, "_estimate_pending", lambda ds: None)
     monkeypatch.setattr(PL, "today_local", lambda: TODAY)
     got = PL.threshold_estimate()
-    assert got["lthr"]["value"] == at_load and got["lthr"]["days"] == 90
+    # SP-950: both empty — the card says 沒有功率計 (watch power is no meter; no test suggested)
+    assert got["lthr"]["value"] is None and at_load is None and got["lthr"].get("no_meter")
 
 
 # ---- 9. SP-574: 「接受手錶功率」's help says what the setting really changes ----------------------

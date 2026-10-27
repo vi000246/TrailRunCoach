@@ -48,7 +48,9 @@ def test_age_birth_year_and_legacy_meter():
     assert AP.birth_year_ok(None) and AP.birth_year_ok(1986, TODAY)
     assert not AP.birth_year_ok(1900, TODAY) and not AP.birth_year_ok(TODAY.year - 5, TODAY)
     assert AP.profile_power_source({"power_source": "none", "power_meter": "stryd"}) == "none"
-    assert AP.profile_power_source({"power_meter": "coros"}) == "watch"
+    # SP-950 (owner 2026-10-27): watch power is no power source — the legacy watch meters read as none
+    assert AP.profile_power_source({"power_meter": "coros"}) == "none"
+    assert AP.profile_power_source({"power_source": "watch"}) == "none"
     assert AP.profile_power_source({"power_meter": "stryd"}) == "stryd"
     assert AP.profile_power_source({}) is None
 
@@ -62,7 +64,9 @@ def _ds(labels):
 
 def test_detect_power_source():
     assert AP.detect_power_source(_ds(["stryd"] * 5 + ["none"] * 9), TODAY)["source"] == "stryd"
-    assert AP.detect_power_source(_ds(["watch"] * 6 + ["stryd"] * 4), TODAY)["source"] == "watch"
+    # SP-950: watch power runs are no power meter (still counted)
+    d = AP.detect_power_source(_ds(["watch"] * 6 + ["stryd"] * 4), TODAY)
+    assert d["source"] == "none" and d["counts"]["watch"] == 6
     d = AP.detect_power_source(_ds(["none"] * 20 + ["watch"] * 2), TODAY)
     assert d["source"] == "none" and d["counts"] == {"stryd": 0, "watch": 2, "none": 20}
     assert AP.effective_power_source({}, _ds(["stryd"] * 5), TODAY) == ("stryd", "自動偵測")
@@ -72,7 +76,7 @@ def test_detect_power_source():
 def test_use_power_follows_the_owner_decision():
     assert AP.use_power("stryd", False) is True
     assert AP.use_power("watch", False) is False        # no Stryd -> heart rate by default
-    assert AP.use_power("watch", True) is True          # 進階: watch power accepted
+    assert AP.use_power("watch", True) is False         # SP-950: 進階 「採用手錶推估功率」 is ignored
     assert AP.use_power("none", True) is False
     # SP-211: weight, sex and age (the birth year) — the wizard asks until all three are known
     assert AP.setup_needed(None, "male", 1990) and AP.setup_needed(60.0, None, 1990)
@@ -98,9 +102,10 @@ def test_profile_api_birth_year_power_source_and_setup(plan_file):
         PA.put_profile(PA.ProfileIn(birth_year=1850))
     with pytest.raises(HTTPException):
         PA.put_profile(PA.ProfileIn(power_source="garmin"))
-    # the legacy field still reads
+    # the legacy field still reads — SP-950: a watch meter as 沒有功率計; the stored value is kept
     PA.put_profile(PA.ProfileIn(power_meter="coros"))
-    assert PA.get_profile()["effective"]["power_source"] == "watch"
+    g = PA.get_profile()
+    assert g["effective"]["power_source"] == "none" and g["profile"]["power_meter"] == "coros"
 
 
 def test_setup_done_is_stored():
@@ -123,12 +128,20 @@ def test_use_power_auto_in_sync_settings(monkeypatch, plan_file):
         s = await _session()
         repo = SettingsRepository(s, 1)
         out = await SY._sync_settings(repo)
-        assert out["use_power_stored"] is None and out["use_power"] is False and out["power_source"] == "watch"
-        await repo.set("power.accept_watch_power", True)
+        # SP-950 (owner 2026-10-27): a stored 手錶推估功率 reads as 沒有功率計
+        assert out["use_power_stored"] is None and out["use_power"] is False and out["power_source"] == "none"
+        assert out["power_meter"] is False
+        await repo.set("power.accept_watch_power", True)               # ignored (kept as stored)
+        out = await SY._sync_settings(repo)
+        assert out["use_power"] is False and out["accept_watch_power"] is True
+        assert out["accept_watch_power_effective"] is False
+        await repo.set("charts.power.enabled", True)                   # ③: a stored 使用功率 on is ignored
+        out = await SY._sync_settings(repo)
+        assert out["use_power"] is False and out["use_power_stored"] is True
+        PL.Plan(profile={"power_source": "stryd"}).save()               # a meter again: it is back
         assert (await SY._sync_settings(repo))["use_power"] is True
         await repo.set("charts.power.enabled", False)                  # an explicit choice wins
         assert (await SY._sync_settings(repo))["use_power"] is False
-        PL.Plan(profile={"power_source": "stryd"}).save()
         await repo.set("charts.power.enabled", None)
         assert (await SY._sync_settings(repo))["use_power"] is True
     _run(go())
@@ -277,7 +290,7 @@ def test_power_source_names_follow_the_ui_language(plan_file, monkeypatch):
         assert PA.detect_profile()["labels"] == want
         assert PA.get_profile()["power_labels"] == want
         from backend.engine.racepower import athlete as RA
-        assert RA._power_label({"power_source": "watch"}) == "Watch-estimated power"
+        assert RA._power_label({"power_source": "watch"}) == "No power meter"     # SP-950: watch = none
         assert RA._power_label({}) == "Not set"
     # the wizard shows the label the API sends (no Chinese of its own for the detected source)
     from pathlib import Path
