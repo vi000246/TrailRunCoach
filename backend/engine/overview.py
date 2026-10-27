@@ -1361,7 +1361,7 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
             from backend.engine import target_policy as TP
             tq = {**TAPER_Q, "power_pct": TAPER_Q_PCT}
             s = dict(TAPER_Q, target=taper_q_target(tq, None, tgt.get("threshold", ""), prefs, "", th)
-                     if TP.flat_pace(th, prefs) else tgt.get("threshold", ""),
+                     if TP.flat_pace(th, prefs, s=tq) else tgt.get("threshold", ""),
                      **taper_no_power(tq, th, prefs, tgt.get("threshold", "")))
         else:
             s = ladder_session(gate, it, kind, th, hours, prefs, history, mountain, road, cap, alt_caps, notes,
@@ -2874,11 +2874,21 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             + (" · " + pst["reason"] if pst["state"] == PST.STALE else ""),
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
+    aet_start: dict = {}
+
     def aet_session() -> dict:
+        # SP-949: the start HR chained to the last UA / Evoke test (below → +5, above → −5), else the
+        # estimate; the fixed intensity from the athlete's own HR → power (①) / HR → pace (② / ③, and
+        # 徐國峰's pace test) on recent flat easy runs, else CP × 0.75 / the E pace / the talk test
+        if not aet_start:
+            ch = AT.chained_start_hr(tx.get("aet_test"), (est.get("aethr") or {}).get("value"), tt.get("lthr"))
+            basis = "power" if pst["power"] and aet_proto != "xu90" else "pace"
+            aet_start.update(hr=ch, start=AT.start_target(None if ds.config.parity else ds, today, ch["hr"], basis,
+                                                          cp=tt.get("cp"), cap=aet))
         return AT.session({**tt, "cp_measured": cp_meas, "e_pace": e_pc},
-                          AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
-                          AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None), aet_proto,
-                          getattr(prefs, "long_cap", None) if prefs is not None else None)
+                          aet_start["hr"]["hr"], AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None),
+                          aet_proto, getattr(prefs, "long_cap", None) if prefs is not None else None,
+                          start=aet_start["start"], hr_why=aet_start["hr"]["why"])
 
     if aet_due:
         a_s = aet_session()
@@ -3681,7 +3691,7 @@ def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=No
     hr_src = z3_target if tmpl.get("hr_cls") == "Z3sub" else q_target
     hr_parts = [p.strip() for p in (hr_src or "").split("·") if p.strip().startswith("心率")]
     flat = TP.session_type({**tmpl, "id": "quality"}) == "interval"
-    if th is not None and flat and lo is not None and hi is not None and TP.flat_pace(th, prefs):
+    if th is not None and flat and lo is not None and hi is not None and TP.flat_pace(th, prefs, s=tmpl):
         parts.append(TP.pace_text(lo, hi, float(th["tpace"])))
         import re
         top = re.search(r"(\d+)\s*bpm", hr_parts[0]) if hr_parts else None       # 「心率 a–b bpm」 → b
@@ -3723,7 +3733,7 @@ def taper_no_power(tmpl: dict, th: Optional[dict], prefs=None, hr_src: str = "")
     if th is None or lo is None or hi is None or not TP.no_power(th):
         return {}
     flat = TP.session_type({**tmpl, "id": "quality"}) == "interval"
-    if flat and TP.flat_pace(th, prefs):
+    if flat and TP.flat_pace(th, prefs, s=tmpl):
         band = TP.pace_pct_text(lo, hi, float(th["tpace"]))
     else:
         band = next((p.strip() for p in (hr_src or "").split("·") if p.strip().startswith("心率")), "RPE 8")

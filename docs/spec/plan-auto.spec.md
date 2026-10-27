@@ -937,8 +937,9 @@ run on the app's event loop in that tenant. `force` (the page's 立即重算) is
   `stale_on`, reason) and, outside ①, gives the plan no CP (`thresholds.cp` None, no 個人化 power
   zone set, no watts in any text, easy targets pace only). `target_policy` in ② / ③: no session by
   power whatever was chosen (road easy / long → HR ≤ the easy-run cap, intervals and hill repeats →
-  HR; hook `_no_power_basis` for SP-951's pace); ② keeps the CP test's power bouts and the AeT
-  test's protocol. ② adds the note 「CP 已 N 天沒測，目前用心率／配速；做一次 CP 測試就切回功率」 and
+  HR; hook `_no_power_basis` for SP-951's pace); ② keeps the CP test's power bouts; the UA / Evoke AeT
+  test runs by a fixed pace in ② / ③ (SP-949: `aet_test.start_target`, overview.spec.md › AeT drift
+  test; fallback 「功率不生效：AeT 測試改用固定配速」, no HR cap note). ② adds the note 「CP 已 N 天沒測，目前用心率／配速；做一次 CP 測試就切回功率」 and
   the same words on the CP test suggestion. ③: no CP test (the 測試 indicator leaves the CP out,
   `cp_due` false, zone events drop `cp`), so the AeT test is no longer held back by one; no test is
   suggested in its place. The automatic run re-plans and re-sends the sessions on the watch when
@@ -980,6 +981,26 @@ run on the app's event loop in that tenant. `force` (the page's 立即重算) is
   `workout_steps._quality_text` / `coros_workouts._quality_steps` read before the 說明's 「lo–hi% CP」
   (`workout_steps.text_band`); the 出處 leaves its % CP parts out (`target_policy.source_without_power`).
   ① keeps every text as it was.
+- 目標依據 per session type (SP-964, owner 2026-10-27; 設定 › 訓練依據 › 進階設定): 課表偏好
+  `plan.prefs.type_basis` {type: basis} (`Prefs.type_basis` ((type, basis), …); a type left out follows
+  `target_basis`). Types and what each may be (`target_policy.TYPE_CHOICES`): road easy `easy` / road long
+  `long` 心率／功率, the flat Zone 3 / tempo `z3` and Zone 5 `z5` intervals 心率／配速／功率, hill repeats `hill`
+  心率／功率, the road long run's marathon-pace segment `mp` 心率／配速／功率. Trail days, long climbs, walking,
+  downhill and the tests are not choosable. Order in `target_policy`: the session's own → its type's
+  (`type_key`: session type, a flat interval split by `flat_zone` — `_zone` hint, `rung_key`, the library
+  variant's rung, the band's middle ≥ Palladino Zone 4 = z5, the title) → `target_basis` → 自動; the answer
+  carries `how` (auto / own / type / pref) and the why 「進階設定：{type}用{basis}」. The SP-950 / SP-951
+  fallbacks apply unchanged (② / ③: a chosen power → pace on a flat interval, HR elsewhere, with the reason;
+  pace without a threshold pace → HR + RPE). `flat_pace(th, prefs, s=)` takes the session (or `{"_zone"}`) so
+  the text builders write pace for that type only. MP (`target_policy.mp_policy`): 自動 = pace (the overall
+  `target_basis` never reached it — unchanged); 心率 = `workout_steps.MP_HR` × LTHR, 功率 = the pace's speed as %
+  CP (`workout_steps.mp_power_band`: threshold pace ÷ goal pace ± 1.5 %, else 1 ÷ `MP_PACE` ≈ 93–96 % CP, 推估);
+  power not in effect / no CP → pace, HR without LTHR → none. The structure (`workout_steps.mp_target(s, th)`,
+  `mp_basis`), the push (`plan_store.push_dict` adds `mp_basis` when one is set; `coros_workouts` MP branch)
+  and the card (`training_basis.rows` `own` / `type_key`, `type_rows`) read the same. Stored values that
+  can't be chosen are dropped (`plan_prefs.clean_type_basis`), new ones refused; `PATCH /prefs` merges
+  `type_basis` ("auto" / null = back to the overall one) and re-plans like 目標依據; `PUT /prefs` without it
+  keeps the stored one (the 課表偏好 dialog never sends it).
 - Power bands (SP-378, `docs/research/power-zone-width.md`, owner 2026-10-12): a road easy run is
   the whole of Zone 1, 65–80 % CP; a road long run 65–88 % (`zones.EASY_BAND` / `LONG_BAND`,
   `WORKOUT_TARGETS` z2 / long); mountain / hike days keep 75–88 % (`TRAIL_BAND`). An auto interval
@@ -1094,4 +1115,6 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-23 | bugfix | SP-909 | The 自動調整 panel (`static/autoplan.js`, 課表 and 總覽) in English: the pending proposal box, its buttons, the status / action / push words, the confirm and the failure alert through `common.autoplan.*`. The change log's texts are msgids (`engine/plan_auto.py`: the summary line, one per combination; the big-change texts; the CP / 課表心率區間 lines; the items' push state `PUSHED` / `TO_PUSH` / `APP_ONLY`, still compared as stored) with the zh-TW text unchanged; GET /plan/auto shows the stored log (summary, items' title / reason / push, big texts, errors) and the big-change texts in the request's language (`api/plan_auto.LOG_KEYS`, engine/stored_text). The 「⚠ 課表待確認」 watch notice is the watch's text: as before. Tests: `backend/tests/test_en_autoplan_sp909.py` |
 | 2026-10-27 | feature | SP-950 | 功率狀態 (`engine/power_state.py`): power only with a power meter (Stryd) and a fresh CP (≤ 42 days since a CP test or race). ② / ③: the week plan has no CP for targets (`thresholds.cp` None; the CP on file in `thresholds.power_state`), `target_policy` runs no session by power (road easy / long and hill repeats too; a chosen 功率 ignored, not deleted); ② note + CP test reason 「CP 已 N 天沒測…做一次 CP 測試就切回功率」; ③ no CP test (testing indicator, zone events), the AeT test no longer held back. Watch power is no power source (owner update 2026-10-27: stored 手錶推估功率 reads as none, `power.accept_watch_power` ignored, `_pd_mftp` no longer falls back to wrist power). The run re-plans / re-sends on a new state (`state.power_state`, `power_state` change-log row; `put_profile` → `after_power_source`). `GET /api/v1/plan/power-state`. Tests: `backend/tests/test_power_state_sp950.py` (+ updated sp493 / sp471 / sp294 / general settings / power source tests) |
 | 2026-10-27 | feature | SP-951 | 配速 basis: in ② / ③ (or with 配速 picked, 課表偏好 / a session's own) the flat Zone 3 / Zone 5 intervals and tempo run by % threshold pace (threshold pace ÷ % CP, 推估) with 「心率 ≤ X bpm」 as the cap note; no threshold pace → HR + RPE with the reason; hill repeats HR + RPE; ① unchanged. One basis in every text builder (`interval_library.session_for`, `quality_gate.session`, `overview.taper_q_target` via `target_policy.flat_pace` / `text_th`), the structure (`workout_steps.resolve` `Ctx.basis = pace`, `Ctx.hill`), the card summary and the COROS push (intensityType 3; `plan_store._basis_for` passes `tpace`). HR without LTHR no longer falls back to an old CP; % CP template steps with no CP → % threshold pace (warning). `plan.prefs.target_basis` accepts `pace`; 課表偏好 配速 radio. Tests: `backend/tests/test_pace_basis_sp951.py` (+ updated `test_target_policy.py`, `test_power_state_sp950.py`, `test_workout_steps_short_reps_sp645.py`) |
+| 2026-10-27 | feature | SP-949 | `target_policy`: the AeT test no longer keeps its power in ② (only the CP test does); a UA / Evoke test without power in effect (or without a CP) is basis `pace` (its own fixed pace — `aet_test.start_target` — not the threshold pace; never turned to HR for a missing threshold pace), source stays the AeT one, no HR cap note. The session text / steps: overview.spec.md › AeT drift test. Tests: `backend/tests/test_aet_start_sp949.py` |
 | 2026-10-27 | feature | SP-951 R1 | No % CP / watts in a ② / ③ session's 說明 or 出處 either: the band in pace / HR / RPE words, a text-path interval's band in `variant_adj["band"]` (read by the structure and the push), the 出處's % CP parts left out. `test_taper_rules.py`'s two week-plan taper tests get a fresh CP test (they broke with SP-950: the fixture's CP was 60 days old) and ③ counterparts by pace. Tests: `test_pace_basis_sp951.py::test_no_session_builder_shows_power_without_power`, `test_no_week_plan_session_shows_power_without_power`, `test_taper_rules.py` |
+| 2026-10-27 | feature | SP-964 | 目標依據 per session type (設定 › 訓練依據 › 進階設定): `plan.prefs.type_basis` for road easy / long (心率／功率), flat Zone 3 / Zone 5 (心率／配速／功率), hill repeats (心率／功率) and the MP segment (心率／配速／功率); order own → type → `target_basis` → 自動 (`target_policy.type_key` / `flat_zone` / `type_basis`, `how` = type); SP-950 / SP-951 fallbacks unchanged. Text builders pass the session to `flat_pace(s=)`; MP by `target_policy.mp_policy` in the structure (`workout_steps.mp_target(s, th)`), the push (`plan_store.push_dict` `mp_basis`, `coros_workouts`) and the card. `PATCH /prefs` merges `type_basis` and re-plans; `PUT /prefs` without it keeps it; unchoosable stored values dropped (`plan_prefs.clean_type_basis`). Tests: `backend/tests/test_type_basis_sp964.py` |

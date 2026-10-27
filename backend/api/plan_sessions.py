@@ -82,6 +82,16 @@ def _shown(out):
     return out
 
 
+def _shown_changes(out: dict) -> dict:
+    """A reconcile answer's changes (重算課表, 不排課日期 previews: titles, reasons, before values) in the request's
+    language (SP-909 R1, engine/stored_text) — only those: its blackouts are the user's and go back as they are."""
+    from backend.engine import stored_text as ST
+    from backend.i18n import DEFAULT_LOCALE, current_locale
+    if current_locale() == DEFAULT_LOCALE:
+        return out
+    return {**out, **{k: ST.shown_tree(out[k]) for k in ("changes", "by_day") if k in out}}
+
+
 # what the 課表 shows of a session's watch copy (SP-908): why it is not pushed / why a push failed — not its
 # name or steps (the watch's own text)
 _COROS_KEYS = frozenset({"reason", "error"})
@@ -2809,8 +2819,8 @@ async def reconcile_preview(reset_edited: bool = False, db: AsyncSession = Depen
         await _ensure(db, inp)
         _, changes = await PS.plan_reconcile(db, inp, apply=False, reset=reset_edited, today=today)
         n = _resettable(await PS.load(db), today)
-    return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes), "resettable": n,
-            "reset_edited": reset_edited}
+    return _shown_changes({**_meta(inp), "changes": changes, "by_day": R.by_day(changes), "resettable": n,
+                           "reset_edited": reset_edited})
 
 
 def _decisions(body: Optional[dict]) -> dict:
@@ -2833,7 +2843,7 @@ async def reconcile_apply(body: Optional[dict] = Body(None), db: AsyncSession = 
     async with _wlock():
         await _ensure(db, inp)
         _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec, reset=reset, today=_today(inp))
-    return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes), "reset_edited": reset}
+    return _shown_changes({**_meta(inp), "changes": changes, "by_day": R.by_day(changes), "reset_edited": reset})
 
 
 def _in_range(ss: list[dict], a: str, b: str, blocked: Optional[dict] = None) -> list[dict]:
@@ -3059,13 +3069,16 @@ def post_prefs_conflicts(body: dict = Body(...)):
 
 @router.put("/prefs")
 async def put_prefs(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
-    """The whole preference set (fields of plan_prefs.Prefs; missing = default)."""
+    """The whole preference set (fields of plan_prefs.Prefs; missing = default). SP-964: `type_basis`
+    (訓練依據 › 進階設定, never on the 課表偏好 dialog) left out = kept as stored."""
     from backend.engine import plan_prefs as PP
     from backend.settings.repository import SettingsRepository
     try:
+        repo = SettingsRepository(db)
+        if "type_basis" not in body:
+            body = {**body, "type_basis": await repo.get("plan.prefs.type_basis")}
         p = PP.from_body(body)
         PP.check(p)
-        repo = SettingsRepository(db)
         for k, v in p.settings().items():
             await repo.set(k, v)
     except (ValueError, TypeError) as e:
@@ -3077,14 +3090,15 @@ async def put_prefs(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
 
 # 設定 › 訓練依據 (SP-955): the 課表偏好 fields that moved to the settings page — changed one at a time there,
 # the rest of the stored preferences kept (PUT /prefs is the whole set, its missing fields the defaults)
-BASIS_FIELDS = ("target_basis", "climb_target", "aet_test_protocol", "cp_test_protocol")
+BASIS_FIELDS = ("target_basis", "climb_target", "aet_test_protocol", "cp_test_protocol", "type_basis")
 
 
 @router.patch("/prefs")
 async def patch_prefs(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     """Some of 目標依據 / 可跑坡目標 / AeT 測試方式 / CP 測試方式 (BASIS_FIELDS) over the stored preferences.
     A new 目標依據 re-plans and re-sends the upcoming sessions the way a new 課表心率區間 does
-    (plan_auto.after_thresholds)."""
+    (plan_auto.after_thresholds). SP-964 `type_basis` (進階設定): {type: basis | "auto" | null} merged over the
+    stored ones — "auto" / null puts that type back on the overall 目標依據; a change re-plans the same way."""
     from backend.engine import plan_prefs as PP
     from backend.settings.repository import SettingsRepository
     bad = [k for k in body if k not in BASIS_FIELDS]
@@ -3093,7 +3107,12 @@ async def patch_prefs(body: dict = Body(...), db: AsyncSession = Depends(get_db)
     repo = SettingsRepository(db)
     try:
         cur = PP.from_settings({k: await repo.get(k) for k in PP.KEY_FIELDS})
-        p = PP.from_body({**cur.to_dict(), **body})
+        new = dict(body)
+        if "type_basis" in new:
+            if not isinstance(new["type_basis"], dict):
+                raise ValueError("type_basis must be an object")
+            new["type_basis"] = {**dict(cur.type_basis), **new["type_basis"]}
+        p = PP.from_body({**cur.to_dict(), **new})
         PP.check(p)
         for k, v in p.settings().items():
             await repo.set(k, v)
@@ -3101,7 +3120,7 @@ async def patch_prefs(body: dict = Body(...), db: AsyncSession = Depends(get_db)
         await db.rollback()
         raise HTTPException(400, str(e))
     await db.commit()
-    if cur.target_basis != p.target_basis:
+    if cur.target_basis != p.target_basis or cur.type_basis != p.type_basis:
         from backend.engine import plan_auto as PA
         PA.after_thresholds()
     return _prefs_body(p)
@@ -3126,6 +3145,8 @@ async def get_basis():
                 "pace_zones": TB.pace_zones(th.get("tpace")),
                 "power_state": th.get("power_state"),
                 "rows": TB.rows(s["sport"], th, prefs, s.get("mp_goal_pace_s")),
+                # SP-964: 進階設定 — the choosable types of 主要訓練項目, their own basis and what 自動 gives them
+                "types": TB.type_rows(s["sport"], th, prefs, s.get("mp_goal_pace_s")),
                 "unlock": _basis_unlock()}
     return await run_in_threadpool(build)
 
@@ -3183,7 +3204,7 @@ async def preview_blackouts(body: dict = Body(...), db: AsyncSession = Depends(g
     async with _wlock():
         await _ensure(db, saved)                  # first visit: generate with what is stored
         _, changes = await PS.plan_reconcile(db, inp, apply=False)
-    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)}
+    return _shown_changes({**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)})
 
 
 @router.put("/blackouts")
@@ -3203,7 +3224,8 @@ async def put_blackouts(body: dict = Body(...), db: AsyncSession = Depends(get_d
         await _ensure(db, inp)
         _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec)
     coros = await _sync_watch(db, [c.get("uid") for c in changes], inp)      # SP-358
-    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes), "coros": coros}
+    return _shown_changes({**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes),
+                           "coros": coros})
 
 
 # 休息日 (the 課表 calendar's context menu on an empty day): a one-day 不排課日期 of
@@ -3228,7 +3250,8 @@ async def _save_blackouts(db: AsyncSession, cand: list[dict], dec: Optional[dict
         await _ensure(db, inp)
         _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec or {})
     coros = await _sync_watch(db, [c.get("uid") for c in changes], inp)      # SP-358
-    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes), "coros": coros}
+    return _shown_changes({**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes),
+                           "coros": coros})
 
 
 def _iso_day(day) -> str:

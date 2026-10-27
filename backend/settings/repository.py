@@ -237,6 +237,9 @@ DEFAULTS: dict[str, Any] = {
     # 可跑坡目標 (SP-632, engine/plan_prefs.CLIMB_TARGETS): a race leg on runnable ground with a power
     # target goes to COROS as power (default) or Effort Pace
     "plan.prefs.climb_target": "power",
+    # 目標依據 per session type (SP-964, 訓練依據 › 進階設定; engine/target_policy.TYPE_CHOICES):
+    # {easy | long | z3 | z5 | hill | mp: hr | pace | power}; a type left out follows plan.prefs.target_basis
+    "plan.prefs.type_basis": {},
     # accepted B2B weekends (engine/b2b.py ACCEPTED_KEY): [{week, days, minutes, uids, at}]
     "plan.b2b.accepted": [],
     # the floating suggestion box (engine/suggestions.py): {suggestion id: {action, at, week}}
@@ -430,6 +433,11 @@ def validate(key: str, value: Any) -> None:
         race_results.validate(value)
     if key == "athlete.timezone.auto" and value is not None and not isinstance(value, dict):
         raise ValueError("athlete.timezone.auto must be an object or null")
+    if key == "plan.prefs.type_basis":
+        from backend.engine.plan_prefs import clean_type_basis
+        if not isinstance(value, dict):
+            raise ValueError("plan.prefs.type_basis must be an object")
+        clean_type_basis(value, strict=True)
     if key == "athlete.region" and value not in (None, "tw", "intl"):
         raise ValueError("athlete.region must be tw, intl or null (auto)")
     if key == "athlete.timezone" and value is not None:

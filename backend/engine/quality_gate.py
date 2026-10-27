@@ -3030,7 +3030,7 @@ def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = No
     from backend.engine import target_policy as TP
     from backend.engine.hr_profile import class_hr
     zb = class_hr(th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None, _HR_CLASS.get(key))
-    pace = key != "z3" and not uphill and TP.flat_pace(th, prefs)
+    pace = key != "z3" and not uphill and TP.flat_pace(th, prefs, s={"_zone": _IL.track_of(key) or "z3"})
     hr_txt = (lambda a, b: TP.cap_text(b)) if pace else (lambda a, b: _("心率 {lo}–{hi} bpm", lo=a, hi=b))
     if key == "z3":
         work = zone3_work(hours, reps)

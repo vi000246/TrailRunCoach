@@ -87,6 +87,7 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.strength_moves": "strength_moves",
     "plan.prefs.strength_no_gear": "strength_no_gear",
     "plan.prefs.climb_target": "climb_target",
+    "plan.prefs.type_basis": "type_basis",
 }
 # 可跑坡目標 (SP-632): what a race leg on runnable ground (−3 … +15 %) gets on COROS when it has a power
 # target — power (default: Stryd is validated there) or Effort Pace (racepower/watch_export, workout_steps.ep_intensity)
@@ -199,6 +200,9 @@ class Prefs:
     # 可跑坡目標 (SP-632, CLIMB_TARGETS): only what COROS gets on a race leg on runnable ground that has a
     # power target (with Stryd). Not part of `active`: it reshapes nothing.
     climb_target: str = "power"
+    # 目標依據 per session type (SP-964, 訓練依據 › 進階設定; engine/target_policy.TYPE_KEYS / TYPE_CHOICES):
+    # ((key, basis), …) sorted; () = every type follows target_basis. Shapes the texts like target_basis.
+    type_basis: tuple = ()
 
     @property
     def active(self) -> bool:
@@ -221,6 +225,7 @@ class Prefs:
         d["pref_keep"] = list(self.pref_keep)
         d["strength_moves"] = dict(self.strength_moves)
         d["strength_no_gear"] = list(self.strength_no_gear)
+        d["type_basis"] = dict(self.type_basis)
         return d
 
     def pref_of(self, kind: str) -> tuple:
@@ -259,6 +264,8 @@ def from_settings(values: dict, lenient: bool = True) -> Prefs:
             # a move / an equipment no longer offered: dropped when stored, refused when new (SP-191)
             from backend.engine import strength_moves as SM
             v = (SM.clean_moves if f == "strength_moves" else SM.clean_gear)(v, strict=not lenient)
+        if f == "type_basis":
+            v = clean_type_basis(v, strict=not lenient)
         if f == "quality_gate" and lenient:
             from backend.engine.quality_gate import MODES
             v = v if v in MODES else "auto"
@@ -274,6 +281,29 @@ def from_settings(values: dict, lenient: bool = True) -> Prefs:
     if kw.get("terrain_long") == "hike":
         kw["terrain_long"] = "trail"
     return Prefs(**kw)
+
+
+def clean_type_basis(v, strict: bool = False) -> tuple:
+    """SP-964: 目標依據 per session type as ((key, basis), …) sorted, from {key: basis} (or pairs); "auto" /
+    None = not set (follows the overall one). A key or a basis that can't be chosen (target_policy.TYPE_CHOICES):
+    dropped when stored, refused when new (`strict`)."""
+    from backend.engine.target_policy import TYPE_CHOICES
+    try:
+        items = dict(v or {}).items()
+    except (TypeError, ValueError):
+        if strict:
+            raise ValueError(_("每一類課的目標依據格式不對"))
+        return ()
+    out = {}
+    for k, b in items:
+        if b in (None, "", "auto"):
+            continue
+        if b not in TYPE_CHOICES.get(k, ()):
+            if strict:
+                raise ValueError(_("「{key}」不能設成「{basis}」", key=k, basis=b))
+            continue
+        out[str(k)] = str(b)
+    return tuple(sorted(out.items()))
 
 
 # preferences that are gone: a page still open from before sends them, they are ignored

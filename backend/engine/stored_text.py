@@ -145,6 +145,15 @@ _NUM_SPEC = re.compile(r"[-+ ]?#?0?\d*,?(?:\.\d+)?[dfgen%]$")
 _NUM_RX = r"[-+−]?\d[\d,]*(?:\.\d+)?%?"
 
 
+# fields written with fmt.weekday (adapt.wd: 「週四」): one may stand right before another field
+WEEKDAY_FIELDS = frozenset({"day", "was", "to"})
+
+
+def _weekday_rx() -> str:
+    from backend.i18n import fmt
+    return "|".join(re.escape(w) for w in fmt.weekdays("short", DEFAULT_LOCALE))
+
+
 class _Tpl:
     __slots__ = ("msgid", "key", "size", "_rx", "fields")
 
@@ -159,7 +168,8 @@ class _Tpl:
     def rx(self) -> re.Pattern:
         if self._rx is None:
             out, seen = [], set()
-            for lit, name, spec in self.fields:
+            nxt = self.fields[1:] + [("x", None, None)]
+            for (lit, name, spec), (lit2, name2, _s2) in zip(self.fields, nxt):
                 out.append(re.escape(lit))
                 if name is None:
                     continue
@@ -167,6 +177,9 @@ class _Tpl:
                     out.append(f"(?P={name})")
                     continue
                 seen.add(name)
+                if name2 is not None and not lit2:          # a weekday right before another field (_parse)
+                    out.append(f"(?P<{name}>{_weekday_rx()})")
+                    continue
                 out.append(f"(?P<{name}>{_NUM_RX})" if spec and _NUM_SPEC.match(spec) else f"(?P<{name}>.+?)")
             self._rx = re.compile("".join(out), re.S)
         return self._rx
@@ -180,9 +193,10 @@ def _parse(msgid: str) -> Optional[list]:
     names = [n for _l, n, _s in parts if n is not None]
     if not names or any(not re.fullmatch(r"[A-Za-z_]\w*", n) for n in names):
         return None
-    # two fields side by side can't be told apart; a template has to say enough on its own
+    # two fields side by side can't be told apart — unless the first is a weekday (WEEKDAY_FIELDS: one of the
+    # seven, 「{day}{title}取消：…」, SP-909 R1); a template has to say enough on its own
     for (_l1, n1, _s1), (l2, n2, _s2) in zip(parts, parts[1:]):
-        if n1 is not None and n2 is not None and not l2:
+        if n1 is not None and n2 is not None and not l2 and n1 not in WEEKDAY_FIELDS:
             return None
     # words of its own, not only brackets: 「{a}（{b}）」 would read every bracketed title
     if msgid not in JOINED and sum(len(HAN.findall(lit)) for lit, _n, _s in parts) < 2:
@@ -234,7 +248,7 @@ def _by_template(s: str, loc: str, depth: int, whole: bool = False) -> Optional[
         m = t.rx().fullmatch(s)
         if not m:
             continue
-        params, ok = {}, True
+        params, ok, kept = {}, True, False
         for k, v in m.groupdict().items():
             if whole and k not in USER_PARAMS and len(_segments(v)) > 1 and _exact(v, loc) is None:
                 ok = False
@@ -243,17 +257,26 @@ def _by_template(s: str, loc: str, depth: int, whole: bool = False) -> Optional[
                 tv = _shown(v, loc, depth + 1)
                 if CJK.search(tv) and "、" in v:
                     tv = _by_list(v, loc, depth + 1) or tv
-                if CJK.search(tv) and k not in USER_PARAMS:
-                    ok = False
-                    break
+                if CJK.search(tv):
+                    # a user's name kept as written — in this field, or in a text this field was read as
+                    # (SP-909 R1: 「{why}，移到 {md}」 whose why is 「在不排課日期內（{name}）」)
+                    if k not in USER_PARAMS and not _KEPT.get((loc, v)):
+                        ok = False
+                        break
+                    kept = True
                 v = tv
             params[k] = v
         if not ok:
             continue
         out = _fill(cat.get(t.msgid), params)
         if out is not None:
+            if kept:
+                _remember(_KEPT, (loc, s), True)
             return out
     return None
+
+
+_KEPT: "OrderedDict[tuple, bool]" = OrderedDict()      # (loc, text) read with a user's name left as written
 
 
 def _by_list(v: str, loc: str, depth: int) -> Optional[str]:
@@ -298,7 +321,8 @@ def _lower(w: str) -> str:
     return w[0].lower() + w[1:] if re.match(r"[A-Z][a-z]+\b(?![-\s][A-Z])", w) else w
 
 
-KEEP_CAP = ("Achilles",)                # SP-905 R1: 「…; Achilles tendon (left) · …」
+# SP-905 R1: 「…; Achilles tendon (left) · …」; SP-909 R1: a weekday inside a list 「(Monday, Tuesday)」
+KEEP_CAP = ("Achilles", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 
 def _ascii_run(s: str, i: int) -> int:

@@ -614,13 +614,15 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
     for q in [g for g in wk.gens() if g.get("kind") == "quality" and wk.free(g) and g.get("day") and g["day"] >= wk.today]:
         if remove:
             wk.remove(q)
-            # (SP-905: the weekday and the title side by side can't be read back — kept as written)
-            _adj(out, "fatigue", wk, q, "removed", f"{wd(q['day'])}{q['title']}取消：{why}，本週減量",
+            # msgids (SP-909 R1): the weekday before the title is read back as one of the seven (stored_text)
+            _adj(out, "fatigue", wk, q, "removed",
+                 _("{day}{title}取消：{why}，本週減量", day=wd(q["day"]), title=q["title"], why=why),
                  _src(*SRC_FATIGUE_PARTS))
         else:
             old = q["title"]
             became = _to_recovery(q, th)
-            _adj(out, "fatigue", wk, q, "downgraded", f"{wd(q['day'])}{old}改成{became}：{why}，本週減量",
+            _adj(out, "fatigue", wk, q, "downgraded",
+                 _("{day}{old}改成{became}：{why}，本週減量", day=wd(q["day"]), old=old, became=became, why=why),
                  _src(*SRC_FATIGUE_PARTS), before_title=old)
     for g in [g for g in wk.gens() if g.get("kind") == "easy" and wk.free(g) and g.get("day") and g["day"] >= wk.today]:
         before = g.get("minutes") or 0

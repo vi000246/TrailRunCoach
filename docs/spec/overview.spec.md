@@ -2442,10 +2442,23 @@ which one. The response keeps the `coros` field names.
   base phase, a reason (`quality_gate.aet_test_reason`: no data for ~6 weeks, the aggregate's SE
   too large, a shift, the estimate moved) and no test in the last 28 days (推估); no fixed
   cadence. A due test is a **suggestion** (`week_plan.test_suggestions`), never a planned
-  session. The session (`aet_test.session(th, hr0, p0, cap_weekday, protocol)`,
-  `backend/engine/aet_test.py:561`) is kind `test`, protocol per `plan.prefs.aet_test_protocol`
-  (plan-auto.spec.md); the UA versions: target 「固定功率 P W（±3%）；心率從 HR 附近開始」 (start HR
-  = the estimate's aethr, else 0.89 × LTHR − 5; P = 0.75 × CP, both our choice), and their
+  session. The session (`aet_test.session(th, hr0, p0, cap_weekday, protocol, cap_long, start, hr_why)`,
+  `backend/engine/aet_test.py:826`) is kind `test`, protocol per `plan.prefs.aet_test_protocol`
+  (plan-auto.spec.md); the UA versions: target 「固定功率 P W（±3%）；心率從 HR 附近開始」. SP-949
+  (`overview.aet_session`, `backend/engine/overview.py:2879`): the start HR is chained to the last UA /
+  Evoke test (`aet_test.chained_start_hr`, `:560`: valid, HR not flagged — below AeT → its first-half HR
+  + 5 (UA), above → − 5 (`LOWER_BPM`, 推估), at → that HR), else the estimate's aethr, else 0.89 × LTHR − 5;
+  the fixed intensity is `aet_test.start_target` (`:736`): the athlete's own HR → power (① power in
+  effect) or HR → speed (② / ③, and 徐國峰's pace test) line (`own_relation`, `:665`) from the last 42
+  days' road runs — one-minute segments after a 10′ warm-up whose minute and the minute before are within
+  ± 2 % grade (`flat_segments`, `:607`; ±50 m baseline), moving ≥ 5 km/h, run HR not flagged
+  (`run_hr_quality`), power only from a Stryd; ≥ 10 such minutes per run, its mean HR ≤ the easy cap + 3;
+  ≥ 3 runs (latest 10), a rising linear fit, the start HR within 5 bpm of the runs' HR range (5th–95th
+  percentile) — read at the start HR: 「固定功率 N W（±3%）」 / 「配速固定 m:ss /km（±3%）」 with a
+  說明 line 「固定功率依據：最近 n 次平路輕鬆跑（a–b）的心率–功率關係…」; too little → ① CP × 0.75 (「…先用
+  CP × 0.75（推估）」), ② / ③ the E pace, else the talk test (`xu_target` without a CP), with the reason.
+  ② / ③ UA / Evoke hold a fixed pace (「固定配速不要調」), no watts; 徐國峰's order is E pace → 75–80 % of a
+  tested CP (①) → the fitted pace → the talk test. All thresholds 推估. Their
   length follows the 課表偏好 weekday cap (`variant_for`, `backend/engine/aet_test.py:532`): no cap / ≥ 80 →
   「AeT 飄移測試 60 分」 80 min (暖身 15 + 測試 60 + 緩和 5); < 80 → 「AeT 飄移測試 40 分」 50 min,
   UA's minimum (暖身 10 到開始流汗 + 測試 40, 緩和可省略; "If you only have 40 minutes, do
@@ -2457,8 +2470,10 @@ which one. The response keeps the `coros` field names.
   起始太高，停掉改天降 5 bpm 再測」. Placed by `aet_test.pick_day` (weekday first, see 課表偏好
   AeT 飄移測試). Never the CP-test week. Marked done by a ≥ 48-min road run titled AeT, or an
   untitled one ≥ 55 min (so ordinary 41–52′ easy runs aren't the test). COROS steps in
-  `coros-sync` (`_aet_test_steps`, `backend/sync/coros_workouts.py:338`): 10 / 40 (no
-  cool-down step) or 15 / 60 / 5.
+  `coros-sync` (`_aet_test_steps`, `backend/sync/coros_workouts.py:382`): 10 / 40 (no
+  cool-down step) or 15 / 60 / 5; the main step reads the stored target (`aet_test.main_target`): a fixed
+  power ± 3 % (intensityType 6) or, SP-949, a fixed pace ± 3 % / the E-pace range (intensityType 3, s/km);
+  the talk test no target; an old row with neither keeps CP × 0.75.
 - Inline source names were removed from engine text (e.g. the ramp verdict, phase focus).
 
 ## API
@@ -2987,3 +3002,5 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-25 | maintenance | SP-945 (SP-808 option A, owner 2026-10-21) | One RPE → intensity table: an RPE target's ≈ % CP (`workout_steps.RPE_FRAC`) is now computed from `rpe_load.DEFAULT_IF`'s five levels at their CR-10 values (2 / 4 / 5 / 7 / 10), linear between, RPE 1 on the first segment's slope, half up to 0.01 (`_rpe_frac_table`, `backend/engine/workout_steps.py:173`): 1 0.70, 2 0.74, 3 0.78 (= `EASY_F`), 4 0.82, 5 0.88, 6 0.92, 7 0.95, 8 1.00, 9 1.05, 10 1.10 (was 0.55 / 0.62 / 0.70 / 0.76 / 0.82 / 0.88 / 0.94 / 1.00 / 1.05 / 1.10, a second hand-written table). The editor chart's copy `RPE_F` (`backend/static/workout_editor.js:243`) follows. Unchanged: `rpe_load`'s defaults, its per-athlete fit, RPE-entered load steps; stored data not recomputed. A 「負荷」 step with an RPE target is timed / converted at the new value (`load_if`), so such a step's time and TL move (its `sent_key` IF changes; an already pushed one differs from the watch until it is pushed again). Tests: `backend/tests/test_rpe_frac_sp945.py`; expectations of `test_intensity_calib_sp511.py`'s two scale tests now read the table (they pinned 0.62 / 0.82 / 0.94) |
 | 2026-10-27 | feature | SP-951 | 課表偏好 目標依據 gets 配速 (`plan.prefs.target_basis = pace`; the tip says the SP-950 rule: no Stryd or a CP older than 42 days → flat intervals / tempo by pace, the rest by HR). The 課表 card's target of a flat interval in ② / ③ is 「配速 a–b /km（x–y% 閾值配速） · 心率 ≤ N bpm」 (plan-auto.spec.md › 配速 basis). Tests: `backend/tests/test_pace_basis_sp951.py` |
 | 2026-10-27 | feature | SP-955 | 設定 › 訓練依據 (owner's mock B): `GET /api/v1/overview/plan/basis` (`backend/engine/training_basis.py`) — the plan summary (phase and its week, this week's runs / long days / quality / strength, the Zone 3 / 5 unlock and what is missing from `phase_checks.compute_unlock`, the next test from the plan's test sessions else the first suggestion) and, per kind of session of 主要訓練項目 (越野: trail easy / long day, hill repeats, long climb, steep-hill walk, downhill, B2B; 路跑: long run, marathon-pace segment), `target_policy`'s basis under the week plan's thresholds / power state with the target text (`zones.target_hr`, `power_zone_plan.target_band` × the CP in effect, `walk_cap`) and why; Friel pace zones at the threshold pace for 我的區間 while a session runs by pace. `PATCH /api/v1/overview/plan/prefs`: only `target_basis` / `climb_target` / `aet_test_protocol` / `cp_test_protocol`, the rest of the stored set kept; a new `target_basis` calls `plan_auto.after_thresholds`. 課表偏好 no longer shows those four (sent back as stored); 主要訓練項目 sits first in it (the same `athlete.primary_sport`, saved before the preferences). Tests: `backend/tests/test_training_basis_sp955.py`, `backend/tests/e2e/test_settings_basis_sp955_e2e.py` |
+| 2026-10-27 | feature | SP-964 | 設定 › 訓練依據 › 進階設定 (collapsed under 手動指定, left column): one row per choosable kind of 主要訓練項目 (越野: road easy, Zone 3, Zone 5, hill repeats; 路跑: easy, long, Zone 3, Zone 5, MP segment) with 自動（目前：X） / 心率 / 配速 (flat intervals, MP only) / 功率 (not in ③; a stored one shown disabled), （手動） + 改回自動, the fallback reason under a choice the rules cannot follow. `GET /api/v1/overview/plan/basis` adds `types` (`training_basis.type_rows`: choice, the basis without it, options) and each row's `own` / `type_key` (the card's 改回自動 per row); `PATCH /api/v1/overview/plan/prefs` takes `type_basis` (merged; "auto" clears). Rules: plan-auto.spec.md. Tests: `backend/tests/test_type_basis_sp964.py`, `backend/tests/e2e/test_settings_basis_sp955_e2e.py::test_advanced_one_type_set_marked_and_reset` |
+| 2026-10-27 | feature | SP-949 | AeT test start from the athlete's own data: the start HR chained to the last UA / Evoke test (below → first-half HR + 5, above → − 5, at → it; else the estimate); UA / Evoke fixed power = the HR → power line of the last 42 days' flat (± 2 %) easy road runs with Stryd power at that HR (① power in effect), else CP × 0.75 labelled 推估; ② / ③ a fixed pace from the HR → pace line (「配速固定 m:ss /km（±3%）」), else the E pace / talk test — never watts; 徐國峰 90′ takes the fitted pace before the talk test. Each with a 依據 line in the 說明. COROS / the editor's structure read the stored target (`aet_test.main_target`: pace → intensityType 3). `target_policy`: an AeT test in ② no longer keeps power; UA / Evoke → pace without power. zh-TW + en. Tests: `backend/tests/test_aet_start_sp949.py` |

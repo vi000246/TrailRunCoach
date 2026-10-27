@@ -846,7 +846,7 @@ def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False,
     # SP-951: a flat rep with power not in effect (② / ③) or 配速 picked → % threshold pace, the HR as a
     # cap note (target_policy.flat_pace / pace_text; the card's summary says the same)
     from backend.engine import target_policy as TP
-    pace = v.terrain != "hill" and TP.flat_pace(th, prefs)
+    pace = v.terrain != "hill" and TP.flat_pace(th, prefs, s={"_zone": track_of(v.rung) or "z3"})
     if pace:
         parts = [TP.pace_text(blo, bhi, float(th["tpace"]))]
         band = TP.pace_pct_text(blo, bhi, float(th["tpace"]))      # the 說明's 「3×8 分，105–114% 閾值配速」

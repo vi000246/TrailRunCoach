@@ -1031,7 +1031,24 @@ def push_dict(s: dict, prefs=PREFS_UNREAD, th: Optional[dict] = None) -> dict:
             # 目標用: the session's own choice, else 課表偏好 目標依據, else 自動 (engine/target_policy.py)
             "basis": _basis_for(s, prefs, bool((th or {}).get("cp_stale")), th),
             # SP-632: 課表偏好「可跑坡目標」 = Effort Pace — COROS sends it over power too (workout_steps.ep_intensity)
-            **({"ep_power": True} if s.get("steps") and _ep_power(prefs) else {})}
+            **({"ep_power": True} if s.get("steps") and _ep_power(prefs) else {}),
+            # SP-964: the marathon-pace segment's basis when 進階設定 sets one (target_policy.mp_policy)
+            **_mp_basis_for(s, prefs, th)}
+
+
+def _mp_basis_for(s: dict, prefs=PREFS_UNREAD, th: Optional[dict] = None) -> dict:
+    from backend.engine import target_policy as TP
+    from backend.engine import workout_steps as WS
+    if s.get("kind") != "long" or not WS.mp_minutes(s):
+        return {}
+    if prefs is PREFS_UNREAD:
+        prefs = load_prefs_safe()
+    if not TP.type_basis(prefs, "mp"):
+        return {}
+    tp = (th or {}).get("tpace") or (False if th else None)
+    return {"mp_basis": TP.mp_policy(prefs, cp_stale=bool((th or {}).get("cp_stale")),
+                                     power_state=(th or {}).get("power_state"), tpace=tp,
+                                     goal=WS.mp_goal_pace(s))["basis"]}
 
 
 def _ep_power(prefs=PREFS_UNREAD) -> bool:

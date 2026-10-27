@@ -53,7 +53,7 @@ import datetime as dt
 from typing import Optional
 
 from backend.engine import compliance as C
-from backend.i18n import N_, _
+from backend.i18n import DEFAULT_LOCALE, N_, _, translate
 
 ENDURANCE = {"road", "trail", "hike", "bike"}
 NEVER = ("heat_passive", "notice")          # a bath / sauna / the 課表待確認 reminder: the user ticks it
@@ -275,7 +275,11 @@ def dedupe(out: list[dict], acts_by_index: dict, today: str, covered: Optional[s
         for s in rest:
             s["state"], s["done_by"] = "active", None
             changes.append({"action": "unmatched", "uid": s["uid"], "day": s.get("day"), "title": s.get("title"),
-                            "kind": s.get("kind"), "reason": f"同一筆活動已算給「{keep.get('title')}」"})
+                            "kind": s.get("kind"),
+                            # zh-TW whatever the request, shown in the page's language (SP-909 R1, stored_text;
+                            # {name}: a title the user typed stays as written)
+                            "reason": translate(N_("同一筆活動已算給「{name}」"), DEFAULT_LOCALE,
+                                                name=keep.get("title") or "")})
 
 
 def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
@@ -357,7 +361,7 @@ def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
             s["state"] = "missed"
             changes.append({"action": "missed", "uid": s["uid"], "day": s.get("day"), "title": s.get("title"),
                             "kind": s.get("kind"), "minutes": s.get("minutes"), "origin": s.get("origin"),
-                            "edited": s.get("edited"), "reason": "沒有對應的活動"})
+                            "edited": s.get("edited"), "reason": N_("沒有對應的活動")})
     return changes
 
 

@@ -16290,5 +16290,193 @@
   "A 賽的目標配速；沒有目標時間就從閾值配速推估": {
     "draft": true,
     "src": "SP-955"
+  },
+  "{day}{title}取消：{why}，本週減量": {
+    "draft": false,
+    "src": "backend/engine/adapt.py (SP-909 R1)"
+  },
+  "{day}{old}改成{became}：{why}，本週減量": {
+    "draft": false,
+    "src": "backend/engine/adapt.py (SP-909 R1)"
+  },
+  "本週有你排入的 B2B": {
+    "draft": false,
+    "src": "backend/engine/b2b.py (SP-909 R1)"
+  },
+  "上週末 B2B（{a}–{b}）後的輕鬆日": {
+    "draft": false,
+    "src": "backend/engine/b2b.py (SP-909 R1)"
+  },
+  "重新計算後不需要": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "這週改成恢復／減量，你改過的這堂課和它衝突": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "超出排程範圍": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "在不排課日期內": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "在不排課日期內（{name}）": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "{why}，移到 {md}": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "{why}，本週沒有空的日子": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "{why}，依你的選擇刪除": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "{why}，依你的選擇移到 {md}": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "{why}，本週沒有空的日子可以移": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "{why}，本週排不下": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "和你安排的課同一天，移到空的一天": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "和你安排的課同一天，本週沒有空的日子": {
+    "draft": false,
+    "src": "backend/engine/reconcile.py (SP-909 R1)"
+  },
+  "沒有對應的活動": {
+    "draft": false,
+    "src": "backend/engine/plan_match.py (SP-909 R1)"
+  },
+  "同一筆活動已算給「{name}」": {
+    "draft": false,
+    "src": "backend/engine/plan_match.py (SP-909 R1)"
+  },
+  "路跑輕鬆跑": {
+    "draft": true,
+    "src": "SP-964"
+  },
+  "節奏・3 區間歇": {
+    "draft": true,
+    "src": "SP-964"
+  },
+  "5 區間歇": {
+    "draft": true,
+    "src": "SP-964"
+  },
+  "進階設定：{type}用{basis}（{fb}）": {
+    "draft": true,
+    "src": "SP-964"
+  },
+  "進階設定：{type}用{basis}": {
+    "draft": true,
+    "src": "SP-964"
+  },
+  "沒有功率計：用配速": {
+    "draft": true,
+    "src": "SP-964"
+  },
+  "沒有 LTHR：不設目標": {
+    "draft": true,
+    "src": "SP-964"
+  },
+  "每一類課的目標依據格式不對": {
+    "draft": true,
+    "src": "SP-964"
+  },
+  "「{key}」不能設成「{basis}」": {
+    "draft": true,
+    "src": "SP-964"
+  },
+  "起始心率 {hr:.0f}：上次 AeT 測試（{date}）前半 {h1:.0f} bpm 還在 AeT 以下，+5 bpm": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "起始心率 {hr:.0f}：上次 AeT 測試（{date}）前半 {h1:.0f} bpm 就是 AeT": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "起始心率 {hr:.0f}：上次 AeT 測試（{date}）前半 {h1:.0f} bpm 高於 AeT，降 {n} bpm（推估）": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "最近 {d} 天只有 {n} 次有 Stryd 功率、心率可信的平路輕鬆跑（要 {k} 次）": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "最近 {d} 天只有 {n} 次心率可信的平路輕鬆跑（要 {k} 次）": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "平路輕鬆跑的心率和功率看不出一起上升": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "平路輕鬆跑的心率和配速看不出一起變快": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "起始心率 {hr:.0f} bpm 在平路輕鬆跑的心率範圍（{lo:.0f}–{hi:.0f}）外": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "沒有起始心率": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "固定功率依據：最近 {n} 次平路輕鬆跑（{a}–{b}）的心率–功率關係，心率 {hr:.0f} bpm ≈ {w:.0f} W": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "固定配速依據：最近 {n} 次平路輕鬆跑（{a}–{b}）的心率–配速關係，心率 {hr:.0f} bpm ≈ {p} /km": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "固定功率依據：{why}，先用 CP × 0.75（推估）": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "固定配速依據：{why}": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "配速固定 {p} /km（±3%）": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "固定配速不要調（至少 40 分）": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "固定配速不要調": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "固定配速，不要調": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "固定功率，不要調": {
+    "draft": true,
+    "src": "SP-949"
+  },
+  "功率不生效：AeT 測試改用固定配速": {
+    "draft": true,
+    "src": "SP-949"
   }
 }

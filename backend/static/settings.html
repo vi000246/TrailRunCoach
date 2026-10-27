@@ -212,6 +212,13 @@ h3.bh { font-size: 14px; margin: 14px 0 4px; display: flex; flex-wrap: wrap; gap
 .row.ovr:first-of-type { border-top: 0; }
 .man { color: var(--warn); font-size: 12.5px; font-weight: 600; }
 button.to-auto { font-size: 12.5px; padding: 2px 8px; }
+/* 進階設定 (SP-964): collapsed under 手動指定, one row per kind of session */
+details.adv { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+details.adv > summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+details.adv > p.meta { margin: 6px 0 0; }
+details.adv .row.ovr:first-of-type { border-top: 1px solid var(--line); }
+.adv-row .fb { flex-basis: 100%; color: var(--warn); }
+.nr .nm button.to-auto { margin-left: 4px; }
 /* 現在用什麼練: the power state line (① ok / ② warn / ③ muted), the plan summary, one row per kind of session */
 .ps-box { border-radius: 8px; padding: 10px 12px; margin: 8px 0 10px; display: grid; gap: 2px; background: var(--soft); }
 .ps-box .l1 { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-weight: 600; }
@@ -639,6 +646,13 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
             <span class="meta" id="pz-model-note" role="status"></span>
           </div>
           <p class="meta" id="pz-model-warn" role="status" style="color:var(--warn)" hidden></p>
+          <!-- SP-964: 進階設定 — 目標依據 per session type of 主要訓練項目 (GET …/plan/basis types, PATCH …/plan/prefs type_basis) -->
+          <details id="adv" class="adv">
+            <summary><span data-i18n="settings.basis.adv_h">進階設定：每一類課分開設</span> <span class="man" id="adv-n"></span>
+              <button type="button" class="q" id="adv-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.adv_help" title="上面的「目標依據」是預設；這裡某一類課選了心率、配速或功率，就蓋過它，只影響那一類課（排課、推到手錶、右邊的結果卡都一樣）。「自動」＝跟著上面的目標依據，括號裡是現在的結果。配速只給平路間歇、節奏和馬拉松配速段（坡上配速沒有意義）。沒有功率計時沒有功率；CP 過期時選了功率也先改用配速或心率，做一次 CP 測試就回來。選了配速但沒有閾值配速時改用心率＋RPE。越野長天、長爬坡、陡坡健走、下坡和測試照它們自己的規則，不能改。">?</button></summary>
+            <p class="meta full-only" data-i18n="settings.basis.adv_sub">某一類課選了心率／配速／功率，就蓋過上面的目標依據；「自動」跟著上面。</p>
+            <div id="adv-rows"></div>
+          </details>
         </section>
       </div>
 
@@ -2544,7 +2558,36 @@ async function loadBasis() {
     $("now-status").innerHTML = `<span class="meta">${esc(t("settings.failed", { msg: e.message.slice(0, 80) }))}</span>`;
     return;
   }
-  drawBasisVis(); drawNow(); drawPhysio();
+  drawBasisVis(); drawNow(); drawPhysio(); drawTypes();
+}
+// 進階設定 (SP-964): one row per choosable kind of session of 主要訓練項目 — 自動（目前：X） or its own basis, which
+// overrides the overall 目標依據 for that kind; 功率 only with a power meter (one stored from before shows, unused);
+// a choice the rules can't follow (② power, pace without a threshold pace) says why under it
+const ADV_LABEL = { hr: "settings.basis.basis_hr", pace: "settings.basis.adv_pace", power: "settings.basis.basis_power" };
+$("adv-q").addEventListener("click", (e) => e.preventDefault());       // the ? in the summary opens its note, not the block
+function drawTypes() {
+  const box = $("adv-rows");
+  if (!box || !BASIS) return;
+  const types = BASIS.types || [], rows = Object.fromEntries((BASIS.rows || []).map((r) => [r.key, r]));
+  box.innerHTML = types.map((ty) => {
+    const opts = [...ty.options];
+    if (ty.choice && !opts.includes(ty.choice)) opts.push(ty.choice);
+    const r = rows[ty.key], fb = ty.choice && r && r.own && r.basis !== ty.choice ? r.fallback : "";
+    const id = "adv-" + ty.key;
+    return `<div class="row ovr adv-row" data-k="${esc(ty.key)}"><label class="sel-q" for="${id}"><span>${esc(ty.name)}</span> <select id="${id}">`
+      + `<option value="auto"${ty.choice ? "" : " selected"}>${esc(t("settings.basis.adv_auto", { b: ty.auto_label }))}</option>`
+      + opts.map((b) => `<option value="${b}"${b === ty.choice ? " selected" : ""}${ty.options.includes(b) ? "" : " disabled"}>${esc(t(ty.options.includes(b) ? ADV_LABEL[b] : "settings.basis.basis_power_off"))}</option>`).join("")
+      + `</select></label><span class="man"${ty.choice ? "" : " hidden"}>${esc(t("settings.basis.manual"))}</span>`
+      + `<button type="button" class="to-auto"${ty.choice ? "" : " hidden"}>${esc(t("settings.basis.to_auto"))}</button>`
+      + (fb ? `<span class="meta fb">${esc(fb)}</span>` : "") + `</div>`;
+  }).join("");
+  const n = types.filter((ty) => ty.choice).length;
+  $("adv-n").textContent = n ? t("settings.basis.adv_n", { n }) : "";
+  box.querySelectorAll(".adv-row").forEach((row) => {
+    const k = row.dataset.k;
+    row.querySelector("select").onchange = (e) => patchPrefs({ type_basis: { [k]: e.target.value } });
+    row.querySelector(".to-auto").onclick = () => patchPrefs({ type_basis: { [k]: "auto" } });
+  });
 }
 // 現在用什麼練: the state line, the plan summary, one row per kind of session
 function drawNow() {
@@ -2582,10 +2625,14 @@ function drawNow() {
     : nt.suggested ? t("settings.basis.test_suggested", { title: nt.title }) : t("settings.basis.test_on", { title: nt.title, day: mdOf(nt.day) }), ""]);
   $("now-kv").innerHTML = kv.map(([k, v, m]) => `<dt>${esc(k)}</dt><dd>${esc(v)}${m ? `<br><span class="miss">${esc(m)}</span>` : ""}</dd>`).join("");
   // per kind of session (主要訓練項目's): the basis chip, the target, why (+ the source behind ?)
+  // SP-964: a kind set in 進階設定 has 改回自動 right on its row (back to the overall 目標依據)
   $("now-rows").innerHTML = (BASIS.rows || []).map((r) => `<div class="nr" data-k="${esc(r.key)}">
-    <span class="nm">${esc(r.name)}${r.manual ? ` <span class="man">${esc(t("settings.basis.manual"))}</span>` : ""}</span>
+    <span class="nm">${esc(r.name)}${r.manual ? ` <span class="man">${esc(t("settings.basis.manual"))}</span>` : ""}${r.own && r.type_key ? ` <button type="button" class="to-auto" data-t="${esc(r.type_key)}">${esc(t("settings.basis.to_auto"))}</button>` : ""}</span>
     <span class="chip b-${esc(r.basis)}">${esc(r.basis_label)}</span><span class="t">${esc(r.target || "–")}</span>
     <span class="why">${esc(r.why)}${r.source ? ` <button type="button" class="q" aria-label="${esc(t("settings.thr.q_aria"))}" title="${esc(r.source)}">?</button>` : ""}</span></div>`).join("");
+  $("now-rows").querySelectorAll("button.to-auto[data-t]").forEach((b) => {
+    b.onclick = () => patchPrefs({ type_basis: { [b.dataset.t]: "auto" } });
+  });
 }
 f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.checked }).then(() => toast(tSy("updated")));
 f("tp", "enabled").onchange = (e) => putSetting({ trainingpeaks_enabled: e.target.checked }).then(() => toast(tSy("updated")));

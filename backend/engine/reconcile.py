@@ -43,6 +43,8 @@ import datetime as dt
 import uuid
 from typing import Callable, Optional
 
+from backend.i18n import DEFAULT_LOCALE, N_, translate
+
 ENDURANCE = {"road", "trail", "hike", "bike"}
 REST_MODES = {"recovery_week", "recovery", "taper", "event", "transition", "rebuild", "reentry"}
 HARD_KINDS = {"long", "quality", "test"}
@@ -86,6 +88,12 @@ def session_from_gen(g: dict, week_start: str, provisional: bool, uid: Optional[
 # reminder pushed to the watch, engine/plan_auto.py — never done / missed / load)
 SIDE_KINDS = ("strength", "heat_passive", "notice")
 NOTICE = "notice"
+
+
+def _zh(msgid: str, **kw) -> str:
+    """A change's reason in zh-TW whatever the request (SP-909 R1): read as written (「不排課」 below), shown in the
+    page's language on the way out (engine/stored_text)."""
+    return translate(msgid, DEFAULT_LOCALE, **kw)
 
 
 def _change(action: str, s: dict, reason: str = "", before: Optional[dict] = None) -> dict:
@@ -146,7 +154,7 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
                 continue                           # the generator counted a run another session has
             if g is None or g.get("done") or not g.get("day") or g["day"] < today:
                 out.remove(s)
-                changes.append(_change("removed", s, "重新計算後不需要"))
+                changes.append(_change("removed", s, N_("重新計算後不需要")))
                 continue
             before = {k: s.get(k) for k in SHOWN if s.get(k) != g.get(k)}
             for k in FIELDS:
@@ -159,7 +167,7 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
                     and s["day"] >= today and s["kind"] in HARD_KINDS
                     and w.get("mode") in REST_MODES and s["gen_key"] not in gens):
                 s["state"] = "superseded"
-                changes.append(_change("removed", s, "這週改成恢復／減量，你改過的這堂課和它衝突"))
+                changes.append(_change("removed", s, N_("這週改成恢復／減量，你改過的這堂課和它衝突")))
         for gid, g in gens.items():
             if gid in consumed or gid in block:
                 continue
@@ -199,7 +207,7 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
             if (s["state"] == "active" and s["origin"] == "auto" and not s["edited"]
                     and s.get("day") and s["day"] > horizon_end):
                 out.remove(s)
-                changes.append(_change("removed", s, "超出排程範圍"))
+                changes.append(_change("removed", s, N_("超出排程範圍")))
     return out, changes
 
 
@@ -269,7 +277,8 @@ def _gen_owns(g: dict, s: dict, held: dict, unlinked: set) -> bool:
 
 
 def _why(label: str) -> str:
-    return "在不排課日期內" + (f"（{label}）" if label else "")
+    # {name}: the user's own label of the 不排課日期, kept as written in English (stored_text.USER_PARAMS)
+    return _zh(N_("在不排課日期內（{name}）"), name=label) if label else N_("在不排課日期內")
 
 
 def _md(day: str) -> str:
@@ -302,10 +311,10 @@ def _clear_blackouts(out: list[dict], ws: str, today: str, changes: list[dict], 
         if s["origin"] == "auto" and not s["edited"]:
             if tgt:
                 s["day"] = tgt
-                _merge_change(changes, s, {"day": prev}, f"{why}，移到 {_md(tgt)}")
+                _merge_change(changes, s, {"day": prev}, _zh(N_("{why}，移到 {md}"), why=why, md=_md(tgt)))
             else:
                 out.remove(s)
-                _drop_change(changes, s, f"{why}，本週沒有空的日子")
+                _drop_change(changes, s, _zh(N_("{why}，本週沒有空的日子"), why=why))
             continue
         choice = decisions.get(s["uid"])
         conflict = {"label": label, "move_to": tgt, "day": prev}
@@ -314,15 +323,15 @@ def _clear_blackouts(out: list[dict], ws: str, today: str, changes: list[dict], 
                 s["state"] = "deleted"             # tombstone: not regenerated
             else:
                 out.remove(s)
-            changes.append({**_change("removed", s, f"{why}，依你的選擇刪除"), "conflict": {**conflict, "choice": "delete"}})
+            changes.append({**_change("removed", s, _zh(N_("{why}，依你的選擇刪除"), why=why)), "conflict": {**conflict, "choice": "delete"}})
         elif choice == "move" and tgt:
             s["day"] = tgt
-            changes.append({**_change("changed", s, f"{why}，依你的選擇移到 {_md(tgt)}", {"day": prev}),
+            changes.append({**_change("changed", s, _zh(N_("{why}，依你的選擇移到 {md}"), why=why, md=_md(tgt)), {"day": prev}),
                             "conflict": {**conflict, "choice": "move"}})
         else:                                      # no decision: shown, left as it is
             if tgt:
                 held.append({**s, "uid": s["uid"] + ":held", "day": tgt})
-            changes.append({**_change("conflict", s, why + ("" if tgt else "，本週沒有空的日子可以移")),
+            changes.append({**_change("conflict", s, why if tgt else _zh(N_("{why}，本週沒有空的日子可以移"), why=why)),
                             "conflict": {**conflict, "choice": None}})
 
 
@@ -345,8 +354,9 @@ def _blackout_reasons(changes: list[dict], blocked: dict) -> None:
             continue
         old = (c.get("before") or {}).get("day") or (c["day"] if c["action"] == "removed" else None)
         if old and old in blocked and "不排課" not in (c.get("reason") or ""):
-            tail = f"，移到 {_md(c['day'])}" if c["action"] == "changed" and c.get("day") else "，本週排不下"
-            c["reason"] = _why(blocked[old]) + tail
+            why = _why(blocked[old])
+            c["reason"] = (_zh(N_("{why}，移到 {md}"), why=why, md=_md(c["day"]))
+                           if c["action"] == "changed" and c.get("day") else _zh(N_("{why}，本週排不下"), why=why))
 
 
 def _resolve_collisions(out: list[dict], ws: str, today: str, changes: list[dict],
@@ -367,10 +377,10 @@ def _resolve_collisions(out: list[dict], ws: str, today: str, changes: list[dict
         if free:
             s["day"] = free[0]
             main_days.add(free[0])
-            _merge_change(changes, s, {"day": prev}, "和你安排的課同一天，移到空的一天")
+            _merge_change(changes, s, {"day": prev}, N_("和你安排的課同一天，移到空的一天"))
         else:
             out.remove(s)
-            changes.append(_change("removed", s, "和你安排的課同一天，本週沒有空的日子"))
+            changes.append(_change("removed", s, N_("和你安排的課同一天，本週沒有空的日子")))
 
 
 def _merge_change(changes: list[dict], s: dict, before: dict, reason: str) -> None:

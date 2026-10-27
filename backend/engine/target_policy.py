@@ -28,7 +28,8 @@ type (docs/research/vo2max-gate-and-trail-metric.md §2, zones-and-thresholds.md
                                                      +74 %, Gravina-Cognetti 2025; descend by skill)
   CP test                                            power (the all-out bouts are open)
   AeT test                                           by protocol: 徐國峰 90 / Friel → HR (or pace),
-                                                     UA 60 / 40 / Evoke → a fixed power
+                                                     UA 60 / 40 / Evoke → a fixed power (SP-949: a
+                                                     fixed pace when power is not in effect)
 A forced basis the thresholds can't fill falls back (power without CP → HR, HR
 without LTHR/AeT → none) with the reason. SP-493 (owner 2026-10-14): the road intervals' auto
 power goes to HR when the CP is stale — no CP test and no race in base_check.EP_ALL_OUT_DAYS
@@ -46,6 +47,14 @@ with the HR as a cap note in the text, when power is not in effect (② / ③) o
 session picks 配速. No threshold pace → heart rate (+ RPE in the text) with the reason. 配速 picked
 for a session that is not a flat interval (easy, long, hill repeats, trail) changes nothing there:
 those follow 自動 (pace means nothing on a hill; easy / long keep their HR cap / power band).
+
+SP-964 (owner 2026-10-27, 訓練依據 › 進階設定): 目標依據 per session type, plan.prefs.type_basis
+{TYPE_KEYS key: basis} — road easy / long (心率／功率), the flat Zone 3 (節奏) / Zone 5 intervals
+(心率／配速／功率), hill repeats (心率／功率) and the road long run's marathon-pace segment (心率／配速／功率,
+mp_policy). Order: the session's own → the type's → 課表偏好's overall one → 自動. A type absent = the
+overall one. Trail days, long climbs, walking, downhill and the tests keep their own rules (not
+choosable). The same fallbacks as above (② / ③ a chosen power → pace / HR with the reason; pace
+without a threshold pace → HR + RPE).
 """
 from __future__ import annotations
 
@@ -95,6 +104,84 @@ def pref_basis(prefs) -> str:
     if b == "auto" and getattr(prefs, "interval_target", "power") == "hr":
         return "hr"
     return b if b in BASES else "auto"
+
+
+# ---- SP-964: 目標依據 per session type (訓練依據 › 進階設定) ------------------------------------------
+TYPE_KEYS = ("easy", "long", "z3", "z5", "hill", "mp")
+# what each type may be set to (pace only where it means something: the flat intervals and the MP segment;
+# power is offered only with a power meter — the page's job, the stored one is ignored in ③ by the rules above)
+TYPE_CHOICES = {"easy": ("hr", "power"), "long": ("hr", "power"), "z3": ("hr", "pace", "power"),
+                "z5": ("hr", "pace", "power"), "hill": ("hr", "power"), "mp": ("hr", "pace", "power")}
+TYPE_KEY_WORD = {"easy": N_("路跑輕鬆跑"), "long": N_("長跑"), "z3": N_("節奏・3 區間歇"), "z5": N_("5 區間歇"),
+                 "hill": N_("爬坡重複"), "mp": N_("馬拉松配速段")}
+# 「5 區」 words in a quality session's title, when it carries neither a ladder rung, a library variant nor a band
+_Z5_WORDS = ("VO2", "5 區", "Zone 5", "短強度", "短間歇", "Supra", "超閾值")
+_BAND = re.compile(r"(\d+(?:\.\d+)?)\s*[–-]\s*(\d+(?:\.\d+)?)\s*%\s*CP")
+
+
+def type_map(prefs) -> dict:
+    """plan.prefs.type_basis as {key: basis} (a Prefs holds it as ((key, basis), …), the plan inputs as a
+    dict); keys / values that are not choosable dropped."""
+    raw = getattr(prefs, "type_basis", None) if prefs is not None else None
+    try:
+        m = dict(raw or ())
+    except (TypeError, ValueError):
+        return {}
+    return {k: v for k, v in m.items() if v in TYPE_CHOICES.get(k, ())}
+
+
+def type_basis(prefs, key: Optional[str]) -> Optional[str]:
+    """The basis set for session type `key` in 進階設定, None = follow the overall one."""
+    return type_map(prefs).get(key) if key else None
+
+
+def without_type(prefs, key: str):
+    """`prefs` without type `key`'s own basis (what 自動 / the overall basis gives that row)."""
+    from dataclasses import is_dataclass, replace
+    from types import SimpleNamespace
+    rest = tuple(sorted((k, v) for k, v in type_map(prefs).items() if k != key))
+    if prefs is None:
+        return None
+    if is_dataclass(prefs):
+        return replace(prefs, type_basis=rest)
+    return SimpleNamespace(**{**vars(prefs), "type_basis": dict(rest)})
+
+
+def flat_zone(s: dict) -> str:
+    """z3 | z5 of a flat interval session: the caller's hint (s["_zone"]), the ladder rung (rung_key), the
+    library variant's rung (interval_library.track_of), the band's middle (power_pct, variant_adj["band"] or
+    「lo–hi% CP」 in the 說明 / 目標: ≥ Palladino Zone 4 = the Zone 5 track, interval_library.CLASS_RANGE),
+    then the title's words; else z3."""
+    from backend.engine import interval_library as IL
+    z = s.get("_zone")
+    if z in ("z3", "z5"):
+        return z
+    tr = IL.track_of(s.get("rung_key"))
+    if tr:
+        return tr
+    v = IL.get(s.get("variant_key"))
+    if v is not None:
+        return IL.track_of(v.rung) or ("z5" if v.cls in ("Z4", "Z5") else "z3")
+    band = s.get("power_pct") or ((s.get("variant_adj") or {}).get("band") if isinstance(s.get("variant_adj"), dict)
+                                  else None)
+    if not band:
+        m = _BAND.search(f"{s.get('detail') or ''} {s.get('target') or ''}")
+        band = (float(m.group(1)) / 100.0, float(m.group(2)) / 100.0) if m else None
+    if band:
+        from backend.engine.zones import Z4_LO
+        return "z5" if (float(band[0]) + float(band[1])) / 2.0 >= Z4_LO else "z3"
+    title = str(s.get("title") or "")
+    return "z5" if any(w in title for w in _Z5_WORDS) else "z3"
+
+
+def type_key(s: dict) -> Optional[str]:
+    """The 進階設定 type of a session (TYPE_KEYS, without mp: a segment, mp_policy) or None (not choosable)."""
+    t = session_type(s)
+    if t in ("easy", "long", "hill"):
+        return t
+    if t == "interval":
+        return flat_zone(s)
+    return None
 
 
 def _aet_basis(s: dict) -> str:
@@ -211,11 +298,12 @@ def _no_power_basis(t: str, th: dict) -> str:
     easy / long: HR ≤ the easy-run cap; hill repeats: the HR targets + RPE), and SP-951: the flat
     Zone 3 / Zone 5 intervals and tempo by "pace" (% threshold pace) with the HR cap in the text
     (target_policy turns it into heart rate, with the reason, when the threshold pace is missing)."""
-    return "pace" if t in PACE_TYPES else "hr"
+    return "pace" if t in PACE_TYPES or t == "aet_test" else "hr"
 
 
 NO_TPACE_HR = N_("沒有閾值配速：改用心率＋RPE")
 NO_METER_PACE = N_("沒有功率計：平路間歇用配速，心率當上限")
+NO_POWER_AET = N_("功率不生效：AeT 測試改用固定配速")         # SP-949
 
 
 def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Optional[bool] = None,
@@ -227,14 +315,22 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Opti
     SP-950 (owner 2026-10-27, engine/power_state.py): power is in effect only with a power meter and a
     fresh CP. ② (a meter, the CP stale — th["power_state"], else `cp_stale` / th["cp_stale"]) and
     ③ (no meter): no session is run by power, whatever was chosen — the CP test keeps its open bouts
-    in ② (it is what brings power back) and an AeT test its fixed power in ② (SP-949 moves it); in ③
+    in ② (it is what brings power back); a UA / Evoke AeT test holds a fixed pace (SP-949); in ③
     a stored 目標依據 = 功率 (課表偏好 or the session's own) is ignored, not deleted.
     SP-951: the flat intervals there (and wherever 配速 is picked) by % threshold pace (`tpace`, else
     th["tpace"]); a threshold pace known to be missing → heart rate with the reason."""
     from backend.engine import power_state as PST
     t = session_type(s)
     own = s.get("target_basis")
-    chosen = own if own in CHOSEN else pref_basis(prefs)
+    # SP-964: the session's own → its type's (進階設定) → the overall 目標依據 → 自動
+    tk = type_key(s) if t in ("easy", "long", "hill", "interval") else None
+    tb = type_basis(prefs, tk)
+    if own in CHOSEN:
+        chosen, src = own, "own"
+    elif tb:
+        chosen, src = tb, "type"
+    else:
+        chosen, src = pref_basis(prefs), "pref"
     base, key = AUTO[t]
     if base is None:
         base = _aet_basis(s)
@@ -246,23 +342,27 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Opti
     picked = chosen in ("hr", "power") or (chosen == "pace" and t in PACE_TYPES)
     if picked and t not in ("cp_test", "aet_test", "downhill", "climb"):
         basis = chosen
-        how = "own" if own == chosen else "pref"
+        how = src
     fb = ""
     th = th or {}
     tp = _tpace_of(th, tpace)
     state, ps = _state(th, cp_stale, power_state)
-    keep = state == PST.STALE and t in ("cp_test", "aet_test")      # ②: the tests keep their power
+    keep = state == PST.STALE and t == "cp_test"      # ②: the CP test keeps its power (SP-949: not the AeT test)
     if basis == "power" and state != PST.POWER and not keep:
         basis = _no_power_basis(t, th)
-        if basis == "pace" and state == PST.NONE and tp is not False:
+        if t == "aet_test":
+            # SP-949: UA / Evoke hold a fixed pace (the athlete's own HR → pace, else the E pace / the
+            # talk test — aet_test.start_target), not the threshold pace
+            fb = _(NO_POWER_AET)
+        elif basis == "pace" and state == PST.NONE and tp is not False:
             fb = _(NO_METER_PACE)
         else:
             fb = PST.short_reason(ps) if ps is not None else \
                 _("沒有功率計：用心率") if state == PST.NONE else _(CP_STALE_ALL)
     if basis == "power" and th and not th.get("cp") and not (keep and t == "cp_test"):
-        basis = "pace" if t in PACE_TYPES and tp else "hr"
+        basis = "pace" if (t in PACE_TYPES and tp) or t == "aet_test" else "hr"
         fb = _("沒有 CP：改用配速") if basis == "pace" else _("沒有 CP：改用心率")
-    if basis == "pace" and tp is False:
+    if basis == "pace" and tp is False and t != "aet_test":
         basis = "hr"
         fb = f"{fb}；{_(NO_TPACE_HR)}" if fb else _(NO_TPACE_HR)
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):
@@ -273,28 +373,71 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Opti
     elif how == "own":
         why = _("這次課表你選了{basis}（{fb}）", basis=_(LABEL[chosen]), fb=fb) if fb \
             else _("這次課表你選了{basis}", basis=_(LABEL[chosen]))
+    elif how == "type":
+        kw = {"type": _(TYPE_KEY_WORD[tk]), "basis": _(LABEL[chosen])}
+        why = _("進階設定：{type}用{basis}（{fb}）", fb=fb, **kw) if fb else _("進階設定：{type}用{basis}", **kw)
     else:
         why = _("課表偏好：{basis}（{fb}）", basis=_(LABEL[chosen]), fb=fb) if fb \
             else _("課表偏好：{basis}", basis=_(LABEL[chosen]))
-    if basis == "pace":
+    if basis == "pace" and t != "aet_test":
         key = "pace_iv"
-    return {"basis": basis, "chosen": own if own in CHOSEN else chosen, "type": t, "why": why,
+    return {"basis": basis, "chosen": chosen, "how": how, "type_key": tk, "type": t, "why": why,
             "source": _(SRC[key]),
-            "hr_cap": (basis == "power" and t in ("interval", "hill", "easy", "long")) or basis == "pace",
+            "hr_cap": (basis == "power" and t in ("interval", "hill", "easy", "long"))
+            or (basis == "pace" and t != "aet_test"),
             "fallback": fb, "power_state": state}
 
 
-def flat_pace(th: Optional[dict], prefs=None, tpace: Optional[float] = None) -> bool:
+def flat_pace(th: Optional[dict], prefs=None, tpace: Optional[float] = None, s: Optional[dict] = None) -> bool:
     """SP-951: the flat intervals of this plan run by pace (target_policy's basis of a flat interval
     with these thresholds and 課表偏好). The text builders (interval_library.session_for,
     quality_gate.session, overview.taper_q_target) ask it, so the session's 目標 says the same as
     its structure and the push. Needs the plan's power state (th["power_state"]) or 配速 picked;
-    otherwise False (a caller without them keeps its old texts)."""
+    otherwise False (a caller without them keeps its old texts). SP-964: `s` = the session (or a hint
+    {"_zone": "z3" | "z5"}) — its type's own 目標依據 (進階設定) counts; None = a Zone 3 one."""
     from backend.engine import power_state as PST
     th = th or {}
-    if PST.of(th) is None and pref_basis(prefs) != "pace":
+    probe = {**(s or {}), "kind": "quality", "title": (s or {}).get("title") or "", "id": "quality"}
+    own = probe.get("target_basis")
+    picked = own if own in CHOSEN else (type_basis(prefs, flat_zone(probe)) or pref_basis(prefs))
+    if PST.of(th) is None and picked != "pace":
         return False
-    return target_policy({"kind": "quality", "title": ""}, prefs, th, tpace=tpace)["basis"] == "pace"
+    return target_policy(probe, prefs, th, tpace=tpace)["basis"] == "pace"
+
+
+# ---- SP-964: the road long run's marathon-pace segment (workout_steps.mp_target, the push, the card) ----
+def mp_policy(prefs=None, th: Optional[dict] = None, cp_stale: Optional[bool] = None,
+              power_state: Optional[dict] = None, tpace=None, goal: Optional[float] = None) -> dict:
+    """{"basis": pace | hr | power | none, "chosen", "how": auto | type, "why", "fallback"} of the MP segment:
+    進階設定's mp, else pace (the overall 目標依據 never reached it — unchanged). A chosen power when power is not
+    in effect (② / ③) or without a CP → pace with the reason; pace without a goal pace and a threshold pace
+    known missing → heart rate (+ RPE, the MP HR band × LTHR: workout_steps.MP_HR); HR without an LTHR → none."""
+    from backend.engine import power_state as PST
+    chosen = type_basis(prefs, "mp")
+    basis = chosen or "pace"
+    fb = ""
+    th = th or {}
+    state, ps = _state(th, cp_stale, power_state)
+    if basis == "power" and state != PST.POWER:
+        basis = "pace"
+        fb = _("沒有功率計：用配速") if state == PST.NONE else \
+            PST.short_reason(ps) if ps is not None else _(CP_STALE_ALL)
+    if basis == "power" and th and not th.get("cp"):
+        basis, fb = "pace", _("沒有 CP：改用配速")
+    tp = _tpace_of(th, tpace)
+    if basis == "pace" and not goal and tp is False:
+        basis = "hr"
+        fb = f"{fb}；{_(NO_TPACE_HR)}" if fb else _(NO_TPACE_HR)
+    if basis == "hr" and th and not th.get("lthr"):
+        basis, fb = "none", _("沒有 LTHR：不設目標")
+    if chosen:
+        kw = {"type": _(TYPE_KEY_WORD["mp"]), "basis": _(LABEL[chosen])}
+        why = _("進階設定：{type}用{basis}（{fb}）", fb=fb, **kw) if fb else _("進階設定：{type}用{basis}", **kw)
+    else:
+        kw = {"type": _(TYPE_KEY_WORD["mp"]), "basis": _(LABEL["pace"])}
+        why = _("自動：{type}看{basis}（{fb}）", fb=fb, **kw) if fb else _("自動：{type}看{basis}", **kw)
+    return {"basis": basis, "chosen": chosen or "auto", "how": "type" if chosen else "auto", "why": why,
+            "fallback": fb, "power_state": state}
 
 
 # the threshold-dict keys the session text builders read (overview._gate_session, session_suggest …):

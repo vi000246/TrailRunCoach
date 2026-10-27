@@ -621,12 +621,19 @@ def _aet_test(s: dict, c: Ctx, ids) -> list:
     elif proto == "friel":
         out = [step(ids, "warm", warm * 60, EASY), step(ids, "work", main * 60, EASY, "AeT 心率附近穩定跑")]
     else:
-        p = _num(r"固定功率\s*(\d+)\s*W", text) or (round(0.75 * c.cp) if c.cp else None)
+        # SP-949: the stored target's fixed power or fixed pace (aet_test.main_target: ①'s own HR → power,
+        # ② / ③'s HR → pace or E pace); an old row without either keeps CP × 0.75; the talk test: no target
+        from backend.engine.aet_test import main_name, main_target
+        tg = main_target(s.get("target") or "")
+        if tg is None and "配速" not in (s.get("target") or "") and c.cp:
+            p = round(0.75 * c.cp)
+            tg = ("power", round(p * 0.97), round(p * 1.03))
         hr0 = _num(r"心率從\s*(\d+)", text)
         e = easy_hr(c)
         warm_t = {"type": "hr", "mode": "abs", "lo": min(e[1], hr0 - 10), "hi": hr0} if hr0 and e else EASY
-        main_t = {"type": "power", "mode": "abs", "lo": round(p * 0.97), "hi": round(p * 1.03)} if p else OPEN
-        out = [step(ids, "warm", warm * 60, warm_t), step(ids, "work", main * 60, main_t, "固定功率，不要調")]
+        main_t = {"type": tg[0], "mode": "abs", "lo": tg[1], "hi": tg[2]} if tg else OPEN
+        out = [step(ids, "warm", warm * 60, warm_t),
+               step(ids, "work", main * 60, main_t, main_name(s.get("target") or ""))]
     if cool:
         out.append(step(ids, "cool", cool * 60, EASY))
     return out
@@ -650,9 +657,41 @@ def mp_goal_pace(s: dict) -> Optional[float]:
     return int(m.group(1)) * 60 + int(m.group(2)) if m else None
 
 
-def mp_target(s: dict) -> dict:
-    """The MP step's target: the goal pace (absolute s/km), else % threshold pace with the HR fallback."""
+def mp_power_band(goal: Optional[float] = None, tpace: Optional[float] = None) -> tuple[float, float]:
+    """SP-964: the MP segment's band as × CP when 進階設定 sets it to power — the same speed as the pace target
+    (running power ≈ proportional to flat speed, Stryd; 推估, as target_policy.pace_band): threshold pace ÷ the
+    goal pace ± MP_GOAL_BAND with both known, else 1 ÷ MP_PACE (≈ 93–96 % CP)."""
+    if goal and tpace:
+        return (round(tpace / (goal * (1 + MP_GOAL_BAND)), 3), round(tpace / (goal * (1 - MP_GOAL_BAND)), 3))
+    return (round(1.0 / MP_PACE[1], 3), round(1.0 / MP_PACE[0], 3))
+
+
+def mp_basis(s: dict, th: Optional[dict] = None) -> str:
+    """SP-964: the MP segment's basis (target_policy.mp_policy): the session's mp_basis (plan_store.push_dict
+    resolved it with the plan thresholds), else 課表偏好 read now with `th`."""
+    b = s.get("mp_basis")
+    if b in ("pace", "hr", "power", "none"):
+        return b
+    from backend.engine import target_policy as TP
+    from backend.engine.plan_store import load_prefs_safe
+    prefs = load_prefs_safe()
+    if not TP.type_basis(prefs, "mp"):
+        return "pace"                       # 自動: the pace target as before (its own HR fallback, hrp)
+    return TP.mp_policy(prefs, th or None, goal=mp_goal_pace(s))["basis"]
+
+
+def mp_target(s: dict, th: Optional[dict] = None) -> dict:
+    """The MP step's target: the goal pace (absolute s/km), else % threshold pace with the HR fallback.
+    SP-964: 進階設定 may set it to heart rate (MP_HR × LTHR) or power (mp_power_band × CP)."""
     g = mp_goal_pace(s)
+    b = mp_basis(s, th)
+    if b == "hr":
+        return {"type": "hr", "mode": "pct", "lo": MP_HR[0], "hi": MP_HR[1]}
+    if b == "power":
+        lo, hi = mp_power_band(g, (th or {}).get("tpace"))
+        return {"type": "power", "mode": "pct", "lo": lo, "hi": hi}
+    if b == "none":
+        return dict(OPEN)
     if g:
         return {"type": "pace", "mode": "abs", "lo": round(g * (1 - MP_GOAL_BAND)), "hi": round(g * (1 + MP_GOAL_BAND))}
     return {"type": "pace", "mode": "pct", "lo": MP_PACE[0], "hi": MP_PACE[1], "hrp": list(MP_HR)}
@@ -950,7 +989,7 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
         return doc(items) if items else None
     if secs <= 0:
         return None
-    items = _easy_items(s, kind, secs, ids)
+    items = _easy_items(s, kind, secs, ids, th)
     if items is None:
         return None
     from backend.engine.warmup import mark_min
@@ -958,12 +997,12 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
     return doc(carve_warm(items, n * 60) if n else items)
 
 
-def _easy_items(s: dict, kind: str, secs: int, ids) -> Optional[list]:
+def _easy_items(s: dict, kind: str, secs: int, ids, th: Optional[dict] = None) -> Optional[list]:
     """derive()'s steps of the easy-type kinds (long, mountain, hike, easy), before the warm-up."""
     mp = mp_minutes(s) if kind == "long" else None
     if mp and secs - mp * 60 - MP_TAIL_S >= 10 * 60:
         return [step(ids, "work", secs - mp * 60 - MP_TAIL_S, _easy(*LONG_BAND), "輕鬆"),
-                step(ids, "work", mp * 60, mp_target(s), "馬拉松配速"),
+                step(ids, "work", mp * 60, mp_target(s, th), "馬拉松配速"),
                 step(ids, "cool", MP_TAIL_S, _easy(*EASY_BAND), "輕鬆收操")]
     if kind in ("long", "mountain", "hike"):
         lo, hi = LONG_BAND if kind == "long" else TRAIL_BAND

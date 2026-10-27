@@ -405,15 +405,20 @@ def _aet_test_steps(s: dict, th: Thresholds) -> list[StepLike]:
             steps.append(Step(EX_COOLDOWN, cool * 60, easy_hr(th)))
         return steps
     cool = _num(r"緩和\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", text, 0)
-    p = _num(r"固定功率\s*(\d+)\s*W", text) or (round(0.75 * th.cp) if th.cp else None)
+    # SP-949: the stored target's fixed power (intensityType 6) or fixed pace (② / ③: intensityType 3,
+    # s/km, faster bound first) — aet_test.main_target; an old row without either keeps CP × 0.75
+    from backend.engine.aet_test import main_name, main_target
+    main_int = main_target(s.get("target", ""))
+    if main_int is None and "配速" not in s.get("target", "") and th.cp:
+        p = round(0.75 * th.cp)
+        main_int = ("power", round(p * 0.97), round(p * 1.03))
     hr0 = _num(r"心率從\s*(\d+)", text)
     # the protocol's 「暖身到開始流汗（心率不超過起始心率）」 window stays (the test's own target, as
     # workout_steps._aet_test); without a start HR the warm-up has no target (SP-479)
     e = easy_hr(th)
     warm_int = ("hr", min(e[1], hr0 - 10), hr0) if hr0 and e else WARM_INT
-    main_int = ("power", round(p * 0.97), round(p * 1.03)) if p else None
     steps = [Step(EX_WARMUP, warm * 60, warm_int),
-             Step(EX_TRAIN, main * 60, main_int, "固定功率，不要調")]
+             Step(EX_TRAIN, main * 60, main_int, main_name(s.get("target", "")))]
     if cool:
         steps.append(Step(EX_COOLDOWN, cool * 60, easy_hr(th)))
     return steps
@@ -540,9 +545,17 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: b
     if mp and secs - mp * 60 - WS.MP_TAIL_S >= 10 * 60:
         # 主要訓練項目 = 路跑: easy, marathon pace, easy (workout_steps.derive / mp_target): the goal pace,
         # else threshold pace × 1.04–1.08 (intensityType 3, s/km), else an HR band
-        tg, g = WS.mp_target(s), WS.mp_goal_pace(s)
-        if g:
-            mp_t = ("pace", tg["lo"], tg["hi"])
+        g = WS.mp_goal_pace(s)
+        b = WS.mp_basis(s)
+        # SP-964: 進階設定 may set the segment to heart rate (MP_HR × LTHR) or power (the same speed as % CP)
+        if b == "hr" and th.lthr:
+            mp_t = ("hr", round(WS.MP_HR[0] * th.lthr), round(WS.MP_HR[1] * th.lthr))
+        elif b == "power" and th.cp:
+            mp_t = power(th, *WS.mp_power_band(g, th.tpace))
+        elif b == "none":
+            mp_t = None
+        elif g:
+            mp_t = ("pace", round(g * (1 - WS.MP_GOAL_BAND)), round(g * (1 + WS.MP_GOAL_BAND)))
         elif th.tpace:
             mp_t = ("pace", round(WS.MP_PACE[0] * th.tpace), round(WS.MP_PACE[1] * th.tpace))
         else:

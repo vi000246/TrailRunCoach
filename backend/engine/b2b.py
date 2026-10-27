@@ -532,10 +532,10 @@ def fatigue_exempt(info: Optional[dict], today: str) -> Optional[str]:
     if not info:
         return None
     if info.get("due"):
-        return "本週有你排入的 B2B"
+        return _("本週有你排入的 B2B")                 # msgids (SP-909 R1): inside adapt's reason
     p = info.get("post")
     if p and today <= p["until"]:
-        return f"上週末 B2B（{md(p['start'])}–{md(p['end'])}）後的輕鬆日"
+        return _("上週末 B2B（{a}–{b}）後的輕鬆日", a=md(p["start"]), b=md(p["end"]))
     return None
 
 

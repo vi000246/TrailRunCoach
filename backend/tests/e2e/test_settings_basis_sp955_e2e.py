@@ -163,6 +163,67 @@ def test_a_phone_puts_the_result_first(e2e_browser, e2e_server):
         ctx.close()
 
 
+def test_advanced_one_type_set_marked_and_reset(app):
+    """SP-964: 進階設定 (collapsed under 手動指定) — one row per choosable kind of 越野; set 5 區間歇 to 配速 → the
+    card's row says （手動） with 改回自動, which puts it back. The writes are intercepted (shared server): the
+    PATCH answers with the choice, the basis answer is the real one with that row as the server gives it."""
+    page, _ = app
+    chosen, sent = {}, []
+
+    def basis(route):
+        r = route.fetch()
+        b = r.json()
+        if chosen.get("z5") == "pace":
+            for row in b["rows"]:
+                if row["key"] == "z5":
+                    row.update(basis="pace", basis_label="配速", manual=True, own=True, type_key="z5",
+                               why="進階設定：5 區間歇用配速", target="配速 5:30–5:50 /km（103–109% 閾值配速）")
+            for ty in b["types"]:
+                if ty["key"] == "z5":
+                    ty["choice"] = "pace"
+        route.fulfill(response=r, json=b)
+    page.route("**/api/v1/overview/plan/basis", basis)
+    _basis(page)
+    base = page.evaluate("() => PREFS")
+
+    def prefs(route):
+        if route.request.method != "PATCH":
+            return route.continue_()
+        body = json.loads(route.request.post_data)
+        sent.append(body)
+        for k, v in (body.get("type_basis") or {}).items():
+            if v == "auto":
+                chosen.pop(k, None)
+            else:
+                chosen[k] = v
+        route.fulfill(json={"prefs": {**base, "type_basis": dict(chosen)}})
+    page.route("**/api/v1/overview/plan/prefs", prefs)
+    adv = page.locator("#adv")
+    expect(adv).to_be_visible()
+    assert page.locator(".basis-l #overrides #adv").count() == 1                 # under 手動指定, left column
+    expect(adv.locator("#adv-rows")).to_be_hidden()                             # collapsed
+    adv.locator("summary").click()
+    keys = page.locator("#adv-rows .adv-row").evaluate_all("rs => rs.map((r) => r.dataset.k)")
+    assert keys == ["easy", "z3", "z5", "hill"]                                 # 越野: no long / MP
+    expect(page.locator("#adv-z5 option").first).to_have_text("自動（目前：功率）")
+    assert page.locator("#adv-z5 option").all_inner_texts()[1:] == ["心率", "配速", "功率"]
+    assert page.locator("#adv-easy option").all_inner_texts()[1:] == ["心率", "功率"]      # no pace on easy runs
+    expect(page.locator('#now-rows .nr[data-k="z5"] .man')).to_have_count(0)
+    page.select_option("#adv-z5", "pace")
+    row = page.locator('#now-rows .nr[data-k="z5"]')
+    expect(row.locator(".man")).to_have_text("（手動）")
+    expect(row.locator(".chip")).to_have_text("配速")
+    expect(page.locator('.adv-row[data-k="z5"] .man')).to_be_visible()
+    expect(page.locator("#adv-n")).to_have_text("（改了 1 類）")
+    expect(page.locator('#now-rows .nr[data-k="z3"] .man')).to_have_count(0)    # the other types stay automatic
+    assert sent == [{"type_basis": {"z5": "pace"}}]
+    row.locator("button.to-auto").click()
+    expect(page.locator('#now-rows .nr[data-k="z5"] .man')).to_have_count(0)
+    expect(page.locator('#now-rows .nr[data-k="z5"] .chip')).to_have_text("功率")
+    expect(page.locator("#adv-z5")).to_have_value("auto")
+    assert sent[-1] == {"type_basis": {"z5": "auto"}}
+
+
 def test_english(app):
     page, _ = app
     open_page(page, _server.PAGES["settings"] + "?lang=en#body")

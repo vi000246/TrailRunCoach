@@ -29,9 +29,9 @@ KINDS = (
      N_("越野輕鬆跑・恢復跑")),
     ("trail_long", ("trail",), {"kind": "mountain", "title": "山路長天"}, "trail", N_("越野長天")),
     ("long", ("road",), {"kind": "long", "title": "長跑"}, "long", N_("長跑")),
-    ("z3", ("trail", "road"), {"kind": "quality", "title": "3 區間歇", "terrain": "road"}, "threshold",
+    ("z3", ("trail", "road"), {"kind": "quality", "title": "3 區間歇", "terrain": "road", "_zone": "z3"}, "threshold",
      N_("節奏・3 區間歇（平路）")),
-    ("z5", ("trail", "road"), {"kind": "quality", "title": "5 區間歇", "terrain": "road"}, "vo2",
+    ("z5", ("trail", "road"), {"kind": "quality", "title": "5 區間歇", "terrain": "road", "_zone": "z5"}, "vo2",
      N_("5 區間歇（平路）")),
     ("hill", ("trail",), {"kind": "quality", "title": "爬坡重複", "terrain": "trail"}, "hill",
      N_("爬坡重複（3–8% 坡）")),
@@ -132,7 +132,9 @@ def rows(sport: str, th: Optional[dict], prefs=None, mp_goal_pace_s: Optional[fl
         if sport not in sports:
             continue
         pol = TP.target_policy(dict(sess), prefs, th)
-        manual = pol["chosen"] in ("hr", "power") and pol["type"] not in ("cp_test", "aet_test", "downhill", "climb")
+        # 「（手動）」: the overall 目標依據 or (SP-964) this type's own decided it; `own` = this type's own (進階設定),
+        # which the card's 改回自動 clears
+        manual = pol["how"] in ("pref", "type")
         why = pol["why"]
         if key in WHY_EXTRA and pol["basis"] == "hr":
             why = _("{why}；{extra}", why=why, extra=_(WHY_EXTRA[key]))
@@ -140,12 +142,60 @@ def rows(sport: str, th: Optional[dict], prefs=None, mp_goal_pace_s: Optional[fl
                     "basis_label": _(TP.LABEL.get(pol["basis"], pol["basis"])),
                     "target": target_text(key, tid, pol, th) or (_("只給建議") if key == "climb" else
                                                                  _("看下降量和技術") if key == "downhill" else ""),
-                    "why": why, "source": pol["source"], "fallback": pol["fallback"], "manual": manual})
+                    "why": why, "source": pol["source"], "fallback": pol["fallback"], "manual": manual,
+                    "type_key": key if key in TP.TYPE_KEYS else None, "own": pol["how"] == "type"})
     if sport == "road":
-        tgt = (_("{p} /km（目標配速）", p=fmt_pace(mp_goal_pace_s)) if mp_goal_pace_s else _("照閾值配速推估"))
-        out.append({"key": "mp", "name": _("馬拉松配速段"), "basis": "pace", "basis_label": _(TP.LABEL["pace"]),
-                    "target": tgt, "why": _("專項期的長跑後段加一段馬拉松配速"),
-                    "source": _("A 賽的目標配速；沒有目標時間就從閾值配速推估"), "fallback": "", "manual": False})
+        pol = TP.mp_policy(prefs, th, goal=mp_goal_pace_s)
+        why = _("專項期的長跑後段加一段馬拉松配速") if pol["how"] == "auto" and not pol["fallback"] else pol["why"]
+        out.append({"key": "mp", "name": _("馬拉松配速段"), "basis": pol["basis"],
+                    "basis_label": _(TP.LABEL.get(pol["basis"], pol["basis"])),
+                    "target": mp_text(pol["basis"], th, mp_goal_pace_s), "why": why,
+                    "source": _("A 賽的目標配速；沒有目標時間就從閾值配速推估"), "fallback": pol["fallback"],
+                    "manual": pol["how"] == "type", "type_key": "mp", "own": pol["how"] == "type"})
+    return out
+
+
+def mp_text(basis: str, th: dict, goal: Optional[float] = None) -> str:
+    """The MP segment's target in `basis` (workout_steps.mp_target's numbers): the goal pace, else threshold
+    pace × MP_PACE; HR = MP_HR × LTHR; power = the same speed as % CP (mp_power_band) × CP."""
+    from backend.engine import overview as O
+    from backend.engine import workout_steps as WS
+    from backend.engine.e_pace import fmt_pace
+    if basis == "hr":
+        lthr = th.get("lthr")
+        return O._range_text([WS.MP_HR[0] * lthr, WS.MP_HR[1] * lthr], True) if lthr else ""
+    if basis == "power":
+        cp = th.get("cp")
+        lo, hi = WS.mp_power_band(goal, th.get("tpace"))
+        return O._range_text([lo * cp, hi * cp], False) if cp else ""
+    if basis == "none":
+        return ""
+    return (_("{p} /km（目標配速）", p=fmt_pace(goal)) if goal else _("照閾值配速推估"))
+
+
+# the 進階設定 rows (SP-964): which types each main sport shows, in the card's order
+TYPE_ROWS = {"trail": ("easy", "z3", "z5", "hill"), "road": ("easy", "long", "z3", "z5", "mp")}
+
+
+def type_rows(sport: str, th: Optional[dict], prefs=None, mp_goal_pace_s: Optional[float] = None) -> list[dict]:
+    """訓練依據 › 進階設定 (SP-964): one row per choosable type of `sport` — {key, name, choice (its own basis or
+    None = follows the overall one), auto (the basis it gets without its own: the overall 目標依據, else 自動),
+    auto_label, options (target_policy.TYPE_CHOICES; 功率 left out without a power meter — ③)}."""
+    from backend.engine import power_state as PST
+    from backend.engine import target_policy as TP
+    th = dict(th or {})
+    sport = "road" if sport == "road" else "trail"
+    reps = {k: dict(sess) for k, _s, sess, _t, _n in KINDS}
+    state = TP._state(th, None)[0]
+    names = {r["key"]: r["name"] for r in rows(sport, th, prefs, mp_goal_pace_s)}
+    out = []
+    for key in TYPE_ROWS[sport]:
+        bare = TP.without_type(prefs, key)
+        auto = (TP.mp_policy(bare, th, goal=mp_goal_pace_s) if key == "mp"
+                else TP.target_policy(reps[key], bare, th))["basis"]
+        opts = [b for b in TP.TYPE_CHOICES[key] if b != "power" or state != PST.NONE]
+        out.append({"key": key, "name": names.get(key) or _(TP.TYPE_KEY_WORD[key]), "choice": TP.type_basis(prefs, key),
+                    "auto": auto, "auto_label": _(TP.LABEL.get(auto, auto)), "options": opts})
     return out
 
 

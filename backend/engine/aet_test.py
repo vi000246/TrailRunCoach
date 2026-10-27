@@ -542,7 +542,234 @@ def start_hr(aet_estimate: Optional[float], lthr: Optional[float]) -> Optional[f
 
 
 def start_power(cp: Optional[float]) -> Optional[float]:
+    """CP × 0.75 (POWER_OF_CP, 自訂): the fallback when the athlete's own HR → power relation is
+    not known (start_target)."""
     return POWER_OF_CP * cp if cp else None
+
+
+# ---- SP-949 (owner 2026-10-27): the start of the next test chained to the last one ----------------
+# UA: below AeT → "start 5 bpm higher next time" (UA's own number); above → start lower (LOWER_BPM,
+# 推估); at → the first-half HR is the AeT. The review card says the same (_lines: 「約 h1 ± 5」), so the
+# chain starts from the last test's first-half HR, not from the HR the session asked for.
+CHAIN_BPM = {"below": 5, "at": 0, "above": -LOWER_BPM}
+CHAIN_WHY = {"below": N_("起始心率 {hr:.0f}：上次 AeT 測試（{date}）前半 {h1:.0f} bpm 還在 AeT 以下，+5 bpm"),
+             "at": N_("起始心率 {hr:.0f}：上次 AeT 測試（{date}）前半 {h1:.0f} bpm 就是 AeT"),
+             "above": N_("起始心率 {hr:.0f}：上次 AeT 測試（{date}）前半 {h1:.0f} bpm 高於 AeT，降 {n} bpm（推估）")}
+
+
+def chained_start_hr(last: Optional[dict], aet_estimate: Optional[float], lthr: Optional[float]) -> dict:
+    """{"hr", "why" (None = the estimate), "from": test | estimate}: the start HR of the next UA /
+    Evoke test. A valid last test (latest_aet_test: ok, HR not flagged — hr_ref —, judged by UA's
+    or Evoke's halves) moves the start from its first-half HR (CHAIN_BPM); otherwise start_hr()
+    (the AeT estimate, else 0.89 × LTHR − 5). 徐國峰 / Friel results say nothing about the AeT HR."""
+    t = last if isinstance(last, dict) else {}
+    band, h1 = t.get("band"), _f(t.get("hr1"))
+    if t.get("ok") and not t.get("hr_ref") and (t.get("judge") or "ua") in ("ua", "evoke") and h1 \
+            and band in CHAIN_BPM:
+        hr = round(h1) + CHAIN_BPM[band]
+        return {"hr": float(hr), "from": "test",
+                "why": _(CHAIN_WHY[band], hr=hr, date=str(t.get("date") or "")[:10], h1=h1, n=LOWER_BPM)}
+    return {"hr": start_hr(aet_estimate, lthr), "why": None, "from": "estimate"}
+
+
+# ---- SP-949: the fixed power / pace from the athlete's own HR → power / pace relation ------------
+# CP × 0.75 and the AeT estimate were two unrelated numbers (the 2026-10-26 test held 136 W at 149 bpm;
+# 0.75 × CP 195 W ≈ 147 W would have started near 155). The recent flat easy road runs give the
+# athlete's own line: one-minute segments after the warm-up, grade within ± 2 % (the owner's rule) for
+# the segment and the minute before it (HR lags 55–70 s, Hunt 2015), moving, HR not flagged
+# (workout_review.run_hr_quality), power only from a Stryd (watch power never counts: SP-950).
+# A linear fit of power (or speed) on HR, read at the start HR. All thresholds 推估.
+FIT_DAYS = 42           # 推估: the last 6 weeks (the CP's shelf life, power_state.fresh_days)
+FIT_MAX_RUNS = 10       # 推估: the latest 10 qualifying runs
+FIT_MIN_RUNS = 3        # 推估: ≥ 3 runs (base_check.easy_targets' minimum)
+FIT_RUN_SEGS = 10       # 推估: a run counts with ≥ 10 flat minutes after its warm-up
+FIT_WARM_S = WARM_S     # the warm-up cut: UA's 10 minutes
+FIT_SEG_S = 60
+FIT_LEAD_S = 60         # 推估: the minute before the segment flat and moving too (the HR lag)
+FIT_GRADE = 0.02        # the owner's ± 2 % (SP-949)
+FIT_MIN_KMH = 5.0       # 推估: running, not walking
+FIT_EXTRAP_BPM = 5.0    # 推估: the start HR at most 5 bpm outside the runs' HR range (5th–95th percentile)
+FIT_BAND = 0.03         # ± 3 %: the fixed power's band (UA's text), the fixed pace's too
+FIT_KEY = "aet_start_segments_v1"
+R_FEW = {"power": N_("最近 {d} 天只有 {n} 次有 Stryd 功率、心率可信的平路輕鬆跑（要 {k} 次）"),
+         "speed": N_("最近 {d} 天只有 {n} 次心率可信的平路輕鬆跑（要 {k} 次）")}
+R_SLOPE = {"power": N_("平路輕鬆跑的心率和功率看不出一起上升"),
+           "speed": N_("平路輕鬆跑的心率和配速看不出一起變快")}
+R_RANGE = N_("起始心率 {hr:.0f} bpm 在平路輕鬆跑的心率範圍（{lo:.0f}–{hi:.0f}）外")
+R_NO_HR = N_("沒有起始心率")
+WHY_FIT = {"power": N_("固定功率依據：最近 {n} 次平路輕鬆跑（{a}–{b}）的心率–功率關係，心率 {hr:.0f} bpm ≈ {w:.0f} W"),
+           "speed": N_("固定配速依據：最近 {n} 次平路輕鬆跑（{a}–{b}）的心率–配速關係，心率 {hr:.0f} bpm ≈ {p} /km")}
+WHY_CP = N_("固定功率依據：{why}，先用 CP × 0.75（推估）")
+WHY_NO_PACE = N_("固定配速依據：{why}")
+PACE_TARGET = N_("配速固定 {p} /km（±3%）")
+
+
+def flat_segments(t, hr, power=None, speed=None, dist_km=None, elev=None, warm_s: float = FIT_WARM_S) -> dict:
+    """{"pw": [[HR, W], …], "sp": [[HR, km/h], …]}: the one-minute flat segments of one run after
+    `warm_s` (module notes above). No distance or elevation → none (the grade can't be checked)."""
+    from backend.engine.climb_vam import grade_1s
+    from backend.engine.workout_review import _at_grid
+    out = {"pw": [], "sp": []}
+    if hr is None or dist_km is None or elev is None:
+        return out
+    tt = np.asarray(t, dtype=float)
+    if np.isfinite(tt).sum() < 2:
+        return out
+    grid = np.arange(np.nanmin(tt), np.nanmax(tt) + 1.0)
+    h = _at_grid(tt, hr, grid)
+    d = _at_grid(tt, dist_km, grid) * 1000.0
+    g = grade_1s(d, _at_grid(tt, elev, grid))
+    v = _at_grid(tt, speed, grid) if speed is not None else np.gradient(np.nan_to_num(d)) * 3.6
+    p = _at_grid(tt, power, grid) if power is not None else np.full(len(grid), np.nan)
+    with np.errstate(invalid="ignore"):
+        ok = np.isfinite(g) & (np.abs(g) <= FIT_GRADE) & np.isfinite(v) & (v >= FIT_MIN_KMH) \
+            & np.isfinite(h) & (h > 0)
+    n = len(grid)
+    for a in range(int(max(warm_s, FIT_LEAD_S)), n - FIT_SEG_S + 1, FIT_SEG_S):
+        if not ok[a - FIT_LEAD_S:a + FIT_SEG_S].all():
+            continue
+        hh = float(h[a:a + FIT_SEG_S].mean())
+        out["sp"].append([hh, float(v[a:a + FIT_SEG_S].mean())])
+        pp = p[a:a + FIT_SEG_S]
+        if np.isfinite(pp).all() and (pp > 0).all():
+            out["pw"].append([hh, float(pp.mean())])
+    return out
+
+
+def _stryd(ds, w) -> bool:
+    """This run's power is a Stryd's (power_source.usable without watch power — SP-950: watch power
+    never counts, whatever 進階 says); True for a Dataset that cannot tell (test doubles)."""
+    src = getattr(ds, "power_source", None)
+    if not callable(src):
+        return True
+    try:
+        from backend.engine import power_source as PS
+        return bool(PS.usable(src(w), False))
+    except Exception:                       # noqa: BLE001
+        return False
+
+
+def _run_segments(ds, w) -> dict:
+    """flat_segments of one run, disk-memoised per activity (Dataset.cached_series)."""
+    from backend.engine import workout_review as WR
+
+    def compute():
+        s = WR._samples(ds, w)
+        if s is None:
+            return {"pw": [], "sp": []}
+        return flat_segments(s["t"], s.get("hr"), s.get("power"), s.get("speed"), s.get("dist"), s.get("elev"))
+    cache = getattr(ds, "cached_series", None)
+    return (cache(FIT_KEY, w, compute) if cache is not None else compute()) or {"pw": [], "sp": []}
+
+
+def own_relation(ds, today: dt.date, what: str = "power", cap: Optional[float] = None) -> dict:
+    """The athlete's own HR → power (`what` power) or HR → speed (speed) line from the recent flat
+    easy road runs: {"ok", "what", "n" (runs), "segs", "from", "to" (ISO), "slope", "icept",
+    "hr_lo", "hr_hi", "reason" (when not ok)}. A run counts with ≥ FIT_RUN_SEGS segments whose mean
+    HR is ≤ `cap` + workout_review.AET_MARGIN (easy; no cap = any)."""
+    from backend.engine import workout_review as WR
+    from backend.engine.overview import category
+    from backend.engine.wko5expr.dataset import date_to_day
+    key = "pw" if what == "power" else "sp"
+    tday = math.floor(date_to_day(today))
+    runs = [w for w in sorted(ds.workouts, key=lambda x: x.day, reverse=True)
+            if w.sport == "run" and tday - FIT_DAYS < math.floor(w.day) <= tday]
+    used, pairs = [], []
+    for w in runs:
+        try:
+            if category(w) != "road" or (what == "power" and not _stryd(ds, w)):
+                continue
+            if WR.run_hr_quality(ds, w) == "low":
+                continue
+            seg = [p for p in (_run_segments(ds, w).get(key) or []) if p[0] and p[1]]
+        except Exception:                   # noqa: BLE001 — an unreadable run is skipped
+            continue
+        if len(seg) < FIT_RUN_SEGS:
+            continue
+        if cap and float(np.mean([p[0] for p in seg])) > float(cap) + WR.AET_MARGIN:
+            continue
+        used.append(WR._wdate(w))
+        pairs += seg
+        if len(used) >= FIT_MAX_RUNS:
+            break
+    WR._flush(ds)
+    out = {"ok": False, "what": what, "n": len(used), "segs": len(pairs),
+           "from": min(used).isoformat() if used else None, "to": max(used).isoformat() if used else None,
+           "slope": None, "icept": None, "hr_lo": None, "hr_hi": None, "reason": None}
+    if len(used) < FIT_MIN_RUNS:
+        out["reason"] = _(R_FEW[what], d=FIT_DAYS, n=len(used), k=FIT_MIN_RUNS)
+        return out
+    x = np.array([p[0] for p in pairs], dtype=float)
+    y = np.array([p[1] for p in pairs], dtype=float)
+    if float(np.ptp(x)) <= 0:
+        out["reason"] = _(R_SLOPE[what])
+        return out
+    b, a = np.polyfit(x, y, 1)
+    if not b > 0:
+        out["reason"] = _(R_SLOPE[what])
+        return out
+    out.update(ok=True, slope=float(b), icept=float(a), hr_lo=float(np.percentile(x, 5)),
+               hr_hi=float(np.percentile(x, 95)))
+    return out
+
+
+def value_at(rel: Optional[dict], hr: Optional[float]) -> tuple[Optional[float], Optional[str]]:
+    """(the relation's power / speed at `hr`, None) or (None, why not)."""
+    if not rel:
+        return None, None
+    if not rel.get("ok"):
+        return None, rel.get("reason")
+    if not hr:
+        return None, _(R_NO_HR)
+    lo, hi = rel["hr_lo"] - FIT_EXTRAP_BPM, rel["hr_hi"] + FIT_EXTRAP_BPM
+    if not lo <= hr <= hi:
+        return None, _(R_RANGE, hr=hr, lo=rel["hr_lo"], hi=rel["hr_hi"])
+    v = rel["icept"] + rel["slope"] * float(hr)
+    return (v, None) if v > 0 else (None, _(R_SLOPE[rel["what"]]))
+
+
+def _md(iso: Optional[str]) -> str:
+    d = dt.date.fromisoformat(iso) if iso else None
+    return f"{d.month}/{d.day}" if d else ""
+
+
+def start_target(ds, today: dt.date, hr0: Optional[float], basis: str = "power", cp: Optional[float] = None,
+                 cap: Optional[float] = None) -> dict:
+    """The fixed intensity of a UA / Evoke test (and 徐國峰's when the E pace is missing):
+    {"basis": power | pace, "value" (W | s/km, None = unknown), "fit" (from own_relation),
+     "target" (the session's 目標 part, None = the caller's fallback), "why" (a 說明 line), "n", "from", "to"}.
+    power (① — power in effect): the HR → power line at `hr0`, else CP × 0.75 (推估, why says why);
+    pace (② / ③, or a pace protocol): the HR → speed line at `hr0` as a pace, else nothing (the caller
+    falls back to the E pace / the talk test, xu_target) with the reason."""
+    what = "power" if basis == "power" else "speed"
+    rel = None
+    if ds is not None:
+        try:
+            rel = own_relation(ds, today, what, cap)
+        except Exception:                   # noqa: BLE001 — the fallback below
+            rel = None
+    v, why_not = value_at(rel, hr0)
+    out = {"basis": basis, "value": None, "fit": False, "target": None, "why": None,
+           "n": (rel or {}).get("n"), "from": (rel or {}).get("from"), "to": (rel or {}).get("to")}
+    if v is not None:
+        a, b = _md(rel["from"]), _md(rel["to"])
+        if what == "power":
+            out.update(value=float(v), fit=True, target=_("固定功率 {w:.0f} W（±3%）", w=v),
+                       why=_(WHY_FIT[what], n=rel["n"], a=a, b=b, hr=hr0, w=v))
+        else:
+            pace = 3600.0 / v
+            from backend.engine.e_pace import fmt_pace
+            out.update(value=pace, fit=True, target=_(PACE_TARGET, p=fmt_pace(pace)),
+                       why=_(WHY_FIT[what], n=rel["n"], a=a, b=b, hr=hr0, p=fmt_pace(pace)))
+        return out
+    why_not = why_not or _(R_FEW[what], d=FIT_DAYS, n=0, k=FIT_MIN_RUNS)
+    if what == "power":
+        p0 = start_power(cp)
+        if p0:
+            out.update(value=p0, target=_("固定功率 {w:.0f} W（±3%）", w=p0), why=_(WHY_CP, why=why_not))
+        return out
+    out["why"] = _(WHY_NO_PACE, why=why_not)
+    return out
 
 
 def due(today: dt.date, kind: Optional[str], base_start: Optional[str], reason,
@@ -597,11 +824,15 @@ def protocol_tip(key: str) -> str:
 
 
 def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Optional[int] = None,
-            protocol: Optional[str] = None, cap_long: Optional[int] = None) -> dict:
+            protocol: Optional[str] = None, cap_long: Optional[int] = None, start: Optional[dict] = None,
+            hr_why: Optional[str] = None) -> dict:
     """The schedulable session (kind test, id test_aet) of the chosen protocol
     (課表偏好 aet_test_protocol; resolve_protocol). No protocol given = the old
     UA behaviour by the weekday cap (variant_for). The detail keeps 「暖身 N
-    分」「測試 N 分」「緩和 N 分」 for the COROS step builder."""
+    分」「測試 N 分」「緩和 N 分」 for the COROS step builder.
+    SP-949: `start` (start_target) is the fixed intensity — power (①: the athlete's own HR → power at
+    the start HR, else CP × 0.75) or pace (② / ③: HR → pace, else the E pace / the talk test); without
+    it the old `p0` watts. `hr_why`: the start HR's line when chained to the last test."""
     if protocol is None:
         key = "ua40" if variant_for(cap_weekday) == "short" else "ua60"
     else:
@@ -610,10 +841,12 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
     warm, main, cool = p["warm"], p["main"], p["cool"]
     tgt = []
     xu = None
+    whys = []                               # SP-949: the fixed intensity's / the start HR's 依據 lines
     # SP-905: the detail is msgids joined with 「；」「。」 (an English page reads each back on its own); the
     # reason (why) and the place are one msgid, 「{why}：…」
     if key == "xu90":
-        xu = xu_target(th if isinstance(th, dict) else {})
+        fit = start if start and start.get("basis") == "pace" and start.get("fit") else None
+        xu = xu_target(th if isinstance(th, dict) else {}, fit)
         tgt += [xu["text"], _("不設心率上限：心率升高也不要放慢（放慢會讓飄移偏小）")]
         why = _("自動：標準版徐國峰 90 分鐘（取代週末那次長跑）") if protocol == "auto" else _("徐國峰 90 分鐘")
         body = (_("暖身 {warm} 分（心率不超過輕鬆跑上限），接著測試 {main} 分：平坦路段、配速固定不要調、心率讓它自己變，"
@@ -621,10 +854,27 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
                 + _("補給每次停不超過 30 秒") + "；" + _("(第 90 分 − 第 10 分) ÷ 第 10 分 < 10% 有氧基礎夠") + "。")
         place = _("{why}：平坦路段（河濱）、不要山路", why=why) + "；" + xu["why"]
     else:
-        if p0:
+        pace = bool(start and start.get("basis") == "pace") and key != "friel"
+        if pace:
+            # ② / ③ (SP-949): a fixed pace — the athlete's own HR → pace at the start HR, else the E pace
+            # / the talk test (xu_target without a CP: no watts without power in effect)
+            if start.get("fit"):
+                tgt.append(start["target"])
+                whys.append(start["why"])
+            else:
+                e = xu_target({k: v for k, v in (th if isinstance(th, dict) else {}).items() if k != "cp"})
+                tgt.append(e["text"])
+                whys += [x for x in (start.get("why"), e["why"].rstrip("。")) if x]
+        elif start and start.get("basis") == "power" and start.get("target"):
+            tgt.append(start["target"])
+            if start.get("why"):
+                whys.append(start["why"])
+        elif p0:
             tgt.append(_("固定功率 {w:.0f} W（±3%）", w=p0))
         if hr0:
             tgt.append(_("心率從 {hr:.0f} 附近開始", hr=hr0))
+        if hr_why and key != "friel":
+            whys.append(hr_why)
         if key == "ua40" and protocol in (None, "auto", "ua60", "xu90"):
             if cap_weekday is None:
                 why = _("長跑日放不下 90 分 → 備案 UA 最短 40 分版本")
@@ -639,7 +889,8 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
         else:
             why = _(p["label"])
         held = (_("心率在 AeT 附近穩定跑") if key == "friel" else
-                _("固定功率不要調（至少 40 分）") if key == "ua60" else _("固定功率不要調"))
+                (_("固定配速不要調（至少 40 分）") if pace else _("固定功率不要調（至少 40 分）")) if key == "ua60"
+                else _("固定配速不要調") if pace else _("固定功率不要調"))
         body = (_("暖身 {warm} 分到開始流汗（心率不超過起始心率），接著測試 {main} 分{held}", warm=warm, main=main,
                   held=held) + "；" + _("中途不停") + "；"
                 + (_("緩和 {n} 分", n=cool) if cool else _("緩和可省略（0–5 分慢跑）")) + "。")
@@ -648,9 +899,10 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
     early = (_("主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天用較慢的配速再測（Evoke）") + "；"
              + _("起始心率約降 {n} bpm（推估）", n=LOWER_BPM)
              if p["judge"] in ("ua", "evoke") else "")
+    basis = "".join(w + "。" for w in whys)
     return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": p["title"], "minutes": warm + main + cool,
             "target": "；".join(tgt) or _("固定功率（±3%），不要調"),
-            "detail": place + body + _(HEAT_TEXT) + "；" + _("記下溫度") + "。" + early,
+            "detail": place + body + basis + _(HEAT_TEXT) + "；" + _("記下溫度") + "。" + early,
             "source": _joined(p["source"] if key != "ua60" and key != "ua40" else SRC),
             "tss": (warm + main + cool) / 60 * 50,
             **({"xu_basis": xu["basis"]} if xu else {})}
@@ -692,12 +944,13 @@ def cp_tested(plan, day: dt.date, cp_test_date: Optional[str] = None) -> bool:
     return day - dt.timedelta(days=CP_TEST_FIT_DAYS) < d <= day
 
 
-def xu_target(th: dict) -> dict:
-    """{"basis": pace | power | talk, "lo", "hi" (s/km or W; None for talk), "text" (the
-    target, its numbers parsed back by the step builders: PACE_RE / WATTS_RE), "name" (the
+def xu_target(th: dict, fit: Optional[dict] = None) -> dict:
+    """{"basis": pace | power | fit | talk, "lo", "hi" (s/km or W; None for talk), "text" (the
+    target, its numbers parsed back by the step builders: main_target), "name" (the
     main step), "why" (the detail's line)}. th: the week plan's thresholds with "e_pace"
     (e_pace.current) and "cp_measured" (cp_tested). A race older than e_pace.STALE_DAYS is not
-    used (owner 2026-10-06): the test falls back to the CP / the talk test."""
+    used (owner 2026-10-06): the test falls back to the CP / the talk test. SP-949: `fit` (a pace
+    start_target from the athlete's own HR → pace) comes before the talk test."""
     from backend.engine import e_pace as EP
     e = th.get("e_pace") if isinstance(th.get("e_pace"), dict) else None
     if e and e.get("e_fast") and e.get("e_slow") and not e.get("stale"):
@@ -716,6 +969,11 @@ def xu_target(th: dict) -> dict:
                 "name": _("固定功率 75–80% CP，不要調"),
                 "why": _("強度：沒有 180 天內的比賽成績可以算 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）",
                          cp=float(cp)) + "。" + _("設定頁填一場比賽成績就會改用 E 配速") + "。"}
+    if fit and fit.get("fit") and fit.get("value") and fit.get("target"):
+        pc = float(fit["value"])
+        return {"basis": "fit", "lo": round(pc * (1 - FIT_BAND)), "hi": round(pc * (1 + FIT_BAND)),
+                "text": fit["target"], "name": _("固定配速，不要調"),
+                "why": fit["why"] + "。" + _("設定頁填一場比賽成績就會改用 E 配速") + "。"}
     return {"basis": "talk", "lo": None, "hi": None,
             "text": _("能講完整句子的配速，固定不要調"),
             "name": _("能講完整句子的配速，固定不要調"),
@@ -723,17 +981,43 @@ def xu_target(th: dict) -> dict:
                      "之後就固定這個配速（講話測試，Foster 2008）") + "。" + _("設定頁填一場比賽成績就會改用 E 配速") + "。"}
 
 
-def xu_main_target(text: str) -> Optional[tuple]:
-    """The main block's target parsed from a stored 90-minute test's target text:
-    ("pace", fast, slow) s/km, ("power", lo, hi) W, or None (the talk test, or an old row)."""
+FIXED_PACE_RE = re.compile(r"配速固定\s*(\d+):(\d\d)\s*/km")                 # SP-949: 「配速固定 8:40 /km（±3%）」
+FIXED_W_RE = re.compile(r"固定功率\s*(\d+)\s*W")                               # 「固定功率 140 W（±3%）」
+
+
+def main_target(text: str) -> Optional[tuple]:
+    """The main block's target parsed from a stored AeT test's target text: ("pace", fast, slow)
+    s/km — a range, or SP-949's one pace ± 3 % —, ("power", lo, hi) W — a range, or a fixed power
+    ± 3 % —, or None (the talk test, or an old row)."""
     m = PACE_RE.search(text or "")
     if m:
         a, b = int(m.group(1)) * 60 + int(m.group(2)), int(m.group(3)) * 60 + int(m.group(4))
         return ("pace", min(a, b), max(a, b))
+    m = FIXED_PACE_RE.search(text or "")
+    if m:
+        pc = int(m.group(1)) * 60 + int(m.group(2))
+        return ("pace", round(pc * (1 - FIT_BAND)), round(pc * (1 + FIT_BAND)))
     m = WATTS_RE.search(text or "")
     if m:
         return ("power", int(m.group(1)), int(m.group(2)))
+    m = FIXED_W_RE.search(text or "")
+    if m:
+        w = int(m.group(1))
+        return ("power", round(w * (1 - FIT_BAND)), round(w * (1 + FIT_BAND)))
     return None
+
+
+def xu_main_target(text: str) -> Optional[tuple]:
+    """The 90-minute test's main block (main_target)."""
+    return main_target(text)
+
+
+def main_name(text: str) -> str:
+    """The UA / Evoke main step's name (SP-949): fixed power, fixed pace, or the talk test."""
+    t = main_target(text)
+    if t is None:
+        return _("能講完整句子的配速，固定不要調") if "講完整句子" in (text or "") else _("固定功率，不要調")
+    return _("固定配速，不要調") if t[0] == "pace" else _("固定功率，不要調")
 
 
 def xu_main_name(text: str) -> str:
@@ -741,7 +1025,9 @@ def xu_main_name(text: str) -> str:
     t = xu_main_target(text)
     if t is None:
         return _("能講完整句子的配速，固定不要調")
-    return _("固定 E 配速，不要調") if t[0] == "pace" else _("固定功率 75–80% CP，不要調")
+    if t[0] == "pace":
+        return _("固定 E 配速，不要調") if PACE_RE.search(text or "") else _("固定配速，不要調")
+    return _("固定功率 75–80% CP，不要調")
 
 
 def pick_day_xu(avail: list, long_wd: int, cap_weekday: Optional[int] = None) -> Optional[dt.date]:
