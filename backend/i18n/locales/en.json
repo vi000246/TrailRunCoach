@@ -2725,7 +2725,7 @@
   "負荷平衡（Load balance）{tsb:+.0f}：本週有你排入的 B2B，負荷平衡下降是預期的，不改成恢復週、量不砍（推估）": "Load balance {tsb:+.0f}: you scheduled a B2B this week, so the drop is expected — no recovery week, volume not cut (estimate)",
   "負荷平衡（Load balance）{tsb:+.0f}：上週末 B2B（{a}–{b}）造成的預期下降，只把之後 {n} 天排輕鬆、不改成恢復週，3:1 照常（推估）": "Load balance {tsb:+.0f}: the expected drop from last weekend's B2B ({a}–{b}) — only the next {n} {n|day|days} are easy, no recovery week, 3:1 as usual (estimate)",
   "{head}（不含賽後恢復期／轉換期 {n} 天）": "{head} (excluding {n} post-race recovery / transition days)",
-  "第 {n} 天比你走過最重的一天重 {pct:.0f} %（EP {ep:.1f}；你最重的一天 {date} EP {big:.1f}）": "Day {n} is {pct:.0f} % heavier than the heaviest day you have walked (EP {ep:.1f}; your heaviest day {date} EP {big:.1f})",
+  "第 {n} 天比你走過最吃力的一天多 {pct:.0f} %（EP {ep:.1f}；你最吃力的一天是 {date}，EP {big:.1f}）": "Day {n} is {pct:.0f} % more than your hardest day on foot (EP {ep:.1f}; your hardest was {date}, EP {big:.1f})",
   "第 {n} 天{what}：第 {m} 天腿可能還沒恢復，前 1 小時放慢（推估）": "Day {n}: {what} — on day {m} your legs may not have recovered; go slower for the first hour (estimate)",
   "背包下坡 {d:.0f} m": "{d:.0f} m downhill with the pack",
   "跟團在 AeT 以上超過 3 小時": "over 3 h above AeT following the group",

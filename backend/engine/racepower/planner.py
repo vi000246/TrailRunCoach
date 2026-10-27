@@ -1820,7 +1820,7 @@ def day_load(days: list, hdays: list, group: Optional[dict], warnings: list) -> 
         d["recovery"] = []
     for i, d in enumerate(days):
         if d["over_biggest"]:
-            warnings.append(H.tag("RC14", _("第 {n} 天比你走過最重的一天重 {pct:.0f} %（EP {ep:.1f}；你最重的一天 {date} EP {big:.1f}）",
+            warnings.append(H.tag("RC14", _("第 {n} 天比你走過最吃力的一天多 {pct:.0f} %（EP {ep:.1f}；你最吃力的一天是 {date}，EP {big:.1f}）",
                                              n=d["day"], pct=d["vs_biggest_pct"], ep=d["ep"], date=big.get("date") or "",
                                              big=big["ep"])))
         why = []

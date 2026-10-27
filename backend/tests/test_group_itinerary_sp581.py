@@ -55,7 +55,7 @@ def test_over_the_heaviest_day_and_after_a_big_descent_a_reminder():
     d1, d2 = p["days"]
     assert d1["over_biggest"] and d1["vs_biggest_pct"] > 0
     txt = " ".join(str(w.get("text") if isinstance(w, dict) else w) for w in p["warnings"])
-    assert f"第 1 天比你走過最重的一天重 {d1['vs_biggest_pct']:.0f} %" in txt
+    assert f"第 1 天比你走過最吃力的一天多 {d1['vs_biggest_pct']:.0f} %" in txt
     # a big descent on day 1 (two days down the same slope) flags day 2
     q = plan(splits=(12.0,), hdays=small)
     a, b = q["days"]
@@ -90,4 +90,4 @@ def test_the_page_and_both_languages():
         c = json.loads((ROOT / f"backend/static/i18n/{loc}/racepower.json").read_text("utf-8"))
         assert all(c[f"dl.{k}"] for k in ("vs", "down", "tip", "rec", "rec_tip", "ref", "noref"))
     en = json.loads((ROOT / "backend/i18n/locales/en.json").read_text("utf-8"))
-    assert en["第 {n} 天比你走過最重的一天重 {pct:.0f} %（EP {ep:.1f}；你最重的一天 {date} EP {big:.1f}）"].startswith("Day {n}")
+    assert en["第 {n} 天比你走過最吃力的一天多 {pct:.0f} %（EP {ep:.1f}；你最吃力的一天是 {date}，EP {big:.1f}）"].startswith("Day {n}")
