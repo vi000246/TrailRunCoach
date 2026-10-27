@@ -64,7 +64,7 @@ READS_OPEN = """
 /api/v1/plan/threshold-history /api/v1/plan/thresholds
 /api/v1/racepower/altitude-acclimatisation /api/v1/racepower/backtest /api/v1/racepower/cadence-check
 /api/v1/racepower/goal-basis /api/v1/racepower/grade-model /api/v1/racepower/heat-status /api/v1/racepower/hike-meta
-/api/v1/racepower/inputs /api/v1/racepower/page /api/v1/racepower/peaks /api/v1/racepower/saved/x
+/api/v1/racepower/inputs /api/v1/racepower/page /api/v1/racepower/peaks /api/v1/racepower/power-state /api/v1/racepower/saved/x
 /api/v1/racepower/solo-hikes /api/v1/racepower/surface/x /api/v1/racepower/weather
 /api/v1/routes /api/v1/routes/page /api/v1/routes/status /api/v1/routes/uploaded/page /api/v1/routes/x
 /api/v1/routes/x/compare

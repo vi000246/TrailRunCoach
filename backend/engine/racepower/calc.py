@@ -660,9 +660,12 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
     """The plan itself on a resolved course: v1 (the baseline / cross-check), the planner
     (plan_hike / plan_run, with the goal against the model in time / power mode) and the
     night marks; make_plan adds what is read from it (fuel, targets, reminders)."""
+    from backend.engine.racepower import nopower as NP
     from backend.engine.racepower import planner as PL
-    v1 = v1_for(ctx, body, course)
-    validated, effort_ok = ctx.flags()
+    # SP-953: the plan's one power rule — ② (CP stale) / ③ (no power meter): no power model at all
+    ps = NP.state_of(ctx) if body.type != "baiyue" else None
+    nopow = NP.off(ps)
+    v1 = None if nopow else v1_for(ctx, body, course)
     from backend.engine.racepower import night as NI
     stops_l = [x.model_dump() for x in body.stops]
     sun = [x.model_dump() for x in body.sun] if body.sun else \
@@ -671,8 +674,27 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
     def night(p: dict, mode: str) -> dict:
         return NI.apply(p, date=body.date, start_time=body.start_time, stops=stops_l, sun=sun,
                         slow_pct=body.night_slow_pct, mode=mode)
-    gm = ctx.grade_models()
     opts = body.model_dump()
+    if nopow:
+        opts["locks"] = []
+        opts["stops"] = stops_l
+        opts["hourly"] = [x.model_dump() for x in body.hourly or []]
+        if body.heat_acclimatisation:
+            opts["heat_status"] = {**ctx.heat_status(body.date), "hrc_test": ctx.hrc_test()}
+        if body.type == "trail":
+            opts["stop_kind"] = stop_kind(ctx, body)
+            pm = getattr(ctx, "place_memory", None)
+            if pm is not None and course.get("source") == "gpx":
+                try:
+                    opts["memory"] = pm(course, ctx.trail_hr())
+                except Exception:           # noqa: BLE001 — the plan stands without it
+                    opts["memory"] = None
+        out = night(NP.plan(ctx, body, course, opts, ps), "time" if body.mode == "time" else "auto")
+        out.update(course_source=course.get("source"),
+                   course_id=body.course.course_id if body.course else None, course_name=course.get("name"))
+        return out
+    validated, effort_ok = ctx.flags()
+    gm = ctx.grade_models()
     opts["locks"] = [x.model_dump() for x in body.locks]
     opts["stops"] = [x.model_dump() for x in body.stops]
     opts["hourly"] = [x.model_dump() for x in body.hourly or []]

@@ -40,7 +40,10 @@
   const rowAt = (P, km) => rowsOf(P).find((r) => km >= r.start_km && km <= r.end_km);
   // the measures a plan can show (百岳: no power; a share made before SP-784 without a heart-rate cap: no HR)
   const HAS = { pace: () => true, power: (r) => r.power || r.power_ref, hr: (r) => r.hr_cap || r.hr_ref };
-  const measures = (P) => ["pace", "power", "hr"].filter((k) => !(k === "power" && P.type === "baiyue") && rowsOf(P).some(HAS[k]));
+  const measures = (P) => ["pace", "power", "hr"].filter((k) => (k === "power" ? hasPower(P) : rowsOf(P).some(HAS[k])));
+  // SP-953: a plan with power — power was in effect (engine/power_state.py ①); without it (② CP stale, ③ no
+  // power meter: P.power_off, or no row with a power) there is no power column, line or hover text at all
+  const hasPower = (P) => P.type !== "baiyue" && !P.power_off && rowsOf(P).some(HAS.power);
 
   // a measure that is not a valid target on a segment (trail: power on steep climbs / descents, HR on
   // descents) is written as a grey 「參考」 (seg_targets.chart_rows power_ref / hr_ref), never left blank
@@ -105,10 +108,10 @@
 
   // the hover text of one segment; `more(r)`: the page's own lines under it (the calculator: the group's leg)
   function rowTip(P, r, more) {
-    const hike = P.type === "baiyue";
+    const pw = hasPower(P);
     const lines = [`<b>${r.mark} ${esc(r.label)}</b>${r.walk ? ` <span class="badge watch">${esc(T("walk"))}</span>` : r.gait === "either" ? ` <span class="badge">${esc(T("gait.either"))}</span>` : ""}`,
       `${f1(r.start_km)}–${f1(r.end_km)} km · ${f1((r.grade || 0) * 100)}% · ↑${n0(r.gain_m)} ↓${n0(r.loss_m)} m`,
-      `${T("m.pace")} ${fmtRow(r, "pace")}${hike ? "" : ` · ${T("m.power")} ${fmtRow(r, "power", true)}`} · ${T("m.hr")} ${fmtRow(r, "hr", true)}`,
+      `${T("m.pace")} ${fmtRow(r, "pace")}${pw ? ` · ${T("m.power")} ${fmtRow(r, "power", true)}` : ""} · ${T("m.hr")} ${fmtRow(r, "hr", true)}`,
       `${T("split")} ${dur(r.t)} · ${T("cum")} ${dur(r.cum_s)}${r.eta ? " · ETA " + esc(r.eta) : ""}${ok(r.temp_c) ? ` · ${f1(r.temp_c)} °C` : ""}`];
     if (r.basis === "safe") lines.push(esc(T("safe")));
     if (r.fuel) lines.push("🍬 " + esc(r.fuel));
@@ -222,24 +225,24 @@
   function table(P, o = {}) {
     const R = rowsOf(P);
     if (!R.length) return "";
-    const hike = P.type === "baiyue", m = o.measure || "pace", sel = o.sel || new Set();
+    const hike = P.type === "baiyue", noPw = !hasPower(P), m = o.measure || "pace", sel = o.sel || new Set();   // noPw: no power column (SP-953)
     const nightCol = !!P.night;           // SP-254: only with a start time and sunrise / sunset
     const th = (k, lab) => `<th class="n opt ${m === k ? "cur" : ""}">${esc(lab)}</th>`;
     const td = (k, r) => `<td class="n opt ${m === k ? "cur" : ""}">${fmtRow(r, k)}</td>`;
     // SP-485: 「看 30 秒平均功率」 (RC26) is the power column's ? instead of a line under the table
-    const thp = hike ? "" : th("power", T("m.power")).replace("</th>", `${help(esc(T("p30.tip")))}</th>`);
+    const thp = noPw ? "" : th("power", T("m.power")).replace("</th>", `${help(esc(T("p30.tip")))}</th>`);
     let h = `<table><thead><tr><th>#</th><th class="n">km</th><th class="n">${esc(T("grade"))}</th>${th("pace", T("m.pace"))}${thp}${th("hr", T("m.hr"))}` +
       `<th class="n">${esc(T("split"))}</th><th class="n">${esc(T("cum"))}</th>${nightCol ? `<th>${esc(T("night.col"))}</th>` : ""}<th>${esc(T("fuel"))}</th></tr></thead><tbody>`;
     for (const r of R) {
       h += `<tr data-row="${r.i}" class="${sel.has(r.i) ? "hl" : ""}" title="${esc(r.label)}${r.hr_cap_src ? " · " + esc(T("hrcap_src", { src: r.hr_cap_src })) : ""}">
         <td>${r.mark}${hike && r.day ? ` <span class="faint">D${r.day}</span>` : ""}</td><td class="n">${f1(r.start_km)}–${f1(r.end_km)}</td>
-        <td class="n ${r.walk ? "walk" : ""}">${f1((r.grade || 0) * 100)}%${r.walk ? " " + esc(T("walk")) : r.gait === "either" ? " " + esc(T("gait.either")) : ""}${climbIn(P, r).length ? ` <span class="climb" title="${esc(climbIn(P, r).map((c) => T("climb.row", { a: f1(c.start_km), b: f1(c.end_km) })).join("\n"))}">🧗</span>` : ""}</td>${td("pace", r)}${hike ? "" : td("power", r)}${td("hr", r)}
+        <td class="n ${r.walk ? "walk" : ""}">${f1((r.grade || 0) * 100)}%${r.walk ? " " + esc(T("walk")) : r.gait === "either" ? " " + esc(T("gait.either")) : ""}${climbIn(P, r).length ? ` <span class="climb" title="${esc(climbIn(P, r).map((c) => T("climb.row", { a: f1(c.start_km), b: f1(c.end_km) })).join("\n"))}">🧗</span>` : ""}</td>${td("pace", r)}${noPw ? "" : td("power", r)}${td("hr", r)}
         <td class="n">${dur(r.t)}</td><td class="n">${dur(r.cum_s)}${r.eta ? ` <span class="faint">${esc(r.eta)}</span>` : ""}</td>
         ${nightCol ? `<td>${r.night ? "🌙" : ""}</td>` : ""}<td class="fuel">${esc(r.fuel || "")}${o.cell ? o.cell(r) : ""}</td></tr>`;
     }
     const s = P.summary;
     h += `<tr class="center"><td colspan="2">${esc(T("total"))}</td><td></td><td class="n opt ${m === "pace" ? "cur" : ""}">${pace(s.pace_s_per_km || (s.time_s / s.km))}</td>` +
-      `${hike ? "" : `<td class="n opt ${m === "power" ? "cur" : ""}">${W(s.power)}</td>`}<td class="opt ${m === "hr" ? "cur" : ""}"></td><td class="n">${hms(s.time_s)}</td><td></td>${nightCol ? "<td></td>" : ""}<td></td></tr></tbody></table>`;
+      `${noPw ? "" : `<td class="n opt ${m === "power" ? "cur" : ""}">${W(s.power)}</td>`}<td class="opt ${m === "hr" ? "cur" : ""}"></td><td class="n">${hms(s.time_s)}</td><td></td>${nightCol ? "<td></td>" : ""}<td></td></tr></tbody></table>`;
     return h;
   }
 
@@ -297,5 +300,5 @@
   }
   style();
 
-  window.SegProfile = { MEASURE, measures, rowsOf, rowAt, fmtRow, rowTip, option, legend, table, buttons, climbs, memSpans, STYLE };
+  window.SegProfile = { MEASURE, measures, hasPower, rowsOf, rowAt, fmtRow, rowTip, option, legend, table, buttons, climbs, memSpans, STYLE };
 })();

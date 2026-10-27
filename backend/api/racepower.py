@@ -312,8 +312,38 @@ class LiveContext:
         with _courses_lock:
             return _courses.get(course_id)
 
+    def power_state(self) -> dict:
+        return power_state()
+
 
 LIVE = LiveContext()
+
+
+def power_state() -> dict:
+    """SP-953: today's 功率狀態 (engine/power_state.current — the plan's one rule: ① power only with a Stryd
+    and a CP test or race in the last 42 days), cached per dataset / day / plan like the inputs. Unreadable
+    data → the equipment alone (power_state.state)."""
+    from backend.engine import power_state as PST
+    from backend.engine.planning import Plan
+    today = today_local()
+    try:
+        ds = _dataset()
+        key = (*_tenancy.ds_key(ds), today, _plan_stamp())
+    except Exception:                       # noqa: BLE001 — no data yet
+        ds, key = None, None
+    hit = _cache.get("power_state")
+    if key is not None and hit and hit[0] == key:
+        ps = hit[1]
+    else:
+        plan = Plan.load()
+        try:
+            ps = PST.current(ds, today, plan) if ds is not None else PST.state(today, plan.profile)
+        except Exception:                   # noqa: BLE001 — the equipment only
+            ps = PST.state(today, plan.profile)
+        if key is not None:
+            _cache["power_state"] = (key, ps)
+    # the cache is shared by every language (SP-944): the texts in the request's
+    return {**ps, "label": _(PST.LABEL[ps["state"]]), "reason": PST.reason(ps)}
 
 
 def _calc(fn, *args):
@@ -344,11 +374,13 @@ def estimate(body: PlanIn):
     from backend.engine.race_feasibility import survey_hours
     from backend.engine.racepower import race_estimate as RX
     MS.use_calc(body)                        # SP-713: the calculator's count, once a route a day
-    if RX.has_cp(inputs(), body):
+    ps = power_state()
+    # SP-953: power not in effect (② / ③) — a CP on file does not bring the power model back
+    if ps.get("power") and RX.has_cp(inputs(), body):
         return {"available": False, "model": True}
     t = _calc(CALC.resolve_course, LIVE, body)["totals"]
     return RX.estimate(body.type, float(t.get("km") or 0.0), float(t.get("gain_m") or 0.0), RR.load(),
-                       today_local(), survey_hours())
+                       today_local(), survey_hours(), power_state=ps)
 
 
 @router.get("/page", include_in_schema=False)
@@ -887,19 +919,32 @@ def _goal_settings() -> tuple[Optional[str], Optional[bool], bool]:
             bool(read_setting("power.accept_watch_power", False)))
 
 
+@router.get("/power-state")
+async def get_power_state():
+    """SP-953: the power state the calculator plans with (power_state() — the same as /plan's): the page
+    hides every power input, card and column when power is not in effect and says which model it uses."""
+    import asyncio
+    return await asyncio.to_thread(power_state)
+
+
 @router.get("/goal-basis")
 async def goal_basis():
     """Which goal the page offers (engine/racepower/goal.py): hr → a target
     pace, power → a target power."""
+    import asyncio
     from backend.engine import athlete_profile as AP
     from backend.engine.racepower import goal as GOAL
     from backend.api.sync import _power_source
     from backend.engine import power_state as PST
     from backend.engine.planning import Plan
     tb, up, watch = _goal_settings()
+    ps = await asyncio.to_thread(power_state)
+    if not ps.get("power"):
+        # SP-950 / SP-953 ② CP 過期 or ③ 沒有功率計: a stored 目標依據 = 功率 / 使用功率 on is ignored (kept,
+        # not deleted) — the calculator follows the plan's rule
+        return GOAL.basis(None, False)
     src = (await _power_source())[0]
     if src == "none":
-        # SP-950 ③ 沒有功率計: a stored 目標依據 = 功率 / 使用功率 on is ignored (kept, not deleted)
         return GOAL.basis(None, False)
     if up is None and tb not in ("hr", "power"):
         up = AP.use_power(src, PST.accept_watch(Plan.load().profile, watch))

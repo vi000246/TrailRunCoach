@@ -555,8 +555,13 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
     rel = BAND_POWER * pw_share + BAND_MODEL * (1.0 - pw_share)
     fl = fletcher_check(segs, weight)
     if total and abs(total - fl["kcal"]) / fl["kcal"] > CROSS_TOL:
-        warnings.append(H.tag("RC22", _("熱量交叉檢查：功率法 {a:.0f} kcal 和 Fletcher 距離法 {b:.0f} kcal 差超過 15 %",
-                                        a=total, b=fl["kcal"])))
+        if pw_share > 0:
+            warnings.append(H.tag("RC22", _("熱量交叉檢查：功率法 {a:.0f} kcal 和 Fletcher 距離法 {b:.0f} kcal 差超過 15 %",
+                                            a=total, b=fl["kcal"])))
+        else:
+            # SP-953: no power on any segment (power not in effect): the heart-rate (Keytel) / distance method
+            warnings.append(H.tag("RC22", _("熱量交叉檢查：心率法 {a:.0f} kcal 和 Fletcher 距離法 {b:.0f} kcal 差超過 15 %",
+                                            a=total, b=fl["kcal"])))
     kj = sum(float(x.get("power") or 0) * float(x.get("t") or 0) for x in segs) / 1000.0
     keytel = None
     if hr_bpm and body_src["age"] != "推估":

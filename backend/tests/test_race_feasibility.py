@@ -554,13 +554,20 @@ def test_baiyue_checks_in_assess_never_over():
 
 
 def test_baiyue_inputs_need_a_power_meter():
+    """SP-953: W/kg only while power is in effect (power_state ①: a Stryd and a CP test or race in the last
+    42 days — the plan's rule; was: the legacy power_meter field and any CP row)."""
     from backend.engine.planning import Plan, Threshold, Weight
-    plan = Plan(events=[], thresholds=[Threshold(date="2026-01-01", cp=250.0)], weights=[Weight("2026-01-01", 65.0)])
+    plan = Plan(events=[], thresholds=[Threshold(date="2026-09-20", cp=250.0)], weights=[Weight("2026-01-01", 65.0)])
     e = trip()
+    plan.profile = {"power_source": "none"}
     climb, power = F.baiyue_inputs(plan, None, TODAY, e)
     assert climb is None and power is None                                          # no ds; no power meter
     plan.profile = {"power_meter": "stryd"}
     assert F.baiyue_inputs(plan, None, TODAY, e)[1] == {"cp": 250.0, "kg": 65.0}
+    plan.profile = {"power_source": "stryd"}         # saving 功率來源 clears power_meter: a Stryd runner still sees it
+    assert F.baiyue_inputs(plan, None, TODAY, e)[1] == {"cp": 250.0, "kg": 65.0}
+    plan.thresholds = [Threshold(date="2026-01-01", cp=250.0)]                      # ② the CP is stale: no W/kg
+    assert F.baiyue_inputs(plan, None, TODAY, e)[1] is None
 
 
 # ---- SP-220: the cutoff of a trail race = the calculator's moving time + the stops ----------------

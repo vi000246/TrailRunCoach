@@ -11,7 +11,8 @@ system (zones.HR_SYSTEMS) at the race HR the calculator itself predicts
 `hr_bar` is what the page needs for the heart-rate version; the page picks the
 system (default = the 課表心率區間 model, hr_profile.plan_model, so there is no
 second place to set it) and falls back to the power bar with `reason` when there
-is no predicted HR (road: the road prediction is power only).
+is no predicted HR (road: the road prediction is power only). SP-953: power not in
+effect (plan["power_off"]) — the reason says so and the page shows no power bar.
 """
 from __future__ import annotations
 
@@ -28,6 +29,9 @@ SHORT = {"frielhr": "Friel", "classichr": "Classic"}
 NO_HR_ROAD = N_("路跑的預估只算功率，沒有平均心率，所以用功率區間")
 NO_HR_LTHR = N_("沒有 LTHR，算不出這場的平均心率，所以用功率區間")
 NO_HR_MODEL = N_("越野心率配速模型算不出這場的平均心率，所以用功率區間")
+# SP-953: power not in effect (power_state ② / ③) — no power zones to fall back on
+NO_HR_OFF_ROAD = N_("路跑用比賽成績推估，沒有預測平均心率，所以沒有區間")
+NO_HR_OFF = N_("算不出這場的平均心率（沒有 LTHR 或越野心率配速模型），所以沒有區間")
 
 
 def hr_systems(lthr: Optional[float], mhr: Optional[float] = None, rhr: Optional[float] = None,
@@ -85,8 +89,11 @@ def hr_bar(plan: dict, lthr: Optional[float], basis: Optional[dict] = None) -> d
     b = basis or {}
     hr, src = WE.race_hr(plan, {"lthr": lthr})
     reason = None
-    if hr is None:
+    off = bool(plan.get("power_off"))
+    if hr is None and off:
+        reason = _(NO_HR_OFF_ROAD) if plan.get("type") == "road" else _(NO_HR_OFF)
+    elif hr is None:
         reason = _(NO_HR_ROAD) if plan.get("type") == "road" else _(NO_HR_LTHR) if not lthr else _(NO_HR_MODEL)
-    return {"hr": round(hr, 1) if hr else None, "hr_source": src, "reason": reason,
+    return {"hr": round(hr, 1) if hr else None, "hr_source": src, "reason": reason, "power_off": off,
             "default": SYSTEM_OF_MODEL.get(b.get("model") or "", DEFAULT_SYSTEM),
             "systems": hr_systems(lthr, b.get("mhr"), b.get("rhr"), b.get("acc"))}

@@ -85,7 +85,7 @@ READ_OPEN = _rx(
     r"/api/v1/plan(?:/page|/events/[^/]+/gpx(?:/preview)?|/thresholds|/profile|/profile/detect|/profile/hint-level"
     r"|/hr-profile|/power-zones|/pmc-start|/race-pace|/threshold-(?:estimate|history|check))?",
     r"/api/v1/racepower/(?:page|inputs|peaks|weather|grade-model|cadence-check|heat-status|altitude-acclimatisation"
-    r"|hike-meta|solo-hikes|goal-basis|backtest|surface/[^/]+|saved/[^/]+)",
+    r"|hike-meta|solo-hikes|goal-basis|power-state|backtest|surface/[^/]+|saved/[^/]+)",
     r"/api/v1/routes(?:/status|/page|/uploaded/page|/[^/]+|/[^/]+/compare)?",
     r"/api/v1/intro/.+",
     r"/api/v1/wko5/.+",                 # the old prefix: a 308 to /api/v1/app/…, checked again there

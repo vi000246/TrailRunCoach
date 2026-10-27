@@ -131,6 +131,13 @@ def snapshot(plan: dict, *, title: str, include_weight: bool = False, expires_da
         "profile": {"km": prof["km"], "z": prof["z"]} if prof and prof.get("km") else None,
         "fuel": fuel,
     }
+    if plan.get("power_off"):
+        # SP-953: power not in effect — no power, % CP, W/kg anywhere (the plan has none); which model it was
+        out["power_off"] = True
+        out["cp"] = None
+        out["summary"].pop("w_per_kg", None)
+        m = plan.get("model") or {}
+        out["model"] = {"kind": m.get("kind"), "label": m.get("label")}
     if cairn_curve:
         out["cairn_curve"] = cairn_curve
     # SP-728: the 攀爬段 on the elevation chart and the cross-validation's shares (not how many runs)

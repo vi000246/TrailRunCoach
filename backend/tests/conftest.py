@@ -319,6 +319,19 @@ def _hr_zone_model_default_lthr(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _calculator_power_state_default(monkeypatch):
+    """SP-953 made the race calculator follow the plan's power rule (engine/power_state.py: power only with a
+    Stryd and a CP test or race in the last 42 days). The suite's calculator fixtures were written for the
+    power model: they keep ① (power in effect) unless a test sets the state (test_racepower_nopower_sp953
+    tests ② / ③ itself)."""
+    import datetime as dt
+    from backend.api import racepower as RP
+    from backend.engine import power_state as PST
+    ps = PST.state(dt.date(2026, 10, 1), {"power_source": "stryd"}, last_cp_test="2026-09-20")
+    monkeypatch.setattr(RP, "power_state", lambda: ps)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_hike_meta(monkeypatch, tmp_path_factory):
     """The per-activity pack (racepower_hike_meta.json; racepower/athlete.py)
     is never read from or written to ~/.wko5coach in tests."""

@@ -74,9 +74,13 @@ SP-291, the level the plan and the status page read too):
            of body weight = 475 → 430 → 395 m/h, 推估) when the event has one. ≤ steady ok, else tight.
            The text shows both rates and says the level compares 走得順 — above it only 有點趕 (SP-545).
            A multi-day 百岳 (baiyue_multiday, SP-545) uses need ÷ 走得辛苦 as one effort item, with a turnaround only.
-  power    with a running power meter (plan profile power_meter + a CP): CP ÷ body weight ≥ 1.5 W/kg
+  power    while power is in effect (SP-953, engine/power_state.py ①: a Stryd and a CP test or race in
+           the last 42 days — the plan's one rule): CP ÷ body weight ≥ 1.5 W/kg
            ok, else tight (Burtscher 2004: a pack at 300 m/h up to 3,500 m needs ~1.2–1.5 W/kg below
-           the anaerobic threshold). Not shown without a power meter.
+           the anaerobic threshold). Not shown in ② / ③ (CP stale, no power meter).
+SP-953: power not in effect → a trail race's moving time is the calculator's HR pace model directly
+(engine/racepower/nopower.py; before, the power model had to succeed first), else its race-results
+estimate; race_refs.calculator_hours takes the same route.
 
 The long day is shown, not graded (Koop: 20–80 % of the race; past ~6 h coaches stop the
 long run — §1). C races are training days: not assessed.
@@ -553,14 +557,22 @@ def cutoff_finish(finish: dict, line_h: float, cut: float) -> tuple[float, str, 
         txt = _("照現在的體能，預估移動 {m:.1f} 小時；關門是 {c:g} 小時", m=moving, c=cut)
         txt += _("。沒有算停留：在賽事計算機的補給站填停留分鐘，或累積 2 場以上的越野比賽紀錄，就會算進來")
     eff = finish.get("effort")
+    est = finish.get("method") == "race_estimate"
     if mv and eff and abs(float(eff) - 1.0) > 1e-9:
         txt += _("。用賽事計算機的努力目標 {p:.0%}", p=float(eff))
+    if mv and est:
+        txt += "。" + _("還沒有越野心率配速模型，移動時間用賽事計算機的比賽成績推估（不用功率）")
     if not mv:
-        txt += ("。" + (_("沒有越野心率配速模型，移動時間退回舊的功率模型（CP＋Riegel），越野上常算得太快")
-                       if finish.get("fallback") == "power" else
-                       _("沒有越野心率配速模型，移動時間用賽季計畫填的預估時間")))
+        # SP-953: the reason the calculator gave no HR pace time — the model is missing only when the plan ran
+        # with another total; a failed plan (e.g. the power model without a CP) says its own reason
+        why = finish.get("why")
+        head = (_("賽事計算機算不出這場的移動時間（{why}）", why=why) if why else
+                _("沒有越野心率配速模型"))
+        txt += ("。" + head + (_("，移動時間退回舊的功率模型（CP＋Riegel），越野上常算得太快")
+                               if finish.get("fallback") == "power" else
+                               _("，移動時間用賽季計畫填的預估時間")))
     kw = {"moving_h": round(moving, 2), "stop_h": round(stop, 2), "stop_src": src,
-          "time_method": "trail_hr" if mv else (finish.get("fallback") or "plan")}
+          "time_method": ("race_estimate" if est else "trail_hr") if mv else (finish.get("fallback") or "plan")}
     return fin, txt, kw
 
 
@@ -983,7 +995,7 @@ def event_summit(e, course: dict, hours: Optional[list[float]]) -> Optional[dict
 
 def baiyue_inputs(plan, ds, today: dt.date, e) -> tuple[Optional[dict], Optional[dict]]:
     """(climb, power) for a 百岳's assess(): the hikehr windows' rates, the GPX's top, the body weight;
-    CP ÷ weight only with a running power meter in the profile and a CP row. Errors → None."""
+    CP ÷ weight only while power is in effect (SP-953, power_state ①) and with a CP. Errors → None."""
     climb = power = None
     kg = plan.weight_on(today) if plan is not None else None
     try:
@@ -1002,8 +1014,16 @@ def baiyue_inputs(plan, ds, today: dt.date, e) -> tuple[Optional[dict], Optional
         climb = {"rates": climb_rates(wins, (wc or {}).get("value")), "top_m": top, "weight": kg}
     except Exception:                       # noqa: BLE001 — the other checks still run
         climb = None
-    cp = plan.threshold_on("cp", today) if plan is not None else None
-    if (getattr(plan, "profile", None) or {}).get("power_meter") and cp and kg:
+    # SP-953: W/kg only while power is in effect (power_state ①: a Stryd and a CP test or race in the last
+    # 42 days) — the plan's one rule. It read the legacy `power_meter`, which saving 功率來源 clears
+    # (api/plan.put_profile), so a Stryd runner never saw this check.
+    from backend.engine import power_state as PST
+    try:
+        ps = PST.current(ds, today, plan) if plan is not None else None
+    except Exception:                       # noqa: BLE001 — unreadable: no power check
+        ps = None
+    cp = (plan.threshold_on("cp", today) if plan is not None else None) or (ps or {}).get("cp")
+    if ps and ps.get("power") and cp and kg:
         power = {"cp": float(cp), "kg": float(kg)}
     return climb, power
 
@@ -1093,7 +1113,8 @@ def trail_finish(e, course: dict, plan_fn: Optional[Callable] = None) -> dict:
     user_min = sum(s["minutes"] for s in stops)
     eff = calc_effort(inp)
     out = {"moving_h": None, "stop_h": user_min / 60.0, "stop_src": "user" if user_min > 0 else None,
-           "stop_user_min": user_min, "effort": eff, "short_min": None, "n_runs": None}
+           "stop_user_min": user_min, "effort": eff, "short_min": None, "n_runs": None,
+           "method": None, "why": None}
     if plan_fn is None:
         def plan_fn(body):
             from backend.api import racepower as RP
@@ -1107,9 +1128,14 @@ def trail_finish(e, course: dict, plan_fn: Optional[Callable] = None) -> dict:
                            event_id=getattr(e, "id", None),     # SP-721: a 越野賽 → the race stops
                            **calc_night(inp))
         s = plan_fn(body).get("summary") or {}
-    except Exception:                       # noqa: BLE001 — no CP / RE / course: the old moving time
+    except Exception as ex:                 # noqa: BLE001 — no CP / RE / course: the old moving time
+        # SP-953: say why (it said 「沒有越野心率配速模型」 even when the model was there and the power
+        # model's CP was what failed)
+        out["why"] = str(getattr(ex, "detail", None) or ex) or None
         return out
-    if s.get("total_method") == "trail_hr" and s.get("time_s"):
+    out["method"] = s.get("total_method")
+    if s.get("total_method") in ("trail_hr", "race_estimate") and s.get("time_s"):
+        # the HR pace model; SP-953: without power and without that model, the calculator's race-results estimate
         out["moving_h"] = float(s["time_s"]) / 3600.0
     nm = s.get("nonmoving")
     if nm and nm.get("total_s") is not None:
@@ -1153,7 +1179,10 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
                 # piece (owner 2026-10-06: not only the cutoff) + the stops for the cutoff; a stage
                 # race keeps the old hours
                 fin = finish(e, course) or {"moving_h": None}
-                if fin.get("moving_h"):
+                if fin.get("moving_h") and fin.get("method") == "race_estimate":
+                    # SP-953: power not in effect and no trail HR model yet — the calculator's race-results estimate
+                    hs, src = [float(fin["moving_h"])], _("賽事計算機用比賽成績推估的時間（還沒有越野心率配速模型）")
+                elif fin.get("moving_h"):
                     hs, src = [float(fin["moving_h"])], _("賽事計算機的越野心率配速模型（移動時間）")
                 else:
                     fin["fallback"] = "power" if hs else "plan"

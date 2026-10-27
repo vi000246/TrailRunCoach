@@ -169,10 +169,16 @@ def hardest_stretch_note(line: dict) -> Optional[str]:
 
 def calculator_hours(e, course: Optional[dict] = None) -> Optional[list[float]]:
     """Moving hours per day from the race calculator (POST /racepower/predict with the
-    course's distance / climb / descent / days), None when it can't predict (no CP, no RE, …)."""
+    course's distance / climb / descent / days), None when it can't predict (no CP, no RE, …).
+    SP-953: power not in effect (power_state ② / ③) → a road / trail race takes the calculator's own
+    route without power (POST /plan: the trail HR pace model, else the race-results estimate), never
+    the power model's v1."""
     from backend.api import racepower as RP
     course = course or plan_course(e)
     t, days = course["totals"], course["days"]
+    kind = CALC_TYPE.get(e.kind, "trail")
+    if kind != "baiyue" and not (RP.power_state() or {}).get("power", True):
+        return nopower_hours(e, course, kind)
     try:
         body = RP.PredictIn(type=CALC_TYPE.get(e.kind, "trail"), distance_km=float(t["km"]),
                             gain_m=float(t["gain_m"] or 0.0),
@@ -189,6 +195,29 @@ def calculator_hours(e, course: Optional[dict] = None) -> Optional[list[float]]:
         tt = res.get("time_s")
         hs = [float(tt) / 3600.0] if tt else []
     return hs if hs and all(math.isfinite(h) and h > 0 for h in hs) else None
+
+
+def nopower_hours(e, course: dict, kind: str, plan_fn=None) -> Optional[list[float]]:
+    """SP-953: the moving hours of a road / trail race from the calculator without power (calc.make_plan →
+    engine/racepower/nopower.py) on the course's km / climb / descent: one total (a multi-day race is spread
+    by race_line as before); None when it can't (no trail HR model and no race result)."""
+    from backend.engine.racepower import calc as CALC
+    t = course["totals"]
+    if plan_fn is None:
+        def plan_fn(body):
+            from backend.api import racepower as RP
+            return CALC.make_plan(RP.LIVE, body)
+    try:
+        body = CALC.PlanIn(type=kind, mode="auto", date=e.date, distance_km=float(t["km"]),
+                           gain_m=float(t["gain_m"] or 0.0),
+                           course=CALC.CourseRef(manual={"km": float(t["km"]), "gain": float(t["gain_m"] or 0.0),
+                                                         "loss": None if course.get("descent_assumed") else float(t["loss_m"])}),
+                           event_id=getattr(e, "id", None))
+        tt = (plan_fn(body).get("summary") or {}).get("time_s")
+    except Exception:                       # noqa: BLE001 — the plan's own estimate is the fallback
+        return None
+    h = float(tt) / 3600.0 if tt else None
+    return [h] if h and math.isfinite(h) and h > 0 else None
 
 
 def spread(total_h: float, days: list[dict]) -> list[float]:

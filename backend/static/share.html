@@ -138,8 +138,9 @@ async function init() {
     if (ok(s.hr_cap)) h += tile(esc(JT("hr_cap")), n0(s.hr_cap) + " bpm", "AeT");
   } else {
     h += tile(esc(JT("finish")), hms(s.time_s), s.finish_eta ? esc(JT("arrive", { t: s.finish_eta })) : "", true);
-    h += tile(esc(JT("avg_power")), ok(s.power) ? n0(s.power) + " W" : "–", `${pct(s.pct_cp)} CP${ok(s.w_per_kg) ? ` · ${s.w_per_kg.toFixed(2)} W/kg` : ""}`);
-    h += tile(esc(JT("avg_pace")), pace(s.pace_s_per_km), "");
+    // SP-953: a plan made while power was not in effect has no power, % CP or W/kg — no power tile
+    if (ok(s.power)) h += tile(esc(JT("avg_power")), n0(s.power) + " W", `${pct(s.pct_cp)} CP${ok(s.w_per_kg) ? ` · ${s.w_per_kg.toFixed(2)} W/kg` : ""}`);
+    h += tile(esc(JT("avg_pace")), pace(s.pace_s_per_km), S.model?.label ? esc(S.model.label) : "");
   }
   if (S.effort?.label) h += tile(esc(JT("effort")), esc(S.effort.label), ok(S.effort.f) ? pct(S.effort.f) : ok(S.effort.r) ? pct(S.effort.r) : "");
   if (ok(I.temp_c)) h += tile(esc(JT("race_day")), `${f1(I.temp_c)} °C`, ok(I.rh_pct) ? esc(JT("humidity", { rh: n0(I.rh_pct) })) : "");
@@ -244,8 +245,9 @@ function fuelHtml(S) {
 
 function splitsHtml(S) {
   const segs = S.segments || []; if (!segs.length) return "";
-  return `<section><h2>${esc(JT("splits"))}</h2><div class="tablewrap"><table><thead><tr><th>#</th><th class="n">km</th><th class="n">${esc(JT("th.power"))}</th><th class="n">${esc(JT("th.pace"))}</th><th class="n">${esc(JT("th.split"))}</th><th class="n">${esc(JT("th.cum"))}</th><th class="n">ETA</th><th>${esc(JT("th.fuel"))}</th></tr></thead><tbody>` +
-    segs.map((x) => `<tr><td>${x.i}</td><td class="n">${f1(x.start_km)}–${f1(x.end_km)}</td><td class="n">${ok(x.power) ? n0(x.power) + " W" : "–"}</td><td class="n">${pace(x.pace_s_per_km)}</td>
+  const pw = segs.some((x) => ok(x.power));               // SP-953: no power column without power
+  return `<section><h2>${esc(JT("splits"))}</h2><div class="tablewrap"><table><thead><tr><th>#</th><th class="n">km</th>${pw ? `<th class="n">${esc(JT("th.power"))}</th>` : ""}<th class="n">${esc(JT("th.pace"))}</th><th class="n">${esc(JT("th.split"))}</th><th class="n">${esc(JT("th.cum"))}</th><th class="n">ETA</th><th>${esc(JT("th.fuel"))}</th></tr></thead><tbody>` +
+    segs.map((x) => `<tr><td>${x.i}</td><td class="n">${f1(x.start_km)}–${f1(x.end_km)}</td>${pw ? `<td class="n">${ok(x.power) ? n0(x.power) + " W" : "–"}</td>` : ""}<td class="n">${pace(x.pace_s_per_km)}</td>
       <td class="n">${dur(x.t)}</td><td class="n">${dur(x.cum_s)}</td><td class="n">${esc(x.eta || "")}</td><td class="act">${esc(x.fuel_action || "")}</td></tr>`).join("") + `</tbody></table></div></section>`;
 }
 
@@ -262,12 +264,14 @@ function drawProfile(S) {
   const st = (S.inputs?.stops || []).filter((x) => x.km > 0 && x.km < km);
   if (pr && st.length) series.push({ type: "scatter", data: st.map((x) => [x.km, zAt(x.km)]), symbol: "pin", symbolSize: 24, itemStyle: { color: css("--s3") },
     label: { show: true, formatter: (p) => (STOP[st[p.dataIndex].type] || STOP.aid)[1], fontSize: 11 } });
-  if (!pr) series.push({ type: "line", data: segs.flatMap((s) => [[s.start_km, s.power], [s.end_km, s.power]]), symbol: "none", lineStyle: { color: css("--accent") } });
+  // no elevation: the power line, or the pace when the plan has no power (SP-953)
+  const pwr = segs.some((s) => ok(s.power)), val = (s) => pwr ? s.power : s.pace_s_per_km;
+  if (!pr) series.push({ type: "line", data: segs.flatMap((s) => [[s.start_km, val(s)], [s.end_km, val(s)]]), symbol: "none", lineStyle: { color: css("--accent") } });
   const c = echarts.init($("profile"));
   c.setOption({ animation: false, grid: { left: 46, right: 16, top: 20, bottom: 28 },
     tooltip: { trigger: "axis", confine: true, formatter: (ps) => { const k = ps[0].value[0]; const s = segs.find((x) => k >= x.start_km && k <= x.end_km);
-      return s ? `<b>${s.target ? s.target.mark + " " : ""}${esc(s.cls_label || "")}</b> ${f1(s.start_km)}–${f1(s.end_km)} km<br>${esc(s.target ? s.target.text : (ok(s.power) ? n0(s.power) + " W" : ""))}<br>⏱ ${dur(s.t)}${s.eta ? " · " + esc(s.eta) : ""}` : ""; } },
-    xAxis: { type: "value", min: 0, max: km, name: "km", ...ax(), axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => +v.toFixed(1), showMaxLabel: false } }, yAxis: { type: "value", scale: true, name: pr ? "m" : "W", ...ax() }, series });
+      return s ? `<b>${s.target ? s.target.mark + " " : ""}${esc(s.cls_label || "")}</b> ${f1(s.start_km)}–${f1(s.end_km)} km<br>${esc(s.target ? s.target.text : (ok(s.power) ? n0(s.power) + " W" : pace(s.pace_s_per_km)))}<br>⏱ ${dur(s.t)}${s.eta ? " · " + esc(s.eta) : ""}` : ""; } },
+    xAxis: { type: "value", min: 0, max: km, name: "km", ...ax(), axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => +v.toFixed(1), showMaxLabel: false } }, yAxis: { type: "value", scale: true, name: pr ? "m" : pwr ? "W" : "s/km", inverse: !pr && !pwr, ...ax() }, series });
   new ResizeObserver(() => c.resize()).observe($("profile"));
 }
 init();

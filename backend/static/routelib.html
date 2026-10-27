@@ -230,15 +230,17 @@ function courseTable(b) {
   const e = (x) => (x.est || {})[lv.key] || {};
   const w = (x) => { const v = e(x); return v.power ? `${v.power} W` : v.power_ref ? `<span class="ref">${v.power_ref} W ${esc(T("crs_ref"))}</span>` : "–"; };
   const climbs = b.climbs || [], segs = b.segments || [], rule = b.rule || {};
+  // SP-953: no power column when power is not in effect (the plan's rule: the step context has no CP, so no segment has one)
+  const pw = segs.some((x) => e(x).power || e(x).power_ref);
   return `<div class="crs"><div class="meta">${esc(T("crs_at", { lv: lv.label || "", p: pace(lv.flat_pace_s_per_km) }))}${lv.power ? ` · ${esc(T("crs_power", { w: lv.power }))}` : ""}</div>` +
     `<h3>${esc(T("crs_climbs"))}</h3>` + (climbs.length ? `<div class="tw"><table><thead><tr><th>#</th><th class="km">km</th><th>${esc(T("crs_dist"))}</th><th>${esc(T("crs_gain"))}</th><th>${esc(T("crs_grade_avg"))}</th><th>${esc(T("crs_pace"))}</th><th>${esc(T("crs_time"))}</th><th>${esc(T("crs_label"))}</th></tr></thead><tbody>` +
       climbs.map((c) => `<tr class="climb"><td>⛰ ${c.no}</td><td class="km">${(+c.start_km).toFixed(2)}–${(+c.end_km).toFixed(2)}</td><td>${Math.round(c.dist_m)} m</td><td>+${Math.round(c.gain_m)} m</td><td>${pct(c.grade)}</td>` +
         `<td>${pace(e(c).pace_s_per_km)}/km</td><td>${hms(e(c).t_s)}</td><td>${esc(c.label || "")}</td></tr>`).join("") + `</tbody></table></div>`
       : `<p class="meta">${esc(T("crs_no_climb"))}</p>`) +
-    `<details${segs.length <= 12 ? " open" : ""}><summary>${esc(T("crs_segs_n", { n: segs.length }))}</summary><div class="tw"><table><thead><tr><th>#</th><th class="km">km</th><th>${esc(T("crs_dist"))}</th><th>${esc(T("crs_updown"))}</th><th>${esc(T("crs_grade"))}</th><th>${esc(T("crs_kind"))}</th><th>${esc(T("crs_pace"))}</th><th>${esc(T("crs_time"))}</th><th>${esc(T("crs_w"))}</th></tr></thead><tbody>` +
+    `<details${segs.length <= 12 ? " open" : ""}><summary>${esc(T("crs_segs_n", { n: segs.length }))}</summary><div class="tw"><table><thead><tr><th>#</th><th class="km">km</th><th>${esc(T("crs_dist"))}</th><th>${esc(T("crs_updown"))}</th><th>${esc(T("crs_grade"))}</th><th>${esc(T("crs_kind"))}</th><th>${esc(T("crs_pace"))}</th><th>${esc(T("crs_time"))}</th>${pw ? `<th>${esc(T("crs_w"))}</th>` : ""}</tr></thead><tbody>` +
       segs.map((x) => `<tr><td>${x.i}${x.climb_no ? ` <span class="faint">⛰${x.climb_no}</span>` : ""}</td><td class="km">${(+x.start_km).toFixed(2)}–${(+x.end_km).toFixed(2)}</td><td>${Math.round(x.dist_m)} m</td>` +
         `<td>+${Math.round(x.gain_m)} / −${Math.round(x.loss_m)} m</td><td>${pct(x.grade)} <span class="faint">(${pct(x.max_grade)})</span></td><td class="k">${esc(x.kind_label || "")}</td>` +
-        `<td>${pace(e(x).pace_s_per_km)}/km</td><td>${hms(e(x).t_s)}</td><td>${w(x)}</td></tr>`).join("") + `</tbody></table></div></details>` +
+        `<td>${pace(e(x).pace_s_per_km)}/km</td><td>${hms(e(x).t_s)}</td>${pw ? `<td>${w(x)}</td>` : ""}</tr>`).join("") + `</tbody></table></div></details>` +
     `<p class="rule">${esc(T("crs_rule", { g: Math.round((rule.min_grade || 0) * 100), m: Math.round(rule.min_gain_m || 0), d: Math.round(rule.drop_m || 0), f: Math.round((rule.drop_frac || 0) * 100) }))}<br>${esc(b.note || "")}</p></div>`;
 }
 

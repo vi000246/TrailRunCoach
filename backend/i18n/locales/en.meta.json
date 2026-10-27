@@ -15986,5 +15986,121 @@
   "沒有功率計：一般跑步估不出 LTHR（要用功率判斷哪幾次夠硬）；LTHR 沿用目前的值，可以手動輸入或用比賽成績": {
     "draft": true,
     "src": "SP-950"
+  },
+  "不用功率時，越野要用越野心率配速模型（還沒有越野跑紀錄）或比賽成績推估：{reason}": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:40"
+  },
+  "分段時間照坡度換算配速分配（Minetti 的跑步坡度成本，推估）：整場時間不變，上坡段變長、緩下坡段變短": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:41"
+  },
+  "手動路線沒有坡度剖面：分段只是平均切開": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:42"
+  },
+  "越野心率配速模型": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:36"
+  },
+  "比賽成績推估": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:36"
+  },
+  "用越野心率配速模型算完賽時間與分段，不用功率：{why}": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:37"
+  },
+  "用比賽成績推估完賽時間（Riegel），分段照坡度換算配速，不用功率：{why}": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:38"
+  },
+  "還沒有越野心率配速模型（要有越野跑紀錄），先用比賽成績推估，不用功率：{why}": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:39"
+  },
+  "模式「目標時間」需要時間或配速": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:201"
+  },
+  "{n} 段的 ETA 超出逐時預報範圍：這些段用單一溫度 {t:.1f} °C": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:262"
+  },
+  "熱修正用單一溫度 {t:.1f} °C / 濕度 {rh:.0f} %（{why}）": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:264"
+  },
+  "，effort km {e:.1f}，": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:306"
+  },
+  "越野整場移動時間用心率配速模型（推估）：全力心率 {x:.0%} LTHR（{src}）": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:302"
+  },
+  "，熱 −{h:.1%}（你的 β）": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:304"
+  },
+  "用 {src} {race} 推算：Riegel（k {k:+.2f}，平路配速固定）→ 約 {t}。一場成績推另一個距離大約 ±5–8 %（推估）": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:49"
+  },
+  "用 {src} {race} 推算：平路輕鬆配速約 {pace} /km（E 配速 {fast}–{slow} 的中間，Daniels VDOT {vdot:.1f}），等效公里 {ekm:.1f}（km + 爬升 ÷ 100）× 配速 × 0.85 → 約 {t}。越野的這個算法是推估": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:50"
+  },
+  "；做一次 CP 測試就會改用功率模型": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:52"
+  },
+  "CP 過期：用你的比賽成績推估": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:48"
+  },
+  "沒有功率計：用你的比賽成績推估": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:48"
+  },
+  "路跑用比賽成績推估，沒有預測平均心率，所以沒有區間": {
+    "draft": false,
+    "src": "backend/engine/racepower/zonebar.py:33"
+  },
+  "算不出這場的平均心率（沒有 LTHR 或越野心率配速模型），所以沒有區間": {
+    "draft": false,
+    "src": "backend/engine/racepower/zonebar.py:34"
+  },
+  "熱量交叉檢查：心率法 {a:.0f} kcal 和 Fletcher 距離法 {b:.0f} kcal 差超過 15 %": {
+    "draft": false,
+    "src": "backend/engine/racepower/fuel.py:563"
+  },
+  "還沒有越野心率配速模型，移動時間用賽事計算機的比賽成績推估（不用功率）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:564"
+  },
+  "賽事計算機算不出這場的移動時間（{why}）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:569"
+  },
+  "沒有越野心率配速模型": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:570"
+  },
+  "，移動時間退回舊的功率模型（CP＋Riegel），越野上常算得太快": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:571"
+  },
+  "，移動時間用賽季計畫填的預估時間": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:573"
+  },
+  "賽事計算機用比賽成績推估的時間（還沒有越野心率配速模型）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:1184"
+  },
+  "不用功率時，路跑用比賽成績推估：{reason}": {
+    "draft": false,
+    "src": "backend/engine/racepower/nopower.py:41"
   }
 }

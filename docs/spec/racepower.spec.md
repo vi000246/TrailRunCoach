@@ -1,6 +1,6 @@
 # Module Spec: racepower
 
-> **Last Updated**: 2026-10-23
+> **Last Updated**: 2026-10-27
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -268,7 +268,47 @@ newest confirmed road race of the last 365 days:
   the race feasibility card, SP-292). No usable race: `{available: False, reason}` (where to add one).
 - The page asks it only after /plan failed with 400 on road / trail and shows the estimate (tile +
   推估 badge + the text); otherwise the error, plus the reason. The feasibility card and the plan's
-  `race_predict` (race_refs.calculator_hours → /predict) are unchanged.
+  `race_predict` (race_refs.calculator_hours → /predict) are unchanged. SP-953: in ② / ③ the same
+  estimate is /plan's own road route (next section), and the page no longer asks /estimate there.
+
+### Power not in effect: the plan's one rule (SP-953, `nopower.py`)
+
+The calculator follows the 課表's power rule (`engine/power_state.py`, SP-950; owner 2026-10-27, SP-950 Q2-2
+option (a)): power only in ① (a Stryd and a CP test or race in the last 42 days). `LiveContext.power_state`
+(`api/racepower.power_state`, cached per dataset / day / plan, texts per request) is today's state; also
+`GET /racepower/power-state` (open while a coach views). In ② (CP stale) / ③ (no power meter) a road /
+trail `/plan` never runs v1 or `plan_run` (`calc.solve` → `nopower.plan`):
+- **Trail**: the trail HR pace model's moving time directly (`planner.trail_hr_estimate`; before SP-953 it
+  was only reached after v1 succeeded, so no CP = no trail plan), ÷ the altitude M (÷ the full M when the
+  HR model's heat β does not apply); the segments get it by the grade-adjusted pace (tᵢ ∝ distᵢ × Minetti
+  cost(gᵢ) ÷ Mᵢ), then the athlete's own slope cost, place memory and fade as `plan_run` does with the HR
+  total; per-segment hourly heat as `plan_run`. No usable HR model → the race-results estimate below.
+- **Road**: `race_estimate.estimate` (Riegel from the newest road race) ÷ M is the main route, split by GAP
+  on a GPX course, evenly on a manual one. 努力目標 f: time ÷ f (推估).
+- Neither → 400 with the estimate's reason (where to add a race). Target time / pace mode compares with
+  the model (`goal`, `model_power` None); a body asking for the power goal is planned as the model.
+- The result keeps /plan's shape with every power field None (`summary.power / pct_cp / w_per_kg`,
+  segments' `power / pct_cp / zone`, no `used.cp / re / k`, `zones` []), `power_off` True, `power_state`,
+  and `model` {kind trail_hr | race_estimate, label, why (power_state.reason), line} — the page's line
+  「用越野心率配速模型算完賽時間與分段，不用功率：CP 已 N 天沒測…」. `effort.basis` hr (HR level) or race.
+- What follows from it: segment targets and chart rows have no power / power_ref (no CP), the watch export
+  no power legs, the share snapshot `power_off`, no `cp` / W/kg, `model` {kind, label}; `zonebar.hr_bar`
+  says why there is no HR (never the power zones); 補給 counts Keytel (HR) or Minetti × Fletcher, the
+  cross-check line says 心率法.
+- `/estimate`: a CP on file does not bring the model back in ② / ③; its title / text say 「CP 過期」 /
+  「沒有功率計」 instead of 「還沒有 CP…有 CP 之後」 (② adds 「做一次 CP 測試就會改用功率模型」).
+- `/goal-basis`: ② / ③ → hr (pace / time goals only).
+- Page (`racepower.html`): `body.nopow` hides every `.pw` element (策略, 坡道彈性, effort km 公式, 解除鎖定,
+  坡度 RE, CP, Riegel, RE, P³ 區間 sections); the power goal mode, power measure, power tile, % CP / 區 /
+  lock columns, power line under 努力度, 功率 ↔ 時間 table and v1 cross-checks are gone; 你的數據 shows the
+  model and LTHR; 準確度 drops the power-error column. `seg_profile.js` (`hasPower`) and `share.html` draw no
+  power column / line; routelib's 坡段表 drops its power column when no segment has one.
+- 賽事可行性 / race_refs: `race_refs.calculator_hours` takes the same route in ② / ③ (`nopower_hours` → /plan),
+  never /predict; `race_feasibility.trail_finish` takes the race-results time too (`method`), and a failed
+  plan's reason (`why`) replaces the wrong 「沒有越野心率配速模型」; 百岳 W/kg only in ① (`baiyue_inputs`
+  reads power_state, not the legacy `power_meter` that saving 功率來源 clears). 百岳 (EP/h, Tobler) unchanged.
+- Tests: the suite's calculator fixtures keep ① (`conftest._calculator_power_state_default`);
+  `test_racepower_nopower_sp953.py` covers ① / ② / ③ on synthetic data.
 
 ## Weather
 
@@ -1765,3 +1805,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-24 | feature | SP-552 Q1 | Owner's answers 2026-10-20: a 鄉鎮 answer takes its wind rows from MET Norway's forecast at the race point (`town_wind`; temperature kept the lapsed 鄉鎮 one; attribution names MET Norway; `tried` `met_norway_wind`; MET down → no wind as before), so a race only the 鄉鎮 product covers gets the 冷風 reminder again; the climatology cache is one copy for the whole site (`climatology/` in the server root, scope INSTANCE, one fetch per file at a time; a tenant's older file is read once and copied); tests in `test_race_township.py`, `test_weather_shared_sp552.py` |
 | 2026-10-25 | feature | SP-946 (SP-844 Q1 option A) | The 百岳 list's provenance: `backend/data/baiyue.json` `source` = `build_baiyue.SOURCE` 「百岳與小百岳點位：地圖產生器（happyman，twmap.happyman.idv.tw）；百岳名單：中華民國山岳協會」 (the old row-format note moved to `rows`), the build script's docstring names the upstream point API, new `backend/data/README.md`; the About page lists it as data entry `baiyue` (`api/about.py` `DATA`, zh-TW + en, link twmap.happyman.idv.tw). Coordinates unchanged (not rebuilt from OSM). Tests: `backend/tests/test_about_baiyue_sp946.py` |
 | 2026-10-25 | bugfix | SP-944 | 環境 card in English: the To chip's line (白天 06–18 平均, 取得於, CWA 地點／最近, 逐時 N 筆／沒有逐時資料), 環境係數 M／海拔影響／熱影響, the 進階 From / To boxes (titles, 海拔／溫度／濕度 labels, 氣壓／海拔係數／露點／熱負荷／無), 「嘗試：」, 未取得 and the CWA key box's 儲存／已設定／已清除 through `racepower.env.*` (zh-TW word for word as before); the CWA 登山 step's `tried` reasons through `_()`; the From label (`training_conditions.label`: fallback, median-altitude and Open-Meteo archive wording) is an `M_()` text that `GET /inputs` relocalizes (the inputs cache is shared by every language), and the daily `racepower_training_env.json` keeps `activities` instead of the text. Place names stay as written; `backend/tests/test_racepower_env_en_sp944.py`, `backend/tests/e2e/test_racepower_env_en_sp944_e2e.py` |
+| 2026-10-27 | feature | SP-953 (SP-950 Q2-2 (a)) | The calculator follows the plan's one power rule (power_state): in ② CP stale / ③ no power meter, trail = the trail HR pace model directly (split by grade-adjusted pace), else / road = the race-results estimate (`nopower.py`); no power, % CP, W/kg, CP / RE inputs, power goal, power segment targets or watch-export power; the page says which model and why; `/estimate` texts per state; race_refs / 賽事可行性 take the same route, the wrong 「沒有越野心率配速模型」 replaced by the real reason, 百岳 W/kg only in ① (was the cleared legacy `power_meter`) |

@@ -193,6 +193,8 @@ tr.hl td { background: var(--soft); }
 .noweight a { color: inherit; font-weight: 600; white-space: nowrap; }
 details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin: 6px 0; }
 .hidden { display: none !important; }
+/* SP-953: power not in effect (power_state ② / ③) — every power input, card and section is gone */
+body.nopow .pw { display: none !important; }
 .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
 .daytbl input { width: 70px; }
 .help { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--line);
@@ -476,12 +478,12 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
             <label>平路門檻 (%)<input id="flatpct" type="number" step="0.5" min="0.5" placeholder="2"></label>
           </div></details>
       </div>
-      <div class="row rf"><span class="lbl">策略</span>
+      <div class="row rf pw"><span class="lbl">策略</span>
         <div class="seg" id="strategy"><button data-k="even">均速</button><button data-k="negative">前慢後快</button><button data-k="positive">前快後慢</button></div>
         <label class="meta" id="amt-box">幅度 <input id="amount" type="range" min="0" max="5" step="0.5" style="width:120px;vertical-align:middle"> <b id="amount-v"></b></label>
         <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.strategy.tip">均速（路跑）：全程同樣的平均功率。均勻努力（越野）：全程同樣的「努力」，坡上功率照下面的坡道彈性變化，所以配速會跟著坡度變，不是全程同一個配速。前慢後快 / 前快後慢：功率從起點到終點線性變化，整場平均不變。過去的研究多半發現前後差距小的配速最快。</span></span>
       </div>
-      <div class="row rf" id="hills-row"><span class="lbl">坡道彈性</span>
+      <div class="row rf pw" id="hills-row"><span class="lbl">坡道彈性</span>
         <label class="meta">上坡 +<input id="hup" type="number" step="1" min="0" max="12" style="width:56px"> %</label>
         <label class="meta">下坡 −<input id="hdown" type="number" step="1" min="0" max="30" style="width:56px"> %</label>
         <span class="help" tabindex="0">?<span class="tip">上坡時功率可以比平均高一點、下坡讓它自然掉下來，平均功率不變。上坡 +5% 以內沒有額外的生理成本；上限 12%。持續超過 CP 太久的坡段會自動縮小。</span></span>
@@ -506,7 +508,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.night.tip">有起跑時間時，依比賽地點的日出日落（天氣預報，沒有就用天文公式算）把天黑時跑的段標成「夜間」，圖上畫深色底。夜間減速只把每段天黑的那部分時間拉長，ETA 和完賽時間跟著變；0 % 時預估完全不變。目標時間模式不套用。</span></span>
         <span class="meta" data-i18n="racepower.night.note">沒有研究拆出天黑本身慢多少；Brager 2020 的 35.9 % 含疲勞</span>
       </div>
-      <div class="row tf"><span class="lbl">effort km</span>
+      <div class="row tf pw"><span class="lbl">effort km</span>
         <label class="meta">effort km 公式 <select id="formula" style="width:auto">
           <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
           <option value="itra">km + 爬升/100（ITRA / 健行筆記）</option>
@@ -539,7 +541,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <details id="seg-all"><summary data-i18n="racepower.seg.all">全部欄位（鎖定功率、地形、熱）</summary><div class="tablewrap" id="segtable"></div></details>
     <div class="toolbar" id="daysplit-bar" style="margin-top:8px"><button class="btn bf" id="splitpreview" data-i18n="racepower.split.preview">✂ 分日預覽</button>
       <span class="meta bf" id="splits-line"></span>
-      <button class="btn rf" id="unlock" data-i18n="racepower.unlock">解除全部鎖定</button>
+      <button class="btn rf pw" id="unlock" data-i18n="racepower.unlock">解除全部鎖定</button>
       <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">📅 匯出至課表</button><span class="meta" id="coros-why" hidden></span>
       <button class="btn" id="share" data-i18n="racepower.share.btn">🔗 分享</button></div>
     <!-- SP-533: camp / hut waypoints (every pass) as day-end candidates; a mismatch of day ends and days -->
@@ -619,7 +621,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     </section>
   </div>
 
-  <section id="gm-sec" class="tab-calc"><h2>坡度 RE 曲線 <span class="meta">你的 Stryd 功率在不同坡度換成多少速度</span></h2>
+  <section id="gm-sec" class="tab-calc pw"><h2>坡度 RE 曲線 <span class="meta">你的 Stryd 功率在不同坡度換成多少速度</span></h2>
     <details><summary>展開</summary><div class="two"><div class="plotwrap"><div class="plot" id="gm-chart"></div></div><div id="gm-detail"></div></div>
       <div class="rw-block"><h3 data-i18n="racepower.rw.title">跑走切換速度</h3><div class="two"><div><div class="plot" id="rw-chart"></div></div><div id="rw-detail"></div></div></div></details>
   </section>
@@ -627,11 +629,11 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
   <section id="cad-sec" class="tab-calc"><details><summary><b data-i18n="racepower.cad.title">爬坡步頻分布</b> <span class="meta" data-i18n="racepower.cad.sub">檢查「步頻 &lt; 130 spm 算走」</span></summary>
     <div class="plotwrap"><div class="plot" id="cad-chart"></div></div><div id="cad-detail"></div></details></section>
 
-  <section id="cp-sec" class="tab-calc"><details><summary><b>CP 分析</b> <span class="meta" id="cp-sub"></span></summary>
+  <section id="cp-sec" class="tab-calc pw"><details><summary><b>CP 分析</b> <span class="meta" id="cp-sub"></span></summary>
     <div class="two"><div><div class="plot" id="cp-chart"></div></div><div id="cp-detail"></div></div></details>
   </section>
 
-  <section id="rg-sec" class="tab-calc"><details><summary><b>Riegel 分析</b> <span class="meta">ln 功率 對 ln 時間；斜率 = k</span>
+  <section id="rg-sec" class="tab-calc pw"><details><summary><b>Riegel 分析</b> <span class="meta">ln 功率 對 ln 時間；斜率 = k</span>
     <span class="help" tabindex="0" onclick="event.preventDefault(); event.stopPropagation()">?<span class="tip" style="white-space:pre-line">Riegel 是什麼：撐得越久，能出的功率越低。這裡把你近一年的最佳功率（每種時間長度各取最高）畫成線，擬合出一條直線（ln 功率 對 ln 時間），斜率就是 k。
 怎麼讀：k 越負（例如 −0.10），功率隨時間掉得越快，長距離比賽就得用比短時間低很多的功率；k 越接近 0，耐力越好。
 圖：藍線是你的最佳功率包絡線，橘線是個人擬合，虛線是用 CP、TTE 查表得到的 k，圓點是這次預估。個人線和查表線差很多，通常是長時間的全力紀錄不夠。
@@ -640,11 +642,11 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="two"><div><div class="plot" id="rg-chart"></div></div><div id="rg-detail"></div></div></details>
   </section>
 
-  <section id="re-sec" class="tab-calc"><details><summary><b>跑步效率 RE 與活動指標</b> <span class="meta">RE = 速度 m/s ÷ 功率 W/kg</span></summary><div id="re-detail"></div></details></section>
+  <section id="re-sec" class="tab-calc pw"><details><summary><b>跑步效率 RE 與活動指標</b> <span class="meta">RE = 速度 m/s ÷ 功率 W/kg</span></summary><div id="re-detail"></div></details></section>
 
   <section id="hike-sec" class="tab-calc"><details><summary><b>登山日 EP/h</b> <span class="meta">EP = km + 爬升/100（健行筆記 / ITRA）</span></summary><div id="hike-detail"></div></details></section>
 
-  <section id="zone-sec" class="tab-calc"><details><summary><b>P³ 功率區間</b> <span class="meta">Palladino，依所選 CP</span></summary><div id="zones"></div></details></section>
+  <section id="zone-sec" class="tab-calc pw"><details><summary><b>P³ 功率區間</b> <span class="meta">Palladino，依所選 CP</span></summary><div id="zones"></div></details></section>
 
   <section id="acc-sec" class="tab-acc hidden">
     <h2><span data-i18n="racepower.bt.tab">準確度</span> <span class="meta" data-i18n="racepower.bt.sub">拿你過去的比賽與長距離活動回測：每一場都只用「那天以前、而且不含那一場」的資料來推估，再和實際比</span></h2>
@@ -799,8 +801,15 @@ async function loadAltAccl() {
 // the goal follows the training basis (/goal-basis): hr → a target pace, power → a target power;
 // 百岳 keeps its three modes. A saved goal of the other kind falls back to the model (it is kept in S).
 let BASIS = null;
-// (both kinds are always offered: the owner picks pace or power; the training basis no longer hides one)
-function goalOk(m) { return true; }
+// SP-953: the calculator follows the plan's one power rule (GET /racepower/power-state, engine/power_state.py):
+// power only in ① (a Stryd and a CP test or race in the last 42 days). In ② / ③ the result (/plan's power_off)
+// comes from the trail HR pace model or the race-results estimate, and no power input, card or column is shown.
+let PSTATE = null;
+const noPow = () => (PLAN && PLAN.type !== "baiyue" && PLAN.power_off != null ? !!PLAN.power_off : !!(PSTATE && !PSTATE.power));
+function applyPow() { document.body.classList.toggle("nopow", noPow()); }
+// (both kinds are always offered: the owner picks pace or power; the training basis no longer hides one) —
+// SP-953: the power goal only while power is in effect (百岳's 目標速度 uses the same button, always there)
+function goalOk(m) { return !(m === "power" && type !== "baiyue" && noPow()); }
 function mode() { return goalOk(S.mode) ? S.mode : "auto"; }
 function syncForm() {
   const md = mode();
@@ -876,7 +885,7 @@ function renderAdvSum() {
   el.classList.toggle("wn", ch.length > 0);
 }
 // the chart's one measure: 百岳 has no power target
-function measure() { return S.measure === "power" && type === "baiyue" ? "pace" : (S.measure || "pace"); }
+function measure() { return S.measure === "power" && (type === "baiyue" || noPow()) ? "pace" : (S.measure || "pace"); }
 
 // ---------------- required inputs ----------------
 // [element id to highlight, label] of every required input that is still empty
@@ -1296,6 +1305,12 @@ function renderInputs() {
     rows.push(inputRow("EP/h（你的登山速度）", "eph", u.eph?.value, (v) => v.toFixed(2), u.eph?.source || "", ` <a href="#hike-sec">看紀錄</a>`));
     rows.push(`<tr><td>背負</td><td class="num">${f1(u.pack_kg?.value)} kg</td><td class="meta wrap">${esc(u.pack_kg?.source || "")}；過去 ${f1(u.hist_pack_kg?.value)} kg（${esc(u.hist_pack_kg?.source || "")}）</td></tr>`);
     rows.push(`<tr><td>心率上限</td><td class="num">${n0(u.aet?.value)} bpm</td><td class="meta wrap">AeT：${esc(u.aet?.source || "")}</td></tr>`);
+  } else if (noPow()) {
+    // SP-953: power not in effect — no CP, 無氧容量, TTE, k, RE or 先前賽事 (power); the model the time comes from
+    const m = PLAN && PLAN.type !== "baiyue" ? PLAN.model : null;
+    rows.push(`<tr><td>${esc(T("off.model_row"))}</td><td colspan="2"><b>${esc(m?.label || "–")}</b> <span class="meta">${esc(m?.why || PSTATE?.reason || "")}</span></td></tr>`);
+    const a = INP.aet || {};
+    if (ok(a.lthr)) rows.push(`<tr><td>LTHR</td><td class="num">${n0(a.lthr)} bpm</td><td class="meta wrap">${esc(a.lthr_source || a.source || "")}</td></tr>`);
   } else {
     // CP: 自動 (the engine picks the source and shows the value it used) or 手動 (typed in)
     const manual = ovr.cp != null;
@@ -1342,6 +1357,10 @@ function renderInputs() {
     schedule();
   }));
   const pe = $("prior"); if (pe) pe.addEventListener("change", () => { ls.set("prior", pe.value); schedule(); });
+  if (noPow()) {
+    $("inputs-note").textContent = T("off.inputs_note", { why: PSTATE?.reason || PLAN?.model?.why || "", n: INP.counts.runs_365 });
+    return;
+  }
   $("inputs-note").innerHTML = `性別 ${esc(INP.profile.sex === "female" ? "女" : "男")}（${esc(INP.profile.sex_source)}）· 功率計 ${esc(INP.profile.power_meter)}，${esc(INP.profile.wind_source)} · 近 365 天 ${INP.counts.runs_365} 次跑步，${INP.counts.runs_with_power} 次有功率` +
     (INP.power_source && !INP.power_source.accept_watch_power && INP.power_source.counts && INP.power_source.counts.watch
       ? `（另 ${INP.power_source.counts.watch} 次${esc(INP.power_source.unused_label)}）` : "");
@@ -1389,7 +1408,7 @@ function renderEnv() {
   set("f-alt", e.from.altitude_m, 0); set("f-t", e.from.temp_c, 1); set("f-rh", e.from.rh_pct, 0);
   $("t-alt").placeholder = f1(e.to.altitude_m); $("t-t").placeholder = f1(e.to.temp_c); $("t-rh").placeholder = f1(e.to.rh_pct);
   const M = PLAN?.summary?.M ?? e.M;
-  $("env-kv").innerHTML = `<span>${esc(T("env.m_label"))} <b class="${M < 0.97 ? "wn" : ""}">${M.toFixed(3)}</b>${esc(T(PLAN?.course_source === "gpx" ? "env.m_note_gpx" : "env.m_note"))}</span>
+  $("env-kv").innerHTML = `<span>${esc(T("env.m_label"))} <b class="${M < 0.97 ? "wn" : ""}">${M.toFixed(3)}</b>${esc(T((PLAN?.course_source === "gpx" ? "env.m_note_gpx" : "env.m_note") + (PLAN?.power_off ? "_off" : "")))}</span>
     <span>${esc(T("env.alt_effect"))} <b>${spct(e.altitude_pct)}</b></span><span>${esc(T("env.heat_effect"))} <b>${spct(e.heat_pct)}</b></span>`;
   renderEnvChips();
 }
@@ -1537,6 +1556,7 @@ function planBody(extra = {}) {
   return body;
 }
 function renderAll() {
+  applyPow(); syncForm();
   renderResults(); renderGroup(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
   renderStops(); renderExportBtn(); renderSurface(); renderTerrainDiff(); renderRain(); fillSleepDefaults();
   if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
@@ -1567,7 +1587,8 @@ async function run() {
     // SP-293: no CP yet → the finish time from your race results (POST /estimate: road Riegel, trail §0.5.5,
     // 推估); the server answers model:true when a CP is there, so other errors stay as they are
     const b = planBody();
-    if (e.status === 400 && b.type !== "baiyue") {
+    // SP-953: power not in effect — /plan is already the race-results route; its error says what is missing
+    if (e.status === 400 && b.type !== "baiyue" && !noPow()) {
       try {
         const est = await post(`${API}/estimate`, b, ctl?.signal);
         if (seq !== RUN_SEQ) return;
@@ -1577,6 +1598,7 @@ async function run() {
     }
     $("results").innerHTML = `<h2>預估結果</h2><div class="err">${esc(msg)}</div>`;
     $("fuel-sec").classList.add("hidden");
+    if (noPow()) renderInputs();               // SP-953: 你的數據 still says why there is no power model
   }
 }
 // SP-293: the no-CP estimate (engine/racepower/race_estimate.py) — every text comes translated from the engine
@@ -1729,12 +1751,14 @@ const ZB_SYS_KEY = "hrsys";
 const zbColor = (i, n) => `hsl(${Math.round(140 - 140 * i / Math.max(1, n - 1))} 60% 42%)`;   // green (easy) → red
 // {kind: "power"} | {kind: "hr", sys, hr}; `why` = the reason a heart-rate basis shows the power zones
 function zoneBarSpec(plan, basis, pick) {
-  if (basis?.basis !== "hr") return { kind: "power" };
+  // SP-953: power not in effect — the heart-rate zones, else nothing (never the power zones)
+  const fb = plan.power_off ? "none" : "power";
+  if (basis?.basis !== "hr" && !plan.power_off) return { kind: "power" };
   const hb = plan.hr_bar;
-  if (!hb) return { kind: "power", why: T("zbar.no_hr_data") };
-  if (!ok(hb.hr)) return { kind: "power", why: hb.reason || T("zbar.no_hr_data") };
+  if (!hb) return { kind: fb, why: T("zbar.no_hr_data") };
+  if (!ok(hb.hr)) return { kind: fb, why: hb.reason || T("zbar.no_hr_data") };
   const avail = Object.keys(hb.systems || {}).filter((k) => hb.systems[k].rows?.length);
-  if (!avail.length) return { kind: "power", why: (hb.systems?.[hb.default] || {}).reason || T("zbar.no_hr_data") };
+  if (!avail.length) return { kind: fb, why: (hb.systems?.[hb.default] || {}).reason || T("zbar.no_hr_data") };
   const sys = [pick, hb.default].find((k) => avail.includes(k)) || avail[0];
   return { kind: "hr", sys, hr: hb.hr };
 }
@@ -1760,6 +1784,7 @@ function zoneStrip(rows, val, lo, hi, ticks, tickText, rangeText) {
 function zoneBar(p, cp, open = false) {
   const spec = zoneBarSpec(PLAN, BASIS, ls.get(ZB_SYS_KEY, null));
   let more = "", line = "";
+  if (spec.kind === "none") return spec.why ? `<div id="zbar-box"><div class="zline" data-rh="RCz">${esc(spec.why)}</div></div>` : "";
   if (spec.kind === "hr") {
     const hb = PLAN.hr_bar, S0 = hb.systems[spec.sys], rows = S0.rows, hr = spec.hr;
     const top = rows[rows.length - 1].lo;
@@ -1786,7 +1811,7 @@ function zoneBar(p, cp, open = false) {
 }
 function wireZoneBar() {
   const sel = $("zbar-sys"); if (!sel) return;
-  sel.onchange = () => { ls.set(ZB_SYS_KEY, sel.value); $("zbar-box").outerHTML = zoneBar(PLAN.summary.power, PLAN.used.cp.value, true); wireZoneBar(); };
+  sel.onchange = () => { ls.set(ZB_SYS_KEY, sel.value); $("zbar-box").outerHTML = zoneBar(PLAN.summary.power, PLAN.power_off ? null : PLAN.used.cp?.value, true); wireZoneBar(); };
 }
 // ---- end zone bar ----
 
@@ -1801,14 +1826,18 @@ function goalLine(g) {
 function renderResults() {
   const P = PLAN, s = P.summary, e = P.effort;
   if (P.type === "baiyue") return renderBaiyue();
-  const trail = P.type === "trail", cp = P.used.cp.value, wt = P.used.weight.value;
+  const off = !!P.power_off;                       // SP-953: power not in effect — no power anywhere
+  const trail = P.type === "trail", cp = off ? null : P.used.cp?.value, wt = P.used.weight?.value;
   const MODE = { time: T("goal.pace"), power: T("goal.power"), auto: T("goal.model") }[s.mode];
   // SP-485: the method line (RC1 ●▷▷) next to the title in 完整, in 「這次怎麼算的」 otherwise
-  const meth = s.total_method === "trail_hr" ? "整場用你的越野心率配速模型（推估），功率只當參考" : s.total_method === "v1" ? "整場用已驗證的方法（Riegel + 你的 RE），分段是推估" : "分段加總";
+  const meth = off ? (P.model?.label || "") + T("off.meth")
+    : s.total_method === "trail_hr" ? "整場用你的越野心率配速模型（推估），功率只當參考" : s.total_method === "v1" ? "整場用已驗證的方法（Riegel + 你的 RE），分段是推估" : "分段加總";
   const own = [], how = [];
   if (hsym("RC1") !== "●") how.push(RH().make("RC1", meth));
   EST.results = [];
   let h = `<h2>預估結果 <span class="meta">${trail ? "越野" : "路跑"} · ${MODE}${hsym("RC1") === "●" ? ` · <span data-rh="RC1">${meth}</span>` : ""}</span>%%EST%%</h2>%%BOX%%`;
+  // SP-953: which model this is and why there is no power (「CP 已 N 天沒測…」 / 「沒有功率計」)
+  if (off && P.model?.line) h += `<div class="note" id="model-line" data-rh="RCpw">ℹ ${esc(P.model.line)}</div>`;
   h += `<div class="tiles">`;
   h += tile(s.time_total_s ? `預估移動時間${help("越野心率配速模型預估的是「移動時間」（速度 > 1 km/h 的時間），回測驗證的就是這個數字。補給站、排隊、零碎停頓另外預估，列在「含停留總時間」。")}` : "預估完賽",
     hms(s.time_s), `${f1(s.km)} km${s.stops_s ? ` · 含補給 ${Math.round(s.stops_s / 60)} 分 → ${s.finish_eta || ""}` : s.finish_eta ? " · 抵達 " + s.finish_eta : ""}`, true);
@@ -1819,14 +1848,14 @@ function renderResults() {
       `<span id="nm-total">${hms(s.time_total_s)}</span>${rg ? ` <small class="meta" id="nm-range" title="${esc(T("nm.range_t"))}">${hms(rg[0])}–${hms(rg[1])}</small>` : ""}`,
       esc(T("nm.s", { min: Math.round(nm.total_s / 60), kind: nm.kind_label || "" }).replace(/ · $/, "")));
   }
-  h += tile("平均功率", W(s.power), `${pct(s.pct_cp)} CP · ${wkg(s.w_per_kg)}`, true);
+  if (!off) h += tile("平均功率", W(s.power), `${pct(s.pct_cp)} CP · ${wkg(s.w_per_kg)}`, true);
   h += tile("平均配速", pace(s.pace_s_per_km), trail ? "實際距離" : "");
   // SP-632: the race's flat-equivalent pace (the segments' GAP by time) and what it means
   if (trail && ok(s.flat_pace_s_per_km)) h += `<div class="tile" id="flat-pace"><div class="k">${esc(T("flat.k"))}${help(esc(T("flat.tip")))}</div><div class="v">${pace(s.flat_pace_s_per_km)}</div><div class="s">${esc(T("flat.s"))}</div></div>`;
   // SP-697: trail 「模型預測」 with the HR model — 努力度 is the HR level picked (of the all-out race HR)
-  const hrE = e.basis === "hr";
-  h += tile("努力度", `<span style="color:${css(EFF_COLORS[["easy", "steady", "hard", "max", "over"].indexOf(e.key)])}">${esc(e.label)}</span>`, `${pct(e.f)} ${hrE ? "全力心率" : "可持續功率"}`);
-  h += tile("環境係數 M", s.M.toFixed(3), P.course_source === "gpx" ? "逐段海拔的平均" : "功率 × M");
+  const hrE = e.basis === "hr", raceE = e.basis === "race";
+  h += tile("努力度", `<span style="color:${css(EFF_COLORS[["easy", "steady", "hard", "max", "over"].indexOf(e.key)])}">${esc(e.label)}</span>`, `${pct(e.f)} ${hrE ? "全力心率" : raceE ? esc(T("off.effort_race")) : "可持續功率"}`);
+  h += tile("環境係數 M", s.M.toFixed(3), P.course_source === "gpx" ? "逐段海拔的平均" : off ? esc(T("off.m_speed")) : "功率 × M");
   h += `</div>`;
   // SP-485 (R11): the heat-acclimatisation block only when the heat changes the time ≥ 1 % (完整: always;
   // 精簡: in 「這次怎麼算的」)
@@ -1840,11 +1869,12 @@ function renderResults() {
     else how.push(RH().make("RC4", "", { html: hh.replace(' data-rh="RC4"', "") }));
   }
   // effort bar
-  const pw = hrE ? (e.power || {}) : e, mult = pw.multiple, tl = pw.t_lim_s, drag = effortDraggable();
+  const pw = off ? {} : hrE ? (e.power || {}) : e, mult = pw.multiple, tl = pw.t_lim_s, drag = effortDraggable();
   const powerLine = pw.f <= 1.0000001 && ok(mult) ? `這個強度你大約可以撐 <b>${mult.toFixed(1)} ×</b> 目標時間（約 ${hm(mult * s.time_s)}）` :
     `這個平均功率大約只撐得了 <b>${hm(tl)}</b>，比預計時間短`;
   const dragHow = drag ? "拖動指針（或上方 100／95／85 % 按鈕）可以改努力目標，放開後重新計算。" : "";
-  const tip = hrE
+  const tip = off ? esc(T(hrE ? "off.effort_tip_hr" : "off.effort_tip_race")) + dragHow
+    : hrE
     ? `越野「模型預測」的完賽時間來自心率配速模型：努力度＝比賽的心率水準相對你的全力比賽心率（選 95 % 就是 95 %）。${dragHow}` +
       `功率比例（參考）：平均功率是你能撐這麼久的功率的 ${pct(pw.f)}（${esc(pw.label || "")}）；${powerLine.replace(/<\/?b>/g, "")}。`
     : `把這個平均功率和「你能撐這麼久的功率」比。淡色帶是 CP ±3% 與 Riegel k ±0.01 的不確定範圍。${dragHow}`;
@@ -1852,17 +1882,18 @@ function renderResults() {
   h += effortBar(e, false, !drag);
   if (!drag) h += `<div class="meta" id="ebar-ro">這是結果：切到「${esc(T("goal.model"))}」才能調整努力度</div>`;
   else if (hrE) h += `<div class="eline">努力目標 <b id="ebar-val">${Math.round(e.f * 100)}%</b>：比賽心率水準 = 全力比賽心率的 ${pct(e.f)}</div>`;
-  if (!hrE) h += `<div class="eline" data-rh="RC5">${powerLine}</div>`;
+  else if (raceE) h += `<div class="eline">${esc(T("off.effort_line", { pct: Math.round(e.f * 100) }))}</div>`;
+  if (!hrE && !off) h += `<div class="eline" data-rh="RC5">${powerLine}</div>`;
   h += zoneBar(s.power, cp);
   // compare
   const cmp = P.compare?.auto, g = P.goal;
   if (g) h += goalLine(g);
   else if (cmp && s.mode !== "auto") h += `<div class="note">對照「通通幫我算」（100%）：${hms(cmp.time_s)} @ ${W(cmp.power)}</div>`;
-  if (P.target) h += `<div class="tiles">${tile("要把這個目標變成你的 100%", W(P.target.cp_required), `CP ${spct(P.target.pct_change)}（目前 ${W(cp)}）`, true)}</div>`;
+  if (P.target && !off) h += `<div class="tiles">${tile("要把這個目標變成你的 100%", W(P.target.cp_required), `CP ${spct(P.target.pct_change)}（目前 ${W(cp)}）`, true)}</div>`;
   const x = resultHints(P, own, how);
   h += x.reminders + x.how;
   // other calcs (v1)
-  h += `<details id="calc-other"><summary>其他試算與交叉檢查</summary>${otherCalcs()}</details>`;
+  h += off ? offCalcs() : `<details id="calc-other"><summary>其他試算與交叉檢查</summary>${otherCalcs()}</details>`;
   $("results").innerHTML = h.replace("%%EST%%", estMark("results")).replace("%%BOX%%", x.box);
   wireEffortBar(); wireZoneBar(); bindHints();
 }
@@ -1964,6 +1995,15 @@ function otherCalcs() {
       <td class="n">${pace(s.pace_s_per_km)}</td><td class="n">${W(s.power_needed)}</td><td class="n">${pct(s.pct_cp_needed)}</td>
       <td class="n">${W(s.power_sustainable)}</td><td class="n">${W(s.cp_required)}</td><td class="${s.feasible ? "ok" : "no"}">${s.feasible ? "✓" : "✕"}</td></tr>`).join("") + `</tbody></table></div>`;
   return h;
+}
+// SP-953: power not in effect — what the model was, instead of the power cross-checks (v1, Stryd table, 功率 ↔ 時間)
+function offCalcs() {
+  const P = PLAN, th = P.summary?.trail_hr, est = P.summary?.race_estimate, items = [];
+  if (P.model?.why) items.push(`<li>${esc(P.model.why)}</li>`);
+  if (th) items.push(`<li>${esc(T("off.hr_model", { x: ((th.x_star ?? th.x) * 100).toFixed(0), km: th.eff_km.toFixed(1), t: hms(th.time_s), t0: hms(th.time_no_durability_s) }))}</li>`);
+  if (est) items.push(`<li>${esc(T("off.est_model", { t: hms(est.time_s) }))}</li>`);
+  if (!items.length) return "";
+  return `<details id="calc-other"><summary>${esc(T("off.other"))}</summary><ul class="meta" style="padding-left:18px;margin:0">${items.join("")}</ul></details>`;
 }
 // SP-697: one 「重新計算中…」 line on top of the result (a second release updates it, never adds one);
 // the result, an estimate or an error replaces #results and takes it away
@@ -2175,13 +2215,14 @@ function renderFuel() {
   const meth = Object.keys(F.methods || {}).map((k) => FUEL_METHOD[k] || k).join("、");
   EST.fuel = [];
   const fx = fuelHints(PLAN);
-  let h = `<h2>🍽 補給 <span class="meta">${esc(F.label)} · 建議值，自己準備</span>%%EST%%${help("熱量用預估的分段功率與時間算，碳水、水、鈉照賽事類型、預估時間和各段氣溫給範圍。每個數字旁的 ? 有算法和來源。沒有個人的流汗率和腸胃訓練紀錄，所以水量是一般範圍、碳水不超過 90 g/h。")}</h2>${fx.box}<div class="tiles">`;
-  const kTip = hike
+  const fOff = !hike && !(F.power_share > 0);       // SP-953: no power on any segment — the heart-rate / distance method
+  let h = `<h2>🍽 補給 <span class="meta">${esc(F.label)} · 建議值，自己準備</span>%%EST%%${help(fOff ? esc(T("off.fuel_tip")) : "熱量用預估的分段功率與時間算，碳水、水、鈉照賽事類型、預估時間和各段氣溫給範圍。每個數字旁的 ? 有算法和來源。沒有個人的流汗率和腸胃訓練紀錄，所以水量是一般範圍、碳水不超過 90 g/h。")}</h2>${fx.box}<div class="tiles">`;
+  const kTip = fOff ? esc(T("off.kcal_tip")) : hike
     ? "行動熱量 = Pandolf 公式（體重、當天背負、每段速度和坡度）逐段加總；下坡 Pandolf 不適用，改用 Minetti 走路曲線推估。範圍包含 Yamamoto（app 原本的登山熱量）：Pandolf 對重背負常低估。"
     : "功率法：每段 Stryd 功率 × 時間 ÷ (22.1 % × 4.184)，坡度 > 4 % 用 21.6 %。坡度 > 8 %、走路段和下坡改用 1.07 kcal/kg/km × Minetti 坡度比例。Stryd 自己的「kJ ≈ kcal」會少算約 8 %：跑步不能直接把 kJ 當 kcal。範圍 ±10–15 %：個人差異、疲勞、陡坡低估加起來。";
   h += ftile("🔥", hike ? "行動熱量" : "消耗熱量", rng(F.kcal_band, n0, "kcal"),
     `${esc(meth)} · ±${Math.round(F.band_rel * 100)}%${ok(F.kcal_per_h) ? ` · ${n0(F.kcal_per_h)} kcal/h` : ""}`, kTip,
-    hike ? `${F.src.pandolf}；${F.src.yamamoto}；${F.src.band}` : `${F.src.power}；${F.src.minetti}；誤差：${F.src.band}`, "main");
+    hike ? `${F.src.pandolf}；${F.src.yamamoto}；${F.src.band}` : fOff ? `${F.src.keytel}；${F.src.minetti}；誤差：${F.src.band}` : `${F.src.power}；${F.src.minetti}；誤差：${F.src.band}`, "main");
   const cTip = hike ? "低強度、多日：取超馬建議的下限，每 45–60 分鐘吃一次行動糧，每次 30–50 g。重點是每天的總熱量。"
     : F.category === "short" ? "不到 75 分鐘：漱口或少量碳水就有效。"
     : F.category === "half" ? "2–2.5 小時以內：每小時 30–60 g。"
@@ -2243,7 +2284,7 @@ function renderFuel() {
   const cc = F.crosscheck || {};
   if (!hike && cc.fletcher) h += `<details><summary>交叉檢查</summary><ul class="meta" style="padding-left:18px;margin:0">
     <li>Fletcher 2009（1.05–1.11 kcal/kg/km × 坡度調整 ${f1(cc.fletcher.adj_km)} km）：${rng(cc.fletcher.range, n0, "kcal")}</li>
-    <li>Stryd「kJ = kcal」：${n0(cc.stryd_kj)}（跑步會少算約 8 %）</li>
+    ${fOff ? "" : `<li>Stryd「kJ = kcal」：${n0(cc.stryd_kj)}（跑步會少算約 8 %）</li>`}
     ${ok(cc.keytel) ? `<li>心率 Keytel 2005（${n0(cc.hr_bpm)} bpm）：${n0(cc.keytel)} kcal</li>` : ""}</ul></details>`;
   $("fuel").innerHTML = h.replace("%%EST%%", estMark("fuel"));
 }
@@ -2272,7 +2313,7 @@ function renderProfile() {
   if (!R.length) return;
   const hike = P.type === "baiyue", m = measure();
   segOn("measure", "m", m);
-  document.querySelector('#measure button[data-m="power"]').classList.toggle("hidden", hike);
+  document.querySelector('#measure button[data-m="power"]').classList.toggle("hidden", hike || !SegProfile.hasPower(P));   // SP-953
   // SP-222: the segment times carry the athlete's own fade (推估) — said next to the title, not only in a hover
   // SP-485 (R10): 「分段目標是推估」 next to the title in 完整; 標準 one 「推估 ?」 for the card, 精簡 only the ?
   EST.profile = [];
@@ -2560,12 +2601,13 @@ function heatText(s) {
   return `${f1(s.temp_c)} °C · 露點 ${f1(s.dew_c)} °C · 熱 ${s.heat_pct > 0 ? "−" + s.heat_pct.toFixed(1) + "%" : "0"}${s.heat_src === "hourly" ? `（${esc(s.heat_clock || "")} 逐時，推估）` : "（單一溫度）"}`;
 }
 function renderSegments() {
-  const P = PLAN, hike = P.type === "baiyue", trail = P.type === "trail";
+  const P = PLAN, hike = P.type === "baiyue", trail = P.type === "trail", off = !!P.power_off;   // SP-953 off: no power columns
   if (!P.segments.length) { $("segtable").innerHTML = ""; return; }
+  $("seg-all").querySelector("summary").textContent = T(off ? "seg.all_off" : "seg.all");
   let h = `<table><thead><tr><th>#</th>${hike ? "<th>天</th>" : ""}<th>類別</th><th class="n">km</th><th class="n">距離</th><th class="n">↑ / ↓</th><th class="n">坡度</th>`;
   const capx = hike && !!P.capacity;
   h += hike ? `<th>地形</th><th class="n">速度</th><th class="n">垂直</th>${capx ? `<th class="n" title="遞減率推算的氣溫 / 熱懲罰（適應後）">溫度</th><th class="n" title="海拔係數 A">A</th><th class="n" title="日內衰減 f_time">f時</th><th class="n" title="該段 σ（對數）">σ</th><th>資料</th>` : ""}` :
-    `<th class="n">目標功率${help(esc(T("p30.tip")))}</th><th class="n">% CP</th><th>區</th><th class="n">配速</th><th class="n">${trail ? `GAP / 垂直${help(esc(T("gap.tip")))}` : ""}</th>`;
+    `${off ? "" : `<th class="n">目標功率${help(esc(T("p30.tip")))}</th><th class="n">% CP</th><th>區</th>`}<th class="n">配速</th><th class="n">${trail ? `GAP / 垂直${help(esc(T("gap.tip")))}` : ""}</th>`;
   const hourly = P.summary.heat?.mode === "hourly";
   const nightCol = !!P.night;              // SP-254
   h += `<th class="n">分段時間</th><th class="n">累計</th><th class="n">ETA</th>${nightCol ? `<th>${esc(T("night.col"))}</th>` : ""}${hike ? "" : `<th class="n">M</th><th class="n" title="該段使用的氣溫與 Hadley 熱負荷">熱${hourly && estMode() === "each" ? ' <span class="badge watch">推估</span>' : ""}</th>`}<th>備註</th></tr></thead><tbody>`;
@@ -2579,8 +2621,8 @@ function renderSegments() {
         (capx ? `<td class="n">${f1(s.temp_c)}°${s.heat_eff_pct > 0.05 ? ` <span class="wn">−${s.heat_eff_pct.toFixed(1)}%</span>` : ""}</td><td class="n">${f2(s.A)}</td>
         <td class="n">${f2(s.f_time)}</td><td class="n">${f2(s.sigma)}</td><td class="wrap">${(s.extrapolated || []).length ? '<span class="wn">外插：' + esc(s.extrapolated.join("、")) + "</span>" : '<span class="faint">資料內</span>'}</td>` : "");
     } else {
-      h += `<td class="n"><input class="lock ${s.locked ? "ovr" : ""}" data-lock="${s.i}" type="number" step="1" value="${Math.round(s.power)}" title="改這一段的功率會鎖定它，其他段重新分配"></td>
-        <td class="n">${pct(s.pct_cp)}</td><td>${esc(s.zone)}</td><td class="n">${pace(s.pace_s_per_km)}</td>
+      h += (off ? "" : `<td class="n"><input class="lock ${s.locked ? "ovr" : ""}" data-lock="${s.i}" type="number" step="1" value="${Math.round(s.power)}" title="改這一段的功率會鎖定它，其他段重新分配"></td>
+        <td class="n">${pct(s.pct_cp)}</td><td>${esc(s.zone)}</td>`) + `<td class="n">${pace(s.pace_s_per_km)}</td>
         <td class="n">${s.vert_m_per_h ? "↑" + n0(s.vert_m_per_h) + " m/h" : trail ? pace(s.gap_pace_s_per_km) : ""}</td>`;
     }
     h += `<td class="n">${dur(s.t)}</td><td class="n">${dur(s.cum_s)}</td><td class="n">${s.eta || ""}</td>${nightCol ? `<td>${s.night ? "🌙" : ""}</td>` : ""}${hike ? "" : `<td class="n">${s.M.toFixed(3)}</td>
@@ -2589,7 +2631,7 @@ function renderSegments() {
   }
   const tot = P.summary;
   h += `<tr class="center"><td colspan="${hike ? 7 : 6}">合計</td>${hike ? `<td></td><td class="n">${f1(tot.km / (tot.time_s / 3600))} km/h</td><td></td>${capx ? "<td></td><td></td><td></td><td></td><td></td>" : ""}` :
-    `<td class="n">${W(tot.power)}</td><td class="n">${pct(tot.pct_cp)}</td><td></td><td class="n">${pace(tot.pace_s_per_km)}</td><td></td>`}
+    `${off ? "" : `<td class="n">${W(tot.power)}</td><td class="n">${pct(tot.pct_cp)}</td><td></td>`}<td class="n">${pace(tot.pace_s_per_km)}</td><td></td>`}
     <td class="n">${hms(tot.time_s)}</td><td></td><td></td>${nightCol ? "<td></td>" : ""}${hike ? "" : "<td></td><td></td>"}<td></td></tr></tbody></table>`;
   // SP-485: 「看 30 秒平均功率」 (RC26) and SP-248's GAP line (RC27) are the column headers' ? now
   if (hike) h += `<div class="note">速度已含背負、海拔、地形與多日修正。</div>`;
@@ -3008,14 +3050,15 @@ async function renderBacktest() {
   // 1. capacity
   h += `<h3>${esc(TR("bt.cap.title"))}</h3>`;
   if (C.message) h += `<div class="err">${esc(C.message)}</div>`;
-  h += `<div class="tablewrap"><table><thead><tr><th>${esc(TR("bt.h.cat"))}</th>${hd4}<th class="n">${esc(TR("bt.h.power_err"))}</th><th class="n">${esc(TR("bt.h.effort"))}</th><th>${esc(TR("bt.h.result"))}</th></tr></thead><tbody>`;
+  const pwE = !noPow();                  // SP-953: power not in effect — no power error column / CP-test power line
+  h += `<div class="tablewrap"><table><thead><tr><th>${esc(TR("bt.h.cat"))}</th>${hd4}${pwE ? `<th class="n">${esc(TR("bt.h.power_err"))}</th>` : ""}<th class="n">${esc(TR("bt.h.effort"))}</th><th>${esc(TR("bt.h.result"))}</th></tr></thead><tbody>`;
   for (const cat of ["road", "trail"]) {
     const c = C.categories[cat];
-    h += `<tr><td>${esc(CAT(cat))}</td>${st4(c.time)}<td class="n">${spct(c.power.bias)}</td><td class="n">${pct(c.f_median)}</td>
+    h += `<tr><td>${esc(CAT(cat))}</td>${st4(c.time)}${pwE ? `<td class="n">${spct(c.power.bias)}</td>` : ""}<td class="n">${pct(c.f_median)}</td>
       <td class="wrap ${c.passed ? "ok" : "no"}">${c.passed ? esc(TR("bt.pass")) : "✕ " + esc(c.reasons.join(TR("bt.sep_reasons")))}</td></tr>`;
   }
   h += `</tbody></table></div><div class="note">${esc(TR("bt.cap.how"))}
-    ${esc(TR("bt.cap.tests", { n: C.tests.n, p: spct(C.tests.power.bias) }))}
+    ${pwE ? esc(TR("bt.cap.tests", { n: C.tests.n, p: spct(C.tests.power.bias) })) : ""}
     ${esc(TR("bt.cap.effort"))}${C.effort.passed ? `<span class="ok">${esc(TR("bt.pass"))}</span>` : '<span class="no">✕ ' + esc(C.effort.reasons.join(TR("bt.sep_reasons"))) + "</span>"}${esc(TR("bt.cap.effort_rule", { n: R.min_n }))}</div>`;
   const LB = C.lower_bound;
   h += `<div class="note">${esc(TR("bt.lb", { n: LB.n, k: LB.violations }))}${LB.violations ? esc(TR("bt.lb.worst", { list: list(LB.worst.slice(0, 3).map((x) => TR("bt.lb.one", { label: x.label, t: hm(x.t_s), p: W(x.p_train), m: W(x.p_sus) }))) })) : ""}${esc(TR("bt.lb.end"))}</div>`;
@@ -3374,8 +3417,9 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   if (!loadForm()) { $("dist").value = 21.0975; $("gain").value = 0; }
   // SP-485: 提示多寡 (one request; offline / failed → 標準); a result already drawn is drawn again with it
   if (window.Hints) Hints.state().then((st) => { HL = st; if (PLAN) { try { renderAll(); } catch (err) { console.warn(err); } } });
-  const [ps, gb] = await Promise.all([j("/api/v1/app/primary-sport").catch(() => null), j(`${API}/goal-basis`).catch(() => null)]);
-  BASIS = gb;
+  const [ps, gb, pst] = await Promise.all([j("/api/v1/app/primary-sport").catch(() => null), j(`${API}/goal-basis`).catch(() => null),
+    j(`${API}/power-state`).catch(() => null)]);
+  BASIS = gb; PSTATE = pst; applyPow();
   SPORT = ps?.sport || "trail";
   if (SPORT === "road" && type !== "road") { type = "road"; $("gain").value = 0; }
   STOPS = parseStops($("stops").value); sortStops(); renderStops();

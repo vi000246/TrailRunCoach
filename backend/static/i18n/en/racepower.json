@@ -603,5 +603,21 @@
   "climb.few": "not enough climbing records yet",
   "climb.few_tip": "No stretch of this route is marked \"may need hands\" — not because there is none, but because your trail runs can't tell yet: it takes at least 5 trail runs with a track, 20 or more scramble windows in them (50 m on a steep grade slow enough to be scrambling) and those in 2 or more runs. So far: {acts} {acts|run|runs}, {pos} scramble {pos|window|windows}. Once there are enough, the elevation chart marks them by itself. The estimated time is not affected.",
   "climb.weak": "your climbing records can't pick out scrambles yet",
-  "climb.weak_tip": "No stretch of this route is marked \"may need hands\": you have climbing records ({acts} trail runs, {pos} scramble windows), but cross-validated on your runs the terrain and the place can't yet tell where you scramble, so nothing is marked. It is tried again as your records grow. The estimated time is not affected."
+  "climb.weak_tip": "No stretch of this route is marked \"may need hands\": you have climbing records ({acts} trail runs, {pos} scramble windows), but cross-validated on your runs the terrain and the place can't yet tell where you scramble, so nothing is marked. It is tried again as your records grow. The estimated time is not affected.",
+  "off.meth": " (no power)",
+  "off.effort_race": "of the estimated race-result speed",
+  "off.m_speed": "speed × M",
+  "off.effort_tip_hr": "The finish time comes from the trail heart-rate pace model (no power): the effort is the race's heart-rate level against your all-out race heart rate (95 % picked is 95 %).",
+  "off.effort_tip_race": "The finish time comes from the estimate from your race results (no power): an effort of 95 % = 5 % slower than the estimated speed (estimate).",
+  "off.effort_line": "Effort target {pct}%: speed = {pct}% of the race-result estimate",
+  "off.hr_model": "Trail heart-rate pace model (estimate): all-out heart rate {x}% LTHR, effort {km} km → {t} (without the durability decline {t0})",
+  "off.est_model": "Estimate from your race results: {t}",
+  "off.other": "The model used this time",
+  "off.model_row": "Finish-time model",
+  "off.inputs_note": "{why} · {n} {n|run|runs} in the last 365 days",
+  "off.kcal_tip": "No power: on a trail with a predicted heart rate each segment uses heart rate (Keytel 2005: weight, age, sex), otherwise 1.07 kcal/kg/km × Minetti's grade ratio. Range ±12–20 %: individual differences and fatigue together.",
+  "off.fuel_tip": "Energy from the predicted segment heart rate, or distance and grade (no power); carbohydrate, water and sodium as ranges by race type, predicted time and each segment's temperature. The ? next to each number has the method and the source. There is no personal sweat rate or gut training record, so water is a general range and carbohydrate stays at or under 90 g/h.",
+  "seg.all_off": "All columns (terrain, heat)",
+  "env.m_note_off": " (speed × M)",
+  "env.m_note_gpx_off": " (speed × M; the mean over the GPX segments' altitudes)"
 }

@@ -43,6 +43,13 @@ TXT_ROAD = N_("用 {src} {race} 推算：Riegel（k {k:+.2f}，平路配速固�
 TXT_TRAIL = N_("用 {src} {race} 推算：平路輕鬆配速約 {pace} /km（E 配速 {fast}–{slow} 的中間，Daniels VDOT {vdot:.1f}），"
                "等效公里 {ekm:.1f}（km + 爬升 ÷ 100）× 配速 × 0.85 → 約 {t}。越野的這個算法是推估；"
                "有 CP 之後會自動改用賽事計算機的模型")
+# SP-953: power not in effect (power_state ② / ③) — the same estimate is the calculator's own road route, so no
+# 「有 CP 之後」: ② says the CP test brings the power model back, ③ (no power meter) says nothing about a CP
+TITLE_OFF = {"stale": N_("CP 過期：用你的比賽成績推估"), "none": N_("沒有功率計：用你的比賽成績推估")}
+TXT_ROAD_OFF = N_("用 {src} {race} 推算：Riegel（k {k:+.2f}，平路配速固定）→ 約 {t}。一場成績推另一個距離大約 ±5–8 %（推估）")
+TXT_TRAIL_OFF = N_("用 {src} {race} 推算：平路輕鬆配速約 {pace} /km（E 配速 {fast}–{slow} 的中間，Daniels VDOT {vdot:.1f}），"
+                   "等效公里 {ekm:.1f}（km + 爬升 ÷ 100）× 配速 × 0.85 → 約 {t}。越野的這個算法是推估")
+TAIL_STALE = N_("；做一次 CP 測試就會改用功率模型")
 NO_RACE = N_("也沒有最近一年的路跑成績可以推估：在「設定 → 個人資料 → 跑步經驗」或「設定 → 生理數據 → 比賽成績（E 配速）」"
              "填一場最近的路跑成績（距離、時間、日期）")
 NO_VDOT = N_("最近的路跑成績算不出平路輕鬆配速（Daniels 的公式只適用 1.5 km 到全馬）：越野先沒辦法推估")
@@ -83,24 +90,30 @@ def riegel_time(race_km: float, race_s: float, km: float, k: float = K) -> float
 
 
 def estimate(kind: str, km: float, gain_m: float, rows: Optional[list], today: dt.date,
-             survey_h: Optional[float] = None) -> dict:
+             survey_h: Optional[float] = None, power_state: Optional[dict] = None) -> dict:
     """The no-CP estimate for a `kind` (road / trail) race of `km` / `gain_m` from the shared race
     results `rows`: {available, time_s, km, method (riegel / effort_pace), race, title, tile, label,
     text, note} — or {available: False, reason}. `survey_h`: the questionnaire's weekly hours
-    (race_feasibility.survey_hours) for the low-volume line."""
+    (race_feasibility.survey_hours) for the low-volume line. `power_state` (SP-953, engine/power_state.py):
+    power not in effect (② / ③) → the title and text say why there is no power model, not 「還沒有 CP」."""
     from backend.engine import race_feasibility as RF
     if kind == "baiyue":
         return {"available": False, "reason": _(NO_BAIYUE)}
     race = pick_road(rows, today)
     if race is None or not km or km <= 0:
         return {"available": False, "reason": _(NO_RACE)}
+    st = (power_state or {}).get("state")
+    off = st in TITLE_OFF
+    tail = _(TAIL_STALE) if st == "stale" else ""
     src = _(SOURCE.get(race.get("source"), SOURCE["manual"]))
-    out = {"available": True, "km": round(float(km), 2), "title": _(TITLE), "tile": _(TILE), "label": _(LABEL),
+    out = {"available": True, "km": round(float(km), 2), "title": _(TITLE_OFF[st]) if off else _(TITLE),
+           "tile": _(TILE), "label": _(LABEL),
            "race": {k: race.get(k) for k in ("date", "distance_km", "time_s", "source", "name")}, "note": None}
     if kind == "road":
         t = riegel_time(race["distance_km"], race["time_s"], km)
         out.update(method="riegel", k=K, time_s=round(t),
-                   text=_(TXT_ROAD, src=src, race=race_label(race), k=K, t=_fmt(t)))
+                   text=(_(TXT_ROAD_OFF, src=src, race=race_label(race), k=K, t=_fmt(t)) + tail) if off else
+                   _(TXT_ROAD, src=src, race=race_label(race), k=K, t=_fmt(t)))
     else:
         from backend.engine import e_pace as EP
         e = EP.of_race({"distance_m": float(race["distance_km"]) * 1000.0, "time_s": race["time_s"],
@@ -110,10 +123,10 @@ def estimate(kind: str, km: float, gain_m: float, rows: Optional[list], today: d
         pace = (e["e_fast"] + e["e_slow"]) / 2.0
         ekm = float(km) + float(gain_m or 0.0) / EP_DIVISOR
         t = ekm * pace * TRAIL_EASY_SHARE
+        kw = dict(src=src, race=race_label(race), pace=EP.fmt_pace(pace), fast=EP.fmt_pace(e["e_fast"]),
+                  slow=EP.fmt_pace(e["e_slow"]), vdot=e["vdot"], ekm=ekm, t=_fmt(t))
         out.update(method="effort_pace", time_s=round(t), pace_s_per_km=round(pace), effort_km=round(ekm, 1),
-                   vdot=e["vdot"],
-                   text=_(TXT_TRAIL, src=src, race=race_label(race), pace=EP.fmt_pace(pace), fast=EP.fmt_pace(e["e_fast"]),
-                          slow=EP.fmt_pace(e["e_slow"]), vdot=e["vdot"], ekm=ekm, t=_fmt(t)))
+                   vdot=e["vdot"], text=(_(TXT_TRAIL_OFF, **kw) + tail) if off else _(TXT_TRAIL, **kw))
     if survey_h is not None and survey_h < RF.LOW_WEEK_H and float(km) >= RF.MARATHON_KM:
         out["note"] = _(RF.OPTIMISTIC, h=survey_h)              # Vickers & Vertosick 2016 [C2]
     return out
