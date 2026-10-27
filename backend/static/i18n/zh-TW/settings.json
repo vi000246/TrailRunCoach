@@ -1051,6 +1051,7 @@
   "basis.st_cp_ok": "CP {cp} W · {day} 測試或比賽 · 還有效 {left} 天（{until} 過期）",
   "basis.st_cp_old": "CP {cp} W · 已 {n} 天沒測",
   "basis.st_cp_never": "還沒有 CP 測試或比賽",
+  "basis.st_cp_efforts": "CP {cp} W · 最近的全力段 · 還有效 {left} 天（{until} 過期）",
   "basis.st_sport": "主要項目：{sport}（{how}）· 目標依據：{basis}",
   "basis.k_now": "現在",
   "basis.k_unlock": "強度課",

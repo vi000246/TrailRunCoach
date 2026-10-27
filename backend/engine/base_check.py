@@ -531,9 +531,15 @@ EP_NO_TEST_MODES = ("recovery_week", "reentry")
 EP_RACE_DAYS = 10           # no test in the 10 days before an A race (the CP / AeT tests' rule)
 
 
-def cp_stale(today: dt.date, last_cp_test: Optional[str], last_race: Optional[str]) -> bool:
+def cp_stale(today: dt.date, last_cp_test: Optional[str], last_race: Optional[str],
+             efforts_until: Optional[str] = None) -> bool:
     """SP-493: the CP has no all-out effort under it — no CP test and no race in the last EP_ALL_OUT_DAYS
-    (the same rule as easy_power_tests' CP side): target_policy runs the road intervals by HR."""
+    (the same rule as easy_power_tests' CP side): target_policy runs the road intervals by HR.
+    SP-963: nor recent all-out efforts on the power curve — `efforts_until` (power_state.efforts_on:
+    the last day a short and a long effort anchor the PD fit) on or after `today` keeps it fresh."""
+    left = _days_ago(today, efforts_until)
+    if left is not None and left <= 0:
+        return False
     hard = [x for x in (_days_ago(today, last_cp_test), _days_ago(today, last_race)) if x is not None and x >= 0]
     return not hard or min(hard) > EP_ALL_OUT_DAYS
 
@@ -565,6 +571,7 @@ def easy_power_tests(note: Optional[dict], today: dt.date, *, lthr: Optional[flo
                      lthr_measured: bool = False, lthr_conf: Optional[str] = None, lthr_prior: bool = False,
                      cp_date: Optional[str] = None, last_cp_test: Optional[str] = None,
                      last_race: Optional[str] = None, last_aet_test: Optional[str] = None,
+                     efforts_until: Optional[str] = None,
                      hr_model: str = "lthr", mhr: Optional[float] = None, mhr_conf: Optional[str] = None,
                      cap_measured: bool = False, model_label: str = "") -> Optional[dict]:
     """SP-471: the tests an easy_power_note points at, from the athlete's own numbers.
@@ -573,7 +580,8 @@ def easy_power_tests(note: Optional[dict], today: dt.date, *, lthr: Optional[flo
       EP_CAP_LTHR_GAP_BPM of LTHR (an easy run cannot sit at threshold), or the LTHR is an automatic
       estimate with low confidence (threshold_confidence) / the 0.90 × max-HR prior;
     * CP test — the power side: the CP's own date older than EP_CP_STALE_DAYS, or no CP test and no
-      race in EP_ALL_OUT_DAYS (WKO5's PD model only rises on all-out efforts);
+      race in EP_ALL_OUT_DAYS (WKO5's PD model only rises on all-out efforts) — cp_stale, so (SP-963)
+      not while recent all-out efforts anchor the PD fit (`efforts_until`);
     * neither side: the CP test (the cap sits well below a believable LTHR, so the CP is the likelier
       one to be low).
     A kind done in the last EP_RETEST_DAYS is left out (its result first). Both can be listed, each
@@ -613,8 +621,7 @@ def easy_power_tests(note: Optional[dict], today: dt.date, *, lthr: Optional[flo
     age = _days_ago(today, cp_date)
     if age is not None and age > EP_CP_STALE_DAYS:
         cp_why.append(_("CP 是 {d} 天前的（超過 {lim} 天）", d=age, lim=EP_CP_STALE_DAYS))
-    hard = [x for x in (_days_ago(today, last_cp_test), _days_ago(today, last_race)) if x is not None and x >= 0]
-    if not hard or min(hard) > EP_ALL_OUT_DAYS:
+    if cp_stale(today, last_cp_test, last_race, efforts_until):    # SP-963: recent all-out efforts count
         cp_why.append(_("最近 {lim} 天沒有 CP 測試或比賽（接近全力的努力），PD 模型的 CP 可能偏低",
                         lim=EP_ALL_OUT_DAYS))
 

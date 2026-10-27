@@ -4495,5 +4495,16 @@
   "固定配速不要調": "fixed pace, don't adjust it",
   "固定配速，不要調": "Hold the pace, don't adjust",
   "固定功率，不要調": "Hold the power, don't adjust",
-  "功率不生效：AeT 測試改用固定配速": "Power not in effect: the AeT test holds a fixed pace"
+  "功率不生效：AeT 測試改用固定配速": "Power not in effect: the AeT test holds a fixed pace",
+  "CP 已 {n} 天沒測，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）": "CP last tested {n} {n|day|days} ago, so heart rate / pace are used for now; one CP test switches back to power (or a recent hard session / race)",
+  "還沒有 CP 測試或比賽，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）": "No CP test or race yet, so heart rate / pace are used for now; one CP test switches to power (or a recent hard session / race)",
+  "CP 太舊（最近沒有 CP 測試、比賽或全力段）：用心率；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）": "CP out of date (no recent CP test, race or all-out effort): by heart rate; one CP test switches back to power (or a recent hard session / race)",
+  "{m} 分鐘": "{m} min",
+  "{t} {w} W": "{t} {w} W",
+  "{d} 的 {a} 和 {b}": "{a} and {b} on {d}",
+  "{d1} 的 {a} 和 {d2} 的 {b}": "{a} on {d1} and {b} on {d2}",
+  "{d} 的 CP 測試": "the CP test on {d}",
+  "{d} 的比賽": "the race on {d}",
+  "{what}撐著，有效到 {until}": "valid until {until} thanks to {what}",
+  "CP {cp} W · {line}": "CP {cp} W · {line}"
 }

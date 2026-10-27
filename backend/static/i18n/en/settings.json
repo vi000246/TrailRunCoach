@@ -1063,6 +1063,7 @@
   "basis.st_cp_ok": "CP {cp} W · test or race {day} · valid {left} more {left|day|days} (stale from {until})",
   "basis.st_cp_old": "CP {cp} W · not tested for {n} {n|day|days}",
   "basis.st_cp_never": "No CP test or race yet",
+  "basis.st_cp_efforts": "CP {cp} W · recent all-out efforts · valid {left} more {left|day|days} (stale from {until})",
   "basis.st_sport": "Main sport: {sport} ({how}) · targets by: {basis}",
   "basis.k_now": "Now",
   "basis.k_unlock": "Hard sessions",

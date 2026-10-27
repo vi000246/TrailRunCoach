@@ -2595,8 +2595,11 @@ function drawNow() {
   const st = PST.state;
   let cp = "";
   if (st === "none") cp = t("settings.basis.st_nopower");
-  else if (st === "power" && PST.cp && PST.days != null)
-    cp = t("settings.basis.st_cp_ok", { cp: Math.round(PST.cp), day: mdOf(PST.anchor), left: Math.max(0, PST.fresh_days - PST.days), until: mdOf(PST.stale_on) });
+  // SP-963: fresh by a CP test / race, or by recent all-out efforts on the power curve (basis "efforts");
+  // PST.reason names them and the day it lasts to
+  else if (st === "power" && PST.cp && PST.valid_until)
+    cp = t(PST.basis === "efforts" ? "settings.basis.st_cp_efforts" : "settings.basis.st_cp_ok",
+      { cp: Math.round(PST.cp), day: mdOf(PST.anchor), left: Math.max(0, PST.left || 0), until: mdOf(PST.stale_on) });
   else if (st === "stale")
     cp = PST.days != null ? t("settings.basis.st_cp_old", { cp: PST.cp ? Math.round(PST.cp) : "–", n: PST.days }) : t("settings.basis.st_cp_never");
   const badge = t("settings.basis.st_" + st);

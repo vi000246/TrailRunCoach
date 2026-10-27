@@ -931,15 +931,21 @@ run on the app's event loop in that tenant. `force` (the page's 立即重算) is
   「拍板的規則」): one site-wide rule — power is in effect only with a power meter (Stryd; a stored
   「手錶推估功率」 / legacy watch meter reads as 沒有功率計, 進階 「採用手錶推估功率」 is ignored, the
   stored values are kept) AND a fresh CP (a CP test or a race in `base_check.EP_ALL_OUT_DAYS` = 42
-  days, `base_check.cp_stale`). ① `power`, ② `stale` (a meter, the CP stale), ③ `none` (no meter;
+  days, `base_check.cp_stale`; SP-963: or the Stryd PD fit anchored by recent all-out efforts —
+  `power_state.efforts_on`: in those 42 days at least one short (`EFFORT_SHORT_S` 180–300 s) and one
+  long (`EFFORT_LONG_S` 720–1800 s) mean-max of a Stryd run ≥ `EFFORT_ON_CURVE` 95 % of the PD model
+  in effect that day (`stryd_pd_params`), the run's whole mean-max — the PD fit's own points; 推估,
+  backtested in SP-963's 筆記). ① `power`, ② `stale` (a meter, the CP stale), ③ `none` (no meter;
   not set → detected: ≥ 5 Stryd runs in 90 days). `week_plan` carries the state in
   `thresholds.power_state` (state, code, equipment, cp on file, days since the last CP test / race,
-  `stale_on`, reason) and, outside ①, gives the plan no CP (`thresholds.cp` None, no 個人化 power
+  `efforts`, `basis` test / race / efforts, `valid_until`, `left`, `stale_on` = valid_until + 1,
+  reason — ① names what keeps the CP fresh and until when: 「CP 195 W · 9/30 的 5 分鐘 227 W 和 12 分鐘
+  221 W 撐著，有效到 11/11」) and, outside ①, gives the plan no CP (`thresholds.cp` None, no 個人化 power
   zone set, no watts in any text, easy targets pace only). `target_policy` in ② / ③: no session by
   power whatever was chosen (road easy / long → HR ≤ the easy-run cap, intervals and hill repeats →
   HR; hook `_no_power_basis` for SP-951's pace); ② keeps the CP test's power bouts; the UA / Evoke AeT
   test runs by a fixed pace in ② / ③ (SP-949: `aet_test.start_target`, overview.spec.md › AeT drift
-  test; fallback 「功率不生效：AeT 測試改用固定配速」, no HR cap note). ② adds the note 「CP 已 N 天沒測，目前用心率／配速；做一次 CP 測試就切回功率」 and
+  test; fallback 「功率不生效：AeT 測試改用固定配速」, no HR cap note). ② adds the note 「CP 已 N 天沒測，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）」 (the parenthesis since SP-963) and
   the same words on the CP test suggestion. ③: no CP test (the 測試 indicator leaves the CP out,
   `cp_due` false, zone events drop `cp`), so the AeT test is no longer held back by one; no test is
   suggested in its place. The automatic run re-plans and re-sends the sessions on the watch when
@@ -1118,3 +1124,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-27 | feature | SP-949 | `target_policy`: the AeT test no longer keeps its power in ② (only the CP test does); a UA / Evoke test without power in effect (or without a CP) is basis `pace` (its own fixed pace — `aet_test.start_target` — not the threshold pace; never turned to HR for a missing threshold pace), source stays the AeT one, no HR cap note. The session text / steps: overview.spec.md › AeT drift test. Tests: `backend/tests/test_aet_start_sp949.py` |
 | 2026-10-27 | feature | SP-951 R1 | No % CP / watts in a ② / ③ session's 說明 or 出處 either: the band in pace / HR / RPE words, a text-path interval's band in `variant_adj["band"]` (read by the structure and the push), the 出處's % CP parts left out. `test_taper_rules.py`'s two week-plan taper tests get a fresh CP test (they broke with SP-950: the fixture's CP was 60 days old) and ③ counterparts by pace. Tests: `test_pace_basis_sp951.py::test_no_session_builder_shows_power_without_power`, `test_no_week_plan_session_shows_power_without_power`, `test_taper_rules.py` |
 | 2026-10-27 | feature | SP-964 | 目標依據 per session type (設定 › 訓練依據 › 進階設定): `plan.prefs.type_basis` for road easy / long (心率／功率), flat Zone 3 / Zone 5 (心率／配速／功率), hill repeats (心率／功率) and the MP segment (心率／配速／功率); order own → type → `target_basis` → 自動 (`target_policy.type_key` / `flat_zone` / `type_basis`, `how` = type); SP-950 / SP-951 fallbacks unchanged. Text builders pass the session to `flat_pace(s=)`; MP by `target_policy.mp_policy` in the structure (`workout_steps.mp_target(s, th)`), the push (`plan_store.push_dict` `mp_basis`, `coros_workouts`) and the card. `PATCH /prefs` merges `type_basis` and re-plans; `PUT /prefs` without it keeps it; unchoosable stored values dropped (`plan_prefs.clean_type_basis`). Tests: `backend/tests/test_type_basis_sp964.py` |
+| 2026-10-27 | feature | SP-963 (from SP-950) | 「CP 有效」 also when the Stryd PD fit is anchored by recent all-out efforts, not only a formal CP test or race: `power_state.efforts_on` (a short 180–300 s and a long 720–1800 s mean-max of a Stryd run ≥ 95 % of the PD model in effect, both in the 42 days up to the day; 推估, backtested on the owner's data: 77 of 210 days ① in 2026-04-01…10-27). One definition: `state` / `current` (today; the API, the calculator), `fresh_on(..., ds=)` / `day_power` (a past day: activity analysis, SP-954), `base_check.cp_stale(..., efforts_until)` and `easy_power_tests`. The dict gains `efforts`, `basis`, `valid_until`, `left` (`stale_on` = valid_until + 1); ① reason names what anchors the CP and until when; ② and `CP_STALE_ALL` add 「（或最近跑一次強度課／比賽）」; the 訓練依據 card's chip reads `basis` / `left`. Tests: `backend/tests/test_cp_efforts_sp963.py` (+ the ② text in `test_power_state_sp950.py`) |

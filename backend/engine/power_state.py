@@ -4,7 +4,11 @@
 The owner's rule (2026-10-27, SP-950 問答 Q1; docs/research/no-power-meter-audit.md 「拍板的規則」):
 power is in effect only when the runner HAS a power meter (設定 › 基本資料 功率來源 = Stryd; not
 set → detected from the data, athlete_profile.effective_power_source) AND the CP is fresh — a CP
-test or a race in the last FRESH_DAYS (base_check.cp_stale, SP-493). Three states:
+test or a race in the last FRESH_DAYS (base_check.cp_stale, SP-493), or (SP-963, owner 2026-10-27)
+the Stryd PD fit anchored by recent all-out efforts: in the last FRESH_DAYS at least one short
+(EFFORT_SHORT_S, ~3–5 min) and one long (EFFORT_LONG_S, ~12–30 min) mean-max of a Stryd run on the
+power curve (≥ EFFORT_ON_CURVE of the model in effect that day) — an interval session, a race, a
+hard long run count without being a formal CP test (efforts_on). Three states:
 
   ① POWER  "power"  Stryd and a fresh CP: power targets, power models, CP tests every 42 days
   ② STALE  "stale"  Stryd but the CP is stale: heart rate / pace; a CP test keeps being suggested
@@ -23,7 +27,8 @@ is changed.
 state(...)        the state of one day from what the caller already has (week_plan: its thresholds)
 current(ds, day)  the same, reading the CP test / race days itself (the API, the status page)
 fresh_on(...)     was the CP fresh on a past day — SP-952 / SP-954's per-activity rule
-                  (「照那次活動當天」)
+                  (「照那次活動當天」); with `ds`, the all-out efforts count too (SP-963)
+efforts_on(ds, d) the short / long efforts that anchor the PD fit on `d` and until when (SP-963)
 no_meter(ds)      ③ for a Dataset: the source gate of the live threshold estimate
 """
 from __future__ import annotations
@@ -110,24 +115,199 @@ def anchor(today: dt.date, last_cp_test=None, last_race=None) -> Optional[dt.dat
     return max(days) if days else None
 
 
-def is_fresh(today: dt.date, last_cp_test=None, last_race=None) -> bool:
-    """base_check.cp_stale's negation (a CP test or a race in the last fresh_days())."""
+def is_fresh(today: dt.date, last_cp_test=None, last_race=None, efforts_until=None) -> bool:
+    """base_check.cp_stale's negation (a CP test or a race in the last fresh_days(), or — SP-963 —
+    the all-out efforts that anchor the PD fit still valid on `today`: efforts_on(...)["until"])."""
     from backend.engine import base_check as BCK
     return not BCK.cp_stale(today, None if last_cp_test is None else str(last_cp_test),
-                            None if last_race is None else str(last_race))
+                            None if last_race is None else str(last_race),
+                            None if efforts_until is None else str(efforts_until))
 
 
-def fresh_on(day, test_days: Iterable = (), race_days: Iterable = ()) -> bool:
+def fresh_on(day, test_days: Iterable = (), race_days: Iterable = (), ds=None) -> bool:
     """Was the CP fresh on `day`: a CP test or a race in the fresh_days() up to it (only the ones
-    on or before `day` count). For the per-activity decisions (SP-952 / SP-954: 「照那次活動當天」):
+    on or before `day` count), or — with `ds` (SP-963) — the PD fit anchored by all-out efforts on
+    that day (efforts_on). For the per-activity decisions (SP-952 / SP-954: 「照那次活動當天」):
     the caller passes every CP test day it knows (plan rows, the tests found in the data) and the
-    race days (plan events) once, then asks per activity."""
+    race days (plan events) once, then asks per activity (efforts_on is memoised per Dataset)."""
     d = _d(day)
     if d is None:
         return False
     tests = [x for x in (_d(t) for t in test_days) if x is not None and x <= d]
     races = [x for x in (_d(r) for r in race_days) if x is not None and x <= d]
-    return is_fresh(d, max(tests) if tests else None, max(races) if races else None)
+    if is_fresh(d, max(tests) if tests else None, max(races) if races else None):
+        return True
+    return ds is not None and bool((efforts_on(ds, d) or {}).get("anchored"))
+
+
+# ---------------------------------------------------------------------------
+# SP-963: the PD fit anchored by recent all-out efforts
+# ---------------------------------------------------------------------------
+# Owner 2026-10-27 (SP-963, SP-950's child; (a)): the CP in effect for a runner without a CP test is
+# WKO5's PD fit on the Stryd 90-day mean-max (SP-468). What matters is whether the fit has fresh
+# all-out efforts under it, not whether one of them was a formal CP test: in the fresh_days() up to
+# the day at least one SHORT and one LONG mean-max of a Stryd run lie on the power curve (≥
+# EFFORT_ON_CURVE of the model in effect that day at that duration). The run's whole-activity
+# mean-max — the very points the PD fit is built from — so an interval session, a race or a hard long
+# run count; watch power never (Stryd and Dataset.power_ok only). Backtest on the owner's data
+# (2026-04-01…10-27, SP-963 筆記): 79 of 210 days anchored at 95 % — the September interval block on,
+# the summer weeks of easy running off. All 推估.
+EFFORT_SHORT_S = (180.0, 300.0)      # 推估: ~3–5 min (the CP test's short bout, a VO2 interval)
+EFFORT_LONG_S = (720.0, 1800.0)      # 推估: ~12–30 min (the CP test's long bout, a threshold effort)
+EFFORT_ON_CURVE = 0.95               # 推估: ≥ 95 % of the PD model at that duration
+
+
+def _model_on(ds, day: dt.date) -> Optional[dict]:
+    """The Stryd PD model in effect on `day` ({"date", "params", "mftp"}: FitFolderDataset.
+    stryd_pd_params, the model the 個人化區間 use); None for a Dataset without one (WKO5, test doubles)."""
+    f = getattr(ds, "stryd_pd_params", None)
+    if not callable(f):
+        return None
+    try:
+        r = f(day)
+    except Exception:                       # noqa: BLE001 — no fit: nothing anchors
+        return None
+    return r if isinstance(r, dict) and r.get("params") else None
+
+
+def _gen(ds) -> tuple:
+    """The Dataset's generation for the efforts memo: the workouts and the PD fits in effect."""
+    ws = getattr(ds, "workouts", None) or []
+    last = ws[-1] if ws else None
+    return (len(ws), getattr(getattr(last, "entry", None), "file", None), id(getattr(ds, "_cp_est", None)))
+
+
+def _effort_memo(ds) -> dict:
+    """The per-generation memo of the efforts (in ds.memo; a Dataset without one: on the instance)."""
+    memo = _memo(ds)
+    if memo is None:
+        memo = ds.__dict__.setdefault("_sp963_memo", {}) if hasattr(ds, "__dict__") else {}
+    key = ("sp963_efforts", _gen(ds))
+    hit = memo.get(key)
+    if hit is None:
+        for k in [k for k in memo if isinstance(k, tuple) and k and k[0] == "sp963_efforts"]:
+            memo.pop(k, None)               # an older generation
+        hit = memo[key] = {"runs": None, "curves": {}, "ratios": {}, "days": {}}
+    return hit
+
+
+def _stryd_runs(ds, m: dict) -> list:
+    """(date, workout) of the runs whose power is Stryd (power_source + power_ok), by date."""
+    if m["runs"] is None:
+        from backend.engine import power_source as PS
+        from backend.engine.wko5expr.dataset import day_to_date
+        out = []
+        for w in getattr(ds, "workouts", None) or []:
+            if w.sport != "run":
+                continue
+            try:
+                ok = ds.power_source(w) == PS.STRYD and ds.power_ok(w)
+            except Exception:               # noqa: BLE001 — cannot tell: no anchor
+                ok = False
+            if ok:
+                out.append((day_to_date(w.day), w))
+        m["runs"] = sorted(out, key=lambda x: (x[0], x[1].idx))
+    return m["runs"]
+
+
+def _curve(ds, w, m: dict):
+    """The run's power mean-max (xs, ys): the curve the PD fit reads (racepower.athlete._curve), else
+    computed from the power channel (a Dataset without curve caches)."""
+    if w.idx in m["curves"]:
+        return m["curves"][w.idx]
+    c = None
+    try:
+        from backend.engine.racepower import athlete as A
+        c = A._curve(ds, w)
+    except Exception:                       # noqa: BLE001 — no curve cache (test doubles): from the samples
+        c = None
+    if not c or not c[0]:
+        try:
+            from backend.engine.racepower.cptest import mean_max_curve
+            p = ds.channel(w.idx, "power")
+            c = mean_max_curve(p) if p is not None else None
+        except Exception:                   # noqa: BLE001
+            c = None
+    m["curves"][w.idx] = c
+    return c
+
+
+def _best(xs, ys, params, lo: float, hi: float, cp: Optional[float]) -> Optional[dict]:
+    """The best ratio mean-max / model over durations lo…hi: {"seconds", "watts", "pct"}."""
+    import math
+    from backend.engine.algorithms import wko5_pdmodel as PDM
+    best = None
+    for x, y in zip(xs, ys):
+        if y is None or x < lo or x > hi:
+            continue
+        try:
+            mdl = PDM.model(params, float(x))
+        except (ValueError, OverflowError, ZeroDivisionError):
+            continue
+        if not mdl or not math.isfinite(mdl) or mdl <= 0:
+            continue
+        if cp and y > 2.0 * cp:             # a spiking sensor (racepower.athlete.implausible)
+            continue
+        q = float(y) / mdl
+        if best is None or q > best["pct"]:
+            best = {"seconds": int(round(float(x))), "watts": round(float(y)), "pct": q}
+    return best
+
+
+def _ratios(ds, w, model: dict, m: dict) -> tuple:
+    """(short, long) best efforts of run `w` against `model` (memoised per fit date and run)."""
+    key = (str(model.get("date")), w.idx)
+    if key not in m["ratios"]:
+        c = _curve(ds, w, m)
+        if not c or not c[0]:
+            m["ratios"][key] = (None, None)
+        else:
+            xs, ys, p, cp = list(c[0]), list(c[1]), model["params"], model.get("mftp")
+            m["ratios"][key] = (_best(xs, ys, p, *EFFORT_SHORT_S, cp), _best(xs, ys, p, *EFFORT_LONG_S, cp))
+    return m["ratios"][key]
+
+
+def efforts_on(ds, day) -> Optional[dict]:
+    """SP-963: the all-out efforts that anchor the Stryd PD fit on `day`:
+
+        anchored   a short and a long effort on the power curve in the fresh_days() up to `day`
+        short, long  the latest of each kind {"date", "seconds", "watts", "pct"} (None without one)
+        until      the last day they keep the CP fresh (the older of the two + fresh_days()); None
+        cp, fit_date   the model's mFTP and its fit date
+
+    None for a Dataset without a Stryd PD model (WKO5, test doubles) or a day without a fit.
+    Memoised per Dataset generation and day: activity analysis asks it per activity."""
+    d = _d(day)
+    if d is None or ds is None:
+        return None
+    m = _effort_memo(ds)
+    if d in m["days"]:
+        return m["days"][d]
+    out = None
+    model = _model_on(ds, d)
+    if model is not None:
+        import bisect
+        lim = fresh_days()
+        runs = _stryd_runs(ds, m)
+        dates = [r[0] for r in runs]
+        lo = bisect.bisect_left(dates, d - dt.timedelta(days=lim))     # day 42 still counts (cp_stale)
+        hi = bisect.bisect_right(dates, d)
+        short = long_ = None
+        for wd, w in runs[lo:hi]:           # oldest → newest: the latest qualifying one wins
+            s, lg = _ratios(ds, w, model, m)
+            if s and s["pct"] >= EFFORT_ON_CURVE:
+                short = {**s, "date": wd.isoformat()}
+            if lg and lg["pct"] >= EFFORT_ON_CURVE:
+                long_ = {**lg, "date": wd.isoformat()}
+        anchored = short is not None and long_ is not None
+        until = None
+        if anchored:
+            until = (min(_d(short["date"]), _d(long_["date"])) + dt.timedelta(days=lim)).isoformat()
+        out = {"anchored": anchored, "short": short, "long": long_, "until": until,
+               "cp": None if model.get("mftp") is None else round(float(model["mftp"]), 1),
+               "fit_date": None if _d(model.get("date")) is None else _d(model.get("date")).isoformat()}
+    m["days"][d] = out
+    return out
 
 
 def plan_days(plan) -> tuple[list[str], list[str]]:
@@ -153,60 +333,127 @@ def plan_days(plan) -> tuple[list[str], list[str]]:
 
 def state(today: dt.date, profile: Optional[dict] = None, *, ds=None, source: Optional[str] = None,
           how: Optional[str] = None, last_cp_test=None, last_race=None, cp: Optional[float] = None,
-          cp_date: Optional[str] = None, cp_source: Optional[str] = None) -> dict:
+          cp_date: Optional[str] = None, cp_source: Optional[str] = None, efforts=Ellipsis) -> dict:
     """The power state of `today` (JSON-safe):
 
         state        power | stale | none (① ② ③), code 1 | 2 | 3, label
         power        bool — power is in effect (①)
         meter        bool — the runner has a power meter
         equipment    stryd | none | None (unknown), equipment_how (設定 / 自動偵測 / 預設)
-        fresh        the CP is fresh (a CP test or a race in fresh_days())
-        last_cp_test, last_race, anchor   the days the freshness stands on (ISO)
-        days         days since `anchor` (None without one)
-        stale_on     the first day the CP is stale (anchor + fresh_days() + 1); None without one
+        fresh        the CP is fresh (a CP test or a race in fresh_days(), or — SP-963 — the PD fit
+                     anchored by recent all-out efforts)
+        last_cp_test, last_race, anchor   the CP test / race days (ISO); anchor = the later one
+        days         days since `anchor` (None without one) — 「CP 已 N 天沒測」
+        efforts      SP-963: efforts_on(ds, today) — {anchored, short, long, until, cp, fit_date}; None
+        basis        what keeps the CP fresh longest: test | race | efforts | None (stale)
+        valid_until  the last day the CP is fresh (ISO; the later of anchor + fresh_days() and the
+                     efforts' until); None without either
+        left         days from today to valid_until (≥ 0 while fresh); None without it
+        stale_on     the first day the CP is stale (valid_until + 1); None without one
         fresh_days   the shelf life (42)
         cp, cp_date, cp_source            the CP on file (shown in ②, never used for targets)
-        reason       one zh-TW line (the request's language)
+        reason       one zh-TW line (the request's language): ① names what keeps the CP fresh and
+                     until when (「CP 195 W · 9/30 的 5 分鐘 228 W 和 12 分鐘 222 W 撐著，有效到 11/11」)
         suggest      cp (① ② — the CP test keeps it / brings it back) | None (③: no test in its place)
 
-    `source` / `how`: the equipment when the caller has it, else read from `profile` / `ds`."""
+    `source` / `how`: the equipment when the caller has it, else read from `profile` / `ds`.
+    `efforts`: efforts_on's dict when the caller has it; not given → read on `ds` (None without)."""
     if source is None and how is None:
         source, how = equipment(profile, ds, today)
     meter = has_meter(source)
-    fresh = is_fresh(today, last_cp_test, last_race)
+    if efforts is Ellipsis:
+        try:
+            efforts = efforts_on(ds, today) if ds is not None and meter else None
+        except Exception:                   # noqa: BLE001 — unreadable data: no efforts
+            efforts = None
+    eff_until = (efforts or {}).get("until") if (efforts or {}).get("anchored") else None
+    fresh = is_fresh(today, last_cp_test, last_race, eff_until)
     st = NONE if not meter else POWER if fresh else STALE
     a = anchor(today, last_cp_test, last_race)
     lim = fresh_days()
     days = (today - a).days if a is not None else None
+    a_until = a + dt.timedelta(days=lim) if a is not None else None
+    e_until = _d(eff_until)
+    until = max([x for x in (a_until, e_until) if x is not None], default=None)
+    basis = None
+    if fresh:
+        if e_until is not None and (a_until is None or e_until > a_until or a_until < today):
+            basis = "efforts"
+        else:
+            basis = "test" if a is not None and a == _d(last_cp_test) else "race"
     out = {"state": st, "code": CODE[st], "label": _(LABEL[st]), "power": st == POWER, "meter": meter,
            "equipment": source, "equipment_how": _(how) if how else None, "fresh": fresh,
            "last_cp_test": None if _d(last_cp_test) is None else _d(last_cp_test).isoformat(),
            "last_race": None if _d(last_race) is None else _d(last_race).isoformat(),
            "anchor": a.isoformat() if a else None, "days": days,
-           "stale_on": (a + dt.timedelta(days=lim + 1)).isoformat() if a else None, "fresh_days": lim,
+           "efforts": efforts, "basis": basis,
+           "valid_until": until.isoformat() if until else None,
+           "left": (until - today).days if until else None,
+           "stale_on": (until + dt.timedelta(days=1)).isoformat() if until else None, "fresh_days": lim,
            "cp": cp, "cp_date": cp_date, "cp_source": cp_source,
            "suggest": None if st == NONE else "cp"}
     out["reason"] = reason(out)
     return out
 
 
+def _md(day) -> str:
+    d = _d(day)
+    return f"{d.month}/{d.day}" if d else "–"
+
+
+def _dur(seconds) -> str:
+    """5 分鐘 / 4 分 23 秒 (an effort's duration)."""
+    s = int(round(float(seconds or 0)))
+    if s % 60 == 0:
+        return _("{m} 分鐘", m=s // 60)
+    return _("{m} 分 {s} 秒", m=s // 60, s=s % 60)
+
+
+def efforts_text(eff: Optional[dict]) -> str:
+    """The efforts that anchor the CP: 「10/22 的 5 分鐘 228 W 和 10/18 的 20 分鐘 205 W」 (one run:
+    「9/30 的 5 分鐘 228 W 和 12 分鐘 222 W」); "" without both."""
+    sh, lg = (eff or {}).get("short"), (eff or {}).get("long")
+    if not sh or not lg:
+        return ""
+    a = _("{t} {w} W", t=_dur(sh["seconds"]), w=sh["watts"])
+    b = _("{t} {w} W", t=_dur(lg["seconds"]), w=lg["watts"])
+    if sh["date"] == lg["date"]:
+        return _("{d} 的 {a} 和 {b}", d=_md(sh["date"]), a=a, b=b)
+    first, second = sorted([(sh["date"], a), (lg["date"], b)], reverse=True)
+    return _("{d1} 的 {a} 和 {d2} 的 {b}", d1=_md(first[0]), a=first[1], d2=_md(second[0]), b=second[1])
+
+
 def reason(ps: dict) -> str:
-    """The state's one line: ① why power, ② 「CP 已 N 天沒測…做一次 CP 測試就切回功率」, ③ no meter."""
+    """The state's one line: ① what keeps the CP fresh and until when (SP-963: 「CP 195 W · 10/22 的
+    … 和 10/18 的 … 撐著，有效到 11/29」), ② 「CP 已 N 天沒測…做一次 CP 測試就切回功率（或最近跑一次
+    強度課／比賽）」, ③ no meter."""
     st = ps.get("state")
     if st == NONE:
         return _("沒有功率計：課表、模型和門檻都用心率／配速")
     if st == STALE:
         return stale_text(ps)
-    if ps.get("days") is not None:
-        return _("用功率：最近一次 CP 測試或比賽在 {n} 天前（{lim} 天內有效）", n=ps["days"], lim=ps.get("fresh_days"))
-    return _("用功率")
+    basis, until = ps.get("basis"), ps.get("valid_until")
+    what = ""
+    if basis == "efforts":
+        what = efforts_text(ps.get("efforts"))
+    elif basis == "test" and ps.get("anchor"):
+        what = _("{d} 的 CP 測試", d=_md(ps["anchor"]))
+    elif basis == "race" and ps.get("anchor"):
+        what = _("{d} 的比賽", d=_md(ps["anchor"]))
+    if not what or not until:
+        return _("用功率")
+    what += " " if what[-1:].isascii() else ""       # 「228 W 撐著」, 「CP 測試撐著」
+    line = _("{what}撐著，有效到 {until}", what=what, until=_md(until)).strip()
+    cp = ps.get("cp")
+    return _("CP {cp} W · {line}", cp=round(float(cp)), line=line) if cp else line
 
 
 def stale_text(ps: dict) -> str:
-    """② (owner 2026-10-27: always say it): how old the CP is, what is used now, how to get power back."""
+    """② (owner 2026-10-27: always say it): how old the CP is, what is used now, how to get power back
+    (SP-963: a CP test, or a recent hard session / race whose efforts land on the power curve)."""
     if ps.get("days") is not None:
-        return _("CP 已 {n} 天沒測，目前用心率／配速；做一次 CP 測試就切回功率", n=ps["days"])
-    return _("還沒有 CP 測試或比賽，目前用心率／配速；做一次 CP 測試就切回功率")
+        return _("CP 已 {n} 天沒測，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）", n=ps["days"])
+    return _("還沒有 CP 測試或比賽，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）")
 
 
 def short_reason(ps: Optional[dict]) -> str:
@@ -371,13 +618,14 @@ def _no_meter_memo(ds) -> bool:
 
 def day_power(ds, day) -> bool:
     """Power is in effect on `day` for this Dataset's runner: not ③ and the CP fresh on that day
-    (fresh_on over cp_days). True for a Dataset that cannot tell (see above)."""
+    (fresh_on over cp_days, and — SP-963 — the all-out efforts on the power curve, efforts_on). True
+    for a Dataset that cannot tell (see above)."""
     if not _can_tell(ds):
         return True
     if _no_meter_memo(ds):
         return False
     tests, races = cp_days(ds)
-    return fresh_on(day, tests, races)
+    return fresh_on(day, tests, races, ds=ds)
 
 
 def activity_power(ds, w) -> bool:

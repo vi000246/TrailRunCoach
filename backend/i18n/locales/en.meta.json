@@ -16478,5 +16478,49 @@
   "功率不生效：AeT 測試改用固定配速": {
     "draft": true,
     "src": "SP-949"
+  },
+  "CP 已 {n} 天沒測，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "還沒有 CP 測試或比賽，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "CP 太舊（最近沒有 CP 測試、比賽或全力段）：用心率；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "{m} 分鐘": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "{t} {w} W": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "{d} 的 {a} 和 {b}": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "{d1} 的 {a} 和 {d2} 的 {b}": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "{d} 的 CP 測試": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "{d} 的比賽": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "{what}撐著，有效到 {until}": {
+    "draft": true,
+    "src": "SP-963"
+  },
+  "CP {cp} W · {line}": {
+    "draft": true,
+    "src": "SP-963"
   }
 }

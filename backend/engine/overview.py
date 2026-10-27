@@ -2083,7 +2083,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                       "text": _("恢復期：心率區間為主；功率、配速目標 × {f:.3f}（停跑 {days} 天的 FVDOT{cross}）",
                                 f=f, days=rp["days"], cross=_("，有交叉訓練") if rp.get("cross") else "")})
     # ---- 功率狀態 (SP-950, engine/power_state.py): power only with a power meter AND a fresh CP (a CP
-    # test or a race in base_check.EP_ALL_OUT_DAYS). ② (stale) / ③ (no meter): the plan has no CP —
+    # test or a race in base_check.EP_ALL_OUT_DAYS, or — SP-963 — recent all-out efforts on the Stryd
+    # power curve: power_state.efforts_on, read on `ds` by state()). ② (stale) / ③ (no meter): the plan has no CP —
     # no watts in any target text, no 個人化 power zone set, no % CP test intensity; the CP on file
     # stays in power_state (shown, never used). Nothing is deleted: the next fresh CP / meter brings it back.
     from backend.engine import power_state as PST
@@ -2911,6 +2912,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             last_cp_test=last_cp_test_day(status.plan, today, (tx.get("cp_test") or {}).get("date")),
             last_race=last_race_day(status.plan, today),
             last_aet_test=tx.get("aet_last_test"),
+            # SP-963: recent all-out efforts on the power curve keep the CP fresh too (power_state)
+            efforts_until=(pst.get("efforts") or {}).get("until") if (pst.get("efforts") or {}).get("anchored") else None,
             # SP-493: under 儲備心率 / 最大心率 the cap's own basis is the max HR
             hr_model=(hrz or {}).get("model") or "lthr", mhr=hm.get("value"), mhr_conf=hm.get("confidence"),
             cap_measured=aet_meas, model_label=(hrz or {}).get("short") or "")

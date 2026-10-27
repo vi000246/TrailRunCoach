@@ -33,7 +33,8 @@ def test_three_states_days_and_the_stale_day():
     two = _st("stryd", "2026-09-07", cp=250.0)
     assert two["state"] == PST.STALE and two["code"] == 2 and not two["power"] and two["meter"]
     assert two["days"] == 50 and two["stale_on"] == "2026-10-20" and two["cp"] == 250.0
-    assert two["reason"] == "CP 已 50 天沒測，目前用心率／配速；做一次 CP 測試就切回功率"
+    # SP-963: 「…（或最近跑一次強度課／比賽）」 — recent all-out efforts bring power back too
+    assert two["reason"] == "CP 已 50 天沒測，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）"
     assert two["suggest"] == "cp"
     # a race counts as the all-out effort too (base_check.cp_stale)
     assert _st("stryd", "2026-08-01", "2026-10-20")["state"] == PST.POWER
@@ -183,7 +184,7 @@ def test_week_plan_stale_cp_reminds_and_suggests_the_cp_test(monkeypatch):
     assert ps["state"] == PST.STALE and ps["days"] == days and ps["cp"] == 250.0
     # no CP in the plan: no watts in any target, the targets by HR
     assert wp["thresholds"]["cp"] is None and not _watts(wp)
-    reminder = f"CP 已 {days} 天沒測，目前用心率／配速；做一次 CP 測試就切回功率"
+    reminder = f"CP 已 {days} 天沒測，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）"  # SP-963
     assert any(n.get("src") == "power_state" and n["text"] == reminder for n in wp["notes"])
     (cp,) = [t for t in wp["test_suggestions"] if t["kind"] == "cp"]
     assert reminder in cp["reason"]
