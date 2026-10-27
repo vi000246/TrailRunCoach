@@ -82,7 +82,8 @@ def test_setting_defaults_to_auto_and_is_a_bool(tmp_path):
         validate(PU.SETTING_KEY, "off")
 
 
-def test_settings_api_round_trip(tmp_path):
+def test_settings_api_round_trip(tmp_path, monkeypatch):
+    from backend.api import sync as SY
     from backend.api.sync import SyncSettingsBody, get_sync_settings, put_sync_settings
 
     async def go():
@@ -90,6 +91,15 @@ def test_settings_api_round_trip(tmp_path):
         g = await get_sync_settings(1, s)
         # auto: no data and no power source entered -> no power meter -> HR only
         assert g["use_power_stored"] is None and g["use_power"] is (g["power_source"] == "stryd")
+        # SP-950 ③ (no power meter): a stored 使用功率 on is kept but not used
+        if g["power_source"] == "none":
+            r = await put_sync_settings(SyncSettingsBody(use_power=True), 1, s)
+            assert r["use_power_stored"] is True and r["use_power"] is False
+
+        async def stryd():
+            return "stryd", "設定"
+        monkeypatch.setattr(SY, "_power_source", stryd)
+        # with a Stryd the stored choice is what's used, both ways
         r = await put_sync_settings(SyncSettingsBody(use_power=True), 1, s)
         assert r["use_power"] is True
         r = await put_sync_settings(SyncSettingsBody(use_power=False), 1, s)
