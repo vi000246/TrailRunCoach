@@ -492,8 +492,10 @@ def test_the_accept_watch_power_help_matches_the_cp_behaviour():
               "Stryd power only", "CP test done with watch power"):
         assert s in en, s
     html = (root / "backend/static/settings.html").read_text("utf-8")
-    assert 'data-i18n="settings.power.watch"' in html and "title:settings.power.watch_help" in html
-    assert f'title="{zh}"' in html                                    # the page's zh text is the catalog's
+    # SP-955 (owner 2026-10-27, SP-950's 後來的修正): watch power is no power source — the control and its help
+    # left the settings page (the stored value is ignored, power_state.accept_watch); the catalog text stays
+    assert 'data-i18n="settings.power.watch"' not in html and "title:settings.power.watch_help" not in html
+    assert 'id="u-watch"' not in html
     repo = (root / "backend/settings/repository.py").read_text("utf-8")
     assert "SP-574" in repo and "NOT the 課表 / charts CP" in repo and "enter a CP test made with wrist power" in repo
     # the behaviour the text describes

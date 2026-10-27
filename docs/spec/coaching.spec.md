@@ -278,3 +278,4 @@ accounts.db（`backend/accounts/store.py:292-336`，冪等建表）：
 | 2026-10-25 | feature | SP-822 | 學員可另外允許教練看傷病紀錄：`PERMS` 第三個開關 `injury`（預設關、只開讀，`READ_PERM`），關著時活動回答不帶疼痛欄位；代看時的選單與傷病紀錄頁唯讀鎖。不改資料表 |
 | 2026-10-25 | fix | SP-947 | 代看時建議框「看起來好了？」的「好了」403 `COACH_VIEW_READONLY`（不論開關，傷病紀錄對教練唯讀），那一列顯示「只有學員本人能標成好了」。由傷病推出來的課表說明要不要藏還在問 |
 | 2026-10-26 | feature | SP-948 | 看傷病紀錄關著時，代看的課表與建議說明藏部位、傷別、疼痛分數、生病種類（換成「傷病」、原因留著），登入閘對 `REDACT_READS` 的回答送出時改寫（`viewing.redact`）；`injury_light` 不送；建議框不給傷病列 |
+| 2026-10-27 | feature | SP-955 | 設定 › 訓練依據：代看可讀 `GET /api/v1/plan/power-state`（`READ_OPEN`）與 `GET /api/v1/overview/plan/basis`；`PATCH /api/v1/overview/plan/prefs`（目標依據、可跑坡目標、AeT／CP 測試方式）歸「門檻與訓練設定」開關（`basis_prefs`）；裝備卡在代看時藏起來（寫的是學員本人的 profile） |

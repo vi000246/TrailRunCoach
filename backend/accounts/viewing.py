@@ -83,7 +83,7 @@ READ_OPEN = _rx(
     r"|races/(?:page|detail|readiness/[^/]+)|activity-compare|activity-compare/(?:page|activities))",
     r"/api/v1/achievements(?:/page)?",
     r"/api/v1/plan(?:/page|/events/[^/]+/gpx(?:/preview)?|/thresholds|/profile|/profile/detect|/profile/hint-level"
-    r"|/hr-profile|/power-zones|/pmc-start|/race-pace|/threshold-(?:estimate|history|check))?",
+    r"|/hr-profile|/power-zones|/power-state|/pmc-start|/race-pace|/threshold-(?:estimate|history|check))?",
     r"/api/v1/racepower/(?:page|inputs|peaks|weather|grade-model|cadence-check|heat-status|altitude-acclimatisation"
     r"|hike-meta|solo-hikes|goal-basis|power-state|backtest|surface/[^/]+|saved/[^/]+)",
     r"/api/v1/routes(?:/status|/page|/uploaded/page|/[^/]+|/[^/]+/compare)?",
@@ -145,6 +145,8 @@ WRITE_OPEN: list[tuple[str, str, frozenset, re.Pattern]] = [(perm, action, froze
     ("training", "power_zones", "PUT", r"/api/v1/plan/power-zones"),
     ("training", "pmc_start", "PUT", r"/api/v1/plan/pmc-start"),
     ("training", "race_pace", "PUT", r"/api/v1/plan/race-pace"),
+    # SP-955: 目標依據 / 可跑坡目標 / AeT・CP 測試方式, now set on 設定 › 訓練依據 (PATCH: those fields only)
+    ("training", "basis_prefs", "PATCH", _P + r"/prefs"),
 ]]
 # the tenant caps each switch gives the view (the shell unlocks those controls; nothing else does)
 CAPS = {"plan": ("plan.write", "push", "upload.gpx"), "training": ("thresholds.write",)}

@@ -3075,6 +3075,80 @@ async def put_prefs(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     return _prefs_body(p)
 
 
+# 設定 › 訓練依據 (SP-955): the 課表偏好 fields that moved to the settings page — changed one at a time there,
+# the rest of the stored preferences kept (PUT /prefs is the whole set, its missing fields the defaults)
+BASIS_FIELDS = ("target_basis", "climb_target", "aet_test_protocol", "cp_test_protocol")
+
+
+@router.patch("/prefs")
+async def patch_prefs(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """Some of 目標依據 / 可跑坡目標 / AeT 測試方式 / CP 測試方式 (BASIS_FIELDS) over the stored preferences.
+    A new 目標依據 re-plans and re-sends the upcoming sessions the way a new 課表心率區間 does
+    (plan_auto.after_thresholds)."""
+    from backend.engine import plan_prefs as PP
+    from backend.settings.repository import SettingsRepository
+    bad = [k for k in body if k not in BASIS_FIELDS]
+    if bad or not body:
+        raise HTTPException(400, f"only {BASIS_FIELDS} can be patched")
+    repo = SettingsRepository(db)
+    try:
+        cur = PP.from_settings({k: await repo.get(k) for k in PP.KEY_FIELDS})
+        p = PP.from_body({**cur.to_dict(), **body})
+        PP.check(p)
+        for k, v in p.settings().items():
+            await repo.set(k, v)
+    except (ValueError, TypeError) as e:
+        await db.rollback()
+        raise HTTPException(400, str(e))
+    await db.commit()
+    if cur.target_basis != p.target_basis:
+        from backend.engine import plan_auto as PA
+        PA.after_thresholds()
+    return _prefs_body(p)
+
+
+@router.get("/basis")
+async def get_basis():
+    """設定 › 訓練依據 «現在用什麼練» (SP-955, engine/training_basis.py): the plan summary (phase and its week,
+    this week's structure, the Zone 3 / 5 unlock and what is missing, the next test) and, per kind of session
+    of 主要訓練項目, the basis target_policy gives it, its target and why. The power state is GET
+    /api/v1/plan/power-state's (the same dict as the week plan's thresholds.power_state)."""
+    from backend.engine import plan_prefs as PP
+    from backend.engine import target_policy as TP
+    from backend.engine import training_basis as TB
+    inp = await _inputs()
+    th = inp.get("thresholds") or {}
+    prefs = PP.load()
+
+    def build() -> dict:
+        s = TB.summary(inp)
+        return {**s, "target_basis": TP.pref_basis(prefs), "tpace": th.get("tpace"),
+                "pace_zones": TB.pace_zones(th.get("tpace")),
+                "power_state": th.get("power_state"),
+                "rows": TB.rows(s["sport"], th, prefs, s.get("mp_goal_pace_s")),
+                "unlock": _basis_unlock()}
+    return await run_in_threadpool(build)
+
+
+def _basis_unlock() -> Optional[dict]:
+    """The Zone 3 / Zone 5 unlock (phase_checks.compute_unlock, the 總覽 card's): open, the head line and
+    what is still missing; None when it can't tell yet."""
+    from backend.api.overview import _dataset, _status
+    from backend.engine import overview as O
+    from backend.engine import phase_checks as PC
+    try:
+        ds = _dataset()
+        today = O.day_to_date(ds.today)
+        st = _status(ds, today)
+        u = PC.compute_unlock(ds, st.plan, today, st=st)
+    except Exception:                          # noqa: BLE001 — no data yet: the card leaves the line out
+        return None
+    if not u:
+        return None
+    return {z: {"open": bool((u.get(z) or {}).get("open")), "head": (u.get(z) or {}).get("head") or "",
+                "missing": list((u.get(z) or {}).get("chips") or [])} for z in ("z3", "z5")}
+
+
 # ---------------------------------------------------------------------------
 # 不排課日期 (engine/blackouts.py)
 #

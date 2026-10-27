@@ -17,10 +17,10 @@ DIALOG = DIALOG[:DIALOG.index("</dialog>")]
 # the tab of every setting (form field name, or the id of a control the JS fills in)
 WHERE = {
     "days": ["pf-days", "runs", "wh_mode", "weekly_hours", "cap_weekday", "cap_long", "cap_mode", "pf-pdays", "pf-pd-add", "pf-dw"],
-    "content": ["quality", "target_basis", "terrain_easy", "terrain_long", "terrain_quality", "warmup_on", "warmup_min",
+    "content": ["quality", "terrain_easy", "terrain_long", "terrain_quality", "warmup_on", "warmup_min",
                 "pf-gate", "quality_gate_weeks", "warmup_commute_min", "cooldown_min"],
     "strength": ["strength", "pf-sdays", "pf-sm", "pf-ng", "pf-mv"],
-    "races": ["pf-cptp", "pf-aetp", "aet_test_days", "taper_days", "transition_weeks", "b2b"],   # SP-569: no heat rows
+    "races": ["aet_test_days", "taper_days", "transition_weeks", "b2b"],   # SP-569: no heat rows
     "auto": ["ap-run", "ap_enabled", "ap_push", "ap_push_days", "ap_confirm_big", "ap_rpe_rule", "ap_notify", "ap-err"],
 }
 
@@ -62,6 +62,23 @@ def test_every_form_field_is_in_a_panel():
               "aet_test_days:", "aet_test_protocol:", "quality_gate:", "b2b:", "transition_weeks:", "taper_days:",
               "strength_moves:", "strength_no_gear:"):
         assert k in read, k
+
+
+def test_sp955_moved_settings_are_gone_and_sent_back_as_stored():
+    """SP-955: 目標依據, 可跑坡目標, AeT／CP 測試方式 live in 設定 › 訓練依據 now — not in the dialog; the dialog
+    sends them back as stored (PUT /prefs is the whole set); 主要訓練項目 sits first, above the tabs."""
+    for gone in ('name="target_basis"', 'name="climb_target"', 'id="pf-cptp"', 'id="pf-aetp"'):
+        assert gone not in DIALOG, gone
+    assert 'href="/api/v1/app/settings#overrides"' in DIALOG and 'href="/api/v1/app/settings#thresholds"' in DIALOG
+    assert DIALOG.index('id="pf-sport"') < DIALOG.index('class="pf-tabs"')
+    read = PAGE[PAGE.index("function pfRead()"):PAGE.index("function pfErrKey(")]
+    for k in ("target_basis", "climb_target", "cp_test_protocol", "aet_test_protocol"):
+        assert f"{k}: PF_KEEP.{k}" in read, k
+    op = PAGE[PAGE.index("async function openPrefs("):]
+    assert "PF_KEEP = Object.fromEntries(PF_MOVED.map((k) => [k, b.prefs[k]]))" in op[:op.index("\n}\n")]
+    # the sport is saved (the one setting both pages write) before the preferences
+    sub = PAGE[PAGE.index('PFF.addEventListener("submit"'):]
+    assert sub.index('sj("PUT", "/api/v1/sync/settings", { primary_sport: sport })') < sub.index('sj("PUT", `${PAPI}/prefs`, p)')
 
 
 def test_last_tab_remembered_in_local_storage_with_try_catch():

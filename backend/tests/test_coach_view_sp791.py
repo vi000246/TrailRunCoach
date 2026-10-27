@@ -43,7 +43,7 @@ READS_OPEN = """
 /api/v1/app/workouts/x/kind /api/v1/app/workouts/x/review /api/v1/app/workouts/x/samples
 /api/v1/app/workouts/x/segments /api/v1/app/workouts/x/zone-sets
 /api/v1/intro/estimate /api/v1/intro/example/x /api/v1/intro/plan /api/v1/intro/templates
-/api/v1/overview/b2b /api/v1/overview/feasibility /api/v1/overview/page /api/v1/overview/plan/auto
+/api/v1/overview/b2b /api/v1/overview/feasibility /api/v1/overview/page /api/v1/overview/plan/auto /api/v1/overview/plan/basis
 /api/v1/overview/plan/blackouts /api/v1/overview/plan/calendar /api/v1/overview/plan/compliance
 /api/v1/overview/plan/compliance/page /api/v1/overview/plan/equivalence /api/v1/overview/plan/fresh
 /api/v1/overview/plan/history /api/v1/overview/plan/prefs /api/v1/overview/plan/prefs/gate
@@ -59,7 +59,7 @@ READS_OPEN = """
 /api/v1/overview/status /api/v1/overview/status/fresh /api/v1/overview/summary /api/v1/overview/weekplan
 /api/v1/overview/z5
 /api/v1/plan /api/v1/plan/events/x/gpx /api/v1/plan/events/x/gpx/preview /api/v1/plan/hr-profile /api/v1/plan/page
-/api/v1/plan/pmc-start /api/v1/plan/power-zones /api/v1/plan/profile /api/v1/plan/profile/detect
+/api/v1/plan/pmc-start /api/v1/plan/power-state /api/v1/plan/power-zones /api/v1/plan/profile /api/v1/plan/profile/detect
 /api/v1/plan/profile/hint-level /api/v1/plan/race-pace /api/v1/plan/threshold-check /api/v1/plan/threshold-estimate
 /api/v1/plan/threshold-history /api/v1/plan/thresholds
 /api/v1/racepower/altitude-acclimatisation /api/v1/racepower/backtest /api/v1/racepower/cadence-check
@@ -96,7 +96,7 @@ PUT /api/v1/plan/events/x/gpx/splits|PUT /api/v1/plan/phases
 """.replace("\n", "|").split("|") if x.strip()}
 WRITES_TRAINING = {tuple(x.split()) for x in """
 PUT /api/v1/plan/hr-profile|PUT /api/v1/plan/pmc-start|PUT /api/v1/plan/power-zones|PUT /api/v1/plan/race-pace
-PUT /api/v1/plan/thresholds|POST /api/v1/plan/thresholds/apply-estimate
+PUT /api/v1/plan/thresholds|POST /api/v1/plan/thresholds/apply-estimate|PATCH /api/v1/overview/plan/prefs
 """.replace("\n", "|").split("|") if x.strip()}
 
 # never read the session at all (the gate hands them over before it: their own secret / token), so 代看

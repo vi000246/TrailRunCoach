@@ -311,16 +311,14 @@ def test_settings_basic_info_section_is_translated():
     sec = html[html.index('<section id="general">'):]
     sec = sec[:sec.index("</section>")]
     assert not cjk.findall(sec), cjk.findall(sec)
-    assert '<option value="" data-i18n="settings.general.power_auto">Auto (from the data)</option>' in sec
-    assert ">Watch-estimated power</option>" in sec and ">No power meter</option>" in sec
+    # SP-955: the power-source dropdown left 基本資料 — the power meter is 訓練依據 › 裝備 (Stryd / no power meter)
+    assert 'id="p-meter"' not in sec and "Watch-estimated power" not in sec
     src = (static / "settings.html").read_text("utf-8")
     js = src[src.index("async function loadProfile()"):src.index("// ---- 心率")]
     code = "\n".join(l.split("//")[0] for l in js.splitlines())           # comments may stay Chinese
     assert not cjk.findall(code), cjk.findall(code)
-    assert 't("settings.general.power_detected", { src: d.labels[s] })' in js
+    assert "power_source: PROF.profile.power_source || null" in js            # 儲存 sends the stored one back
     keys = {k for k in re.findall(r'settings\.general\.(\w+)', src) if not k.endswith("_")} | {"male", "female"}
     for loc in ("zh-TW", "en"):
         cat = json.loads((static / "i18n" / loc / "settings.json").read_text("utf-8"))
         assert not [k for k in keys if not cat.get(f"general.{k}")], loc
-    en = json.loads((static / "i18n" / "en" / "settings.json").read_text("utf-8"))
-    assert en["general.power_detected"].format(src="Watch-estimated power") == "Auto (detected: Watch-estimated power)"

@@ -25,7 +25,7 @@ def test_no_question_mark_writes_into_a_line_any_more():
     for gone in ('id="b-note"', 'id="ar-note"', 'id="ds-note"'):
         assert gone not in html, gone
     # the two status lines stay, for their own text (no longer overwritten by the ?)
-    assert 'id="u-power-note"' in html and 'id="u-sport-note"' in html
+    assert 'id="equip-note"' in html and 'id="u-sport-note"' in html      # SP-955: 使用功率 → 裝備
 
 
 def test_every_settings_question_mark_has_a_title():

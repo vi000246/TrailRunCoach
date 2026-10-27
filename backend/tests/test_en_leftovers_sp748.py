@@ -117,17 +117,21 @@ def _settings() -> str:
     return (STATIC / "settings.html").read_text("utf-8")
 
 
-def test_settings_power_section_is_translated():
+def test_settings_basis_tab_is_translated():
+    """SP-955: the 功率 section (使用功率, 手錶推估功率) is gone; its place is 訓練依據 (#basis), all of it through
+    the catalogs, its script's settings.basis.* keys in both languages."""
     html = _settings()
-    sec = html[html.index('<section id="power">'):html.index("</section>", html.index('<section id="power">'))]
+    assert '<section id="power">' not in html
+    sec = html[html.index('<section id="basis">'):html.index('<section id="sync">')]
     from backend.scripts import i18n_extract as X
     left = [m for _l, m in X.scan_html(STATIC / "x.html", sec).unwrapped]
     assert left == [], left
     zh = json.loads((STATIC / "i18n" / "zh-TW" / "settings.json").read_text("utf-8"))
     en = json.loads((STATIC / "i18n" / "en" / "settings.json").read_text("utf-8"))
-    keys = set(re.findall(r'settings\.(power\.[\w.]+)', html))
-    assert {"power.title", "power.use", "power.auto_note", "power.fail"} <= keys
-    assert all(zh.get(k) and en.get(k) and not CJK.search(en[k]) for k in keys), keys
+    keys = {k for k in re.findall(r'settings\.(basis\.[\w.]+)', html) if not k.endswith(("_", "."))}
+    assert {"basis.equip_h", "basis.now_h", "basis.st_sport", "basis.manual"} <= keys
+    keys |= {f"basis.st_{s}" for s in ("power", "stale", "none")} | {f"basis.aetp_{k}" for k in ("auto", "xu90", "ua60", "ua40", "evoke60", "friel")}
+    assert all(zh.get(k) and en.get(k) and not CJK.search(en[k]) for k in keys), [k for k in keys if not (zh.get(k) and en.get(k))]
 
 
 def test_power_source_how_is_translated():

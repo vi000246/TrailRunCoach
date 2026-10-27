@@ -1211,7 +1211,7 @@ async function load(opts = {}) {
   const focus = S.focusChart; S.focusChart = null;
   if (!visCharts(d).length) {
     grid.insertAdjacentHTML("beforeend", d.charts.every((c) => c.power)
-      ? `<div class="empty">${esc(t("viewer.power_only"))} <a href="/api/v1/app/settings#power">${esc(t("viewer.to_settings"))}</a></div>`
+      ? `<div class="empty">${esc(t("viewer.power_only"))} <a href="/api/v1/app/settings#equip">${esc(t("viewer.to_settings"))}</a></div>`
       : S.mode === "workout" ? `<div class="empty">${esc(t("viewer.trail_only"))}</div>`
       : `<div class="empty">${esc(t("viewer.sport_only"))} <a href="/api/v1/app/settings#sport">${esc(t("viewer.to_settings"))}</a></div>`);
     return;

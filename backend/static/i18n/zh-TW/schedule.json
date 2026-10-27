@@ -729,5 +729,15 @@
   "bo.done": "已設定 {range} 不排課",
   "bo.what_rm": "移除不排課日期",
   "bo.done_rm": "已移除 {range} 的不排課",
-  "bo.changes": "：{n} 項變動"
+  "bo.changes": "：{n} 項變動",
+  "pf.sport": "主要訓練項目",
+  "pf.sport_tip": "越野跑：課表排陡坡健走、山路長天、B2B；路跑／馬拉松：不排這些，專項期的長跑加一段馬拉松配速。跟「設定 › 訓練依據」的主要訓練項目是同一個設定，一邊改了另一邊跟著變。自動＝先看之後的 A 賽，沒有 A 賽看 B 賽，都沒有看近 12 週越野＋登山的時間比例（≥ 25% 算越野，推估）。",
+  "pf.sport_auto": "自動",
+  "pf.sport_trail": "越野跑",
+  "pf.sport_road": "路跑／馬拉松",
+  "pf.sport_now": "自動判斷：{sport}（{why}）",
+  "pf.sport_advice": "資料建議：{sport}（{why}）",
+  "pf.moved_basis": "目標依據、可跑坡目標在設定的「訓練依據」分頁。",
+  "pf.moved_tests": "AeT／CP 測試方式在設定的「訓練依據」分頁。",
+  "pf.to_basis": "去設定 ›"
 }

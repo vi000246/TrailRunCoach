@@ -16190,5 +16190,105 @@
   "Palladino 恢復週保留 fartlek": {
     "draft": true,
     "src": "SP-951"
+  },
+  "越野輕鬆跑・恢復跑": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "越野長天": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "節奏・3 區間歇（平路）": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "5 區間歇（平路）": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "爬坡重複（3–8% 坡）": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "B2B 第二天": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "路跑輕鬆跑・恢復跑": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "輕鬆跑・恢復跑": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "累的時候心率比較誠實": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "長天後段心率飄移超過 5% 就放慢": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "閾值上": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "心率 ≤ {hi} bpm": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "閾值配速 {p} /km 的 %": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "閾值配速的 %": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "心率 ≤ {hi} bpm 或 RPE ≤ {rpe}": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "RPE ≤ {rpe}": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "{p}，{h} 當保險": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "{why}；{extra}": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "只給建議": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "看下降量和技術": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "{p} /km（目標配速）": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "照閾值配速推估": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "馬拉松配速段": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "專項期的長跑後段加一段馬拉松配速": {
+    "draft": true,
+    "src": "SP-955"
+  },
+  "A 賽的目標配速；沒有目標時間就從閾值配速推估": {
+    "draft": true,
+    "src": "SP-955"
   }
 }

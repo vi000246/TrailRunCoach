@@ -37,7 +37,7 @@ LEVELS = ("full", "standard", "lean")
 
 COUNT_JS = r"""() => {
   const HINT = "#tab-note, .meta, .s, .pill, .err-text, .pm, .conf, .est .card, details.fold > summary, .cmp p, .cmp li";
-  const VALUE = "#thr-now, #thr-now > .meta, #hr-model-note, #pmc-card .card, #pmc-card .card *, #u-power-note,"
+  const VALUE = "#thr-now, #thr-now > .meta, #hr-model-note, #pmc-card .card, #pmc-card .card *, #equip-note, #u-sport-note, #pv-tiles *,"
     + " #race-card .card .k, #race-card .card .v, details:not(.fold) > summary, table *";
   const CHIP = ".conf, .err-text, .pm";
   // inside a closed <details> (its summary aside) is not on the page — Chromium still gives it boxes
@@ -45,7 +45,7 @@ COUNT_JS = r"""() => {
     if (!d.open && !(el.closest("summary") && el.closest("summary").parentElement === d)) return true; } return false; };
   const on = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden" && el.textContent.trim() && !shut(el);
   const isHint = (el) => el.matches(HINT) && (!el.matches(VALUE) || el.matches(CHIP)) && !el.closest("table");
-  const roots = ["#tab-note", "#hr", "#thresholds", "#power"].map((s) => document.querySelector(s));
+  const roots = ["#tab-note", "#equip", "#thresholds", "#overrides"].map((s) => document.querySelector(s));
   const out = [];
   for (const root of roots) {
     for (const el of [root, ...root.querySelectorAll("*")]) {

@@ -44,15 +44,16 @@ def test_the_zones_and_numbers_are_on_top_of_the_tab_and_not_folded(app):
     _body(page)
     box = page.locator("#physio")
     expect(box).to_be_visible()
-    # first on the tab: above 心率 and 閾值測試紀錄
+    # SP-955: 我的區間 tops the right column (系統用的); the tiles moved to 門檻與測試 on the left
     assert box.bounding_box()["y"] < page.locator("#hr").bounding_box()["y"]
-    tiles = box.locator(".pv-tile")
-    expect(tiles).to_have_count(5)
+    tiles = page.locator("#thresholds .pv-tile")
+    page.wait_for_function("() => document.querySelectorAll('#thresholds .pv-tile').length === 6")
     expect(tiles.nth(0)).to_contain_text("最大心率")
     expect(tiles.nth(1)).to_contain_text("靜息心率")
     expect(tiles.nth(2)).to_contain_text("LTHR")
     expect(tiles.nth(3)).to_contain_text("AeT")
-    expect(tiles.nth(4)).to_contain_text("CP")
+    expect(tiles.nth(4)).to_contain_text("閾值配速")
+    expect(tiles.nth(5)).to_contain_text("CP")
     expect(tiles.nth(2).locator(".v")).to_have_text("168bpm")
     # 心率: the six COROS zones, each in view with its bpm range and % LTHR, a tinted background and a colour bar
     hr = box.locator("#pv-hr .pv-row")
@@ -70,7 +71,7 @@ def test_the_zones_and_numbers_are_on_top_of_the_tab_and_not_folded(app):
     expect(pw.first.locator(".p")).to_contain_text("%")
     expect(box.locator("#pv-pw h3")).to_contain_text("W")
     # nothing of it inside a <details>
-    assert page.evaluate("() => !document.querySelector('#physio .pv-tiles, #physio .pv-zones').closest('details')")
+    assert page.evaluate("() => !document.querySelector('#thresholds .pv-tiles, #physio .pv-zones').closest('details')")
 
 
 def test_the_watch_check_is_one_sentence_when_close(app):

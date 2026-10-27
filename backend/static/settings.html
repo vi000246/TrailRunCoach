@@ -188,10 +188,55 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .plan-sum .low { color: var(--warn); font-weight: 600; }
 .plan-sum a { white-space: nowrap; font-weight: 600; }
 main > section.tab-off { display: none; }
-/* 生理數據: 心率 → 閾值測試紀錄 → 功率 (grid order; the HTML order stays) */
 /* a grid item's min-content (閾值測試紀錄's table) widened the whole tab past a phone's width: the tables scroll in .tw instead */
 main > section { min-width: 0; }
-#physio { order: 0; } #hr { order: 1; } #thresholds { order: 2; } #power { order: 3; }
+/* 訓練依據 (SP-955, mock B): the tab is wider (two columns); left 你給的, right 系統用的; ≤ 880 px one column with the
+   right one first (a phone reads the result before the inputs) */
+main.wide { max-width: 1180px; }
+#basis { background: none; border: 0; padding: 0; }
+.basis-cols { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.basis-col { display: grid; gap: 14px; min-width: 0; }
+.basis-l { flex: 1 1 400px; }
+.basis-r { flex: 999 1 480px; }
+@media (max-width: 940px) { .basis-col { flex-basis: 100%; } .basis-r { order: -1; } }
+/* a select's ? stays on its line in the narrower left column too (the SP-875 rule, at every width) */
+.basis-col .row > label.sel-q { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: calc(100% - 30px); }
+.basis-col .row > label.sel-q > span { flex: none; white-space: nowrap; }
+.basis-col .row > label.sel-q > select { flex: 0 1 auto; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+.basis-col .row.ovr > .meta { flex-basis: 100%; }
+.colh { margin: 0 2px -6px; font-size: 12px; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.basis-col section { min-width: 0; }
+h3.bh { font-size: 14px; margin: 14px 0 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#hr h3.bh { margin-top: 0; }
+.row.ovr { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.row.ovr:first-of-type { border-top: 0; }
+.man { color: var(--warn); font-size: 12.5px; font-weight: 600; }
+button.to-auto { font-size: 12.5px; padding: 2px 8px; }
+/* 現在用什麼練: the power state line (① ok / ② warn / ③ muted), the plan summary, one row per kind of session */
+.ps-box { border-radius: 8px; padding: 10px 12px; margin: 8px 0 10px; display: grid; gap: 2px; background: var(--soft); }
+.ps-box .l1 { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-weight: 600; }
+.ps-box.ps-power { background: color-mix(in srgb, var(--ok) 12%, var(--panel)); }
+.ps-box.ps-stale { background: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
+.ps-box.ps-none { background: color-mix(in srgb, var(--muted) 14%, var(--panel)); }
+.ps-box .badge { font-size: 11.5px; font-weight: 500; border: 1px solid currentColor; border-radius: 10px; padding: 0 8px; }
+.ps-box .act { color: var(--warn); font-weight: 600; }
+.now-kv { grid-template-columns: max-content minmax(0, 1fr); margin: 0 0 10px; }
+.now-kv .miss { color: var(--warn); }
+.now-rows { border-top: 1px solid var(--line); }
+.nr { display: grid; grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1.3fr); gap: 2px 12px; align-items: start;
+  padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.nr .nm { font-weight: 600; overflow-wrap: anywhere; }
+.nr .t { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.nr .why { grid-column: 3; font-size: 12px; color: var(--muted); }
+.nr .why button.q { margin-left: 4px; vertical-align: 1px; }
+.chip { font-size: 12px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; justify-self: start; border: 1px solid var(--line); }
+.chip.b-power { background: color-mix(in srgb, #7c3aed 15%, var(--panel)); }
+.chip.b-hr { background: color-mix(in srgb, #dc2626 13%, var(--panel)); }
+.chip.b-pace { background: color-mix(in srgb, #2563eb 14%, var(--panel)); }
+@media (max-width: 560px) {
+  .nr { grid-template-columns: minmax(0, 1fr) auto; }
+  .nr .t, .nr .why { grid-column: 1 / -1; }
+}
 /* 我的區間 (SP-662): the numbers as tiles, then each zone set as one coloured bar and a tinted row per zone
    (zonecolors.js), light panels in both themes; the app-vs-watch check is one sentence under them */
 .pv-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-top: 10px; }
@@ -265,7 +310,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
 })();
 </script>
 <style>
-html.viewing #plan-sum, html.viewing #power, html.viewing .tabs [role="tab"]:not([data-tab="body"]) { display: none !important; }
+html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not([data-tab="body"]) { display: none !important; }
 </style>
 </head>
 <body>
@@ -316,13 +361,11 @@ html.viewing #plan-sum, html.viewing #power, html.viewing .tabs [role="tab"]:not
   </nav>
   <p class="meta tab-note" id="tab-note"></p>
   <section id="general">
-    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" data-manual="start#weight" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機；每一天用當天或之前最近的一筆體重紀錄。這裡改的是最新一筆（儲存時用你填的量測日期；同一天的那筆會被取代，之前的紀錄留著）。手動填的優先：體重同步（資料同步分頁）不會改它，也不會用那天和之前的量測蓋掉它。性別決定無氧容量（Anaerobic capacity）的先驗值（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
+    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" data-manual="start#weight" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機；每一天用當天或之前最近的一筆體重紀錄。這裡改的是最新一筆（儲存時用你填的量測日期；同一天的那筆會被取代，之前的紀錄留著）。手動填的優先：體重同步（資料同步分頁）不會改它，也不會用那天和之前的量測蓋掉它。性別決定無氧容量（Anaerobic capacity）的先驗值（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率計（Stryd／沒有）在「訓練依據」分頁的「裝備」。其他數字都自動估算。">?</button></h2>
     <div class="row">
       <label><span data-i18n="settings.general.sex">性別</span> <select id="p-sex"><option value="" data-i18n="settings.general.sex_unset">（未填）</option><option value="male" data-i18n="settings.general.male">男</option><option value="female" data-i18n="settings.general.female">女</option></select></label>
       <label><span data-i18n="settings.general.height">身高</span> <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
       <label><span data-i18n="settings.general.age">年齡</span> <input type="number" id="p-age" min="10" max="100" step="1" style="width:64px"> <span data-i18n="settings.general.age_unit">歲</span></label>
-      <label><span data-i18n="settings.general.power">功率來源</span> <select id="p-meter"><option value="" data-i18n="settings.general.power_auto">自動（依資料）</option><option value="stryd">Stryd</option>
-        <option value="watch" data-i18n="settings.general.power_watch">手錶推估功率</option><option value="none" data-i18n="settings.general.power_none">沒有功率計</option></select></label>
     </div>
     <div class="row">
       <label><span data-i18n="settings.general.weight">體重</span> <input type="number" id="p-kg" step="0.1" min="25" max="250" style="width:90px"> kg</label>
@@ -426,144 +469,200 @@ html.viewing #plan-sum, html.viewing #power, html.viewing .tabs [role="tab"]:not
     <p class="meta mode-note" data-i18n="settings.mode.only_mine">資料校正、排除壞掉的活動檔和閾值測試紀錄只在「我的算式」生效；「對照模式」一律用對照資料夾裡的設定。</p>
   </section>
 
-  <section id="sport">
-    <h2>主要訓練項目</h2>
-    <div class="row" style="margin-top:4px">
-      <label class="sel-q"><span>主要訓練項目</span> <select id="u-sport"><option value="auto">自動</option><option value="trail">越野跑</option><option value="road">路跑／馬拉松</option></select></label>
-      <button type="button" class="q" aria-label="說明" title="決定圖表分析顯示哪些圖、自動課表怎麼排、比賽計算機預設什麼。越野跑：爬升、下坡、コース定数、陡坡健走、B2B 都會出現。路跑／馬拉松：藏起爬坡和下坡的圖，改看平路的有氧效率、心率飄移、長跑距離和馬拉松配速的量；課表不排陡坡健走和 B2B，專項期的長跑加一段馬拉松配速。自動 = 先看之後的 A 賽：只有越野賽或百岳就算越野，只有路跑賽就算路跑；兩種都有就看哪一場比較吃力（先比賽事大小，再比預估時間，再比 EP），一樣或比不出來就算越野；沒有 A 賽才照同樣方式看 B 賽；都沒有就看近 12 週越野＋登山的時間比例（≥ 25% 算越野，推估）。C 賽不算。">?</button>
-      <span class="meta" id="u-sport-note"></span>
-    </div>
-  </section>
+  <!-- SP-955: 訓練依據 — one tab, two columns (mock B, owner 2026-10-27): left 「你給的」 (裝備 + 主要訓練項目, 門檻與
+       測試, 手動指定), right 「系統用的」 (現在用什麼練, 我的區間); a phone stacks them, the right column first.
+       The old ids stay (deep links #thresholds / #hr / #physio / #sport, the scripts below) -->
+  <section id="basis">
+    <div class="basis-cols">
+      <div class="basis-col basis-l">
+        <p class="colh" data-i18n="settings.basis.given">你給的</p>
+        <section id="equip">
+          <h2><span id="equip-l" data-i18n="settings.basis.equip_h">裝備</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.equip_help" title="只問有沒有功率計。有 Stryd 而且 42 天內做過 CP 測試或比賽，平路的強度課、路跑輕鬆跑才用功率；CP 過期或沒有功率計就用心率／配速。手錶推估的功率不算功率計（跟 Stryd 的量尺不同）。改了之後課表馬上重排、重推手錶。">?</button></h2>
+          <p class="meta full-only" data-i18n="settings.basis.equip_sub">只問這一題，其他都自動。有功率計而且 CP 在 42 天內測過，平路強度課才用功率。</p>
+          <div class="seg" role="radiogroup" aria-labelledby="equip-l" style="margin-top:6px">
+            <label><input type="radio" name="equip" value="stryd"><span>Stryd</span></label>
+            <label><input type="radio" name="equip" value="none"><span data-i18n="settings.basis.equip_none">沒有功率計</span></label>
+          </div>
+          <p class="meta" id="equip-note" role="status"></p>
+          <div class="sub" id="sport">
+            <div class="row" style="margin-top:0">
+              <label class="sel-q"><span data-i18n="settings.basis.sport">主要訓練項目</span> <select id="u-sport"><option value="auto" data-i18n="settings.basis.sport_auto">自動</option><option value="trail" data-i18n="settings.basis.sport_trail">越野跑</option><option value="road" data-i18n="settings.basis.sport_road">路跑／馬拉松</option></select></label>
+              <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.sport_help" title="決定圖表分析顯示哪些圖、自動課表怎麼排、比賽計算機預設什麼，右邊「現在用什麼練」也照它切換。越野跑：爬升、下坡、コース定数、陡坡健走、B2B 都會出現。路跑／馬拉松：藏起爬坡和下坡的圖，改看平路的有氧效率、心率飄移、長跑距離和馬拉松配速的量；課表不排陡坡健走和 B2B，專項期的長跑加一段馬拉松配速。課表頁的「課表偏好」也能改，是同一個設定。自動 = 先看之後的 A 賽：只有越野賽或百岳就算越野，只有路跑賽就算路跑；兩種都有就看哪一場比較吃力（先比賽事大小，再比預估時間，再比 EP），一樣或比不出來就算越野；沒有 A 賽才照同樣方式看 B 賽；都沒有就看近 12 週越野＋登山的時間比例（≥ 25% 算越野，推估）。C 賽不算。">?</button>
+              <span class="meta" id="u-sport-note"></span>
+            </div>
+          </div>
+        </section>
 
-  <section id="power">
-    <h2 data-i18n="settings.power.title">功率</h2>
-    <div class="row" style="margin-top:4px">
-      <label><input type="checkbox" id="u-power"> <span data-i18n="settings.power.use">使用功率</span></label>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.power.use_help" title="預設跟著「基本資料」的功率來源：Stryd 才打開，沒有功率計或只有手錶推估功率就用心率。只用心率訓練就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、無氧儲備（Anaerobic reserve）、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
-      <span class="meta" id="u-power-note"></span>
-      <button type="button" id="u-power-auto" hidden data-i18n="settings.power.auto">改回自動</button>
-    </div>
-    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.power.advanced">進階設定</summary>
-      <div class="row"><label><input type="checkbox" id="u-watch"> <span data-i18n="settings.power.watch">功率模型也採用手錶推估功率</span></label>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.power.watch_help" title="預設只有 Stryd 的功率會進功率模型，沒有 Stryd 的人用心率。打開後，手錶推估功率也會用在：賽事功率的模型（功率曲線、PD 模型）、功率負荷（Power load）、間歇的功率判讀，還有從跑步估 LTHR 時判斷哪幾次跑得夠硬。課表和圖表的 CP 不會因此改變：還是只用 Stryd 功率擬合，或用你輸入的 CP 測試。手錶功率的量尺跟 Stryd 不同，用它擬合的 CP 可能高很多，課表的功率目標會跟著錯。手錶功率的跑步算功率負荷時也是除以這個 CP；沒有 CP 就照舊用配速或心率算。想用手錶功率練：在「閾值測試紀錄」新增一列，CP 填一次用手錶功率做的 CP 測試，課表和測試就是同一種功率。手錶功率的準度沒驗證過，數字都當推估。">?</button></div>
-    </details>
-  </section>
+        <section id="thresholds">
+          <h2><span data-i18n="settings.basis.thr_h">門檻與測試</span>
+            <button type="button" class="q" data-manual="start#thresholds" id="thr-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套。心率負荷（HR load）、功率負荷（Power load）、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。最大心率和靜息心率在下面的「最大心率／靜息心率」。">?</button></h2>
+          <!-- SP-662 → SP-955: the numbers in use as tiles, each with where it comes from -->
+          <div class="pv-tiles" id="pv-tiles"></div>
+          <p class="meta" id="thr-now" role="status"></p>
+          <p class="meta" id="thr-wko5"></p>
+          <div class="est" id="thr-est"><span class="meta" data-i18n="settings.thr.est_loading">正在從你的跑步資料估算 LTHR / AeT…</span></div>
+          <div class="est" id="thr-check" hidden></div>
+          <!-- SP-488 (ST11, R5): 標準／精簡 fold the estimate cards that match what is in use  (and the comparison folder line) -->
+          <details class="fold" id="thr-more" hidden><summary class="meta" id="thr-more-sum" data-hint-id="ST11"></summary>
+            <div class="est" id="thr-more-est"></div><p class="meta" id="thr-more-wko5"></p></details>
+          <h3 class="bh" data-i18n="settings.basis.records">測試紀錄（LTHR／AeT／CP）</h3>
+          <div class="tw"><table class="wt">
+            <thead><tr><th data-i18n="settings.thr.date">測試日期</th><th data-i18n="settings.thr.lthr">LTHR 乳酸閾值心率</th>
+              <th data-i18n="settings.thr.aethr">AeT 有氧閾值心率</th><th data-i18n="settings.thr.cp">CP 跑步臨界功率 W</th>
+              <th data-i18n="settings.thr.note">備註（測試方式）</th><th></th></tr></thead>
+            <tbody id="thr"></tbody>
+          </table></div>
+          <div class="row">
+            <button id="thr-add" data-i18n="settings.thr.add">＋ 新增一次測試</button>
+            <button class="primary" id="thr-save" data-i18n="settings.thr.save">儲存閾值</button>
+          </div>
+          <!-- SP-955: AeT / CP 測試方式 moved here from 課表偏好 (PATCH /api/v1/overview/plan/prefs); CP hidden in ③ -->
+          <div class="row">
+            <label class="sel-q"><span data-i18n="settings.basis.aetp">AeT 測試方式</span> <select id="b-aetp"></select></label>
+            <button type="button" class="q" id="b-aetp-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.aetp_help" title="「測試方式」決定排什麼、怎麼判讀；「間歇門檻」決定什麼時候開 5 區。90′ 長跑測試排在週末長跑日（台灣教練），其他方式照「AeT 排在」。只在需要時才排：聚合估計不準、有偏移、約 6 週沒有可判讀的跑步，或停跑 ≥ 4 週後（推估）。氣溫 25 °C 以下時開始。">?</button>
+          </div>
+          <div class="row" id="b-cpp-row">
+            <label class="sel-q"><span data-i18n="settings.basis.cpp">CP 測試方式</span> <select id="b-cpp">
+              <option value="quick" data-i18n="settings.basis.cpp_quick">快速 20′</option>
+              <option value="standard" data-i18n="settings.basis.cpp_standard">標準 12′＋3′</option>
+              <option value="race" data-i18n="settings.basis.cpp_race">用比賽</option></select></label>
+            <button type="button" class="q" id="b-cpp-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.cpp_help" title="快速 20′：20 分全力，約 37 分；CP ≈ 0.95 × 20 分功率，誤差約 ±3%，不測無氧容量。標準 12′＋3′：12 分＋休 30 分＋3 分，約 70 分；兩點 CP＋無氧容量，最準，休息不能縮短。用比賽：5–10 K 比賽或計時跑，不另外排；Riegel 換算（外插），不測無氧容量。每 4–6 週或賽前 10–21 天做一次。">?</button>
+          </div>
+          <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.how_h">怎麼測</summary>
+            <ul class="meta" style="margin:4px 0;padding-left:18px">
+              <li data-i18n="settings.thr.how_aet">AeT 測試（Uphill Athlete）：暖身 10 分後在跑步機或平路用固定功率跑 40–60 分鐘（課表排 40 分；UA 不建議短於 40 分），前後半段的心率飄移 &lt; 5% 就代表那個心率在有氧閾值以下，逐次往上找到飄移剛好約 5% 的心率。</li>
+              <li data-i18n="settings.thr.how_lthr">LTHR 測試（Friel）：單獨一人 30 分鐘全力跑，取最後 20 分鐘的平均心率。</li>
+              <li id="how-cp" data-i18n="settings.thr.how_cp">CP 測試的方式在上面的「CP 測試方式」選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。CP 自動計算（PD 模型擬合近 90 天功率曲線的上緣）：測試只是近 90 天功率曲線上的一次全力，沒有套用按鈕。這裡沒填的話，課表用 Stryd 功率 PD 模型算出的模型閾值功率（Modelled threshold power；用近 90 天每次跑步的 mean-max 曲線上緣擬合，含 CP 測試；30–60 分鐘的功率；新的擬合跟目前的 CP 差 3 W 以上才換）。這裡手動填的 CP 優先。</li>
+            </ul>
+          </details>
+          <div class="sub" id="hr">
+            <h3 class="bh"><span data-i18n="settings.basis.hr_h">最大心率／靜息心率</span> <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.help" title="最大心率依序用：你填的值 → 手錶（COROS 帳號）的值 → 近 365 天跑步裡 10 秒平均心率的最高值（先濾掉光學心率的尖刺）→ 年齡公式 208 − 0.7 × 年齡（推估）。靜息心率：你填的值，沒有就用手錶（COROS 帳號）的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h3>
+            <dl class="kv" id="hr-kv"><dt data-i18n="settings.hr.max">最大心率</dt><dd class="meta" data-i18n="settings.pmc.loading">載入中…</dd></dl>
+            <div class="est" id="hr-check" hidden></div>
+            <details style="margin-top:6px"><summary class="meta" data-i18n="settings.basis.hr_edit">自己填最大心率、靜息心率</summary>
+              <div class="row"><label><span data-i18n="settings.hr.max">最大心率</span> <input type="number" id="hr-max" min="120" max="240" step="1" style="width:72px"> bpm</label>
+                <button id="hr-max-save" data-i18n="settings.pmc.save">儲存</button><button id="hr-max-auto" data-i18n="settings.pmc.clear" hidden>改回自動</button></div>
+              <div class="row"><label><span data-i18n="settings.hr.rest">靜息心率</span> <input type="number" id="hr-rest" min="25" max="120" step="1" style="width:72px"> bpm</label>
+                <button id="hr-rest-save" data-i18n="settings.pmc.save">儲存</button><button id="hr-rest-auto" data-i18n="settings.pmc.clear" hidden>改回自動</button></div>
+              <p class="meta" id="hr-est"></p>
+            </details>
+          </div>
+          <details style="margin-top:6px" id="thr-pz-box"><summary class="meta" data-i18n="settings.thr.pz_h">功率區間（Palladino／Stryd，依目前 CP）</summary>
+            <div id="thr-pz-plan-box" hidden>
+              <p class="meta"><span id="thr-pz-plan-h"></span> <span class="badge" data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
+              <p class="meta" id="thr-pz-plan-basis" hidden></p>
+              <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
+                <th id="thr-pz-plan-pct">% CP</th><th>W</th><th id="thr-pz-plan-dur" data-i18n="settings.thr.pz_dur" hidden>持續時間</th></tr></thead>
+              <tbody id="thr-pz-plan"></tbody></table></div>
+              <p class="meta" id="thr-pz-plan-src"></p>
+            </div>
+            <p class="meta"><span data-i18n="settings.thr.pz_palladino">Palladino 10 區</span> <span class="badge" id="pz-use-palladino" hidden data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
+            <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
+              <th>% CP</th><th>W</th></tr></thead>
+            <tbody id="thr-pz"></tbody></table></div>
+            <p class="meta" id="thr-pzsrc"></p>
+            <!-- SP-363: Stryd's five zones at the same CP, for comparison (the 課表 keeps Palladino's) -->
+            <p class="meta"><span data-i18n="settings.thr.pz_stryd">Stryd 5 區</span> <span class="badge" id="pz-use-stryd" hidden data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
+            <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
+              <th>% CP</th><th>W</th></tr></thead>
+            <tbody id="thr-pz-stryd"></tbody></table></div>
+            <p class="meta" id="thr-pzsrc-stryd"></p></details>
+          <details id="thr-hist" style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.hist_h">門檻變更紀錄：哪個門檻在哪天變了</summary>
+            <p class="meta" data-i18n="settings.thr.hist_intro">課表的心率／功率區間跟著這些門檻走。同一種課的區間跟上一堂不一樣時，看兩堂課日期之間的紀錄。</p>
+            <div id="thr-hist-body"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
+          </details>
+          <div class="sub" id="pmc">
+            <b data-i18n="settings.pmc.title">起始長期訓練負荷（Chronic load）／短期負荷（Acute load）</b>
+            <button type="button" class="q" data-manual="schedule#weekly-load" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="長期訓練負荷（Chronic load）／短期負荷（Acute load）要有一個起點。順序：你填的值（從那天開始）→ 自動（有訓練負荷（Training load）的前 28 天平均每日負荷，長期負荷和短期負荷都用它）→ 0。總覽、圖表、長期負荷週增量（Chronic load ramp）護欄、負荷平衡（Load balance）&lt; 長期負荷的 −30% 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的長期／短期負荷時才需要填。">?</button>
+            <div class="est" id="pmc-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
+            <div class="row">
+              <label><span data-i18n="settings.pmc.date">日期</span> <input type="date" id="pmc-date"></label>
+              <label><span data-i18n="settings.pmc.ctl">長期訓練負荷（Chronic load）</span> <input type="number" id="pmc-ctl" min="0" max="300" step="0.1" style="width:72px"></label>
+              <label><span data-i18n="settings.pmc.atl">短期負荷（Acute load）</span> <input type="number" id="pmc-atl" min="0" max="300" step="0.1" style="width:72px"></label>
+              <button id="pmc-save" data-i18n="settings.pmc.save">儲存</button>
+              <button id="pmc-clear" data-i18n="settings.pmc.clear" hidden>改回自動</button>
+            </div>
+          </div>
+          <div class="sub" id="race">
+            <b data-i18n="settings.race.title">比賽成績（E 配速）</b>
+            <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.race.help" title="徐國峰 90 分鐘測試要用 E 配速跑，E 配速從一場比賽成績算（Daniels VDOT 公式；E 配速＝62–70 % VDOT 的速度，對齊 Daniels 的配速表，推估）。填最近一場路跑或田徑場的全力比賽（5 K 到全馬）；越野賽不算，爬升會讓成績失真。只用在 90 分鐘測試和它的說明，其他課表和區間不受影響。比賽超過 180 天就太舊了（推估），不會拿來算 90 分鐘測試的配速，改用 CP 測試結果或講話測試。比賽成績跟跑步經驗問卷共用同一份清單：這裡儲存或「用這場」確認的比賽都會加進去，E 配速用清單裡最新一場路跑。">?</button>
+            <div class="est" id="race-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
+            <div class="row">
+              <label><span data-i18n="settings.race.dist">距離</span> <select id="race-dist">
+                <option value="5" data-i18n="settings.race.d5">5 K</option><option value="10" selected data-i18n="settings.race.d10">10 K</option>
+                <option value="21.0975" data-i18n="settings.race.dhalf">半馬</option><option value="42.195" data-i18n="settings.race.dfull">全馬</option>
+                <option value="other" data-i18n="settings.race.dother">其他</option></select></label>
+              <label id="race-km-l" hidden><input type="number" id="race-km" min="1.5" max="42.5" step="0.01" style="width:72px"> km</label>
+              <label><span data-i18n="settings.race.time">時間</span> <input type="text" id="race-time" placeholder="45:00" inputmode="numeric" style="width:84px"></label>
+              <label><span data-i18n="settings.race.date">比賽日期</span> <input type="date" id="race-date"></label>
+              <button id="race-save" data-i18n="settings.pmc.save">儲存</button>
+              <button id="race-clear" data-i18n="settings.race.clear" hidden>清除</button>
+            </div>
+            <div id="race-cands"></div>
+          </div>
+        </section>
 
-  <!-- SP-662: 我的區間 — the numbers in use and both zone sets at a glance (not folded); the editing stays below -->
-  <section id="physio">
-    <h2><span data-i18n="settings.pv.title">我的區間</span> <button type="button" class="q" id="pv-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pv.help" title="課表、活動判讀和圖表預設用的數字和區間。要改數字到下面的「心率」和「閾值測試紀錄」，要換區間的算法用「課表心率區間」「課表功率區間」。">?</button></h2>
-    <div class="pv-tiles" id="pv-tiles"></div>
-    <div class="pv-zones">
-      <div class="pv-set" id="pv-hr"></div>
-      <div class="pv-set" id="pv-pw"></div>
-    </div>
-    <div class="src cmp" id="hr-cmp" hidden></div>
-  </section>
-
-  <section id="hr">
-    <h2><span data-i18n="settings.hr.title">心率</span> <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.help" title="最大心率依序用：你填的值 → 手錶（COROS 帳號）的值 → 近 365 天跑步裡 10 秒平均心率的最高值（先濾掉光學心率的尖刺）→ 年齡公式 208 − 0.7 × 年齡（推估）。靜息心率：你填的值，沒有就用手錶（COROS 帳號）的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
-    <dl class="kv" id="hr-kv"><dt data-i18n="settings.hr.max">最大心率</dt><dd class="meta" data-i18n="settings.pmc.loading">載入中…</dd></dl>
-    <div class="est" id="hr-check" hidden></div>
-    <div class="row">
-      <label class="sel-q"><span data-i18n="settings.hr.model">課表心率區間</span> <select id="hr-model"></select></label>
-      <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" id="hr-model-q" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.model_help" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。「自動」看哪個數字可信：LTHR 可信用乳酸閾值區間，否則最大心率和靜息心率可信用儲備心率區間，都不可信用最大心率區間；換了會通知一次。選其中一種就固定用那種。量過的 AeT（AeT 測試）一定當輕鬆跑上限。活動判讀（輕鬆跑／中強度）和自動調整（輕鬆跑偏強）也用同一個輕鬆跑上限：平均心率不超過上限 +3 算輕鬆。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
-      <span class="meta" id="hr-model-note" role="status"></span>
-    </div>
-    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.hr.advanced">進階設定</summary>
-      <div class="row"><label><span data-i18n="settings.hr.max">最大心率</span> <input type="number" id="hr-max" min="120" max="240" step="1" style="width:72px"> bpm</label>
-        <button id="hr-max-save" data-i18n="settings.pmc.save">儲存</button><button id="hr-max-auto" data-i18n="settings.pmc.clear" hidden>改回自動</button></div>
-      <div class="row"><label><span data-i18n="settings.hr.rest">靜息心率</span> <input type="number" id="hr-rest" min="25" max="120" step="1" style="width:72px"> bpm</label>
-        <button id="hr-rest-save" data-i18n="settings.pmc.save">儲存</button><button id="hr-rest-auto" data-i18n="settings.pmc.clear" hidden>改回自動</button></div>
-      <p class="meta" id="hr-est"></p>
-    </details>
-  </section>
-
-  <section id="thresholds">
-    <h2><span data-i18n="settings.thr.title">閾值測試紀錄（LTHR／AeT／CP）</span>
-      <button type="button" class="q" data-manual="start#thresholds" id="thr-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套。心率負荷（HR load）、功率負荷（Power load）、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
-    <p class="meta" id="thr-now" role="status"></p>
-    <p class="meta" id="thr-wko5"></p>
-    <div class="est" id="thr-est"><span class="meta" data-i18n="settings.thr.est_loading">正在從你的跑步資料估算 LTHR / AeT…</span></div>
-    <div class="est" id="thr-check" hidden></div>
-    <!-- SP-488 (ST11, R5): 標準／精簡 fold the estimate cards that match what is in use  (and the comparison folder line) -->
-    <details class="fold" id="thr-more" hidden><summary class="meta" id="thr-more-sum" data-hint-id="ST11"></summary>
-      <div class="est" id="thr-more-est"></div><p class="meta" id="thr-more-wko5"></p></details>
-    <div class="tw"><table class="wt">
-      <thead><tr><th data-i18n="settings.thr.date">測試日期</th><th data-i18n="settings.thr.lthr">LTHR 乳酸閾值心率</th>
-        <th data-i18n="settings.thr.aethr">AeT 有氧閾值心率</th><th data-i18n="settings.thr.cp">CP 跑步臨界功率 W</th>
-        <th data-i18n="settings.thr.note">備註（測試方式）</th><th></th></tr></thead>
-      <tbody id="thr"></tbody>
-    </table></div>
-    <div class="row">
-      <button id="thr-add" data-i18n="settings.thr.add">＋ 新增一次測試</button>
-      <button class="primary" id="thr-save" data-i18n="settings.thr.save">儲存閾值</button>
-    </div>
-    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.how_h">怎麼測</summary>
-      <ul class="meta" style="margin:4px 0;padding-left:18px">
-        <li data-i18n="settings.thr.how_aet">AeT 測試（Uphill Athlete）：暖身 10 分後在跑步機或平路用固定功率跑 40–60 分鐘（課表排 40 分；UA 不建議短於 40 分），前後半段的心率飄移 &lt; 5% 就代表那個心率在有氧閾值以下，逐次往上找到飄移剛好約 5% 的心率。</li>
-        <li data-i18n="settings.thr.how_lthr">LTHR 測試（Friel）：單獨一人 30 分鐘全力跑，取最後 20 分鐘的平均心率。</li>
-        <li data-i18n="settings.thr.how_cp">CP 測試的方式在「課表」頁的課表偏好選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。CP 自動計算（PD 模型擬合近 90 天功率曲線的上緣）：測試只是近 90 天功率曲線上的一次全力，沒有套用按鈕。這裡沒填的話，課表用 Stryd 功率 PD 模型算出的模型閾值功率（Modelled threshold power；用近 90 天每次跑步的 mean-max 曲線上緣擬合，含 CP 測試；30–60 分鐘的功率；新的擬合跟目前的 CP 差 3 W 以上才換）。這裡手動填的 CP 優先。</li>
-      </ul>
-    </details>
-    <!-- SP-363 R2: 課表功率區間 — which set the 課表's power targets (texts, the push) and the power charts' default use -->
-    <div class="row">
-      <label class="sel-q"><span data-i18n="settings.thr.pz_model">課表功率區間</span> <select id="pz-model"></select></label>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.pz_model_help" title="課表（自動排課、課表步驟、推到手錶）的功率目標用哪一套區間，圖表的功率區間預設也跟著它。每種課照原本的強度對到這套最接近的一級：輕鬆跑、長跑、山路長天用這套的輕鬆級，恢復跑用含 75% CP 那一級的上緣當上限，間歇和爬坡用跟原本功率帶重疊最多的那一級。換了之後，接下來的課會重新排、已推到手錶的課照課表的規則重新推送；你在結構裡自己設的功率目標（% CP、區間、瓦數）不變，設成「自動」的段跟著新區間。個人化區間要有近 90 天的 Stryd 跑步算出功率–時間模型，沒有時先用 Palladino。">?</button>
-      <span class="meta" id="pz-model-note" role="status"></span>
-    </div>
-    <p class="meta" id="pz-model-warn" role="status" style="color:var(--warn)" hidden></p>
-    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.pz_h">功率區間（Palladino／Stryd，依目前 CP）</summary>
-      <div id="thr-pz-plan-box" hidden>
-        <p class="meta"><span id="thr-pz-plan-h"></span> <span class="badge" data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
-        <p class="meta" id="thr-pz-plan-basis" hidden></p>
-        <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
-          <th id="thr-pz-plan-pct">% CP</th><th>W</th><th id="thr-pz-plan-dur" data-i18n="settings.thr.pz_dur" hidden>持續時間</th></tr></thead>
-        <tbody id="thr-pz-plan"></tbody></table></div>
-        <p class="meta" id="thr-pz-plan-src"></p>
+        <section id="overrides">
+          <h2><span data-i18n="settings.basis.ovr_h">手動指定</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.ovr_help" title="預設全部自動，平常不用動。改過的那一項標「（手動）」，旁邊有「改回自動」；右邊「現在用什麼練」的那幾類課也會標（手動）。沒有功率計時，功率的選項不出現；之前選的功率設定留著不刪，換回 Stryd 就回來。">?</button></h2>
+          <p class="meta full-only" data-i18n="settings.basis.ovr_sub">預設全部自動；改過的標「（手動）」，右邊的結果卡也會標。</p>
+          <div class="row ovr" id="b-basis-row">
+            <label class="sel-q"><span data-i18n="settings.basis.basis">目標依據</span> <select id="b-basis">
+              <option value="auto" data-i18n="settings.basis.basis_auto">自動（照課的類型）</option>
+              <option value="hr" data-i18n="settings.basis.basis_hr">心率</option>
+              <option value="pace" data-i18n="settings.basis.basis_pace">配速（平路間歇、節奏）</option>
+              <option value="power" data-i18n="settings.basis.basis_power">功率</option></select></label>
+            <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.basis_help" title="課表的目標用心率還是功率。自動：照課的類型，結果看右邊「現在用什麼練」——有功率計而且 CP 有效時，路跑輕鬆跑、長跑、平路間歇、3–8% 坡的爬坡重複看功率（心率當保險）；越野輕鬆跑、山路長天、恢復跑看心率；陡坡健走看心率或 RPE；長爬坡、下坡不設目標。CP 過期或沒有功率計時，原本看功率的課改看心率。心率：全部用心率區間。功率：全部用功率區間（測試和下坡照它們自己的規則；CP 過期或沒有功率計時照樣改用心率）。只影響系統排的課；每一段也可以在課表的「結構」裡自己改。">?</button>
+            <span class="man" hidden data-i18n="settings.basis.manual">（手動）</span>
+            <button type="button" class="to-auto" hidden data-i18n="settings.basis.to_auto">改回自動</button>
+          </div>
+          <div class="row ovr" id="b-climb-row">
+            <label class="sel-q"><span data-i18n="settings.basis.climb">可跑坡目標（COROS）</span> <select id="b-climb">
+              <option value="power" data-i18n="settings.basis.climb_power">自動（功率）</option>
+              <option value="effort_pace">Effort Pace</option></select></label>
+            <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.climb_help" title="只在越野。賽事計算機匯出的比賽課，可跑的坡（−3～+15 %，不含技術段與高海拔）推到 COROS 時用什麼目標。有 Stryd（這些段是功率）：預設照舊送功率；選 Effort Pace 就改送 Effort Pace（COROS 手錶的坡度調整配速，跟計算機的平地等效配速是同一種換算）。沒有功率計時一律送 Effort Pace，所以這裡不出現。Garmin 推送不變：可以在手錶加 GAP（坡度調整配速）資料欄位當參考。">?</button>
+            <span class="man" hidden data-i18n="settings.basis.manual">（手動）</span>
+            <button type="button" class="to-auto" hidden data-i18n="settings.basis.to_auto">改回自動</button>
+          </div>
+          <div class="row ovr" id="hr-model-row">
+            <label class="sel-q"><span data-i18n="settings.hr.model">課表心率區間</span> <select id="hr-model"></select></label>
+            <button type="button" class="q" data-manual="start#heart-rate" aria-label="說明" id="hr-model-q" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.model_help" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。「自動」看哪個數字可信：LTHR 可信用乳酸閾值區間，否則最大心率和靜息心率可信用儲備心率區間，都不可信用最大心率區間；換了會通知一次。選其中一種就固定用那種。量過的 AeT（AeT 測試）一定當輕鬆跑上限。活動判讀（輕鬆跑／中強度）和自動調整（輕鬆跑偏強）也用同一個輕鬆跑上限：平均心率不超過上限 +3 算輕鬆。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
+            <span class="man" hidden data-i18n="settings.basis.manual">（手動）</span>
+            <button type="button" class="to-auto" hidden data-i18n="settings.basis.to_auto">改回自動</button>
+            <span class="meta" id="hr-model-note" role="status"></span>
+          </div>
+          <!-- SP-363 R2: 課表功率區間 — which set the 課表's power targets (texts, the push) and the power charts' default use; hidden in ③ -->
+          <div class="row ovr" id="pz-model-row">
+            <label class="sel-q"><span data-i18n="settings.thr.pz_model">課表功率區間</span> <select id="pz-model"></select></label>
+            <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.pz_model_help" title="課表（自動排課、課表步驟、推到手錶）的功率目標用哪一套區間，圖表的功率區間預設也跟著它。每種課照原本的強度對到這套最接近的一級：輕鬆跑、長跑、山路長天用這套的輕鬆級，恢復跑用含 75% CP 那一級的上緣當上限，間歇和爬坡用跟原本功率帶重疊最多的那一級。換了之後，接下來的課會重新排、已推到手錶的課照課表的規則重新推送；你在結構裡自己設的功率目標（% CP、區間、瓦數）不變，設成「自動」的段跟著新區間。個人化區間要有近 90 天的 Stryd 跑步算出功率–時間模型，沒有時先用 Palladino。">?</button>
+            <span class="man" hidden data-i18n="settings.basis.manual">（手動）</span>
+            <button type="button" class="to-auto" hidden data-i18n="settings.basis.to_auto">改回自動</button>
+            <span class="meta" id="pz-model-note" role="status"></span>
+          </div>
+          <p class="meta" id="pz-model-warn" role="status" style="color:var(--warn)" hidden></p>
+        </section>
       </div>
-      <p class="meta"><span data-i18n="settings.thr.pz_palladino">Palladino 10 區</span> <span class="badge" id="pz-use-palladino" hidden data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
-      <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
-        <th>% CP</th><th>W</th></tr></thead>
-      <tbody id="thr-pz"></tbody></table></div>
-      <p class="meta" id="thr-pzsrc"></p>
-      <!-- SP-363: Stryd's five zones at the same CP, for comparison (the 課表 keeps Palladino's) -->
-      <p class="meta"><span data-i18n="settings.thr.pz_stryd">Stryd 5 區</span> <span class="badge" id="pz-use-stryd" hidden data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
-      <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
-        <th>% CP</th><th>W</th></tr></thead>
-      <tbody id="thr-pz-stryd"></tbody></table></div>
-      <p class="meta" id="thr-pzsrc-stryd"></p></details>
-    <details id="thr-hist" style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.hist_h">門檻變更紀錄：哪個門檻在哪天變了</summary>
-      <p class="meta" data-i18n="settings.thr.hist_intro">課表的心率／功率區間跟著這些門檻走。同一種課的區間跟上一堂不一樣時，看兩堂課日期之間的紀錄。</p>
-      <div id="thr-hist-body"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
-    </details>
-    <div class="sub" id="pmc">
-      <b data-i18n="settings.pmc.title">起始長期訓練負荷（Chronic load）／短期負荷（Acute load）</b>
-      <button type="button" class="q" data-manual="schedule#weekly-load" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="長期訓練負荷（Chronic load）／短期負荷（Acute load）要有一個起點。順序：你填的值（從那天開始）→ 自動（有訓練負荷（Training load）的前 28 天平均每日負荷，長期負荷和短期負荷都用它）→ 0。總覽、圖表、長期負荷週增量（Chronic load ramp）護欄、負荷平衡（Load balance）&lt; 長期負荷的 −30% 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的長期／短期負荷時才需要填。">?</button>
-      <div class="est" id="pmc-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
-      <div class="row">
-        <label><span data-i18n="settings.pmc.date">日期</span> <input type="date" id="pmc-date"></label>
-        <label><span data-i18n="settings.pmc.ctl">長期訓練負荷（Chronic load）</span> <input type="number" id="pmc-ctl" min="0" max="300" step="0.1" style="width:72px"></label>
-        <label><span data-i18n="settings.pmc.atl">短期負荷（Acute load）</span> <input type="number" id="pmc-atl" min="0" max="300" step="0.1" style="width:72px"></label>
-        <button id="pmc-save" data-i18n="settings.pmc.save">儲存</button>
-        <button id="pmc-clear" data-i18n="settings.pmc.clear" hidden>改回自動</button>
+
+      <div class="basis-col basis-r">
+        <p class="colh" data-i18n="settings.basis.system">系統用的（全自動）</p>
+        <section id="now">
+          <h2><span data-i18n="settings.basis.now_h">現在用什麼練</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.now_help" title="只能看、全自動：跟著裝備、CP 有沒有過期、主要訓練項目和手動指定切換。每一類課寫現在的目標，點 ? 看原因。狀態一變（例如 CP 過期），課表會重排、重推手錶。">?</button></h2>
+          <div class="ps-box" id="now-status"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
+          <dl class="kv now-kv" id="now-kv"></dl>
+          <div class="now-rows" id="now-rows"></div>
+        </section>
+        <!-- SP-662: 我的區間 — the zone sets in use (heart rate always; pace when a session runs by pace; power in ① only),
+             each a coloured bar and a tinted row per zone -->
+        <section id="physio">
+          <h2><span data-i18n="settings.pv.title">我的區間</span> <button type="button" class="q" id="pv-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pv.help" title="課表、活動判讀和圖表預設用的區間，只列正在用的單位：心率一定有，配速有課看配速時才有，功率只在功率生效時。要改數字到左邊的「門檻與測試」，要換區間的算法用「手動指定」。">?</button></h2>
+          <div class="pv-zones">
+            <div class="pv-set" id="pv-hr"></div>
+            <div class="pv-set" id="pv-pace" hidden></div>
+            <div class="pv-set" id="pv-pw"></div>
+          </div>
+          <p class="meta" id="pv-pw-off" hidden></p>
+          <div class="src cmp" id="hr-cmp" hidden></div>
+        </section>
       </div>
-    </div>
-    <div class="sub" id="race">
-      <b data-i18n="settings.race.title">比賽成績（E 配速）</b>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.race.help" title="徐國峰 90 分鐘測試要用 E 配速跑，E 配速從一場比賽成績算（Daniels VDOT 公式；E 配速＝62–70 % VDOT 的速度，對齊 Daniels 的配速表，推估）。填最近一場路跑或田徑場的全力比賽（5 K 到全馬）；越野賽不算，爬升會讓成績失真。只用在 90 分鐘測試和它的說明，其他課表和區間不受影響。比賽超過 180 天就太舊了（推估），不會拿來算 90 分鐘測試的配速，改用 CP 測試結果或講話測試。比賽成績跟跑步經驗問卷共用同一份清單：這裡儲存或「用這場」確認的比賽都會加進去，E 配速用清單裡最新一場路跑。">?</button>
-      <div class="est" id="race-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
-      <div class="row">
-        <label><span data-i18n="settings.race.dist">距離</span> <select id="race-dist">
-          <option value="5" data-i18n="settings.race.d5">5 K</option><option value="10" selected data-i18n="settings.race.d10">10 K</option>
-          <option value="21.0975" data-i18n="settings.race.dhalf">半馬</option><option value="42.195" data-i18n="settings.race.dfull">全馬</option>
-          <option value="other" data-i18n="settings.race.dother">其他</option></select></label>
-        <label id="race-km-l" hidden><input type="number" id="race-km" min="1.5" max="42.5" step="0.01" style="width:72px"> km</label>
-        <label><span data-i18n="settings.race.time">時間</span> <input type="text" id="race-time" placeholder="45:00" inputmode="numeric" style="width:84px"></label>
-        <label><span data-i18n="settings.race.date">比賽日期</span> <input type="date" id="race-date"></label>
-        <button id="race-save" data-i18n="settings.pmc.save">儲存</button>
-        <button id="race-clear" data-i18n="settings.race.clear" hidden>清除</button>
-      </div>
-      <div id="race-cands"></div>
     </div>
   </section>
 
@@ -1238,7 +1337,7 @@ let PROF = null;
 async function loadProfile() {
   PROF = await j("/api/v1/plan/profile");
   const p = PROF.profile, e = PROF.effective, wk = PROF.wko5;
-  $("p-sex").value = p.sex || ""; $("p-height").value = p.height_cm || ""; $("p-meter").value = e.power_source || "";
+  $("p-sex").value = p.sex || ""; $("p-height").value = p.height_cm || "";
   $("p-age").value = e.age ?? "";                  // stored as the birth year (SP-211)
   $("p-height").placeholder = wk.height_cm || "";
   renderWeights();
@@ -1253,11 +1352,8 @@ async function loadProfile() {
     sex: wk.sex === "male" || wk.sex === "female" ? t(`settings.general.${wk.sex}`) : "–",
     list: wk.weights.length ? wk.weights.map((w) => `${w.date} ${w.kg} kg`).join(t("settings.general.sep"))
       : t("settings.general.wko5_none") });
-  // 功率來源 pre-fill: what the last 90 days of runs show (shown on the 自動 option)
+  // the data's answers (the weight the app has; whether there is a running history)
   j("/api/v1/plan/profile/detect").then((d) => {
-    const s = d.power_source && d.power_source.source;
-    $("p-meter").options[0].textContent = s ? t("settings.general.power_detected", { src: d.labels[s] })
-      : t("settings.general.power_auto");
     PROF.appWeight = d.weight;
     expShow(d.has_history !== true);
   }).catch(() => expShow(true));
@@ -1407,7 +1503,8 @@ $("saveprof").onclick = async () => {
   const body = { weights: weightsToSave(kg, date),
     sex: $("p-sex").value || null, height_cm: $("p-height").value ? Number($("p-height").value) : null,
     age: $("p-age").value ? Number($("p-age").value) : null,
-    power_source: $("p-meter").value || null };
+    // SP-955: the power meter is 訓練依據 › 裝備's; the stored value goes back as it is
+    power_source: PROF.profile.power_source || null, power_meter: PROF.profile.power_source ? null : PROF.profile.power_meter || null };
   try {
     await j("/api/v1/plan/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     toast(t("settings.general.saved")); loadProfile();
@@ -1430,6 +1527,7 @@ function renderHr(r) {
   $("hr-model").innerHTML = r.models.map((m) => `<option value="${esc(m.id)}"${m.id === r.model ? " selected" : ""}>${esc(m.label)}</option>`).join("");
   const cur = r.models.find((m) => m.id === r.model);
   $("hr-model-q").title = $("hr-model-q").title.split("\n\n")[0] + (cur ? "\n\n" + cur.source : "");
+  manTag("hr-model-row", r.model !== "auto");          // SP-955: 手動指定
   const z = r.plan_zones, ef = r.effective;
   // SP-493: 自動 says which zones are in effect and why (「自動 → 目前用：儲備心率（…）」)
   const auto = r.model === "auto" && ef ? t("settings.hr.auto_now", { model: ef.label, reason: ef.reason || "" }) : "";
@@ -1523,7 +1621,8 @@ function renderPz(r) {
   $("pz-model").innerHTML = r.choices.map((c) => `<option value="${esc(c.id)}"${c.id === r.setting ? " selected" : ""}>${esc(c.title)}</option>`).join("");
   $("pz-model-note").textContent = r.fallback || "";
   $("pz-model-warn").textContent = r.warning ? "⚠ " + r.warning : "";   // SP-363: model threshold power far from the CP
-  $("pz-model-warn").hidden = !r.warning;
+  $("pz-model-warn").hidden = !r.warning || NOPW();
+  manTag("pz-model-row", r.setting !== "palladino");   // SP-955: 手動指定 (Palladino % CP is the automatic set)
   $("pz-use-palladino").hidden = r.system !== "palladino";
   $("pz-use-stryd").hidden = r.system !== "stryd";
   const own = r.system === "classic" || r.system === "personal";
@@ -1579,12 +1678,18 @@ function drawPhysio() {
     <div class="v">${v == null ? esc(t("settings.hr.unset")) : `${v}<small>${unit}</small>`}</div>
     <div class="s" title="${esc(s || "")}">${esc(s || "")}</div></div>`;
   const cp = ef ? num0(ef.cp.value) : PZ ? num0(PZ.cp) : null;
+  // SP-955: in 門檻與測試, each with where it comes from; 閾值配速 when there is one; CP not in ③ (no power meter),
+  // its line says the power state's (the test day, still valid N days / stale for N days)
+  const cpSrc = !PST || !cp ? (ef && ef.cp.label) || t("settings.pv.cp")
+    : PST.state === "power" && PST.days != null ? t("settings.basis.cp_ok", { day: mdOf(PST.anchor), left: Math.max(0, PST.fresh_days - PST.days) })
+    : PST.state === "stale" ? (PST.days != null ? t("settings.basis.cp_old", { n: PST.days }) : t("settings.basis.st_cp_never")) : (ef && ef.cp.label) || t("settings.pv.cp");
   $("pv-tiles").innerHTML = [
     tile(t("settings.hr.max"), HR && HR.max_hr ? num0(HR.max_hr.value) : null, "bpm", HR && HR.max_hr && (HR.max_hr.source || HR.max_hr.reason)),
     tile(t("settings.hr.rest"), HR && HR.rest_hr ? num0(HR.rest_hr.value) : null, "bpm", HR && HR.rest_hr && (HR.rest_hr.source || HR.rest_hr.reason)),
-    tile("LTHR", ef ? num0(ef.lthr.value) : null, "bpm", t("settings.pv.lthr")),
-    tile("AeT", ef ? num0(ef.aethr.value) : null, "bpm", t("settings.pv.aet")),
-    tile("CP", cp, "W", t("settings.pv.cp")),
+    tile("LTHR", ef ? num0(ef.lthr.value) : null, "bpm", (ef && ef.lthr.label) || t("settings.pv.lthr")),
+    tile("AeT", ef ? num0(ef.aethr.value) : null, "bpm", (ef && ef.aethr.label) || t("settings.pv.aet")),
+    ...(BASIS && BASIS.tpace ? [tile(t("settings.basis.tpace"), paceOf(BASIS.tpace), "/km", t("settings.basis.tpace_src"))] : []),
+    ...(NOPW() ? [] : [tile("CP", cp, "W", cpSrc)]),
   ].join("");
   // 心率區間: the 課表心率區間 in effect (GET hr-profile plan_zones, engine/hr_profile.plan_hr_zones)
   const z = HR && HR.plan_zones;
@@ -1604,8 +1709,25 @@ function drawPhysio() {
     $("pv-hr").innerHTML = `<h3>${esc(t("settings.pv.hr_h"))} <span class="meta">${esc(z.short || z.label)} · bpm · ${esc(unit)}</span></h3>
       ${zoneBar(z.rows, lo, hi)}${zoneRows(z.rows, range, pct, easy)}`;
   }
-  // 功率區間: the 課表功率區間 in effect (GET power-zones levels at the CP in effect)
-  if (!PZ) $("pv-pw").innerHTML = "";
+  // 配速區間 (SP-955): only while a session runs by pace (target_policy's basis; the 馬拉松配速段's own goal pace
+  // aside) — Friel's pace zones at the threshold pace (GET …/plan/basis pace_zones)
+  const paceOn = !!(BASIS && BASIS.pace_zones && (BASIS.rows || []).some((r) => r.basis === "pace" && r.key !== "mp"));
+  $("pv-pace").hidden = !paceOn;
+  if (paceOn) {
+    const P = BASIS.pace_zones;
+    const lo = (z) => z.pct[0], hi = (z) => z.pct[1];
+    const range = (z) => z.slow == null ? t("settings.basis.pace_slower", { p: paceOf(z.fast) }) : z.fast == null
+      ? t("settings.basis.pace_faster", { p: paceOf(z.slow) }) : `${paceOf(z.fast)}–${paceOf(z.slow)}`;
+    const pct = (z) => { const [a, b] = z.pct.map((x) => x == null ? null : Math.round(x * 100)); return b == null ? `≥ ${a}%` : a == null ? `< ${b}%` : `${a}–${b}%`; };
+    $("pv-pace").innerHTML = `<h3>${esc(t("settings.basis.pace_h"))} <span class="meta">${esc(t("settings.basis.pace_unit", { p: paceOf(BASIS.tpace) }))}</span></h3>
+      ${zoneBar(P, lo, hi)}${zoneRows(P, range, pct, null)}`;
+  }
+  // 功率區間 (SP-955: only while power is in effect — ①; ② says it is paused, ③ shows none)
+  const pwOn = !PST || PST.state === "power";
+  $("pv-pw").hidden = !pwOn;
+  $("pv-pw-off").hidden = !PST || PST.state !== "stale";
+  $("pv-pw-off").textContent = PST && PST.state === "stale" ? t("settings.basis.pw_paused") : "";
+  if (!PZ || !pwOn) $("pv-pw").innerHTML = "";
   else if (!PZ.levels || !PZ.levels.length || !PZ.levels.some((l) => l.watts))
     $("pv-pw").innerHTML = `<h3>${esc(t("settings.pv.pw_h"))}</h3><p class="pv-none">${esc(t("settings.pv.pw_none"))}</p>`;
   else {
@@ -1651,9 +1773,11 @@ async function loadThr() {
 function renderThr() {
   const ef = TS.effective_thresholds, w = TS.wko5_settings.runthr, m = TS.wko5_settings.runmhr;
   // ST10: the LTHR-is-the-default and factory-default notes said once — the one red line where it matters (SP-488)
-  $("thr-now").innerHTML = esc(t("settings.thr.now", { aet: num(ef.aethr.value), lthr: num(ef.lthr.value), cp: num(ef.cp.value) }))
+  // SP-955: ③ (no power meter) uses no CP — the line leaves it out (the rows keep theirs)
+  const nocp = NOPW();
+  $("thr-now").innerHTML = esc(t(nocp ? "settings.basis.thr_now_nocp" : "settings.thr.now", { aet: num(ef.aethr.value), lthr: num(ef.lthr.value), cp: num(ef.cp.value) }))
     + pmBadge(ef.aethr.pm) + (ef.lthr.wko5_default ? ` <span class="err-text" data-hint-id="ST10">${esc(t("settings.thr.lthr_default"))}</span>` : "")
-    + (ef.cp.label ? `<span class="meta">${esc(t("settings.thr.cp_src", { src: ef.cp.label }))}</span>` : "")
+    + (ef.cp.label && !nocp ? `<span class="meta">${esc(t("settings.thr.cp_src", { src: ef.cp.label }))}</span>` : "")
     + ` <span id="thr-conf"></span>`;
   WKO5_RED = !!(w && w.is_default && !ef.lthr.wko5_default);
   WKO5_HTML = esc(t("settings.thr.wko5", { lthr: num(w && w.value), mhr: num(m && m.value) }))
@@ -2070,14 +2194,7 @@ async function loadSyncSettings() {
   showTl(SS.coros_tl);
   showRpe(SS.rpe_load);
   $("m-base").value = SS.map_basemap || "rudy";
-  $("u-power").checked = SS.use_power !== false;
-  // SP-748: the power source's name and the note in the page's language (power_source_how is the server's)
-  const PSL = { stryd: "Stryd", watch: t("settings.power.src_watch"), none: t("settings.power.src_none") };
-  $("u-power-note").textContent = SS.use_power_stored == null
-    ? t("settings.power.auto_note", { src: PSL[SS.power_source] || "–", how: SS.power_source_how || "–" })
-    : (SS.use_power === false ? t("settings.power.off_note") : "");
-  $("u-power-auto").hidden = SS.use_power_stored == null;
-  $("u-watch").checked = !!SS.accept_watch_power;
+  // SP-955: 使用功率 / 採用手錶推估功率 are gone — power follows 訓練依據 › 裝備 (engine/power_state.py)
   document.querySelectorAll('input[name="m-ovl"]').forEach((c) => c.checked = (SS.map_overlays || []).includes(c.value));
   f("tp", "secretsrc").textContent = SRC_LABEL[SS.tp_client_credentials_source]
     ? tSy("tp_src_" + SS.tp_client_credentials_source) : SS.tp_client_credentials_source;
@@ -2290,13 +2407,15 @@ $("m-save").onclick = async () => {
   catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
 };
 
-// 主要訓練項目 (engine/primary_sport.py): the setting, the sport in effect and the suggestion
+// 主要訓練項目 (engine/primary_sport.py): the setting, the sport in effect and the suggestion. SP-955: in 訓練依據 ›
+// 你給的 beside 裝備 — the same setting as 課表偏好's (both write athlete.primary_sport); the result card follows it
 async function loadSport() {
   const ps = await j("/api/v1/app/primary-sport").catch(() => null);
   if (!ps) return;
   $("u-sport").value = ps.setting || "auto";
   SPORT = ps;
   drawSport();
+  drawBasisVis();
 }
 // ST4 (●●▷, SP-488): 主要訓練項目's 「資料建議」 — 精簡 on hover (the select's title) only
 let SPORT = null;
@@ -2304,32 +2423,170 @@ function drawSport() {
   const ps = SPORT, sug = (ps && ps.suggested) || {};
   if (!ps) return;
   const advice = ps.setting !== "auto" && sug.sport && sug.sport !== ps.sport
-    ? `資料建議：${sug.sport === "road" ? "路跑／馬拉松" : "越野跑"}（${sug.reason || ""}）` : "";
-  $("u-sport-note").textContent = ps.setting === "auto" ? `目前：${ps.label}（${sug.reason || ""}）` : LEAN() ? "" : advice;
+    ? t("settings.basis.sport_advice", { sport: t(sug.sport === "road" ? "settings.basis.sport_road" : "settings.basis.sport_trail"), why: sug.reason || "" }) : "";
+  $("u-sport-note").textContent = ps.setting === "auto" ? t("settings.basis.sport_now", { sport: ps.label, why: sug.reason || "" }) : LEAN() ? "" : advice;
   $("u-sport").title = LEAN() ? advice : "";
 }
 $("u-sport").onchange = async (e) => {
-  try { await putSetting({ primary_sport: e.target.value }); toast("已更新主要訓練項目：重新整理其他頁面就會套用"); loadSport(); }
-  catch (err) { toast("失敗：" + err.message.slice(0, 80)); loadSport(); }
+  try { await putSetting({ primary_sport: e.target.value }); toast(t("settings.basis.sport_saved")); await loadSport(); loadBasis(); }
+  catch (err) { toast(t("settings.failed", { msg: err.message.slice(0, 80) })); loadSport(); }
 };
 loadSport();
 
 async function putSetting(body) {
   await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
-$("u-power").onchange = async (e) => {
-  try { await putSetting({ use_power: e.target.checked });
-    toast(t(e.target.checked ? "settings.power.on_toast" : "settings.power.off_toast")); loadSyncSettings(); }
-  catch (err) { toast(t("settings.power.fail", { msg: err.message.slice(0, 80) })); e.target.checked = !e.target.checked; }
-};
-$("u-power-auto").onclick = async () => {
-  try { await putSetting({ use_power: null }); toast(t("settings.power.auto_toast")); loadSyncSettings(); }
-  catch (err) { toast(t("settings.power.fail", { msg: err.message.slice(0, 80) })); }
-};
-$("u-watch").onchange = async (e) => {
-  try { await putSetting({ accept_watch_power: e.target.checked }); toast(t("settings.power.watch_toast")); loadSyncSettings(); }
-  catch (err) { toast(t("settings.power.fail", { msg: err.message.slice(0, 80) })); e.target.checked = !e.target.checked; }
-};
+
+// ---- 訓練依據 (SP-955; docs/research/no-power-meter-audit.md 「拍板的規則」) -------------------------------
+// 裝備 is the only question: Stryd or no power meter (the profile's power_source; a stored 手錶推估功率 reads as
+// none). The power state (① power / ② stale / ③ none) is GET /api/v1/plan/power-state's — never re-derived here.
+// 手動指定 and the AeT / CP 測試方式 are the 課表偏好 fields that moved here (PATCH …/plan/prefs, one at a time).
+// 現在用什麼練 is GET …/plan/basis (engine/training_basis.py): the plan summary and, per kind of session of
+// 主要訓練項目, target_policy's basis, the target and why.
+const BAPI = "/api/v1/overview/plan";
+const AETP = ["auto", "xu90", "ua60", "ua40", "evoke60", "friel"];
+let PST = null, BASIS = null, PREFS = null, AETO = {};
+const NOPW = () => !!PST && PST.state === "none";
+const sportNow = () => (BASIS && BASIS.sport) || (SPORT && SPORT.sport) || "trail";
+const mdOf = (iso) => { if (!iso) return ""; const [, m, d] = iso.slice(0, 10).split("-"); return `${+m}/${+d}`; };
+const paceOf = (s) => s == null ? "–" : `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
+const jsend = (url, method, body) => j(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+// a 手動指定 row: 「（手動）」 and 改回自動 when it is not on its automatic value
+function manTag(row, on) {
+  const r = $(row);
+  if (!r) return;
+  r.querySelector(".man").hidden = !on;
+  r.querySelector(".to-auto").hidden = !on;
+}
+
+async function loadPowerState() {
+  try { PST = await j("/api/v1/plan/power-state"); } catch (e) { PST = null; }
+  drawEquip(); drawBasisVis(); drawNow(); drawPhysio();
+  if (TS) renderThr();
+}
+function drawEquip() {
+  if (!PST) return;
+  const v = PST.meter ? "stryd" : "none";
+  document.querySelectorAll('input[name="equip"]').forEach((r) => { r.checked = r.value === v; });
+  const stored = PROF && PROF.profile ? PROF.profile.power_source : undefined;
+  $("equip-note").textContent = stored === "watch" ? t("settings.basis.equip_watch")
+    : !stored && PST.equipment_how ? t("settings.basis.equip_how", { how: PST.equipment_how }) : "";
+}
+document.querySelectorAll('input[name="equip"]').forEach((r) => r.addEventListener("change", async () => {
+  try {
+    if (!PROF) await loadProfile();
+    const p = PROF.profile || {};
+    await jsend("/api/v1/plan/profile", "PUT", { weights: PROF.weights.map((w) => ({ date: w.date, kg: w.kg })),
+      sex: p.sex || null, height_cm: p.height_cm || null, birth_year: p.birth_year ?? null, power_source: r.value });
+    // 使用功率 follows the equipment now: a stored on / off from before goes back to automatic
+    if (SS && SS.use_power_stored != null) await putSetting({ use_power: null }).catch(() => {});
+    toast(t("settings.basis.equip_saved"));
+    loadProfile().then(drawEquip);
+    loadPowerState(); loadBasis(); loadThr(); loadPz();
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); drawEquip(); }
+}));
+
+async function loadPrefs() {
+  try { const b = await j(`${BAPI}/prefs`); PREFS = b.prefs; AETO = b.aet_options || {}; } catch (e) { PREFS = null; }
+  drawPrefs();
+}
+function drawPrefs() {
+  if (!PREFS) return;
+  const aet = PREFS.aet_test_protocol || "auto";
+  $("b-aetp").innerHTML = AETP.map((k) => `<option value="${k}"${k === aet ? " selected" : ""}>${esc(t("settings.basis.aetp_" + k))}</option>`).join("");
+  const q = $("b-aetp-q"), tip = (AETO[aet] || {}).tip;
+  q.title = q.title.split("\n\n")[0] + (tip ? "\n\n" + tip : "");
+  $("b-cpp").value = PREFS.cp_test_protocol || "quick";
+  // ③: no 功率 to choose; one stored from before stays (ignored by the plan), shown as such
+  const basis = PREFS.target_basis || "auto", pw = $("b-basis").querySelector('option[value="power"]');
+  pw.disabled = NOPW();
+  pw.hidden = NOPW() && basis !== "power";
+  pw.textContent = t(NOPW() ? "settings.basis.basis_power_off" : "settings.basis.basis_power");
+  $("b-basis").value = basis;
+  $("b-climb").value = PREFS.climb_target || "power";
+  manTag("b-basis-row", basis !== "auto");
+  manTag("b-climb-row", $("b-climb").value !== "power");
+}
+async function patchPrefs(body) {
+  try {
+    const b = await jsend(`${BAPI}/prefs`, "PATCH", body);
+    PREFS = b.prefs; drawPrefs();
+    toast(t("settings.basis.saved"));
+    loadBasis();
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); drawPrefs(); }
+}
+$("b-basis").onchange = (e) => patchPrefs({ target_basis: e.target.value });
+$("b-climb").onchange = (e) => patchPrefs({ climb_target: e.target.value });
+$("b-aetp").onchange = (e) => patchPrefs({ aet_test_protocol: e.target.value });
+$("b-cpp").onchange = (e) => patchPrefs({ cp_test_protocol: e.target.value });
+$("b-basis-row").querySelector(".to-auto").onclick = () => patchPrefs({ target_basis: "auto" });
+$("b-climb-row").querySelector(".to-auto").onclick = () => patchPrefs({ climb_target: "power" });
+$("hr-model-row").querySelector(".to-auto").onclick = () => putHr({ model: "auto" }, t("settings.hr.model_saved"));
+$("pz-model-row").querySelector(".to-auto").onclick = () => { $("pz-model").value = "palladino"; $("pz-model").dispatchEvent(new Event("change")); };
+
+// what shows in which state / sport: 可跑坡目標 越野 only (and not in ③: it is always Effort Pace there); the
+// power settings (CP 測試方式, 課表功率區間, the power zone tables) not in ③
+function drawBasisVis() {
+  const nopw = NOPW();
+  $("b-climb-row").hidden = sportNow() !== "trail" || nopw;
+  $("pz-model-row").hidden = nopw;
+  if (nopw) $("pz-model-warn").hidden = true;
+  $("b-cpp-row").hidden = nopw;
+  $("how-cp").hidden = nopw;
+  $("thr-pz-box").hidden = nopw;
+  drawPrefs();
+}
+
+async function loadBasis() {
+  try { BASIS = await j(`${BAPI}/basis`); }
+  catch (e) {
+    BASIS = null;
+    $("now-status").innerHTML = `<span class="meta">${esc(t("settings.failed", { msg: e.message.slice(0, 80) }))}</span>`;
+    return;
+  }
+  drawBasisVis(); drawNow(); drawPhysio();
+}
+// 現在用什麼練: the state line, the plan summary, one row per kind of session
+function drawNow() {
+  if (!PST || !BASIS) return;
+  const st = PST.state;
+  let cp = "";
+  if (st === "none") cp = t("settings.basis.st_nopower");
+  else if (st === "power" && PST.cp && PST.days != null)
+    cp = t("settings.basis.st_cp_ok", { cp: Math.round(PST.cp), day: mdOf(PST.anchor), left: Math.max(0, PST.fresh_days - PST.days), until: mdOf(PST.stale_on) });
+  else if (st === "stale")
+    cp = PST.days != null ? t("settings.basis.st_cp_old", { cp: PST.cp ? Math.round(PST.cp) : "–", n: PST.days }) : t("settings.basis.st_cp_never");
+  const badge = t("settings.basis.st_" + st);
+  const sport = SPORT ? SPORT.label : t(sportNow() === "road" ? "settings.basis.sport_road" : "settings.basis.sport_trail");
+  const how = t(SPORT && SPORT.setting !== "auto" ? "settings.basis.sport_set" : "settings.basis.sport_auto");
+  const basisTxt = t("settings.basis.basis_" + (BASIS.target_basis || "auto")) + (BASIS.target_basis && BASIS.target_basis !== "auto" ? t("settings.basis.manual") : "");
+  $("now-status").className = "ps-box ps-" + st;
+  $("now-status").innerHTML = `<div class="l1"><span>${esc(PST.meter ? "Stryd" : t("settings.basis.equip_none"))}</span>`
+    + (cp ? `<span>${esc(cp)}</span>` : "") + `<span class="badge">${esc(badge)}</span></div>`
+    + `<div${st === "stale" ? ' class="act"' : ""}>${esc(PST.reason || "")}</div>`
+    + `<div class="meta">${esc(t("settings.basis.st_sport", { sport, how, basis: basisTxt }))}</div>`;
+  // the plan summary
+  const kv = [];
+  const ph = BASIS.phase, w = BASIS.week || {};
+  const struct = t("settings.basis.week_struct", { runs: w.runs || 0, long: w.long || 0, q: w.quality || 0, s: w.strength || 0 });
+  const mode = ph && ph.label && BASIS.mode_label && BASIS.mode_label !== ph.label ? t("settings.basis.mode", { mode: BASIS.mode_label }) : "";
+  kv.push([t("settings.basis.k_now"), (ph && ph.label ? (ph.week ? t("settings.basis.phase_week", { phase: ph.label, n: ph.week }) : ph.label) + mode
+    : BASIS.mode_label || "–") + " · " + struct, ""]);
+  const u = BASIS.unlock;
+  if (u) {
+    const miss = [...(u.z3.open ? [] : u.z3.missing), ...(u.z5.open ? [] : u.z5.missing)];
+    kv.push([t("settings.basis.k_unlock"), `${u.z3.head} · ${u.z5.head}`, miss.length ? t("settings.basis.missing", { list: [...new Set(miss)].join(t("settings.general.sep")) }) : ""]);
+  }
+  const nt = BASIS.next_test;
+  kv.push([t("settings.basis.k_test"), !nt ? t("settings.basis.test_none")
+    : nt.suggested ? t("settings.basis.test_suggested", { title: nt.title }) : t("settings.basis.test_on", { title: nt.title, day: mdOf(nt.day) }), ""]);
+  $("now-kv").innerHTML = kv.map(([k, v, m]) => `<dt>${esc(k)}</dt><dd>${esc(v)}${m ? `<br><span class="miss">${esc(m)}</span>` : ""}</dd>`).join("");
+  // per kind of session (主要訓練項目's): the basis chip, the target, why (+ the source behind ?)
+  $("now-rows").innerHTML = (BASIS.rows || []).map((r) => `<div class="nr" data-k="${esc(r.key)}">
+    <span class="nm">${esc(r.name)}${r.manual ? ` <span class="man">${esc(t("settings.basis.manual"))}</span>` : ""}</span>
+    <span class="chip b-${esc(r.basis)}">${esc(r.basis_label)}</span><span class="t">${esc(r.target || "–")}</span>
+    <span class="why">${esc(r.why)}${r.source ? ` <button type="button" class="q" aria-label="${esc(t("settings.thr.q_aria"))}" title="${esc(r.source)}">?</button>` : ""}</span></div>`).join("");
+}
 f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.checked }).then(() => toast(tSy("updated")));
 f("tp", "enabled").onchange = (e) => putSetting({ trainingpeaks_enabled: e.target.checked }).then(() => toast(tSy("updated")));
 f("garmin", "enabled").onchange = (e) => putSetting({ garmin_enabled: e.target.checked }).then(() => toast(tSy("updated")));
@@ -3276,9 +3533,11 @@ $("acct-analysis-btn").onclick = async () => {
 // tab: #body … or a section / element id (#sync, #thresholds, #badfiles: its tab, scrolled to).
 // 疊石 Cairn (SP-666): sign-in mode only — its button stays hidden otherwise (cairnTab), and a
 // hidden tab is never shown (個人資料 instead)
+// SP-955: 生理數據 became 訓練依據 (its key stays "body": links, the coach view); one section, #basis, holds
+// 裝備／主要訓練項目, 門檻與測試, 手動指定, 現在用什麼練 and 我的區間 (their ids still pick the tab)
 const TABS = {
-  personal: ["general", "sport", "map", "account"],
-  body: ["physio", "hr", "thresholds", "power"],
+  personal: ["general", "map", "account"],
+  body: ["basis"],
   data: ["sync", "weightsync", "backup", "archive", "device", "calendar"],
   advanced: ["mode", "calib", "fixes", "debugapi", "askai", "upstream"],
   cairn: ["cairn"],
@@ -3298,6 +3557,7 @@ const tabHidden = (tab) => { const b = $(`tab-${tab}`); return !b || b.hidden ||
 function showTab(tab, focus) {
   if (!TABS[tab] || tabHidden(tab)) tab = VIEWING ? "body" : "personal";
   document.querySelectorAll("main > section").forEach((sec) => sec.classList.toggle("tab-off", tabOf(sec) !== tab));
+  document.querySelector("main").classList.toggle("wide", tab === "body");      // two columns (SP-955)
   tabBtns().forEach((b) => {
     const on = b.dataset.tab === tab;
     b.setAttribute("aria-selected", on ? "true" : "false"); b.tabIndex = on ? 0 : -1;
@@ -3317,6 +3577,8 @@ function tabNote() {
   const tab = b.dataset.tab;
   $("tab-note").textContent = FULL() ? t(`settings.tabs.${tab}_note${tab === "advanced" && $("mode").hidden ? "_nomode" : ""}`) : "";
   $("tab-note").hidden = !FULL();
+  // SP-955: the 訓練依據 cards' one-line intros, like the tab note (the `?` beside the heading says the same)
+  document.querySelectorAll(".full-only").forEach((el) => { el.hidden = !FULL(); });
 }
 // ST5 (●▷▷, SP-488): fixed explanations — 地圖 ×2, 記住密碼, the TP terms risk, 課表訂閱 — are text in 完整 and a `?`
 // in 標準／精簡: a sentence (span) gets its own `?` right after it, a paragraph / list the `?` of its heading
@@ -3398,9 +3660,10 @@ foldQ();
 
 if (VIEWING) {
   // 代看 (SP-791): only what 生理數據 shows (the rest is the student's own and the server refuses it)
-  loadHr(); loadThr(); loadPz();
+  loadHr(); loadThr(); loadPz(); loadPowerState(); loadPrefs(); loadBasis();
 } else {
-loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadPz(); loadExclusions(); if (CAN_BACKUP) loadBackup();
+loadMode(); loadApplied(); loadProfile().then(drawEquip); loadHr(); loadThr(); loadPz(); loadExclusions(); if (CAN_BACKUP) loadBackup();
+loadPowerState(); loadPrefs(); loadBasis();          // 訓練依據 (SP-955)
 loadArchive(); loadCalib(); loadCal();
 loadAccount();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));

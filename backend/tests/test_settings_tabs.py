@@ -1,4 +1,4 @@
-"""設定頁分頁 (SP-213): 個人資料 / 生理數據 / 資料同步 / 進階設定 on static/settings.html.
+"""設定頁分頁 (SP-213): 個人資料 / 訓練依據 (SP-955; was 生理數據) / 資料同步 / 進階設定 on static/settings.html.
 Reads the repo's page and catalogs only."""
 import json
 import re
@@ -14,9 +14,15 @@ def _tabs() -> dict[str, list[str]]:
     return {k: re.findall(r'"(\w+)"', ids) for k, ids in re.findall(r"(\w+): \[([^\]]*)\]", js)}
 
 
+MAIN = PAGE[PAGE.index("<main>"):PAGE.index("</main>")]
+# SP-955: 訓練依據 is one section (#basis) holding its cards as sections of their own (the old ids stay)
+BASIS = MAIN[MAIN.index('<section id="basis">'):MAIN.index('<section id="sync">')]
+BASIS_IDS = set(re.findall(r"<section\b[^>]*\bid=\"([\w-]+)\"", BASIS)) - {"basis"}
+
+
 def _sections() -> list[str]:
-    main = PAGE[PAGE.index("<main>"):PAGE.index("</main>")]
-    return re.findall(r"<section\b[^>]*\bid=\"([\w-]+)\"", main)
+    """The sections directly under <main> (the tab panels)."""
+    return [s for s in re.findall(r"<section\b[^>]*\bid=\"([\w-]+)\"", MAIN) if s not in BASIS_IDS]
 
 
 def test_four_tabs_each_section_on_one():
@@ -31,14 +37,18 @@ def test_four_tabs_each_section_on_one():
     secs = _sections()
     assert sorted(placed) == sorted(secs), set(placed) ^ set(secs)   # every section has an id and a tab
     # what the ticket groups: personal info / physiology (heart rate …) / advanced
-    assert tabs["personal"][0] == "general" and "sport" in tabs["personal"]
-    assert {"hr", "thresholds", "power"} <= set(tabs["body"])
+    # SP-955: 主要訓練項目 moved to 訓練依據 (body), which is one section with the two columns' cards
+    assert tabs["personal"][0] == "general" and "sport" not in tabs["personal"]
+    assert tabs["body"] == ["basis"]
+    assert {"equip", "thresholds", "overrides", "now", "physio"} == BASIS_IDS
+    for i in ("sport", "hr", "hr-cmp", "pv-tiles", "b-aetp", "b-cpp", "b-basis", "b-climb", "hr-model", "pz-model"):
+        assert f'id="{i}"' in BASIS, i
+    assert 'id="power"' not in PAGE
     assert {"sync", "weightsync", "backup", "archive", "device", "calendar"} == set(tabs["data"])     # 運動紀錄保留 (SP-317),
     # 這台裝置的離線資料 (SP-322), 體重同步 (SP-472)
     assert {"mode", "calib", "fixes", "debugapi", "upstream", "askai"} == set(tabs["advanced"])   # debugapi: SP-371; upstream: SP-373; askai: SP-786
     # a section without an id would land on 進階設定 silently: there is none
-    main = PAGE[PAGE.index("<main>"):PAGE.index("</main>")]
-    assert len(re.findall(r"<section\b", main)) == len(secs)
+    assert len(re.findall(r"<section\b", MAIN)) == len(secs) + len(BASIS_IDS)
 
 
 def test_tab_bar_markup_and_catalogs():
@@ -71,7 +81,8 @@ def _section_of(element_id: str) -> str:
     """The <section id> of main that holds the element with this id."""
     main = PAGE[PAGE.index("<main>"):PAGE.index("</main>")]
     at = main.index(f'id="{element_id}"')
-    return re.findall(r"<section\b[^>]*\bid=\"([\w-]+)\"", main[:at])[-1]
+    sec = re.findall(r"<section\b[^>]*\bid=\"([\w-]+)\"", main[:at])[-1]
+    return "basis" if sec in BASIS_IDS else sec                   # SP-955: a card of 訓練依據
 
 
 def test_the_controls_of_the_other_branches_land_on_their_tab():

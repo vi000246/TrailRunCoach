@@ -729,5 +729,15 @@
   "bo.done": "{range} set as no-training days",
   "bo.what_rm": "Remove no-training days",
   "bo.done_rm": "Removed the no-training days {range}",
-  "bo.changes": " ({n} {n|change|changes})"
+  "bo.changes": " ({n} {n|change|changes})",
+  "pf.sport": "Main sport",
+  "pf.sport_tip": "Trail: the plan has steep power hiking, mountain long days and B2B; road / marathon: none of those, and the Build long run gets a marathon-pace segment. The same setting as the main sport under Settings › Training basis: change one and the other follows. Automatic = the next A races first, then the B races, else the share of trail + hiking time in the last 12 weeks (≥ 25% is trail, an estimate).",
+  "pf.sport_auto": "Automatic",
+  "pf.sport_trail": "Trail running",
+  "pf.sport_road": "Road / marathon",
+  "pf.sport_now": "Automatic: {sport} ({why})",
+  "pf.sport_advice": "The data suggests: {sport} ({why})",
+  "pf.moved_basis": "Targets by and the runnable-climb target are on the Training basis tab in Settings.",
+  "pf.moved_tests": "The AeT / CP tests are on the Training basis tab in Settings.",
+  "pf.to_basis": "Go to Settings ›"
 }
