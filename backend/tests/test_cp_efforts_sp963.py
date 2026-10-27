@@ -107,9 +107,10 @@ def test_a_short_and_a_long_effort_in_42_days_keep_the_cp_fresh_without_a_cp_tes
     assert st["last_cp_test"] is None and st["days"] is None          # no CP test, no race
     assert st["valid_until"] == eff["until"] and st["left"] == 22
     assert st["stale_on"] == (_ago(20) + dt.timedelta(days=43)).isoformat()
-    # the status line names the efforts and the day it lasts to: 「CP 250 W · 10/17 的 … 和 10/7 的 … 撐著，有效到 11/18」
+    # the status line says until when and why, plain (R2): 「CP 250 W 有效到 11/18（10/7 跑出 …，10/17 跑出 …）, the older one first」
     r = st["reason"]
-    assert r.startswith("CP 250 W · 10/17 的 ") and " 和 10/7 的 " in r and r.endswith("撐著，有效到 11/18")
+    assert r.startswith("CP 250 W 有效到 11/18（10/7 跑出 ") and "，10/17 跑出 " in r and r.endswith("）")
+    assert st["basis_text"] in r and st["basis_text"].startswith("10/7 跑出 ")
     assert f"{eff['short']['watts']} W" in r and f"{eff['long']['watts']} W" in r
 
 
@@ -118,7 +119,7 @@ def test_one_run_with_both_efforts_is_named_once():
     ds = _DS([_run(_ago(5), [(600, 170), (300, 1.02 * _p(300)), (600, 150), (900, 0.99 * _p(900)), (300, 150)])])
     st = _state(ds)
     assert st["state"] == PST.POWER and st["basis"] == "efforts"
-    assert st["reason"].startswith("CP 250 W · 10/22 的 ") and st["reason"].count(" 的 ") == 1
+    assert st["reason"].startswith("CP 250 W 有效到 12/3（10/22 跑出 ") and st["reason"].count("跑出") == 1
     assert st["valid_until"] == (_ago(5) + dt.timedelta(days=42)).isoformat()
 
 
@@ -126,10 +127,10 @@ def test_a_cp_test_still_counts_and_is_named():
     ds = _DS([easy(_ago(3))])
     st = _state(ds, last_cp_test="2026-10-17")
     assert st["state"] == PST.POWER and st["basis"] == "test" and st["days"] == 10
-    assert st["reason"] == "CP 250 W · 10/17 的 CP 測試撐著，有效到 11/28"
+    assert st["reason"] == "CP 250 W 有效到 11/28（10/17 做了 CP 測試）"
     assert st["valid_until"] == "2026-11-28" and st["stale_on"] == "2026-11-29" and st["left"] == 32
     race = _state(ds, last_race="2026-10-20")
-    assert race["basis"] == "race" and race["reason"] == "CP 250 W · 10/20 的比賽撐著，有效到 12/1"
+    assert race["basis"] == "race" and race["reason"] == "CP 250 W 有效到 12/1（10/20 跑了比賽）"
 
 
 def test_efforts_after_an_old_test_extend_it():
@@ -155,14 +156,14 @@ def test_without_a_short_and_a_long_effort_in_42_days_it_is_stale(runs):
     st = _state(ds)
     assert st["state"] == PST.STALE and not st["power"] and st["basis"] is None and st["valid_until"] is None
     # ② still asks for a CP test — or a hard session / race (SP-963)
-    assert st["reason"] == ("還沒有 CP 測試或比賽，目前用心率／配速；做一次 CP 測試就切回功率"
-                            "（或最近跑一次強度課／比賽）")
+    assert st["reason"] == ("還沒有 CP 測試或比賽，先用心率／配速；做一次 CP 測試就切回功率"
+                            "，跑一次強度課或比賽也行")
     assert st["suggest"] == "cp"
 
 
 def test_the_stale_reminder_with_an_old_test_names_its_age_and_the_hard_session_way_back():
     st = _state(_DS([easy(_ago(5))]), last_cp_test=_ago(50).isoformat())
-    assert st["reason"] == "CP 已 50 天沒測，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）"
+    assert st["reason"] == "CP 已 50 天沒測，先用心率／配速；做一次 CP 測試就切回功率，跑一次強度課或比賽也行"
 
 
 def test_no_pd_model_no_efforts():
@@ -213,9 +214,9 @@ def test_current_reads_the_efforts_for_the_api_and_the_calculator():
     ps = PST.current(ds, TODAY)
     assert ps["state"] == PST.POWER and ps["basis"] == "efforts" and ps["efforts"]["anchored"]
     assert ps["valid_until"] == (_ago(20) + dt.timedelta(days=42)).isoformat()
-    assert "撐著，有效到" in ps["reason"]
+    assert "有效到" in ps["reason"] and "跑出" in ps["reason"]
     stale = PST.current(_DS([easy(_ago(20)), easy(_ago(10))]), TODAY)
-    assert stale["state"] == PST.STALE and "或最近跑一次強度課／比賽" in stale["reason"]
+    assert stale["state"] == PST.STALE and "跑一次強度課或比賽也行" in stale["reason"]
 
 
 def test_no_meter_ignores_the_efforts():

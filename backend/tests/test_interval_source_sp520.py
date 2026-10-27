@@ -12,8 +12,6 @@ fresh dataset (a restarted server) alike, marked or not; the only change of sour
 later (a sync), from then on; 「你標了「當作間歇」」 is said only with the tag, and judging never writes it."""
 import datetime as dt
 
-import pytest
-
 from backend.engine import interval_eval as IE
 from backend.engine import workout_review as WR
 from backend.i18n import use_locale
@@ -27,8 +25,9 @@ def _source(ds, w) -> tuple:
     """What a reader compares between two calls: the source, the band and the badge's subtitle."""
     e = IE.card_cached(ds, w)
     v = WR.review(ds, w, "interval_verdict")
-    return (e["kind"], e["planned"], e["label"], round(e["lo"], 4), round(e["hi"], 4), round(e["floor"], 1),
-            v["badge"]["sub"])
+    # SP-918: detected reps have no 達標 line (floor None)
+    return (e["kind"], e["planned"], e["label"], round(e["lo"], 4), round(e["hi"], 4),
+            None if e["floor"] is None else round(e["floor"], 1), v["badge"]["sub"])
 
 
 def _fresh_planned():
@@ -98,28 +97,27 @@ def _detected(on: float):
 
 
 def test_detected_reps_say_the_band_they_fell_in_not_a_target():
-    """Q1-3: the 理由 line and the 每趟 tip of detected reps name the band the reps fell in
-    (「偵測到的趟落在超閾值帶（101–106% CP）」), never 「目標下限 101% CP」 — it read as a plan's target."""
+    """Q1-3: detected reps name the band they fell in, never 「目標下限 101% CP」 — it read as a plan's target.
+    SP-918 (owner, Q1 2026-10-27): and no 「n/n 趟達標」 against that band either (it was the reps' own median's):
+    the 理由 line counts the reps per band; `band_text` stays the median's band (the 功率 card's grey band)."""
     ds, w = _detected(260.0)                                           # 104 % CP: 超閾值
     e = IE.card_cached(ds, w)
     assert e["kind"] == "detected" and not e["planned"] and e["band_text"] == "超閾值帶（101–106% CP）", e
+    assert e["floor"] is None and e["hit"] is None
     v = WR.review(ds, w, "interval_verdict")
     reasons = [r["data"]["value"] for r in v["series"]]
-    line = next(x for x in reasons if "趟達標" in x)
-    assert "偵測到的趟落在超閾值帶（101–106% CP）" in line and "目標下限" not in line, line
-    assert f"達標線 {e['floor']:.0f} W＝帶的下限 × {e['in_band_tol_text']}" in line, line
+    assert not any("趟達標" in x or "達標線" in x or "目標下限" in x for x in reasons), reasons
+    line = next(x for x in reasons if x.startswith("5 趟："))
+    assert line.startswith("5 趟：0 趟閾值、5 趟超閾值") and "不判達標" in line, line
     tip = {r["label"]: r for r in v["chip_rows"]}["每趟"]["tip"]
-    assert "偵測到的趟落在超閾值帶（101–106% CP）" in tip and "目標下限" not in tip and "目標上限" not in tip, tip
-    # the rule is unchanged: the same floor (the band's lower bound × the tolerance)
-    assert e["floor"] == pytest.approx(e["lo"] * e["cp"] * e["in_band_tol"])
+    assert "超閾值 101–106%" in tip and "目標下限" not in tip and "目標上限" not in tip, tip
     with use_locale("en"):
         v = WR.review(ds, w, "interval_verdict")
     reasons = [r["data"]["value"] for r in v["series"]]
-    line = next(x for x in reasons if "on target" in x)
-    assert "the detected reps fall in the supra-threshold band (101–106% CP)" in line, line
-    assert "lower bound 101" not in line, line
+    assert any(x.startswith("5 reps: 0 threshold, 5 supra-threshold") for x in reasons), reasons
+    assert not any("lower bound 101" in x for x in reasons), reasons
     tip = {r["label"]: r for r in v["chip_rows"]}["Each rep"]["tip"]
-    assert "supra-threshold band (101–106% CP)" in tip, tip
+    assert "supra-threshold 101–106%" in tip, tip
 
 
 def test_detected_band_text_edges():

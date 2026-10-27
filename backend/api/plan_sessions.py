@@ -4052,6 +4052,17 @@ def _stats_view(s: dict, inp: dict) -> dict:
 
 @router.get("/compliance")
 async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
+    """The whole request reads each setting once (SP-968, datasource.settings_memo as SP-752's 課表輸入):
+    classifying the range's activities asked the DB for the same HR account / zone model / data source
+    per activity — ~2,550 sqlite connections for a 371-day range of the demo athlete. The threadpool
+    work (the range extras, the history) runs in a copy of this context, so it shares the memo; the
+    next request reads the settings again."""
+    from backend.engine.wko5expr.datasource import settings_memo
+    with settings_memo():
+        return await _compliance(start, end, db)
+
+
+async def _compliance(start: str, end: str, db: AsyncSession) -> dict:
     from backend.engine import compliance as C
     try:
         a, b = dt.date.fromisoformat(start[:10]), dt.date.fromisoformat(end[:10])

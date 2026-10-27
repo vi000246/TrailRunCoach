@@ -28,15 +28,18 @@ def test_detected_reps_card_names_the_band_not_a_target():
     assert e["kind"] == "detected" and e["band_name"] == "超閾值帶", e.get("band_name")
     r = WR.review(ds, w, "interval_reps")
     p = r["rep_profile"]
-    assert p["source"] == "detected" and p["band_name"] == "超閾值帶", p
+    # SP-918: the 每趟功率 card no longer frames one band (the reps' own): every band, each rep by its band
+    # (test_interval_bands_sp918); still never 「目標」
+    assert p["source"] == "detected" and p["mode"] == "bands", p
     assert "目標" not in r["subtitle"], r["subtitle"]
-    assert "目標 " not in r["description"] and "偵測到的趟落在的超閾值帶（101–106% CP）" in r["description"], r["description"]
+    assert "目標 " not in r["description"] and "沒有目標" in r["description"], r["description"]
     t = WR.review(ds, w, "interval_power")
     assert t["iv_trace"]["band_name"] == "超閾值帶" and "目標帶" not in t["description"], t["description"]
     with use_locale("en"):
         r = WR.review(ds, w, "interval_reps")
-    assert r["rep_profile"]["band_name"] == "supra-threshold band", r["rep_profile"]
-    assert "the supra-threshold band (101–106% CP) the detected reps fell in" in r["description"], r["description"]
+        t = WR.review(ds, w, "interval_power")
+    assert "target" not in r["subtitle"].lower(), r["subtitle"]
+    assert t["iv_trace"]["band_name"] == "supra-threshold band", t["iv_trace"]
 
 
 def test_detected_band_name_below_every_band():
@@ -55,10 +58,9 @@ def test_a_planned_session_keeps_its_target():
 
 
 def test_the_viewer_says_the_band_on_detected_reps():
-    """drawRepProfile: legend, frame label, tip and the 「在帶內」 word go by `source` / `band_name`."""
+    """SP-918: detected reps are drawn by drawRepBands (every band, no target frame); the 功率 card's grey band
+    keeps its name (`band_name`)."""
     src = CHARTS.read_text(encoding="utf-8")
     body = src[src.index("function drawRepProfile"):src.index("function drawIntervalTrace")]
-    assert 'P.source === "detected"' in body
-    assert 't("viewer.iv.band_2l", ' in body and 't("viewer.iv.band", ' in body
-    assert 'sw(det ? "in_band" : "in")' in body
+    assert 'mode === "bands") return drawRepBands(card, res)' in body
     assert "viewer.it.leg_band_det" in src

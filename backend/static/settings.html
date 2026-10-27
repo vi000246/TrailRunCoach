@@ -227,6 +227,19 @@ details.adv .row.ovr:first-of-type { border-top: 1px solid var(--line); }
 .ps-box.ps-none { background: color-mix(in srgb, var(--muted) 14%, var(--panel)); }
 .ps-box .badge { font-size: 11.5px; font-weight: 500; border: 1px solid currentColor; border-radius: 10px; padding: 0 8px; }
 .ps-box .act { color: var(--warn); font-weight: 600; }
+/* SP-963 R2: ① the CP's 42-day validity as a bar — what keeps it valid on the left, until when on the right,
+   today's mark; the green part is what is left */
+.cp-tl { margin: 2px 0 2px; }
+.cp-tl .trk { position: relative; height: 8px; margin: 16px 6px 4px; border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 22%, transparent); }
+.cp-tl .left { position: absolute; top: 0; bottom: 0; right: 0; border-radius: 0 4px 4px 0; background: var(--ok); }
+.cp-tl .ev { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+  background: var(--ok); border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--ok); }
+.cp-tl .now { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--text); }
+.cp-tl .now b { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 500;
+  font-style: normal; color: var(--muted); white-space: nowrap; line-height: 1.2; }
+.cp-tl .ends { display: flex; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; font-size: 13px; }
+.cp-tl .ends .u { color: var(--ok); font-weight: 600; white-space: nowrap; margin-left: auto; }
 .now-kv { grid-template-columns: max-content minmax(0, 1fr); margin: 0 0 10px; }
 .now-kv .miss { color: var(--warn); }
 .now-rows { border-top: 1px solid var(--line); }
@@ -1695,6 +1708,9 @@ function drawPhysio() {
   // SP-955: in 門檻與測試, each with where it comes from; 閾值配速 when there is one; CP not in ③ (no power meter),
   // its line says the power state's (the test day, still valid N days / stale for N days)
   const cpSrc = !PST || !cp ? (ef && ef.cp.label) || t("settings.pv.cp")
+    // SP-963 R2: kept valid by recent all-out runs (basis efforts) → 「9/30 全力跑 · 還有效 N 天」 (the bar's start), its own left
+    : PST.state === "power" && PST.basis === "efforts" && PST.valid_until
+      ? t("settings.basis.cp_efforts", { day: mdOf(new Date(Date.parse(PST.valid_until) - (PST.fresh_days || 42) * 864e5).toISOString()), left: Math.max(0, PST.left || 0) })
     : PST.state === "power" && PST.days != null ? t("settings.basis.cp_ok", { day: mdOf(PST.anchor), left: Math.max(0, PST.fresh_days - PST.days) })
     : PST.state === "stale" ? (PST.days != null ? t("settings.basis.cp_old", { n: PST.days }) : t("settings.basis.st_cp_never")) : (ef && ef.cp.label) || t("settings.pv.cp");
   $("pv-tiles").innerHTML = [
@@ -2589,19 +2605,36 @@ function drawTypes() {
     row.querySelector(".to-auto").onclick = () => patchPrefs({ type_basis: { [k]: "auto" } });
   });
 }
+// SP-963 R2: ① the CP's validity (fresh_days, 42) as a bar from its start to valid_until: a dot on each day that
+// keeps it valid (the short / long all-out efforts, or the CP test / race), today's mark, the green rest = days left;
+// under it what keeps it valid (PST.basis_text, the API's words) and until when
+function cpBar(ps) {
+  const n = ps.fresh_days || 42, until = ps.valid_until;
+  if (!until || !ps.basis_text) return "";
+  const day = (iso) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 864e5;
+  const pct = (x) => (Math.min(1, Math.max(0, x)) * 100).toFixed(1) + "%";
+  const left = Math.min(n, Math.max(0, ps.left || 0));
+  const days = ps.basis === "efforts" ? [ps.efforts?.short?.date, ps.efforts?.long?.date] : [ps.anchor];
+  const dots = [...new Set(days.filter(Boolean))]
+    .map((d) => `<i class="ev" style="left:${pct(1 - (day(until) - day(d)) / n)}"></i>`).join("");
+  const from = new Date((day(until) - n) * 864e5).toISOString().slice(0, 10);
+  const aria = t("settings.basis.tl_aria", { n, from: mdOf(from), until: mdOf(until), left });
+  return `<div class="cp-tl" role="img" aria-label="${esc(aria)}"><div class="trk"><span class="left" style="width:${pct(left / n)}"></span>`
+    + dots + `<i class="now" style="left:${pct(1 - left / n)}"><b>${esc(t("settings.basis.tl_today"))}</b></i></div>`
+    + `<div class="ends"><span>${esc(ps.basis_text)}</span><span class="u">${esc(t("settings.basis.tl_until", { d: mdOf(until) }))}</span></div></div>`;
+}
 // 現在用什麼練: the state line, the plan summary, one row per kind of session
 function drawNow() {
   if (!PST || !BASIS) return;
   const st = PST.state;
   let cp = "";
   if (st === "none") cp = t("settings.basis.st_nopower");
-  // SP-963: fresh by a CP test / race, or by recent all-out efforts on the power curve (basis "efforts");
-  // PST.reason names them and the day it lasts to
+  // SP-963 R2: few words — ① 「CP 195 W · 還有效 15 天」 with the validity bar under it (cpBar) in place of
+  // PST.reason; ② just the CP, PST.reason says how old it is and how to get power back
   else if (st === "power" && PST.cp && PST.valid_until)
-    cp = t(PST.basis === "efforts" ? "settings.basis.st_cp_efforts" : "settings.basis.st_cp_ok",
-      { cp: Math.round(PST.cp), day: mdOf(PST.anchor), left: Math.max(0, PST.left || 0), until: mdOf(PST.stale_on) });
-  else if (st === "stale")
-    cp = PST.days != null ? t("settings.basis.st_cp_old", { cp: PST.cp ? Math.round(PST.cp) : "–", n: PST.days }) : t("settings.basis.st_cp_never");
+    cp = t("settings.basis.st_cp_ok", { cp: Math.round(PST.cp), left: Math.max(0, PST.left || 0) });
+  else if (st === "stale" && PST.cp) cp = t("settings.basis.st_cp_old", { cp: Math.round(PST.cp) });
+  const bar = st === "power" ? cpBar(PST) : "";
   const badge = t("settings.basis.st_" + st);
   const sport = SPORT ? SPORT.label : t(sportNow() === "road" ? "settings.basis.sport_road" : "settings.basis.sport_trail");
   const how = t(SPORT && SPORT.setting !== "auto" ? "settings.basis.sport_set" : "settings.basis.sport_auto");
@@ -2609,7 +2642,7 @@ function drawNow() {
   $("now-status").className = "ps-box ps-" + st;
   $("now-status").innerHTML = `<div class="l1"><span>${esc(PST.meter ? "Stryd" : t("settings.basis.equip_none"))}</span>`
     + (cp ? `<span>${esc(cp)}</span>` : "") + `<span class="badge">${esc(badge)}</span></div>`
-    + `<div${st === "stale" ? ' class="act"' : ""}>${esc(PST.reason || "")}</div>`
+    + (bar || `<div${st === "stale" ? ' class="act"' : ""}>${esc(PST.reason || "")}</div>`)
     + `<div class="meta">${esc(t("settings.basis.st_sport", { sport, how, basis: basisTxt }))}</div>`;
   // the plan summary
   const kv = [];

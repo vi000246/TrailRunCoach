@@ -78,8 +78,10 @@ def test_the_card_judges_thirty_second_reps_by_their_time_in_the_zone():
     ds.laps = lambda idx: laps
     e = IE.card_cached(ds, w)
     assert e["ok"] and e["auto"] and e["tiz_run_s"] == 15.0
-    assert e["tiz_ratio"] >= 0.85, e["tiz_ratio"]
+    # SP-918: detected reps (no plan) are no longer judged on target — the 30″ reps' time still counts,
+    # now as time per intensity band instead of a ratio against a plan
     assert e["verdict"] != "missed", e.get("why")
+    assert sum(e["band_secs"].values()) >= 0.85 * 4 * 30, e["band_secs"]
     v = WR.review(ds, w, "interval_verdict")
-    row = next(r for r in v["chip_rows"] if r["label"] == "目標區時間")
-    assert "連續 ≥ 15 秒才算" in row["tip"], row["tip"]
+    row = next(r for r in v["chip_rows"] if r["label"] == "各強度帶的時間")
+    assert "連續 ≥ 15 秒" in row["tip"], row["tip"]

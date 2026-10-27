@@ -190,12 +190,31 @@ def unwrap(index: int, fed: int) -> int:
     return fed - ((fed - index) % (1 << 32))
 
 
+_HEAD = re.compile(rb'^\{"key": ("(?:[^"\\]|\\.)*"), "pos": (\d+)[,}]')
+
+
+def reading(scratch: Path) -> Optional[tuple[int, str]]:
+    """(how far a pass over export.xml got in bytes, the key it was given) from its checkpoint;
+    None: none. SP-957: asked on every poll of the import page while export.xml is read, so only
+    the head of the file is read — save() writes "key" and "pos" first; the workouts so far (up
+    to MAX_WORKOUTS of them) come after."""
+    try:
+        with open(scratch / CHECKPOINT, "rb") as f:
+            m = _HEAD.match(f.read(64 * 1024))
+        if m is None:
+            return None
+        key = json.loads(m.group(1))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(key, str) or not key.startswith(FORMAT + "|"):
+        return None
+    return int(m.group(2)), key[len(FORMAT) + 1:]
+
+
 def progress(scratch: Path) -> Optional[int]:
     """How far a pass over export.xml got (bytes), from its checkpoint; None: none."""
-    try:
-        return int(json.loads((scratch / CHECKPOINT).read_text("utf-8"))["pos"])
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
+    got = reading(scratch)
+    return None if got is None else got[0]
 
 
 def scan_export(read: Callable[[int], bytes], scratch: Path, base: str = "", key: Optional[str] = None,
@@ -292,6 +311,7 @@ def scan_export(read: Callable[[int], bytes], scratch: Path, base: str = "", key
             f.flush()
             os.fsync(f.fileno())
         tmp = scratch / (CHECKPOINT + ".tmp")
+        # "key" and "pos" first: reading() takes them from the head of the file (SP-957)
         tmp.write_text(json.dumps({"key": f"{FORMAT}|{key}", "pos": at, "pairs": out.tell(), "hr": seen["hr"],
                                    "more": out_more.tell(), "more_n": seen["more"],
                                    "sources": sorted(sources, key=sources.get),

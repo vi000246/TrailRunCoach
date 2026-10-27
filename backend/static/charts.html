@@ -4308,10 +4308,10 @@ function drawGradeProfile(card, res) {
 //   axis, one linked crosshair. Status / series colours validated with dataviz validate_palette.
 function ivStyle() {
   if (document.getElementById("iv-style")) return;
-  const dark = "--iv-wp: #4a95ee; --iv-in: #2fbf2f; --iv-lo: #fab219; --iv-hi: #e66767; --iv-band: rgba(170,176,186,.20); --iv-rep: rgba(170,176,186,.07); --iv-ink2: #c3c2b7; --iv-target: rgba(47,191,47,.24);";
+  const dark = "--iv-wp: #4a95ee; --iv-in: #2fbf2f; --iv-lo: #fab219; --iv-hi: #e66767; --iv-band: rgba(170,176,186,.20); --iv-rep: rgba(170,176,186,.07); --iv-ink2: #c3c2b7; --iv-target: rgba(47,191,47,.24); --iv-b-below: #6b6a64; --iv-b-sub: #184f95; --iv-b-thr: #256abf; --iv-b-supra: #3987e5; --iv-b-vo2: #86b6ef; --iv-b-ana: #cde2fb; --iv-b-fill: .16;";
   const st = document.createElement("style");
   st.id = "iv-style";
-  st.textContent = `:root { --iv-wp: #2a78d6; --iv-in: #0ca30c; --iv-lo: #e0a000; --iv-hi: #d03b3b; --iv-band: rgba(110,118,130,.16); --iv-rep: rgba(110,118,130,.06); --iv-ink2: #52514e; --iv-target: rgba(12,163,12,.20); }
+  st.textContent = `:root { --iv-wp: #2a78d6; --iv-in: #0ca30c; --iv-lo: #e0a000; --iv-hi: #d03b3b; --iv-band: rgba(110,118,130,.16); --iv-rep: rgba(110,118,130,.06); --iv-ink2: #52514e; --iv-target: rgba(12,163,12,.20); --iv-b-below: #a3a29b; --iv-b-sub: #86b6ef; --iv-b-thr: #3987e5; --iv-b-supra: #256abf; --iv-b-vo2: #184f95; --iv-b-ana: #0d366b; --iv-b-fill: .13; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${dark} } }
 :root[data-theme="dark"] { ${dark} }
 .iv-head { margin: 4px 0 6px; font-size: 13px; color: var(--text); }
@@ -4334,7 +4334,6 @@ function ivStyle() {
 }
 const IV_ST = {
   in: { word: t("viewer.iv.in"), short: t("viewer.iv.in_s"), c: "--iv-in" },
-  in_band: { word: t("viewer.iv.in_band"), short: t("viewer.iv.in_band_s"), c: "--iv-in" },     // SP-849: detected reps
   low: { word: t("viewer.iv.low"), short: t("viewer.iv.low_s"), c: "--iv-lo" },
   high: { word: t("viewer.iv.high"), short: t("viewer.iv.high_s"), c: "--iv-hi" },
   even: { word: t("viewer.iv.even"), short: t("viewer.iv.even"), c: "--iv-in" },
@@ -4352,11 +4351,17 @@ function textW(text, font) {
   c.font = font;
   return Math.max(0, ...String(text).split("\n").map((l) => c.measureText(l).width));
 }
+// a rep's second-half HR for the tips, with % LTHR and the HR zone (SP-918 Q2: a reference only, never judged)
+function ivHrLine(r) {
+  if (r.hr_end == null) return "";
+  const x = [r.pct_lthr != null ? t("viewer.iv.pct_lthr", { pct: Math.round(r.pct_lthr * 100) }) : "",
+    r.hr_zone ? t("viewer.iv.hr_zone", { zone: r.hr_zone }) : ""].filter(Boolean).join(" · ");
+  return `<br>${esc(t("viewer.iv.hr_end", { hr: Math.round(r.hr_end) }) + (x ? t("viewer.iv.paren", { x }) : ""))}`;
+}
 function drawRepProfile(card, res) {
+  if (res.rep_profile?.mode === "bands") return drawRepBands(card, res);     // SP-918: detected reps (no 課表)
   ivStyle();
   const P = res.rep_profile, test = P.mode === "test";
-  // SP-849: detected reps (no 課表) — the frame is the band they fell in, named, never 「目標」
-  const det = !test && P.source === "detected" && !!P.band_name;
   draw(card, { ...res, series: [], subtitle: null });
   if (!card.isConnected || res.empty) return;
   card.querySelector(".loading")?.remove();
@@ -4367,8 +4372,8 @@ function drawRepProfile(card, res) {
   for (let k = reps.length + 1; !test && k <= P.n_plan; k++) cols.push({ k, label: String(k), missing: true });
   const bandOf = (r) => r?.band || P.band;                     // [lo, hi | null] W
   const fmtBand = (b) => b[1] != null ? `${Math.round(b[0])}–${Math.round(b[1])}` : `≥ ${Math.round(b[0])}`;
-  const bandWord = (b) => det ? t("viewer.iv.band", { name: P.band_name, band: fmtBand(b) }) : t("viewer.iv.target", { band: fmtBand(b) });
-  const frameText = (b) => det ? t("viewer.iv.band_2l", { name: P.band_name, band: fmtBand(b) }) : t("viewer.iv.target_2l", { band: fmtBand(b) });
+  const bandWord = (b) => t("viewer.iv.target", { band: fmtBand(b) });
+  const frameText = (b) => t("viewer.iv.target_2l", { band: fmtBand(b) });
   const head = document.createElement("p");
   head.className = "iv-head";
   head.innerHTML = `<b>${esc(res.subtitle || "")}</b><br><span class="iv-rule">${test
@@ -4378,11 +4383,11 @@ function drawRepProfile(card, res) {
   leg.setAttribute("aria-label", t("viewer.legend"));
   const sw = (st) => `<span><i class="dot" style="background:${col(st)}"></i>${IV_ST[st].word}</span>`;
   leg.innerHTML = test ? `${sw("even")}${sw("uneven")}<span><i class="dash" style="border-color:var(--iv-ink2)"></i>CP ${Math.round(P.cp)} W</span>`
-    : `<span><i class="frame"></i>${esc(bandWord(P.band))}</span>${sw(det ? "in_band" : "in")}${sw("low")}${sw("high")}`;
+    : `<span><i class="frame"></i>${esc(bandWord(P.band))}</span>${sw("in")}${sw("low")}${sw("high")}`;
   const el = document.createElement("div");
   el.className = "plot iv-reps";
   el.setAttribute("role", "img");
-  el.setAttribute("aria-label", t(det ? "viewer.iv.aria_band" : "viewer.iv.aria", { sub: res.subtitle || "" }));
+  el.setAttribute("aria-label", t("viewer.iv.aria", { sub: res.subtitle || "" }));
   card.append(head, leg, el);
   const chart = echarts.init(el);
   charts.push(chart);
@@ -4393,14 +4398,14 @@ function drawRepProfile(card, res) {
   const tip = (r) => {
     if (!r || r.missing) return r ? cpTipBox(`<b>${esc(t("viewer.rep_n", { n: r.k }))}</b><br>${esc(t("viewer.iv.missing_tip", { n: P.n_plan }))}`) : "";
     const b = bandOf(r);
-    const vs = !test && b ? (r.status === "low" ? t(det ? "viewer.iv.under_band" : "viewer.iv.under", { w: Math.round(b[0] - r.power) })
-      : r.status === "high" && b[1] != null ? t(det ? "viewer.iv.over_band" : "viewer.iv.over", { w: Math.round(r.power - b[1]) }) : "") : "";
+    const vs = !test && b ? (r.status === "low" ? t("viewer.iv.under", { w: Math.round(b[0] - r.power) })
+      : r.status === "high" && b[1] != null ? t("viewer.iv.over", { w: Math.round(r.power - b[1]) }) : "") : "";
     return cpTipBox(`<b>${test ? esc(r.label) : esc(t("viewer.rep_n", { n: r.k }))}</b> · ${cpDur(r.duration_s)}`
       + `<br>${esc(t("viewer.st.power"))} <b>${Math.round(r.power)} W</b>（${cpPct(r.pct_cp)} CP）`
-      + `<br>${IV_ST[det && r.status === "in" ? "in_band" : r.status].short}${esc(vs)}` + (test && r.pacing ? `（${esc(r.pacing)}）` : "")
+      + `<br>${IV_ST[r.status].short}${esc(vs)}` + (test && r.pacing ? `（${esc(r.pacing)}）` : "")
       + (!test && b ? `<br>${esc(bandWord(b))}` : "")
       + (r.expected ? `<br>${esc(t("viewer.iv.expected", { w: Math.round(r.expected), pct: Math.round(r.power / r.expected * 100) }))}` : "")
-      + (r.hr_end != null ? `<br>${esc(t("viewer.iv.hr_end", { hr: Math.round(r.hr_end) }))}` : ""));
+      + ivHrLine(r));
   };
   function paint() {
     const W = el.clientWidth || card.clientWidth || 600, colW = (W - 136) / Math.max(1, cols.length);
@@ -4461,6 +4466,109 @@ function drawRepProfile(card, res) {
             // above a local peak, below a valley: the label sits away from the line on either side
             label: { show: true, position: labelPos(i), distance: 6, color: ink,
               fontSize: tight ? 9.5 : 11, fontWeight: 600, formatter: tight ? "{c}" : "{c} W" } }) },
+      ],
+    }, { replaceMerge: ["series"] });
+  }
+  paint();
+  new ResizeObserver(() => paint()).observe(el);
+}
+// 每趟功率 for detected reps (SP-918, rep_profile.mode "bands"): no 課表, so no target and no 達標 — every intensity
+// band as a pale stripe across the reps (the 閾值 band framed), each rep's mean power coloured by the band it fell
+// in (one blue, darker = harder; grey under 88 % CP), the count per band above (subtitle).
+function drawRepBands(card, res) {
+  ivStyle();
+  const P = res.rep_profile;
+  draw(card, { ...res, series: [], subtitle: null });
+  if (!card.isConnected || res.empty) return;
+  card.querySelector(".loading")?.remove();
+  const reps = P.reps || [], bands = P.bands || [];
+  const colOf = (key) => css(`--iv-b-${key}`) || (bands.find((b) => b.key === key) || P.below || {}).color || "#888";
+  const nameOf = (key) => key === P.below?.key ? P.below.name : (bands.find((b) => b.key === key) || {}).name || "";
+  const fmt = (b) => b.hi != null ? `${Math.round(b.lo)}–${Math.round(b.hi)}` : `≥ ${Math.round(b.lo)}`;
+  // a band's name in the right gutter: the 閾值 band always with its watts, the others when there is room (px)
+  const gutText = (b, h) => b.thr ? t("viewer.iv.thr_band_2l", { name: b.name, band: fmt(b) }) : h >= 28 ? `${b.name}\n${fmt(b)} W` : b.name;
+  const thr = bands.find((b) => b.thr);
+  const head = document.createElement("p");
+  head.className = "iv-head";
+  head.innerHTML = `<b>${esc(res.subtitle || "")}</b><br><span class="iv-rule">${esc(t("viewer.iv.rule_bands"))}</span>`;
+  // the y range: the reps and always the 閾值 band (the one to compare with), padded
+  const vals = [...reps.map((r) => r.power), ...(thr ? [thr.lo, thr.hi] : [])];
+  const lo0 = Math.min(...vals), hi0 = Math.max(...vals), pad = Math.max((hi0 - lo0) * 0.15, 12);
+  const yn = cpNice(Math.max(0, lo0 - pad), hi0 + pad, 4);
+  const shown = bands.filter((b) => (b.hi ?? Infinity) > yn.min && b.lo < yn.max);
+  const used = new Set(reps.map((r) => r.band));
+  const leg = document.createElement("div");
+  leg.className = "iv-leg";
+  leg.setAttribute("aria-label", t("viewer.legend"));
+  leg.innerHTML = [...(used.has(P.below?.key) ? [P.below] : []), ...shown].map((b) =>
+    `<span><i class="dot" style="background:${colOf(b.key)}${b.thr ? `;outline:1.5px solid ${colOf(b.key)};outline-offset:1.5px` : ""}"></i>${esc(b.thr
+      ? t("viewer.iv.thr_band", { name: b.name, band: fmt(b) }) : b.name)}</span>`).join("");
+  const el = document.createElement("div");
+  el.className = "plot iv-reps";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", t("viewer.iv.aria_bands", { sub: res.subtitle || "" }));
+  card.append(head, leg, el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
+  const fillA = parseFloat(css("--iv-b-fill")) || 0.13;
+  const tip = (r) => {
+    if (!r) return "";
+    const b = bands.find((x) => x.key === r.band);
+    return cpTipBox(`<b>${esc(t("viewer.rep_n", { n: r.k }))}</b> · ${cpDur(r.duration_s)}`
+      + `<br>${esc(t("viewer.st.power"))} <b>${Math.round(r.power)} W</b>（${cpPct(r.pct_cp)} CP）`
+      + `<br><span style="color:${colOf(r.band)}">●</span> ${esc(b ? t("viewer.iv.in_band_of", { name: b.name, band: fmt(b) }) : nameOf(r.band))}`
+      + ivHrLine(r));
+  };
+  function paint() {
+    const W = el.clientWidth || card.clientWidth || 600, colW = (W - 150) / Math.max(1, reps.length);
+    const tight = colW < 40;
+    const gutR = Math.max(84, ...shown.map((b) => Math.ceil(textW(gutText(b, 99),
+      "600 11px system-ui, sans-serif")) + 12));
+    const pw = (i) => reps[i] ? reps[i].power : null;
+    const labelPos = (i) => {
+      const nb = [pw(i - 1), pw(i + 1)].filter((v) => v != null);
+      return !nb.length || pw(i) >= nb.reduce((a, b) => a + b, 0) / nb.length ? "top" : "bottom";
+    };
+    chart.resize();
+    chart.setOption({
+      animation: false,
+      grid: { left: 58, right: gutR, top: 26, bottom: 40 },
+      tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => tip(reps[p.dataIndex]) },
+      xAxis: { type: "category", data: reps.map((r) => r.label), boundaryGap: true, axisTick: { show: false },
+        axisLine: { lineStyle: { color: line } }, splitLine: { show: false },
+        name: t("viewer.iv.which_rep"), nameLocation: "middle", nameGap: 24, nameTextStyle: { color: muted, fontSize: 11 },
+        axisLabel: { color: ink, fontSize: 11, interval: 0, hideOverlap: true } },
+      yAxis: { type: "value", min: yn.min, max: yn.max, interval: yn.interval, splitLine: { lineStyle: { color: line, opacity: 0.6 } },
+        name: t("viewer.iv.avg_power_w"), nameLocation: "middle", nameGap: 42, nameTextStyle: { color: muted, fontSize: 11 },
+        axisLabel: { color: muted, fontSize: 10 } },
+      series: [
+        // the bands: pale stripes across the plot, the 閾值 band framed; names in the right gutter
+        { type: "custom", z: 3, silent: true, data: [[0, 0]], encode: { x: 0, y: 1 },
+          renderItem: (params, api) => {
+            const x0 = params.coordSys.x, x1 = x0 + params.coordSys.width, kids = [];
+            shown.forEach((b) => {
+              const yT = api.coord([0, Math.min(b.hi ?? yn.max, yn.max)])[1], yB = api.coord([0, Math.max(b.lo, yn.min)])[1];
+              const c = colOf(b.key);
+              kids.push({ type: "rect", shape: { x: x0, y: yT, width: x1 - x0, height: yB - yT },
+                style: { fill: cpRgba(c, b.thr ? fillA * 1.6 : fillA), stroke: b.thr ? c : null, lineWidth: b.thr ? 1.5 : 0 } });
+              // the edge to the band below (a dashed hairline): where the colour changes
+              if (!b.thr && b.lo > yn.min && b.lo < yn.max) {
+                kids.push({ type: "line", shape: { x1: x0, y1: yB, x2: x1, y2: yB }, style: { stroke: muted, lineWidth: 1, lineDash: [3, 3], opacity: 0.7 } });
+              }
+              if (yB - yT >= 11) kids.push({ type: "text", style: { text: gutText(b, yB - yT),
+                x: x1 + 6, y: (yT + yB) / 2, fill: b.thr ? ink : muted, font: `${b.thr ? 600 : 400} 11px system-ui, sans-serif`,
+                verticalAlign: "middle", lineHeight: 14 } });
+            });
+            return { type: "group", children: kids };
+          } },
+        // the reps' mean power: one line, a marker per rep in its band's colour, the W beside it
+        { type: "line", z: 5, symbol: "circle", symbolSize: 11,
+          lineStyle: { color: css("--iv-ink2"), width: 1.5 }, itemStyle: { borderColor: panel, borderWidth: 2 },
+          data: reps.map((r, i) => ({ value: Math.round(r.power),
+            itemStyle: { color: colOf(r.band), borderColor: panel, borderWidth: 2 },
+            label: { show: true, position: labelPos(i), distance: 6, color: ink,
+              fontSize: tight ? 9.5 : 11, fontWeight: 600, formatter: tight ? "{c}" : "{c} W" } })) },
       ],
     }, { replaceMerge: ["series"] });
   }

@@ -95,8 +95,8 @@ TIP = ("課表的目標用心率還是功率。\n自動：路跑的輕鬆跑、�
 
 CP_STALE = N_("CP 太舊（最近沒有 CP 測試或比賽）：間歇改用心率")      # SP-493's (kept: stored texts)
 # SP-950 ②, when the caller has only the cp_stale flag (no power_state with the CP's age); SP-963: the
-# recent all-out efforts count too, so a hard session / a race brings power back as well
-CP_STALE_ALL = N_("CP 太舊（最近沒有 CP 測試、比賽或全力段）：用心率；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）")
+# recent all-out efforts count too, so a hard session / a race brings power back as well (R2: plain, no brackets)
+CP_STALE_ALL = N_("CP 太舊，先用心率；做一次 CP 測試就切回功率，跑一次強度課或比賽也行")
 
 
 def pref_basis(prefs) -> str:

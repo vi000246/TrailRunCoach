@@ -38,10 +38,11 @@ def test_detected_reps_get_the_views_detected_title_and_text():
     cs = _charts(_view())
     r = _card(cs["interval-reps"], ds, w)
     assert r["rep_profile"]["source"] == "detected" and r["text_source"] == "detected"
-    assert r["title"] == "每趟功率 vs 所在的強度帶", r["title"]
+    # SP-918: every band is drawn now, each rep by the band it fell in (was: the band of the reps' median)
+    assert r["title"] == "每趟功率落在哪個強度帶", r["title"]
     assert "目標" not in r["title"]
     assert "課表的目標" not in r["description"] and "沒有目標" in r["description"], r["description"]
-    assert "中位數落在的強度帶" in r["description"], r["description"]
+    assert "加框的是閾值帶" in r["description"], r["description"]
     p = _card(cs["interval-power"], ds, w)
     assert p["title"] == cs["interval-power"]["title"]          # no 目標 in it: the same title
     assert "目標帶" not in p["description"] and "偵測到的趟所在的強度帶" in p["description"], p["description"]
@@ -62,7 +63,7 @@ def test_every_detected_text_has_english():
     tr = VI.sidecar("en").get("workout") or {}
     cs = _charts(VI.translate_view(_view(), tr))
     alt = cs["interval-reps"]["by_source"]["detected"]
-    assert alt["title"] == "Power per rep vs the band they fell in", alt["title"]
+    assert alt["title"] == "Which intensity band each rep fell in", alt["title"]          # SP-918
     assert "target" not in alt["title"].lower()
     assert "no target" in alt["description"] and "this session's target" not in alt["description"]
     p = cs["interval-power"]["by_source"]["detected"]

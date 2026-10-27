@@ -391,6 +391,7 @@
   "expimport.uploading": "上傳中 {got}／{all} MB…",
   "expimport.queued": "等待處理…",
   "expimport.queued_n": "排隊中，前面還有 {n} 個工作…",
+  "expimport.reading": "正在讀取 Apple 健康資料 {pct}%…",
   "expimport.working": "處理中 {done}／{total} 個活動檔…",
   "expimport.background": "伺服器正在背景處理，可以先離開這一頁，回來再看結果。",
   "expimport.unfinished": "上次的上傳沒有完成（{got}／{all} MB）。再選一次同一個檔案，會從中斷的地方接著傳。",

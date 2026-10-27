@@ -339,6 +339,8 @@ def status(imp_id: Optional[str] = None, items: bool = True) -> Optional[dict]:
            "kind": (man or {}).get("kind") or st.get("kind"), "error": st.get("error"),
            "total": len(man["entries"]) if man else None, "done": len(its), "finished": st.get("finished"),
            "position": None, "limits": limits(), **_counts(its, man)}
+    # SP-957: export.xml read in parts — how far, so the page says more than 「排隊中」
+    out["reading"] = _reading(d) if man is None and state in (QUEUED, RUNNING, INTERRUPTED) else None
     if job is not None and state == QUEUED:
         from backend import jobs
         out["position"] = jobs.position(job)
@@ -453,6 +455,30 @@ def _apple_export(infos: list) -> Optional[zipfile.ZipInfo]:
     return None
 
 
+def _apple_key(info: zipfile.ZipInfo) -> str:
+    """The key of a pass over export.xml: this very entry of this very archive (a checkpoint of
+    another file is never gone on from). Its size second from the left — _reading() takes it back."""
+    return f"{info.filename}|{info.file_size}|{info.compress_size}|{info.CRC}|{info.header_offset}"
+
+
+def _reading(d: Path) -> Optional[dict]:
+    """SP-957: how far Apple Health's export.xml has been read, while it is (no list yet):
+    {"pos": bytes, "size": bytes} from the checkpoint in apple-scratch/ (the position, and
+    export.xml's size in its key); None without one — not begun, read, or no Apple export."""
+    from backend.files import apple_health as AH
+    got = AH.reading(d / "apple-scratch")
+    if got is None:
+        return None
+    pos, key = got
+    try:
+        size = int(key.rsplit("|", 4)[1])                # the name may hold a '|': from the right
+    except (IndexError, ValueError):
+        return None
+    if size <= 0:
+        return None
+    return {"pos": max(0, min(pos, size)), "size": size}
+
+
 def _scan_apple(zf: zipfile.ZipFile, info: zipfile.ZipInfo, d: Path, cap: int) -> Optional[tuple[list, set, int]]:
     """Stream export.xml (files/apple_health.py) -> (entries [container, member, shown, size], the
     route members the workouts refer to, the bytes inflated). Each workout to apple/<k>.json.
@@ -479,8 +505,7 @@ def _scan_apple(zf: zipfile.ZipFile, info: zipfile.ZipInfo, d: Path, cap: int) -
         return b
 
     base = info.filename[: info.filename.lower().rfind("export.xml")]
-    # this very entry of this very archive: a checkpoint of another file is never gone on from
-    key = f"{info.filename}|{info.file_size}|{info.compress_size}|{info.CRC}|{info.header_offset}"
+    key = _apple_key(info)
     try:
         with f:
             res = AH.scan_export(read, scratch, base=base, key=key, budget=SCAN_PART_BYTES)

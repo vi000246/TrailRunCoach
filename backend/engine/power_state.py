@@ -352,8 +352,10 @@ def state(today: dt.date, profile: Optional[dict] = None, *, ds=None, source: Op
         stale_on     the first day the CP is stale (valid_until + 1); None without one
         fresh_days   the shelf life (42)
         cp, cp_date, cp_source            the CP on file (shown in ②, never used for targets)
-        reason       one zh-TW line (the request's language): ① names what keeps the CP fresh and
-                     until when (「CP 195 W · 9/30 的 5 分鐘 228 W 和 12 分鐘 222 W 撐著，有效到 11/11」)
+        basis_text   ① what keeps the CP fresh, plain (「9/30 跑出 5 分鐘 228 W、12 分鐘 222 W」 /
+                     「10/17 做了 CP 測試」 / 「10/20 跑了比賽」); "" outside ①
+        reason       one zh-TW line (the request's language): ① until when and why
+                     (「CP 195 W 有效到 11/11（9/30 跑出 5 分鐘 228 W、12 分鐘 222 W）」)
         suggest      cp (① ② — the CP test keeps it / brings it back) | None (③: no test in its place)
 
     `source` / `how`: the equipment when the caller has it, else read from `profile` / `ds`.
@@ -392,6 +394,7 @@ def state(today: dt.date, profile: Optional[dict] = None, *, ds=None, source: Op
            "stale_on": (until + dt.timedelta(days=1)).isoformat() if until else None, "fresh_days": lim,
            "cp": cp, "cp_date": cp_date, "cp_source": cp_source,
            "suggest": None if st == NONE else "cp"}
+    out["basis_text"] = basis_text(out)
     out["reason"] = reason(out)
     return out
 
@@ -410,50 +413,60 @@ def _dur(seconds) -> str:
 
 
 def efforts_text(eff: Optional[dict]) -> str:
-    """The efforts that anchor the CP: 「10/22 的 5 分鐘 228 W 和 10/18 的 20 分鐘 205 W」 (one run:
-    「9/30 的 5 分鐘 228 W 和 12 分鐘 222 W」); "" without both."""
+    """The efforts that keep the CP valid, in plain words (SP-963 R2): 「9/30 跑出 5 分鐘 228 W、12 分鐘
+    222 W」 (one run), 「10/18 跑出 20 分鐘 205 W，10/22 跑出 4 分 23 秒 228 W」 (two, older first); "" without both."""
     sh, lg = (eff or {}).get("short"), (eff or {}).get("long")
     if not sh or not lg:
         return ""
     a = _("{t} {w} W", t=_dur(sh["seconds"]), w=sh["watts"])
     b = _("{t} {w} W", t=_dur(lg["seconds"]), w=lg["watts"])
     if sh["date"] == lg["date"]:
-        return _("{d} 的 {a} 和 {b}", d=_md(sh["date"]), a=a, b=b)
-    first, second = sorted([(sh["date"], a), (lg["date"], b)], reverse=True)
-    return _("{d1} 的 {a} 和 {d2} 的 {b}", d1=_md(first[0]), a=first[1], d2=_md(second[0]), b=second[1])
+        return _("{d} 跑出 {a}、{b}", d=_md(sh["date"]), a=a, b=b)
+    first, second = sorted([(sh["date"], a), (lg["date"], b)])        # older first, as on the bar
+    return _("{d1} 跑出 {a}，{d2} 跑出 {b}", d1=_md(first[0]), a=first[1], d2=_md(second[0]), b=second[1])
+
+
+def basis_text(ps: dict) -> str:
+    """What keeps the CP valid (①), one short phrase: 「9/30 跑出 5 分鐘 228 W、12 分鐘 222 W」,
+    「10/17 做了 CP 測試」, 「10/20 跑了比賽」; "" outside ① or without one. The 訓練依據 card writes it
+    under its validity bar; reason() puts it in brackets."""
+    if ps.get("state") != POWER:
+        return ""
+    basis = ps.get("basis")
+    if basis == "efforts":
+        return efforts_text(ps.get("efforts"))
+    if basis == "test" and ps.get("anchor"):
+        return _("{d} 做了 CP 測試", d=_md(ps["anchor"]))
+    if basis == "race" and ps.get("anchor"):
+        return _("{d} 跑了比賽", d=_md(ps["anchor"]))
+    return ""
 
 
 def reason(ps: dict) -> str:
-    """The state's one line: ① what keeps the CP fresh and until when (SP-963: 「CP 195 W · 10/22 的
-    … 和 10/18 的 … 撐著，有效到 11/29」), ② 「CP 已 N 天沒測…做一次 CP 測試就切回功率（或最近跑一次
-    強度課／比賽）」, ③ no meter."""
+    """The state's one line, short and plain (SP-963 R2): ① 「CP 195 W 有效到 11/11（9/30 跑出 5 分鐘
+    228 W、12 分鐘 222 W）」, ② 「CP 已 N 天沒測，先用心率／配速；做一次 CP 測試就切回功率，跑一次強度課或
+    比賽也行」, ③ no meter."""
     st = ps.get("state")
     if st == NONE:
         return _("沒有功率計：課表、模型和門檻都用心率／配速")
     if st == STALE:
         return stale_text(ps)
-    basis, until = ps.get("basis"), ps.get("valid_until")
-    what = ""
-    if basis == "efforts":
-        what = efforts_text(ps.get("efforts"))
-    elif basis == "test" and ps.get("anchor"):
-        what = _("{d} 的 CP 測試", d=_md(ps["anchor"]))
-    elif basis == "race" and ps.get("anchor"):
-        what = _("{d} 的比賽", d=_md(ps["anchor"]))
+    what, until = basis_text(ps), ps.get("valid_until")
     if not what or not until:
         return _("用功率")
-    what += " " if what[-1:].isascii() else ""       # 「228 W 撐著」, 「CP 測試撐著」
-    line = _("{what}撐著，有效到 {until}", what=what, until=_md(until)).strip()
     cp = ps.get("cp")
-    return _("CP {cp} W · {line}", cp=round(float(cp)), line=line) if cp else line
+    if cp:
+        return _("CP {cp} W 有效到 {until}（{what}）", cp=round(float(cp)), until=_md(until), what=what)
+    return _("有效到 {until}（{what}）", until=_md(until), what=what)
 
 
 def stale_text(ps: dict) -> str:
     """② (owner 2026-10-27: always say it): how old the CP is, what is used now, how to get power back
-    (SP-963: a CP test, or a recent hard session / race whose efforts land on the power curve)."""
+    (SP-963: a CP test, or a recent hard session / race whose efforts land on the power curve; R2: no
+    brackets, plain words)."""
     if ps.get("days") is not None:
-        return _("CP 已 {n} 天沒測，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）", n=ps["days"])
-    return _("還沒有 CP 測試或比賽，目前用心率／配速；做一次 CP 測試就切回功率（或最近跑一次強度課／比賽）")
+        return _("CP 已 {n} 天沒測，先用心率／配速；做一次 CP 測試就切回功率，跑一次強度課或比賽也行", n=ps["days"])
+    return _("還沒有 CP 測試或比賽，先用心率／配速；做一次 CP 測試就切回功率，跑一次強度課或比賽也行")
 
 
 def short_reason(ps: Optional[dict]) -> str:

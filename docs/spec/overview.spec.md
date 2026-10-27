@@ -608,7 +608,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   `backend/static/settings.html:263`, `:933`; the `compare` of `GET /api/v1/plan/hr-profile`,
   `backend/api/plan.py:666`; `backend/engine/coros_compare.py:175`) with the app's LTHR / max HR / resting HR
   and the 課表心率區間's five upper edges beside the COROS account's (`athlete.coros_profile`; the watch's
-  zones = its ratios × its own values). A gap **more than** `ALERT_BPM` = 5 bpm (`coros_compare.py:45`;
+  zones = its ratios × its own values). A gap **more than** `ALERT_BPM` = 5 bpm (`backend/engine/coros_compare.py:45`;
   5 is quiet, 6 is flagged) marks the row and writes out what to change by hand in the COROS app and
   where: max / resting HR → the app's number; the LTHR cannot be typed in on COROS (support text, 未驗證),
   so the app's LTHR-model zone edges are given for COROS's custom zones (whether COROS takes any edge:
@@ -956,7 +956,7 @@ tickets is in plan-auto.spec.md):
   `backend/engine/planning.py:256`), except (SP-412) an edit of an event that has no per-day numbers
   on the server with none sent: it is saved without them, still hinted (`backend/engine/planning.py:783`);
   the 賽事周期 form then leaves the rows optional until one is filled and says so (`plan.ev.dayplan_old`,
-  `backend/static/plan.html:522`). Such a trip's 總距離／總爬升 are editable and saved as sent while its
+  `backend/static/races.html:702`). Such a trip's 總距離／總爬升 are editable and saved as sent while its
   rows are blank (decision 2026-10-13: they are the only numbers it has; `backend/static/plan.html:456`);
   a new multi-day trip, a trip with its per-day numbers, and an old trip once a row is filled keep them
   read-only — the sums of the days, which `upsert_event` also enforces.
@@ -1884,7 +1884,9 @@ which one. The response keeps the `coros` field names.
   line at 1). A period switch (SP-446): `GET /plan/compliance` reads the stored sessions reconciled like the
   calendar (`_reconciled`) with only the 強度課 family of the calendar's view (`_stats_view`; no watch-push status),
   and prices the plan with the inputs' own TSS / h (`plan_rates` default; `_range_extras` skips its `tph` under
-  `_EXTRAS_TPH`); the page asks for the 負荷比 next to the stats (not after), drops an answer for a period no longer
+  `_EXTRAS_TPH`); the whole request runs inside one `settings_memo()` (SP-968: each setting read once, the
+  threadpool work included — classifying the range's activities read the HR account / zone model / data source
+  per activity); the page asks for the 負荷比 next to the stats (not after), drops an answer for a period no longer
   picked, and 本周期 longer than 371 days shows its last 371 days. 每週存檔 (SP-71, `engine/plan_history.py`; `backend/static/compliance.html:649`): one
   row per stored week, the plan as it began and how it went; `GET /sessions` takes this week's
   snapshot / last week's result when due (`backend/api/plan_sessions.py:458`). The 基線測試 rows
@@ -3004,3 +3006,5 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-27 | feature | SP-955 | 設定 › 訓練依據 (owner's mock B): `GET /api/v1/overview/plan/basis` (`backend/engine/training_basis.py`) — the plan summary (phase and its week, this week's runs / long days / quality / strength, the Zone 3 / 5 unlock and what is missing from `phase_checks.compute_unlock`, the next test from the plan's test sessions else the first suggestion) and, per kind of session of 主要訓練項目 (越野: trail easy / long day, hill repeats, long climb, steep-hill walk, downhill, B2B; 路跑: long run, marathon-pace segment), `target_policy`'s basis under the week plan's thresholds / power state with the target text (`zones.target_hr`, `power_zone_plan.target_band` × the CP in effect, `walk_cap`) and why; Friel pace zones at the threshold pace for 我的區間 while a session runs by pace. `PATCH /api/v1/overview/plan/prefs`: only `target_basis` / `climb_target` / `aet_test_protocol` / `cp_test_protocol`, the rest of the stored set kept; a new `target_basis` calls `plan_auto.after_thresholds`. 課表偏好 no longer shows those four (sent back as stored); 主要訓練項目 sits first in it (the same `athlete.primary_sport`, saved before the preferences). Tests: `backend/tests/test_training_basis_sp955.py`, `backend/tests/e2e/test_settings_basis_sp955_e2e.py` |
 | 2026-10-27 | feature | SP-964 | 設定 › 訓練依據 › 進階設定 (collapsed under 手動指定, left column): one row per choosable kind of 主要訓練項目 (越野: road easy, Zone 3, Zone 5, hill repeats; 路跑: easy, long, Zone 3, Zone 5, MP segment) with 自動（目前：X） / 心率 / 配速 (flat intervals, MP only) / 功率 (not in ③; a stored one shown disabled), （手動） + 改回自動, the fallback reason under a choice the rules cannot follow. `GET /api/v1/overview/plan/basis` adds `types` (`training_basis.type_rows`: choice, the basis without it, options) and each row's `own` / `type_key` (the card's 改回自動 per row); `PATCH /api/v1/overview/plan/prefs` takes `type_basis` (merged; "auto" clears). Rules: plan-auto.spec.md. Tests: `backend/tests/test_type_basis_sp964.py`, `backend/tests/e2e/test_settings_basis_sp955_e2e.py::test_advanced_one_type_set_marked_and_reset` |
 | 2026-10-27 | feature | SP-949 | AeT test start from the athlete's own data: the start HR chained to the last UA / Evoke test (below → first-half HR + 5, above → − 5, at → it; else the estimate); UA / Evoke fixed power = the HR → power line of the last 42 days' flat (± 2 %) easy road runs with Stryd power at that HR (① power in effect), else CP × 0.75 labelled 推估; ② / ③ a fixed pace from the HR → pace line (「配速固定 m:ss /km（±3%）」), else the E pace / talk test — never watts; 徐國峰 90′ takes the fitted pace before the talk test. Each with a 依據 line in the 說明. COROS / the editor's structure read the stored target (`aet_test.main_target`: pace → intensityType 3). `target_policy`: an AeT test in ② no longer keeps power; UA / Evoke → pace without power. zh-TW + en. Tests: `backend/tests/test_aet_start_sp949.py` |
+| 2026-10-27 | maintenance | SP-958 | Two dead cite-lint anchors fixed, wording unchanged: the 5 bpm alert threshold's anchor gets its directory (backend/engine/coros_compare.py); the old multi-day trip's 「rows optional」 hint now points into backend/static/races.html (the event editor moved there from plan.html in SP-691) |
+| 2026-10-27 | feature | SP-968 | 課表統計's `GET /plan/compliance`: the whole request inside `datasource.settings_memo()` (as SP-752's 課表輸入) — each setting read once per request instead of per activity / session (the range's activity classification asked for the HR account, zone model and data source each time, a new sqlite connection per read). Demo athlete (52 weeks), cache warm, 15 requests each: 4 weeks 85 → 40 ms (306 → 46 reads), 371 days 702 → 255 ms (~2,550 → 46 reads); responses byte-identical. Measured with `backend/scripts/perf_sp968.py`. Test: `backend/tests/test_compliance_dashboard.py::test_api_compliance_reads_each_setting_once_per_request_sp968` |

@@ -14,6 +14,8 @@
  *   ExportImport.mount(el, { onDone(status) })            the widget in `el`
  *   ExportImport.send(file, { fetch, onProgress, sleep, tries })   the upload -> the status, or { error }
  *   ExportImport.summary(status)                           pure: the lists the page shows
+ *   ExportImport.line(status)                              pure: the progress line while it works,
+ *                                                          { v, max (null: no bar), text }
  *
  * i18n: common.expimport.* and the per-file reasons of common.fitimport.reason.* (the common catalog
  * is inlined on every page).
@@ -80,6 +82,22 @@
       await sleep(1000 * 2 ** fails);
     }
     return st;
+  }
+
+  // the progress line while the server works on it: { v, max (null: no bar), text }. SP-957: while
+  // Apple Health's export.xml is read (in parts, no list yet) the server says how far (`reading`:
+  // bytes of export.xml) — 「正在讀取 Apple 健康資料 N%」 instead of 「排隊中」; below 100 until the
+  // list is there (then 「處理中 done／total」 as before)
+  function line(st) {
+    const r = st.reading;
+    if (st.total == null && r && r.size > 0) {
+      const pct = Math.max(0, Math.min(99, Math.floor((100 * r.pos) / r.size)));
+      return { v: pct, max: 100, text: T("reading", { pct }) };
+    }
+    if (st.state === "queued" || st.total == null) {
+      return { v: 0, max: null, text: st.position ? T("queued_n", { n: st.position }) : T("queued") };
+    }
+    return { v: st.done, max: st.total, text: T("working", { done: st.done, total: st.total }) };
   }
 
   // what the page lists: { failed: [...], duplicate: [...], skipped: [...] } of { name, reason, of, date }
@@ -177,11 +195,8 @@
         setBusy(false);
       } else if (ACTIVE.has(st.state)) {
         setBusy(true);
-        if (st.state === "queued" || st.total == null) {
-          progress(0, null, st.position ? T("queued_n", { n: st.position }) : T("queued"));
-        } else {
-          progress(st.done, st.total, T("working", { done: st.done, total: st.total }));
-        }
+        const l = line(st);
+        progress(l.v, l.max, l.text);
         html = head + kind + `<p class="ei-meta">${esc(T("background"))}</p>`;
         timer = setTimeout(poll, POLL_MS);
       } else {
@@ -292,5 +307,5 @@
     return { refresh: load };
   }
 
-  window.ExportImport = { mount, send, summary, URL };
+  window.ExportImport = { mount, send, summary, line, URL };
 })();

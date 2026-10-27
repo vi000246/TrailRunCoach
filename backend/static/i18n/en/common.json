@@ -391,6 +391,7 @@
   "expimport.uploading": "Uploading {got} / {all} MB…",
   "expimport.queued": "Waiting to be processed…",
   "expimport.queued_n": "Queued: {n} jobs ahead…",
+  "expimport.reading": "Reading the Apple Health data: {pct}%…",
   "expimport.working": "Processing {done} / {total} activity files…",
   "expimport.background": "The server is processing it in the background: you can leave this page and come back for the result.",
   "expimport.unfinished": "The last upload did not finish ({got} / {all} MB). Choose the same file again to go on where it stopped.",

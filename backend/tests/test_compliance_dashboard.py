@@ -657,3 +657,49 @@ def test_period_switch_page_side_sp446():
     assert "seq !== LOAD.seq" in load
     rng = _fn(html, "range")
     assert "MAX_DAYS" in rng.split('S.period === "phase"')[1].split("\n")[0]
+
+
+# ---------------------------------------------------------------------------
+# SP-968: one GET /compliance read the same settings again and again — read_setting opens a new
+# sqlite connection each time, and the range's activities (activity_rows → classify → the HR
+# account / zone model / data source, per activity) asked for the same few keys thousands of times
+# over a long range. The whole request now runs inside datasource.settings_memo() (as SP-752's
+# 課表輸入): each setting once per request, the threadpool work (the range extras, the history)
+# included; the next request reads them again.
+# ---------------------------------------------------------------------------
+
+def test_api_compliance_reads_each_setting_once_per_request_sp968(tmp_path, monkeypatch):
+    import sqlite3
+    from backend.api import plan_sessions
+    from backend.engine.wko5expr import datasource as DS
+    db = tmp_path / "settings.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE user_settings (user_id INTEGER, key TEXT, value_json TEXT)")
+    con.execute("INSERT INTO user_settings VALUES (1, 'plan.hr_zone_model', ?)", (json.dumps("lthr"),))
+    con.commit()
+    con.close()
+    monkeypatch.setattr(DS, "_db_path", lambda: db)
+    reads, real = [], DS._setting_row
+    monkeypatch.setattr(DS, "_setting_row", lambda path, key, uid: reads.append(key) or real(path, key, uid))
+    acts = [ACT_929, {**ACT_929, "index": 12, "date": "2026-09-30"}, {**ACT_929, "index": 13, "date": "2026-10-01"}]
+    seen = []
+
+    def extras(a, b):                       # the real one classifies each activity: per-activity reads
+        got = [x for x in acts if a <= x["date"] <= b]
+        seen.extend(DS.read_setting("plan.hr_zone_model") for _ in got)
+        return {"activities": got, "phases": []}
+
+    def history(before):
+        seen.append(DS.read_setting("plan.hr_zone_model"))
+        return []
+    monkeypatch.setattr(plan_sessions, "_range_extras", extras)
+    monkeypatch.setattr(plan_sessions, "_run_history", history)
+    with Env(monkeypatch) as e:
+        _two_days_on(e, monkeypatch)
+        for _ in range(2):
+            reads.clear()
+            seen.clear()
+            assert e.c.get(f"{API}/compliance?start=2026-09-21&end=2026-10-04").status_code == 200
+            assert seen == ["lthr"] * 4                      # three activities and the history
+            assert reads.count("plan.hr_zone_model") == 1    # one DB read for the whole request
+            assert [k for k in set(reads) if reads.count(k) > 1] == []

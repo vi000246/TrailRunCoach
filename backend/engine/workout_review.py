@@ -4589,6 +4589,8 @@ def _iv_verdict(ds, w, m, c, base):
                    "條件（推估）：≥ 3 趟、最長 ≤ 最短 × 1.5、平均 ≥ 95% CP，每兩趟之間有輕鬆一點的一段"
                    "（平均 ≤ 兩旁那兩趟的 80%、不超過 3 分鐘或趟長的 3 倍）；上坡也算。")
                  if e.get("auto") else None)
+    if e.get("kind") == "detected":
+        return _iv_verdict_bands(e, base, sub, auto_note, wrow, wtip)
     # SP-521: a verdict short of 達到 says why (e.g. every rep 達標 but the time in the zone short) — words only
     why = e.get("verdict_why")
     rows = [_row("判定", _("{verdict}：{why}", verdict=e["verdict_label"], why=why) if why else e["verdict_label"],
@@ -4598,10 +4600,7 @@ def _iv_verdict(ds, w, m, c, base):
         rows.append(_row("理由" if i == 0 else "", r))
     rows.append(_row("無氧容量用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% 無氧容量）；"
                      f"無氧儲備最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
-    src_name = {"lap": N_("COROS 推送的分段"), "power": N_("功率型態"), "short": N_("短趟偵測"), "z3": N_("3 區偵測"),
-                "auto_lap": N_("手錶分段（自動判讀）"), "auto": N_("功率型態（自動判讀）")}.get(e["rep_source"])
-    src_rule = {"lap": "lap", "power": N_("0.95 × 目標下限"), "short": "≥ 95% CP", "z3": N_("功率 ≥ 0.95 × 88% CP 或心率 ≥ 95% LTHR"),
-                "auto_lap": N_("分段平均 ≥ 95% CP"), "auto": N_("10 秒功率 ≥ 95% CP、≥ 40 秒")}.get(e["rep_source"])
+    src_name, src_rule = _SRC_NAME.get(e["rep_source"]), _SRC_RULE.get(e["rep_source"])
     src = _("{name}（{rule}）", name=_(src_name), rule=_(src_rule)) if src_name else "—"
     rows.append(_row(_("找趟"), src))
     n, hit, n_high = e["n_plan"], e["hit"], e.get("n_high") or 0
@@ -4610,13 +4609,7 @@ def _iv_verdict(ds, w, m, c, base):
                        _("全部達標") if hit >= n else _("差 {k} 趟", k=n - hit),
                        "good" if hit >= n else "warn",
                        # the tolerance / TIZ goal in effect and whose they are (interval_calib, SP-69);
-                       # SP-520: detected reps' band is where they fell, not a plan's 目標下限
-                       (_("達標 = 平均 ≥ {floor:.0f} W＝帶的下限 × {tol}（{basis}）；偵測到的趟落在{band}。逐趟看「每趟功率」。",
-                          floor=e["floor"], band=e["band_text"], tol=e.get("in_band_tol_text", "0.98"),
-                          basis=e.get("in_band_basis", ""))
-                        + (_("超過 {ceil:.0f} W（帶的上限 × 1.02，推估）算偏高：仍算達標，只是做太重。", ceil=e["ceil"])
-                           if e.get("ceil") is not None else ""))
-                       if e.get("band_text") else
+                       # SP-918: detected reps (no 課表) are read by their bands instead (_iv_verdict_bands)
                        (_("達標 = 平均 ≥ {floor:.0f} W（目標下限 {lo:.0f}% CP × {tol}，{basis}）。逐趟看「每趟功率」。",
                           floor=e["floor"], lo=e["lo"] * 100, tol=e.get("in_band_tol_text", "0.98"),
                           basis=e.get("in_band_basis", ""))
@@ -4648,6 +4641,59 @@ def _iv_verdict(ds, w, m, c, base):
             "series": rows, "chip_rows": chips}
 
 
+_SRC_NAME = {"lap": N_("COROS 推送的分段"), "power": N_("功率型態"), "short": N_("短趟偵測"), "z3": N_("3 區偵測"),
+             "auto_lap": N_("手錶分段（自動判讀）"), "auto": N_("功率型態（自動判讀）")}
+_SRC_RULE = {"lap": "lap", "power": N_("0.95 × 目標下限"), "short": "≥ 95% CP", "z3": N_("功率 ≥ 0.95 × 88% CP 或心率 ≥ 95% LTHR"),
+             "auto_lap": N_("分段平均 ≥ 95% CP"), "auto": N_("10 秒功率 ≥ 95% CP、≥ 40 秒")}
+
+
+def _bands_rule(cp: float) -> str:
+    """「閾值下 88–95%、閾值 95–101%、超閾值 101–106%、VO2max 106–116%、無氧 ≥ 116% CP」 (interval_eval.band_rows)."""
+    from backend.engine import interval_eval as IE
+    return _("、").join(f"{b['name']} {b['lo'] / cp * 100:.0f}–{b['hi'] / cp * 100:.0f}%" if b["hi"] else
+                        f"{b['name']} ≥ {b['lo'] / cp * 100:.0f}%" for b in IE.band_rows(cp)) + " CP"
+
+
+def _iv_verdict_bands(e, base, sub, auto_note, wrow, wtip):
+    """間歇判讀 for detected reps (no 課表, SP-918): which intensity the reps trained, not 達到／部分達到 — the badge
+    「練到超閾值」, the reps per band, the time in each band; no 達標, no 目標區時間 ÷ plan, no 逐趟判定."""
+    from backend.engine import interval_eval as IE
+    cp, reps = e["cp"], e["reps"]
+    nb, main = e.get("band_counts") or {}, e.get("band_main")
+    rule = _bands_rule(cp)
+    why = _("沒有課表，不知道你想練哪一帶，所以不判達標：改看每趟的平均功率落在哪個強度帶（{rule}；強度帶的切法是推估）。"
+            "想照目標判 → 把這堂排進課表。", rule=rule)
+    head = (_("{verdict}：{n} 趟中 {k} 趟落在這一帶", verdict=e["verdict_label"], n=len(reps), k=nb.get(main, 0))
+            if main else e["verdict_label"])
+    rows = [_row("判定", head, why), _row("課表", sub, auto_note)]
+    for i, r in enumerate(e["reasons"]):
+        rows.append(_row("理由" if i == 0 else "", r))
+    rows.append(_row("無氧容量用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% 無氧容量）；"
+                     f"無氧儲備最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
+    src_name, src_rule = _SRC_NAME.get(e["rep_source"]), _SRC_RULE.get(e["rep_source"])
+    src = _("{name}（{rule}）", name=_(src_name), rule=_(src_rule)) if src_name else "—"
+    rows.append(_row(_("找趟"), src))
+    keys = [k for k in (IE.BELOW, *IE.BAND_KEYS) if nb.get(k) or k == IE.THR]
+    chips = [_chip_row(_("每趟"), [IE._n_band(nb.get(k, 0), k) for k in keys], None, "",
+                       _("每趟一個點，照它的平均功率落在哪個強度帶上色（{rule}）；閾值帶加框。"
+                         "沒有課表，不判達標。逐趟看「每趟功率」。", rule=rule))]
+    secs = e.get("band_secs")
+    if secs:
+        on = [(k, x) for k, x in secs.items() if x >= 1 or k == IE.THR]
+        chips.append(_chip_row(_("各強度帶的時間"), [f"{IE.band_word(k)} {x / 60:.1f} " + _("分") for k, x in on], None, "",
+                               _("每一秒的 10 秒功率落在哪個強度帶，連續 ≥ {s} 秒在 {lo:.0f}% CP 以上才算（推估）。"
+                                 "沒有課表，所以沒有「計畫的時間」可以比，只列各帶多久。",
+                                 s=f"{e.get('tiz_run_s') or IE.TIZ_RUN_S:g}", lo=BANDS[0][1] * 100)))
+    if e.get("fade") is not None:
+        chips.append(_chip_row(_("掉速"), [f"{e['fade'] * 100:+.0f}%", f"Sdec {e['sdec']:.1f}%"],
+                               tip=_("掉速 = 最後一趟比第一趟；Sdec = 衰退分數（Glaister 2008），只顯示、不判讀。")))
+    chips.append(wrow)
+    chips.append(_chip_row(_("找趟"), [_(src_name) if src_name else "—"],
+                           tip=_("{src}。課表：{sub}", src=src, sub=sub) + ("\n" + auto_note if auto_note else "")))
+    return {**base, "badge": {"text": e["verdict_label"], "level": "", "sub": sub}, "series": rows, "chip_rows": chips,
+            "text_source": "detected"}
+
+
 def _tiz_band(e: dict) -> str:
     """The watts the time in the zone counts (interval_eval.tiz_seconds): lo·CP to hi·CP × 1.05, Zone 5 open-ended
     (lo: interval_eval.tiz_lower's — the recovery fartlek's is Zone 3B's lower edge, SP-647)."""
@@ -4672,61 +4718,100 @@ def _rep_status(r: dict, floor: float, ceil: Optional[float]) -> str:
     return IE.rep_status(r["power"], floor, ceil)
 
 
+def _hr_reader(ds, w, m):
+    """SP-918 Q2: a rep's second-half HR as % LTHR and the HR zone it falls in (the 課表心率區間 in effect,
+    hr_profile.plan_hr_zones_for) — for the 每趟功率 tip only, never to judge (a wrist HR lags short reps).
+    hr → {"pct_lthr", "hr_zone"} (either None without its basis)."""
+    lthr = (m or {}).get("lthr")
+    rows = []
+    try:
+        from backend.engine import hr_profile as HP
+        z = HP.plan_hr_zones_for(ds, _wdate(w), lthr, (m or {}).get("aet"), False)
+        rows = (z or {}).get("rows") or []
+    except Exception:                       # noqa: BLE001 — no HR basis / settings: % LTHR only
+        rows = []
+
+    def read(hr):
+        if hr is None:
+            return {"pct_lthr": None, "hr_zone": None}
+        zone = next((f"{r['id']} {r['name']}" for r in rows
+                     if (r["lo"] or 0) <= hr and (r["hi"] is None or hr < r["hi"])), None)
+        return {"pct_lthr": round(hr / lthr, 4) if lthr else None, "hr_zone": zone}
+    return read
+
+
 def _iv_reps(ds, w, m, c, base):
     """每趟功率 vs 目標帶 (viewer: drawRepProfile, res.rep_profile): one column per rep in
     order — the target band as a shaded range, the rep's mean power as a bold dot coloured
-    in band / below / above; a one-line count above (subtitle)."""
+    in band / below / above; a one-line count above (subtitle). Detected reps (no 課表, SP-918):
+    _iv_reps_bands."""
     e, bad = _ie(ds, w, base)
     if bad:
         return bad
     cp = e["cp"]
     if e.get("kind") == "test":
         return _iv_reps_test(e, base)
+    hrr = _hr_reader(ds, w, m)
+    if e.get("kind") == "detected":
+        return _iv_reps_bands(e, base, hrr)
     lo_w = e["lo"] * cp
     hi_w = e["hi"] * cp if e.get("hi") is not None else None
     ceil = hi_w * REP_HI_TOL if hi_w is not None else None
     reps = [{"k": r["k"], "label": str(r["k"]), "power": round(r["power"], 1), "pct_cp": round(r["pct_cp"], 4),
              "start_s": r["start_s"], "duration_s": r["duration_s"],
-             "hr_end": None if r.get("hr_end") is None else round(r["hr_end"], 1),
+             "hr_end": None if r.get("hr_end") is None else round(r["hr_end"], 1), **hrr(r.get("hr_end")),
              # the evaluation's own word for the rep (SP-516: the 判讀 card counts the same)
              "status": r.get("status") or _rep_status(r, e["floor"], ceil)} for r in e["reps"]]
     n = max(int(e["n_plan"] or 0), len(reps))
     k_in = sum(1 for r in reps if r["status"] == "in")
     k_hi = sum(1 for r in reps if r["status"] == "high")
     k_lo = sum(1 for r in reps if r["status"] == "low")
-    # SP-849: detected reps (no 課表) have no target — the band is where they fell (SP-520's words)
-    det = e.get("kind") == "detected"
     # SP-516: 達標 = in + high (≥ the floor), as 間歇判讀 counts it; the high ones named
     head = (_("{n} 趟中 {k} 趟達標", n=n, k=k_in + k_hi)
-            + ((_("（{k} 趟在帶內，{h} 趟偏高）", k=k_in, h=k_hi) if det else
-                _("（{k} 趟在目標內，{h} 趟偏高）", k=k_in, h=k_hi)) if k_hi else "")
+            + (_("（{k} 趟在目標內，{h} 趟偏高）", k=k_in, h=k_hi) if k_hi else "")
             + (_("，{k} 趟偏低", k=k_lo) if k_lo else ""))
     if len(reps) < n:
         head += _("，少做 {k} 趟", k=n - len(reps))
     band = (f"{e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP（{lo_w:.0f}–{hi_w:.0f} W）" if hi_w is not None
             else f"≥ {e['lo'] * 100:.0f}% CP（≥ {lo_w:.0f} W）")
     tol_kw = dict(floor=e["floor"], tol=e.get("in_band_tol_text", "0.98"), basis=e.get("in_band_basis", ""))
-    if det:
-        watts = f"{lo_w:.0f}–{hi_w:.0f} W" if hi_w is not None else f"≥ {lo_w:.0f} W"
-        desc = (_("每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 偵測到的趟落在的{band}，{w}（沒有課表，所以沒有目標）。"
-                  "長條頂端在綠色帶裡或上面 = 達標：", band=e.get("band_text") or "", w=watts)
-                + _("綠 ✓ 在帶內、黃 ▼ 偏低（< {floor:.0f} W = 帶的下限 × {tol}，{basis}）", **tol_kw)
-                + (_("、紅 ▲ 偏高（> {ceil:.0f} W = 帶的上限 × 1.02，推估）", ceil=ceil) if ceil is not None else ""))
-    else:
-        desc = (f"每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 目標 {band}。長條頂端在綠色帶裡或上面 = 達標："
-                + _("綠 ✓ 在目標內、黃 ▼ 偏低（< {floor:.0f} W = 下限 × {tol}，{basis}）", **tol_kw)
-                + (f"、紅 ▲ 偏高（> {ceil:.0f} W = 上限 × 1.02，推估）" if ceil is not None else ""))
+    desc = (f"每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 目標 {band}。長條頂端在綠色帶裡或上面 = 達標："
+            + _("綠 ✓ 在目標內、黃 ▼ 偏低（< {floor:.0f} W = 下限 × {tol}，{basis}）", **tol_kw)
+            + (f"、紅 ▲ 偏高（> {ceil:.0f} W = 上限 × 1.02，推估）" if ceil is not None else ""))
     desc += ("。偏高在判讀裡仍算達標，只是提醒做太重。"
              + (f"掉速 {e['fade'] * 100:+.0f}%（最後一趟比第一趟）。" if e.get("fade") is not None else "")
              + "滑過點看那趟的時間長度、% CP 和後半心率。")
     prof = {"mode": "plan", "cp": round(cp, 1), "band": [round(lo_w, 1), None if hi_w is None else round(hi_w, 1)],
             "floor": round(e["floor"], 1), "ceil": None if ceil is None else round(ceil, 1), "n_plan": n, "reps": reps,
             "counts": {"in": k_in, "high": k_hi, "low": k_lo, "missing": n - len(reps)},
-            # SP-849: the legend / frame / tip say the band's name, not 「目標」
-            "source": "detected" if det else "plan", "band_name": e.get("band_name") if det else None}
+            "source": "plan", "band_name": None}
+    return {**base, "series": [], "rep_profile": prof, "subtitle": head, "description": desc}
+
+
+def _iv_reps_bands(e, base, hrr):
+    """每趟功率 for detected reps (no 課表, SP-918; viewer: drawRepBands, rep_profile.mode "bands"): every
+    intensity band drawn across the reps (閾值 framed), each rep's mean power coloured by the band it fell in,
+    the count per band above (「6 趟：0 趟閾值、4 趟超閾值、2 趟 VO2max」) — no target, no 達標."""
+    from backend.engine import interval_eval as IE
+    cp = e["cp"]
+    reps = [{"k": r["k"], "label": str(r["k"]), "power": round(r["power"], 1), "pct_cp": round(r["pct_cp"], 4),
+             "start_s": r["start_s"], "duration_s": r["duration_s"],
+             "hr_end": None if r.get("hr_end") is None else round(r["hr_end"], 1), **hrr(r.get("hr_end")),
+             "band": r["band"], "status": r["band"]} for r in e["reps"]]
+    bands = [{**b, "lo": round(b["lo"], 1), "hi": None if b["hi"] is None else round(b["hi"], 1)}
+             for b in IE.band_rows(cp)]
+    below = {"key": IE.BELOW, "name": IE.band_word(IE.BELOW), "color": IE.BAND_COLOR[IE.BELOW]}
+    thr = next(b for b in bands if b["thr"])
+    desc = (_("沒有課表，所以沒有目標、不判達標：每趟一個點（照順序），高度 = 那趟的平均功率，顏色 = 它落在哪個強度帶"
+              "（{rule}）；淺色橫帶 = 各強度帶，加框的是閾值帶 {lo:.0f}–{hi:.0f} W。",
+              rule=_bands_rule(cp), lo=thr["lo"], hi=thr["hi"])
+            + (_("掉速 {f:+.0f}%（最後一趟比第一趟）。", f=e["fade"] * 100) if e.get("fade") is not None else "")
+            + _("滑過點看那趟的時間長度、% CP、強度帶和後半心率（% LTHR、心率區）。"))
+    prof = {"mode": "bands", "cp": round(cp, 1), "band": None, "n_plan": len(reps), "reps": reps, "bands": bands,
+            "below": below, "counts": e.get("band_counts") or {}, "main": e.get("band_main"), "source": "detected"}
     # SP-920: the view's title / ? text for detected reps (wko5views._render, views/workout.json `by_source`)
-    return {**base, "series": [], "rep_profile": prof, "subtitle": head, "description": desc,
-            **({"text_source": "detected"} if det else {})}
+    return {**base, "series": [], "rep_profile": prof, "subtitle": e.get("band_dist") or "", "description": desc,
+            "text_source": "detected"}
 
 
 def _iv_reps_test(e, base):
@@ -4863,6 +4948,8 @@ def _iv_tiz(ds, w, m, c, base):
     from backend.engine.wko5expr import units as U
     du = U.meta("HHMMSS")
     xu = {"id": "BAR", "label": "", "kind": "number", "dec": [[0, 0]]}
+    if e.get("kind") == "detected":
+        return _iv_tiz_bands(e, base, du, xu)
     plan, act = e["tiz_plan_s"], e["tiz_s"] or 0.0
     r = e.get("tiz_ratio")
     s = [{"name": _("計畫（這份課表）"), "type": "bar", "expression": "", "y_axis": "HHMMSS", "unit": du, "x_unit": xu,
@@ -4878,6 +4965,29 @@ def _iv_tiz(ds, w, m, c, base):
             "description": f"目標區 = 10 秒功率 {zone}、連續 ≥ {e.get('tiz_run_s') or IE.TIZ_RUN_S:g} 秒才算（推估）。"
                            + _("≥ {goal:.0%} 算達到，{basis}（TrainingPeaks、intervals.icu、TrainerPlan 的「完成」都從 80% 起）。",
                                goal=e.get("tiz_goal", IE.TIZ_GOAL), basis=e.get("tiz_basis", ""))}
+
+
+def _iv_tiz_bands(e, base, du, xu):
+    """目標區時間 for detected reps (no 課表, SP-918): no plan to divide by — one bar per intensity band, the time
+    the 10-s power spent in it (interval_eval.band_seconds), the 閾值 band named as the marked one."""
+    from backend.engine import interval_eval as IE
+    secs = e.get("band_secs")
+    if not secs:
+        return {**base, "hide": True}
+    s = []
+    for i, b in enumerate(IE.band_rows(e["cp"])):
+        x = secs.get(b["key"]) or 0.0
+        if b["key"] == "ana" and x < 1:
+            continue                                # the open-ended band only when a rep got there
+        s.append({"name": b["name"], "type": "bar", "expression": "", "y_axis": "HHMMSS", "unit": du, "x_unit": xu,
+                  "color": b["color"], "bar_width": 36,
+                  "labels": [_("{band} {m:.1f} 分", band=b["name"], m=x / 60)],
+                  "data": {"kind": "points", "x": "value", "points": [[i + 1, x]]}})
+    return {**base, "axes": [{"id": "HHMMSS", "unit": du, "min": 0}], "series": s, "text_source": "detected",
+            "description": _("沒有課表，所以沒有目標區和計畫的時間可以比：改列這次在各強度帶各待了多久。"
+                             "每一秒的 10 秒功率落在哪一帶（{rule}），連續 ≥ {s} 秒在 {lo:.0f}% CP 以上才算（推估）。",
+                             rule=_bands_rule(e["cp"]), s=f"{e.get('tiz_run_s') or IE.TIZ_RUN_S:g}",
+                             lo=BANDS[0][1] * 100)}
 
 
 def _iv_hr(ds, w, m, c, base):
