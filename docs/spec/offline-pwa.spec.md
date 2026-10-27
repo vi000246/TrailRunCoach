@@ -42,7 +42,7 @@ Tickets: SP-314 (this), SP-319 (the tiers and the 20 MB budget, `docs/research/f
 | Pages | register, offline bar, write guard, locked controls, sign-out clear, 加到主畫面 hint, manifest links | `backend/static/shell.js` (`// ---- offline copy (SP-314)`) |
 | Fallback page | a page not kept, offline | `backend/static/offline.html` (+ `i18n/*/offline.json`) |
 | Settings block | 設定 › 資料同步 › 這台裝置的離線資料 (SP-322) | `backend/static/device_storage.js` (`window.DeviceStorage`), `settings.html` `#device` (+ `settings.device.*`) |
-| Icons | any (rounded), maskable, apple-touch | `backend/static/icons/` |
+| Icons | any (the Trig badge, round on a transparent ground), maskable and apple-touch (opaque squares, the badge in the safe zone); SVG sources `trig-logo.svg` (64 px and up) / `trig-logo-small.svg` (= `icon.svg`, the tab, 32 px and below) — SP-971 | `backend/static/icons/` |
 
 ## What is kept (tiers, SP-319)
 

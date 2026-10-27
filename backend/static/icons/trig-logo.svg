@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 14 92 92">
+  <title>Trig</title>
+  <defs><clipPath id="trig-disc"><circle cx="60" cy="60" r="46"/></clipPath></defs>
+  <circle cx="60" cy="60" r="46" fill="#1f4a52"/>
+  <g clip-path="url(#trig-disc)"><g transform="translate(60 28) scale(.84) translate(-60 -24)">
+    <path d="M6 100C28 82 46 52 60 24C74 52 92 82 114 100V130H6Z" fill="#3c7c74"/>
+    <path d="M42 99L80 91Q87 89.5 81 87L44 79Q38 77.5 43.5 75.5L72 68Q77.5 66.5 72.5 64.5L50 58Q45.5 56.5 49.5 55L64 50Q68 48.5 64.5 47L57 43.5Q54.5 42 57 40.5L60 35" fill="none" stroke="#f3efe4" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+  </g></g>
+  <circle cx="60" cy="60" r="41" fill="none" stroke="#f2c46d" stroke-width="1.4"/>
+  <circle cx="60" cy="29" r="3.4" fill="#f2c46d"/>
+</svg>

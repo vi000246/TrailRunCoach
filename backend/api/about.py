@@ -27,7 +27,7 @@ from typing import Optional
 from fastapi import APIRouter
 
 from backend import __version__, i18n
-from backend.i18n.pages import page_catalog, render_page
+from backend.i18n.pages import brand, page_catalog, render_page
 
 URL = "/about"
 NS = "about"
@@ -221,7 +221,7 @@ def _fill(loc: str, legal: bool = False) -> dict:
         + (_section("legal", _t(cat, "legal.h"),
                     f'<p class="ab-lead">{_E(_t(cat, "legal.lead"))}</p><ul class="ab-legal">{_legal()}</ul>')
            if legal else ""))
-    return {"title": _E(f'{_t(cat, "title")} · TrailRunCoach', quote=False), "main": main}
+    return {"title": _E(f'{_t(cat, "title")} · {brand(loc)}', quote=False), "main": main}
 
 
 @router.get(URL)

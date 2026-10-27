@@ -10,7 +10,7 @@
  *   t("overview.ramp.good", { ramp: 2.4 })        // "{ramp}" placeholders
  *   t("schedule.n_sessions", { n: 3 })             // {"one": "…", "other": "…"} picks by n
  *   t("x.days", { days: 1 })                       // "{days} {days|day|days}" -> "1 day" (SP-762)
- *   t("shell.brand", "訓練教練")                    // fallback when the key isn't in the catalog
+ *   t("shell.brand", "Trig 基石")                  // fallback when the key isn't in the catalog
  *   I18N.fmt.date("2026-10-02", "mdw")             // 10/2（週四） · en: Thu 10/2
  *   I18N.setLocale("en")                           // cookie `lang` (1 year), then reload
  *

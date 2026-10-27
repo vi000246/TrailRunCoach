@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-i18n="pricing.title">方案與價格 · TrailRunCoach</title>
-<meta name="description" data-i18n-attr="content:pricing.description" content="TrailRunCoach 的免費方案與訂閱方案：各有哪些功能、月繳與年繳多少錢。課表、近 90 天的資料和安全提示免費就能用。">
+<title data-i18n="pricing.title">方案與價格 · Trig 基石</title>
+<meta name="description" data-i18n-attr="content:pricing.description" content="Trig 基石的免費方案與訂閱方案：各有哪些功能、月繳與年繳多少錢。課表、近 90 天的資料和安全提示免費就能用。">
 <style>
 /* 方案與價格 (SP-846, api/billing.py /pricing, billing/plan_table.py): public, signed in or not. Mock A
    of the ticket: two plan cards on top (the subscription's price by the month / year switch), the safety
@@ -37,10 +37,9 @@ a { color: var(--accent); }
 /* top bar (intro.html's) */
 .top { position: sticky; top: 0; z-index: 10; background: var(--panel); border-bottom: 1px solid var(--line); }
 .top .wrap { display: flex; align-items: center; gap: 6px; min-height: 54px; }
+.brand img { flex: none; }
 .brand { display: flex; align-items: center; gap: 8px; margin-right: auto; color: var(--text); text-decoration: none;
   font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
-.brand i { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); display: grid; place-items: center; flex: none; }
-.brand svg { width: 18px; height: 18px; color: #fff; }
 .top .link { color: var(--muted); text-decoration: none; padding: 6px 8px; border-radius: 7px; font-size: 14px; white-space: nowrap; }
 .top .link:hover, .top .link[aria-current="page"] { color: var(--accent); }
 .top .link[aria-current="page"] { font-weight: 600; }
@@ -132,7 +131,7 @@ footer .lang { margin-left: auto; }
 <body>
 <header class="top">
   <nav class="wrap" aria-label="主要連結" data-i18n-attr="aria-label:pricing.nav.label">
-    <a class="brand" href="/"><i><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg></i><span>TrailRunCoach</span></a>
+    <a class="brand" href="/"><img src="/api/v1/static/icons/trig-logo-small.svg" alt="" width="28" height="28"><span data-i18n="shell.brand">Trig 基石</span></a>
     <a class="link wide" href="/manual" data-i18n="pricing.nav.manual">操作手冊</a>
     <a class="link" href="/pricing" aria-current="page" data-i18n="pricing.nav.pricing">方案與價格</a>
     <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:pricing.lang.title" data-i18n="pricing.lang.other">English</button>

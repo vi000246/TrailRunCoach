@@ -1,5 +1,5 @@
 {
-  "title": "Sign in · TrailRunCoach",
+  "title": "Sign in · {brand}",
   "h1": "Sign in",
   "lead": "A training coach for trail running, Taiwan's 100 Peaks (Baiyue) and road running. Sign in with Google or email; the first time, you will be asked to read the terms.",
   "google": "Sign in with Google",
@@ -74,6 +74,6 @@
   "verify.lead": "Enter the password you set when you signed up to confirm your email.",
   "verify.go": "Confirm and continue",
   "what": "What is this? See the introduction →",
-  "cairn.next": "After you sign in, the route from Cairn goes on into the Race manager. The first time, you accept TrailRunCoach's terms.",
-  "cairn.full": "TrailRunCoach is full right now: you are on the waiting list and we will let you know when there is a place. Cairn's time estimate for this route still works as before."
+  "cairn.next": "After you sign in, the route from Cairn goes on into the Race manager. The first time, you accept {brand}'s terms.",
+  "cairn.full": "{brand} is full right now: you are on the waiting list and we will let you know when there is a place. Cairn's time estimate for this route still works as before."
 }

@@ -48,7 +48,7 @@ def test_the_worker_and_the_manifest_in_the_owners_app(monkeypatch, tmp_path):
         m = cl.get("/manifest.webmanifest", headers={"Accept-Language": "zh-TW"})
         assert m.status_code == 200 and m.headers["content-type"].startswith("application/manifest+json")
         man = m.json()
-        assert man["name"] == "訓練教練" and man["lang"] == "zh-TW" and man["description"]
+        assert man["name"] == "Trig 基石" and man["lang"] == "zh-TW" and man["description"]
         assert man["start_url"] == "/api/v1/overview/page" and man["scope"] == "/" and man["display"] == "standalone"
         assert {i["purpose"] for i in man["icons"]} == {"any", "maskable"}
         for i in man["icons"]:
@@ -59,7 +59,7 @@ def test_the_worker_and_the_manifest_in_the_owners_app(monkeypatch, tmp_path):
                 assert i["sizes"] == f"{w}x{w}", i
         assert cl.get("/api/v1/static/icons/apple-touch-icon.png").status_code == 200
         en = cl.get("/manifest.webmanifest", headers={"Accept-Language": "en"}).json()
-        assert en["name"] == "Training Coach" and en["lang"] == "en"
+        assert en["name"] == "Trig" and en["lang"] == "en"
         # the page the worker shows for a page it hasn't kept, in both languages
         assert '<html lang="en">' in cl.get("/api/v1/static/offline.html", headers={"Accept-Language": "en"}).text
         zh = cl.get("/api/v1/static/offline.html", headers={"Accept-Language": "zh-TW"})

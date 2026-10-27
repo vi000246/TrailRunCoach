@@ -2,7 +2,7 @@
   "page_title": "Pace check",
   "heading": "Pace check",
   "sub": "Before a group hike: about how long this route takes",
-  "home": "TrailRunCoach home",
+  "home": "{brand} home",
   "lead": "Upload one recent hike (a GPX or FIT recorded by a watch or a hiking app) and the route you plan to walk: you get about how many hours the route takes, and whether that is faster or slower than an ordinary hiker.",
   "privacy": "The files are used for the calculation only and dropped right after; nothing is kept.",
   "track.h": "1. One recorded hike",

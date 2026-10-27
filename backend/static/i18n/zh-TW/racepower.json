@@ -542,7 +542,7 @@
   "dl.noref": "還沒有登山紀錄可以比（需要登山或健行活動）",
   "cairn.sched_mixed": "有寫休息的天扣掉 {m} 分，沒寫休息的天 × 跟團移動比 {pct} %，{src}",
   "share.cairn_curve": "附上給疊石 Cairn 的時間曲線",
-  "share.cairn_curve_tip": "沿路線的累積移動時間（不含座標、停留），讓 Cairn 用 TrailRunCoach 的腳程推估抵達時刻。只有賽季計畫賽事存的 GPX 才能附；拿到連結的人也看得到你的腳程。",
+  "share.cairn_curve_tip": "沿路線的累積移動時間（不含座標、停留），讓 Cairn 用 {brand}的腳程推估抵達時刻。只有賽季計畫賽事存的 GPX 才能附；拿到連結的人也看得到你的腳程。",
   "unlock": "解除全部鎖定",
   "share.btn": "🔗 分享",
   "share.title": "🔗 分享計算結果",

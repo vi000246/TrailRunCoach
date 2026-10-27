@@ -63,6 +63,10 @@ header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; jus
   text-decoration: none; white-space: nowrap; }
 .join-btn:hover { filter: brightness(1.08); }
 .join-btn[hidden] { display: none; }
+/* SP-971: the product's badge and name over the title (inline: a visitor gets only /share/*, not /api/v1/static) */
+header .brand { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--muted);
+  font-size: 12.5px; font-weight: 700; letter-spacing: .02em; text-decoration: none; }
+header .brand svg { flex: none; }
 .join { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; border-color: var(--accent); background: var(--soft); }
 .join h2 { margin: 0 0 2px; }
 .join p { margin: 0; color: var(--muted); font-size: 13px; }
@@ -70,7 +74,7 @@ header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; jus
 </style>
 </head>
 <body>
-<header><div><h1 id="title" data-i18n="share.heading">賽事計畫</h1><div class="meta" id="sub" data-i18n="share.readonly_share">唯讀分享</div></div><a class="join-btn" id="join-top" hidden></a></header>
+<header><div><a class="brand" href="/"><svg aria-hidden="true" width="20" height="20" xmlns="http://www.w3.org/2000/svg" viewBox="14 14 92 92"><defs><clipPath id="trig-disc-s"><circle cx="60" cy="60" r="46"/></clipPath></defs><circle cx="60" cy="60" r="46" fill="#1f4a52"/><g clip-path="url(#trig-disc-s)"><path d="M2 106C26 90 44 64 60 34C76 64 94 90 118 106V120H2Z" fill="#3c7c74"/><path d="M44 91L78 83L48 69L60 52" fill="none" stroke="#f3efe4" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></g><circle cx="60" cy="60" r="42.5" fill="none" stroke="#f2c46d" stroke-width="3.2"/><circle cx="60" cy="36" r="6" fill="#f2c46d"/></svg><span data-i18n="shell.brand">Trig 基石</span></a><h1 id="title" data-i18n="share.heading">賽事計畫</h1><div class="meta" id="sub" data-i18n="share.readonly_share">唯讀分享</div></div><a class="join-btn" id="join-top" hidden></a></header>
 <main id="main"><section><div class="meta" data-i18n="share.loading">讀取中…</div></section></main>
 <!--fill:join-->
 <!--inline:seg_profile.js-->

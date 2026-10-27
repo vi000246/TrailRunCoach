@@ -21,7 +21,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse, Response
 
 from backend import i18n
-from backend.i18n.pages import STATIC, page_catalog
+from backend.i18n.pages import STATIC, brand, page_catalog
 
 router = APIRouter(tags=["pwa"])
 
@@ -35,7 +35,8 @@ ICONS = [
     {"src": f"{ICON_DIR}/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
     {"src": f"{ICON_DIR}/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
     {"src": f"{ICON_DIR}/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
-    {"src": f"{ICON_DIR}/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+    # SP-971: the badge drawn for large sizes (icon.svg, the tab's, is the version for 32 px and below)
+    {"src": f"{ICON_DIR}/trig-logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
 ]
 
 _BUILD: dict = {}
@@ -74,7 +75,7 @@ def manifest():
     """In the request's language (the browser sends no cookie for it: Accept-Language decides)."""
     loc = i18n.current_locale()
     cat = page_catalog(("shell",), loc)
-    name = cat.get("shell.brand") or "Training Coach"
+    name = brand(loc)
     body = {
         "id": "/",
         "name": name,

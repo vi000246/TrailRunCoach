@@ -1,11 +1,11 @@
 {
-  "title": "Plans and pricing · TrailRunCoach",
-  "description": "TrailRunCoach's free plan and subscription: what each has and what the monthly and yearly subscription cost. The training plan, the last 90 days and the safety hints are free.",
+  "title": "Plans and pricing · {brand}",
+  "description": "{brand}'s free plan and subscription: what each has and what the monthly and yearly subscription cost. The training plan, the last 90 days and the safety hints are free.",
   "nav.label": "Main links",
   "nav.manual": "Manual",
   "nav.pricing": "Pricing",
   "nav.login": "Sign in",
-  "nav.app": "Open TrailRunCoach",
+  "nav.app": "Open {brand}",
   "lang.title": "Switch language",
   "lang.other": "中文",
   "kicker": "Plans and pricing",
@@ -19,7 +19,7 @@
   "free.who": "Preparing for a first race, or trying it out",
   "free.price": "NT$0",
   "free.start": "Start with Google",
-  "free.open": "Open TrailRunCoach",
+  "free.open": "Open {brand}",
   "free.li.plan": "A plan built for your target race; edit it, log by hand",
   "free.li.charts": "Charts and activity reviews of the last 90 days (5 charts a day)",
   "free.li.charts_n": {

@@ -25,7 +25,10 @@ LOCALES = ("zh-TW", "en")
 
 
 def _cat(loc: str) -> dict:
-    return json.loads((STATIC / "i18n" / loc / "about.json").read_text("utf-8"))
+    """The file's text with the product's name filled in, as the page shows it (SP-971: {brand})."""
+    from backend.i18n.pages import brand
+    raw = json.loads((STATIC / "i18n" / loc / "about.json").read_text("utf-8"))
+    return {k: v.replace("{brand}", brand(loc)) if isinstance(v, str) else v for k, v in raw.items()}
 
 
 def _text(html: str) -> str:

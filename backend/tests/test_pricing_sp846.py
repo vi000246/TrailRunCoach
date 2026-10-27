@@ -99,7 +99,7 @@ def test_on_sale_a_free_user_goes_to_the_plans_page_and_a_subscriber_manages(app
     cta = _paid_cta(page)
     assert '<a class="btn primary" href="/plans">開始訂閱</a>' in cta
     top = page[page.index('<header class="top">'):page.index("</header>")]
-    assert '<a class="btn small primary" href="/">打開 TrailRunCoach</a>' in top and 'href="/login"' not in top
+    assert '<a class="btn small primary" href="/">打開 Trig 基石</a>' in top and 'href="/login"' not in top
     from backend.accounts import store
     store.set_plan(uid, "subscriber")
     cta = _paid_cta(cl.get("/pricing", headers=HTML).text)

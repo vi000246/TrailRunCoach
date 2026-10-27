@@ -95,7 +95,27 @@ def page_catalog(namespaces: Iterable[str], loc: str, debug: bool = False) -> di
             out[k] = t if t else (f"⟦{v}⟧" if debug and loc != i18n.DEFAULT_LOCALE else v)
         for k, v in tr.items():            # keys only the translation has (shouldn't happen; harmless)
             out.setdefault(k, v)
-    return out
+    name = brand(loc)
+    return {k: _with_brand(v, name) for k, v in out.items()}
+
+
+BRAND_KEY = "shell.brand"
+BRAND_MARK = "{brand}"
+
+
+def brand(loc: str) -> str:
+    """The product's name in `loc` (SP-971): one key, shell.brand. Every other catalog text that names
+    the product writes `{brand}` instead, filled in here — renaming it is a one-line change."""
+    t = _read_ns(loc, "shell").get(BRAND_KEY) if loc != i18n.DEFAULT_LOCALE else None
+    return t or _read_ns(i18n.DEFAULT_LOCALE, "shell").get(BRAND_KEY) or "Trig"
+
+
+def _with_brand(v, name: str):
+    if isinstance(v, str):
+        return v.replace(BRAND_MARK, name) if BRAND_MARK in v else v
+    if isinstance(v, dict):
+        return {k: _with_brand(x, name) for k, x in v.items()}
+    return v
 
 
 def namespaces_for(name: str) -> tuple[str, ...]:

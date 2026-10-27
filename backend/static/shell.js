@@ -97,8 +97,7 @@
   .appnav .an-brand { display: flex; align-items: center; gap: 7px; padding: 0 14px 0 4px; margin-right: 6px;
     border-right: 1px solid var(--line, #e1e5ea); color: var(--text, #111); text-decoration: none; font-weight: 700;
     letter-spacing: .02em; white-space: nowrap; }
-  .appnav .an-brand i { width: 22px; height: 22px; border-radius: 6px; background: var(--an-acc); display: grid; place-items: center; }
-  .appnav .an-brand i svg { width: 15px; height: 15px; color: #fff; }
+  .appnav .an-brand img { width: 24px; height: 24px; flex: none; }
   .appnav .an-item { position: relative; display: grid; grid-template-columns: 20px auto; grid-template-rows: auto auto;
     column-gap: 8px; align-content: center; padding: 7px 12px; min-height: var(--an-h); text-decoration: none;
     color: var(--muted, #667); border-radius: 8px 8px 0 0; }
@@ -181,11 +180,12 @@
   nav.setAttribute("aria-label", T("nav.label"));
   // the language switch shows the other language; remembered in the `lang` cookie (i18n.js setLocale)
   const other = L.locale === "en" ? "zh-TW" : "en";
-  const CAL_ICON = I('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>');
+  // SP-971: the Trig badge, its version for 32 px and below
+  const LOGO = '<img src="/api/v1/static/icons/trig-logo-small.svg" alt="" width="24" height="24">';
   const LOGIN_ICON = I('<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M14 17l5-5-5-5"/><path d="M19 12H8"/>');
   const login = () => `<a class="an-item an-login" href="/login?${new URLSearchParams({ next: location.pathname + location.hash })}" title="${T("account.login_title")}">
       ${LOGIN_ICON}<span class="an-name"><span class="an-long">${T("account.login")}</span><span class="an-short">${T("account.login")}</span></span></a>`;
-  nav.innerHTML = `<a class="an-brand" href="${PUBLIC ? "/" : PAGES[0].href}" title="${T("brand.title")}"><i>${CAL_ICON}</i><span>${T("brand")}</span></a>` +
+  nav.innerHTML = `<a class="an-brand" href="${PUBLIC ? "/" : PAGES[0].href}" title="${T("brand.title")}">${LOGO}<span>${T("brand")}</span></a>` +
     PAGES.filter((p) => !p.more).map(item).join("") +
     (PUBLIC ? login() : `<details class="an-more"><summary class="an-item"${cur && cur.more ? ' aria-current="page"' : ""} title="${T("nav.more_title")}">
       ${MORE_ICON}<span class="an-name"><span class="an-long">${cur && cur.more ? `${T("nav.more")} · ${cur.name}` : T("nav.more")}</span><span class="an-short">${T("nav.more")}</span></span></summary>

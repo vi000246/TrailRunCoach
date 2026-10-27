@@ -542,7 +542,7 @@
   "dl.noref": "No hiking day recorded yet to compare with (hiking or mountaineering activities)",
   "cairn.sched_mixed": "minus the {m} min of stops written; days without stops × the group moving ratio {pct} %, {src}",
   "share.cairn_curve": "Attach the time curve for Cairn",
-  "share.cairn_curve_tip": "The cumulative moving time along the route (no coordinates, no stops), so Cairn estimates its arrival times with TrailRunCoach's pace. Only with a GPX stored with a season-plan event; whoever has the link also sees your pace.",
+  "share.cairn_curve_tip": "The cumulative moving time along the route (no coordinates, no stops), so Cairn estimates its arrival times with {brand}'s pace. Only with a GPX stored with a season-plan event; whoever has the link also sees your pace.",
   "unlock": "Unlock all",
   "share.btn": "🔗 Share",
   "share.title": "🔗 Share the result",

@@ -779,7 +779,7 @@
   "cairn.cairn_plan_basic": "Light member",
   "cairn.cairn_plan_pro": "Heavy member",
   "cairn.cairn_plan_owner": "Site admin",
-  "cairn.plan_here": "TrailRunCoach",
+  "cairn.plan_here": "{brand}",
   "cairn.plan_cairn": "Cairn",
   "cairn.here_owner": "Site admin",
   "cairn.here_paid": "Subscribed",

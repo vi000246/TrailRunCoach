@@ -1,5 +1,5 @@
 {
-  "title": "登入 · TrailRunCoach",
+  "title": "登入 · {brand}",
   "h1": "登入",
   "lead": "越野跑、百岳、路跑的訓練教練。用 Google 帳號或 email 登入；第一次登入會先請你看過條款。",
   "google": "用 Google 帳號登入",
@@ -74,6 +74,6 @@
   "verify.lead": "輸入註冊時設定的密碼，完成 email 驗證。",
   "verify.go": "驗證並繼續",
   "what": "這是什麼？看介紹 →",
-  "cairn.next": "登入後會接著把疊石 Cairn 的路線帶進賽事管理。第一次使用要先同意 TrailRunCoach 的條款。",
-  "cairn.full": "TrailRunCoach 目前人數已滿，你已經排進候補名單，有名額時會通知你。這條路線在 Cairn 的時刻推估照樣可以用。"
+  "cairn.next": "登入後會接著把疊石 Cairn 的路線帶進賽事管理。第一次使用要先同意 {brand}的條款。",
+  "cairn.full": "{brand}目前人數已滿，你已經排進候補名單，有名額時會通知你。這條路線在 Cairn 的時刻推估照樣可以用。"
 }

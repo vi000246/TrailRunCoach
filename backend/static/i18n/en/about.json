@@ -1,7 +1,7 @@
 {
   "title": "About",
-  "h1": "About TrailRunCoach",
-  "lead": "TrailRunCoach is a training tool for trail runners, mountain hikers and road runners. This page lists the program version, where the calculations come from, the licences of the third-party data and software it uses, and the trademark notice.",
+  "h1": "About {brand}",
+  "lead": "{brand} is a training tool for trail runners, mountain hikers and road runners. This page lists the program version, where the calculations come from, the licences of the third-party data and software it uses, and the trademark notice.",
   "toc": "Sections of this page",
   "version.h": "Version",
   "version.app": "Version",
@@ -71,7 +71,7 @@
   "trademarks.others": "COROS, Garmin, Stryd, Strava, Google and other names are trademarks of their respective owners. TrailRunCoach is not affiliated with, authorised or endorsed by any of these companies.",
   "trademarks.own": "Training load, Intensity, Weighted power and Chronic load / Acute load / Load balance in this service are our own metrics; the names above are mentioned only to identify a data source, a compatible file format, or to let you compare numbers.",
   "cairn.h": "Cairn",
-  "cairn.what": "Cairn is our other service, for planning hiking trips: where each day ends and where you sleep on a timeline, the 3D terrain and the trail surface, your live position shared with the family who stay behind once you set off, and group sign-ups. TrailRunCoach covers the training before you go and how long the trip will take, how to pace it and how much to eat, so the two complement each other. Cairn makes a free account the first time you sign in with Google.",
+  "cairn.what": "Cairn is our other service, for planning hiking trips: where each day ends and where you sleep on a timeline, the 3D terrain and the trail surface, your live position shared with the family who stay behind once you set off, and group sign-ups. {brand} covers the training before you go and how long the trip will take, how to pace it and how much to eat, so the two complement each other. Cairn makes a free account the first time you sign in with Google.",
   "cairn.routes": "Routes go both ways: paste a Cairn trip's share link in the Race manager and the route and each night's stop become that race's GPX; once it is worked out, you can push the route, the pacing curve and the overnight stops to Cairn (with your accounts linked, on a paid plan). The steps are in the manual's Cairn section.",
   "cairn.link": "The same Google account is never linked on its own: you link it in the Cairn tab of Settings, or you are asked the first time something is to be pushed. Once linked, Cairn can read only the items listed — never your activities, heart rate or other health data — and you can unlink at any time.",
   "legal.h": "Terms and privacy",

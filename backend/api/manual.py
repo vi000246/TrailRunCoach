@@ -66,7 +66,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from backend import i18n
-from backend.i18n.pages import page_catalog, render_page
+from backend.i18n.pages import brand, page_catalog, render_page
 
 ROOT = Path(__file__).resolve().parents[1] / "manual"
 IMG_DIR = ROOT / "img"
@@ -507,7 +507,7 @@ def _fill(loc: str, chs: list[Chapter], cur: Optional[Chapter]) -> dict:
                 + (f'<div class="m-intro">{cur.intro_html}</div>' if cur.intro_html else "") + "</header>"
                 + "".join(_section_html(s, cat, cur.deep_sub) for s in cur.sections) + pager)
         title = f"{cur.title} · {name}"
-    return {"title": _E(f"{title} · TrailRunCoach", quote=False), "toc": _toc(chs, cur), "main": main,
+    return {"title": _E(f"{title} · {brand(loc)}", quote=False), "toc": _toc(chs, cur), "main": main,
             "chapter": _E(cur.id if cur else "")}
 
 
