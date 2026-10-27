@@ -62,12 +62,15 @@ def activities(race: bool = False):
     return out
 
 
-def _series(ds, idx: int) -> AC.Series:
+def _series(ds, idx: int, power: bool = True) -> AC.Series:
+    """`power` False (SP-954: an activity without trusted power, or no power meter now): no power line,
+    no average power."""
     ch = lambda n: ds.channel(idx, n)
     elev = ch("_elevation")
     if elev is None or not (elev == elev).any():
         elev = ch("elevation")
-    return AC.Series(ch("elapsedtime"), ch("elapseddistance"), elev, ch("heartrate"), ch("power"))
+    return AC.Series(ch("elapsedtime"), ch("elapseddistance"), elev, ch("heartrate"),
+                     ch("power") if power else None)
 
 
 def _meta(ds, w) -> dict:
@@ -95,7 +98,13 @@ def compare(a: int, b: int):
     for w in (wa, wb):
         MS.require_workout_age(ds, w)        # SP-713: like the charts — 90 days free, 365 / all paid
     ma, mb = _meta(ds, wa), _meta(ds, wb)
-    out = AC.compare(_series(ds, a), _series(ds, b), ma, mb)
+    # SP-954: each activity's power by THAT day's rule (engine/power_display.py): shown when it was a trusted
+    # Stryd power and there is a power meter now (stale or fresh — no % CP on this page either way)
+    from backend.engine import power_display as PWD
+    pwv = PWD.View(ds)
+    ma["pw"], mb["pw"] = pwv.activity(wa), pwv.activity(wb)
+    out = AC.compare(_series(ds, a, ma["pw"]["mode"] != PWD.NONE), _series(ds, b, mb["pw"]["mode"] != PWD.NONE),
+                     ma, mb)
     out["a"], out["b"] = ma, mb
     out.update(same_course(wa, wb))
     return out

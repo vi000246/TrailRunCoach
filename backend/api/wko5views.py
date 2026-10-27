@@ -834,6 +834,12 @@ def _needs_met() -> dict:
     return {"poles": poles}
 
 
+def _pwday(c: dict) -> bool:
+    """SP-954: a single-activity chart shown only when the activity had full power that day."""
+    from backend.engine import power_display as PWD
+    return _panel_kind(c) == "workout" and PWD.day_power_only(c)
+
+
 @router.get("/views")
 def list_views():
     met = None
@@ -859,6 +865,8 @@ def list_views():
                          # 「使用功率」 off (charts.power.enabled): the viewer hides power-only charts
                          # and locks 配速／功率 toggles to pace (power_use.py)
                          "power": PU.chart_needs_power(c), "power_basis": PU.power_basis(c),
+                         # SP-954: a single-activity card shown only with full power THAT day (power_display)
+                         **({"pwday": True} if _pwday(c) else {}),
                          **({"zoned": c["zoned"]} if c.get("zoned") else {}),
                          # 主要訓練項目 (engine/primary_sport.py): the viewer hides charts whose
                          # `sports` doesn't list the athlete's sport and sorts by `order`
@@ -1021,6 +1029,27 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         # SP-466: VO2max per kg reads the body weight of each fit's day (plan.json is in the
         # fingerprint; the DB's weight settings are not): the Dataset's weight history is in the key
         params = {**params, "_weights": json.dumps(ds.athlete.settings.get("weight") or [], default=str)}
+    # SP-954: power by THAT day's power state (engine/power_display.py) — a single-activity chart by its
+    # activity's (full / stale / none), an athlete chart's power points only on the days the CP was fresh,
+    # the 課表建議強度 table by today's state; what it reads (the plan's CP rows, the CP tests in the data,
+    # the equipment) is in the key
+    pw_act = pw_states = pw_now = None
+    if not ds.config.parity:
+        from backend.engine import power_display as PWD
+        if needs_workout:
+            pw_act = PWD.activity_view(ds, ds.workouts[workout])
+            params = {**params, "_pw": json.dumps(pw_act, sort_keys=True)}
+        elif ch.get("kind") in ("athlete", "pdtrend") and (
+                PU.chart_needs_power(ch) or any(PWD.is_power_series(s) for s in ch.get("series") or [])):
+            pw_states = PWD.View(ds).day_states(b, e)
+            params = {**params, "_pw": json.dumps(pw_states)}
+        elif ch.get("kind") == "targets":
+            from backend.engine import power_state as PST
+            try:
+                pw_now = PST.current(ds, today_local())
+            except Exception:                    # noqa: BLE001 — no data / plan: the table as it was
+                pw_now = None
+            params = {**params, "_pw": json.dumps(None if pw_now is None else [pw_now.get("state"), pw_now.get("days")])}
     cpref = None
     if ch.get("cp_ref") and ch.get("kind") == "athlete":
         # SP-465: the mFTP line = the CP the 課表 uses on the range's last day (panels/cp_ref.py); its
@@ -1063,7 +1092,20 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     key = chart_key(ch, req, CS.fingerprint(ds, scope), CS.code_signature(ch, ds, glue=(chart, _render, _apply_period)))
 
     def compute():
+        if pw_act is not None and pw_act["mode"] != PWD.FULL and PWD.day_power_only(ch):
+            # SP-954: a power-only card (power zones, the CP test, W′, the interval cards) is off an activity
+            # without power in effect that day
+            return {"title": ch.get("title"), "kind": ch.get("kind"), "hide": True}
         res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None, params=params)
+        if pw_act is not None and pw_act["mode"] != PWD.FULL:
+            res = PWD.strip_cp(res, pw_act["mode"])
+        if pw_states is not None:
+            if PU.chart_needs_power(ch) and not PWD.range_valid(pw_states):
+                res = PWD.no_valid(res)
+            else:
+                res = PWD.mask_power(res, pw_states)
+        if pw_now is not None and res.get("targets"):
+            res = {**res, "targets": PWD.targets_by_state(res["targets"], pw_now), "power_state": pw_now}
         if ch.get("race_refs") == "course_constant" and not needs_workout:
             # 目標賽事參考線 (panels/race_refs.py): the plan and the dataset are in the cache key
             import math
@@ -1429,11 +1471,16 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
     except Exception:                       # noqa: BLE001 — the list never breaks on the plan
         plan = {}
     out = []
+    # SP-954: how much power each activity's page shows (full / stale / none, engine/power_display.py)
+    from backend.engine import power_display as PWD
+    pwv = PWD.View(ds) if not getattr(getattr(ds, "config", None), "parity", False) else None
+    pwv = pwv if pwv is not None and pwv.tell else None      # a Dataset that cannot tell: no field
     for w in reversed(ds.workouts):
         if not (b <= w.day < e + 1) or (keep is not None and not keep(w)):
             continue
         m = w.metrics
         out.append({
+            "pw": pwv.activity(w) if pwv is not None else None,
             "index": w.idx, "start": w.entry.start.isoformat(), "sport": w.sport, "kind": kinds.kind(w),
             # the 活動編輯 page's title (activity_tags.name), else null
             "name": AT.name_of(AT.find(tag_rows, w.entry.start, w.entry.file)) if tag_rows else None,
@@ -1671,7 +1718,11 @@ def get_kind(i: int, parity: Optional[bool] = None, response: Response = None):
         raise HTTPException(404, "workout not found")
     kind = SM.KindFilter(SM.RUN_TYPES, ds, AT.load()).kind(ds.workouts[i])
     act_header(response, ds.workouts[i])
-    return {"workout": i, "kind": kind, "chart_sport": SM.chart_sport(kind)}
+    # SP-954: how much power its page shows — full / stale (「當時 CP 已 N 天沒測」) / none
+    from backend.engine import power_display as PWD
+    pwv = PWD.View(ds)
+    pw = pwv.activity(ds.workouts[i]) if pwv.tell and not getattr(getattr(ds, "config", None), "parity", False) else None
+    return {"workout": i, "kind": kind, "chart_sport": SM.chart_sport(kind), **({"pw": pw} if pw else {})}
 
 
 @router.get("/workouts/{i}/pain")
@@ -2003,12 +2054,19 @@ async def activities_stats():
     from backend.engine import activity_tags as AT
 
     def work():
+        from backend.engine import power_display as PWD
         ds = _dataset()
+        pwv = PWD.View(ds)
         out = {}
         for w in ds.workouts:
             a = _averages(ds, w)
-            out[AT.key_of(w.entry.start)] = {k: None if a.get(k) is None else round(a[k], 1)
-                                            for k in ("avg_hr", "avg_power")}
+            row = {k: None if a.get(k) is None else round(a[k], 1) for k in ("avg_hr", "avg_power")}
+            # SP-954: the average power only of an activity whose power is shown (a trusted Stryd power
+            # and a power meter now; watch power never) — `pw` full / stale / none
+            row["pw"] = pwv.activity(w)["mode"]
+            if row["pw"] == PWD.NONE:
+                row["avg_power"] = None
+            out[AT.key_of(w.entry.start)] = row
         if hasattr(ds, "save_cache"):
             ds.save_cache()
         return out

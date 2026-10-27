@@ -211,7 +211,11 @@ const WE = WorkoutEditor.mount($("tm-we"), { api: PAPI, saveTemplate: false, rou
 } });
 
 async function load() {
-  const [u, b, rl] = await Promise.all([req("GET", UAPI), req("GET", PAPI + "/steps/templates"), req("GET", PAPI + "/routes/library")]);
+  const [u, b, rl, ps] = await Promise.all([req("GET", UAPI), req("GET", PAPI + "/steps/templates"), req("GET", PAPI + "/routes/library"),
+    req("GET", "/api/v1/plan/power-state").catch(() => ({ ok: false }))]);
+  // SP-954: no power meter (③, engine/power_state.py) — no 「功率」 目標用, no power-only library template, no 功率
+  // 主課強度 filter (my own templates are kept as they are); a power meter again brings them back
+  S.noMeter = !!(ps && ps.ok && ps.body && ps.body.meter === false);
   // a template's GPX moved to 課表 › 路線 (SP-640): template id → route id
   S.moved = Object.fromEntries(((rl.ok && rl.body.routes) || []).filter((r) => r.from_tpl).map((r) => [r.from_tpl, r.id]));
   S.mine = u.ok ? u.body.templates : [];
@@ -241,7 +245,8 @@ function rows() {
   const hit = (name) => !q || String(name).toLowerCase().includes(q);
   const sub = curSub();
   const mine = S.src === "lib" ? [] : S.mine.filter((t) => (S.cat === "all" || t.cats.includes(S.cat)) && (!sub || !mySub(t, S.cat) || mySub(t, S.cat) === sub));
-  const lib = S.src === "mine" ? [] : S.lib.filter((r) => (S.cat === "all" || r.cat === S.cat) && (!sub || r.sub === sub));
+  const lib = S.src === "mine" ? [] : S.lib.filter((r) => (S.cat === "all" || r.cat === S.cat) && (!sub || r.sub === sub)
+    && !(S.noMeter && r.basis === "power"));
   // the 主課強度 chips: the types these rows use; a kept choice none of them has shows 全部 (kept still)
   const types = (t) => (t.row ? t.row.target_types : t.target_types) || [];
   const avail = new Set([...mine, ...lib].flatMap(types));
@@ -253,7 +258,7 @@ function rows() {
 function renderFilters(avail, tt) {
   const cats = [{ id: "all", label: T("cat_all") }, ...S.cats];
   if (!cats.some((c) => c.id === S.cat)) S.cat = "all";
-  const tts = [{ id: "all", label: T("tt_all") }, ...S.tts.filter((x) => avail.has(x.id))];
+  const tts = [{ id: "all", label: T("tt_all") }, ...S.tts.filter((x) => avail.has(x.id) && !(S.noMeter && x.id === "power"))];
   const had = document.activeElement && document.activeElement.matches("#tm-filt select");
   $("tm-filt").innerHTML = WorkoutEditor.tplFilters({ cats, cat: S.cat, subs: subsOf(S.cat), sub: curSub(), tts, tt });
   if (had) $("tm-filt").querySelector("select")?.focus();
@@ -292,7 +297,8 @@ function renderForm() {
   if (ro) srcl.innerHTML = `${esc(T("src"))}${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.src)}</a>` : esc(f.src || "")}` +
     (f.purpose ? `<br>${esc(f.purpose)}` : "") + (f.conv ? `<br><span class="faint">${esc(f.conv)}</span>` : "");
   renderPick();
-  $("tm-basis").querySelectorAll("button").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.b === (f.basis || "auto"))); b.disabled = ro; });
+  $("tm-basis").querySelectorAll("button").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.b === (f.basis || "auto"))); b.disabled = ro;
+    b.hidden = b.dataset.b === "power" && S.noMeter && f.basis !== "power"; });     // SP-954
   renderGpx();
   $("tm-save").hidden = ro; $("tm-del").hidden = f.kind !== "mine"; $("tm-copy").hidden = f.kind !== "lib";
   $("tm-del").classList.remove("armed"); $("tm-del").textContent = T("del");

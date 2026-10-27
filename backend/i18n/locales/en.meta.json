@@ -16522,5 +16522,21 @@
   "CP {cp} W · {line}": {
     "draft": true,
     "src": "SP-963"
+  },
+  "CP 過期": {
+    "draft": true,
+    "src": "SP-954"
+  },
+  "這段期間沒有有效的功率（當時 CP 過期或沒有功率計）": {
+    "draft": true,
+    "src": "SP-954"
+  },
+  "心率／配速": {
+    "draft": true,
+    "src": "SP-954"
+  },
+  "30 分鐘獨跑測試（LTHR）": {
+    "draft": true,
+    "src": "SP-954"
   }
 }

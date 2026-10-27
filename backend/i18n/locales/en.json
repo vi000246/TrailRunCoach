@@ -4506,5 +4506,9 @@
   "{d} 的 CP 測試": "the CP test on {d}",
   "{d} 的比賽": "the race on {d}",
   "{what}撐著，有效到 {until}": "valid until {until} thanks to {what}",
-  "CP {cp} W · {line}": "CP {cp} W · {line}"
+  "CP {cp} W · {line}": "CP {cp} W · {line}",
+  "CP 過期": "CP stale",
+  "這段期間沒有有效的功率（當時 CP 過期或沒有功率計）": "No valid power in this period (the CP was stale then, or no power meter)",
+  "心率／配速": "Heart rate / pace",
+  "30 分鐘獨跑測試（LTHR）": "30-min solo test (LTHR)"
 }

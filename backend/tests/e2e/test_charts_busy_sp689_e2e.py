@@ -31,6 +31,10 @@ SLOW_POWER = """(() => {
 
 
 def _drift_card(page):
+    # SP-954: an unpicked 配速／功率 toggle follows today's power state (功率 on the demo athlete), and the demo's one
+    # drift run is on a stale-CP day (no power point): start from 配速, the choice this test makes first anyway
+    page.add_init_script("""(() => { try { const k = 'charts.basis', p = JSON.parse(localStorage.getItem(k) || '{}');
+      if (!('我的訓練|3|3' in p)) localStorage.setItem(k, JSON.stringify({ ...p, '我的訓練|3|3': 'pace' })); } catch {} })()""")
     page.goto("/api/v1/app/viewer?" + urllib.parse.urlencode({"view": "我的訓練", "dash": 3}, safe=""))
     card = page.locator("#grid .card", has=page.locator("h2", has_text=TITLE)).first
     expect(card.locator('.seg[data-kind="basis"] button')).to_have_count(2, timeout=60_000)

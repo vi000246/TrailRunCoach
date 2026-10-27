@@ -410,6 +410,10 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 .rv-chip.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
 .rv-chip .qtip { margin: 0; width: 16px; height: 16px; }
 .ddesc-q { margin: 0 0 2px; grid-column: 1 / -1; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 2px; }
+/* SP-954: 「當時 CP 已 N 天沒測」 above a single activity's charts */
+.pw-note { margin: 0 0 4px; grid-column: 1 / -1; font-size: 12.5px; color: var(--text); padding: 6px 10px;
+  border-left: 3px solid var(--warn, #b45309); background: color-mix(in srgb, var(--warn, #b45309) 8%, transparent); border-radius: 4px; }
+.pw-note[hidden] { display: none; }
 /* 疼痛 chip + popover (傷病紀錄) */
 .pain-wrap { position: relative; display: inline-flex; }
 .pain-wrap[hidden], .pain-pop[hidden] { display: none; }
@@ -652,15 +656,24 @@ function chartSportFor(mode, primary, act) {
 function chartSportOfKind(kind) {
   return !kind ? null : ["trail", "hike", "baiyue"].includes(kind) ? "trail" : kind;
 }
-function visChartsFor(d, sp, usePower) {
-  const cs = d.charts.filter((c) => (usePower !== false || !c.power) && (!c.sports || sp == null || c.sports.includes(sp))
-    && (!c.needs || c.needs_met));
+// SP-954: `pw` = the shown activity's power view (GET /workouts rows / /kind `pw.mode`: full / stale / none, by THAT
+// day's CP, engine/power_display.py): a card marked `pwday` (power zones, the CP test, W′, the per-rep power cards)
+// only with full power; null (not known yet, a season page) = no filter
+function visChartsFor(d, sp, usePower, pw) {
+  const cs = d.charts.filter((c) => (usePower !== false || !c.power) && (!c.pwday || pw == null || pw === "full")
+    && (!c.sports || sp == null || c.sports.includes(sp)) && (!c.needs || c.needs_met));
   const rank = (c, i) => (sp != null && c.order && c.order[sp] != null ? c.order[sp] : i);
   return cs.map((c, i) => [c, i]).sort((a, b) => rank(...a) - rank(...b) || a[1] - b[1]).map((x) => x[0]);
 }
 const actChartSport = () => S.actSport && S.actSport.workout === S.workout ? S.actSport.sport : null;
+// the shown activity's power view ({mode, days}) when known (SP-954)
+const actPw = () => S.actSport && S.actSport.workout === S.workout ? S.actSport.pw || null : null;
+const actPwMode = () => actPw()?.mode || null;
+// on a single-activity page: its power drawn at all (not 「none」), its % CP / CP line (only 「full」)
+const pwShown = () => S.usePower !== false && (S.mode !== "workout" || actPwMode() !== "none");
+const cpShown = () => pwShown() && (S.mode !== "workout" || actPwMode() !== "stale");
 const dashSport = (d) => chartSportFor(d._mode, S.sport, actChartSport());
-function visCharts(d) { return visChartsFor(d, dashSport(d), S.usePower); }
+function visCharts(d) { return visChartsFor(d, dashSport(d), S.usePower, d._mode === "workout" ? actPwMode() : null); }
 // the charts a page can have whatever the shown activity is: the tree keeps a workout page the reader picked
 // even when this activity has no chart on it (the page then says why, viewer.trail_only), so the choice is
 // never overwritten by a road run in between (SP-218 review)
@@ -671,10 +684,19 @@ function settleActSport() {
   if (S.workout == null || S.actSport?.workout === S.workout) return true;
   const a = (S.acts || []).find((x) => x.index === S.workout);
   if (!a || !a.kind) return false;
-  S.actSport = { workout: S.workout, sport: chartSportOfKind(a.kind), kind: a.kind };
+  S.actSport = { workout: S.workout, sport: chartSportOfKind(a.kind), kind: a.kind, ...(a.pw ? { pw: a.pw } : {}) };
   return true;
 }
 // ---- end chart sport ----
+// SP-954: 「當時 CP 已 N 天沒測」 above a single activity's charts when its CP was stale that day (the power line,
+// average power and NP stay; % CP and the power zones don't)
+function renderPwNote() {
+  const el = document.getElementById("pw-note");
+  if (!el) return;
+  const pw = actPw(), on = S.mode === "workout" && S.usePower !== false && pw?.mode === "stale";
+  el.hidden = !on;
+  el.textContent = !on ? "" : pw.days != null ? t("viewer.pw.stale_note", { n: pw.days }) : t("viewer.pw.stale_note_never");
+}
 function selectedSports() { return [...document.querySelectorAll("#sports input:checked")].map((i) => i.value); }
 // 活動類型 (engine/sport_map.py, SP-263): 越野跑 / 路跑 / 登山健行 / 百岳登山 / 騎車 / 肌力 / 走路 / 其他
 const kindLabel = (k) => { const s = (S.sports || []).find((x) => x.sport === k); return t("viewer.kind." + k, s?.label || k || ""); };
@@ -709,6 +731,10 @@ async function init() {
   $("paritytag").hidden = !S.parity;  // SP-463: a small tag that cannot be clicked, only in 對照模式
   // 使用功率 (settings, charts.power.enabled): off = power-only charts hidden, 配速／功率 toggles on pace
   S.usePower = us.use_power !== false;
+  // SP-954: today's power state (① power / ② stale / ③ none, engine/power_state.py) — the 配速／功率 toggles'
+  // default; waited for at most 1.5 s (after that the toggles keep the view's own default until it is in)
+  const psIn = j("/api/v1/plan/power-state").then((x) => { S.powerNow = x; }).catch(() => {});
+  await Promise.race([psIn, new Promise((r) => setTimeout(r, 1500))]);
   const broken = S.views.filter((v) => v.error);
   if (broken.length) console.warn("view files with errors:", broken.map((v) => `${v.path}: ${v.error}`));
   await init0();
@@ -1109,7 +1135,7 @@ async function loadActs() {
   if (S.mode === "workout" && S.workout != null && S.actSport?.workout !== S.workout && curView()) {
     const d = curView().dashboards[S.dash[S.mode]], shown = () => visCharts(d).map((c) => c.index).join();
     const before = shown();
-    if (settleActSport()) { renderTree(); if (shown() !== before) load(); }
+    if (settleActSport()) { renderTree(); renderPwNote(); if (shown() !== before) load(); }
   }
   $("acts-n").textContent = acts.length;
   renderActChip();
@@ -1191,9 +1217,10 @@ async function load(opts = {}) {
     const before = shown(v.dashboards[S.dash[S.mode]]);
     j(`${API}/workouts/${wi}/kind?${tpParam()}`).then((k) => {
       if (S.workout !== wi || S.actSport?.workout === wi) return;
-      S.actSport = { workout: wi, sport: k?.chart_sport ?? null, kind: k?.kind ?? null };
+      S.actSport = { workout: wi, sport: k?.chart_sport ?? null, kind: k?.kind ?? null, ...(k?.pw ? { pw: k.pw } : {}) };
       if (S.mode !== "workout") return;
       renderTree();
+      renderPwNote();
       if (token === loadToken && shown(curView().dashboards[S.dash[S.mode]]) !== before) load();
     }).catch(() => {});
   }
@@ -1207,10 +1234,15 @@ async function load(opts = {}) {
     // the dashboard's description: behind a ? (hover / tap), not a caption paragraph
     grid.insertAdjacentHTML("beforeend", `<p class="ddesc-q">${esc(t("viewer.ddesc"))}<button type="button" class="qtip" aria-label="${esc(t("viewer.ddesc"))}" data-tip="${esc(ddesc)}">?</button></p>`);
   }
+  // SP-954: an activity whose power isn't in full effect that day says so above its charts
+  if (S.mode === "workout") { grid.insertAdjacentHTML("beforeend", `<p class="pw-note" id="pw-note" hidden></p>`); renderPwNote(); }
   // render sequentially-ish (4 at a time) so heavy charts don't block the rest
   const focus = S.focusChart; S.focusChart = null;
   if (!visCharts(d).length) {
-    grid.insertAdjacentHTML("beforeend", d.charts.every((c) => c.power)
+    grid.insertAdjacentHTML("beforeend", d.charts.every((c) => c.pwday) && S.mode === "workout" && S.usePower !== false
+        && actPwMode() && actPwMode() !== "full"
+      ? `<div class="empty">${esc(t(actPwMode() === "stale" ? "viewer.pw.page_stale" : "viewer.pw.page_none"))}</div>`
+      : d.charts.every((c) => c.power)
       ? `<div class="empty">${esc(t("viewer.power_only"))} <a href="/api/v1/app/settings#equip">${esc(t("viewer.to_settings"))}</a></div>`
       : S.mode === "workout" ? `<div class="empty">${esc(t("viewer.trail_only"))}</div>`
       : `<div class="empty">${esc(t("viewer.sport_only"))} <a href="/api/v1/app/settings#sport">${esc(t("viewer.to_settings"))}</a></div>`);
@@ -1433,7 +1465,11 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
   const pkey = `${v.name}|${di}|${c.index}`;
   const period = periodPrefs()[pkey];
   const win = windowPrefs()[pkey];
-  const basis = !S.usePower && c.power_basis ? "pace" : basisPrefs()[pkey];
+  // 配速／功率: locked to pace with 使用功率 off or (SP-954) on an activity without power that day; else the
+  // remembered choice, by default the current power state's (SP-954: ① power, ② / ③ pace — GET /plan/power-state)
+  const basisFree = S.usePower !== false && !(c.kind === "workout" && actPwMode() === "none");
+  const basis = !basisFree && c.power_basis ? "pace"
+    : basisPrefs()[pkey] ?? (c.power_basis && c.kind === "athlete" && S.powerNow?.power ? "power" : undefined);
   const seq = card._seq = (card._seq || 0) + 1;
   const moot = () => token !== loadToken || seq !== card._seq;
   try {
@@ -1521,7 +1557,7 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
       };
       card.querySelector("h2").appendChild(seg);
     }
-    if (!S.usePower && c.power_basis) { res.basis_toggle = false; res.basis_note = null; }
+    if (!basisFree && c.power_basis) { res.basis_toggle = false; res.basis_note = null; }
     if (c.zoned) res.zoned = c.zoned;      // banded chart (負荷比, Form%): drawPlot colours the line by band
     if (res.basis_toggle && res.basis_choices?.length) {
       // 配速／功率: Pa:HR or Pw:HR (remembered per chart)
@@ -2236,10 +2272,15 @@ function drawTargets(card, res) {
   const T = res.targets;
   const w = (a) => a[0] == null && a[1] == null ? "–" : a[0] == null ? `< ${Math.round(a[1])}` : a[1] == null ? `${Math.round(a[0])}+` : `${Math.round(a[0])}–${Math.round(a[1])}`;
   addTip(card, [res.description, T.terrain_note].filter(Boolean).join("\n\n"));
-  card.insertAdjacentHTML("beforeend", `<div class="meta" style="margin-bottom:4px">CP ${T.cp ? Math.round(T.cp) + " W" : "未設定"}（${esc(T.cp_source)}）· LTHR ${Math.round(T.lthr || 0)}（${esc(T.lthr_source)}）· AeT ${Math.round(T.aet || 0)}（${esc(T.aet_source)}）</div>
-    <table class="zt"><thead><tr><th>課表</th><th class="num">功率 W</th><th class="num">心率</th><th>看哪個</th><th>怎麼練</th></tr></thead>
+  // SP-954: without power in effect today (② CP stale, ③ no power meter — res.power_state) the 課表 trains by heart
+  // rate / pace: no CP, no watts column (② says how old the CP is and how to get power back)
+  const pwOff = !!T.power_off, ps = res.power_state;
+  const cpTxt = pwOff ? (ps?.state === "stale" ? `${esc(ps.reason || "")} · ` : "")
+    : `CP ${T.cp ? Math.round(T.cp) + " W" : "未設定"}（${esc(T.cp_source)}）· `;
+  card.insertAdjacentHTML("beforeend", `<div class="meta" style="margin-bottom:4px">${cpTxt}LTHR ${Math.round(T.lthr || 0)}（${esc(T.lthr_source)}）· AeT ${Math.round(T.aet || 0)}（${esc(T.aet_source)}）</div>
+    <table class="zt"><thead><tr><th>課表</th>${pwOff ? "" : `<th class="num">功率 W</th>`}<th class="num">心率</th><th>看哪個</th><th>怎麼練</th></tr></thead>
     <tbody>${T.rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
-      <td class="num">${w(r.power)}</td><td class="num">${w(r.hr)}</td><td>${esc(r.primary)}</td>
+      ${pwOff ? "" : `<td class="num">${w(r.power)}</td>`}<td class="num">${w(r.hr)}</td><td>${esc(r.primary)}</td>
       <td class="meta" style="white-space:normal">${esc(r.example)}<br><span style="opacity:.8">${esc(r.source)}</span></td></tr>`).join("")}</tbody></table>`);
 }
 
@@ -2440,10 +2481,10 @@ async function drawMap(card, res, opts = {}) {
     legend.innerHTML = `${Math.round(lo)}<i style="background:linear-gradient(90deg,${RAMP.join(",")})"></i>${Math.round(hi)} ${esc(unit)}`;
   }
   // colour toggle: 心率 / 功率 / 坡度 / 單色 (remembered per browser)
-  const has = (k) => k === "none" || (s[k] && s.gps.some((i) => s[k][i] != null));
+  const has = (k) => k === "none" || ((k !== "power" || pwShown()) && s[k] && s.gps.some((i) => s[k][i] != null));
   const want = pref[ck] || opts.defColor || pref.color;
   let color = has(want) ? want : ["hr", "power", "grade"].find(has) || "none";
-  tb.innerHTML = `<span class="meta">${esc(t("viewer.route.color"))}</span><div class="seg" role="group" aria-label="${esc(t("viewer.route.color"))}">${ROUTE_COLOR.map(([k, lab]) =>
+  tb.innerHTML = `<span class="meta">${esc(t("viewer.route.color"))}</span><div class="seg" role="group" aria-label="${esc(t("viewer.route.color"))}">${ROUTE_COLOR.filter(([k]) => k !== "power" || pwShown()).map(([k, lab]) =>
     `<button data-c="${k}" class="${k === color ? "on" : ""}" aria-pressed="${k === color}" ${has(k) ? "" : "disabled"}>${esc(lab)}</button>`).join("")}</div>`;
   tb.appendChild(legend);
   tb.onclick = (e) => {
@@ -2822,7 +2863,7 @@ function mcZoneLegend(pick) {
 }
 function mapChart(card, tb, wrap, s) {
   if (!s.byT) return;                         // no time axis: the map alone
-  const pwOn = S.usePower !== false;
+  const pwOn = pwShown();             // SP-954: 使用功率 and this activity's power that day
   const g100 = mcGrade(s.d, s.elev);
   const vals = { elev: s.elev, hr: s.hr, power: pwOn && s.power ? mcSmooth(s.t, s.power) : null, pace: mcPace(s.t, s.d),
     grade: s.grade, g100 };
@@ -3259,6 +3300,17 @@ function drawPlot(card, res, series) {
       yAxis[yiP].max = (e) => Math.ceil(Math.max(typeof pmax === "function" ? pmax(e) : pmax ?? e.max, hi) / 5) * 5;
     }
   }
+  // SP-954: the stretches of the range without valid power (res.power_spans, engine/power_display.py): the power
+  // points there are blank (the CP was stale that day, or no power), shaded and labelled 「CP 過期」/「沒有功率」
+  const PSP = !cat && (xKind === "date" || xKind === "datetime") && res.power_spans?.length ? res.power_spans : null;
+  if (PSP) {
+    const nextDay = (d) => { const [y, m, dd] = String(d).slice(0, 10).split("-").map(Number); const x = new Date(y, m - 1, dd + 1);
+      return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+    put({ type: "line", yAxisIndex: 0, data: [], _pwspan: true,
+      markArea: { silent: true, itemStyle: { color: muted, opacity: 0.1 },
+        label: { show: true, position: "insideTop", color: muted, fontSize: 10 },
+        data: PSP.map((s) => [{ xAxis: s.from, name: s.label }, { xAxis: nextDay(s.to) }]) } }, null);
+  }
   const lbl = { color: muted, fontSize: 10, hideOverlap: true };
   const axLine = { lineStyle: { color: line } };
   let xAxis;
@@ -3483,14 +3535,15 @@ function drawActHrPower(card, res) {
   const HQ = res.has_hr && res.hr_quality?.spans?.length ? res.hr_quality : null;
   const HV = hrqView(HQ);                 // SP-487 (R6): what 提示多寡 shades; the legend's ? has the seconds
   const hqAt = (x) => HV ? HV.spans.filter((r) => x >= r[0] && x < r[1]).map((r) => HQ.labels[r[2]] || r[2]) : [];
-  // 使用功率 off (settings): the HR panel alone, no power stats
-  const pwOn = S.usePower !== false, usePw = res.has_power && pwOn;
+  // 使用功率 off (settings) or no power that day (SP-954 「none」): the HR panel alone, no power stats;
+  // a stale CP that day (「stale」): the power line, average power and NP, but no CP line
+  const pwOn = pwShown(), usePw = res.has_power && pwOn, cpOn = cpShown();
   if (!pwOn) { const h = card.querySelector("h2"); if (h?.firstChild?.nodeType === 3) h.firstChild.textContent = h.firstChild.textContent.replace(t("viewer.hp.hr_power"), t("viewer.hp.hr")); }
   if (!res._zoom) card.classList.add("ac-wide");
   card.insertAdjacentHTML("beforeend", `<div class="ac-leg" aria-label="${esc(t("viewer.legend"))}">
       ${res.has_hr ? `<span><i style="border-color:${T.hr}"></i>${esc(t(pwOn ? "viewer.hp.leg_hr_top" : "viewer.hp.leg_hr"))}</span>` : ""}
       ${usePw ? `<span><i style="border-color:${T.pw}"></i>${esc(t("viewer.hp.leg_pw"))}</span>` : pwOn ? `<span>${esc(t("viewer.hp.no_power"))}</span>` : ""}
-      <span><i class="dash" style="border-color:${T.ink2}"></i>${esc(t(usePw ? "viewer.hp.refs_pw" : "viewer.hp.refs"))}</span>
+      <span><i class="dash" style="border-color:${T.ink2}"></i>${esc(t(usePw && cpOn ? "viewer.hp.refs_pw" : "viewer.hp.refs"))}</span>
       ${HV ? `<span data-hrq="${HV.shaded ? "shaded" : "quiet"}">${HV.shaded ? '<i class="hrq"></i>' : ""}${esc(HQ.legend)} ${rvQ(HV.tip)}</span>` : ""}
       <span class="hint">${esc(t("viewer.hp.drag"))} <button type="button" class="ac-clear" hidden>${esc(t("viewer.hp.clear"))}</button></span></div>`);
   const chart = actChart(card, "ac-hp", t("viewer.hp.aria"));
@@ -3516,7 +3569,7 @@ function drawActHrPower(card, res) {
   const mark = (rows) => ({ silent: true, symbol: "none", lineStyle: { color: T.ink2, type: "dashed", width: 1 }, data: rows.filter(Boolean) });
   const hrs = (res.hr || []).filter((v) => v != null), ps = (res.power || []).filter((v) => v != null);
   const hrLo = hrs.length ? Math.min(...hrs, res.ref.aet ?? Infinity) : 60, hrHi = hrs.length ? Math.max(...hrs, res.ref.lthr ?? 0) : 200;
-  const pHi = ps.length ? Math.max(...ps, res.ref.cp ?? 0) : 300;
+  const pHi = ps.length ? Math.max(...ps, cpOn ? res.ref.cp ?? 0 : 0) : 300;
   const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
   const xBase = { type: "value", min: 0, max: span, interval: iv, axisLine: { lineStyle: { color: T.line } }, axisLabel: { showMaxLabel: false },
     splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } };
@@ -3556,7 +3609,7 @@ function drawActHrPower(card, res) {
           data: HV.spans.map((r) => [{ xAxis: r[0] }, { xAxis: r[1] }]) } } : {}) },
       ...(pwOn ? [{ name: t("viewer.mapchart.power"), type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(usePw ? res.power : null), showSymbol: false, connectNulls: false,
         lineStyle: { color: T.pw, width: 1.5 }, itemStyle: { color: T.pw },
-        markLine: mark([usePw ? ref(res.ref.cp, "CP") : null]) }] : []),
+        markLine: mark([usePw && cpOn ? ref(res.ref.cp, "CP") : null]) }] : []),
     ],
   });
   chart.dispatchAction({ type: "takeGlobalCursor", key: "brush", brushOption: { brushType: "lineX", brushMode: "single" } });
@@ -3995,7 +4048,7 @@ async function drawClimbMap(card, res) {
   const mapBox = document.createElement("div"), profBox = document.createElement("div"), tblBox = document.createElement("div");
   mapBox.className = "cmmap"; profBox.className = "cmprof"; tblBox.className = "cmtbl";
   card.append(mapBox, profBox, tblBox);
-  const pwOn = S.usePower !== false;
+  const pwOn = pwShown();             // SP-954: 使用功率 and this activity's power that day
   let sel = -1, peek = -1, ctx = null, hlLayer = null, last = null;
   const shown = () => (peek >= 0 ? peek : sel);
   // a tap (touch) or a mouse click: a tap never unpicks (cmClickPick)

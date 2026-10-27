@@ -2372,7 +2372,7 @@ async function varLoad() {
   } catch (e) { box.hidden = false; $("sd-var-cur").textContent = tt("read_failed", { err: e.message }); }
 }
 function vdRow(v, cur) {
-  const meta = [v.structure, v.power, v.rest, tt("vd.tiz", { n: v.tiz_min }), v.terrain === "hill" ? tt("vd.hill", { g: v.grade }) : tt("vd.flat"),
+  const meta = [v.structure, S.noMeter ? null : v.power, v.rest,     // SP-954: no % CP without a power meter tt("vd.tiz", { n: v.tiz_min }), v.terrain === "hill" ? tt("vd.hill", { g: v.grade }) : tt("vd.flat"),
     v.last ? tt("vd.last", { day: md(v.last.date), out: v.last.outcome ? " " + (OUTC[v.last.outcome] ? tt(OUTC[v.last.outcome]) : v.last.outcome) : "" }) : tt("vd.never")].filter(Boolean);
   return `<li class="${v.key === cur && !v.reps ? "cur" : ""}${v.fits ? "" : " off"}"><span class="t">${esc(v.title)}${v.key === cur && !v.reps ? esc(tt("vd.current")) : ""}</span>
     <button class="btn" type="button" data-vk="${esc(v.key)}" data-vr="${v.reps || ""}"${v.fits ? "" : " disabled"}>${esc(tt("vd.use"))}</button>
@@ -2508,6 +2508,9 @@ function openDlg(s, day) {
   dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null, variant: null, varFor: null, vars: null, test: null,
     famTouched: false, stepsFam: null };
   $("sd-tkind").value = s && s.kind === "test" ? (s.protocol === "aet" || /AeT|飄移/.test(srcTitle(s)) ? "aet" : "cp") : "";
+  // SP-954: no power meter (③) — no CP test to add (a stored one still opens as one)
+  const cpOpt = $("sd-tkind").querySelector('option[value="cp"]');
+  if (cpOpt) cpOpt.hidden = cpOpt.disabled = !!S.noMeter && $("sd-tkind").value !== "cp";
   $("sd-tkind").dispatchEvent(new Event("change"));
   $("sd-h").textContent = tt(!s ? "ctx.add" : ro ? "sd.view" : "sd.edit");
   const d = s ? s.day : day;
@@ -3094,6 +3097,8 @@ $("ap-run").onclick = async () => {
 // day_conflicts / place). long -> long_day (one day); the others -> pref_days (≤ 2 days,
 // the first clicked = first choice). One type per row, one type per weekday; no rows = 自動.
 const PD_KINDS = ["long", "quality", "aet_test", "cp_test", "strides", "rest"];   // rest: 休息日偏好 (SP-82)
+// SP-954: no power meter (③) — no CP test day to pick (a stored row stays, and comes back with a meter)
+const pdKinds = (keep) => PD_KINDS.filter((k) => k !== "cp_test" || !S.noMeter || k === keep);
 const PD_MAX = (k) => (k === "long" ? 1 : 2);
 const WDZ = I18N.fmt.weekdays("narrow"), WDS = I18N.fmt.weekdays("short");   // 四 / T · 週四 / Thu
 const pdLabel = (k) => tt("pd.kind." + k);
@@ -3129,9 +3134,9 @@ function pdWarn(c) {                            // short + plain; rule, source a
 function pdDraw(focus) {
   const used = new Set(PD.map((r) => r.kind));
   $("pf-pd-auto").hidden = PD.length > 0;
-  $("pf-pd-add").disabled = used.size >= PD_KINDS.length;
+  $("pf-pd-add").disabled = !pdKinds().some((k) => !used.has(k));
   $("pf-pdays").innerHTML = PD.map((r, i) => {
-    const opts = PD_KINDS.map((k) => `<option value="${k}"${k === r.kind ? " selected" : ""}${k !== r.kind && used.has(k) ? " disabled" : ""}>${esc(pdLabel(k))}</option>`).join("");
+    const opts = pdKinds(r.kind).map((k) => `<option value="${k}"${k === r.kind ? " selected" : ""}${k !== r.kind && used.has(k) ? " disabled" : ""}>${esc(pdLabel(k))}</option>`).join("");
     const chips = [...WDZ].map((z, wd) => {
       const own = pdOwner(wd, r), on = r.days.includes(wd), n = r.days.length > 1 && on ? `<sup>${r.days.indexOf(wd) + 1}</sup>` : "";
       const title = own ? tt("pd.taken", { kind: pdLabel(own.kind) }) : WDS[wd];
@@ -3154,7 +3159,7 @@ function pdChanged(focus) {
   pfSync();
 }
 $("pf-pd-add").onclick = () => {
-  const used = new Set(PD.map((r) => r.kind)), k = PD_KINDS.find((x) => !used.has(x));
+  const used = new Set(PD.map((r) => r.kind)), k = pdKinds().find((x) => !used.has(x));
   if (!k) return;
   PD.push({ kind: k, days: [] });
   pdChanged(`select[data-pdk="${PD.length - 1}"]`);
@@ -3882,6 +3887,9 @@ loadPrimary();
 (async () => {
   const q = new URLSearchParams(location.search).get("day");
   S.anchor = q && /^\d{4}-\d\d-\d\d$/.test(q) ? q : isoOf(new Date());
+  // SP-954: 功率狀態 (engine/power_state.py) — ③ 沒有功率計 hides the CP test choices (asked alongside, never waited for)
+  fetch("/api/v1/plan/power-state").then((r) => r.ok ? r.json() : null).then((x) => { S.noMeter = !!x && x.meter === false; })
+    .catch(() => {});
   await load();
   if (D && !q && S.anchor !== D.today) { S.anchor = D.today; await load(); }
   // deep link from 總覽: ?uid= opens that session (planned vs actual), ?act= an activity outside the plan

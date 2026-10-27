@@ -216,9 +216,11 @@ def zone_rows(zone: dict, covered_kinds: set, scheduled: callable, days_for) -> 
         for t in sg.get("tests") or []:
             if t not in ZONE_TESTS or t in covered_kinds or scheduled(t, sg.get("detected") or ""):
                 continue
-            tests.append({"key": t, "label": ZE.TEST_LABEL.get(t, t),
+            # SP-954: a suggestion's own `labels` (zone_events.without_cp_tests: 「30 分鐘獨跑測試（LTHR）」 without a Stryd)
+            tests.append({"key": t, "label": (sg.get("labels") or {}).get(t) or ZE.TEST_LABEL.get(t, t),
                           "options": day_options(days_for(t, sg.get("earliest")))})
-        manual = [ZE.TEST_LABEL[t] for t in sg.get("tests") or [] if t not in ZONE_TESTS]
+        manual = [(sg.get("labels") or {}).get(t) or ZE.TEST_LABEL[t] for t in sg.get("tests") or []
+                  if t not in ZONE_TESTS]
         if not tests and not manual:
             continue
         help_ = "；".join(sg.get("conditions") or [])

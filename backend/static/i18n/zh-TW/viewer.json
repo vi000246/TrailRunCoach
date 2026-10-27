@@ -524,5 +524,9 @@
   "readiness.ramp_z_ok": "照計畫",
   "readiness.ramp_z_fast": "偏快",
   "readiness.ramp_z_high": "注意",
-  "readiness.pts": "{p} 點"
+  "readiness.pts": "{p} 點",
+  "pw.stale_note": "當時 CP 已 {n} 天沒測：這次只看功率線、平均功率和 NP，不算 % CP 和功率區間，強度用心率／配速判。",
+  "pw.stale_note_never": "當時還沒有 CP 測試或比賽：這次只看功率線、平均功率和 NP，不算 % CP 和功率區間，強度用心率／配速判。",
+  "pw.page_stale": "這一頁都是功率的圖（% CP、功率區間）。這次活動當天 CP 已過期，所以不顯示；功率線和平均功率在第一頁的「心率與功率」。",
+  "pw.page_none": "這一頁都是功率的圖。這次活動沒有可用的功率（沒有 Stryd，或現在沒有功率計），所以不顯示。"
 }

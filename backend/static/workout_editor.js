@@ -661,8 +661,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const t = st.target || { type: "auto" }, ty = t.type, ctx = this.ctx || {}, th = ctx.thresholds || {};
       const zones = (ctx.zones || {})[ty] || [];
       const miss = { power: !th.cp && tr("workout.no_cp"), hr: !(th.lthr || th.aet) && tr("workout.no_lthr"), pace: !th.tpace && tr("workout.no_tp") };
+      // SP-954: no power meter (context.power_meter false) — no power option, unless this step already holds one
+      const types = ["power", "hr", "pace"].filter((k) => k !== "power" || ctx.power_meter !== false || ty === "power");
       let h = `<div class="we-tg" data-tg="${st.id}"><select data-f="ttype" aria-label="${esc(tr("workout.aria_ttype"))}">` +
-        opt("auto", tr("workout.auto_by_kind"), ty) + ["power", "hr", "pace"].map((k) => opt(k, TYPE[k] + (miss[k] ? tr("workout.paren", { x: miss[k] }) : ""), ty)).join("") +
+        opt("auto", tr("workout.auto_by_kind"), ty) + types.map((k) => opt(k, TYPE[k] + (miss[k] ? tr("workout.paren", { x: miss[k] }) : ""), ty)).join("") +
         opt("rpe", tr("workout.rpe_climb_opt"), ty) + opt("none", TYPE.none, ty) + `</select>`;
       if (ty === "rpe") {
         const n = (f, v, l, mx, stp) => `<input class="num" type="number" min="${f === "tlo" || f === "thi" ? 1 : 0}" max="${mx}" step="${stp}" data-f="${f}" value="${v ?? ""}" aria-label="${l}">`;
@@ -1184,7 +1186,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       // 主課強度: the types this category's rows use; a kept choice none of them has shows 全部 (kept still)
       const avail = new Set((T.groups || []).filter((g) => g.cat === cat).flatMap((g) => g.rows.flatMap((r) => r.target_types || [])));
       const tt = avail.has(this.tplTT) ? this.tplTT : "all";
-      const ttOk = (r) => tt === "all" || (r.target_types || []).includes(tt);
+      // SP-954: no power meter — no power-only library template (Palladino / Stryd, the CP tests); my own stay
+      const noPw = (this.ctx || {}).power_meter === false;
+      const ttOk = (r) => !(noPw && !r.mine && r.basis === "power") && (tt === "all" || (r.target_types || []).includes(tt));
       const rowAt = (at) => { const [g, i] = at.split(".").map(Number); return T.groups[g].rows[i]; };
       // 我的範本 with no sub-tab of its own (a 強度課 one with no interval family): in every sub-tab
       const gs = (T.groups || []).map((g, gi) => ({ g, gi })).filter(({ g }) => g.cat === cat && (!subs.length || g.sub === this.tplSub || (g.mine && !g.sub)));
@@ -1211,7 +1215,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const list = (others || `<p class="empty">${esc(tr(!gs.length ? "workout.tpl_none"
         : gs.some(({ g }) => g.rows.some(ttOk)) ? "workout.tpl_all_in_recs" : "workout.tt_none"))}</p>`);
       const n = gs.reduce((a, { g }) => a + g.rows.filter((r) => !recKeys.has(r.key) && ttOk(r)).length, 0);
-      const tts = [{ id: "all", label: tr("workout.tt_all") }, ...(T.target_types || []).filter((x) => avail.has(x.id))];
+      const tts = [{ id: "all", label: tr("workout.tt_all") }, ...(T.target_types || []).filter((x) => avail.has(x.id) && !(noPw && x.id === "power"))];
       this.$("we-pop").innerHTML = tplFilters({ cats, cat, subs, sub: this.tplSub, tts, tt }) +
         (rec ? rec + `<details class="more" id="we-more"${this.tplMore ? " open" : ""}><summary>${esc(tr("workout.tpl_more", { n }))}</summary>${list}</details>` : list) +
         `<div class="mode" role="radiogroup" aria-label="${esc(tr("workout.tpl_mode"))}"><label><input type="radio" name="we-tm" value="full"${this.tplFull ? " checked" : ""}>${esc(tr("workout.tpl_full"))}</label><label><input type="radio" name="we-tm" value="main"${this.tplFull ? "" : " checked"}>${esc(tr("workout.tpl_main"))}</label></div>`;
@@ -1246,7 +1250,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       let xx = 0;
       const lv = (v) => v == null ? 0 : v < .75 ? 1 : v < .88 ? 2 : v < 1.01 ? 3 : v < 1.06 ? 4 : 5;
       // the colour's type: the step's own, 「自動」 the session's 目標用 (the editor's policy basis)
-      const basis = (((this.ctx || {}).policy || {}).basis) || "power";
+      // (SP-954: without a power meter the session's default is heart rate, not power)
+      const basis = (((this.ctx || {}).policy || {}).basis) || ((this.ctx || {}).power_meter === false ? "hr" : "power");
       const ty = (x) => { const t = (x.target || {}).type; return t === "auto" ? basis : t; };
       const bars = rows.map((x) => {
         const v = f(x), w = sec(x) / tot * W, h = Math.max(3, Math.min(1.3, v == null ? (x.kind === "rest" ? .45 : .55) : v) / 1.3 * H);

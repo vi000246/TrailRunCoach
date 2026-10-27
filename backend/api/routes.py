@@ -402,6 +402,26 @@ def _idx_of(f2i, file: Optional[str], start=None) -> Optional[int]:
     return hit.get("idx") if isinstance(hit, dict) else hit
 
 
+POWER_FIELDS = ("avg_power", "max_p30", "power_vam")
+
+
+def _power_off(idxs) -> set:
+    """SP-954: the workout indexes (of `idxs`) whose power is not shown — no trusted Stryd power, or no power
+    meter now (engine/power_display.py; a stale CP still shows the power, there's no % CP here)."""
+    from backend.engine import power_display as PWD
+    try:
+        ds = _ds()
+        v = PWD.View(ds)
+        return {i for i in idxs if i is not None and 0 <= i < len(ds.workouts)
+                and v.activity(ds.workouts[i])["mode"] == PWD.NONE}
+    except Exception:      # noqa: BLE001 — no Dataset: as before
+        return set()
+
+
+def _no_power(e: dict) -> dict:
+    return {**e, **{k: None for k in POWER_FIELDS if k in e}}
+
+
 def _phase_labels(days: list[dt.date]) -> list[Optional[str]]:
     try:
         from backend.engine.planning import Plan, phases
@@ -429,13 +449,17 @@ def detail(rid: str):
     for e, lab in zip(efforts, labels):
         e["phase"] = lab
         e["workout"] = _idx_of(f2i, e["file"], e.get("start"))
+    off = _power_off({e["workout"] for e in efforts})
+    efforts = [_no_power(e) if e["workout"] in off else e for e in efforts]
     favs = _favs(_index())
     out = {k: v for k, v in it.items() if k not in ("efforts", "segments", "on_routes")}
     out["name"] = names.get(rid) or it["auto_name"]
     out["renamed"] = rid in names
     out["fav"] = rid in favs
     out["efforts"] = efforts
-    out["partials"] = [dict(p, workout=_idx_of(f2i, p["file"], p.get("start"))) for p in it.get("partials") or []]
+    parts = [dict(p, workout=_idx_of(f2i, p["file"], p.get("start"))) for p in it.get("partials") or []]
+    poff = _power_off({p["workout"] for p in parts})
+    out["partials"] = [_no_power(p) if p["workout"] in poff else p for p in parts]
     items = _index()["items"]
     ref = lambda i: {"id": i, "name": names.get(i) or items[i]["auto_name"], "length_m": items[i]["length_m"],
                      "n_efforts": items[i]["n_efforts"]}
@@ -558,10 +582,18 @@ def compare(rid: str, a: str, b: str, step: float = 25.0):
                                     end_tol=R.ROUTE_END_TOL_M if it["kind"] == "route" else RM.END_TOL_M)
     ta, tb = np.asarray(series[a].pop("_t")), np.asarray(series[b].pop("_t"))
     gap = tb - ta
+    # SP-954: no power line / average power of an effort whose activity's power is not shown
+    f2i = _file_to_idx()
+    wi = {k: _idx_of(f2i, by_id[k]["file"], by_id[k].get("start")) for k in (a, b)}
+    off = _power_off(set(wi.values()))
+    brief = {k: _no_power(_brief(by_id[k])) if wi[k] in off else _brief(by_id[k]) for k in (a, b)}
+    for k in (a, b):
+        if wi[k] in off:
+            series[k]["power"] = [None] * len(series[k].get("power") or [])
     return {
         "id": rid, "length_m": round(L, 1), "x_m": [round(float(x), 1) for x in grid],
         "lat": [round(float(x), 6) for x in glat], "lon": [round(float(x), 6) for x in glon],
-        "a": {"effort": _brief(by_id[a]), **series[a]}, "b": {"effort": _brief(by_id[b]), **series[b]},
+        "a": {"effort": brief[a], **series[a]}, "b": {"effort": brief[b], **series[b]},
         "gap_s": [None if not np.isfinite(g) else round(float(g), 1) for g in gap],
     }
 

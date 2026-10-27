@@ -28,7 +28,7 @@
     const lab = document.createElement("label");
     lab.style.cssText = "display:inline-flex;gap:6px;align-items:center;font-size:12.5px;padding:2px 8px;"
       + "border:1px solid currentColor;border-radius:12px;opacity:.85";
-    lab.title = "圖表、總覽和功率計算機讀取的資料來源。COROS／TrainingPeaks 一次只用一個，在 設定 → 資料同步 切換";
+    lab.title = "圖表、總覽和賽事計算機讀取的資料來源。COROS／TrainingPeaks 一次只用一個，在 設定 → 資料同步 切換";
     const sel = document.createElement("select");
     sel.style.cssText = "font:inherit;border:0;background:transparent;color:inherit";
     for (const k of Object.keys(LABEL)) {

@@ -375,7 +375,13 @@ const GLOSS = {
     "選了某個方法但缺資料時不會永久鎖住，改照護欄排（自訂）。",
 };
 const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
-const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>`);
+const gl = (s) => esc(s).replace(GLOSS_RE, (m) => GLOSS[m] ? `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>` : m);
+// SP-954: without a power meter (③, engine/power_state.py) the AeT drift test runs at a fixed pace (SP-950 Q1-6) and
+// compares pace ÷ HR; the CP test is no term to explain (it is never suggested then)
+function glossNoMeter() {
+  GLOSS["AeT"] = GLOSS["AeT"].replace("固定功率跑 40 分鐘", "固定配速跑 40 分鐘").replace("「功率÷心率」", "「配速÷心率」");
+  delete GLOSS["CP 測試"];
+}
 async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`); return r.json(); }
 const ls = { get(k, d) { try { const v = localStorage.getItem("overview." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("overview." + k, JSON.stringify(v)); } catch {} } };
@@ -1226,7 +1232,10 @@ $("wk-ic").innerHTML = I("time");
 (async () => {
   if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
   // 使用功率 (設定): off = no CP / power fields or buttons on this page
-  USE_POWER = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
+  const us = await j("/api/v1/sync/settings").catch(() => ({}));
+  USE_POWER = us.use_power !== false;
+  // SP-954: no power meter (③) — the glossary's AeT test is at a fixed pace and there is no CP test
+  if (us.power_meter === false) glossNoMeter();
   await loadStatus().catch(fail("kpis"));
   loadPmc().catch(fail("pmc"));
   loadZ5().catch(fail("z5"));

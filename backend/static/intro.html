@@ -357,7 +357,7 @@ html.anim .reveal.in { opacity: 1; transform: none; }
       <div class="text">
         <p class="kicker" data-i18n="intro.race.kicker">比賽前</p>
         <h2 id="race-h" data-i18n="intro.race.h">賽事計算機</h2>
-        <p class="sec-lead" data-i18n="intro.race.lead">丟一條賽道 GPX，算出完賽時間、每一段的配速、功率、心率上限和補給量。</p>
+        <p class="sec-lead" data-i18n="intro.race.lead">丟一條賽道 GPX，算出完賽時間、每一段的配速、心率上限和補給量；有功率計而且 CP 有效時也算功率。</p>
         <ul>
           <li data-i18n="intro.race.li.legs">逐段配速：哪段該跑、哪段改用走的、陡下坡先求安全</li>
           <li data-i18n="intro.race.li.weather">比賽日天氣：每一段用「跑到那裡時」的氣溫和濕度算熱負荷，也算海拔</li>
@@ -426,7 +426,7 @@ html.anim .reveal.in { opacity: 1; transform: none; }
           <li data-i18n="intro.read.li.status">訓練負荷與疲勞的趨勢、本週的量、離下一場 A 賽還有幾天</li>
           <li data-i18n="intro.read.li.intervals">間歇每一趟的達成度、心率飄移，自動認出 AeT／CP 測試</li>
           <li data-i18n="intro.read.li.climb">爬升速度、登山杖有沒有用、百岳成就、同一段爬坡的進步</li>
-          <li data-i18n="intro.read.li.zones">心率與功率區間跟著你的測試和資料校正</li>
+          <li data-i18n="intro.read.li.zones">心率區間（有功率計時還有功率區間）跟著你的測試和資料校正</li>
         </ul>
         <a class="more" href="/manual/glossary" data-i18n="intro.read.more">手冊：名詞表 →</a>
       </div>
@@ -470,7 +470,7 @@ html.anim .reveal.in { opacity: 1; transform: none; }
       <details><summary data-i18n="intro.faq.watch.q">要什麼手錶？沒有 COROS 或 Garmin 可以用嗎？</summary>
         <div><p data-i18n="intro.faq.watch.a">可以。任何手錶匯出的 FIT 檔都能匯入，也能連 intervals.icu。</p><a class="more" href="/manual/start#connect" data-i18n="intro.faq.more">看手冊 →</a></div></details>
       <details><summary data-i18n="intro.faq.power.q">沒有功率計可以用嗎？</summary>
-        <div><p data-i18n="intro.faq.power.a">可以。沒有功率時改用心率：課表的目標用心率區間，只有功率才有的圖表會隱藏。</p><a class="more" href="/manual/faq#no-power" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+        <div><p data-i18n="intro.faq.power.a">可以。功率計選「沒有」時全部改用心率和配速：輕鬆跑、長跑看心率，平路間歇和節奏跑看配速，計算機用心率模型；功率的圖表、選項和 CP 測試都不出現。有功率計但 CP 超過 42 天沒測時課表也先用心率／配速，做一次 CP 測試就切回功率。</p><a class="more" href="/manual/faq#no-power" data-i18n="intro.faq.more">看手冊 →</a></div></details>
       <details><summary data-i18n="intro.faq.numbers.q">數字為什麼跟手錶不一樣？</summary>
         <div><p data-i18n="intro.faq.numbers.a">兩邊的算法和用的閾值不同，這是正常的；設定裡有 app 和手錶數值的對照。</p><a class="more" href="/manual/faq#watch-numbers" data-i18n="intro.faq.more">看手冊 →</a></div></details>
       <details><summary data-i18n="intro.faq.estimate.q">「推估」是什麼意思？</summary>

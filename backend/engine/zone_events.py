@@ -158,7 +158,23 @@ CONDITIONS = {
     "hrmax": "戴胸帶、休息充足、沒生病；暖身 15 分後 3 趟 2–3 分鐘上坡，最後一趟全力（Polar）；"
              "有心血管風險的人不要做，不舒服立刻停",
 }
+# SP-954 (owner 2026-10-27): without a Stryd (③ 沒有功率計) the 30-min test is an LTHR test only — no 「＋CP
+# 檢查」, no 30-min power against the CP
+TEST_LABEL_NO_METER = {"tt30": "30 分鐘獨跑測試（LTHR）"}
+CONDITIONS_NO_METER = {
+    "tt30": "< 25 °C、平路；暖身 15 分後 30 分鐘均勻用力（不要衝開頭），第 10 分按 lap；"
+            "LTHR＝後 20 分平均心率（Friel）",
+}
 SRC = "門檻在事件後重測：CP 變化、停跑、季節轉換（Friel；推估）"
+
+
+def test_label(t: str, meter: bool = True) -> str:
+    """A test's name (zh-TW msgid): the 30-min test without 「＋CP 檢查」 when there is no power meter."""
+    return (TEST_LABEL_NO_METER.get(t) if not meter else None) or TEST_LABEL.get(t, t)
+
+
+def test_condition(t: str, meter: bool = True) -> str:
+    return (CONDITIONS_NO_METER.get(t) if not meter else None) or CONDITIONS.get(t, "")
 
 
 def _iso(d) -> str:
@@ -936,8 +952,10 @@ def without_cp_tests(out: list[dict], ds, today: dt.date) -> list[dict]:
         tests = [t for t in s.get("tests") or [] if t != "cp"]
         if not tests:
             continue
-        if len(tests) != len(s.get("tests") or []):
-            s = {**s, "tests": tests, "conditions": [f"{TEST_LABEL[t]}：{CONDITIONS[t]}" for t in tests]}
+        # SP-954: the 30-min test is an LTHR test only without a Stryd — its name (`labels`, read by the
+        # suggestion box and the 測試 indicator) and its condition line
+        s = {**s, "tests": tests, "labels": {t: test_label(t, False) for t in tests},
+             "conditions": [f"{test_label(t, False)}：{test_condition(t, False)}" for t in tests]}
         kept.append(s)
     return kept
 

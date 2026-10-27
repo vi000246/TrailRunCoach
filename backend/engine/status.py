@@ -1118,7 +1118,7 @@ class Status:
                 txt, v = _("建議測"), s0["title"]
             why += SEP + SEP.join(s["title"] for s in firm)
             act = (act + SEP if act else "") + _("建議（不會自動排課）：{tests}", tests=_("、").join(
-                _(ZE.TEST_LABEL[t]) for t in s0["tests"]))
+                _((s0.get("labels") or {}).get(t) or ZE.TEST_LABEL[t]) for t in s0["tests"]))   # SP-954: labels
         extra["cp_due"] = cp_due
         extra["aet_date"] = ae.isoformat() if ae else None
         extra["aet_last_test"] = at["date"] if at else None

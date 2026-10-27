@@ -2258,6 +2258,9 @@ def _context(env: dict) -> dict:
                            for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source",
                                      "thr_warn", "aet_measured")},
             "tpace_link": tpace_link(),
+            # SP-954: no power meter (③, engine/power_state.py) — the editor offers no power target (a stored one
+            # stays as it is); a power meter again brings the option back
+            "power_meter": ((th.get("power_state") or {}).get("meter", True) is not False),
             "zones": WS.zones_table(env["ctx"]), "policy": pol,
             "basis_label": _basis_label(pol),
             "cap": env["cap"], "cap_mode": env["cap_mode"], "rung": env["rung"],
