@@ -192,14 +192,24 @@ def test_taper_context_and_sore():
 
 # ---- week_plan + projection -----------------------------------------------------------------
 
-def _week(ev_day, prefs=None):
+FRESH_CP_TEST = "2026-09-16"     # 14 days before TODAY: the CP is fresh (SP-950 ①, power in effect)
+
+
+def _week(ev_day, prefs=None, cp_test=None, profile=None, tpace=None):
+    """`cp_test`: a CP test row on that day (SP-950: the fixture's 2026-08-01 CP is 60 days old on TODAY — ②,
+    no watts — so the ① tests add a fresh one); `profile`: the plan's profile (③: power_source none);
+    `tpace`: the week's threshold pace (s/km)."""
     ds = _history(TODAY)
     plan = _plan_with("2027-06-01", 1, TODAY)
+    if cp_test:
+        plan.thresholds.append(P.Threshold(cp_test, cp=250.0))
+    if profile is not None:
+        plan.profile = profile
     plan.events = [Event("e1", "越野賽", ev_day, kind="race", priority="A", distance_km=30, climbing_m=2000,
                          est_hours=5.0)]
     ds.plan = plan
     st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
-    return ds, plan, O.week_plan(ds, st, TODAY, prefs=prefs)
+    return ds, plan, O.week_plan(ds, st, TODAY, prefs=prefs, tpace=tpace)
 
 
 def test_week_plan_and_projection_in_the_taper():
@@ -281,8 +291,10 @@ def test_taper_quality_target_follows_the_basis_and_never_keeps_the_old_text():
 
 
 def test_week_plan_and_projection_taper_quality_take_the_templates_target():
-    """SP-408: week_plan and the projection pass the CP and the threshold row to the taper rules."""
-    ds, plan, wp = _week("2026-10-10")
+    """SP-408: week_plan and the projection pass the CP and the threshold row to the taper rules (① power in
+    effect: a CP test 14 days ago, SP-950)."""
+    ds, plan, wp = _week("2026-10-10", cp_test=FRESH_CP_TEST)
+    assert wp["thresholds"]["power_state"]["state"] == "power"
     cp = float(wp["thresholds"]["cp"])
 
     def want(t):
@@ -297,6 +309,44 @@ def test_week_plan_and_projection_taper_quality_take_the_templates_target():
     race_wk = next(w for w in weeks if w["start"] == "2026-10-05")
     pq = [x for x in race_wk["sessions"] if x["kind"] == "quality"]
     assert pq and all(x["target"].startswith(want(O.TAPER_SHORT)) for x in pq)
+
+
+TPACE = 400.0
+
+
+def _no_power_text(x) -> bool:
+    import re
+    return not any(re.search(r"% CP|\d\s*W\b", x.get(k) or "") for k in ("title", "target", "detail"))
+
+
+def test_week_plan_and_projection_taper_quality_without_a_power_meter_take_pace():
+    """SP-951 (③ counterpart of the one above): no power meter — the flat 短強度 2×3 分 by % threshold pace
+    with the HR cap, the 越野 上坡節奏跑 by HR; no watts, no % CP in the target or the 說明; the structure
+    and the push read the template's band (variant_adj)."""
+    from backend.engine import target_policy as TP
+    from backend.engine import workout_steps as WS
+    from backend.sync import coros_workouts as CW
+    ds, plan, wp = _week("2026-10-10", cp_test=FRESH_CP_TEST, profile={"power_source": "none"}, tpace=TPACE)
+    th = wp["thresholds"]
+    assert th["power_state"]["state"] == "none" and th["cp"] is None
+    hills = (O.TAPER_FULL["trail"]["title"], O.TAPER_CUT["trail"]["title"])
+    q = [x for x in wp["sessions"] if x["kind"] == "quality" and x["day"] and not x["done"]
+         and x["title"] in hills + (O.TAPER_SHORT["title"],)]
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 18), events=plan.events)
+    race_wk = next(w for w in weeks if w["start"] == "2026-10-05")
+    pq = [x for x in race_wk["sessions"] if x["kind"] == "quality"]
+    assert pq
+    for x in q + pq:
+        assert _no_power_text(x), x
+        if x["title"] == O.TAPER_SHORT["title"]:
+            assert x["target"].startswith(TP.pace_text(0.98, 1.02, TPACE)) and "心率 ≤ " in x["target"]
+            assert "閾值配速" in x["detail"]
+            work = WS.derive(x, th)["items"][1]["items"][0]
+            assert (work["target"]["lo"], work["target"]["hi"]) == (0.98, 1.02)
+            rep = CW.session_steps({**x, "basis": "pace"}, CW.Thresholds.of(th))[1]
+            assert rep.steps[0].intensity[0] == "pace"
+        else:
+            assert x["target"].startswith("心率 ") and "配速" not in x["target"]
 
 
 # ---- SP-411: the 減量期 trail template's minutes are the structure's ---------------------------------
@@ -468,7 +518,9 @@ def test_week_plan_and_projection_taper_z3_pick_takes_zone_3(monkeypatch):
     off here so the pick itself is seen (they rewrite it on the taper's days; a pick before the taper start
     or on a day they leave keeps it)."""
     monkeypatch.setattr(O, "taper_rules", lambda ss, *a, **k: ss)
-    ds, plan, wp = _week("2026-10-10")          # this week (9/28–) and the next are 減量期 weeks
+    # this week (9/28–) and the next are 減量期 weeks; ① power in effect (a CP test 14 days ago, SP-950)
+    ds, plan, wp = _week("2026-10-10", cp_test=FRESH_CP_TEST)
+    assert wp["thresholds"]["power_state"]["state"] == "power"
     th = wp["thresholds"]
     z3 = O.z3_hr_text(th.get("hr_model"), th.get("aet"), th.get("lthr"))
     assert z3
@@ -478,3 +530,26 @@ def test_week_plan_and_projection_taper_z3_pick_takes_zone_3(monkeypatch):
     assert cur and proj
     for x in cur + proj:
         assert x["target"].endswith(z3) and "88–95% CP" in x["target"]
+
+
+def test_week_plan_and_projection_taper_z3_pick_without_a_power_meter_takes_pace(monkeypatch):
+    """SP-951 (③ counterpart): the 2×8′ pick (有氧間歇（巡航）, flat) by % threshold pace of its 88–95 % CP with
+    the Zone 3 row's top as the HR cap; the 說明 says the pace too; the band travels in variant_adj."""
+    import re
+    from backend.engine import target_policy as TP
+    from backend.engine import workout_steps as WS
+    monkeypatch.setattr(O, "taper_rules", lambda ss, *a, **k: ss)
+    ds, plan, wp = _week("2026-10-10", cp_test=FRESH_CP_TEST, profile={"power_source": "none"}, tpace=TPACE)
+    th = wp["thresholds"]
+    assert th["power_state"]["state"] == "none"
+    z3 = O.z3_hr_text(th.get("hr_model"), th.get("aet"), th.get("lthr"))
+    top = re.search(r"(\d+)\s*bpm", z3).group(1)
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 11), events=plan.events)
+    cur = [x for x in wp["sessions"] if x["title"] == O.TAPER_Z3["title"]]
+    proj = [x for w in weeks for x in w["sessions"] if x["title"] == O.TAPER_Z3["title"]]
+    assert cur and proj
+    for x in cur + proj:
+        assert x["target"] == f"{TP.pace_text(0.88, 0.95, TPACE)} · 心率 ≤ {top} bpm"
+        assert _no_power_text(x) and "105–114% 閾值配速" in x["detail"]
+        work = WS.derive(x, th)["items"][1]["items"][0]
+        assert (work["target"]["lo"], work["target"]["hi"]) == (0.88, 0.95)

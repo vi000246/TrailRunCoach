@@ -29,6 +29,7 @@ import datetime as dt
 from typing import Optional
 
 from backend.engine import interval_library as IL
+from backend.engine import target_policy as TP
 from backend.i18n import N_, _
 
 LOCKED = "locked"                      # plan_sessions.swap of a Zone 5 session added before the track opened
@@ -86,7 +87,7 @@ def ladder(family: str, gate: Optional[dict], th: Optional[dict], *, cap: Option
         dose = _dose(gate, track)
         if dose.get("faded"):
             pre = (dose.get("note") or "") + pre
-    tth = {k: th.get(k) for k in ("cp", "lthr", "aet", "hr_model", "power_model")}
+    tth = TP.text_th(th)               # SP-951: + tpace / power_state (target_policy.flat_pace)
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
     if locked:
         f = {**f, "equiv": False, "progress": False, "rung": rung, "reason": _(LOCKED_NOTE)}
@@ -181,7 +182,7 @@ def aerobic(inp: dict, day: Optional[str], gate: Optional[dict], th: Optional[di
                if s.get("kind") == "quality" and _is_z5(s))
     left = None if total is None else max(0.0, total - used)
     th = th or {}
-    tth = {k: th.get(k) for k in ("cp", "lthr", "aet", "hr_model", "power_model")}
+    tth = TP.text_th(th)               # SP-951: + tpace / power_state (target_policy.flat_pace)
     s = O.ladder_session(gate, it, kind, tth, hours, prefs, O.variant_history(wk["monday"] or _date(day)
                                                                                 or dt.date.today(), gate),
                          mountain, road, cap, None, None, left=left, hill=hill)

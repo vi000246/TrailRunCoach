@@ -196,13 +196,30 @@ def _num(pat: str, text: str, default: Optional[int] = None, group: int = 1) -> 
 
 
 def _basis(s: dict) -> Optional[str]:
-    """hr / power / none from engine/target_policy (push_dict resolves it with the 課表偏好;
+    """hr / power / pace / none from engine/target_policy (push_dict resolves it with the 課表偏好;
     a session without it is resolved here with the defaults)."""
     b = s.get("basis")
-    if b in ("hr", "power", "none"):
+    if b in ("hr", "power", "pace", "none"):
         return b
     from backend.engine import target_policy as TP
     return TP.target_policy(s)["basis"]
+
+
+def _hill(s: dict) -> bool:
+    """A hill session (target_policy.session_type): a band there never goes to pace (SP-951)."""
+    from backend.engine import target_policy as TP
+    return TP.session_type(s) == "hill"
+
+
+def _pace_work(s: dict, th: Thresholds, lo: float, hi: float, cls: Optional[str]) -> Optional[tuple]:
+    """SP-951: a flat interval rep by pace — the band the rep is judged by (zones.watch_band, as on power)
+    at threshold pace ÷ (% CP) (target_policy.pace_band; COROS intensityType 3, faster bound first);
+    no threshold pace (or a hill) → the class's HR band (workout_steps.resolve's fallback)."""
+    if th.tpace and not _hill(s):
+        from backend.engine.target_policy import pace_band
+        a, b = pace_band(*watch_band(lo, hi), th.tpace)
+        return ("pace", round(a), round(b))
+    return _work_hr(s, th, cls)
 
 
 HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "Z5": (1.00, 1.05)}   # × LTHR (aet = the AeT)
@@ -269,6 +286,8 @@ def _variant_steps(s: dict, th: Thresholds) -> Optional[list[StepLike]]:
     work_int = power(th, *watch_band(*IL.plan_band(v, th.pzm)))
     if _basis(s) == "hr":
         work_int = _work_hr(s, th, v.cls) or work_int
+    elif _basis(s) == "pace":                   # SP-951 (workout_steps.resolve: the same band)
+        work_int = _pace_work(s, th, *IL.plan_band(v, th.pzm), v.cls)
     elif _basis(s) == "none":
         work_int = None
     out: list[StepLike] = []
@@ -309,11 +328,19 @@ def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
     pm = re.search(r"(\d+)\s*[–-]\s*(\d+)\s*%\s*CP", detail + " " + target)
     if pm:
         plo, phi = int(pm.group(1)) / 100.0, int(pm.group(2)) / 100.0
+    from backend.engine.workout_steps import text_band
+    tb = text_band(s)
+    if tb:
+        plo, phi = tb                       # SP-951: the band carried apart (= workout_steps._quality_text)
     from backend.engine.power_zone_plan import band as pz_band
     work_int = power(th, *watch_band(*pz_band(plo, phi, th.pzm)))   # SP-378 / SP-363 (see _variant_steps)
     # 課表偏好 間歇目標 = 心率 (engine/plan_prefs.py): the target carries only a heart-rate range
     hm = re.search(r"心率\s*(\d+)\s*[–-]\s*(\d+)\s*bpm", target)
-    if (hm and "功率" not in target) or s.get("basis") == "hr":
+    hr_only = bool(hm) and "功率" not in target and "配速" not in target     # = workout_steps._quality_text
+    if s.get("basis") == "pace" and not hr_only:
+        # SP-951: a flat interval by pace (workout_steps._quality_text's auto band, resolved the same way)
+        work_int = _pace_work(s, th, *pz_band(plo, phi, th.pzm), None)
+    elif hr_only or s.get("basis") in ("hr", "pace"):
         work_int = _work_hr(s, th, None) or work_int
     elif s.get("basis") == "none":
         work_int = None
@@ -477,7 +504,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: b
             st = WS.normalize(s["steps"])
         except WS.StepsError as e:
             raise Unsupported(_("課表結構有誤：{err}", err=e))
-        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm,
+        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hill=_hill(s), hrz=th.hrz, pzm=th.pzm,
                    sent_tl=sent_tl, walk=th.walk_of(s), ep=ep, ep_power=bool(s.get("ep_power")))
         return WS.steps_to_coros(st, c)
     if kind == "notice":
@@ -489,7 +516,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: b
         d = WS.derive(s) if not s.get("variant_key") and WS.me_climb(s) else None
         if d is not None:
             # 「ME 負重爬坡」 (SP-443): warm-up, the climb, the descent — the editor's structure, pushed as it is
-            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm,
+            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hill=_hill(s), hrz=th.hrz, pzm=th.pzm,
                        sent_tl=sent_tl, walk=th.walk_of(s))
             return WS.steps_to_coros(WS.normalize(d), c)
         return _quality_steps(s, th)
@@ -506,7 +533,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: b
         # pushed as it is
         d = WS.derive(s)
         if d is not None:
-            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm,
+            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hill=_hill(s), hrz=th.hrz, pzm=th.pzm,
                        sent_tl=sent_tl, walk=th.walk_of(s))
             return WS.steps_to_coros(WS.normalize(d), c)
     mp = WS.mp_minutes(s) if kind == "long" else None
@@ -757,7 +784,7 @@ def _load_records(s: dict, th: Thresholds, sent: Optional[dict] = None) -> list:
         st = WS.normalize(s["steps"])
     except WS.StepsError:
         return []
-    c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, pzm=th.pzm, sent_tl=sent,
+    c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hill=_hill(s), hrz=th.hrz, pzm=th.pzm, sent_tl=sent,
                walk=th.walk_of(s))
     return WS.load_records(st, c)
 

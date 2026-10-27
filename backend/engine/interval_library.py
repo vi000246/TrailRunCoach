@@ -333,6 +333,10 @@ def warm_floor(v: Variant, prefs=None) -> int:
     return max(int(v.warm_floor or 0), floor_min(prefs))
 
 
+# SP-951: the city warm-up's words without power in effect (② / ③: no % CP in a 說明)
+CITY_NO_POWER = N_("輕鬆跑暖身 {c} 分（可以就是跑到間歇地點；照輕鬆跑心率，最後 2 分漸進）")
+
+
 def _warm(v: Variant, level: str, c: int) -> list:
     """The warm-up blocks of a level with a `c`-minute city part (§C3)."""
     z5 = is_z5(v)
@@ -839,22 +843,41 @@ def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False,
     # 課表功率區間 (SP-363): the rep's band in the chosen set (Palladino: the variant's own)
     blo, bhi = plan_band(v, pm)
     band = f"{blo * 100:.0f}–{bhi * 100:.0f}% CP"
-    parts = [_("功率 {lo}–{hi} W（{band}）", lo=f"{blo * cp:.0f}", hi=f"{bhi * cp:.0f}", band=band)] if cp \
-        else [f"RPE 8（{band}）"]
+    # SP-951: a flat rep with power not in effect (② / ③) or 配速 picked → % threshold pace, the HR as a
+    # cap note (target_policy.flat_pace / pace_text; the card's summary says the same)
+    from backend.engine import target_policy as TP
+    pace = v.terrain != "hill" and TP.flat_pace(th, prefs)
+    if pace:
+        parts = [TP.pace_text(blo, bhi, float(th["tpace"]))]
+        band = TP.pace_pct_text(blo, bhi, float(th["tpace"]))      # the 說明's 「3×8 分，105–114% 閾值配速」
+    elif cp:
+        parts = [_("功率 {lo}–{hi} W（{band}）", lo=f"{blo * cp:.0f}", hi=f"{bhi * cp:.0f}", band=band)]
+    else:
+        # no CP: RPE; power not in effect (SP-950 ② / ③) → no % CP in the 目標 either
+        parts = ["RPE 8" if TP.no_power(th) else f"RPE 8（{band}）"]
     # SP-493: under the 儲備心率 / 最大心率 課表心率區間 the HR is the class's zone of that model (what the
     # push gives a library step, hr_profile.work_band) — not × LTHR; the LTHR model keeps HR_LTHR
     from backend.engine.hr_profile import class_hr
     zb = class_hr(th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None, v.cls)
+    hr = None
     if zb and use_hr and (v.cls != "Z5" or min(v.works) >= 180):
-        parts.append(_hr_text(zb[0], zb[1], v.cls == "Z5"))
+        hr = (zb[0], zb[1])
     elif zb:
         pass                                        # a short Z5 rep: no HR, as under the LTHR model
     elif use_hr and v.cls == "Z3sub" and aet:
-        parts.append(_hr_text(f"{aet:.0f}", f"{lthr:.0f}"))
+        hr = (f"{aet:.0f}", f"{lthr:.0f}")
     elif use_hr and v.cls in HR_LTHR and (v.cls != "Z5" or min(v.works) >= 180):
         a, b = HR_LTHR[v.cls]
-        parts.append(_hr_text(f"{a * lthr:.0f}", f"{b * lthr:.0f}", v.cls == "Z5"))
+        hr = (f"{a * lthr:.0f}", f"{b * lthr:.0f}")
+    if hr is not None:
+        parts.append(TP.cap_text(hr[1]) if pace else _hr_text(hr[0], hr[1], v.cls == "Z5"))
+    nop = TP.no_power(th)
+    if nop and not pace:
+        # SP-951 (owner: no % CP / watts anywhere without power in effect): the 說明's band in HR / RPE words
+        band = _hr_text(hr[0], hr[1], v.cls == "Z5") if hr is not None else "RPE 8"
     b = blocks(v, lv, prefs)
+    if nop:
+        b = {**b, "warm": [(c, m, _(CITY_NO_POWER, c=m) if c == "city" else t) for c, m, t in b["warm"]]}
     total = int(round(total_min(v, lv, prefs)))
     # the 說明 (SP-905: parts joined by 「；」「。」, each one msgid): the reason, then the gate's prefix (no
     # separator after it — a msgid ending in 「：」 / 「，」) with the 個人化間歇 note or the main set, the rest,
@@ -874,7 +897,7 @@ def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False,
         # (no prefs there) build the same warm-up
         adj["warm"] = warm_floor(v, prefs)
     return {"id": "quality", "kind": "quality", "title": title(v), "minutes": total,
-            "target": " · ".join(parts), "detail": detail, "source": v.src,
+            "target": " · ".join(parts), "detail": detail, "source": TP.source_without_power(v.src, th),
             "tss": total / 60.0 * RATE.get(v.cls, 70.0),
             "terrain": "trail" if v.terrain == "hill" else None,
             "variant_key": v.key, "rung_key": f.get("rung") or v.rung, "equiv": bool(f["equiv"]),

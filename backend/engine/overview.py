@@ -1194,8 +1194,8 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         # the progression state machine's verdict (quality_gate.dose_step)
         pre = (dose.get("note") or _("上次間歇沒有達標：")) + pre
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
-    tth = {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet"), "hr_model": th.get("hr_model"),
-           "power_model": th.get("power_model")}
+    from backend.engine import target_policy as TP
+    tth = TP.text_th(th)                    # SP-951: + the threshold pace and the power state (flat_pace)
     if spec is QG.SUB:
         # a ramp week (CTL ramp at load_guard's watch line): T1's content, never a ladder step (neutral)
         f = IL.fit("z3a", cap, (), prefs, mountain)
@@ -1203,7 +1203,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
                             "reason": _("長期負荷週增量（Chronic load ramp）≥ +5（Friel）：本週只排閾值，不算進階")},
                            tth, pre, lthr_default, prefs)
         s["title"] = QG.SUB[1]
-        s["source"] = QG.source(gate, spec)
+        s["source"] = TP.source_without_power(QG.source(gate, spec), th)
         return s
     rung = spec[0]
     budget = QG.z3_budget_min(hours, bool(dec.get("first"))) if rung in IL.Z3_TRACK else None
@@ -1227,7 +1227,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
                             "reason": f"{why}；{f['reason']}"}, tth, pre, lthr_default, prefs, swap="cap")
         if f["action"] == "move" and f.get("move_wd") is not None:
             s["prefer_days"] = [f["move_wd"]]
-        s["source"] = QG.source(gate, (f"{s['source']}；{QG.SRC_Z3['volume']}",))
+        s["source"] = TP.source_without_power(QG.source(gate, (f"{s['source']}；{QG.SRC_Z3['volume']}",)), th)
         if notes is not None:
             notes.append({"level": "info", "src": "z3",
                           "text": _("{why}（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算；UA：起步約 5%）",
@@ -1246,7 +1246,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
                         variant=IL.structure(fc['variant']))
                 s = IL.session_for({**fc, "rung": rung, "equiv": True, "progress": True, "action": "ok",
                                     "reason": f"{why}；{fc['reason']}"}, tth, pre, lthr_default, prefs, swap="cap")
-                s["source"] = QG.source(gate, (s["source"],))
+                s["source"] = TP.source_without_power(QG.source(gate, (s["source"],)), th)
                 if notes is not None:
                     notes.append({"level": "info", "src": "z3", "text": why})
                 return s
@@ -1254,10 +1254,10 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         s = IL.session_for(f, tth, pre, lthr_default, prefs, swap="cap" if by_cap else "auto")
         if f["action"] == "move" and f.get("move_wd") is not None:
             s["prefer_days"] = [f["move_wd"]]
-        s["source"] = QG.source(gate, (s["source"],))
+        s["source"] = TP.source_without_power(QG.source(gate, (s["source"],)), th)
         return s
-    s = QG.session(spec, tth, pre, hours, lthr_default)
-    s["source"] = QG.source(gate, spec)
+    s = QG.session(spec, tth, pre, hours, lthr_default, prefs)
+    s["source"] = TP.source_without_power(QG.source(gate, spec), th)
     return s
 
 
@@ -1353,10 +1353,16 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
             # `th` = the week's thresholds (week_plan's tt / the projection's): its easy-run cap first
             z3 = z3_hr_text(th.get("hr_model"), (th.get("easy_cap") or {}).get("value") or th.get("aet"),
                             th.get("lthr"))
-            s = dict(TAPER_Z3, target=taper_q_target({**TAPER_Z3, **TAPER_Z3_TARGET}, th.get("cp"),
-                                                     tgt.get("threshold", ""), prefs, z3))
+            tz = {**TAPER_Z3, **TAPER_Z3_TARGET}
+            s = dict(TAPER_Z3, target=taper_q_target(tz, th.get("cp"), tgt.get("threshold", ""), prefs, z3, th),
+                     **taper_no_power(tz, th, prefs, z3))
         elif kind == "taper":
-            s = dict(TAPER_Q, target=tgt.get("threshold", ""))
+            # SP-951: by pace when the flat intervals are (its 98–102 % CP, TAPER_Q's 說明); else the threshold row
+            from backend.engine import target_policy as TP
+            tq = {**TAPER_Q, "power_pct": TAPER_Q_PCT}
+            s = dict(TAPER_Q, target=taper_q_target(tq, None, tgt.get("threshold", ""), prefs, "", th)
+                     if TP.flat_pace(th, prefs) else tgt.get("threshold", ""),
+                     **taper_no_power(tq, th, prefs, tgt.get("threshold", "")))
         else:
             s = ladder_session(gate, it, kind, th, hours, prefs, history, mountain, road, cap, alt_caps, notes,
                                left=left, hill=hill)
@@ -1455,11 +1461,11 @@ def _second_z3(gate: dict, built: dict, it: dict, th: dict, hours: Optional[floa
     f = {"variant": v, "level": "min" if cap is not None else "std", "reps": n if n != canon.n else None,
          "equiv": True, "progress": False, "reason": why, "action": "ok", "rung": rung, "base": canon}
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
-    s = IL.session_for(f, {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet"),
-                           "hr_model": th.get("hr_model"), "power_model": th.get("power_model")},
+    from backend.engine import target_policy as TP
+    s = IL.session_for(f, TP.text_th(th),
                        QG.prefix(gate),
                        lthr_default, prefs, swap="cap")
-    s["source"] = QG.source(gate, (f"{s['source']}；{QG.SRC_Z3['volume']}",))
+    s["source"] = TP.source_without_power(QG.source(gate, (f"{s['source']}；{QG.SRC_Z3['volume']}",)), th)
     if notes is not None:
         notes.append({"level": "info", "src": "z3", "text": why})
     return s
@@ -1501,12 +1507,12 @@ def _shorten(s: dict, left: float, total: float, hours: float, th: dict, gate: d
     n = max(floor, min(v.n - 1, int(left * 60 // max(1, max(v.works)))))
     r = IL.with_reps(v, n)
     why = _("{head} → 減成 {n} 趟（縮量版，不算進階）", head=head, n=n)
+    from backend.engine.target_policy import source_without_power, text_th
     out = IL.session_for({"variant": r, "level": s.get("variant_blocks") or "std", "reps": n, "equiv": False,
                           "progress": False, "reason": why, "rung": s.get("rung_key")},
-                         {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet"),
-                          "hr_model": th.get("hr_model"), "power_model": th.get("power_model")}, "",
+                         text_th(th), "",
                          bool((gate.get("lthr") or {}).get("default")), prefs, swap="cap")
-    out["source"] = f"{s.get('source') or ''}；{QG.SRC_Z3['share']}"
+    out["source"] = source_without_power(f"{s.get('source') or ''}；{QG.SRC_Z3['share']}", th)
     if notes is not None:
         notes.append({"level": "info", "src": "quality_share", "text": why})
     return out
@@ -1644,6 +1650,7 @@ TAPER_Z3 = dict(id="quality", kind="quality", title="有氧間歇（巡航）2×
 # card says the template's % CP in watts and the Zone 3 row's HR (taper_q_target / z3_hr_text), not the
 # week's threshold row (Zone 4) TAPER_Q keeps; the structure and the push read the same
 TAPER_Z3_TARGET = dict(power_pct=(0.88, 0.95), hr_cls="Z3sub")
+TAPER_Q_PCT = (0.98, 1.02)          # TAPER_Q's 「98–102% CP」 (SP-951: its pace target in ② / ③)
 # the base-phase strides for 路跑 (instead of hill sprints): title, detail, source suffixes
 # (SP-905: the detail / source parts after 「；」 are msgids)
 ROAD_STRIDES = ("＋加速跑 6×20 秒", "；" + N_("最後 6 趟 20 秒平路加速跑（快而放鬆，不是衝刺），慢跑回來"),
@@ -2092,6 +2099,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             # ② (owner 2026-10-27): always say how old the CP is and that one CP test brings power back —
             # not in a new runner's first weeks (SP-288: no CP test is suggested there either)
             notes.append({"level": "watch", "src": "power_state", "text": pst["reason"]})
+    # SP-951: the session builders read the threshold pace and the power state (target_policy.flat_pace:
+    # the flat intervals by pace in ② / ③ or with 配速 picked)
+    tt = {**tt, "tpace": tpace, "power_state": pst}
     tgt = _targets(tt)
     # the easy-run cap of every session: 課表心率區間 (設定; engine/hr_profile.py) — a measured AeT,
     # else the chosen COROS model's Z2 top; an estimated AeT no longer caps (owner 2026-10-03).
@@ -2712,7 +2722,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # 減量期規則 (SP-96): quality by days to the race, the last long run, no hard downhill / climbing
     sessions = taper_rules(sessions, t_ctx, monday, notes, road, today, easy_target=tgt.get("z2", ""),
                            cp=tt.get("cp"), q_target=tgt.get("threshold", ""), prefs=PR,
-                           z3_target=z3_hr_text(hrz, aet, tt.get("lthr")))
+                           z3_target=z3_hr_text(hrz, aet, tt.get("lthr")), th=tt)
     # 賽後的日子 (SP-98): no run the first 2 days, ≤ 40 min the first week, flat after a big downhill
     sessions = PR_.apply(sessions, PR_.a_windows(phs, plan_events, monday), monday, notes, today, bmap,
                          easy_target=tgt.get("z2", ""))
@@ -3656,21 +3666,32 @@ def z3_hr_text(hrz: Optional[dict], aet: Optional[float], lthr: Optional[float])
     return _("心率 {lo}–{hi} bpm", lo=b[0], hi=b[1]) if b else ""
 
 
-def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=None, z3_target: str = "") -> str:
+def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=None, z3_target: str = "",
+                   th: Optional[dict] = None) -> str:
     """The target text of a 減量期 quality template (SP-408): 「功率 lo–hi W（lo–hi% CP）」 from its
     power_pct × `cp` (the structure and the push read the same %; the watch gets SP-378's wider band)
     and the 心率 part of `q_target` (the week's threshold row, as the session it replaces had) — of
     `z3_target` (z3_hr_text: the Zone 3 row, the user 2026-10-13) for a Z3sub template (hr_cls, the
     越野 88–95 % CP ones) — kept by the 目標依據 as plan_prefs.shape does. No CP / no HR text: that
-    part is left out."""
+    part is left out. SP-951: a flat template whose intervals run by pace (`th`: the plan thresholds,
+    target_policy.flat_pace) → 「配速 …（% 閾值配速）」 and the HR's top as the cap note."""
     from backend.engine import target_policy as TP
     parts = []
     lo, hi = tmpl.get("power_pct") or (None, None)
+    hr_src = z3_target if tmpl.get("hr_cls") == "Z3sub" else q_target
+    hr_parts = [p.strip() for p in (hr_src or "").split("·") if p.strip().startswith("心率")]
+    flat = TP.session_type({**tmpl, "id": "quality"}) == "interval"
+    if th is not None and flat and lo is not None and hi is not None and TP.flat_pace(th, prefs):
+        parts.append(TP.pace_text(lo, hi, float(th["tpace"])))
+        import re
+        top = re.search(r"(\d+)\s*bpm", hr_parts[0]) if hr_parts else None       # 「心率 a–b bpm」 → b
+        if top:
+            parts.append(TP.cap_text(top.group(1)))
+        return " · ".join(parts)
     if cp and lo is not None and hi is not None:
         parts.append(_("功率 {lo:.0f}–{hi:.0f} W（{plo:.0f}–{phi:.0f}% CP）", lo=lo * cp, hi=hi * cp, plo=lo * 100,
                        phi=hi * 100))
-    hr_src = z3_target if tmpl.get("hr_cls") == "Z3sub" else q_target
-    parts += [p.strip() for p in (hr_src or "").split("·") if p.strip().startswith("心率")]
+    parts += hr_parts
     text = " · ".join(parts)
     pol = TP.target_policy({**tmpl, "id": "quality"}, prefs)
     if pol["chosen"] in ("hr", "power"):
@@ -3678,9 +3699,43 @@ def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=No
     return text
 
 
+# SP-951 (owner: no % CP / watts anywhere without power in effect): the 減量期 templates' 說明 parts that
+# say a % CP, and their words with the band in pace / HR / RPE (taper_no_power)
+TAPER_DETAIL_NO_POWER = {
+    N_("保留強度、不累積疲勞（98–102% CP）"): N_("保留強度、不累積疲勞（{band}）"),
+    N_("保留強度、量減半（88–95% CP）"): N_("保留強度、量減半（{band}）"),
+    N_("減量期最後一次完整強度課：4–8% 緩坡、3 區（88–95% CP），慢跑下來恢復、下坡放鬆不衝"):
+        N_("減量期最後一次完整強度課：4–8% 緩坡、3 區（{band}），慢跑下來恢復、下坡放鬆不衝"),
+    N_("4–8% 緩坡、3 區（88–95% CP），下坡放鬆不衝"): N_("4–8% 緩坡、3 區（{band}），下坡放鬆不衝"),
+    N_("賽前 3–5 天最後一次短強度：量減半，98–102% CP，休 2 分慢跑"):
+        N_("賽前 3–5 天最後一次短強度：量減半，{band}，休 2 分慢跑"),
+}
+
+
+def taper_no_power(tmpl: dict, th: Optional[dict], prefs=None, hr_src: str = "") -> dict:
+    """SP-951: a 減量期 template's fields when power is not in effect (② / ③; `th`: the plan thresholds):
+    the 說明 with its % CP said as % threshold pace (a flat template whose intervals run by pace,
+    target_policy.flat_pace), else the HR of `hr_src` (the row its target took), else 「RPE 8」; the band
+    in variant_adj (quality_gate.band_adj — the structure and the push read it there). {} with power."""
+    from backend.engine import quality_gate as QG
+    from backend.engine import target_policy as TP
+    lo, hi = tmpl.get("power_pct") or (None, None)
+    if th is None or lo is None or hi is None or not TP.no_power(th):
+        return {}
+    flat = TP.session_type({**tmpl, "id": "quality"}) == "interval"
+    if flat and TP.flat_pace(th, prefs):
+        band = TP.pace_pct_text(lo, hi, float(th["tpace"]))
+    else:
+        band = next((p.strip() for p in (hr_src or "").split("·") if p.strip().startswith("心率")), "RPE 8")
+    parts = [(_(TAPER_DETAIL_NO_POWER[p], band=band) if p in TAPER_DETAIL_NO_POWER else p)
+             for p in (tmpl.get("detail") or "").split("；")]
+    return {"detail": "；".join(parts), "variant_adj": QG.band_adj(lo, hi)}
+
+
 def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[list] = None,
                 road: bool = False, today: Optional[dt.date] = None, easy_target: str = "",
-                cp: Optional[float] = None, q_target: str = "", prefs=None, z3_target: str = "") -> list:
+                cp: Optional[float] = None, q_target: str = "", prefs=None, z3_target: str = "",
+                th: Optional[dict] = None) -> list:
     """`ss` (Session objects or dicts, placed) with the 減量期 rules applied to the not-done sessions on
     a day of `tc`'s taper (taper_context): the quality sessions by days to the race (full ≥ 10, the
     same kind shorter, the half-volume short one 3–5 days out — moved onto an easy day there when it
@@ -3739,7 +3794,8 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
     def as_q(s, tmpl: dict):
         t = {k: v for k, v in tmpl.items() if k not in ("power_pct", "hr_cls")}
         put(s, **{**{k: None for k in _VARIANT_KEYS}, "source": _(SRC_TAPER_WEEK), "terrain": None, **t,
-                  "target": taper_q_target(tmpl, cp, q_target, prefs, z3_target)})
+                  "target": taper_q_target(tmpl, cp, q_target, prefs, z3_target, th),
+                  **taper_no_power(tmpl, th, prefs, z3_target if tmpl.get("hr_cls") == "Z3sub" else q_target)})
 
     # SP-668: the week the taper starts in keeps one quality session — when the 專項期 days before the taper
     # already hold one (the last full one, 11–14 days out), a quality session on its taper days is an easy run

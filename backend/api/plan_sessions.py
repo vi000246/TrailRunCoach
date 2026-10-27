@@ -2005,7 +2005,7 @@ async def steps_preview(body: dict = Body(...)):
     s = {k: body.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "terrain", "protocol",
                                   "variant_key", "variant_reps", "variant_blocks", "variant_adj", "heat")}
     tb = body.get("target_basis")
-    s["target_basis"] = tb if tb in ("hr", "power") else None
+    s["target_basis"] = tb if tb in TP.CHOSEN else None
     pol = TP.target_policy(s, PP.load(), th)
     s["basis"] = pol["basis"]
     try:
@@ -2185,7 +2185,8 @@ async def _steps_env(s: dict, inp: dict, stored: Optional[dict] = None) -> dict:
     # 越野跑 (kind hike) and trail sessions: effort distance with the session's climb
     sp["terrain"] = "trail" if s.get("kind") == "hike" or s.get("terrain") in ("trail", "hike") else "road"
     sp["climb_per_km"] = _climb_per_km(s)
-    c = WS.Ctx.of(th, pol["basis"], bool(pol.get("hr_cap")), sp, walk=pol["type"] == "walk")
+    c = WS.Ctx.of(th, pol["basis"], bool(pol.get("hr_cap")), sp, walk=pol["type"] == "walk",
+                  hill=pol["type"] == "hill")
     # the push target's end conditions (sync/workout_targets; 「負荷」 only where it has one)
     prov = _provider()
     c.end_conditions, c.provider_label = tuple(prov.capabilities.end_conditions), prov.label

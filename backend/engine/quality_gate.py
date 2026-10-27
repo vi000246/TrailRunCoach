@@ -3018,16 +3018,20 @@ _HR_CLASS = {"z3": "Z3sub", "z3a": "Z3sub", "z3b": "Z3sub", "sub": "Z3sub", "z3c
 
 
 def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = None,
-            lthr_default: bool = False) -> dict:
+            lthr_default: bool = False, prefs=None) -> dict:
     """A week-plan session dict for a dose spec. Title / detail keep the tokens
     the COROS step builder and trim_quality parse (N×M 分 in the title; 休 N 分,
-    暖身 / 緩和 and lo–hi% CP in the detail; 爬坡 for uphill)."""
+    暖身 / 緩和 and lo–hi% CP in the detail; 爬坡 for uphill). SP-951: a flat rep with power not in
+    effect (② / ③) or 配速 picked (`prefs`) → 「配速 …（% 閾值配速）· 心率 ≤ X bpm」 (target_policy.flat_pace);
+    the detail keeps its % CP band (the structure reads the band from it)."""
     key, title, reps, work, rest, lo, hi, uphill, src = spec
     cp, lthr, aet = th.get("cp"), th.get("lthr"), th.get("aet")
     use_hr = bool(lthr) and not lthr_default          # LTHR still WKO5's default → power / RPE only
+    from backend.engine import target_policy as TP
     from backend.engine.hr_profile import class_hr
     zb = class_hr(th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None, _HR_CLASS.get(key))
-    hr_txt = lambda a, b: _("心率 {lo}–{hi} bpm", lo=a, hi=b)
+    pace = key != "z3" and not uphill and TP.flat_pace(th, prefs)
+    hr_txt = (lambda a, b: TP.cap_text(b)) if pace else (lambda a, b: _("心率 {lo}–{hi} bpm", lo=a, hi=b))
     if key == "z3":
         work = zone3_work(hours, reps)
         title = f"Zone 3 間歇 {reps}×{work} 分"
@@ -3037,8 +3041,12 @@ def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = No
                 if zb else _("心率在 AeT–LTHR（Zone 3），總量約 {m} 分（週有氧量的 5%）", m=reps * work))
     else:
         what = f"{lo * 100:.0f}–{hi * 100:.0f}% CP"
-        parts = [_("功率 {lo}–{hi} W（{band}）", lo=f"{lo * cp:.0f}", hi=f"{hi * cp:.0f}", band=what)] if cp \
-            else [f"RPE 8（{what}）"]
+        if pace:
+            parts = [TP.pace_text(lo, hi, float(th["tpace"]))]
+        elif cp:
+            parts = [_("功率 {lo}–{hi} W（{band}）", lo=f"{lo * cp:.0f}", hi=f"{hi * cp:.0f}", band=what)]
+        else:
+            parts = ["RPE 8" if TP.no_power(th) else f"RPE 8（{what}）"]      # SP-950 ② / ③: no % CP
         if zb and use_hr:
             parts.append(hr_txt(zb[0], zb[1]))          # SP-493: the class's zone of the 課表心率區間 in effect
         elif zb:
@@ -3048,6 +3056,12 @@ def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = No
         elif key in _HR_FRAC and use_hr:
             a, b = _HR_FRAC[key]
             parts.append(hr_txt(f"{a * lthr:.0f}", f"{b * lthr:.0f}"))
+    nop = key != "z3" and TP.no_power(th)
+    if nop:
+        # SP-951 (owner: no % CP / watts anywhere without power in effect): the 說明 says the pace / HR / RPE;
+        # the band the structure and the push read (workout_steps._quality_text) travels in variant_adj
+        what = TP.pace_pct_text(lo, hi, float(th["tpace"])) if pace else \
+            (parts[-1] if parts[-1].startswith("心率") else "RPE 8")
     fmt = lambda x: f"{x:g}"
     # Buchheit & Laursen 2013: rests < 2–3 min passive — a Zone 5 rest ≤ 2.5 min is a walk
     how = _("走路或極慢跑") if key.startswith("z5") and rest <= 2.5 else _("慢跑")
@@ -3062,7 +3076,15 @@ def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = No
     rate = {"z3": 60.0, "z3a": 65.0, "z3b": 65.0, "sub": 65.0, "z3c": 68.0, "r1": 55.0}.get(key, 72.0)
     return {"id": "quality", "kind": "quality", "title": title, "minutes": minutes,
             "target": " · ".join(parts), "detail": f"{prefix}{body}；" + _("暖身 15 分、緩和 10 分"),
-            "source": src, "tss": minutes / 60.0 * rate}
+            "source": TP.source_without_power(src, th), "tss": minutes / 60.0 * rate,
+            **({"variant_adj": band_adj(lo, hi)} if nop else {})}
+
+
+def band_adj(lo: float, hi: float) -> dict:
+    """SP-951: the variant_adj of a text-path interval (no library variant) whose 說明 carries no % CP
+    (power not in effect): its band × CP, read by workout_steps._quality_text / coros_workouts._quality_steps
+    in place of the 說明's 「lo–hi% CP」."""
+    return {"band": [round(float(lo), 4), round(float(hi), 4)]}
 
 
 # 「（<the mode's LABEL>缺資料，先照護欄排）」 — one msgid per mode (no {label} field: the prefix sits a few

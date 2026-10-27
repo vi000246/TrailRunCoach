@@ -62,6 +62,10 @@ PATTERNS = (
     N_("自動調整：降一階到 {rung}（不算進階）"),                    # adapt
     N_("CP {old} → {new} W：功率目標依 % CP 重算"),                   # plan_auto.rescale_sessions
 )
+# templates read back although their own words are only punctuation (_parse wants two Chinese characters of
+# a template's own) — SP-905 R1: an injury's rule as injuries.condition_rule writes it, 「右膝・膝前痛進行中：…」,
+# quoted in a session's 說明 by overview.condition_apply (「{why}：改成平路輕鬆跑，時間不變」)
+JOINED = frozenset({N_("{label}・{what}")})
 # counts with a unit (matched where a piece is expected; the numbers are kept as written)
 _NUM = r"\d+(?:\.\d+)?"
 UNITS = (
@@ -98,6 +102,41 @@ def _remember(d: OrderedDict, k, v) -> None:
         d.move_to_end(k)
         while len(d) > _MEMO_MAX:
             d.popitem(last=False)
+
+
+# ---- 1. one text as written ------------------------------------------------------------------------
+
+_PHR: dict = {}                                          # loc -> (catalog id, {zh: shown})
+
+
+def _phrases(loc: str) -> dict:
+    """Labels made of two table words with nothing between them, which no template can read back
+    (「{side}{area}」: two fields side by side) — an injury's body part, 「右膝」 → "Knee (right)"
+    (injuries.full_label; a custom area is the user's own label and isn't one of these)."""
+    cat = catalog(loc)
+    hit = _PHR.get(loc)
+    if hit is not None and hit[0] == id(cat):
+        return hit[1]
+    from backend.engine import injuries as INJ
+    areas = list(INJ.AREAS.values()) + [N_("未指定部位")]
+    sides = [INJ.SIDES["left"], INJ.SIDES["right"], N_("雙側")]
+    out = {}
+    for a in areas:
+        for s in sides:
+            zh = translate("{side}{area}", DEFAULT_LOCALE, side=s, area=a)
+            out[zh] = translate("{side}{area}", loc, side=translate(s, loc), area=translate(a, loc))
+    _PHR[loc] = (id(cat), out)
+    return out
+
+
+def _exact(s: str, loc: str) -> Optional[str]:
+    """`s` as one text with nothing to fill in: a catalog msgid, or a label of _phrases."""
+    entry = catalog(loc).get(s)
+    if isinstance(entry, str) and entry:
+        return entry
+    if isinstance(entry, dict) and entry.get("other"):
+        return entry["other"]
+    return _phrases(loc).get(s)
 
 
 # ---- 2. one msgid filled in ------------------------------------------------------------------------
@@ -146,7 +185,7 @@ def _parse(msgid: str) -> Optional[list]:
         if n1 is not None and n2 is not None and not l2:
             return None
     # words of its own, not only brackets: 「{a}（{b}）」 would read every bracketed title
-    if sum(len(HAN.findall(lit)) for lit, _n, _s in parts) < 2:
+    if msgid not in JOINED and sum(len(HAN.findall(lit)) for lit, _n, _s in parts) < 2:
         return None
     return parts
 
@@ -186,7 +225,8 @@ def _fill(entry: Any, params: dict) -> Optional[str]:
 
 def _by_template(s: str, loc: str, depth: int, whole: bool = False) -> Optional[str]:
     """`whole`: `s` is a run of 「；」-joined parts read as one msgid (_by_segments) — a field may not hold
-    a separator of its own (it would swallow the parts after it)."""
+    a separator of its own (it would swallow the parts after it), unless the field is one msgid as
+    written (SP-905 R1: an injury's rule 「…；…」 inside 「{label}・{what}」)."""
     cat = catalog(loc)
     for t in _templates(loc):
         if t.key not in s:
@@ -196,7 +236,7 @@ def _by_template(s: str, loc: str, depth: int, whole: bool = False) -> Optional[
             continue
         params, ok = {}, True
         for k, v in m.groupdict().items():
-            if whole and k not in USER_PARAMS and len(_segments(v)) > 1:
+            if whole and k not in USER_PARAMS and len(_segments(v)) > 1 and _exact(v, loc) is None:
                 ok = False
                 break
             if CJK.search(v):
@@ -252,8 +292,13 @@ def _words(loc: str) -> list:
 
 
 def _lower(w: str) -> str:
-    """「Road」 → 「road」 inside a title, but AeT / VO2max / CP stay as they are."""
+    """「Road」 → 「road」 inside a title, but AeT / VO2max / CP and a name (Achilles) stay as they are."""
+    if w.startswith(KEEP_CAP):
+        return w
     return w[0].lower() + w[1:] if re.match(r"[A-Z][a-z]+\b(?![-\s][A-Z])", w) else w
+
+
+KEEP_CAP = ("Achilles",)                # SP-905 R1: 「…; Achilles tendon (left) · …」
 
 
 def _ascii_run(s: str, i: int) -> int:
@@ -392,11 +437,9 @@ def _by_segments(s: str, loc: str, depth: int) -> Optional[str]:
 
 def _one(s: str, loc: str, depth: int) -> Optional[str]:
     """`s` as one text: a catalog msgid, or one msgid filled in (no splitting at separators)."""
-    entry = catalog(loc).get(s)
-    if isinstance(entry, str) and entry:
-        return entry
-    if isinstance(entry, dict) and entry.get("other"):
-        return entry["other"]
+    hit = _exact(s, loc)
+    if hit is not None:
+        return hit
     if "{" in s or depth > 3:
         return None
     return _by_template(s, loc, depth, whole=True)
@@ -405,17 +448,15 @@ def _one(s: str, loc: str, depth: int) -> Optional[str]:
 # ---- the entry points ------------------------------------------------------------------------------
 
 def _shown(s: str, loc: str, depth: int = 0) -> str:
-    if not s or not CJK.search(s) or depth > 3:
+    if not s or not CJK.search(s):
         return s
+    if depth > 3:                          # past the depth limit only a text as written (SP-905 R1: 「右膝」)
+        return _exact(s, loc) or s
     key = (loc, s, depth)                  # depth: a whole text gets a capital, a part not; the depth limit
     hit = _MEMO.get(key)
     if hit is not None:
         return hit
-    cat = catalog(loc)
-    entry = cat.get(s)
-    out = entry if isinstance(entry, str) and entry else None
-    if out is None and isinstance(entry, dict):
-        out = entry.get("other")
+    out = _exact(s, loc)
     if out is None and "{" not in s:
         # parts joined by 「；」「。」「·」 first (SP-905): a msgid's field must not swallow the parts after
         # it (「平路；全程心率壓在…以下」 is two texts, not 「{label}以下」)

@@ -158,3 +158,61 @@ def test_test_templates_in_english_made_in_zh_tw(monkeypatch):
     with use_locale("en"):
         made = plan_sessions._test_templates(TH, None)
     assert made["cp"][0]["detail"] == zh["cp"][0]["detail"]
+
+
+# ---- R1: an injury's rule quoted in a session's 說明 (injuries.condition_rule → overview.condition_apply) ----
+
+def _injured_week():
+    trail_long = dict(LONG, id="long", kind="long", day="2026-10-03", title="LSD（山路）", terrain="trail",
+                      detail="有山路就走山路，陡坡用走的；" + LONG["detail"].split("；", 1)[1])
+    return [{"id": "tech", "kind": "easy", "day": "2026-09-30", "title": "技術地形", "terrain": "trail", "detail": ""},
+            {"id": "climb", "kind": "easy", "day": "2026-10-01", "title": "長爬坡反覆", "terrain": "trail", "detail": ""},
+            {"id": "steep", "kind": "easy", "day": "2026-10-02", "title": "陡坡健走", "terrain": "trail", "detail": ""},
+            trail_long]
+
+
+def _cev(i, condition, area, side=None):
+    return {"id": i, "condition": condition, "area": area, "side": side, "onset_date": "2026-09-20",
+            "status": "active", "kind": "overuse", "severity": "mild"}
+
+
+@pytest.mark.parametrize("events", [
+    [_cev(1, "pfp", "knee", "right")],
+    [_cev(1, "itb", "knee", "both")],
+    [_cev(1, "achilles", "achilles", "left")],
+    [_cev(1, "pfp", "knee", "right"), _cev(2, "achilles", "achilles", "left")],     # two rules joined by 「；」
+])
+def test_an_injury_rule_in_a_session_reads_in_english(events):
+    notes = []
+    ss = O.condition_apply(_injured_week(), events, notes)
+    said = [s["detail"] for s in ss if "進行中" in (s["detail"] or "")]
+    assert said and notes
+    texts = said + [n["text"] for n in notes]
+    assert not _left(texts)
+    for t in texts:                                      # the way back: the shown text is stored in zh-TW again
+        assert ST.to_source(_en(t), "en") == t
+
+
+def test_an_injury_rule_reads_like_the_injuries_page():
+    ss = O.condition_apply(_injured_week(), [_cev(1, "pfp", "knee", "right")], [])
+    easy = next(s for s in ss if s["kind"] == "easy")
+    # zh-TW stored as before (code reads it: the flat long run's 「平路或緩坡」)
+    assert easy["detail"].startswith("右膝・膝前痛進行中：先不跑下坡（Esculier 2016）；")
+    assert _en(easy["detail"]) == (
+        "Knee (right) · Front-of-knee pain ongoing: no running downhill for now (Esculier 2016); no technical-terrain "
+        "or long-climb sessions either, and the trail long run moves to flat ground: made a flat easy run of the "
+        "same length")
+    long = next(s for s in ss if s["kind"] == "long")
+    assert long["detail"].startswith("平路或緩坡（右膝・") and _en(long["detail"]).startswith(
+        "Flat or gently rolling ground (Knee (right) · Front-of-knee pain ongoing")
+    # a second rule after 「；」: a name keeps its capital
+    two = O.condition_apply(_injured_week(), [_cev(1, "pfp", "knee", "right"),
+                                              _cev(2, "achilles", "achilles", "left")], [])
+    assert "; Achilles tendon (left) · Achilles ongoing" in _en(two[0]["detail"])
+
+
+def test_an_injury_rule_on_a_custom_area_stays_whole_in_zh_tw():
+    # a custom area is the user's own label: the rule can't be read without it → the whole text as stored
+    ss = O.condition_apply(_injured_week(), [_cev(1, "pfp", "左邊膝蓋外側")], [])
+    t = next(s for s in ss if s["kind"] == "easy")["detail"]
+    assert t.startswith("左邊膝蓋外側・") and _en(t) == t

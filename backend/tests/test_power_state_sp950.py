@@ -106,7 +106,8 @@ def test_no_session_is_run_by_power_without_power_in_effect(state):
         want = "hr" if one == "power" else one              # road easy / long → HR ≤ the easy cap, intervals HR
         assert p["basis"] == want and p["power_state"] == state, s["title"]
         if one == "power":
-            assert p["fallback"] == PST.short_reason(ps)
+            # SP-951: a flat interval (TH has no threshold pace) adds 「；沒有閾值配速：改用心率＋RPE」
+            assert p["fallback"].startswith(PST.short_reason(ps))
     if state == PST.STALE:
         assert "CP 已 50 天沒測" in TP.target_policy({"kind": "easy", "title": "輕鬆跑"}, None, th)["why"]
 

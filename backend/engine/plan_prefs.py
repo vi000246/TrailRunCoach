@@ -266,7 +266,7 @@ def from_settings(values: dict, lenient: bool = True) -> Prefs:
     # migration: the old 「間歇目標 = 心率」 is 目標依據 = 心率 now (both stay readable)
     if kw.get("interval_target") == "hr" and kw.get("target_basis") in (None, "auto"):
         kw["target_basis"] = "hr"
-    if lenient and kw.get("target_basis") not in (None, "auto", "hr", "power"):
+    if lenient and kw.get("target_basis") not in (None, "auto", "hr", "power", "pace"):
         kw["target_basis"] = "auto"
     if lenient and kw.get("climb_target") not in (None,) + CLIMB_TARGETS:
         kw["climb_target"] = "power"

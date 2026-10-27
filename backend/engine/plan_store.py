@@ -396,8 +396,8 @@ def _clean(patch: dict, today: str) -> dict:
                 raise PlanError(_("強度課類型要是 有氧間歇／VO2max 間歇／速度：{v!r}", v=v))
         elif k == "target_basis":
             v = None if v in (None, "", "auto") else v       # 自動 = None
-            if v is not None and v not in ("hr", "power"):
-                raise PlanError(_("目標用要是 自動／心率／功率：{v!r}", v=v))
+            if v is not None and v not in ("hr", "power", "pace"):          # pace: SP-951
+                raise PlanError(_("目標用要是 自動／心率／功率／配速：{v!r}", v=v))
         elif k in ("distance_km", "climb_m"):
             if v is not None and v != "":
                 try:
@@ -1054,7 +1054,11 @@ def _basis_for(s: dict, prefs=PREFS_UNREAD, cp_stale: bool = False, th: Optional
     from backend.engine import target_policy as TP
     if prefs is PREFS_UNREAD:
         prefs = load_prefs_safe()
-    return TP.target_policy(s, prefs, cp_stale=cp_stale, power_state=(th or {}).get("power_state"))["basis"]
+    # SP-951: the threshold pace too (a flat interval by pace in ② / ③; known missing → HR, as the card)
+    # (the plan thresholds leave "tpace" out when there is none: given thresholds without one = none)
+    tp = (th or {}).get("tpace") or (False if th else None)
+    return TP.target_policy(s, prefs, cp_stale=cp_stale, power_state=(th or {}).get("power_state"),
+                            tpace=tp)["basis"]
 
 
 # ---------------------------------------------------------------------------

@@ -111,9 +111,14 @@ def test_no_template_errs_with_full_data():
 
 def test_missing_cp_or_lthr_still_errs():
     rows = _rows()
-    no_cp = WS.Ctx.of({"lthr": 168.0, "aet": 150.0, "tpace": 270.0}, "hr")
+    no_cp = WS.Ctx.of({"lthr": 168.0, "aet": 150.0}, "hr")
     iss = WS.issues(WS.normalize({"items": rows["lib:ronnestad_3015"]["full"]}), no_cp)
     assert any(i["level"] == "err" and "CP" in i["text"] for i in iss), iss
+    # SP-951: with a threshold pace (power not in effect) the % CP steps run by % threshold pace — a warning
+    with_pace = WS.Ctx.of({"lthr": 168.0, "aet": 150.0, "tpace": 270.0}, "hr")
+    iss = WS.issues(WS.normalize({"items": rows["lib:ronnestad_3015"]["full"]}), with_pace)
+    assert not any(i["level"] == "err" and "CP" in i["text"] for i in iss), iss
+    assert any(i["level"] == "warn" and "閾值配速" in i["text"] for i in iss), iss
     no_lthr = WS.Ctx.of({"cp": 250.0, "tpace": 270.0}, "power")
     errs = []
     for r in rows.values():

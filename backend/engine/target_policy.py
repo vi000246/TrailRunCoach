@@ -37,19 +37,33 @@ SP-950 (owner 2026-10-27) widens it to one site-wide rule (engine/power_state.py
 power meter AND a fresh CP. ② a meter but a stale CP, ③ no meter: every power session (road easy /
 long → HR ≤ the easy cap, intervals, hill repeats) is run by HR (SP-951: flat intervals by pace), a
 chosen 功率 included; in ③ the stored choice is ignored, not deleted.
+
+SP-951 (owner 2026-10-27, SP-950 問答 Q1-3): a first-class 配速 basis. The flat Zone 3 / Zone 5
+intervals and tempo (session type "interval": the library's flat variants, the gate's road
+sessions; never a hill / trail one) run by % threshold pace (thresholds.estimate_tpace; the % CP
+band as pace = threshold pace ÷ (% CP), running power ≈ proportional to flat speed — Stryd, 推估)
+with the HR as a cap note in the text, when power is not in effect (② / ③) or 課表偏好 / the
+session picks 配速. No threshold pace → heart rate (+ RPE in the text) with the reason. 配速 picked
+for a session that is not a flat interval (easy, long, hill repeats, trail) changes nothing there:
+those follow 自動 (pace means nothing on a hill; easy / long keep their HR cap / power band).
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from backend.i18n import N_, _
 
-BASES = ("auto", "hr", "power")
+BASES = ("auto", "hr", "power", "pace")
+CHOSEN = ("hr", "power", "pace")          # a basis picked by hand (課表偏好 / the session's own)
 LABEL = {"auto": N_("自動（依課表類型）"), "hr": N_("心率"), "power": N_("功率"), "pace": N_("配速"), "none": N_("不設目標")}
 SRC = {
     "hr_base": N_("Uphill Athlete（AeT 以下累積有氧基礎）；長天後段心率飄移（Coyle & González-Alonso 2001）"),
     "power_easy": N_("路跑輕鬆／長跑看功率（Palladino Z1–Z2 % CP），心率以輕鬆跑上限為上限：天熱、疲勞時心率先到就放慢"),
     "power_iv": N_("Stryd 功率在 0–8% 坡≈固定代謝負荷（van Rassel 2026）；心率延遲 55–70 秒（Hunt 2015）"),
+    # SP-951
+    "pace_iv": N_("平路間歇看 % 閾值配速（閾值配速 ÷ % CP：平地上跑步的功率約和速度成正比，推估）；"
+                  "心率延遲 55–70 秒（Hunt 2015），只當上限提醒"),
     "climb": N_("長爬坡：> 8% 功率低估、心率在 20 分以上才準（推估）"),
     # SP-247: Gravina-Cognetti et al. 2025 (Sports 13:294; power-gap-trail-validity.md §3 #2)
     "down": N_("下坡：Stryd 功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），看下降量與技術"),
@@ -173,48 +187,84 @@ def _state(th: Optional[dict], cp_stale: Optional[bool], power_state: Optional[d
     return (PST.STALE if stale else PST.POWER), None
 
 
+PACE_TYPES = ("interval",)               # SP-951: the flat Zone 3 / Zone 5 intervals and tempo
+
+
+def _tpace_of(th: Optional[dict], tpace=None):
+    """The threshold pace (s/km) the caller knows: `tpace`, else th["tpace"]; None = none known.
+    `False` when `th` is a real thresholds dict (it has an lthr / aet / cp / power_state key) without
+    one — the pace is known to be missing (week_plan leaves "tpace" out when there is none)."""
+    if tpace:
+        return float(tpace)
+    if tpace is False:                      # the caller knows there is none
+        return False
+    th = th or {}
+    if th.get("tpace"):
+        return float(th["tpace"])
+    if any(k in th for k in ("lthr", "aet", "cp", "power_state", "tpace")):
+        return False
+    return None
+
+
 def _no_power_basis(t: str, th: dict) -> str:
     """The basis of a would-be power session when power is not in effect (② / ③): heart rate (road
-    easy / long: HR ≤ the easy-run cap; intervals and hill repeats: the HR targets).
-    Hook for SP-951: the flat Zone 3 / Zone 5 intervals and tempo go to "pace" (% threshold pace,
-    th["tpace"]) with the HR cap in the text; without a threshold pace they stay HR (+ RPE)."""
-    return "hr"
+    easy / long: HR ≤ the easy-run cap; hill repeats: the HR targets + RPE), and SP-951: the flat
+    Zone 3 / Zone 5 intervals and tempo by "pace" (% threshold pace) with the HR cap in the text
+    (target_policy turns it into heart rate, with the reason, when the threshold pace is missing)."""
+    return "pace" if t in PACE_TYPES else "hr"
+
+
+NO_TPACE_HR = N_("沒有閾值配速：改用心率＋RPE")
+NO_METER_PACE = N_("沒有功率計：平路間歇用配速，心率當上限")
 
 
 def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Optional[bool] = None,
-                  power_state: Optional[dict] = None) -> dict:
-    """{"basis": hr | power | none, "chosen": auto | hr | power (where it came from),
-        "type", "why", "source", "hr_cap": bool (an HR cap note on power sessions),
+                  power_state: Optional[dict] = None, tpace=None) -> dict:
+    """{"basis": hr | power | pace | none, "chosen": auto | hr | power | pace (where it came from),
+        "type", "why", "source", "hr_cap": bool (an HR cap note on power / pace sessions),
         "fallback": "" | reason, "power_state": power | stale | none}.
 
     SP-950 (owner 2026-10-27, engine/power_state.py): power is in effect only with a power meter and a
     fresh CP. ② (a meter, the CP stale — th["power_state"], else `cp_stale` / th["cp_stale"]) and
     ③ (no meter): no session is run by power, whatever was chosen — the CP test keeps its open bouts
     in ② (it is what brings power back) and an AeT test its fixed power in ② (SP-949 moves it); in ③
-    a stored 目標依據 = 功率 (課表偏好 or the session's own) is ignored, not deleted."""
+    a stored 目標依據 = 功率 (課表偏好 or the session's own) is ignored, not deleted.
+    SP-951: the flat intervals there (and wherever 配速 is picked) by % threshold pace (`tpace`, else
+    th["tpace"]); a threshold pace known to be missing → heart rate with the reason."""
     from backend.engine import power_state as PST
     t = session_type(s)
     own = s.get("target_basis")
-    chosen = own if own in ("hr", "power") else pref_basis(prefs)
+    chosen = own if own in CHOSEN else pref_basis(prefs)
     base, key = AUTO[t]
     if base is None:
         base = _aet_basis(s)
     basis = base
     # the why: one msgid each (with the fallback in brackets when there is one), filled in at the end
     how = "auto"
-    if chosen in ("hr", "power") and t not in ("cp_test", "aet_test", "downhill", "climb"):
+    # 配速 picked: only the flat intervals take it; the other types follow 自動 (pace means nothing on a
+    # hill, the easy / long runs keep their HR cap / power band)
+    picked = chosen in ("hr", "power") or (chosen == "pace" and t in PACE_TYPES)
+    if picked and t not in ("cp_test", "aet_test", "downhill", "climb"):
         basis = chosen
-        how = "own" if own in ("hr", "power") else "pref"
+        how = "own" if own == chosen else "pref"
     fb = ""
     th = th or {}
+    tp = _tpace_of(th, tpace)
     state, ps = _state(th, cp_stale, power_state)
     keep = state == PST.STALE and t in ("cp_test", "aet_test")      # ②: the tests keep their power
     if basis == "power" and state != PST.POWER and not keep:
         basis = _no_power_basis(t, th)
-        fb = PST.short_reason(ps) if ps is not None else \
-            _("沒有功率計：用心率") if state == PST.NONE else _(CP_STALE_ALL)
+        if basis == "pace" and state == PST.NONE and tp is not False:
+            fb = _(NO_METER_PACE)
+        else:
+            fb = PST.short_reason(ps) if ps is not None else \
+                _("沒有功率計：用心率") if state == PST.NONE else _(CP_STALE_ALL)
     if basis == "power" and th and not th.get("cp") and not (keep and t == "cp_test"):
-        basis, fb = "hr", _("沒有 CP：改用心率")
+        basis = "pace" if t in PACE_TYPES and tp else "hr"
+        fb = _("沒有 CP：改用配速") if basis == "pace" else _("沒有 CP：改用心率")
+    if basis == "pace" and tp is False:
+        basis = "hr"
+        fb = f"{fb}；{_(NO_TPACE_HR)}" if fb else _(NO_TPACE_HR)
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):
         basis, fb = "none", _("沒有 AeT／LTHR：不設目標")
     if how == "auto":
@@ -226,19 +276,102 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None, cp_stale: Opti
     else:
         why = _("課表偏好：{basis}（{fb}）", basis=_(LABEL[chosen]), fb=fb) if fb \
             else _("課表偏好：{basis}", basis=_(LABEL[chosen]))
-    return {"basis": basis, "chosen": own if own in ("hr", "power") else chosen, "type": t, "why": why,
-            "source": _(SRC[key]), "hr_cap": basis == "power" and t in ("interval", "hill", "easy", "long"), "fallback": fb,
-            "power_state": state}
+    if basis == "pace":
+        key = "pace_iv"
+    return {"basis": basis, "chosen": own if own in CHOSEN else chosen, "type": t, "why": why,
+            "source": _(SRC[key]),
+            "hr_cap": (basis == "power" and t in ("interval", "hill", "easy", "long")) or basis == "pace",
+            "fallback": fb, "power_state": state}
+
+
+def flat_pace(th: Optional[dict], prefs=None, tpace: Optional[float] = None) -> bool:
+    """SP-951: the flat intervals of this plan run by pace (target_policy's basis of a flat interval
+    with these thresholds and 課表偏好). The text builders (interval_library.session_for,
+    quality_gate.session, overview.taper_q_target) ask it, so the session's 目標 says the same as
+    its structure and the push. Needs the plan's power state (th["power_state"]) or 配速 picked;
+    otherwise False (a caller without them keeps its old texts)."""
+    from backend.engine import power_state as PST
+    th = th or {}
+    if PST.of(th) is None and pref_basis(prefs) != "pace":
+        return False
+    return target_policy({"kind": "quality", "title": ""}, prefs, th, tpace=tpace)["basis"] == "pace"
+
+
+# the threshold-dict keys the session text builders read (overview._gate_session, session_suggest …):
+# SP-951 adds the threshold pace and the power state, so they can write a pace target (flat_pace)
+TEXT_KEYS = ("cp", "lthr", "aet", "hr_model", "power_model", "tpace", "power_state", "cp_stale")
+
+
+def text_th(th: Optional[dict]) -> dict:
+    """The keys of `th` a session text builder reads (TEXT_KEYS; missing ones left out)."""
+    th = th or {}
+    return {k: th.get(k) for k in TEXT_KEYS if k in th}
+
+
+def pace_band(lo: float, hi: float, tpace: float) -> tuple[float, float]:
+    """(fast, slow) s/km of a % CP band (lo, hi) at threshold pace `tpace`: threshold pace ÷ (% CP)
+    (running power ≈ proportional to flat speed — Stryd; 推估). The 88–95 % CP Zone 3 band → 105–114 %
+    of threshold pace (≈ Friel pace Z3 106–114 %)."""
+    return tpace / hi, tpace / lo
+
+
+def pace_text(lo: float, hi: float, tpace: float) -> str:
+    """「配速 6:00–6:27 /km（105–114% 閾值配速）」 of a % CP band — the 課表 card's words (the session
+    builders and session_structure.card_summary both write it, so the card says one thing)."""
+    from backend.engine.workout_steps import mmss
+    a, b = pace_band(lo, hi, tpace)
+    return _("配速 {a}–{b} /km（{pa}–{pb}% 閾值配速）", a=mmss(a), b=mmss(b), pa=f"{a / tpace * 100:.0f}",
+             pb=f"{b / tpace * 100:.0f}")
+
+
+def pace_pct_text(lo: float, hi: float, tpace: float) -> str:
+    """「105–114% 閾值配速」 of a % CP band (the step's sub, a 說明's band)."""
+    a, b = pace_band(lo, hi, tpace)
+    return _("{pa}–{pb}% 閾值配速", pa=f"{a / tpace * 100:.0f}", pb=f"{b / tpace * 100:.0f}")
+
+
+def no_power(th: Optional[dict]) -> bool:
+    """The plan's power state (th["power_state"]) says power is not in effect (② / ③); False without one."""
+    from backend.engine import power_state as PST
+    ps = PST.of(th)
+    return ps is not None and ps["state"] != PST.POWER
+
+
+_BAND_PART = re.compile(r"^\s*\d+\s*[–-]\s*\d+\s*%\s*CP\s*$")
+# a 出處 part that names a % CP band, and its words without it (SP-951: ② / ③ show no % CP)
+SOURCE_NO_POWER = {
+    "Palladino 恢復週保留 98–101% CP fartlek": N_("Palladino 恢復週保留 fartlek"),
+    "Stryd Cruise Intervals 94–100% CP": "Stryd Cruise Intervals",
+}
+
+
+def source_without_power(src: str, th: Optional[dict]) -> str:
+    """SP-951 (owner: no % CP / watts anywhere without power in effect): a session's 出處 without its % CP
+    parts when the plan's power state is ② / ③ (no_power) — a bare band part dropped, a source that
+    names its band said without it (SOURCE_NO_POWER); as it is with power."""
+    if not src or not no_power(th):
+        return src
+    out = [(_(SOURCE_NO_POWER[p]) if p in SOURCE_NO_POWER else p)
+           for p in src.split("；") if not _BAND_PART.match(p)]
+    return "；".join(out)
+
+
+def cap_text(hi) -> str:
+    """「心率 ≤ 172 bpm」: the HR cap note of a pace session (SP-951)."""
+    return _("心率 ≤ {hr} bpm", hr=f"{float(hi):.0f}")
 
 
 def target_text(target: str, basis: str) -> str:
     """The target text of the chosen basis: keep the 功率 or the 心率 parts (the other as
-    a cap note on power sessions is the caller's choice)."""
+    a cap note on power sessions is the caller's choice); 配速 keeps the pace and the HR parts
+    (the HR as the cap note)."""
     parts = [p.strip() for p in (target or "").split("·") if p.strip()]
     if basis == "hr":
         keep = [p for p in parts if p.startswith("心率")]
     elif basis == "power":
         keep = [p for p in parts if p.startswith(("功率", "RPE"))]
+    elif basis == "pace":
+        keep = [p for p in parts if p.startswith(("配速", "心率"))]
     else:
         keep = []
     return " · ".join(keep) if keep else ("" if basis == "none" else target or "")

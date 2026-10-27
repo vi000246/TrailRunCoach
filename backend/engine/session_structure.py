@@ -176,6 +176,15 @@ def _hr_part(st: dict, c, out: str) -> str:
         tg = x.get("target") or {}
         if x.get("kind") != "work":
             continue
+        if tg.get("intent") == "band" and c.basis == "pace" and c.tpace and not c.hill:
+            # SP-951: a flat interval by pace — the HR is its cap note (「心率 ≤ X bpm」); none on a short
+            # Zone 5 rep (workout_steps.hr_cap_of)
+            cap = WS.hr_cap_of(c, tg, WS._step_secs(x))
+            if cap:
+                from backend.engine.target_policy import cap_text
+                part = cap_text(cap)
+                break
+            continue
         if tg.get("intent") == "band" and tg.get("hr"):
             part = _("心率 {lo}–{hi} bpm", lo=int(tg['hr'][0]), hi=int(tg['hr'][1]))
             break

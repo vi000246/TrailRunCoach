@@ -61,8 +61,9 @@ def test_the_old_interval_target_migrates():
     assert PP.from_settings({"plan.prefs.target_basis": "bogus"}).target_basis == "auto"
     assert SR.DEFAULTS["plan.prefs.target_basis"] == "auto"
     SR.validate("plan.prefs.target_basis", "hr")
+    SR.validate("plan.prefs.target_basis", "pace")          # SP-951: 配速 is a basis now
     with pytest.raises(ValueError):
-        SR.validate("plan.prefs.target_basis", "pace")
+        SR.validate("plan.prefs.target_basis", "bogus")
     assert PP.from_settings(PP.Prefs(target_basis="power").settings()).target_basis == "power"
 
 

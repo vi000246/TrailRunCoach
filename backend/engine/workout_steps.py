@@ -61,6 +61,7 @@ from typing import Optional
 from backend.engine import interval_library as IL
 from backend.engine.hr_profile import EASY_CAP
 from backend.engine.hr_profile import ZONE_IDS as HR_MODEL_ZONES
+from backend.engine.target_policy import NO_TPACE_HR as TP_NO_TPACE_HR
 from backend.i18n import N_, _
 from backend.engine.zones import (EASY_BAND, FRIEL_HR, FRIEL_PACE, LONG_BAND, PALLADINO_3ZONE, PALLADINO_POWER_ZONES,
                                   TRAIL_BAND, watch_band)
@@ -75,6 +76,7 @@ KINDS = ("warm", "work", "rest", "cool", "other")
 KIND_LABEL = {"warm": N_("暖身"), "work": N_("主課"), "rest": N_("休息"), "cool": N_("緩和"), "other": N_("其他"),
               "repeat": N_("重複")}
 TYPES = ("auto", "power", "hr", "pace", "rpe", "none")
+BASES = ("hr", "power", "pace", "none")   # a session's basis (target_policy; pace: SP-951)
 TYPE_LABEL = {"auto": N_("自動"), "power": N_("功率"), "hr": N_("心率"), "pace": N_("配速"), "rpe": "RPE", "none": N_("無")}
 MODES = ("pct", "zone", "abs")
 INTENTS = ("easy", "band", "open")
@@ -236,8 +238,10 @@ class Ctx:
     lthr: Optional[float] = None
     aet: Optional[float] = None
     tpace: Optional[float] = None          # threshold pace, s/km (thresholds.estimate_tpace: 推估)
-    basis: str = "hr"                       # hr | power | none (target_policy)
-    hr_cap: bool = False                    # target_policy: an HR cap note on power sessions
+    basis: str = "hr"                       # hr | power | pace | none (target_policy)
+    hr_cap: bool = False                    # target_policy: an HR cap note on power / pace sessions
+    # SP-951: a hill session (target_policy.session_type "hill"): a band never falls back to pace there
+    hill: bool = False
     # the athlete's own speeds, for the time of a distance step (estimate_secs)
     v_easy: Optional[float] = None          # km/h, easy flat road running (equivalence.fit v_flat)
     v_easy_src: str = ""
@@ -310,7 +314,7 @@ class Ctx:
 
     @classmethod
     def of(cls, th: Optional[dict], basis: Optional[str] = None, hr_cap: bool = False,
-           speeds: Optional[dict] = None, walk: bool = False) -> "Ctx":
+           speeds: Optional[dict] = None, walk: bool = False, hill: bool = False) -> "Ctx":
         th = th or {}
 
         def f(k, d=None):
@@ -322,7 +326,7 @@ class Ctx:
         sp = speeds or {}
         ter = "trail" if sp.get("terrain") in ("trail", "hike") else "road"
         return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"),
-                   basis=basis if basis in ("hr", "power", "none") else "hr", hr_cap=hr_cap,
+                   basis=basis if basis in BASES else "hr", hr_cap=hr_cap, hill=hill,
                    v_easy=f("v_easy", sp), v_easy_src=str(sp.get("v_easy_src") or ""), ep_kmh=f("ep_kmh", sp),
                    terrain=ter, climb_per_km=max(0.0, f("climb_per_km", sp) or 0.0) if ter == "trail" else 0.0,
                    hrz=th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None,
@@ -335,10 +339,11 @@ def session_ctx(s: dict, th: Optional[dict], prefs=None) -> Ctx:
     目標用, 課表偏好, else 自動 by session type; falls back without CP / LTHR)."""
     from backend.engine import target_policy as TP
     pol = TP.target_policy(s, prefs, th or {})
-    b = s.get("basis") if s.get("basis") in ("hr", "power", "none") else pol["basis"]
+    b = s.get("basis") if s.get("basis") in BASES else pol["basis"]
     if b == "power" and th and not (th or {}).get("cp"):
         b = pol["basis"]
-    c = Ctx.of(th, b, bool(pol.get("hr_cap")), walk=pol["type"] == "walk")
+    c = Ctx.of(th, b, bool(pol.get("hr_cap")) or b == "pace", walk=pol["type"] == "walk",
+               hill=pol["type"] == "hill")
     c.ep_power = ep_power_of(prefs)
     return c
 
@@ -533,6 +538,17 @@ def main_set(v: IL.Variant, target_text: str = "", ids=None) -> list:
     return [rep(ids, len(works), [step(ids, "work", v.work_s, dict(band)), _rest(ids, v.rest_s, v.rest_mode)], False)]
 
 
+def text_band(s: dict) -> Optional[tuple]:
+    """SP-951: (lo, hi) × CP a text-path interval carries in variant_adj["band"] (quality_gate.band_adj,
+    the 減量期 templates) when its 說明 has no 「lo–hi% CP」 (power not in effect); None."""
+    adj = s.get("variant_adj")
+    b = adj.get("band") if isinstance(adj, dict) else None
+    try:
+        return (float(b[0]), float(b[1])) if b and len(b) == 2 else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _quality_text(s: dict, ids) -> Optional[list]:
     """coros_workouts._quality_steps' text path (a 「N×M 分」 title)."""
     from backend.sync.coros_workouts import _FRAC
@@ -550,8 +566,11 @@ def _quality_text(s: dict, ids) -> Optional[list]:
     pm = re.search(r"(\d+)\s*[–-]\s*(\d+)\s*%\s*CP", detail + " " + target)
     if pm:
         plo, phi = int(pm.group(1)) / 100.0, int(pm.group(2)) / 100.0
+    tb = text_band(s)
+    if tb:
+        plo, phi = tb                       # SP-951: the band carried apart (no % CP in the 說明)
     hr = _text_hr(target)
-    if hr and "功率" not in target:
+    if hr and "功率" not in target and "配速" not in target:
         work_t = {"type": "hr", "mode": "abs", "lo": hr[0], "hi": hr[1]}      # the text holds only an HR range
     else:
         work_t = {"type": "auto", "intent": "band", "lo": plo, "hi": phi, "cls": ""}
@@ -1378,6 +1397,41 @@ def _watch_band(r: Resolved, c: Ctx, lo: float, hi: float) -> Resolved:
     return r
 
 
+def _pace_band_step(c: Ctx, tg: dict, secs: Optional[float] = None) -> Resolved:
+    """SP-951: an auto interval band (lo–hi × CP) as a pace target — threshold pace ÷ (% CP)
+    (target_policy.pace_band, 推估). The step shows the prescription (target_policy.pace_text's
+    words); the watch gets the band the rep is judged by (zones.watch_band, as on power: SP-378) as
+    COROS intensityType 3. The HR band of the class is a cap note only (`cap`, the card adds it)."""
+    from backend.engine.target_policy import pace_band
+    lo, hi = float(tg["lo"]), float(tg["hi"])
+    a, b = pace_band(lo, hi, c.tpace)
+    wlo, whi = watch_band(lo, hi)
+    wa, wb = pace_band(wlo, whi, c.tpace)
+    parts = [_("{pa}–{pb}% 閾值配速", pa=f"{a / c.tpace * 100:.0f}", pb=f"{b / c.tpace * 100:.0f}")]
+    cap = hr_cap_of(c, tg, secs)
+    if cap:
+        parts.append(_("心率 ≤ {hr} bpm", hr=f"{cap:.0f}"))
+    if (round(wa), round(wb)) != (round(a), round(b)):
+        parts.append(_("手錶 {a}–{b} /km", a=mmss(wa), b=mmss(wb)))
+    return Resolved("pace", a, b, (lo + hi) / 2, f"{mmss(a)}–{mmss(b)} /km", " · ".join(parts), True,
+                    intensity=("pace", round(wa), round(wb)))
+
+
+def _step_secs(st: dict) -> Optional[float]:
+    d = st.get("dur") or {}
+    return float(d["value"]) if d.get("type") == "time" and d.get("value") else None
+
+
+def hr_cap_of(c: Ctx, tg: dict, secs: Optional[float] = None) -> Optional[float]:
+    """SP-951: the HR cap note of a pace band step — the top of the class's HR band (the text's bpm,
+    else the 課表心率區間 / × LTHR band, _work_hr); None for a Zone 5 rep under 3 min (HR has not
+    settled: interval_library writes no HR there either) or without an HR basis."""
+    if tg.get("cls") == "Z5" and secs is not None and secs < 180:
+        return None
+    h = _work_hr(c, tg)
+    return float(h[2]) if h else None
+
+
 def _from_int(it: Optional[tuple], c: Ctx, auto: bool = True, warn: str = "") -> Resolved:
     if not it:
         return Resolved("none", text=_("不設目標"), auto=auto, warn=warn)
@@ -1507,13 +1561,26 @@ def resolve(st: dict, c: Ctx) -> Resolved:
         from backend.engine.power_zone_plan import band as pz_band
         blo, bhi = (tg["lo"], tg["hi"]) if tg.get("opt") is not None else pz_band(tg["lo"], tg["hi"], c.pzm)
         tg = {**tg, "lo": blo, "hi": bhi}
+        if c.basis == "pace":
+            # SP-951: a flat interval by % threshold pace, the HR as a cap note; no threshold pace (or a
+            # hill) → the HR band (+ RPE) with the reason
+            if c.tpace and not c.hill:
+                return _pace_band_step(c, tg, _step_secs(st))
+            h = _work_hr(c, tg)
+            if h:
+                return _from_int(h, c, warn=_(TP_NO_TPACE_HR))
+            return _from_int(None, c, warn=_("沒有閾值配速／LTHR：不設目標"))
         if c.basis == "hr":
             h = _work_hr(c, tg)
             if h:
                 return _from_int(h, c)
             p = _power(c, tg["lo"], tg["hi"])
-            if p:                                   # the power fallback: the watch band too (SP-378)
+            if p:                                   # the power fallback (power in effect: ①): the watch band too (SP-378)
                 return _watch_band(_from_int(p, c, warn=_("沒有 LTHR：改用功率")), c, tg["lo"], tg["hi"])
+            if c.tpace and not c.hill:              # SP-951: no CP either (② / ③) → the flat band by pace
+                r = _pace_band_step(c, tg, _step_secs(st))
+                r.warn = _("沒有 LTHR：改用配速")
+                return r
             return _from_int(p, c, warn=_("沒有 LTHR／CP：不設目標"))
         p = _power(c, tg["lo"], tg["hi"])
         if p:
@@ -1528,6 +1595,15 @@ def resolve(st: dict, c: Ctx) -> Resolved:
             if lo is None:
                 return Resolved("none", text=_("不設目標"), auto=False, err=_("選了課表功率區間的區間，但目前沒有這一套"))
         if mode != "abs":
+            if not c.cp and c.tpace and not c.hill and lo is not None and hi is not None and lo > 0 and hi > 0:
+                # SP-951: a % CP step (a Palladino / Stryd template's, a step saved before) with no CP — power
+                # is not in effect (② / ③): the same band by % threshold pace, said so (推估)
+                from backend.engine.target_policy import pace_band
+                a, b = pace_band(min(lo, hi), max(lo, hi), c.tpace)
+                return Resolved("pace", a, b, (lo + hi) / 2, f"{mmss(a)}–{mmss(b)} /km",
+                                _("{pa}–{pb}% 閾值配速", pa=f"{a / c.tpace * 100:.0f}", pb=f"{b / c.tpace * 100:.0f}"),
+                                False, warn=_("沒有功率：% CP 換成 % 閾值配速（推估）"),
+                                intensity=("pace", round(a), round(b)))
             if not c.cp:
                 return Resolved("none", text=_("不設目標"), auto=False, err=_("選了功率卻沒有 CP"))
             lo, hi = lo * c.cp, hi * c.cp
@@ -1963,7 +2039,7 @@ def _target_type(tg: Optional[dict], basis: Optional[str]) -> str:
             if tg.get("plo") is None or basis == "hr":
                 return "hr_zone"
             return "power_pct" if basis == "power" else "auto"
-        return {"hr": "hr_pct", "power": "power_pct"}.get(basis, "auto")
+        return {"hr": "hr_pct", "power": "power_pct", "pace": "pace"}.get(basis, "auto")
     if ty == "pace":
         return "pace"
     mode = tg.get("mode", "pct")
@@ -1986,7 +2062,8 @@ def quality_auto_basis(prefs=None) -> str:
             prefs = PP.load()
         except Exception:                   # noqa: BLE001
             prefs = None
-    return "hr" if TP.target_policy({"kind": "quality"}, prefs)["basis"] == "hr" else "power"
+    b = TP.target_policy({"kind": "quality"}, prefs)["basis"]
+    return b if b in ("hr", "pace") else "power"          # SP-951: a flat interval by pace
 
 
 def target_types(items: list, basis: Optional[str] = None, quality: bool = False,
@@ -1999,8 +2076,8 @@ def target_types(items: list, basis: Optional[str] = None, quality: bool = False
     there it takes what such a session runs on at plan time (`qbasis`, else quality_auto_basis():
     課表偏好 hr or a non-Stryd power source → % LTHR, otherwise % CP; SP-84, owner 2026-10-07 /
     2026-10-13)."""
-    if basis not in ("hr", "power") and quality:
-        basis = qbasis if qbasis in ("hr", "power") else quality_auto_basis()
+    if basis not in ("hr", "power", "pace") and quality:
+        basis = qbasis if qbasis in ("hr", "power", "pace") else quality_auto_basis()
     steps: list = []
 
     def walk(xs):

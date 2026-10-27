@@ -946,6 +946,40 @@ run on the app's event loop in that tenant. `force` (the page's 立即重算) is
   `api/plan.put_profile` starts it right away on a new 功率來源 (`plan_auto.after_power_source`,
   trigger `power_source`, every tier); a CP going stale is caught by the next run. The state for the
   pages: `GET /api/v1/plan/power-state` (same dict).
+- 配速 basis (SP-951, owner 2026-10-27, SP-950 問答 Q1-3): `target_policy` has a fourth basis `pace`
+  (`BASES` auto / hr / power / pace; 課表偏好 `plan.prefs.target_basis = pace`, a session's own
+  `target_basis = pace`). In ② / ③ — and wherever 配速 is picked — the flat Zone 3 / Zone 5
+  intervals and tempo (session type `interval`: library variants that are not `hill`, the gate's
+  flat dose steps, the 減量期 flat templates) run by % threshold pace: the % CP band as threshold pace
+  ÷ (% CP) (`target_policy.pace_band`; running power ≈ proportional to flat speed, 推估 — 88–95 % CP
+  → 105–114 % of threshold pace), threshold pace = the plan's `thresholds.tpace`
+  (`thresholds.estimate_tpace`). The HR is only a cap note in the text: 「配速 7:01–7:35 /km
+  （105–114% 閾值配速） · 心率 ≤ 165 bpm」 (`target_policy.pace_text` / `cap_text`; no cap on a Zone 5
+  rep < 3 min). No threshold pace (the plan thresholds leave `tpace` out) → heart rate (+ 「RPE 8」 in
+  the text, no % CP) with 「沒有閾值配速：改用心率＋RPE」. 配速 picked for any other type changes
+  nothing there (自動: hill repeats → HR + RPE in ② / ③, power in ①; road easy / long → HR ≤ the
+  easy cap in ② / ③). Trail, long climbs, downhill, walking and the MP segment are unchanged; ① is
+  unchanged unless 配速 is picked. One basis everywhere a target is written: the text builders
+  (`interval_library.session_for`, `quality_gate.session`, `overview.taper_q_target` /
+  `taper_rules(th=)`) ask `target_policy.flat_pace(th, prefs)` with the plan thresholds' `tpace` and
+  `power_state` (`target_policy.text_th`; week_plan's `tt` carries both); the structure
+  (`workout_steps.resolve`: an auto band with `Ctx.basis = pace` → `_pace_band_step`, the watch gets
+  `zones.watch_band` as pace; `Ctx.hill` keeps a hill on HR) and the card summary
+  (`session_structure._hr_part` adds the cap) say the same; the push (`coros_workouts._variant_steps`
+  / `_quality_steps` → `_pace_work`, intensityType 3, faster bound first; `plan_store._basis_for`
+  passes `tpace`, thresholds without one = none) too. Fallbacks: HR basis with no LTHR → power only
+  with a CP (①), else pace, else none (was: an old CP's watts); a % CP / zone power step (a Palladino /
+  Stryd template) with no CP → the same band by % threshold pace with the warning 「沒有功率：% CP
+  換成 % 閾值配速（推估）」 (a hill or no threshold pace: the old error). 課表偏好 目標依據 has a 配速
+  radio (`static/schedule.html`).
+  No % CP / watts anywhere a ② / ③ session shows (owner): the 說明 says the band as % threshold pace
+  (or the HR band / 「RPE 8」 without one) — the library's main set and city warm-up
+  (`interval_library.CITY_NO_POWER`), the gate's dose sessions, the 減量期 templates
+  (`overview.TAPER_DETAIL_NO_POWER` / `taper_no_power`); a text-path interval (no library variant)
+  carries its band in `variant_adj["band"]` (`quality_gate.band_adj`), which
+  `workout_steps._quality_text` / `coros_workouts._quality_steps` read before the 說明's 「lo–hi% CP」
+  (`workout_steps.text_band`); the 出處 leaves its % CP parts out (`target_policy.source_without_power`).
+  ① keeps every text as it was.
 - Power bands (SP-378, `docs/research/power-zone-width.md`, owner 2026-10-12): a road easy run is
   the whole of Zone 1, 65–80 % CP; a road long run 65–88 % (`zones.EASY_BAND` / `LONG_BAND`,
   `WORKOUT_TARGETS` z2 / long); mountain / hike days keep 75–88 % (`TRAIL_BAND`). An auto interval
@@ -1059,3 +1093,5 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-23 | feature | SP-905 | A session's 目標 / 說明 / 出處 (target, detail, source) and the 測試 / 插入範本 rows' tip and source in the request's language. The generators (overview, projection, adapt, post_race, warmup, session_structure, base_climb, technical, steep_hill, plan_prefs, specific_phase, b2b, aet_test, cp_protocols, interval_library, quality_gate, target_policy, workout_templates, hr_profile's easy-run cap, base_check's easy power) write msgids — the zh-TW text byte for byte as before, so stored rows and the code that reads them (「；」 parts, 「心率 x–y bpm」, 「目標配速」, warmup's mark) are unchanged. `engine/stored_text` reads a stored text back by parts joined with 「；」「。」「·」 (a run of parts may be one msgid; a field may not swallow the parts after it), a 「、」 list in a field item by item, a capital only for a whole text. Responses keep the stored text as `<key>_src` (title, target, detail, source); the 課表 dialog and `to_source` send a shown 目標 / 說明 back as stored. Handlers that make stored texts (add / edit session, 新增課表's suggestion, 排入測試, accepting a suggestion, the 測試 dialog's protocols) run in zh-TW (`plan_sessions._stored_texts` / `_src_locale`) and answer in the request's language; the watch push they trigger keeps the request's language (unchanged). Tests: `backend/tests/test_en_texts_sp905.py` |
 | 2026-10-23 | bugfix | SP-909 | The 自動調整 panel (`static/autoplan.js`, 課表 and 總覽) in English: the pending proposal box, its buttons, the status / action / push words, the confirm and the failure alert through `common.autoplan.*`. The change log's texts are msgids (`engine/plan_auto.py`: the summary line, one per combination; the big-change texts; the CP / 課表心率區間 lines; the items' push state `PUSHED` / `TO_PUSH` / `APP_ONLY`, still compared as stored) with the zh-TW text unchanged; GET /plan/auto shows the stored log (summary, items' title / reason / push, big texts, errors) and the big-change texts in the request's language (`api/plan_auto.LOG_KEYS`, engine/stored_text). The 「⚠ 課表待確認」 watch notice is the watch's text: as before. Tests: `backend/tests/test_en_autoplan_sp909.py` |
 | 2026-10-27 | feature | SP-950 | 功率狀態 (`engine/power_state.py`): power only with a power meter (Stryd) and a fresh CP (≤ 42 days since a CP test or race). ② / ③: the week plan has no CP for targets (`thresholds.cp` None; the CP on file in `thresholds.power_state`), `target_policy` runs no session by power (road easy / long and hill repeats too; a chosen 功率 ignored, not deleted); ② note + CP test reason 「CP 已 N 天沒測…做一次 CP 測試就切回功率」; ③ no CP test (testing indicator, zone events), the AeT test no longer held back. Watch power is no power source (owner update 2026-10-27: stored 手錶推估功率 reads as none, `power.accept_watch_power` ignored, `_pd_mftp` no longer falls back to wrist power). The run re-plans / re-sends on a new state (`state.power_state`, `power_state` change-log row; `put_profile` → `after_power_source`). `GET /api/v1/plan/power-state`. Tests: `backend/tests/test_power_state_sp950.py` (+ updated sp493 / sp471 / sp294 / general settings / power source tests) |
+| 2026-10-27 | feature | SP-951 | 配速 basis: in ② / ③ (or with 配速 picked, 課表偏好 / a session's own) the flat Zone 3 / Zone 5 intervals and tempo run by % threshold pace (threshold pace ÷ % CP, 推估) with 「心率 ≤ X bpm」 as the cap note; no threshold pace → HR + RPE with the reason; hill repeats HR + RPE; ① unchanged. One basis in every text builder (`interval_library.session_for`, `quality_gate.session`, `overview.taper_q_target` via `target_policy.flat_pace` / `text_th`), the structure (`workout_steps.resolve` `Ctx.basis = pace`, `Ctx.hill`), the card summary and the COROS push (intensityType 3; `plan_store._basis_for` passes `tpace`). HR without LTHR no longer falls back to an old CP; % CP template steps with no CP → % threshold pace (warning). `plan.prefs.target_basis` accepts `pace`; 課表偏好 配速 radio. Tests: `backend/tests/test_pace_basis_sp951.py` (+ updated `test_target_policy.py`, `test_power_state_sp950.py`, `test_workout_steps_short_reps_sp645.py`) |
+| 2026-10-27 | feature | SP-951 R1 | No % CP / watts in a ② / ③ session's 說明 or 出處 either: the band in pace / HR / RPE words, a text-path interval's band in `variant_adj["band"]` (read by the structure and the push), the 出處's % CP parts left out. `test_taper_rules.py`'s two week-plan taper tests get a fresh CP test (they broke with SP-950: the fixture's CP was 60 days old) and ③ counterparts by pace. Tests: `test_pace_basis_sp951.py::test_no_session_builder_shows_power_without_power`, `test_no_week_plan_session_shows_power_without_power`, `test_taper_rules.py` |
