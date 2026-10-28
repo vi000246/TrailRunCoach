@@ -46,10 +46,21 @@
     el("ai-key-clear").hidden = k.source !== "saved";
     el("ai-test-row").hidden = k.source === "none";
     el("ai-model").textContent = t("settings.askai.model", { model: s.model, n: s.used_today, limit: s.daily_limit });
+    // SP-883: an open 「問 AI」 on this page unlocks (or locks) as the key is saved or cleared
+    window.dispatchEvent(new CustomEvent("askai:key", { detail: { has: k.source !== "none" } }));
+  }
+
+  // SP-883: 「問 AI」's 「到設定填 API key」 lands on #ai-key-row — the section is hidden until GET answers, so the
+  // row is scrolled to, outlined and its field focused here (the outline goes once a key is saved)
+  function asked() {
+    if (location.hash !== "#ai-key-row" || el("ai-key-row").hidden) return;
+    el("ai-key-row").classList.add("link-asked");
+    el("ai-key-row").scrollIntoView({ block: "center" });
+    el("ai-key").focus({ preventScroll: true });
   }
 
   async function load() {
-    try { show(await api()); } catch (e) {
+    try { show(await api()); asked(); } catch (e) {
       if (e.status === 403 || e.status === 404) { el("askai").hidden = true; return; }
       say(t("settings.askai.failed", { msg: e.message.slice(0, 80) }));
     }
@@ -80,6 +91,7 @@
     const v = el("ai-key").value.trim();
     if (!v) return;
     el("ai-key").value = "";
+    el("ai-key-row").classList.remove("link-asked");
     save({ api_key: v });
   };
   el("ai-key-clear").onclick = () => save({ api_key: "" });

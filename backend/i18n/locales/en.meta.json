@@ -10471,6 +10471,42 @@
     "draft": true,
     "src": "backend/accounts/cairn_push.py"
   },
+  "Cairn 上這條行程勾了「這是跟團的時刻表」，只能讀、這邊不會寫回去。再按一次會在你的 Cairn 另外建一條。": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "Cairn 上這條行程勾了「這是跟團的時刻表」，只能讀、這邊不會蓋掉它。要推的話先在 Cairn 取消勾選。": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "從疊石 Cairn 匯入還沒開放": {
+    "draft": true,
+    "src": "backend/accounts/cairn_trips.py"
+  },
+  "先在設定連結疊石 Cairn 才能匯入你的行程": {
+    "draft": true,
+    "src": "backend/accounts/cairn_trips.py"
+  },
+  "你的疊石 Cairn 裡找不到這條行程（可能已經刪掉）": {
+    "draft": true,
+    "src": "backend/accounts/cairn_trips.py"
+  },
+  "疊石 Cairn 不讓這裡讀你的行程（Cairn 的方案或權限）": {
+    "draft": true,
+    "src": "backend/accounts/cairn_trips.py"
+  },
+  "今天從疊石 Cairn 讀行程的次數用完了，明天再試": {
+    "draft": true,
+    "src": "backend/accounts/cairn_trips.py"
+  },
+  "這條行程的 GPX 太大": {
+    "draft": true,
+    "src": "backend/accounts/cairn_trips.py"
+  },
+  "這場賽事的 GPX 不是從 Cairn 匯入的": {
+    "draft": true,
+    "src": "backend/api/link.py"
+  },
   "讀你路線的天氣": {
     "draft": true,
     "src": "backend/accounts/links.py"

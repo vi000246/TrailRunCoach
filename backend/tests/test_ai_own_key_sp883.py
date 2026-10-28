@@ -82,15 +82,16 @@ def test_a_member_s_own_key_is_used_counted_under_their_name_sealed_and_masked(s
     mem = _member(site)
     s = mem.get("/api/v1/ai/settings").json()
     assert s["who"] == "member" and s["key"] == {"source": "none", "masked": None}   # never the server's key
-    assert s["enabled"] is False                                        # no 「問 AI」 before a key
-    assert mem.get("/api/v1/session").json()["ai"] == {"on": False, "key": False}
+    # the owner 2026-10-28: 「問 AI」 shows before a key too; its dialog asks for the key (own, key false)
+    assert s["enabled"] is True
+    assert mem.get("/api/v1/session").json()["ai"] == {"on": True, "key": False, "own": True}
     r = mem.post("/api/v1/ai/ask", json={"question": "我現在的訓練狀態如何？"}, headers=mem.h)
-    assert r.status_code == 409 and r.json()["detail"]["code"] == "AI_OFF" and not m.calls   # off until a key
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "AI_NO_KEY" and not m.calls
 
     r = mem.put("/api/v1/ai/settings", json={"api_key": MEMBER_KEY}, headers=mem.h)
     assert r.status_code == 200 and MEMBER_KEY not in r.text
     assert r.json()["key"] == {"source": "saved", "masked": "…MINE"} and r.json()["enabled"] is True
-    assert mem.get("/api/v1/session").json()["ai"] == {"on": True, "key": True}
+    assert mem.get("/api/v1/session").json()["ai"] == {"on": True, "key": True, "own": True}
     # sealed in the member's own folder; the owner's folder untouched
     [f] = _files(C.FILE_NAME)
     raw = f.read_text("utf-8")

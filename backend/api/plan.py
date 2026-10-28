@@ -399,21 +399,26 @@ async def import_event_cairn(eid: str, body: CairnIn):
     """SP-537: the event's GPX and day ends from a 疊石 Cairn share link (one way, Cairn → here). The
     nights marked in Cairn are applied at once (the user can still change them); the days follow them.
     The token reads Cairn once and is not kept: the row keeps the route's id and its token-free link."""
-    import dataclasses
-
     from starlette.concurrency import run_in_threadpool
     from backend.engine import cairn as CA
-    from backend.engine import event_gpx as EG
-    e = _plan_event(eid)
+    _plan_event(eid)
     try:
         imp = await run_in_threadpool(CA.import_link, body.url)
     except CA.CairnError as x:
         raise HTTPException(_CAIRN_STATUS.get(x.kind, 400), str(x))
+    return await run_in_threadpool(apply_cairn_import, eid, imp)
+
+
+def apply_cairn_import(eid: str, imp: dict) -> dict:
+    """A Cairn trip read (engine/cairn.import_link from a share link, SP-537; accounts/cairn_trips.import_trip
+    from the person's own trips, SP-538) becomes the event's GPX, day ends, distance, climb and days."""
+    import dataclasses
+
+    from backend.engine import event_gpx as EG
+    e = _plan_event(eid)
     try:
-        row = await run_in_threadpool(lambda: EG.save(eid, imp["data"], imp["filename"],
-                                                      day_splits_km=imp["splits_km"] or None,
-                                                      source={**imp["source"], "nights": imp["nights"],
-                                                              "schedule": imp.get("schedule")}))
+        row = EG.save(eid, imp["data"], imp["filename"], day_splits_km=imp["splits_km"] or None,
+                      source={**imp["source"], "nights": imp["nights"], "schedule": imp.get("schedule")})
     except EG.EventGpxError as x:
         raise HTTPException(400, str(x))
     # SP-699: the race takes the Cairn route's distance and climb (a plain GPX upload only fills empty

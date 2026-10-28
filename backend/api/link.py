@@ -37,6 +37,11 @@ The user's side also has
                                          A GPX imported from Cairn updates the trip it came from
                                          (SP-816; 409 CAIRN_ORIGIN_GONE when that is not theirs /
                                          gone, then {new: true} creates one)
+  GET  /api/v1/account/links/cairn/trips[?held_only=1]   賽事管理's 「從我的疊石 Cairn 行程匯入」 (SP-538,
+                                         cairn_trips.py): the person's trips in Cairn, which race holds
+                                         which, and whose version moved (「重新同步」)
+  POST /api/v1/account/links/cairn/events/<event id>/import   {trip_id?}: that trip becomes the race's
+                                         GPX and nights (no trip_id: the one it came from, re-synced)
 """
 from __future__ import annotations
 
@@ -275,3 +280,66 @@ async def cairn_push(eid: str, body: PushIn):
     u = _signed_in()
     return JSONResponse(await run_in_threadpool(CP.push, u, eid, bool(body.consent), bool(body.new)),
                         headers=NO_STORE)
+
+
+# ---------------------------------------------------------------------------- 從我的 Cairn 行程匯入 (SP-538)
+
+@router.get("/api/v1/account/links/cairn/trips")
+async def cairn_trips(held_only: bool = False):
+    """賽事管理's 「從我的疊石 Cairn 行程匯入」 (accounts/cairn_trips.py): {available, reason, linked,
+    link_url, card_off, trips: [summary + event_id], races: {event id: {trip_id, have, now, stale}},
+    error: {code, message} | null}. Not linked / not set up: no call to Cairn, the flags only.
+    held_only: the race list's 「Cairn 上改過了」 — Cairn is asked only when a race holds a trip."""
+    from backend.accounts import cairn_trips as CT
+    from backend.api.xp import OFF_KEY
+    from backend.engine.wko5expr.datasource import read_setting
+    _on()
+    u = _signed_in()
+    c = LK.CAIRN
+    site_ok = bool(LK.out_secret(c) and LK.base_url(c))
+    linked = await run_in_threadpool(LK.is_linked, u, c)
+    out = {"available": site_ok and bool(u.google_sub),
+           "reason": None if site_ok and u.google_sub else "no_google" if site_ok else "not_open",
+           "linked": linked, "link_url": LK.link_url(c), "card_off": bool(read_setting(OFF_KEY, False)),
+           "trips": [], "races": {}, "error": None}
+    if not (out["available"] and linked):
+        return JSONResponse(out, headers=NO_STORE)
+    have = await run_in_threadpool(CT.held)
+    if held_only and not have:
+        return JSONResponse(out, headers=NO_STORE)
+    try:
+        listed = await run_in_threadpool(CT.trips, u)
+    except UserError as e:
+        out["error"] = {"code": e.code, "message": e.message()}
+        return JSONResponse(out, headers=NO_STORE)
+    holder = {h["trip_id"]: eid for eid, h in have.items()}
+    out["trips"] = [{**t, "event_id": holder.get(t["id"])} for t in listed]
+    out["races"] = CT.compare(listed, have)
+    return JSONResponse(out, headers=NO_STORE)
+
+
+class TripImportIn(BaseModel):
+    trip_id: Optional[str] = None       # none: the trip the race's GPX came from (「重新同步」)
+
+
+@router.post("/api/v1/account/links/cairn/events/{eid}/import")
+async def cairn_trip_import(eid: str, body: TripImportIn):
+    """One of the person's Cairn trips becomes the race's GPX, nights, distance, climb and days — the same
+    as a share link's import (api/plan.apply_cairn_import), the trip's version kept for 「重新同步」."""
+    from backend.accounts import cairn_trips as CT
+    from backend.api.plan import _plan_event, apply_cairn_import
+    from backend.engine import event_gpx as EG
+    _on()
+    u = _signed_in()
+    _plan_event(eid)
+    tid = body.trip_id
+    if not tid:
+        src = ((await run_in_threadpool(EG.get, eid)) or {}).get("source") or {}
+        tid = src.get("gpx_id") if src.get("kind") == "cairn" else None
+        if not tid:
+            raise UserError(N_("這場賽事的 GPX 不是從 Cairn 匯入的"), code="NOT_FROM_CAIRN", status=409)
+    imp = await run_in_threadpool(CT.import_trip, u, tid)
+    out = await run_in_threadpool(apply_cairn_import, eid, imp)
+    out["trip"] = imp["trip"]
+    log.info("race GPX imported from the person's Cairn trip")
+    return JSONResponse(out, headers=NO_STORE)

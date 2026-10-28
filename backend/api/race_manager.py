@@ -9,7 +9,8 @@
 Adding / editing / deleting a race is the season plan's own API (PUT /api/v1/plan/events, DELETE
 /api/v1/plan/events/{id}) — one list of events for this page and 賽事周期. Two races are overlaid by
 GET /api/v1/app/activity-compare (SP-625); Cairn: POST /api/v1/plan/events/{id}/gpx/cairn (a share
-link, SP-537) and /api/v1/account/links/cairn/events/{id}[/push] (SP-655).
+link, SP-537), /api/v1/account/links/cairn/trips + /events/{id}/import (the person's own trips and
+「重新同步」, SP-538) and /api/v1/account/links/cairn/events/{id}[/push] (SP-655).
 """
 from __future__ import annotations
 

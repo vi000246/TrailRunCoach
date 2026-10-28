@@ -19,8 +19,10 @@
  * more with data-ai-card / data-ai-kind / data-ai-title, or with data-ai-facts / data-ai-rules (JSON) —
  * set in the markup, or by the page on the `askai:describe` event the card gets just before it is read.
  *
- * Loaded by shell.js only when the session says so (TRC_SESSION.ai.on: the owner, switched on in 設定 ›
- * 進階 › AI 問答). Text: the shell catalog, shell.askai.* (static/i18n/<locale>/shell.json).
+ * Loaded by shell.js only when the session says so (TRC_SESSION.ai.on: the owner, or a signed-in member while
+ * the server's TRC_AI_MEMBER_KEYS is on — SP-883; switched on in 設定 › 進階 › AI 問答). A member without their
+ * own key (TRC_SESSION.ai.own, key false) gets a reminder with a link to the key field instead of the questions,
+ * and nothing can be sent until the key is saved. Text: the shell catalog, shell.askai.* (static/i18n/<locale>/shell.json).
  */
 (() => {
   if (window.AskAI) return;
@@ -31,6 +33,11 @@
   const AI = SESSION.ai || {};
   const API = "/api/v1/ai/ask";
   const SETTINGS = "/api/v1/app/settings#askai";
+  // SP-883: a member on their own key — without one the dialog asks for it (the key field, outlined) and sends
+  // nothing; once saved (here: the settings page's `askai:key` event, or the check when the dialog opens) it asks
+  const MEMBER = AI.own === true;
+  const SETTINGS_KEY = "/api/v1/app/settings#ai-key-row";
+  let hasKey = AI.key !== false;
   const PAGE = (document.querySelector("script[data-page]") || { dataset: {} }).dataset.page || "";
   const KINDS = ["page", "card", "chart", "session", "calc", "hint"];
   const PRESETS = { page: 4, card: 3, chart: 3, session: 3, calc: 3, hint: 3 };
@@ -167,11 +174,19 @@
   .askai-err { color: var(--bad, #c0392b); font-size: 12.5px; }
   .askai-err a, .askai-nokey a { color: var(--accent, #2563eb); }
   .askai-nokey { margin: 8px 12px 0; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line, #e1e5ea); font-size: 12.5px; }
+  .askai-needkey { margin: 10px 12px 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.55;
+    border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 40%, var(--line, #e1e5ea));
+    background: color-mix(in srgb, var(--accent, #2563eb) 8%, var(--panel, #fff)); color: var(--text, #111); }
+  .askai-needkey b { display: block; margin-bottom: 3px; }
+  .askai-needkey p { margin: 0 0 8px; color: var(--muted, #556); }
+  .askai-needkey a { display: inline-block; font-weight: 600; color: var(--accent, #2563eb); }
+  .askai-dlg.askai-locked [data-askai-presets] { display: none; }
   .askai-ft { display: flex; gap: 6px; padding: 8px 12px 10px; border-top: 1px solid var(--line, #e1e5ea); }
   .askai-ft textarea { flex: 1; resize: none; height: 38px; max-height: 120px; border: 1px solid var(--line, #d5dbe2); border-radius: 8px;
     padding: 8px 9px; font: inherit; background: var(--bg, var(--panel, #fff)); color: var(--text, #111); }
   .askai-ft button { border: 0; border-radius: 8px; padding: 0 14px; background: var(--accent, #2563eb); color: #fff; font: 600 13px system-ui, sans-serif; cursor: pointer; }
   .askai-ft button:disabled { opacity: .5; cursor: default; }
+  .askai-ft textarea:disabled { opacity: .55; cursor: not-allowed; }
   .askai-row { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--line, #e1e5ea); white-space: normal; }
   .askai-link { border: 0; background: none; padding: 0; color: var(--accent, #2563eb); font: inherit; font-weight: 600; cursor: pointer; }
   .askai-link:hover { text-decoration: underline; }
@@ -199,6 +214,7 @@
   dlg.innerHTML = `<div class="askai-hd">${ICON}<span>${esc(T("title"))}</span><button type="button" class="askai-x" data-askai-close aria-label="${esc(T("close"))}">✕</button></div>
     <div class="askai-ctx" data-askai-ctx><span class="askai-lab">${esc(T("asking"))}</span><b data-askai-ctx-t></b><button type="button" data-askai-page title="${esc(T("whole_page_title"))}" aria-label="${esc(T("whole_page_title"))}">✕</button></div>
     <div class="askai-nokey" data-askai-nokey hidden>${esc(T("no_key"))} <a href="${SETTINGS}">${esc(T("no_key_link"))}</a></div>
+    <div class="askai-needkey" data-askai-needkey role="note" hidden><b>${esc(T("need_key_title"))}</b><p>${esc(T("need_key"))}</p><a href="${SETTINGS_KEY}">${esc(T("need_key_link"))}</a></div>
     <div class="askai-presets" data-askai-presets></div>
     <div class="askai-log" data-askai-log aria-live="polite"></div>
     <div class="askai-ft"><textarea data-askai-in rows="1" maxlength="500" placeholder="${esc(T("placeholder"))}" aria-label="${esc(T("placeholder"))}"></textarea>
@@ -245,7 +261,7 @@
 
   async function ask(q) {
     q = String(q || "").trim();
-    if (!q || busy) return;
+    if (!q || busy || locked()) return;
     busy = true;
     $("[data-askai-send]").disabled = true;
     const log = $("[data-askai-log]");
@@ -271,8 +287,32 @@
     log.insertAdjacentHTML("beforeend", html);
     log.scrollTop = log.scrollHeight;
     busy = false;
-    $("[data-askai-send]").disabled = false;
+    $("[data-askai-send]").disabled = locked();
   }
+
+  // ---- a member without a key (SP-883): the reminder instead of the questions, nothing can be sent --------
+  const locked = () => MEMBER && !hasKey;
+  function keyState() {
+    const lock = locked();
+    dlg.classList.toggle("askai-locked", lock);
+    $("[data-askai-needkey]").hidden = !lock;
+    $("[data-askai-nokey]").hidden = MEMBER || hasKey;          // the owner's line, as before (SP-786)
+    $("[data-askai-in]").disabled = lock;
+    $("[data-askai-send]").disabled = lock || busy;
+  }
+  function setKey(has) {
+    hasKey = !!has;
+    keyState();
+  }
+  // saved in another tab, or on the settings page before this dialog was opened: ask the server once more
+  async function recheck() {
+    try {
+      const r = await fetch("/api/v1/ai/settings", { credentials: "same-origin" });
+      const s = r.ok ? await r.json() : null;
+      if (s && s.key) setKey(s.key.source !== "none");
+    } catch (e) { /* stays as the session said */ }
+  }
+  window.addEventListener("askai:key", (e) => setKey(e.detail && e.detail.has));
 
   /** Open the dialog on `el` (a card; null: the card in view, false: the whole page); `extra` overrides the summary. */
   function open(el, kind, extra) {
@@ -281,10 +321,14 @@
     if (JSON.stringify(next) !== JSON.stringify(focus)) { history = []; $("[data-askai-log]").innerHTML = ""; }
     focus = next;
     showCtx();
-    $("[data-askai-nokey]").hidden = AI.key !== false;
+    keyState();
+    if (locked()) recheck();
     dlg.hidden = false;
     fab.hidden = true;
-    setTimeout(() => { const i = $("[data-askai-in]"); if (i && !matchMedia("(max-width: 699px)").matches) i.focus(); }, 0);
+    setTimeout(() => {
+      const i = locked() ? $("[data-askai-needkey] a") : $("[data-askai-in]");
+      if (i && !matchMedia("(max-width: 699px)").matches) i.focus();
+    }, 0);
   }
   function close() { dlg.hidden = true; fab.hidden = false; place(); fab.focus(); }
 

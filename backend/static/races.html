@@ -146,6 +146,11 @@ dialog#ed[open] { display: flex; flex-direction: column; }
 .hint { color: var(--warn); font-size: 12px; }
 details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; margin: 2px 0 6px; }
 #cairnres { white-space: pre-line; }
+/* SP-538: the person's own Cairn trips in the editor; a race whose trip changed in Cairn is marked in the list */
+#ct-pick { flex: 1; min-width: 0; max-width: 100%; }
+#ct-sync:empty, #ct-msg:empty { display: none; }
+.ct-badge { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 8px; font-size: 11px; line-height: 16px;
+  color: var(--accent, #2a78d6); border: 1px solid currentColor; white-space: nowrap; }
 /* SP-699: 「這是登山社／團排好的時間表」 with the Cairn import (moved here from 賽事計算機) */
 .grp-ask { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; line-height: 1.6; font-size: 13px; }
 .grp-ask label { font-weight: 600; cursor: pointer; display: inline-flex; gap: 6px; align-items: flex-start; }
@@ -295,6 +300,17 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
     <div class="full edsec" id="ed-cairn">
       <h3><span data-i18n="races.cairn.import_h">從 Cairn 匯入 GPX</span>
         <span class="help" tabindex="0">?<span class="tip"><span data-i18n="races.cairn.import_how"></span> <span data-i18n="races.cairn.import_pick_na"></span></span></span></h3>
+      <!-- SP-538: the person's own Cairn trips (linked: GET /api/v1/account/links/cairn/trips), 「重新同步」 when
+           the trip's version in Cairn moved; not linked: a card to 設定 › 疊石 Cairn, 「不用了」 = the xp card's off -->
+      <div id="ct-wrap" hidden>
+        <div class="bar">
+          <select id="ct-pick" data-i18n-attr="aria-label:races.ct.pick" aria-label=""></select>
+          <button type="button" id="ct-go" data-i18n="races.cairn.import_go">匯入</button>
+        </div>
+        <div class="meta" id="ct-sync"></div>
+        <div class="meta" id="ct-msg"></div>
+      </div>
+      <div id="ct-card" hidden></div>
       <div class="bar">
         <input id="evcairn" type="url" autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:races.cairn.url_ph;aria-label:races.cairn.url_ph" placeholder="" aria-label="">
         <button type="button" id="ci-go" data-i18n="races.cairn.import_go">匯入</button>
@@ -334,7 +350,8 @@ const T = (k, p) => I18N.t("races." + k, p);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const S = { rows: [], today: "", pick: [], cur: null, det: null, act: 0, dmode: "pace", cmp: null, omode: "pace", xmode: "pct", charts: [], cmpCharts: [], edit: null, cp: null, planEv: {} };
+const S = { rows: [], today: "", pick: [], cur: null, det: null, act: 0, dmode: "pace", cmp: null, omode: "pace", xmode: "pct", charts: [], cmpCharts: [], edit: null, cp: null, planEv: {}, ct: null, ctRaces: {} };
+const CTRIPS = "/api/v1/account/links/cairn/trips";
 
 function hms(s) {
   if (s == null) return "—";
@@ -433,7 +450,10 @@ function cell(c, r) {
     case "date": return `<span class="yr">${esc(r.date.slice(0, 5))}</span>${esc(r.date.slice(5))}${r.end !== r.date ? `<span class="meta"> – ${esc(r.end.slice(5))}</span>` : ""}`;
     case "name": {
       const sub = [kindName(r.kind), r.climbing_m ? `↑${num(r.climbing_m)} m` : "", statusText(r), r.result || ""].filter(Boolean).join(" · ");
-      return `${r.priority ? `<span class="pr ${r.priority}">${r.priority}</span> ` : ""}<button class="name" data-open="${esc(r.id)}">${esc(r.name || T("unnamed"))}</button>`
+      // SP-538: the race's Cairn trip changed in Cairn — 編輯 › 重新同步
+      const moved = r.event_id && S.ctRaces[r.event_id]?.stale === true
+        ? `<span class="ct-badge" title="${esc(T("ct.stale"))}">⟳ Cairn</span>` : "";
+      return `${r.priority ? `<span class="pr ${r.priority}">${r.priority}</span> ` : ""}<button class="name" data-open="${esc(r.id)}">${esc(r.name || T("unnamed"))}</button>${moved}`
         + `<span class="sub">${esc(sub)}</span>`;
     }
     case "kind": return esc(kindName(r.kind));
@@ -671,7 +691,7 @@ let dayPlanLenient = false, dayPlanTotals = null;
 const dayFilled = (rows) => rows.some((r) => r && ["km", "gain_m", "loss_m"].some((k) => r[k] != null));
 // SP-533: the trip has a GPX (stored, attached in the form) or one is to come: its days come from the GPX
 let evGpx = null;
-const gpxDays = () => !!evGpx || !!$("evgpxfile").files.length || !!$("evcairn").value.trim() || $("evgpxlater").checked;
+const gpxDays = () => !!evGpx || !!$("evgpxfile").files.length || !!$("evcairn").value.trim() || !!$("ct-pick").value || $("evgpxlater").checked;
 function dayPlanRequired(rows) { return !(dayPlanLenient || gpxDays()) || dayFilled(rows || readDayRows()); }
 function syncDayRequired() {
   const req = dayPlanRequired(), f = EVF();
@@ -738,6 +758,9 @@ EVF().days.addEventListener("input", () => { dayPlanForm(); xpCard(); });
 function xpCard() {
   const el = $("xp-cairn-ed");
   if (!window.XpCard) return;
+  // SP-538: where this site links with Cairn, the import's own card (ct-card: link → pick your trips) speaks instead
+  // (asked once that answer is in: XpCard.show is async, a hide sent meanwhile would lose to it)
+  if (S.ctWait || (S.ct && S.ct.available)) { XpCard.hide(el); return; }
   // SP-764: someone who just came from Cairn with this route has Cairn already — no introduction then
   if ((Number(EVF().days.value) || 1) >= 2 && !S.fromCairn) XpCard.show(el, { where: "races" }); else XpCard.hide(el);
 }
@@ -787,8 +810,10 @@ async function openEditor(row, fromAct) {
   $("cp-wrap").hidden = !ev;
   $("cp-msg").textContent = "";
   renderGroupAsk();
+  ctReset();
   xpCard();
   $("ed").showModal();
+  ctLoad().then(() => { ctRender(); xpCard(); });      // SP-538: the person's Cairn trips, not waited for
   if (ev) { $("cp-body").textContent = T("loading"); $("cp-go").disabled = true; await cairnStatus(); cpRender(); }
 }
 async function saveEvent() {
@@ -806,7 +831,8 @@ async function saveEvent() {
   body.day_plan = needsDayPlan() ? readDayRows().map((r) => ({ km: r.km, gain_m: r.gain_m, loss_m: r.loss_m })) : null;
   const file = $("evgpxfile").files[0] || null;
   const cairn = $("evcairn").value.trim();
-  body.gpx_pending = !!file || !!cairn || $("evgpxlater").checked;
+  const trip = !S.edit && $("ct-pick").value;          // SP-538: a new race takes the picked trip once saved
+  body.gpx_pending = !!file || !!cairn || !!trip || $("evgpxlater").checked;
   $("ed-save").disabled = true; $("ed-msg").textContent = T("saving");
   let saved;
   try { saved = await call("PUT", "/events", body); }
@@ -817,7 +843,8 @@ async function saveEvent() {
   toast(T("ed.saved"));
   const id = saved.event.id;
   const up = file ? await uploadEventGpx(id, file) : null;
-  const imported = !file && cairn ? await importEventCairn(id, cairn) : null;
+  const imported = !file && cairn ? await importEventCairn(id, cairn)
+    : !file && trip ? await importTrip(id, trip) : null;
   // SP-764: brought from Cairn → on to the calculator with this race (first=1: no run or hike recorded yet)
   if (imported && S.fromCairn) {
     location.assign("/api/v1/racepower/page?" + new URLSearchParams({ event: id, from: "cairn", ...(S.fromCairn.first ? { first: "1" } : {}) }));
@@ -990,37 +1017,171 @@ async function importCairnNow() {
   $("ci-go").disabled = true; $("ci-msg").textContent = T("sending");
   try {
     const r = await send(`${PLAN}/events/${encodeURIComponent(e.id)}/gpx/cairn`, "POST", { url });
-    if (r.event) {
-      S.edit = { ...e, ...r.event, gpx: r.gpx };
-      const f = EVF();
-      f.days.value = r.event.days || 1;
-      f.distance_km.value = r.event.distance_km ?? "";
-      f.climbing_m.value = r.event.climbing_m ?? "";
-      evGpx = r.gpx || evGpx; dayPlanLenient = false; dayPlanTotals = null;
-      dayPlanForm(r.event.day_plan || []);
-      f.distance_km.value = r.event.distance_km ?? "";      // the route's totals, not the days' rounded sums
-      f.climbing_m.value = r.event.climbing_m ?? "";
-    }
-    $("evcairn").value = ""; syncDayRequired();
-    renderGroupAsk();                                          // SP-699: a timetable came with it → asked here
-    xpCard();                                                  // SP-763: the days may have changed
-    $("ci-msg").innerHTML = `<span class="ok">${esc(T("cairn.imported_ev", { name: r.cairn?.name || "", km: num(r.event?.distance_km ?? r.gpx?.km, 1),
-      gain: num(r.event?.climbing_m ?? r.gpx?.gain_m), days: r.event_days }))} ✓</span>`
-      + (r.cairn?.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join("");
-    loadPlanEvents(); load().then(() => { if (S.cur) openRace(S.cur); });
-    await cairnStatus(); cpRender();
+    $("evcairn").value = "";
+    $("ci-msg").innerHTML = await applyImported(r);
   } catch (err) { $("ci-msg").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
   $("ci-go").disabled = false;
+}
+// a Cairn import's answer ({gpx, event, event_days, cairn}: a share link's or one of the person's trips) into the
+// open editor; the list and the open race reload behind it. → the message to show
+async function applyImported(r) {
+  const e = S.edit;
+  if (r.event) {
+    S.edit = { ...e, ...r.event, gpx: r.gpx };
+    const f = EVF();
+    f.days.value = r.event.days || 1;
+    f.distance_km.value = r.event.distance_km ?? "";
+    f.climbing_m.value = r.event.climbing_m ?? "";
+    evGpx = r.gpx || evGpx; dayPlanLenient = false; dayPlanTotals = null;
+    dayPlanForm(r.event.day_plan || []);
+    f.distance_km.value = r.event.distance_km ?? "";      // the route's totals, not the days' rounded sums
+    f.climbing_m.value = r.event.climbing_m ?? "";
+  }
+  syncDayRequired();
+  renderGroupAsk();                                          // SP-699: a timetable came with it → asked here
+  xpCard();                                                  // SP-763: the days may have changed
+  const msg = `<span class="ok">${esc(T("cairn.imported_ev", { name: r.cairn?.name || "", km: num(r.event?.distance_km ?? r.gpx?.km, 1),
+    gain: num(r.event?.climbing_m ?? r.gpx?.gain_m), days: r.event_days }))} ✓</span>`
+    + (r.cairn?.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join("");
+  loadPlanEvents(); load().then(() => { if (S.cur) openRace(S.cur); });
+  await cairnStatus(); cpRender();
+  return msg;
+}
+
+// ---------------- SP-538: 從我的疊石 Cairn 行程匯入 (accounts/cairn_trips.py) ----------------
+// linked: a select of the person's trips (匯入 replaces the race's GPX at once; a new race takes it when saved)
+// and 「重新同步」 when the trip's version in Cairn moved; not linked: a card to 設定 › 疊石 Cairn with 「不用了」
+// (the xp card's own switch, ui.xp_cairn_off — 設定 › 提示多寡 shows it again); not set up here: nothing.
+function ctReset() {
+  S.ct = null; S.ctWait = true;
+  $("ct-wrap").hidden = true; $("ct-card").hidden = true; $("ct-card").innerHTML = "";
+  $("ct-pick").innerHTML = ""; $("ct-sync").innerHTML = ""; $("ct-msg").innerHTML = "";
+}
+async function ctLoad() {
+  try { S.ct = await j(CTRIPS); } catch { S.ct = null; }            // 404: sign-in off / the demo
+  S.ctWait = false;
+  if (S.ct) Object.assign(S.ctRaces, S.ct.races || {});
+}
+const ctKm = (m) => (m == null ? "—" : num(m / 1000, 1));
+function ctRender() {
+  const st = S.ct, wrap = $("ct-wrap"), card = $("ct-card");
+  wrap.hidden = true; card.hidden = true; card.innerHTML = "";
+  if (!st || !st.available) return;
+  if (!st.linked) {
+    if (st.card_off) return;
+    card.innerHTML = `<div class="xp-card" role="note"><b class="xp-h">🪨 ${esc(T("ct.card_h"))}</b>`
+      + `<p class="xp-text">${esc(T("ct.card_body"))}</p><div class="xp-acts">`
+      + `<a class="xp-go" href="${esc(st.link_url)}">${esc(T("ct.card_go"))}</a>`
+      + `<button type="button" class="xp-no" id="ct-no">${esc(T("ct.card_no"))}</button></div></div>`;
+    card.hidden = false;
+    $("ct-no").onclick = ctDismiss;
+    return;
+  }
+  wrap.hidden = false;
+  const pick = $("ct-pick"), go = $("ct-go");
+  if (st.error) {
+    pick.hidden = go.hidden = true;
+    $("ct-msg").innerHTML = `<span class="err">${esc(st.error.message)}</span>`;
+    return;
+  }
+  const trips = st.trips || [];
+  pick.hidden = go.hidden = !trips.length;
+  if (!trips.length) $("ct-msg").textContent = T("ct.empty");
+  const id = S.edit?.id;
+  pick.innerHTML = `<option value="">${esc(T("ct.pick"))}</option>` + trips.map((t) => {
+    const parts = [t.name || t.id, t.days ? T("ct.days", { n: t.days }) : "", `${ctKm(t.distance_m)} km`,
+                   t.gain_m != null ? `↑${num(t.gain_m)} m` : ""];
+    if (t.event_id && t.event_id !== id) parts.push(T("ct.held"));
+    return `<option value="${esc(t.id)}">${esc(parts.filter(Boolean).join(" · "))}</option>`;
+  }).join("");
+  go.disabled = true;
+  go.hidden = go.hidden || !id;                    // a new race: imported when saved
+  ctSync();
+}
+// the open race's own trip: changed in Cairn → 「重新同步」; the same version → ✓; no version kept (a share
+// link's import) → the button only
+function ctSync() {
+  const el = $("ct-sync"), id = S.edit?.id, x = id && S.ct?.races?.[id];
+  el.innerHTML = "";
+  if (!x) return;
+  const btn = `<button type="button" id="ct-resync">⟳ ${esc(T("ct.resync"))}</button>`;
+  if (x.stale === true) el.innerHTML = `<b>${esc(T("ct.stale"))}</b> ${btn}`;
+  else if (x.stale === false) el.innerHTML = `<span class="ok">✓ ${esc(T("ct.synced"))}</span>`;
+  else el.innerHTML = btn;
+  const b = $("ct-resync");
+  if (b) b.onclick = () => ctImport(null);
+}
+async function ctImport(tripId) {
+  const e = S.edit;
+  if (!e) return;
+  const go = $("ct-go"), b = $("ct-resync");
+  go.disabled = true; if (b) b.disabled = true;
+  $("ct-msg").textContent = T("sending");
+  try {
+    const r = await send(CPUSH + encodeURIComponent(e.id) + "/import", "POST", tripId ? { trip_id: tripId } : {});
+    $("ct-msg").innerHTML = await applyImported(r);
+    if (r.trip) S.ctRaces[e.id] = { trip_id: r.trip.id, have: r.trip.version, now: r.trip.version, stale: r.trip.version ? false : null };
+    if (S.ct) {
+      S.ct.races = { ...(S.ct.races || {}), [e.id]: S.ctRaces[e.id] };
+      S.ct.trips = (S.ct.trips || []).map((t) => (t.id === r.trip?.id ? { ...t, event_id: e.id } : t.event_id === e.id ? { ...t, event_id: null } : t));
+    }
+    const msg = $("ct-msg").innerHTML;
+    ctRender(); $("ct-msg").innerHTML = msg;
+    renderList();
+  } catch (err) {
+    $("ct-msg").innerHTML = `<span class="err">${esc(err.message)}</span>`;
+    go.disabled = !$("ct-pick").value; if (b) b.disabled = false;
+  }
+}
+// a new race: the picked trip fills what the form can show now (name, days, distance, climb); saving imports it
+$("ct-pick").addEventListener("change", () => {
+  const t = (S.ct?.trips || []).find((x) => x.id === $("ct-pick").value);
+  $("ct-go").disabled = !t;
+  if (S.edit || !t) { syncDayRequired(); return; }
+  const f = EVF();
+  if (!f.name.value.trim()) f.name.value = t.name || "";
+  if (t.days) f.days.value = t.days;
+  if (t.distance_m != null) f.distance_km.value = (t.distance_m / 1000).toFixed(1);
+  if (t.gain_m != null) f.climbing_m.value = Math.round(t.gain_m);
+  dayPlanForm(); syncDayRequired(); xpCard();
+  $("ct-msg").textContent = T("cairn.on_save");
+});
+$("ct-go").onclick = () => { const v = $("ct-pick").value; if (v) ctImport(v); };
+async function ctDismiss() {
+  try { await send("/api/v1/app/xp/cairn/dismiss", "POST", {}); } catch { /* hidden on this page anyway */ }
+  if (S.ct) S.ct.card_off = true;
+  ctRender(); xpCard();
+}
+// after saving a new race with a picked trip
+async function importTrip(eid, tripId) {
+  try {
+    const r = await send(CPUSH + encodeURIComponent(eid) + "/import", "POST", { trip_id: tripId });
+    toast(tP("cairn_toast", { days: r.event_days }));
+    if (r.trip) S.ctRaces[eid] = { trip_id: r.trip.id, have: r.trip.version, now: r.trip.version, stale: r.trip.version ? false : null };
+    return r;
+  } catch (e) { alert(tP("cairn_fail", { msg: e.message })); return null; }
+}
+// the list's 「⟳ Cairn」: Cairn is asked only when some race holds one of the person's trips (held_only)
+async function ctStale() {
+  try {
+    const r = await j(CTRIPS + "?held_only=1");
+    S.ctRaces = { ...S.ctRaces, ...(r.races || {}) };
+    if (Object.values(S.ctRaces).some((x) => x.stale)) renderList();
+  } catch { /* sign-in off / the demo / Cairn down: no marks */ }
 }
 // SP-577 / 699: a Cairn trip with times — 「這是登山社／團排好的時間表」, ticked when the data says so (several
 // times typed in a day, or the route recruiting in Cairn; never for a route older than Cairn's 「who wrote
 // it」), the why in the ? only. The answer is kept with the race's GPX; 賽事計算機 shows 跟團對照 from it.
+// SP-986: the route marked 「這是跟團的時刻表」 in Cairn (its share meta's group_schedule) ticks it first —
+// a person said so, so the guesses against it (legacy 「not ticked by itself」, 「mostly Cairn's estimates」) are
+// not said then.
 function groupWhy(sc) {
   const g = sc.signals || {}, out = [];
+  if (g.marked) out.push(T("grp.sig_marked"));
   if (g.user_days?.length) out.push(T("grp.sig_user", { u: g.n_user, n: g.n }));
-  else if (g.n_estimate > g.n_user) out.push(T("grp.sig_estimate", { e: g.n_estimate, n: g.n }));
+  else if (!g.marked && g.n_estimate > g.n_user) out.push(T("grp.sig_estimate", { e: g.n_estimate, n: g.n }));
   if (g.recruit) out.push(T("grp.sig_recruit"));
-  if (g.legacy) out.push(T("grp.sig_legacy"));
+  if (g.legacy && !g.marked) out.push(T("grp.sig_legacy"));
   return out.join(T("grp.sep"));
 }
 function renderGroupAsk() {
@@ -1071,6 +1232,7 @@ window.addEventListener("resize", () => [...S.charts, ...S.cmpCharts].forEach((c
     return;
   }
   await load();
+  ctStale();                                                  // SP-538: not waited for (Cairn is asked)
   const want = q.get("race") || (ev ? "e:" + ev : null);
   const cmp = (q.get("cmp") || "").split(",").filter((id) => S.rows.some((r) => r.id === id && r.compare_idx != null));
   if (cmp.length === 2) { S.pick = cmp; renderList(); runCompare(); }

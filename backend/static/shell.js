@@ -1323,7 +1323,8 @@
     document.head.appendChild(sg);
   }
 
-  // 問 AI (SP-786, static/askai.js; the backend SP-785): the owner only, while 設定 › 進階 › AI 問答 is on — the
+  // 問 AI (SP-786, static/askai.js; the backend SP-785): the owner, or a signed-in member while the server allows
+  // members' own keys (SP-883; without a key its dialog asks for one), while 設定 › 進階 › AI 問答 is on — the
   // session says so (api/session.py `ai`); never while viewing a student (no `ai` then)
   if (SESSION.ai && SESSION.ai.on && !VIEW) {
     const ai = document.createElement("script");

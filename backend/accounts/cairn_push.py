@@ -28,7 +28,8 @@ the person (links.FEATURES: each feature asks on its own; the push dialog's 「�
 the same consents row as the switch in 設定) — and a paid plan here (link_calc.require_plan).
 Cairn's own answers become plain hints: 403 its free plan, 429 today's pushes used up, 404 no Cairn
 account for this Google account or the trip deleted there (the kept id is forgotten, the next push
-creates a new trip — never by itself), anything else "Cairn can't be reached".
+creates a new trip — never by itself), 409 "group schedule: …" the trip is marked the group's in Cairn
+(SP-582 / SP-986: read only; CAIRN_GROUP, not "down"), anything else "Cairn can't be reached".
 """
 from __future__ import annotations
 
@@ -53,6 +54,7 @@ DDL = (f"CREATE TABLE IF NOT EXISTS {TABLE} (id INTEGER PRIMARY KEY, event_id VA
        "trip_id VARCHAR(64) NOT NULL, gpx_sha256 VARCHAR(64), pushed_at DATETIME)")
 TIMEOUT_S = 20.0                       # a GPX of a few MB goes up in one request
 CAIRN_NOT_FOUND_SUB = "no cairn account for this sub"     # Cairn's TRC_NOT_LINKED message
+CAIRN_GROUP_PREFIX = "group schedule:"     # Cairn's 409 on PUT for a group's timetable (GROUP_SCHEDULE_READ_ONLY)
 NAME_NEAR_KM = 0.5                     # a camp / hut / Cairn night this close to a day end names it
 _ID = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 _LOCKS: dict = {}
@@ -251,7 +253,8 @@ def origin(eid: str) -> Optional[dict]:
     if not isinstance(tid, str) or not _ID.match(tid):
         return None
     # SP-577 / SP-582: a trip answered 「這是團的時刻表」 is the group's, read only — never written back
-    group = bool((src.get("schedule") or {}).get("group"))
+    # SP-538: a trip Cairn lists with a group's timetable (summary.group) likewise
+    group = bool((src.get("schedule") or {}).get("group")) or src.get("group") is True
     return {"trip_id": tid, "url": src.get("url") or CA.route_url(tid), "name": src.get("name") or "", "group": group}
 
 
@@ -357,6 +360,12 @@ def push(user, eid: str, consent: bool = False, new: bool = False) -> dict:
         if tid and trip_id is None:
             trip_id = tid
         remember(eid, trip_id, sha)
+        if kind == "origin":                # SP-538: our own write moved the trip's version — not a change to sync
+            from backend.accounts import cairn_trips as CT
+            try:
+                CT.after_push(eid, r.json())
+            except ValueError:
+                pass
         log.info("event pushed to Cairn (%s)", {"kept": "updated", "origin": "the trip it came from updated",
                                                 "new": "created"}[kind])
         from backend.engine import cairn as CA
@@ -400,4 +409,19 @@ def _answer(r: httpx.Response, eid: str, updating: bool, origin: bool = False) -
     if r.status_code == 400:
         raise UserError(N_("疊石 Cairn 不收這份資料：{why}"), code="CAIRN_REJECTED", status=422,
                         why=str(msg or "")[:200])
+    if r.status_code == 409 and updating and isinstance(msg, str) and msg.startswith(CAIRN_GROUP_PREFIX):
+        # SP-986: the trip is marked 「這是跟團的時刻表」 in Cairn (SP-582) — read only, Cairn refused before
+        # writing anything. The trip the GPX came from is now known as the group's: the next push makes a
+        # trip of our own (target(), as for one known before); a trip we made and the person marked later
+        # stays ours to update once they untick it there.
+        if origin:
+            from backend.engine import event_gpx as EG
+            try:
+                EG.set_source(eid, group=True)
+            except EG.EventGpxError:
+                pass
+            raise UserError(N_("Cairn 上這條行程勾了「這是跟團的時刻表」，只能讀、這邊不會寫回去。"
+                               "再按一次會在你的 Cairn 另外建一條。"), code="CAIRN_GROUP", status=409)
+        raise UserError(N_("Cairn 上這條行程勾了「這是跟團的時刻表」，只能讀、這邊不會蓋掉它。"
+                           "要推的話先在 Cairn 取消勾選。"), code="CAIRN_GROUP", status=409)
     raise UserError(N_("疊石 Cairn 暫時連不上，稍後再試"), code="CAIRN_DOWN", status=502)

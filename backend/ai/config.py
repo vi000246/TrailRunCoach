@@ -19,8 +19,8 @@ The key, read in this order:
      log line — among the values applog.redact blanks), never in an export or a backup
      (data_registry: SECRET)
 
-<their folder>/ai.json also holds the switch (設定 › 進階 › AI 問答; the owner's default on, a
-member's on once they save a key). The model and the daily limit are the server's: TRC_AI_MODEL
+<their folder>/ai.json also holds the switch (設定 › 進階 › AI 問答; default on for the owner and a
+member alike — a member without a key gets 「問 AI」 whose dialog asks for the key first). The model and the daily limit are the server's: TRC_AI_MODEL
 (default DEFAULT_MODEL), TRC_AI_DAILY_LIMIT (default DEFAULT_DAILY_LIMIT) — each person's count in
 their own <folder>/ai_usage.json (with the day's 「測試」 count, KEY_TESTS_PER_DAY).
 
@@ -185,8 +185,6 @@ def save_key(key: str) -> None:
         d = _read()
         if key:
             d["api_key"] = secrets.seal(key)
-            if member and "enabled" not in d:      # a member's first key turns 「問 AI」 on
-                d["enabled"] = True
         else:
             d.pop("api_key", None)
         _write(d)
@@ -264,15 +262,13 @@ def redact_value() -> Optional[str]:
 # ------------------------------------------------------------------------- the switch, model, limit
 
 def enabled() -> bool:
-    """設定 › 進階 › AI 問答: the owner's default on; a member's off until their first key (SP-883: no
-    「問 AI」 on every page of a member without a key); False for anyone else."""
+    """設定 › 進階 › AI 問答: default on, the owner's and a member's alike — a member without a key
+    sees 「問 AI」 too, and its dialog asks for their key first (SP-883, the owner 2026-10-28: 「填完
+    API key 就能用，還沒填就在對話框裡提醒」); False for anyone else."""
     if not allowed():
         return False
-    d = _read()
-    v = d.get("enabled")
-    if v is None:
-        return bool(d.get("api_key")) if is_member() else True
-    return bool(v)
+    v = _read().get("enabled")
+    return True if v is None else bool(v)
 
 
 def set_enabled(on: bool) -> None:

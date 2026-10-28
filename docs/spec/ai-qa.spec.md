@@ -36,7 +36,7 @@
 
 舊的 `athlete_settings.ai_api_key`（SP-48）不讀：`init_db` 會把值清掉並刪欄（`db/database.RETIRED_COLUMNS`）。
 
-其他設定：`TRC_AI_MODEL`（預設 `claude-sonnet-5-5`，只收英數與 `-._:`）、`TRC_AI_DAILY_LIMIT`（預設 30，1～1000；站主與每位會員各自算）、`TRC_AI_MEMBER_KEYS`（預設關，見「誰能用」）。開關在各自 `ai.json` 的 `enabled`：站主預設開；會員在存第一把 key 前預設關（不會每頁多一顆按了只說「去設 key」的「問 AI」），存 key 時自動打開。
+其他設定：`TRC_AI_MODEL`（預設 `claude-sonnet-5-5`，只收英數與 `-._:`）、`TRC_AI_DAILY_LIMIT`（預設 30，1～1000；站主與每位會員各自算）、`TRC_AI_MEMBER_KEYS`（預設關，見「誰能用」）。開關在各自 `ai.json` 的 `enabled`：站主與會員都預設開——會員還沒存 key 也看得到「問 AI」，對話框先請他填 key（使用者 2026-10-28：「填完 API key 就能用，還沒填就在對話框裡提醒」）。
 
 **測試 key**（SP-883）：設定頁「測試」→ `POST /api/v1/ai/settings/test` → `qa.check_key()`：用現在這把 key `GET https://api.anthropic.com/v1/models?limit=1`——列模型，不吃 token、不計費、不算每日問題次數。每人每天最多 `config.KEY_TESTS_PER_DAY`（10）次，超過回 429 `AI_TEST_LIMIT` 且不打外部（不讓站變成驗證別人 key 的工具）。只看得出 key 有沒有被接受，看不出帳號有沒有餘額；餘額不足要到真的問時才知道（Messages API 回 400「credit balance is too low」→ `AI_NO_CREDIT` 402，不算次數）。
 
@@ -100,6 +100,7 @@
 - 預設問題依 kind：整頁 4 個、卡／圖／課／計算機／說明各 3 個（`shell.json` `askai.preset.<kind>.<n>`）；也可以自己打字（Enter 送出）。
 - 每個 `?` 說明框（`ManualLink.decorate`）和提示的「詳細」清單（`ul.hint-detail`）最下面一行「還不懂？問 AI」，帶入那張卡、kind = hint、摘要 ＝ 說明文字＋卡片文字。
 - 沒設 key 時對話框上方說明去哪設；錯誤碼對到 `askai.err.*`。
+- **會員還沒存 key**（`TRC_SESSION.ai` 是 `{on: true, key: false, own: true}`，SP-883）：對話框不列預設問題，改成一段提醒（「先設定你自己的 API key 才能問」：用自己的 Anthropic key、費用記在自己的帳號）＋「到設定填 API key →」連到 `/api/v1/app/settings#ai-key-row`（設定頁把那一列加亮框 `link-asked`、捲到中間、游標放進欄位）；輸入框與送出都停用，`AskAI.ask()` 也不送。打開對話框時再問一次 `GET /api/v1/ai/settings`（別的分頁存好了就直接解鎖）；設定頁存好 key 會發 `askai:key` 事件，同一頁開著的對話框當場解鎖。站主沒 key 時照舊（上方一行說明，可以送、回 `AI_NO_KEY`）。
 - 設定 › 進階設定 › AI 問答：開關、key 狀態（環境變數／已設定 …末四碼／未設定）、「測試」（有 key 時才出現，結果寫在旁邊）、貼上／清除、模型與今天次數。會員（`who: member`）多一行「用你自己的 Anthropic API key……費用記在你的 Anthropic 帳號」，兩個 `?` 換成會員版的說明（不提伺服器環境變數）。
 
 ## API
@@ -125,6 +126,7 @@
 
 | Date | Source | Ticket | Summary |
 |------|--------|--------|---------|
+| 2026-10-28 | feature | SP-883 | 使用者要求開放：會員的「問 AI」預設開（沒 key 也看得到），`/api/v1/session` 的 `ai` 對會員多 `own: true`；沒 key 的會員對話框改成提醒＋連到設定頁 key 欄位（亮框），不能送出，存好 key 同一個對話框就能問。測試：`backend/tests/e2e/test_askai_own_key_sp883_e2e.py`、`test_ai_own_key_sp883.py` |
 | 2026-10-28 | feature | SP-883 | 新增：會員用自己的 key（`TRC_AI_MEMBER_KEYS` 開著時，所有登入會員）：key 加密存在自己的 `ai.json`、次數記在自己的 `ai_usage.json`、絕不拿站主的環境變數 key；log 遮罩加上請求者自己的 key；`data_registry` 把 `ai.json` 列為 SECRET；呼叫鎖依人分開；`purpose=ask_own_key`；`POST /api/v1/ai/settings/test`（GET /v1/models，不計費，每天 10 次）；餘額不足 `AI_NO_CREDIT`；設定頁「測試」與會員版文字。測試：`backend/tests/test_ai_own_key_sp883.py` |
 | 2026-10-20 | feature | SP-785 | 新增：`backend/ai`（config 金鑰與開關、context 彙總與清理、qa prompt／呼叫／解析／快取／每日上限、medical）、`/api/v1/ai/*`、`TRC_ANTHROPIC_API_KEY`（或 `_FILE`）或設定頁加密存放、log 遮罩、`/api/v1/session` 的 `ai`。測試：`backend/tests/test_ai_qa_sp785.py` |
 | 2026-10-21 | maintenance | SP-885 | 英文介面巡一次：「正在問」對課表課卡寫課名與日期（`data-ai-title`，不再是卡片整串 aria-label）、對計算機結果／分段卡用頁面語言的標題（結果區本身的標題還沒翻）。測試：`backend/tests/e2e/test_askai_en_sp885_e2e.py` |

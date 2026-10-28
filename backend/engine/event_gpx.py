@@ -189,6 +189,14 @@ def clean_source(src: Optional[dict]) -> Optional[dict]:
     if not isinstance(src, dict) or src.get("kind") != "cairn":
         return None
     out = {k: str(src[k])[:200] for k in ("kind", "gpx_id", "url", "name") if src.get(k)}
+    # SP-538: an import from the person's own Cairn trips (via "account", accounts/cairn_trips.py) keeps the
+    # trip's version (「重新同步」 when Cairn's moves) and whether it carries a group's timetable (never pushed back)
+    if src.get("via") in ("account", "share"):
+        out["via"] = src["via"]
+    if src.get("version") not in (None, "") and not isinstance(src.get("version"), bool):
+        out["version"] = str(src["version"])[:40]
+    if src.get("group") is True:
+        out["group"] = True
     # SP-535: the nights marked in Cairn (km on our track), so the day-split preview can offer them back
     # as candidates after the day ends were changed
     nights = []
@@ -213,7 +221,19 @@ def set_group(eid: str, group: bool, db_path=None) -> dict:
     src = (r or {}).get("source") or {}
     if r is None or not isinstance(src.get("schedule"), dict):
         raise EventGpxError("這場賽事沒有 Cairn 時刻表")
-    src = {**src, "schedule": {**src["schedule"], "group": bool(group)}}
+    return _put_source(eid, {**src, "schedule": {**src["schedule"], "group": bool(group)}}, db_path)
+
+
+def set_source(eid: str, db_path=None, **fields) -> dict:
+    """Some keys of a Cairn source changed in place (SP-538: the trip's version after our own push)."""
+    r = get(eid, db_path)
+    src = (r or {}).get("source") or {}
+    if r is None or src.get("kind") != "cairn":
+        raise EventGpxError("not a GPX imported from Cairn")      # internal: after_push only
+    return _put_source(eid, {**src, **fields}, db_path)
+
+
+def _put_source(eid: str, src: dict, db_path=None) -> dict:
     p = _db(db_path)
     con = sqlite3.connect(str(p))
     try:

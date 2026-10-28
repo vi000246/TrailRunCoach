@@ -282,8 +282,10 @@ def signals(visits: list[dict], meta: dict) -> dict:
       user_days — days with ≥ 2 typed times besides the start: a timetable typed in (strong, for a
                   route made on or after LEGACY_BEFORE; older ones read `user` whatever wrote them);
       recruit   — the route is recruiting in Cairn right now (`meta.recruit`, weak: only while open);
-      legacy    — made before LEGACY_BEFORE (`uploaded_at`): who wrote the times can't be told.
-    `suggest`: the import's 「這是團的時刻表」 starts ticked — a signal and not legacy."""
+      legacy    — made before LEGACY_BEFORE (`uploaded_at`): who wrote the times can't be told;
+      marked    — the route's owner ticked 「這是跟團的時刻表」 in Cairn (SP-582, the share meta's
+                  `group_schedule`; SP-986): said by a person, so it counts on a legacy route too.
+    `suggest`: the import's 「這是團的時刻表」 starts ticked — marked, or a signal and not legacy."""
     by_day: dict[int, list[dict]] = {}
     for v in visits:
         by_day.setdefault(v["day"], []).append(v)
@@ -292,8 +294,17 @@ def signals(visits: list[dict], meta: dict) -> dict:
     up = str(meta.get("uploaded_at") or "")[:10]
     legacy = bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", up)) and up < LEGACY_BEFORE
     recruit = bool(meta.get("recruit"))
+    marked = marked_group(meta)
     return {"n": len(visits), "n_user": n_user, "n_estimate": len(visits) - n_user, "user_days": user_days,
-            "recruit": recruit, "legacy": legacy, "suggest": (bool(user_days) or recruit) and not legacy}
+            "recruit": recruit, "legacy": legacy, "marked": marked,
+            "suggest": marked or ((bool(user_days) or recruit) and not legacy)}
+
+
+def marked_group(meta: dict) -> bool:
+    """SP-582 / SP-986: the route is marked 「這是跟團的時刻表」 in Cairn — the share meta's `group_schedule`
+    (snake_case, as Cairn sends it; `groupSchedule`, the name SP-582 Q1 first wrote, too). Only a real
+    true counts: an older Cairn without the field, or false (not ticked), says nothing either way."""
+    return any((meta or {}).get(k) is True for k in ("group_schedule", "groupSchedule"))
 
 
 def clean_schedule(sc) -> Optional[dict]:
@@ -318,6 +329,8 @@ def clean_schedule(sc) -> Optional[dict]:
     sg = sc.get("signals") if isinstance(sc.get("signals"), dict) else {}
     sig = {k: int(sg[k]) for k in ("n", "n_user", "n_estimate") if isinstance(sg.get(k), int)}
     sig.update({k: bool(sg.get(k)) for k in ("recruit", "legacy", "suggest")})
+    if sg.get("marked") is True:                     # SP-986: marked in Cairn (kept only when it was)
+        sig["marked"] = True
     sig["user_days"] = [int(x) for x in (sg.get("user_days") or []) if isinstance(x, int)][:20]
     return {"points": pts, "signals": sig, "group": bool(sc.get("group"))}
 
@@ -342,7 +355,7 @@ def schedule_of(pois: list, meta: dict, track) -> Optional[dict]:
 
 def import_link(link: str, *, transport=None) -> dict:
     """The trip behind a share link: {"data": GPX bytes, "filename", "name", "gpx_id", "start_date",
-    "nights": [...], "splits_km", "days", "source": {kind, gpx_id, url, name}, "schedule": the
+    "nights": [...], "splits_km", "days", "source": {kind, gpx_id, url, name, group?}, "schedule": the
     timetable or None (SP-576)} — no token in it.
     Raises CairnError with a message for the user."""
     from backend.engine.racepower import gpx as GPX
@@ -357,10 +370,13 @@ def import_link(link: str, *, transport=None) -> dict:
     nights = place_nights(night_visits(got["pois"]), track)
     sd = meta.get("start_date")
     sched = schedule_of(got["pois"], meta, track)
+    # SP-986: marked the group's in Cairn — kept with the trip, times or not, so a push never writes it
+    # back (cairn_push.origin; Cairn would answer that PUT 409 anyway)
+    group = {"group": True} if marked_group(meta) else {}
     return {"schedule": sched, "data": got["gpx"], "filename": (re.sub(r"[\\/:*?\"<>|]+", "_", name) or "cairn")[:80] + ".gpx",
             "name": name, "gpx_id": gid, "start_date": sd if isinstance(sd, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", sd) else None,
             "nights": nights, "splits_km": [n["km"] for n in nights], "days": len(nights) + 1,
-            "source": {"kind": "cairn", "gpx_id": gid, "url": route_url(gid), "name": name}}
+            "source": {"kind": "cairn", "gpx_id": gid, "url": route_url(gid), "name": name, **group}}
 
 
 def note(imp: dict) -> Optional[str]:
