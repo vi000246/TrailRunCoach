@@ -112,7 +112,7 @@ def test_the_section_is_a_feature_after_the_schedule():
     sec = html[cyc:html.index("</section>", cyc)]
     assert 'class="feature"' in sec and '<div class="text">' in sec and 'class="cy reveal"' in sec
     assert sec.count("<li ") == 4                                           # 3–4 short points, like the others
-    assert 'href="/about#m-phases"' in sec                                  # the sources: the 關於 page
+    assert 'href="/methods#cycle"' in sec                                   # the sources: the 方法 page's card (SP-973)
     # no 「現在」 cards, no long rule text on the page
     for gone in ('class="cards"', "plan.tl.auto", "目前區間用的門檻"):
         assert gone not in sec, gone

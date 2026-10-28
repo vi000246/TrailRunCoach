@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!--fill:title--></title>
+<style>
+/* 方法 (SP-973): one card per calculation model, the open card's formula and sources beside it (on a phone:
+   under the card). Public; the contents come from api/methods.py (static/i18n/<locale>/methods.json), this
+   page only frames them and opens a card for /methods#<id>. Colours are tokens: the Trig palettes
+   (theme.css, SP-974) set the same names over this :root. */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --ok: #1d7a3c; --warn: #a35a00;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --ok: #5cc98a; --warn: #f0b453;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --ok: #5cc98a; --warn: #f0b453;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: calc(var(--shell-top, 0px) + 16px); }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.65 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+a { color: var(--accent); }
+.md-main { max-width: 1160px; margin: 0 auto; padding: 22px 16px 64px; }
+.md-hero h1 { margin: 6px 0 6px; font-size: 26px; line-height: 1.3; text-wrap: balance; }
+.md-hero p { margin: 0 0 8px; color: var(--muted); max-width: 46em; }
+.md-hero .md-count { font-size: 14px; }
+.md-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 14px; }
+.md-filters button { font: inherit; font-size: 13.5px; padding: 4px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+.md-filters button:hover { border-color: var(--accent); color: var(--accent); }
+.md-filters button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
+.md-filters .n { margin-left: 4px; opacity: .75; font-variant-numeric: tabular-nums; }
+.md-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 20px; align-items: start; }
+.md-wall { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-content: start; min-width: 0; }
+.md-card { display: grid; gap: 5px; align-content: start; padding: 12px 14px; border-radius: 12px; min-width: 0;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.md-card:hover { border-color: var(--accent); }
+.md-card[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.md-card[hidden] { display: none; }
+.md-g, .md-k { font-size: 11.5px; letter-spacing: .06em; color: var(--faint); font-weight: 700; }
+.md-nm { font-weight: 700; line-height: 1.4; }
+.md-short { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+.md-more { font-size: 12.5px; color: var(--accent); }
+.md-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.md-chip { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.7;
+  white-space: nowrap; border: 1px solid transparent; }
+.md-chip.cal-yes { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.md-chip.cal-part { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); border-style: dashed; }
+.md-chip.cal-no { color: var(--muted); border-color: var(--line); }
+.md-chip.est { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.md-chip.layer { color: var(--accent); background: var(--soft); }
+.md-empty { grid-column: 1 / -1; color: var(--muted); margin: 8px 0; }
+.md-pane { position: sticky; top: calc(var(--shell-top, 0px) + 12px); min-width: 0; display: grid; gap: 12px; }
+.md-hint { margin: 0; padding: 14px 16px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); }
+.md-about { margin: 0; font-size: 13.5px; }
+.md-d { padding: 16px 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line);
+  box-shadow: var(--shadow); min-width: 0; outline: none; }
+.md-d + .md-d { margin-top: 0; }
+.md-dh { display: flex; gap: 10px; align-items: start; }
+.md-dh h2 { margin: 0 0 6px; font-size: 19px; line-height: 1.35; flex: 1; min-width: 0; }
+.md-x { display: none; flex: none; font: inherit; font-size: 18px; line-height: 1; width: 32px; height: 32px; border-radius: 8px;
+  border: 1px solid var(--line); background: none; color: var(--muted); cursor: pointer; }
+.md-k { margin: 0 0 2px; }
+.md-d .md-chips { margin: 0 0 10px; }
+.md-plain { margin: 0 0 10px; }
+.md-meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 12px; font-size: 14px; }
+.md-meta dt { color: var(--muted); font-weight: 600; }
+.md-meta dd { margin: 0; min-width: 0; }
+.md-fx { margin: 0 0 12px; border: 1px solid var(--line); border-radius: 10px; }
+.md-fx summary { cursor: pointer; padding: 7px 12px; font-weight: 650; font-size: 14px; color: var(--accent); }
+.md-fx dl { display: grid; grid-template-columns: minmax(0, 8.5em) minmax(0, 1fr); gap: 6px 12px; margin: 0; padding: 2px 12px 12px; font-size: 14px; }
+.md-fx dt { color: var(--muted); }
+.md-fx dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.md-fx:not(.rules) dd { font-family: "Cambria Math", "STIX Two Math", Cambria, system-ui, "Noto Sans TC", sans-serif; font-size: 14.5px; }
+.md-src h3 { margin: 0 0 4px; font-size: 13px; color: var(--muted); letter-spacing: .04em; }
+.md-src ol { margin: 0; padding-left: 1.3em; font-size: 13px; color: var(--muted); display: grid; gap: 3px; }
+.md-src li, .md-src p { overflow-wrap: anywhere; }
+.md-src p { margin: 0; font-size: 13.5px; color: var(--muted); }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* with the script: only the open card's detail shows (without it every detail is listed in the pane) */
+.md-js .md-d { display: none; }
+.md-js .md-d.on { display: block; }
+.md-js .md-hint.off { display: none; }
+@media (max-width: 860px) {
+  .md-split { grid-template-columns: minmax(0, 1fr); }
+  .md-wall { grid-template-columns: minmax(0, 1fr); }
+  .md-pane { position: static; }
+  .md-js .md-hint { display: none; }
+  .md-wall .md-d { margin: -2px 0 4px; }
+  .md-x { display: block; }
+  /* under its own card: the card already shows the group and the name (kept for screen readers) */
+  .md-wall .md-d .md-k { display: none; }
+  .md-wall .md-d { position: relative; }
+  .md-wall .md-d .md-dh { position: absolute; top: 10px; right: 10px; }
+  .md-wall .md-d > .md-chips { padding-right: 40px; min-height: 32px; align-items: center; }
+  .md-wall .md-d .md-dh h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+@media (max-width: 699px) {
+  .md-main { padding: 14px 12px 40px; }
+  .md-hero h1 { font-size: 22px; }
+  .md-fx dl { grid-template-columns: minmax(0, 1fr); gap: 0 0; }
+  .md-fx dd { margin-bottom: 6px; }
+}
+@media print { .md-filters, .md-wall { display: none; } .md-js .md-d { display: block; } }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="methods"></script>
+<main class="md-main" id="md-main"><!--fill:main--></main>
+<script>
+(function () {
+  "use strict";
+  var main = document.getElementById("md-main"), wall = document.getElementById("md-wall"),
+      pane = document.getElementById("md-pane");
+  if (!main || !wall || !pane) return;
+  main.classList.add("md-js");
+  var hint = pane.querySelector(".md-hint"), about = pane.querySelector(".md-about"),
+      empty = wall.querySelector(".md-empty");
+  var cards = Array.prototype.slice.call(wall.querySelectorAll(".md-card"));
+  var FILTERS = ["all", "plan", "read", "race", "calibrated", "estimates"];
+  var narrow = window.matchMedia("(max-width: 860px)");
+  var open = null;
+  function card(id) { for (var i = 0; i < cards.length; i++) if (cards[i].dataset.id === id) return cards[i]; return null; }
+  function place(sec, c) {
+    if (narrow.matches && c) c.after(sec); else if (sec.parentNode !== pane) pane.insertBefore(sec, about);
+  }
+  function close() {
+    if (!open) return;
+    var sec = document.getElementById(open), c = card(open);
+    if (sec) sec.classList.remove("on");
+    if (c) c.setAttribute("aria-expanded", "false");
+    hint.classList.remove("off");
+    open = null;
+    return c;
+  }
+  function show(id, how) {
+    var sec = document.getElementById(id), c = card(id);
+    if (!sec || !c || !sec.classList.contains("md-d")) return false;
+    close();
+    if (c.hidden) filter("all");
+    place(sec, c);
+    sec.hidden = false;
+    sec.classList.add("on");
+    c.setAttribute("aria-expanded", "true");
+    hint.classList.add("off");
+    open = id;
+    // the card at the top: on a phone its detail follows it, on a desktop the sticky pane beside it
+    if (how === "scroll") c.scrollIntoView({ block: "start" });
+    return true;
+  }
+  function filter(f) {
+    document.querySelectorAll(".md-filters button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.f === f)); });
+    var shown = 0;
+    cards.forEach(function (c) {
+      var ok = f === "all" || c.dataset.g === f || (f === "calibrated" && c.dataset.cal !== "no") || (f === "estimates" && c.dataset.est === "1");
+      c.hidden = !ok;
+      if (ok) shown++;
+    });
+    empty.hidden = shown > 0;
+    if (open && card(open).hidden) close();
+  }
+  function fromHash(how) {
+    var h = decodeURIComponent((location.hash || "").slice(1));
+    if (!h) return;
+    if (FILTERS.indexOf(h) >= 0) { filter(h); return; }
+    show(h, how);
+  }
+  wall.addEventListener("click", function (e) {
+    var c = e.target.closest(".md-card");
+    if (!c || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (open === c.dataset.id && narrow.matches) { close(); history.replaceState(null, "", location.pathname + location.search); return; }
+    show(c.dataset.id, narrow.matches ? "scroll" : null);
+    history.replaceState(null, "", "#" + c.dataset.id);
+  });
+  main.addEventListener("click", function (e) {
+    var x = e.target.closest(".md-x");
+    if (!x) return;
+    var c = close();
+    history.replaceState(null, "", location.pathname + location.search);
+    if (c) c.focus();
+  });
+  document.querySelectorAll(".md-filters button").forEach(function (b) {
+    b.addEventListener("click", function () { filter(b.dataset.f); });
+  });
+  window.addEventListener("hashchange", function () { fromHash("scroll"); });
+  var onWidth = function () { if (open) place(document.getElementById(open), card(open)); };
+  if (narrow.addEventListener) narrow.addEventListener("change", onWidth); else narrow.addListener(onWidth);
+  fromHash("scroll");
+})();
+</script>
+</body>
+</html>

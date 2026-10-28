@@ -289,7 +289,7 @@
   "why.lead": "很多腳程計算機用「距離 ÷ 速度、每爬 100 公尺加幾分鐘」。這裡把坡度、背包、天氣、海拔分開算，用的是運動科學文獻的模型，再拿你自己的紀錄校正。",
   "why.sources.l": "篇文獻 · {m} 個計算方法",
   "why.sources.p": "坡度用 Minetti 的能量成本、背包用 Pandolf、CP 用 Monod、距離換算用 Riegel、熱用國際共識。",
-  "why.sources.ex": "「關於」頁列出每一篇，方法與名稱屬於原作者 →",
+  "why.sources.ex": "每個模型的公式與出處，方法與名稱屬於原作者 →",
   "why.zones.l": "套教練區間系統對齊",
   "why.zones.p": "Daniels、Friel、Seiler、80/20、Lydiard、Canova、Pfitzinger、Uphill Athlete、Koop…課表的強度跟這些教練說的是同一件事。",
   "why.zones.ex": "對齊研究引用 {n} 筆文獻。",

@@ -73,7 +73,7 @@ _PAGES = "activity|actcompare|charts|compliance|overview|plan|racepower|races|ro
 
 READ_OPEN = _rx(
     r"/", r"/overview", r"/activities", r"/achievements", r"/activities/[^/]+",
-    r"/manual(?:/.*)?", r"/about", r"/legal(?:/[^/]+)?", r"/sw\.js", r"/manifest\.webmanifest",
+    r"/manual(?:/.*)?", r"/about", r"/methods", r"/legal(?:/[^/]+)?", r"/sw\.js", r"/manifest\.webmanifest",
     r"/api/v1/session", r"/api/v1/region",
     r"/api/v1/static/(?!.*\.html$).+", rf"/api/v1/static/(?:{_PAGES})\.html",
     r"/api/v1/overview/.+",

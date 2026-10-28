@@ -119,6 +119,8 @@ PUBLIC_PATHS = frozenset({
 PUBLIC_PATHS = PUBLIC_PATHS | {"/manual"}
 # 關於 (SP-495, api/about.py): version, sources, licences, trademarks — exactly /about
 PUBLIC_PATHS = PUBLIC_PATHS | {"/about"}
+# 方法 (SP-973, api/methods.py): each calculation model, its formula and sources — exactly /methods
+PUBLIC_PATHS = PUBLIC_PATHS | {"/methods"}
 # 「用自己的資料算」 (SP-124, api/session.join): a redirect to sign-up / the waitlist / the demo — exactly /join
 PUBLIC_PATHS = PUBLIC_PATHS | {"/join"}
 # a test account's one-time sign-in link (SP-611, accounts/testaccounts.py): the page (its token in the

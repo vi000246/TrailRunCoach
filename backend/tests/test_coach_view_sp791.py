@@ -29,7 +29,7 @@ ON = {"plan": True, "training": True, "injury": False}
 # widening accounts/viewing.py without changing these fails the walk below)
 
 READS_OPEN = """
-/ /about /achievements /activities /activities/x /overview /legal /legal/x /manifest.webmanifest /manual
+/ /about /achievements /activities /activities/x /overview /legal /legal/x /manifest.webmanifest /manual /methods
 /manual/img/x /manual/index.json /manual/terms.json /manual/x /sw.js
 /api/v1/session /api/v1/region
 /api/v1/achievements /api/v1/achievements/page

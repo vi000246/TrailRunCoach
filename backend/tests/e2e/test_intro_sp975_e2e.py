@@ -53,7 +53,7 @@ def test_the_season_is_drawn_from_the_server_and_says_what_each_phase_stands_on(
     assert box["height"] <= 900, box
     txt, card = page.locator("#cycle .text").bounding_box(), page.locator("#cycle .cy").bounding_box()
     assert card["x"] > txt["x"] + txt["width"] - 1
-    assert page.locator("#cycle a.more").get_attribute("href") == "/about#m-phases"
+    assert page.locator("#cycle a.more").get_attribute("href") == "/methods#cycle"     # SP-973: the 方法 card
 
 
 def test_english_words(app):

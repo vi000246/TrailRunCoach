@@ -289,7 +289,7 @@
   "why.lead": "Many pace calculators do \"distance ÷ speed, plus a few minutes per 100 m of climb\". This one works out grade, pack, weather and altitude separately, with models from the sports-science literature, then calibrates them on your own records.",
   "why.sources.l": "papers · {m} methods",
   "why.sources.p": "Grade from Minetti's energy cost, pack from Pandolf, CP from Monod, distance from Riegel, heat from the international consensus.",
-  "why.sources.ex": "The About page lists every one; methods and names belong to their authors →",
+  "why.sources.ex": "Every model's formula and sources; methods and names belong to their authors →",
   "why.zones.l": "coaches' zone systems aligned",
   "why.zones.p": "Daniels, Friel, Seiler, 80/20, Lydiard, Canova, Pfitzinger, Uphill Athlete, Koop… the schedule's intensities mean the same thing these coaches do.",
   "why.zones.ex": "The alignment study cites {n} references.",

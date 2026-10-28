@@ -104,6 +104,37 @@ SOURCES: dict[str, Source] = {
                            "PLoS One 2011.", "https://pmc.ncbi.nlm.nih.gov/articles/PMC3043077/"),
     "bontemps": Source("Bontemps B, et al. Downhill running: what are the effects and how can we adapt? A narrative "
                        "review. Sports Medicine 2020.", "https://pmc.ncbi.nlm.nih.gov/articles/PMC7674385/"),
+    # SP-973 (Q1-2 (a)): what the 方法 page (api/methods.py) cites, on the one list 關於, 方法 and the 介紹頁's
+    # count share. Citations as the research docs give them: docs/research/unsourced-rules.md (Clark,
+    # Fornasiero), long-race-durability-shape.md [L1] [P2], public-datasets.md (Kerhervé 2015),
+    # effort-distance-formulas.md §1 (UTMB), paywalled-sources.md (Péronnet, Bassett), baiyue-from-running.md
+    # (Wehrlin); author lists cut to "et al." where the doc does.
+    "fornasiero": Source("Fornasiero A, Savoldelli A, Fruet D, Boccia G, Pellegrini B, Schena F. Physiological "
+                         "intensity profile, exercise load and performance predictors of a 65-km mountain "
+                         "ultra-marathon. Journal of Sports Sciences 2018;36:1287–1295.",
+                         "https://doi.org/10.1080/02640414.2017.1374707"),
+    "kerherve": Source("Kerhervé H, et al. The dynamics of speed selection and psycho-physiological load during a "
+                       "mountain ultramarathon. PLOS ONE 2015;10:e0145482.",
+                       "https://doi.org/10.1371/journal.pone.0145482"),
+    "clark": Source("Clark IE, et al. Dynamics of the power-duration relationship during prolonged endurance "
+                    "exercise and influence of carbohydrate ingestion. Journal of Applied Physiology "
+                    "2019;127:726–736.", "https://doi.org/10.1152/japplphysiol.00207.2019"),
+    "bossi": Source("Bossi AH, Matta GG, Millet GY, Lima P, Pertence LC, de Lima JP, Hopker JG. Pacing strategy "
+                    "during 24-hour ultramarathon-distance running. International Journal of Sports Physiology "
+                    "and Performance 2017.", "https://kar.kent.ac.uk/id/document/52115"),
+    "markovic": Source("Markovic S, et al. Pacing in ultra-marathon running: the Western States 100-mile endurance "
+                       "run 2006–2023. Scientific Reports 2025.", "https://doi.org/10.1038/s41598-025-92141-2"),
+    "itra": Source("UTMB World Series. Sports system: KM-Effort = distance (km) + elevation gain (m) / 100, the "
+                   "ITRA km-effort (accessed 2026).", "https://utmb.world/sports-system"),
+    "peronnet": Source("Péronnet F, Thibault G, Cousineau DL. A theoretical analysis of the effect of altitude on "
+                       "running performance. Journal of Applied Physiology 1991;70:399–404.",
+                       "https://doi.org/10.1152/jappl.1991.70.1.399"),
+    "wehrlin": Source("Wehrlin JP, Hallén J. Linear decrease in VO2max and performance with increasing altitude in "
+                      "endurance athletes. European Journal of Applied Physiology 2006;96:404–412.",
+                      "https://doi.org/10.1007/s00421-005-0081-9"),
+    "bassett": Source("Bassett DR, Kyle CR, Passfield L, Broker JP, Burke ER. Comparing cycling world hour records, "
+                      "1967–1996: modeling with empirical data. Medicine & Science in Sports & Exercise "
+                      "1999;31:1665–1676.", "https://doi.org/10.1097/00005768-199911000-00025"),
 }
 
 # (id, the sources it cites): the words are about.json "m.<id>.name" / "m.<id>.desc"
@@ -127,6 +158,11 @@ METHODS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("heat", ("racinais",)),
     ("phases", ("ua_ultra", "pfitzinger", "canova", "daniels", "jiang", "bosquet", "wang_taper")),
     ("postrace", ("johnston_rec", "torrence", "millet_ultra", "bontemps")),
+    # SP-973: the trail race model's parts the 方法 page explains (the 介紹頁's waterfall layers)
+    ("trailhr", ("fornasiero", "kerherve")),
+    ("effort", ("itra",)),
+    ("durability", ("clark", "bossi", "markovic")),
+    ("altitude", ("peronnet", "wehrlin", "bassett")),
 )
 
 # (id, [(link text, address)]): the words are about.json "d.<id>.name" / "d.<id>.desc"

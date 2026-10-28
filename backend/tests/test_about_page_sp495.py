@@ -169,7 +169,8 @@ def test_the_menu_links_to_the_page_last_in_more_and_for_signed_out_visitors():
     assert re.findall(r'"(\w+)"', re.search(r'const PUBLIC_PAGES = new Set\(\[([^\]]*)\]\)', js).group(1)) == [
         "manual", "about"]
     # a page for reading: no floating suggestion box (like the manual; the coach board neither, SP-790)
-    gate = 'if ((!cur || !PUBLIC_PAGES.has(cur.id)) && me?.dataset.page !== "coach_board") {'
+    gate = ('if ((!cur || !PUBLIC_PAGES.has(cur.id)) && me?.dataset.page !== "coach_board"'
+            ' && me?.dataset.page !== "methods") {')                 # SP-973: 方法 is for reading too
     assert gate in js
     sg = js.index(gate)
     assert js.index('"/api/v1/static/suggestions.js"') > sg

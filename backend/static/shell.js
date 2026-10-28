@@ -1314,8 +1314,9 @@
 
   // the floating suggestion box (B2B weekends, due tests, zone retests): every page shows it — but the
   // manual (SP-558) and 關於 (SP-495), pages for reading that it would cover; nor the 教練看板 (SP-790):
-  // the coach's own suggestions there covered the students' alerts
-  if ((!cur || !PUBLIC_PAGES.has(cur.id)) && me?.dataset.page !== "coach_board") {
+  // the coach's own suggestions there covered the students' alerts; nor 方法 (SP-973: public, for reading,
+  // not in the menu so never a `cur`)
+  if ((!cur || !PUBLIC_PAGES.has(cur.id)) && me?.dataset.page !== "coach_board" && me?.dataset.page !== "methods") {
     const sg = document.createElement("script");
     sg.src = "/api/v1/static/suggestions.js";
     sg.defer = true;

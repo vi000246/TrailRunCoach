@@ -294,6 +294,7 @@ html.modal-open { overflow: hidden; }
 .why .numl { color: var(--muted); font-size: 13px; font-weight: 600; margin-top: -2px; }
 .why .card p { color: var(--text); }
 .why .ex { margin-top: auto !important; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--muted) !important; font-size: 13px !important; }
+.why .ex a.to-m::after { content: " →"; }   /* SP-973: the card's line opens its 方法 card */
 /* SP-969: the race calculator's waterfall — the example's finish time, factor by factor (api/intro.breakdown) */
 .race-head { margin-bottom: 16px; }
 .wf-card { padding: 16px 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); min-width: 0; }
@@ -441,22 +442,22 @@ html.modal-open { overflow: hidden; }
         <div class="card reveal">
           <div class="num" data-why="sources">–</div><div class="numl" data-why-l="sources"></div>
           <p data-i18n="intro.why.sources.p">坡度用 Minetti 的能量成本、背包用 Pandolf、CP 用 Monod、距離換算用 Riegel、熱用國際共識。</p>
-          <p class="ex"><a href="/about#methods" data-i18n="intro.why.sources.ex">「關於」頁列出每一篇，方法與名稱屬於原作者 →</a></p>
+          <p class="ex"><a href="/methods" data-i18n="intro.why.sources.ex">每個模型的公式與出處，方法與名稱屬於原作者 →</a></p>
         </div>
         <div class="card reveal">
           <div class="num" data-why="zones">–</div><div class="numl" data-why-l="zones"></div>
           <p data-i18n="intro.why.zones.p">Daniels、Friel、Seiler、80/20、Lydiard、Canova、Pfitzinger、Uphill Athlete、Koop…課表的強度跟這些教練說的是同一件事。</p>
-          <p class="ex" data-why-ex="zones"></p>
+          <p class="ex"><a class="to-m" href="/methods#zones" data-why-ex="zones"></a></p>
         </div>
         <div class="card reveal">
           <div class="num" data-why="calibrated">–</div><div class="numl" data-why-l="calibrated"></div>
           <p data-i18n="intro.why.calibrated.p">熱對心率的影響、爬升換成多少平路、什麼算全力、心率飄移怎麼切、輕鬆跑的強度…都用你跑過的資料擬合。</p>
-          <p class="ex" data-i18n="intro.why.calibrated.ex">資料不夠時先用文獻值，累積越多越像你。</p>
+          <p class="ex"><a class="to-m" href="/methods#calibrated" data-i18n="intro.why.calibrated.ex">資料不夠時先用文獻值，累積越多越像你。</a></p>
         </div>
         <div class="card reveal">
           <div class="num" data-i18n="intro.why.estimate.num">推估</div><div class="numl" data-i18n="intro.why.estimate.l">不確定的就照實標出來</div>
           <p data-i18n="intro.why.estimate.p">沒有直接出處的數字一律標「推估」，回測沒變準的也照實寫。</p>
-          <p class="ex" data-why-ex="estimate"></p>
+          <p class="ex"><a class="to-m" href="/methods#durability" data-why-ex="estimate"></a></p>
         </div>
       </div>
     </section>
@@ -525,7 +526,7 @@ html.modal-open { overflow: hidden; }
           <li data-i18n="intro.cyc.li.b">B 賽事只在賽前 5 天小減量，不打亂周期</li>
           <li data-i18n="intro.cyc.li.basis">每段多長都對照過教練系統與研究：Uphill Athlete、Pfitzinger、Daniels，以及兩份減量統合分析</li>
         </ul>
-        <a class="more" href="/about#m-phases" data-i18n="intro.cyc.more">方法與出處 →</a>
+        <a class="more" href="/methods#cycle" data-i18n="intro.cyc.more">方法與出處 →</a>
       </div>
       <figure class="cy reveal" aria-labelledby="cy-h">
         <div class="cy-top"><b id="cy-h" data-i18n="intro.cyc.card.h">示範賽季：示範山徑越野 50K</b><span class="cy-sub" data-i18n="intro.cyc.card.sub">虛構跑者，用 app 的排程規則算出來</span></div>
@@ -1061,10 +1062,13 @@ html.modal-open { overflow: hidden; }
     for (const x of d.layers) { cum += x.t_s; top = Math.max(top, cum); }
     const hours = Math.max(1, Math.ceil(top / 3600)), step = hours > 6 ? 2 : 1, max = hours * 3600;
     const pct = (s) => `${((s / max) * 100).toFixed(2)}%`;
-    const row = (lab, sub, a, b, cls, t) => {
+    // SP-973: each layer's name links to the 方法 card that explains it (api/methods.LAYER_CARD)
+    const METHOD_CARD = { flat: "trail-hr", climb: "effort", terrain: "terrain", durability: "durability", heat: "heat", altitude: "altitude" };
+    const row = (lab, sub, a, b, cls, t, key) => {
       const r = document.createElement("div"); r.className = "wf-row" + (cls === "total" ? " sum" : ""); r.setAttribute("role", "listitem");
       const l = document.createElement("div"); l.className = "lab";
-      const h = document.createElement(cls === "total" ? "b" : "span"); h.textContent = lab; l.appendChild(h);
+      const h = document.createElement(cls === "total" ? "b" : METHOD_CARD[key] ? "a" : "span"); h.textContent = lab; l.appendChild(h);
+      if (METHOD_CARD[key]) h.href = "/methods#" + METHOD_CARD[key];
       const s = document.createElement("small"); s.textContent = sub; l.appendChild(s);
       const tk = document.createElement("div"); tk.className = "track"; tk.setAttribute("aria-hidden", "true");
       const bar = document.createElement("div"); bar.className = "bar " + cls;
@@ -1077,10 +1081,10 @@ html.modal-open { overflow: hidden; }
       const a = cum; cum += x.t_s;
       if (i === 0) {
         P.pace = mmss(d.km ? x.t_s / d.km : null);
-        row(L.t("intro.wf." + x.key, P), L.t("intro.wf." + x.key + "_s", P), 0, cum, "base", hms(x.t_s));
+        row(L.t("intro.wf." + x.key, P), L.t("intro.wf." + x.key + "_s", P), 0, cum, "base", hms(x.t_s), x.key);
       } else {
         const sign = x.t_s < 0 ? "−" : "+";
-        row(L.t("intro.wf." + x.key, P), L.t("intro.wf." + x.key + "_s", P), a, cum, x.t_s < 0 ? "neg" : "", sign + lapse(x.t_s));
+        row(L.t("intro.wf." + x.key, P), L.t("intro.wf." + x.key + "_s", P), a, cum, x.t_s < 0 ? "neg" : "", sign + lapse(x.t_s), x.key);
       }
     });
     row(L.t("intro.wf.total"), L.t("intro.wf.total_s", P), 0, d.time_s, "total", hms(d.time_s));

@@ -44,6 +44,7 @@ from backend.api import weight as weight_api
 from backend.api import manual as manual_api
 from backend.api import intervals as intervals_api
 from backend.api import about as about_api
+from backend.api import methods as methods_api
 from backend.api import admin as admin_api
 from backend.api import change_sync as change_sync_api
 from backend.api import billing as billing_api
@@ -272,6 +273,8 @@ def build_app(demo: bool | None = None) -> FastAPI:
         manual_api.router,
         # 關於 (SP-495): version, sources, licences, trademarks; public like the manual, also in the demo
         about_api.router,
+        # 方法 (SP-973): one card per calculation model; public like 關於, also in the demo
+        methods_api.router,
         # the change-log sync trial (SP-312, db/changelog.py): 404 unless TRC_CHANGE_SYNC=1; no page
         # calls it; never in the demo
         change_sync_api.router,
