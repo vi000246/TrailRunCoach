@@ -12,7 +12,8 @@ calculation core staying on the server (SP-500: the page only formats what these
 
   GET /api/v1/intro/example/<kind>   kind trail | baiyue | road: the built-in example of that kind
         (share.EXAMPLES, repo files, a fictional runner) trimmed for the elevation profile — the profile
-        (≤ PROFILE_POINTS points), each leg's distance, pace, heart-rate cap, time and fuel; numbers only
+        (≤ PROFILE_POINTS points), each leg's distance, pace, heart-rate cap, time and fuel, the stops
+        (km and a fuel.STOP_TYPES code; SP-1013: the try card rings them on the profile); numbers only
         (the page words them: no source note, no product name, no date); plus the small calculator's
         range for the kind and its answer for the example's own distance and climb.
   GET /api/v1/intro/estimate?kind=&km=&gain=   the small calculator: the finish time of the built-in
@@ -448,6 +449,18 @@ def _leg(s: dict, hike: bool = False) -> dict:
             "day": s.get("day") if isinstance(s.get("day"), int) and not isinstance(s.get("day"), bool) else None}
 
 
+def _stops(stops) -> list:
+    """The example's stops along the course (SP-1013): km and a fuel.STOP_TYPES code, nothing else (no name)."""
+    from backend.engine.racepower import fuel
+    out = []
+    for x in stops if isinstance(stops, list) else []:
+        km = x.get("km") if isinstance(x, dict) else None
+        if isinstance(km, (int, float)) and not isinstance(km, bool) and math.isfinite(km):
+            t = x.get("type")
+            out.append({"km": _r(km, 2), "type": t if t in fuel.STOP_TYPES else fuel.STOP_DEFAULT})
+    return sorted(out, key=lambda x: x["km"])
+
+
 def trimmed(kind: str) -> Optional[dict]:
     from backend.engine.racepower import share as SH
     snap = SH.example(SH.example_id(kind))
@@ -464,7 +477,8 @@ def trimmed(kind: str) -> Optional[dict]:
     return {"kind": kind,
             "summary": {"km": _r(s.get("km"), 1), "gain_m": _r(s.get("gain_m")), "loss_m": _r(s.get("loss_m")),
                         "time_s": _r(s.get("time_s")), "legs": len(legs)},
-            "profile": _profile(snap.get("profile") or {}), "legs": legs, "days": days, "calc": calc}
+            "profile": _profile(snap.get("profile") or {}), "legs": legs, "days": days,
+            "stops": _stops((snap.get("inputs") or {}).get("stops")), "calc": calc}
 
 
 # ---------------------------------------------------------------------------- 課表 (SP-637 R1)

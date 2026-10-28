@@ -98,12 +98,18 @@ def test_adding_a_session_picks_a_template_and_shows_its_structure(app, size):
     _open(page, size=size)
     page.locator("#tpl").scroll_into_view_if_needed()
     page.wait_for_function("() => document.querySelectorAll('.tpl-row').length === 3")
-    view = page.locator("#tpl-view").text_content()
-    assert page.locator("#tpl-view svg.bars.big rect").count() >= 3
-    page.locator("#tpl-cats button[data-cat='quality']").click()
-    page.wait_for_function("(t) => document.getElementById('tpl-view').textContent !== t", arg=view)
+    # SP-1013: it opens on 強度課 (an interval session's structure has shape; an easy run is one flat bar)
+    assert page.locator("#tpl-cats button[data-cat='quality']").get_attribute("aria-pressed") == "true"
+    assert page.locator("#tpl-cats button[data-cat='easy']").get_attribute("aria-pressed") == "false"
     rows = page.locator(".tpl-row")
     assert rows.count() == 3 and rows.nth(0).get_attribute("aria-pressed") == "true"
+    assert page.locator("#tpl-view svg.bars.big rect").count() >= 5           # warm-up, the reps, cool-down
+    view = page.locator("#tpl-view").text_content()
+    page.locator("#tpl-cats button[data-cat='easy']").click()
+    page.wait_for_function("(t) => document.getElementById('tpl-view').textContent !== t", arg=view)
+    assert rows.count() == 3 and rows.nth(0).get_attribute("aria-pressed") == "true"
+    assert page.locator("#tpl-view svg.bars.big rect").count() >= 1
+    page.locator("#tpl-cats button[data-cat='quality']").click()
     rows.nth(2).click()
     assert rows.nth(2).get_attribute("aria-pressed") == "true"
     text = page.locator("#tpl-view").text_content()

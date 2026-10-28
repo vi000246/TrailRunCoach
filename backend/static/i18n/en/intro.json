@@ -309,6 +309,8 @@
   "step.cool": "Cool-down",
   "step.other": "Other",
   "step.repeat": "{n} × ({what})",
+  "try.tag": "Sample race · no sign-up",
+  "try.tag_baiyue": "Sample trek · no sign-up",
   "try.trail": "See a full 50K trail race calculation",
   "try.baiyue": "See a full 3-day Baiyue trek calculation",
   "try.road": "See a full half-marathon calculation",

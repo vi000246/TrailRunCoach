@@ -255,18 +255,30 @@ html.anim .reveal.in { opacity: 1; transform: none; }
   html.anim .reveal { opacity: 1; transform: none; transition: none; }
   html { scroll-behavior: auto; }
 }
-/* SP-969: the try buttons carry the example's result (距離、爬升、預估、段數) and open it in a dialog */
-.trybtn { display: inline-grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 1px 12px;
-  max-width: 100%; min-height: 56px; padding: 9px 18px 9px 12px; border-radius: 12px; border: 2px solid var(--accent);
+/* SP-969: the try buttons carry the example's result (距離、爬升、預估、段數) and open it in a dialog.
+   SP-1013 (mock 6): a card — a tag, the play ring + title + the numbers, and along the bottom the example's own
+   elevation profile with its stops (the example API's profile / stops; a 百岳 trek's nights), drawn by tryProf */
+.trybtn { position: relative; isolation: isolate; display: block; width: 100%; max-width: 440px; min-width: 0; overflow: hidden;
+  padding: 14px 18px 66px; border-radius: 16px; border: 1.5px solid var(--accent);
   background: var(--panel); color: var(--text); text-decoration: none; text-align: left; cursor: pointer; }
-.trybtn:hover { background: var(--soft); }
+.trybtn:hover { box-shadow: 0 0 0 1px var(--accent); }
 .trybtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.trybtn .play { grid-row: span 2; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; }
-.trybtn .play::before { content: ""; margin-left: 3px; border-left: 11px solid #fff; border-top: 7px solid transparent; border-bottom: 7px solid transparent; }
-.trybtn b { font-size: 15.5px; line-height: 1.3; }
-.trybtn small { color: var(--muted); font-size: 13px; line-height: 1.35; font-variant-numeric: tabular-nums; min-height: 1.35em; }
-.trybtn.demo { grid-template-columns: minmax(0, 1fr); }
-.trybtn.demo .play, .trybtn.demo small { display: none; }
+.trybtn .tag { display: block; font-size: 12.5px; font-weight: 700; letter-spacing: .08em; line-height: 1.4; color: var(--accent); }
+.trybtn .row { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; margin-top: 8px; }
+.trybtn .play { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--accent); display: grid; place-items: center; }
+.trybtn .play::before { content: ""; margin-left: 4px; border-left: 13px solid var(--accent); border-top: 8px solid transparent; border-bottom: 8px solid transparent; }
+.trybtn:hover .play { background: var(--soft); }
+.trybtn .txt { min-width: 0; }
+.trybtn b { display: block; font-size: 17px; line-height: 1.32; }
+.trybtn small { display: block; margin-top: 2px; color: var(--muted); font-size: 13.5px; line-height: 1.4; font-variant-numeric: tabular-nums; min-height: 1.4em; }
+.trybtn .try-prof { position: absolute; z-index: -1; left: 0; bottom: 0; width: 100%; height: 70px; display: block; }
+.trybtn .try-prof .area { fill: var(--soft); }
+.trybtn .try-prof .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.trybtn .try-prof .stop { fill: var(--panel); stroke: var(--accent); stroke-width: 2; }
+.trybtn.noprof, .trybtn.demo { padding-bottom: 16px; }
+.trybtn.noprof .try-prof { display: none; }
+.trybtn.demo .row { grid-template-columns: minmax(0, 1fr); }
+.trybtn.demo .tag, .trybtn.demo .play, .trybtn.demo small, .trybtn.demo .try-prof { display: none; }
 .try-end { margin-top: 22px; }
 /* the dialog: the example's own share page in a same-origin frame */
 .modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(10,10,10,.55);
@@ -458,7 +470,7 @@ html.modal-open { overflow: hidden; }
         <div class="cta">
           <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
           <!-- SP-969: the example with its result; a click opens it in the dialog below (a new tab still works) -->
-          <a class="trybtn" data-try data-try-big href="/share/example-trail-50k"><span class="play" aria-hidden="true"></span><b data-try-h data-i18n="intro.try.trail">看一場 50K 越野賽的完整試算</b><small data-try-sub></small></a>
+          <a class="trybtn" data-try data-try-big href="/share/example-trail-50k"><span class="tag" data-try-tag data-i18n="intro.try.tag">示範賽事・免註冊</span><span class="row"><span class="play" aria-hidden="true"></span><span class="txt"><b data-try-h data-i18n="intro.try.trail">看一場 50K 越野賽的完整試算</b><small data-try-sub></small></span></span><svg class="try-prof" data-try-prof viewBox="0 0 440 70" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false"></svg></a>
         </div>
         <p class="price"><span data-i18n="intro.cta.price">免費方案可以一直用，名額有限、額滿收候補；訂閱即將開放（每月 NT$99 或每年 NT$890）。</span> <a href="/pricing" data-i18n="intro.cta.pricing">看方案與價格 →</a></p>
       </div>
@@ -546,7 +558,7 @@ html.modal-open { overflow: hidden; }
         <h3 id="tpl-h" class="tpl-h" data-i18n="intro.tpl.h">新增一堂課</h3>
         <p class="tpl-step"><b>1</b> <span data-i18n="intro.tpl.step1">選類型</span></p>
         <div class="kinds small" role="group" id="tpl-cats" aria-label="課的類型" data-i18n-attr="aria-label:intro.tpl.cats">
-          <button type="button" data-cat="easy" aria-pressed="true" data-i18n="intro.tpl.cat.easy">輕鬆跑／長跑</button><button type="button" data-cat="quality" aria-pressed="false" data-i18n="intro.tpl.cat.quality">強度課</button><button type="button" data-cat="trail" aria-pressed="false" data-i18n="intro.tpl.cat.trail">越野爬坡</button>
+          <button type="button" data-cat="easy" aria-pressed="false" data-i18n="intro.tpl.cat.easy">輕鬆跑／長跑</button><button type="button" data-cat="quality" aria-pressed="true" data-i18n="intro.tpl.cat.quality">強度課</button><button type="button" data-cat="trail" aria-pressed="false" data-i18n="intro.tpl.cat.trail">越野爬坡</button>
         </div>
         <p class="tpl-step"><b>2</b> <span data-i18n="intro.tpl.step2">選範本</span></p>
         <div class="tpl-list" id="tpl-list" role="group" aria-label="範本" data-i18n-attr="aria-label:intro.tpl.list"></div>
@@ -610,7 +622,7 @@ html.modal-open { overflow: hidden; }
       </div>
       <!-- SP-969 Q2-3: the old list, the small calculator and the profile are gone; the credit stays -->
       <div class="try-end">
-        <a class="trybtn" data-try data-try-big href="/share/example-trail-50k"><span class="play" aria-hidden="true"></span><b data-try-h data-i18n="intro.try.trail">看一場 50K 越野賽的完整試算</b><small data-try-sub></small></a>
+        <a class="trybtn" data-try data-try-big href="/share/example-trail-50k"><span class="tag" data-try-tag data-i18n="intro.try.tag">示範賽事・免註冊</span><span class="row"><span class="play" aria-hidden="true"></span><span class="txt"><b data-try-h data-i18n="intro.try.trail">看一場 50K 越野賽的完整試算</b><small data-try-sub></small></span></span><svg class="try-prof" data-try-prof viewBox="0 0 440 70" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false"></svg></a>
       </div>
     </section>
 
@@ -1079,8 +1091,8 @@ html.modal-open { overflow: hidden; }
     .then((d) => { CY.d = d; drawCycle(); let q = 0; addEventListener("resize", () => { cancelAnimationFrame(q); q = requestAnimationFrame(drawCycle); }); })
     .catch(() => { $("cycle").hidden = true; });
 
-  // 新增一堂課 → 選範本 → 看結構 (the 課表 section)
-  const TPL = { d: null, cat: "easy", key: null };
+  // 新增一堂課 → 選範本 → 看結構 (the 課表 section); SP-1013: opens on 強度課, whose structure has shape
+  const TPL = { d: null, cat: "quality", key: null };
   function drawTplList() {
     const cat = (TPL.d.cats || []).find((c) => c.id === TPL.cat) || { templates: [] };
     for (const b of document.querySelectorAll("#tpl-cats button")) b.setAttribute("aria-pressed", String(b.dataset.cat === TPL.cat));
@@ -1219,15 +1231,47 @@ html.modal-open { overflow: hidden; }
   // Esc inside the frame (the share page has the focus): its document is ours, the same origin
   frame.addEventListener("load", () => { try { frame.contentWindow.document.addEventListener("keydown", onKey); } catch { /* not ours */ } });
 
-  // the big buttons carry the chosen example's numbers (the example API's summary)
+  // SP-1013: the card's bottom is the example's own elevation profile (the example API's [km, z] points), its
+  // stops ringed where they are (stops: the race's aid stations; a 百岳 trek's nights, where a leg's day changes).
+  // The height keeps its scale (at least 300 m from bottom to top), so a flat road race reads flat.
+  const TP = { W: 440, H: 70, TOP: 16, BOT: 62, MIN_SPAN: 300 };
+  function tryProf(svg, d) {
+    svg.textContent = "";
+    const P = (d.profile || []).filter((p) => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1]));
+    if (P.length < 2 || !(P[P.length - 1][0] > 0)) return false;
+    const end = P[P.length - 1][0];
+    let lo = Infinity, hi = -Infinity;
+    for (const p of P) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
+    const span = Math.max(hi - lo, TP.MIN_SPAN);
+    const X = (km) => (km / end) * TP.W, Y = (z) => TP.BOT - ((z - lo) / span) * (TP.BOT - TP.TOP);
+    const line = "M" + P.map((p) => `${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join("L");
+    svg.appendChild(el("path", { class: "area", d: `${line}L${TP.W} ${TP.H}L0 ${TP.H}Z` }));
+    svg.appendChild(el("path", { class: "line", d: line }));
+    const zAt = (km) => {
+      let i = 1;
+      while (i < P.length - 1 && P[i][0] < km) i++;
+      const a = P[i - 1], b = P[i];
+      return b[0] === a[0] ? b[1] : a[1] + ((km - a[0]) / (b[0] - a[0])) * (b[1] - a[1]);
+    };
+    const marks = (d.stops || []).map((x) => x && x.km).filter((km) => isFinite(km));
+    const legs = d.legs || [];
+    for (let i = 1; i < legs.length; i++) if (legs[i].day && legs[i - 1].day && legs[i].day !== legs[i - 1].day) marks.push(legs[i].a);
+    for (const km of marks) {
+      if (km > 0 && km < end) svg.appendChild(el("circle", { class: "stop", cx: X(km).toFixed(1), cy: Y(zAt(km)).toFixed(1), r: 3.6 }));
+    }
+    return true;
+  }
+  // the big buttons carry the chosen example's numbers (the example API's summary) and its profile
   function setTry(k, d) {
     const s = d.summary || {};
     const sub = L.t(k === "baiyue" ? "intro.try.sub_baiyue" : "intro.try.sub",
       { km: num(s.km, 1), gain: num(s.gain_m), time: hms(s.time_s), legs: num(s.legs) });
     for (const a of document.querySelectorAll("a[data-try-big]")) {
       if (demoTry) continue;
+      a.querySelector("[data-try-tag]").textContent = L.t(k === "baiyue" ? "intro.try.tag_baiyue" : "intro.try.tag");
       a.querySelector("[data-try-h]").textContent = L.t("intro.try." + k);
       a.querySelector("[data-try-sub]").textContent = sub;
+      a.classList.toggle("noprof", !tryProf(a.querySelector("[data-try-prof]"), d));
     }
   }
 
@@ -1244,7 +1288,11 @@ html.modal-open { overflow: hidden; }
     for (const b of document.querySelectorAll("button[data-kind]")) b.setAttribute("aria-pressed", String(b.dataset.kind === k));
     for (const t of document.querySelectorAll("[data-kind-text]")) t.textContent = L.t(`intro.kind.${k}.${t.dataset.kindText}`);
     let d;
-    try { d = await example(k); } catch { delete EX[k]; return; }     // the buttons stay plain links
+    try { d = await example(k); } catch {                             // the buttons stay plain links
+      delete EX[k];
+      if (k === kind) for (const a of document.querySelectorAll("a[data-try-big]")) a.classList.add("noprof");
+      return;
+    }
     if (k !== kind) return;
     setTry(k, d);
   }

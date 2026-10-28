@@ -261,7 +261,9 @@ def test_example_api_is_trimmed_and_has_no_source_note(c):
         r = c.get(f"/api/v1/intro/example/{kind}")
         assert r.status_code == 200, kind
         d = r.json()
-        assert set(d) == {"kind", "summary", "profile", "legs", "days", "calc"}, kind
+        # SP-1013: + stops (km and a type code), which the try card rings on the profile
+        assert set(d) == {"kind", "summary", "profile", "legs", "days", "stops", "calc"}, kind
+        assert all(set(x) == {"km", "type"} for x in d["stops"]), kind
         assert d["kind"] == kind and len(d["profile"]) <= 300 and d["legs"], kind
         assert {x["mode"] for x in d["legs"]} <= {"run", "walk", "mix"}, kind
         for leg in d["legs"]:
