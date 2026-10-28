@@ -54,7 +54,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import CorosPlanPush
-from backend.i18n import _      # SP-908: why a session is not pushed / a push failed (never the watch's text)
+# SP-908: why a session is not pushed / a push failed in the request's language; the watch's text is built in
+# zh-TW (the fingerprint) and sent in the account's language (watch_locale / for_watch)
+from backend.i18n import DEFAULT_LOCALE, N_, _, current_locale, use_locale
 from backend.engine.zones import EASY_BAND, LONG_BAND, TRAIL_BAND, WORKOUT_TARGETS, watch_band
 from backend.sync import http
 from backend.sync.coros_client import _get_token_and_base, _headers
@@ -84,7 +86,7 @@ MAX_NAME = 30
 
 OVERVIEW = {EX_WARMUP: "sid_run_warm_up", EX_TRAIN: "sid_run_training",
             EX_COOLDOWN: "sid_run_cool_down", EX_REST: "sid_run_rest"}
-STEP_NAME = {EX_WARMUP: "暖身", EX_TRAIN: "主課", EX_COOLDOWN: "緩和", EX_REST: "恢復"}
+STEP_NAME = {EX_WARMUP: N_("暖身"), EX_TRAIN: N_("主課"), EX_COOLDOWN: N_("緩和"), EX_REST: N_("恢復")}
 
 # power / HR fractions per target id, straight from zones.WORKOUT_TARGETS
 _FRAC = {tid: (plo, phi, hlo, hhi) for tid, _n, plo, phi, hlo, hhi, *_ in WORKOUT_TARGETS}
@@ -125,7 +127,7 @@ class Step:
 class Repeat:
     sets: int
     steps: list = field(default_factory=list)
-    name: str = "間歇"
+    name: str = N_("間歇")
 
 
 StepLike = Union[Step, Repeat]
@@ -261,15 +263,15 @@ def easy_name(s: dict, th: Thresholds, it: Optional[tuple]) -> str:
             from backend.engine.hr_profile import walk_step_name
             return walk_step_name()
         return cap_name(th)
-    return "功率區間" if it else "照感覺"
+    return N_("功率區間") if it else N_("照感覺")
 
 
 # SP-479 (the owner 2026-10-14): a warm-up the app writes has no target — the easy band's floor (0.75 × LTHR,
 # the plan zones' Z2 bottom…) is above a HR still coming up and the watch kept alerting; COROS takes an HR
 # target only as lo–hi, so no cap alone. The cool-down keeps the easy band. = workout_steps.resolve's warm.
 WARM_INT = None
-WARM_NAME = {"city": "輕鬆跑暖身", "river": "輕鬆跑→漸進", "drills": "動態伸展／drill"}
-REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
+WARM_NAME = {"city": N_("輕鬆跑暖身"), "river": N_("輕鬆跑→漸進"), "drills": N_("動態伸展／drill")}
+REST_NAME = {"walk": N_("走路或極慢跑"), "jog": N_("慢跑恢復"), "jog_down": N_("慢跑／走下坡"), "none": N_("恢復")}
 
 
 def _variant_steps(s: dict, th: Thresholds) -> Optional[list[StepLike]]:
@@ -295,18 +297,18 @@ def _variant_steps(s: dict, th: Thresholds) -> Optional[list[StepLike]]:
         k = st["kind"]
         if k == "warm" and st["code"] == "strides":
             n = max(1, st["s"] // 60)
-            out.append(Repeat(n, [Step(EX_TRAIN, 20, None, "快步跑 20 秒"), Step(EX_REST, 40, None, "慢跑")],
+            out.append(Repeat(n, [Step(EX_TRAIN, 20, None, N_("快步跑 20 秒")), Step(EX_REST, 40, None, N_("慢跑"))],
                               f"快步跑 {n}×20 秒"))
         elif k == "warm":
             # SP-479: no target on a warm-up (the easy band's floor is above a HR still coming up)
-            out.append(Step(EX_WARMUP, st["s"], WARM_INT, WARM_NAME.get(st["code"], "暖身")))
+            out.append(Step(EX_WARMUP, st["s"], WARM_INT, WARM_NAME.get(st["code"], N_("暖身"))))
         elif k == "work":
             out.append(Step(EX_TRAIN, st["s"], work_int, st["text"]))
         elif k == "rest":
             out.append(Step(EX_REST, st["s"], easy_hr(th) if st.get("mode") == "jog" else None,
-                            REST_NAME.get(st.get("mode"), "恢復")))
+                            REST_NAME.get(st.get("mode"), N_("恢復"))))
         else:
-            out.append(Step(EX_COOLDOWN, st["s"], easy_hr(th), "緩和"))
+            out.append(Step(EX_COOLDOWN, st["s"], easy_hr(th), N_("緩和")))
     return out
 
 
@@ -374,7 +376,7 @@ def _test_steps(s: dict, th: Thresholds) -> list[StepLike]:
     gap = _num(r"休\s*(\d+)\s*分", s.get("target", "") + detail, t["rest"])
     return [Step(EX_WARMUP, warm * 60, WARM_INT),
             Step(EX_TRAIN, a * 60, None, f"{a} 分全力"),
-            Step(EX_REST, gap * 60, easy_hr(th), "恢復"),
+            Step(EX_REST, gap * 60, easy_hr(th), N_("恢復")),
             Step(EX_TRAIN, b * 60, None, f"{b} 分全力"),
             Step(EX_COOLDOWN, cool * 60, easy_hr(th))]
 
@@ -398,7 +400,7 @@ def _aet_test_steps(s: dict, th: Thresholds) -> list[StepLike]:
             tg = xu_main_target(s.get("target", ""))
             main_step = Step(EX_TRAIN, main * 60, tg, xu_main_name(s.get("target", "")))
         else:
-            main_step = Step(EX_TRAIN, main * 60, easy_hr(th), "AeT 心率附近穩定跑")
+            main_step = Step(EX_TRAIN, main * 60, easy_hr(th), N_("AeT 心率附近穩定跑"))
         steps = [Step(EX_WARMUP, warm * 60, WARM_INT), main_step]
         cool = _num(r"緩和\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", text, 0)
         if cool:
@@ -515,7 +517,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: b
     if kind == "notice":
         # 課表待確認 (engine/plan_auto.py): one 1-minute open warm-up step, so it is
         # obviously not a real session; the summary goes in the overview (detail)
-        return [Step(EX_WARMUP, 60, None, "課表待確認：到總覽頁同意／拒絕")]
+        return [Step(EX_WARMUP, 60, None, N_("課表待確認：到總覽頁同意／拒絕"))]
     if kind in ("quality",):
         from backend.engine import workout_steps as WS
         d = WS.derive(s) if not s.get("variant_key") and WS.me_climb(s) else None
@@ -560,17 +562,17 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None, ep: b
             mp_t = ("pace", round(WS.MP_PACE[0] * th.tpace), round(WS.MP_PACE[1] * th.tpace))
         else:
             mp_t = ("hr", round(WS.MP_HR[0] * th.lthr), round(WS.MP_HR[1] * th.lthr)) if th.lthr else None
-        return [Step(EX_TRAIN, secs - mp * 60 - WS.MP_TAIL_S, easy_target(s, th, LONG_BAND), "輕鬆"),
-                Step(EX_TRAIN, mp * 60, mp_t, "馬拉松配速"),
-                Step(EX_COOLDOWN, WS.MP_TAIL_S, easy_target(s, th), "輕鬆收操")]
+        return [Step(EX_TRAIN, secs - mp * 60 - WS.MP_TAIL_S, easy_target(s, th, LONG_BAND), N_("輕鬆")),
+                Step(EX_TRAIN, mp * 60, mp_t, N_("馬拉松配速")),
+                Step(EX_COOLDOWN, WS.MP_TAIL_S, easy_target(s, th), N_("輕鬆收操"))]
     if kind in ("long", "mountain", "hike"):
         it = easy_target(s, th, LONG_BAND if kind == "long" else TRAIL_BAND)
         return [Step(EX_TRAIN, secs, it, easy_name(s, th, it))]
     if kind == "easy" and (s.get("heat") or "熱適應" in (s.get("title") or "")) and secs >= 20 * 60:
         # heat-acclimation.md §5.4: warm-up 10 / main / cool-down 5 (walk), HR ≤ AeT
-        return [Step(EX_WARMUP, 10 * 60, WARM_INT, "熱適應：慢慢進入"),
-                Step(EX_TRAIN, secs - 15 * 60, easy_hr(th), "熱適應：照心率、配速放慢"),
-                Step(EX_COOLDOWN, 5 * 60, None, "走路降溫")]
+        return [Step(EX_WARMUP, 10 * 60, WARM_INT, N_("熱適應：慢慢進入")),
+                Step(EX_TRAIN, secs - 15 * 60, easy_hr(th), N_("熱適應：照心率、配速放慢")),
+                Step(EX_COOLDOWN, 5 * 60, None, N_("走路降溫"))]
     if kind == "easy":
         m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*秒", s.get("title", ""))
         if m:
@@ -721,19 +723,89 @@ class WorkoutSpec:
         return bool(fp) and fp in (self.fingerprint, self.legacy_fingerprint, *self.legacy_names)
 
 
-def workout_name(s: dict) -> str:
+# ---------------------------------------------------------------------------
+# the watch's language (SP-908)
+# ---------------------------------------------------------------------------
+# The workout is built in zh-TW — its fingerprint (what was pushed) never depends on a language, so changing
+# the account's language re-pushes nothing (the owner 2026-10-27: a pushed workout keeps its names until it
+# changes for another reason, as SP-391's renamed steps) — and sent in the account's language (athlete.locale:
+# the interface language the account last used, shell.js reports it): the name, the overview and every step's
+# name shown the way the 課表 shows a stored text (engine/stored_text). zh-TW: the payload as built.
+
+async def watch_locale(db, athlete_id: int = 1) -> str:
+    """The language the watch's text is written in: the account's (settings athlete.locale), else zh-TW."""
+    try:
+        from backend.settings.repository import SettingsRepository
+        from backend.i18n import normalize
+        return normalize(await SettingsRepository(db, athlete_id).get("athlete.locale")) or DEFAULT_LOCALE
+    except Exception:                        # noqa: BLE001 — no settings table (a test double): zh-TW
+        return DEFAULT_LOCALE
+
+
+def watch_text(text: Optional[str], loc: Optional[str]) -> str:
+    """A text the app built for the watch (zh-TW) in `loc`; a user's own words stay as written."""
+    if not text or not loc or loc == DEFAULT_LOCALE:
+        return text or ""
+    from backend.engine.stored_text import shown
+    return shown(text, loc)
+
+
+def _built(fn, *a, **k):
+    """`fn` run in zh-TW (the watch's text as built, whatever the request's language); a reason it raises
+    (Unsupported) back in the request's language."""
+    loc = current_locale()
+    try:
+        with use_locale(DEFAULT_LOCALE):
+            return fn(*a, **k)
+    except Unsupported as e:
+        if loc == DEFAULT_LOCALE:
+            raise
+        raise Unsupported(watch_text(str(e), loc)) from None
+
+
+def for_watch(payload: dict, name: str, overview: str, loc: Optional[str]) -> dict:
+    """The program as sent: `payload` (built in zh-TW) with its name, overview and step names in `loc`."""
+    if not loc or loc == DEFAULT_LOCALE:
+        return payload
+    return {**payload, "name": name[:MAX_NAME], "overview": watch_text(overview, loc)[:200],
+            "exercises": [{**ex, "name": _cap(watch_text(ex.get("name"), loc))} for ex in payload["exercises"]]}
+
+
+def _cap(s: str) -> str:
+    """A step name starts with a capital (a catalog entry used mid-sentence too reads 「marathon pace」)."""
+    return s[:1].upper() + s[1:] if s[:1].isascii() and s[:1].islower() else s
+
+
+def workout_name(s: dict, loc: Optional[str] = None) -> str:
     d = dt.date.fromisoformat(s["day"])
-    return f"{NAME_PREFIX} {s['title']} {d.month}/{d.day}"[:MAX_NAME]
+    day = f"{d.month}/{d.day}"
+    if not loc or loc == DEFAULT_LOCALE:
+        return f"{NAME_PREFIX} {s['title']} {day}"[:MAX_NAME]
+    # a longer English title is cut — at a word when one ends past half the room — never the date (the
+    # watch's list tells the days apart by it)
+    title = watch_text(s["title"], loc)
+    room = MAX_NAME - len(NAME_PREFIX) - len(day) - 2
+    if len(title) > room:
+        cut = title[:room + 1].rfind(" ")
+        title = title[:cut] if cut > room // 2 else title[:room]
+    title = title.rstrip(" ·,;:(（+＋-–")
+    return f"{NAME_PREFIX} {title} {day}"
 
 
-def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = None) -> WorkoutSpec:
-    """COROS workout for one plan session (raises Unsupported when not pushed)."""
+def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = None,
+                    loc: Optional[str] = None) -> WorkoutSpec:
+    """COROS workout for one plan session (raises Unsupported when not pushed). `loc`: the watch's
+    language (watch_locale; None = zh-TW) — the payload sent, never the fingerprint."""
     if s.get("done"):
         raise Unsupported(_("已完成"))
     if not s.get("day"):
         raise Unsupported(_("本週排不進去"))
     if today and s["day"] < today:
         raise Unsupported(_("日期已過"))
+    return _built(_session_workout, s, thresholds, loc)
+
+
+def _session_workout(s: dict, thresholds: Optional[dict], loc: Optional[str]) -> WorkoutSpec:
     th = Thresholds.of(thresholds)
     sent = _sent_tl(s)
     steps = session_steps(s, th, sent, ep=True)
@@ -744,7 +816,9 @@ def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = 
     # pushed, _sent_tl; no other field depends on the conversion)
     fp = _fingerprint(s["day"], payload)
     old = _fingerprint(s["day"], build_program(name, steps, th, s.get("detail") or "", legacy_percent=True))
-    return WorkoutSpec(s["id"], s["day"], name, payload, fp, _load_records(s, th, sent),
+    shown_name = workout_name(s, loc)
+    return WorkoutSpec(s["id"], s["day"], shown_name, for_watch(payload, shown_name, s.get("detail") or "", loc), fp,
+                       _load_records(s, th, sent),
                        legacy_fingerprint=old if old != fp else None,
                        legacy_names=legacy_tss_fps(s["day"], name, steps, th, s.get("detail") or "", fp))
 
@@ -1089,8 +1163,8 @@ RACE_KEY_PREFIX = "racecalc:"     # a race-calculator export's key (one per even
                                   # the old direct push; plan_sessions.ext_key of the 「匯出至課表」 row
 
 
-def library_name(s: dict) -> str:
-    return f"{NAME_PREFIX} {s['title']}"[:MAX_NAME]
+def library_name(s: dict, loc: Optional[str] = None) -> str:
+    return f"{NAME_PREFIX} {watch_text(s['title'], loc)}"[:MAX_NAME]
 
 
 async def push_workout(db: AsyncSession, s: dict, thresholds: Optional[dict], today: str, *,
@@ -1103,14 +1177,12 @@ async def push_workout(db: AsyncSession, s: dict, thresholds: Optional[dict], to
     if s.get("day") and s["day"] >= today:
         res = await push_sessions(db, [s], thresholds, today, athlete_id=athlete_id, hub=hub)
         return {**res["sessions"][0], "scheduled": True}
+    loc = await watch_locale(db, athlete_id)
     th = Thresholds.of(thresholds)
-    steps = session_steps(s, th, ep=True)
-    name = library_name(s)
-    payload = build_program(name, steps, th, s.get("detail") or "")
-    fp = _fingerprint(None, payload)
-    # the same workout as exported before SP-67 (WorkoutSpec.legacy_fingerprint) / SP-391 (legacy_names)
-    old = _fingerprint(None, build_program(name, steps, th, s.get("detail") or "", legacy_percent=True))
-    olds = (old, *legacy_tss_fps(None, name, steps, th, s.get("detail") or "", fp))
+    steps = _built(session_steps, s, th, ep=True)
+    payload, fp, olds = _built(_library_program, library_name(s), steps, th, s.get("detail") or "")
+    name = library_name(s, loc)
+    payload = for_watch(payload, name, s.get("detail") or "", loc)
     out = {"id": s["id"], "title": s.get("title"), "day": None, "name": name, "scheduled": False}
     async with _push_lock:
         hub = hub or await TrainingHub.from_db(db, athlete_id)
@@ -1145,13 +1217,22 @@ async def push_workout(db: AsyncSession, s: dict, thresholds: Optional[dict], to
         return {**out, "status": "updated" if replacing else "pushed", "changed": True, **_row_view(row)}
 
 
+def _library_program(name: str, steps: list[StepLike], th: Thresholds, overview: str) -> tuple:
+    """(payload, fingerprint, the fingerprints it had before) of a library workout, built in zh-TW."""
+    payload = build_program(name, steps, th, overview)
+    fp = _fingerprint(None, payload)
+    # the same workout as exported before SP-67 (WorkoutSpec.legacy_fingerprint) / SP-391 (legacy_names)
+    old = _fingerprint(None, build_program(name, steps, th, overview, legacy_percent=True))
+    return payload, fp, (old, *legacy_tss_fps(None, name, steps, th, overview, fp))
+
+
 async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,
                     thresholds: Optional[dict], row: Optional[CorosPlanPush],
-                    today: Optional[str] = None) -> dict:
-    """Push one session; `s["key"]` identifies it in coros_plan_push."""
+                    today: Optional[str] = None, loc: Optional[str] = None) -> dict:
+    """Push one session; `s["key"]` identifies it in coros_plan_push. `loc`: the watch's language."""
     out = {"id": s["id"], "title": s.get("title"), "day": s.get("day")}
     try:
-        spec = session_workout(s, thresholds, today)
+        spec = session_workout(s, thresholds, today, loc)
     except Unsupported as e:
         if s.get("done"):
             # done sessions stay on the COROS calendar as they are
@@ -1215,13 +1296,14 @@ async def push_sessions(db: AsyncSession, sessions: list[dict], thresholds: Opti
     past day. `missed_keys`: sessions the athlete missed — removed from the
     calendar (still never an entry COROS shows as done)."""
     await _rpe_sessions_follow(db, athlete_id, today)
+    loc = await watch_locale(db, athlete_id)
     async with _push_lock:
         hub = hub or await TrainingHub.from_db(db, athlete_id)
         keys = {s["key"] for s in sessions}
         rows = await rows_by_key(db, athlete_id, keys | set(stale_keys) | set(missed_keys))
         results = []
         for s in sessions:
-            results.append(await _push_one(db, hub, athlete_id, s, thresholds, rows.get(s["key"]), today))
+            results.append(await _push_one(db, hub, athlete_id, s, thresholds, rows.get(s["key"]), today, loc))
         removed = []
         for k in stale_keys:
             if k in rows and k not in keys:

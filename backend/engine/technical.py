@@ -102,9 +102,9 @@ def _steps(work: int, rpe: tuple) -> dict:
     from backend.engine import workout_templates as WT
     b = WT.B()
     up = int(round(work * CLIMB_PER_MIN / 50.0) * 50) or None
-    items = [b.warm(WARM, "好走的路段暖身"),
-             b.t("work", work * 60, WT.rpe(rpe[0], rpe[1], up=up), "接近比賽路況的技術路段"),
-             b.t("cool", COOL * 60, WT.OPEN, "收操")]
+    items = [b.warm(WARM, N_("好走的路段暖身")),
+             b.t("work", work * 60, WT.rpe(rpe[0], rpe[1], up=up), N_("接近比賽路況的技術路段")),
+             b.t("cool", COOL * 60, WT.OPEN, N_("收操"))]
     return WS.doc(items, origin="template:lib:tech_hard")
 
 

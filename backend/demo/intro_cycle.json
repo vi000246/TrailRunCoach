@@ -1,0 +1,140 @@
+{
+ "_about": "SP-975: the 介紹頁's 賽事周期 example (backend/scripts/intro_cycle.py: the demo season through engine/planning.auto_phases; a fictional runner). Days from today, no calendar date.",
+ "begin": -120,
+ "end": 73,
+ "phases": [
+  {
+   "kind": "specific",
+   "start": -120,
+   "end": -118,
+   "event": "baiyue"
+  },
+  {
+   "kind": "taper",
+   "start": -117,
+   "end": -111,
+   "event": "baiyue"
+  },
+  {
+   "kind": "event",
+   "start": -110,
+   "end": -108,
+   "event": "baiyue",
+   "trip": true
+  },
+  {
+   "kind": "recovery",
+   "start": -107,
+   "end": -94,
+   "event": "baiyue",
+   "size": "ultra"
+  },
+  {
+   "kind": "transition",
+   "start": -93,
+   "end": -73,
+   "event": "baiyue"
+  },
+  {
+   "kind": "base",
+   "start": -72,
+   "end": -36,
+   "event": null
+  },
+  {
+   "kind": "specific",
+   "start": -35,
+   "end": 20,
+   "event": "trail50k"
+  },
+  {
+   "kind": "taper",
+   "start": 21,
+   "end": 30,
+   "event": "trail50k"
+  },
+  {
+   "kind": "event",
+   "start": 31,
+   "end": 31,
+   "event": "trail50k"
+  },
+  {
+   "kind": "recovery",
+   "start": 32,
+   "end": 45,
+   "event": "trail50k",
+   "size": "ultra"
+  },
+  {
+   "kind": "transition",
+   "start": 46,
+   "end": 66,
+   "event": "trail50k"
+  },
+  {
+   "kind": "base",
+   "start": 67,
+   "end": 73,
+   "event": null
+  }
+ ],
+ "events": [
+  {
+   "id": "baiyue",
+   "priority": "A",
+   "start": -110,
+   "end": -108
+  },
+  {
+   "id": "trail25k",
+   "priority": "B",
+   "start": -52,
+   "end": -52
+  },
+  {
+   "id": "trail17k",
+   "priority": "B",
+   "start": 10,
+   "end": 10
+  },
+  {
+   "id": "trail50k",
+   "priority": "A",
+   "start": 31,
+   "end": 31
+  }
+ ],
+ "b_windows": [
+  {
+   "kind": "mini_taper",
+   "event": "trail17k",
+   "start": 5,
+   "end": 9
+  },
+  {
+   "kind": "mini_recovery",
+   "event": "trail17k",
+   "start": 11,
+   "end": 17
+  },
+  {
+   "kind": "mini_taper",
+   "event": "trail25k",
+   "start": -57,
+   "end": -53
+  },
+  {
+   "kind": "mini_recovery",
+   "event": "trail25k",
+   "start": -51,
+   "end": -45
+  }
+ ],
+ "rules": {
+  "taper_days": 10,
+  "specific_weeks": 8,
+  "mini_taper_days": 5,
+  "transition_weeks": 3
+ }
+}

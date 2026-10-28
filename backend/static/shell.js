@@ -143,22 +143,44 @@
   .appnav .an-more { position: relative; display: flex; }
   .appnav .an-more > summary { list-style: none; cursor: pointer; }
   .appnav .an-more > summary::-webkit-details-marker { display: none; }
+  /* SP-976: as wide as its longest row (not the ~70 px 更多 cell it hangs from: shrunk to that, the menu fell to
+     its min-width and the long purposes ran out of it, squeezing the icons of 路線 / 賽事 / 管理 away), never
+     wider than the screen — a purpose wraps then */
   .appnav .an-more .an-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; min-width: 210px; padding: 6px;
+    width: max-content; max-width: calc(100vw - 16px);
     background: var(--panel, #fff); border: 1px solid var(--line, #e1e5ea); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14);
     display: grid; gap: 2px; }
+  /* every width: the icon in its own column over both lines, the name above the purpose (SP-976: the bar's
+     one-row grid at 700–1100 px put the purpose under the icon; the phone's flex row let the icon shrink) */
+  .appnav .an-menu .an-item { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto;
+    column-gap: 8px; row-gap: 1px; align-content: center; justify-items: start; padding: 7px 12px; text-align: left; }
+  .appnav .an-menu .an-item svg { grid-row: 1 / span 2; grid-column: 1; align-self: center; flex: none; }
+  .appnav .an-menu .an-name, .appnav .an-menu .an-purpose { grid-column: 2; min-width: 0; max-width: 100%; }
+  .appnav .an-menu .an-purpose { white-space: normal; }
   .appnav .an-menu a.an-item { border-radius: 7px; min-height: 40px; }
   .appnav .an-menu a.an-item[aria-current="page"]::after { display: none; }
   .appnav .an-menu .an-purpose { display: block !important; }
   /* sign out (sign-in mode, SP-58): a button styled as the menu links */
   .appnav .an-menu button.an-item { border: 0; border-top: 1px solid var(--line, #e1e5ea); border-radius: 0 0 7px 7px;
     background: none; font: inherit; text-align: left; cursor: pointer; min-height: 40px; width: 100%; }
-  .appnav .an-menu button.an-item .an-purpose { overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  .appnav .an-menu button.an-item .an-purpose { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  /* the top bar's 更多 sits right of the middle below 1100 px: the menu opens leftwards so it stays on screen */
+  @media (max-width: 1100px) { .appnav .an-more .an-menu { left: auto; right: 0; } }
+  /* SP-976: while 更多 is open the bar (and its menu) goes above the floating 「建議」 / 「問 AI」 (z-index 60 / 61) */
+  .appnav.an-open { z-index: 70; }
   @media (max-width: 699px) {
-    .appnav .an-more { flex: 1 1 0; min-width: 0; }
+    /* the menu hangs from the whole bar (fixed), on its right edge over 更多, up to the screen's height */
+    .appnav .an-more { flex: 1 1 0; min-width: 0; position: static; }
     .appnav .an-more > summary { width: 100%; }
-    .appnav .an-more .an-menu { top: auto; bottom: calc(100% + 6px); left: auto; right: 4px; }
-    .appnav .an-menu a.an-item, .appnav .an-menu button.an-item { flex-direction: row; justify-content: flex-start;
-      padding: 6px 10px; min-height: 44px; }
+    .appnav .an-more .an-menu { top: auto; bottom: calc(100% + 6px); left: auto; right: 6px; max-width: calc(100vw - 12px);
+      max-height: calc(100vh - 57px - 18px - env(safe-area-inset-bottom));
+      max-height: calc(100dvh - 57px - 18px - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+    .appnav .an-menu a.an-item, .appnav .an-menu button.an-item { column-gap: 10px; padding: 7px 12px 7px 10px; min-height: 48px; }
+    .appnav .an-menu .an-name { font-size: 14px; font-weight: 600; color: var(--text, #111); }
+    .appnav .an-menu .an-item[aria-current="page"] .an-name { color: var(--an-acc); }
+    .appnav .an-menu .an-name .an-long { display: inline; }
+    .appnav .an-menu .an-name .an-short { display: none; }
+    .appnav .an-menu .an-purpose { font-size: 12px; }
   }
   @media print { .appnav { display: none; } }
   /* SP-751: a read-only field looks read-only on every page (greyed, dashed border; the page's own --muted /
@@ -196,6 +218,8 @@
   const more = nav.querySelector(".an-more") || { open: false, contains: () => false };
   document.addEventListener("click", (e) => { if (more.open && !more.contains(e.target)) more.open = false; });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") more.open = false; });
+  // SP-976: open, the bar goes above the floating 建議 / 問 AI (.appnav.an-open)
+  if (more.addEventListener) more.addEventListener("toggle", () => nav.classList.toggle("an-open", more.open));
   // sign-in mode (SP-328): 方案與訂閱 in 更多, above 登出 (not for the site owner: every feature already)
   const role = SESSION.membership && SESSION.membership.role;
   if (SESSION.login && SESSION.user && (role === "user" || role === "subscriber")) {
@@ -1319,6 +1343,17 @@
     if (z && localStorage.getItem("tz.sent") !== z) {
       fetch("/api/v1/sync/timezone/browser", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ zone: z }) }).then((r) => { if (r.ok) localStorage.setItem("tz.sent", z); }).catch(() => {});
+    }
+  } catch (e) { /* storage blocked: skip */ }
+
+  // 帳號語言 (SP-908): the language this account is used in, when it changed in this browser (the 中文／EN
+  // switch reloads into the other one) — the COROS push names the watch's workouts in it. Per account: two
+  // accounts on one browser each get theirs; not on public pages or the demo (no account of one's own)
+  try {
+    const lk = `lang.sent.${(SESSION.user && SESSION.user.id) || 0}`;
+    if (!PUBLIC && !DEMO && L.locale && localStorage.getItem(lk) !== L.locale) {
+      fetch("/api/v1/sync/locale", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale: L.locale }) }).then((r) => { if (r.ok) localStorage.setItem(lk, L.locale); }).catch(() => {});
     }
   } catch (e) { /* storage blocked: skip */ }
 

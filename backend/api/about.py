@@ -83,6 +83,27 @@ SOURCES: dict[str, Source] = {
     "racinais": Source("Racinais S, Alonso JM, Coutts AJ, et al. Consensus recommendations on training and "
                        "competing in the heat. British Journal of Sports Medicine 2015;49(18):1164–1173.",
                        "https://doi.org/10.1136/bjsports-2015-094915"),
+    # SP-975: the 賽事周期 (engine/planning.py: TAPER_DAYS, SPECIFIC_WEEKS, REC_BY_SIZE, 下坡升級)
+    "bosquet": Source("Bosquet L, Montpetit J, Arvisais D, Mujika I. Effects of tapering on performance: a meta-analysis. "
+                      "Medicine & Science in Sports & Exercise 2007;39(8):1358–1365.",
+                      "https://doi.org/10.1249/mss.0b013e31806010e0"),
+    "wang_taper": Source("Wang Z, et al. Effects of tapering on performance in endurance athletes: a systematic review "
+                         "and meta-analysis. PLOS ONE 2023.", "https://doi.org/10.1371/journal.pone.0282838"),
+    "ua_ultra": Source("Uphill Athlete. Intro to Ultra Marathons: 20-week training plan (accessed 2026).",
+                       "https://uphillathlete.com/training-plans/20-week-intro-ultra-running-training-plan/"),
+    "pfitzinger": Source("Pfitzinger P, Douglas S. Advanced Marathoning, 3rd ed. Champaign, IL: Human Kinetics; 2019."),
+    "canova": Source("Running Writings. Review and summary of Marathon Training – A Scientific Approach by Renato "
+                     "Canova. 2023.", "https://runningwritings.com/2023/06/canova-marathon-book.html"),
+    "jiang": Source("Chiang YC. A periodization guide for trail running (in Chinese). Garmin Taiwan blog; 2020.",
+                    "https://www.garmin.com/zh-TW/blog/running/trail-run/"),
+    "johnston_rec": Source("Johnston S. Optimizing ultra race recovery (interview). TrainingPeaks Coach Blog; 2024.",
+                           "https://www.trainingpeaks.com/coach-blog/optimizing-ultra-race-recovery-scott-johnston/"),
+    "torrence": Source("Torrence I. Quick turnarounds: recover and train during a full race season. iRunFar; 2019.",
+                       "https://www.irunfar.com/quick-turnarounds-recover-and-train-during-a-full-race-season"),
+    "millet_ultra": Source("Millet GY, et al. Neuromuscular consequences of an extreme mountain ultra-marathon. "
+                           "PLoS One 2011.", "https://pmc.ncbi.nlm.nih.gov/articles/PMC3043077/"),
+    "bontemps": Source("Bontemps B, et al. Downhill running: what are the effects and how can we adapt? A narrative "
+                       "review. Sports Medicine 2020.", "https://pmc.ncbi.nlm.nih.gov/articles/PMC7674385/"),
 }
 
 # (id, the sources it cites): the words are about.json "m.<id>.name" / "m.<id>.desc"
@@ -104,6 +125,8 @@ METHODS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("aet", ("uphill",)),
     ("reentry", ("daniels",)),
     ("heat", ("racinais",)),
+    ("phases", ("ua_ultra", "pfitzinger", "canova", "daniels", "jiang", "bosquet", "wang_taper")),
+    ("postrace", ("johnston_rec", "torrence", "millet_ultra", "bontemps")),
 )
 
 # (id, [(link text, address)]): the words are about.json "d.<id>.name" / "d.<id>.desc"

@@ -160,8 +160,8 @@ MOD_FRAC = PALLADINO_3ZONE["low"]
 HARD_FRAC = PALLADINO_3ZONE["high"]
 HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "Z5": (1.00, 1.05)}    # = coros_workouts.HR_WORK
 
-WARM_NAME = {"city": "輕鬆跑暖身", "river": "輕鬆跑→漸進", "drills": "動態伸展／drill"}
-REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
+WARM_NAME = {"city": N_("輕鬆跑暖身"), "river": N_("輕鬆跑→漸進"), "drills": N_("動態伸展／drill")}
+REST_NAME = {"walk": N_("走路或極慢跑"), "jog": N_("慢跑恢復"), "jog_down": N_("慢跑／走下坡"), "none": N_("恢復")}
 
 # RPE targets (技術地形／下坡, SP-62): Borg CR-10 as Foster's session RPE uses it (Foster et al.
 # 2001, J Strength Cond Res 15:109–115) — 3 中等, 5 吃力, 7 很累, 10 極限. The ≈ % CP of each value
@@ -797,7 +797,7 @@ def _climb_items(s: dict, secs: int, ids) -> Optional[list]:
             rep(ids, n, [step(ids, "work", up, {"type": "rpe", "lo": CLIMB_UP_RPE[0], "hi": CLIMB_UP_RPE[1]},
                               f"上坡 · {hr}"),
                          step(ids, "work", down, {"type": "rpe", "lo": CLIMB_DOWN_RPE[0], "hi": CLIMB_DOWN_RPE[1]},
-                              "下坡用跑的")], True, f"上坡 {n}×{rep_min} 分"),
+                              N_("下坡用跑的"))], True, f"上坡 {n}×{rep_min} 分"),
             step(ids, "cool", cool, _easy(*EASY_BAND))]
 
 
@@ -961,7 +961,7 @@ def carve_warm(items: list, floor_s: int) -> list:
 def strides_names(title: str, sprint: int, n: int) -> tuple[str, str, str]:
     """(work, recovery, repeat) step names: flat strides (路跑, 「加速跑」) or hill sprints."""
     if "加速跑" in (title or ""):
-        return f"{sprint} 秒加速跑（平路）", "慢跑回來", f"加速跑 {n}×{sprint} 秒"
+        return f"{sprint} 秒加速跑（平路）", N_("慢跑回來"), f"加速跑 {n}×{sprint} 秒"
     return f"{sprint} 秒上坡衝刺", "走下來", f"衝刺 {n}×{sprint} 秒"
 
 
@@ -2308,7 +2308,7 @@ def _name(st: dict, r: Resolved, em: _Emit, grouped: bool) -> str:
         if r.type == "hr" and em.c.walk:
             from backend.engine.hr_profile import walk_step_name
             return walk_step_name()
-        return CAP_NAME if r.type == "hr" else "功率區間" if r.type == "power" else "照感覺"
+        return CAP_NAME if r.type == "hr" else N_("功率區間") if r.type == "power" else N_("照感覺")
     if st["kind"] == "work" and not grouped:
         em.n_work += 1
         return f"第 {em.n_work} 趟 {fmt_dur(st['dur'])}"
@@ -2599,7 +2599,7 @@ def templates(prefs=None, user: Optional[dict] = None, warm_floor_s: int = 0) ->
     hills = {"key": "hill_sprints", "label": "上坡衝刺 8×10 秒（走下來 60 秒）", "title": "上坡衝刺 8×10 秒", "equiv": None,
              "src_kind": "coach", "src": "常見的輕鬆跑附加",
              "items": [rep(ids, 8, [step(ids, "work", 10, OPEN, "10 秒上坡衝刺"), step(ids, "rest", 60, OPEN, "走下來")],
-                           True, "衝刺 8×10 秒")]}
+                           True, N_("衝刺 8×10 秒"))]}
     g("easy", "有出處的課表", [r for t, r in lib if t.cat == "easy"])
     g("easy", "附加（只換主課時插在中間）", [strides])
     fams = {v.key: WT.family_of_variant(v) for v in IL.ALL.values()}

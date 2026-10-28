@@ -36,6 +36,15 @@ SP-969, what sets the calculator apart:
   「為什麼不一樣」's numbers (why()): counted from the repo (the 關於 page's literature and methods, the
         calibrated items) or, for documents, constants with their source; handed to the page with it
         (window.TRC_WHY).
+
+SP-975, the 賽事周期:
+
+  GET /api/v1/intro/cycle   the fictional runner's season as the app's phase planner cuts it (backend/demo/
+        intro_cycle.json, frozen by scripts/intro_cycle.py from engine/planning.auto_phases): phases, the A / B
+        races and the B races' mini-taper / recovery, each as whole days from today (no calendar date — the
+        page adds them to the visitor's today). 404 without the file or with a broken one. The section's
+        words (the rule numbers, the sources' names) are intro.json's, checked against engine/planning by
+        test_intro_sp975.
 """
 from __future__ import annotations
 
@@ -57,7 +66,8 @@ from backend.security import ratelimit as RL
 PAGE = "intro"
 PREFIX = "/api/v1/intro"
 KINDS = ("trail", "baiyue", "road")
-PUBLIC_PATHS = frozenset({PREFIX + "/estimate", PREFIX + "/templates", PREFIX + "/plan", PREFIX + "/breakdown"}
+PUBLIC_PATHS = frozenset({PREFIX + "/estimate", PREFIX + "/templates", PREFIX + "/plan", PREFIX + "/breakdown",
+                          PREFIX + "/cycle"}
                          | {f"{PREFIX}/example/{k}" for k in KINDS})
 
 RUNNER_FILE = Path(__file__).resolve().parents[1] / "demo" / "intro_runner.json"
@@ -203,6 +213,56 @@ def breakdown() -> Optional[dict]:
             "delta": _r(d.get("delta"), 4), "heat_beta": bool(d.get("heat_beta")),
             "temp_c": _r(d.get("temp_c"), 1), "rh_pct": _r(d.get("rh_pct")), "altitude_m": _r(d.get("altitude_m")),
             "legs": len(snap.get("segments") or [])}
+
+
+# ---------------------------------------------------------------------------- the 賽事周期 (SP-975)
+
+CYCLE_FILE = Path(__file__).resolve().parents[1] / "demo" / "intro_cycle.json"
+CYCLE_PHASES = ("base", "specific", "taper", "event", "recovery", "transition", "rebuild")
+CYCLE_EVENTS = ("baiyue", "trail25k", "trail17k", "trail50k")
+CYCLE_WINDOWS = ("mini_taper", "mini_recovery")
+CYCLE_SIZES = ("short", "medium", "marathon", "ultra", "hundred")
+
+
+def _day(v) -> Optional[int]:
+    return int(v) if isinstance(v, int) and not isinstance(v, bool) and abs(v) <= 400 else None
+
+
+def cycle() -> Optional[dict]:
+    """The example season (backend/demo/intro_cycle.json, scripts/intro_cycle.py) — whole days from today and
+    the known keys only, the page words and draws them; None without the file or with a broken one."""
+    try:
+        d = json.loads(CYCLE_FILE.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    begin, end = _day(d.get("begin")), _day(d.get("end"))
+    if begin is None or end is None or not begin < 0 < end:
+        return None
+
+    def span(x: dict) -> Optional[tuple]:
+        s, e = _day(x.get("start")), _day(x.get("end"))
+        return (s, e) if s is not None and e is not None and begin <= s <= e <= end else None
+    phases = []
+    for x in d.get("phases") or []:
+        sp = span(x) if isinstance(x, dict) else None
+        if sp is None or x.get("kind") not in CYCLE_PHASES:
+            continue
+        p = {"kind": x["kind"], "start": sp[0], "end": sp[1],
+             "event": x.get("event") if x.get("event") in CYCLE_EVENTS else None}
+        if x.get("trip") is True:
+            p["trip"] = True
+        if x.get("size") in CYCLE_SIZES:
+            p["size"] = x["size"]
+        phases.append(p)
+    events = [{"id": x["id"], "priority": x["priority"], "start": sp[0], "end": sp[1]}
+              for x in d.get("events") or [] if isinstance(x, dict) and (sp := span(x))
+              and x.get("id") in CYCLE_EVENTS and x.get("priority") in ("A", "B")]
+    wins = [{"kind": x["kind"], "event": x.get("event") if x.get("event") in CYCLE_EVENTS else None,
+             "start": sp[0], "end": sp[1]}
+            for x in d.get("b_windows") or [] if isinstance(x, dict) and (sp := span(x)) and x.get("kind") in CYCLE_WINDOWS]
+    if not phases or not any(p["start"] <= 0 <= p["end"] for p in phases):
+        return None                          # nothing for 「今天」 to stand in
+    return {"begin": begin, "end": end, "phases": phases, "events": events, "b_windows": wins}
 
 
 # ---------------------------------------------------------------------------- the limits
@@ -575,6 +635,14 @@ def get_breakdown():
     d = breakdown()
     if d is None:
         raise HTTPException(404, "no breakdown")
+    return JSONResponse(d, headers=CACHE_HEADERS)
+
+
+@router.get("/cycle")
+def get_cycle():
+    d = cycle()
+    if d is None:
+        raise HTTPException(404, "no example season")
     return JSONResponse(d, headers=CACHE_HEADERS)
 
 

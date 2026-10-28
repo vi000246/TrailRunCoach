@@ -91,8 +91,8 @@ class B:
         return [self.t("warm", 12 * 60, ez, "EZ ≤ 80% CP"),
                 self.t("warm", 60, pw(0.97, 1.03), "1′ 97–103% CP"), self.t("warm", 120, ez, "輕鬆跑"),
                 self.t("warm", 30, pw(1.02, 1.07), "30″ 102–107% CP"), self.t("warm", 90, ez, "輕鬆跑"),
-                self.t("other", 10, OPEN, "10″ 漸進加速，放鬆不硬拚"), self.t("warm", 110, ez, "輕鬆跑"),
-                self.t("rest", 180, OPEN, "停下走路，呼吸完全恢復")]
+                self.t("other", 10, OPEN, N_("10″ 漸進加速，放鬆不硬拚")), self.t("warm", 110, ez, "輕鬆跑"),
+                self.t("rest", 180, OPEN, N_("停下走路，呼吸完全恢復"))]
 
     def warm(self, minutes=15, note="暖身", target=AET):
         return self.t("warm", minutes * 60, target, note)
@@ -197,10 +197,10 @@ TEMPLATES: list[Template] = [
     # ---------------- 輕鬆跑 ----------------
     Template("pal_ez", "easy", "Palladino EZ 輕鬆跑＋3×10″ 加速", PAL, PAL_URL, lambda b: [
         b.t("warm", 24 * 60, pw(0.70, 0.80), "EZ ≤ 80% CP"),
-        b.rep(3, [b.t("other", 10, OPEN, "10″ 漸進加速"), b.t("rest", 110, pw(0.65, 0.80), "輕鬆跑")], True, "加速 3×10″"),
+        b.rep(3, [b.t("other", 10, OPEN, N_("10″ 漸進加速")), b.t("rest", 110, pw(0.65, 0.80), "輕鬆跑")], True, "加速 3×10″"),
         b.t("cool", 5 * 60, pw(0.70, 0.80), "EZ")], basis="power", purpose=PURPOSE["easy"]),
     Template("pfitz_recovery", "easy", "Pfitzinger 恢復跑 30′", PFITZ, PFITZ_URL, lambda b: [
-        b.t("warm", 5 * 60, hr(0.70, 0.80), "很慢開始"),
+        b.t("warm", 5 * 60, hr(0.70, 0.80), N_("很慢開始")),
         b.t("work", 25 * 60, hr(0.75, 0.84), "恢復跑 < 76% HRmax"),
         b.t("cool", 5 * 60, OPEN, "走路")], conv=HRMAX, purpose=PURPOSE["recovery"]),
     Template("pfitz_ga", "easy", "Pfitzinger 有氧耐力跑 60′", PFITZ, PFITZ_URL, lambda b: [
@@ -218,7 +218,7 @@ TEMPLATES: list[Template] = [
     Template("xu_e90", "easy", "徐國峰 E 強度 90′（看心率飄移）",
              "；".join((N_("徐國峰 部落格 2015-10-14《E 配速心率飄移》"), N_("《全方位的馬拉松科學化訓練》2015"))),
              "http://rocky549.blogspot.com/2015/10/e.html", lambda b: [
-        b.warm(10), b.t("work", 80 * 60, hr(0.72, 0.88), "平路 E；記第 10、90 分心率"), b.cool(10)],
+        b.warm(10), b.t("work", 80 * 60, hr(0.72, 0.88), N_("平路 E；記第 10、90 分心率")), b.cool(10)],
         conv=HRMAX, note=N_("飄移 < 10% 有氧很好、< 5% 國手級（徐國峰）"), purpose=PURPOSE["long"]),
     Template("ua_z2", "easy", "Uphill Athlete 有氧基礎 Z2 60′", N_("Uphill Athlete（House／Johnston）「Zone 2 Heart Rate Training」2026"),
              "https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/", lambda b: [
@@ -234,22 +234,22 @@ TEMPLATES: list[Template] = [
         *b.pal_warm(12, 2),
         b.rep(2, [b.t("work", 11 * 60, pw(0.91, 0.96), "11′ 91–96% CP"),
                   b.t("rest", 3 * 60, pw(0.65, 0.75), "輕鬆跑")], False, "2×11′"),
-        b.cool(5, "EZ 跑到總量", pw(0.65, 0.80))], basis="power", purpose=PURPOSE["cruise"]),
+        b.cool(5, N_("EZ 跑到總量"), pw(0.65, 0.80))], basis="power", purpose=PURPOSE["cruise"]),
     Template("pal_near", "quality", "Palladino 近閾值 3×7′", PAL, PAL_URL, lambda b: [
         *b.pal_warm(8, 1),
         b.rep(3, [b.t("work", 7 * 60, pw(0.96, 1.02), "7′ 96–102% CP"),
-                  b.t("rest", 3 * 60, OPEN, "走路或慢跑（0–75% CP）")], False, "3×7′"),
-        b.cool(5, "EZ 跑到總量", pw(0.65, 0.80))], basis="power", purpose=PURPOSE["cruise"]),
+                  b.t("rest", 3 * 60, OPEN, N_("走路或慢跑（0–75% CP）"))], False, "3×7′"),
+        b.cool(5, N_("EZ 跑到總量"), pw(0.65, 0.80))], basis="power", purpose=PURPOSE["cruise"]),
     Template("pal_supra", "quality", "Palladino 超閾值 4×4:30", PAL, PAL_URL, lambda b: [
         *b.pal_warm(8, 1),
         b.rep(4, [b.t("work", 270, pw(0.98, 1.04), "4:30 98–104% CP"),
-                  b.t("rest", 165, OPEN, "走路或慢跑（0–75% CP）")], False, "4×4:30"),
-        b.cool(6, "EZ 跑到總量", pw(0.65, 0.80))], basis="power", purpose=PURPOSE["cruise"]),
+                  b.t("rest", 165, OPEN, N_("走路或慢跑（0–75% CP）"))], False, "4×4:30"),
+        b.cool(6, N_("EZ 跑到總量"), pw(0.65, 0.80))], basis="power", purpose=PURPOSE["cruise"]),
     Template("pal_vo2", "quality", "Palladino 最大有氧功率 4×2:40", PAL, PAL_URL, lambda b: [
         *b.pal_warm(12, 2),
         b.rep(4, [b.t("work", 160, pw(1.01, 1.06), "2:40 101–106% CP"),
-                  b.t("rest", 150, OPEN, "走路或慢跑（0–75% CP）")], False, "4×2:40"),
-        b.cool(9, "EZ 跑到總量", pw(0.65, 0.80))], basis="power", purpose=PURPOSE["vo2max"]),
+                  b.t("rest", 150, OPEN, N_("走路或慢跑（0–75% CP）"))], False, "4×2:40"),
+        b.cool(9, N_("EZ 跑到總量"), pw(0.65, 0.80))], basis="power", purpose=PURPOSE["vo2max"]),
     Template("daniels_cruise", "quality", "Daniels T 巡航間歇 5×6′", DANIELS, DANIELS_URL, lambda b: [
         b.warm(15),
         b.rep(5, [b.t("work", 6 * 60, pace(0.99, 1.01), "T 配速"),
@@ -259,13 +259,13 @@ TEMPLATES: list[Template] = [
         b.warm(20), b.t("work", 25 * 60, hr(0.91, 1.00), "82–91% HRmax"), b.cool(15)], conv=HRMAX, purpose=PURPOSE["tempo_t"]),
     Template("friel_cruise", "quality", "Friel 巡航間歇 4×8′", N_("Joe Friel《The Triathlete's Training Bible》"), FRIEL_URL, lambda b: [
         b.warm(15),
-        b.rep(4, [b.t("work", 8 * 60, hr(0.95, 1.02), "Friel 4–5a 區"),
-                  b.t("rest", 2 * 60, hr(0.70, 0.85), "1 區恢復（工作的 1/4）")], False, "4×8′"),
+        b.rep(4, [b.t("work", 8 * 60, hr(0.95, 1.02), N_("Friel 4–5a 區")),
+                  b.t("rest", 2 * 60, hr(0.70, 0.85), N_("1 區恢復（工作的 1/4）"))], False, "4×8′"),
         b.cool(10)], purpose=PURPOSE["cruise"]),
     Template("koop_tempo", "quality", "Koop TempoRun 3×12′", KOOP, KOOP_URL, lambda b: [
         b.warm(15),
         b.rep(3, [b.t("work", 12 * 60, hr(0.95, 1.00), "RPE 8–9"),
-                  b.t("rest", 6 * 60, AET, "輕鬆跑（工休 2:1）")], False, "3×12′"),
+                  b.t("rest", 6 * 60, AET, N_("輕鬆跑（工休 2:1）"))], False, "3×12′"),
         b.cool(10)], conv=N_("來源只有 RPE：心率推估"), purpose=PURPOSE["cruise"]),
     Template("canova_specific", "quality", "Canova 專項間歇 5×3 km（1 km 浮動）",
              N_("Arcelli & Canova《Marathon Training – A Scientific Approach》1999"),
@@ -283,8 +283,8 @@ TEMPLATES: list[Template] = [
     Template("seiler_4x8", "quality", "Seiler 4×8′", "Seiler et al. 2013, Scand J Med Sci Sports 23:74–83",
              "https://pubmed.ncbi.nlm.nih.gov/21812820/", lambda b: [
         b.warm(15),
-        b.rep(4, [b.t("work", 8 * 60, hr(1.00, 1.05), "能撐住的最高強度（≈ 90% HRpeak）"),
-                  b.t("rest", 2 * 60, OPEN, "2′ 恢復")], False, "4×8′"),
+        b.rep(4, [b.t("work", 8 * 60, hr(1.00, 1.05), N_("能撐住的最高強度（≈ 90% HRpeak）")),
+                  b.t("rest", 2 * 60, OPEN, N_("2′ 恢復"))], False, "4×8′"),
         b.cool(10)], src_kind="peer", conv=N_("% LTHR 由 % HRpeak ÷ 0.9 換算（推估）"), purpose=PURPOSE["cruise"]),
     Template("pfitz_vo2", "quality", "Pfitzinger VO2max 5×1000 m", PFITZ, PFITZ_URL, lambda b: [
         b.warm(20),
@@ -294,7 +294,7 @@ TEMPLATES: list[Template] = [
     Template("daniels_i", "quality", "Daniels I 間歇 5×3′", DANIELS, DANIELS_URL, lambda b: [
         b.warm(15),
         b.rep(5, [b.t("work", 3 * 60, pace(0.92, 0.95), "I 配速"),
-                  b.t("rest", 3 * 60, OPEN, "等長慢跑")], False, "5×3′"),
+                  b.t("rest", 3 * 60, OPEN, N_("等長慢跑"))], False, "5×3′"),
         b.cool(10)], basis="pace", conv=N_("I 配速 ≈ 閾值配速 × 0.92–0.95（推估）"), purpose=PURPOSE["vo2max"]),
     Template("koop_vo2", "quality", "Koop RunningIntervals 6×3′", KOOP, KOOP_URL, lambda b: [
         b.warm(15),
@@ -317,8 +317,8 @@ TEMPLATES: list[Template] = [
         conv=N_("原研究是自行車功率：跑步的 % CP 推估"), purpose=PURPOSE["short"]),
     Template("daniels_r", "quality", "Daniels R 8×300 m", DANIELS, DANIELS_URL, lambda b: [
         b.warm(15),
-        b.rep(8, [b.d("work", 300, pace(0.85, 0.89), "R 配速：快而放鬆"),
-                  b.t("rest", 180, OPEN, "完全恢復（2–3 倍）")], False, "8×300 m"),
+        b.rep(8, [b.d("work", 300, pace(0.85, 0.89), N_("R 配速：快而放鬆")),
+                  b.t("rest", 180, OPEN, N_("完全恢復（2–3 倍）"))], False, "8×300 m"),
         b.cool(10)], basis="pace", conv=N_("R 配速 ≈ 閾值配速 × 0.85–0.89（推估）"), purpose=PURPOSE["rep"]),
 
     # ---------------- 測試 ----------------
@@ -326,83 +326,83 @@ TEMPLATES: list[Template] = [
         b.t("warm", 12 * 60, pw(0.70, 0.80), "EZ ≤ 80% CP"),
         b.rep(2, [b.t("warm", 60, pw(0.99, 1.01), "1′ 99–101% CP"), b.t("warm", 120, pw(0.70, 0.80), "輕鬆跑")], True, "2×1′"),
         b.t("warm", 30, pw(1.03, 1.08), "30″ 103–108% CP"), b.t("warm", 90, pw(0.70, 0.80), "輕鬆跑"),
-        b.lap("rest", 120, "走路到呼吸恢復（≥ 2′），直到按下計圈"),
-        b.t("work", 3 * 60, OPEN, "3′ 全力、均勻"),
-        b.lap("rest", 30 * 60, "走→輕鬆跑 5–10′→走，≥ 30′；直到按下計圈"),
-        b.t("work", 12 * 60, OPEN, "12′ 全力、均勻"),
-        b.lap("cool", 10 * 60, "走路恢復後輕鬆跑到總量；直到按下計圈", pw(0.65, 0.80))], basis="power",
+        b.lap("rest", 120, N_("走路到呼吸恢復（≥ 2′），直到按下計圈")),
+        b.t("work", 3 * 60, OPEN, N_("3′ 全力、均勻")),
+        b.lap("rest", 30 * 60, N_("走→輕鬆跑 5–10′→走，≥ 30′；直到按下計圈")),
+        b.t("work", 12 * 60, OPEN, N_("12′ 全力、均勻")),
+        b.lap("cool", 10 * 60, N_("走路恢復後輕鬆跑到總量；直到按下計圈"), pw(0.65, 0.80))], basis="power",
         note=N_("全力段不設目標（Stryd 留給你填：模型功率 −1%～+5%）"), purpose=PURPOSE["test"]),
     Template("pal_test3", "test", "Palladino 3′ 測試", N_("Steve Palladino，Stryd 訓練計畫（Stryd 內建課表）：3 minute max effort"), PAL_URL, lambda b: [
-        *b.pal_test_warm(), b.t("work", 3 * 60, OPEN, "3′ 全力：穩穩開始，最後才到極限"),
-        b.t("rest", 5 * 60, OPEN, "走路恢復"), b.t("cool", 10 * 60, pw(0.70, 0.80), "EZ 跑到總量")], basis="power", purpose=PURPOSE["test"]),
+        *b.pal_test_warm(), b.t("work", 3 * 60, OPEN, N_("3′ 全力：穩穩開始，最後才到極限")),
+        b.t("rest", 5 * 60, OPEN, N_("走路恢復")), b.t("cool", 10 * 60, pw(0.70, 0.80), N_("EZ 跑到總量"))], basis="power", purpose=PURPOSE["test"]),
     Template("pal_test10", "test", "Palladino 10′ 測試", N_("Steve Palladino，Stryd 訓練計畫（Stryd 內建課表）：10 minute max effort"), PAL_URL, lambda b: [
-        *b.pal_test_warm(), b.t("work", 10 * 60, OPEN, "10′ 全力：前 7′ 照 10′ 模型功率"),
-        b.t("rest", 5 * 60, OPEN, "走路恢復"), b.t("cool", 10 * 60, pw(0.70, 0.80), "EZ 跑到總量")], basis="power", purpose=PURPOSE["test"]),
+        *b.pal_test_warm(), b.t("work", 10 * 60, OPEN, N_("10′ 全力：前 7′ 照 10′ 模型功率")),
+        b.t("rest", 5 * 60, OPEN, N_("走路恢復")), b.t("cool", 10 * 60, pw(0.70, 0.80), N_("EZ 跑到總量"))], basis="power", purpose=PURPOSE["test"]),
     Template("pal_test20", "test", "Palladino 20′ 測試", N_("Steve Palladino，Stryd 訓練計畫（Stryd 內建課表）：20 minute max effort"), PAL_URL, lambda b: [
-        *b.pal_test_warm(), b.t("work", 20 * 60, OPEN, "20′ 全力：前 15′ 照 20′ 模型功率"),
-        b.t("rest", 5 * 60, OPEN, "走路恢復"), b.t("cool", 10 * 60, pw(0.70, 0.80), "EZ 跑到總量")], basis="power", purpose=PURPOSE["test"]),
+        *b.pal_test_warm(), b.t("work", 20 * 60, OPEN, N_("20′ 全力：前 15′ 照 20′ 模型功率")),
+        b.t("rest", 5 * 60, OPEN, N_("走路恢復")), b.t("cool", 10 * 60, pw(0.70, 0.80), N_("EZ 跑到總量"))], basis="power", purpose=PURPOSE["test"]),
     Template("stryd_9_3", "test", "Stryd 9′＋3′ CP 測試", "；".join((N_("Stryd CP 測試（9/3 分鐘）"), N_("JSSM 2023 驗證"))),
              "https://pmc.ncbi.nlm.nih.gov/articles/PMC10499150/", lambda b: [
         b.t("warm", 10 * 60, pw(0.65, 0.75), "EZ"),
-        b.rep(5, [b.d("other", 100, OPEN, "100 m 約 80% 力"), b.t("rest", 60, OPEN, "慢跑")], True, "5×100 m"),
-        b.t("work", 9 * 60, OPEN, "9′ 全力、均勻"),
-        b.t("rest", 30 * 60, pw(0.50, 0.65), "走路或輕鬆跑 30′"),
-        b.t("work", 3 * 60, OPEN, "3′ 全力、均勻"), b.t("cool", 10 * 60, pw(0.55, 0.70), "緩和")],
+        b.rep(5, [b.d("other", 100, OPEN, N_("100 m 約 80% 力")), b.t("rest", 60, OPEN, "慢跑")], True, "5×100 m"),
+        b.t("work", 9 * 60, OPEN, N_("9′ 全力、均勻")),
+        b.t("rest", 30 * 60, pw(0.50, 0.65), N_("走路或輕鬆跑 30′")),
+        b.t("work", 3 * 60, OPEN, N_("3′ 全力、均勻")), b.t("cool", 10 * 60, pw(0.55, 0.70), "緩和")],
         basis="power", src_kind="peer", purpose=PURPOSE["test"]),
     Template("friel_lthr30", "test", "Friel 30′ 閾值心率測試", "Joe Friel「Quick Guide to Setting Zones」TrainingPeaks", FRIEL_URL, lambda b: [
-        b.warm(15), b.t("work", 10 * 60, OPEN, "獨自全力 30′ 的前 10′：第 10′ 按下計圈"),
-        b.t("work", 20 * 60, OPEN, "後 20′：平均心率＝LTHR"), b.cool(10)],
+        b.warm(15), b.t("work", 10 * 60, OPEN, N_("獨自全力 30′ 的前 10′：第 10′ 按下計圈")),
+        b.t("work", 20 * 60, OPEN, N_("後 20′：平均心率＝LTHR")), b.cool(10)],
         note=N_("只看全力，不設目標；手腕光學心率的平均誤差比胸帶大。條件：< 25 °C、平路環線或田徑場、戴胸帶、"
               "前 48 小時沒有硬課、不在減量期／比賽週；自己一個人跑，不要跟人跑、不要在比賽中測"),
         purpose=PURPOSE["test"]),
     # SP-64: Polar's hill field test (docs/research/zones-and-thresholds.md 附錄 C); the app reads
     # the highest HR held ≥ 5 s after spike / cadence-lock filtering (threshold_confidence.hrmax_result)
     Template("maxhr_hill", "test", "最大心率測試：3 趟上坡、最後一趟全力", MAXHR_SRC, MAXHR_URL, lambda b: [
-        b.t("warm", 15 * 60, AET, "平路暖身 15′，慢慢加到平常的訓練配速"),
-        b.lap("work", 150, "上坡 ≥ 2′：能撐 20 分鐘的強度，記下心率"),
-        b.lap("rest", 180, "慢跑／走下來，心率降 30–40 bpm"),
-        b.lap("work", 150, "同一段上坡再跑一次，更快（約 3 km 比賽的力）"),
-        b.lap("rest", 180, "慢跑／走下來，心率降 30–40 bpm"),
-        b.lap("work", 60, "最後一趟：全力衝 1′（上半段坡），結束前的心率最接近最大心率"),
-        b.cool(10, "走路／慢跑緩和 ≥ 10′")],
+        b.t("warm", 15 * 60, AET, N_("平路暖身 15′，慢慢加到平常的訓練配速")),
+        b.lap("work", 150, N_("上坡 ≥ 2′：能撐 20 分鐘的強度，記下心率")),
+        b.lap("rest", 180, N_("慢跑／走下來，心率降 30–40 bpm")),
+        b.lap("work", 150, N_("同一段上坡再跑一次，更快（約 3 km 比賽的力）")),
+        b.lap("rest", 180, N_("慢跑／走下來，心率降 30–40 bpm")),
+        b.lap("work", 60, N_("最後一趟：全力衝 1′（上半段坡），結束前的心率最接近最大心率")),
+        b.cool(10, N_("走路／慢跑緩和 ≥ 10′"))],
         note=MAXHR_NOTE, purpose=PURPOSE["test"]),
     Template("ua_aet_drift", "test", "AeT 心率飄移測試 60′", "Steve House, Uphill Athlete「Heart Rate Drift」",
              "https://uphillathlete.com/aerobic-training/heart-rate-drift/", lambda b: [
-        b.warm(15, "慢慢加到心率穩定"),
-        b.t("work", 60 * 60, AET, "固定對話配速、平路；前後半心率比"),
+        b.warm(15, N_("慢慢加到心率穩定")),
+        b.t("work", 60 * 60, AET, N_("固定對話配速、平路；前後半心率比")),
         b.cool(10)],
         note=N_("飄移 3.5–5% 就是 AeT；< 3.5% 下次 +5 bpm、> 5% 降低（來源要胸帶，手腕心率只看趨勢）"), purpose=PURPOSE["test"]),
     Template("xu_e_drift", "test", "徐國峰 90′ E 配速飄移", N_("徐國峰 部落格 2015-10-14"),
              "http://rocky549.blogspot.com/2015/10/e.html", lambda b: [
-        b.warm(10), b.t("work", 80 * 60, pace(1.18, 1.29), "固定 E 配速；比第 10、90 分心率"), b.cool(10)],
+        b.warm(10), b.t("work", 80 * 60, pace(1.18, 1.29), N_("固定 E 配速；比第 10、90 分心率")), b.cool(10)],
         basis="pace", conv=N_("E 配速 ≈ 閾值配速 × 1.18–1.29（Friel 2 區配速，推估）"), purpose=PURPOSE["test"]),
 
     # ---------------- 越野跑 ----------------
     Template("dsw_classic", "trail", "登山王經典 4×7′ 爬升", N_("江晏慶「如何提升越野跑的爬升能力－登山王課表」Garmin 台灣 2021-01-27"),
              GARMIN_DSW, lambda b: [
-        b.warm(12, "階梯步道輕鬆跑／走"),
-        b.rep(4, [b.t("work", 7 * 60, hr(0.95, 1.02), "上坡 9 成力（快崩但不爆）"),
-                  b.t("rest", 7 * 60, OPEN, "慢慢走下來")], False, "4×7′ 上坡"),
-        b.t("cool", 5 * 60, OPEN, "收操、補給")], conv=N_("來源是 RPE：心率推估"), purpose=PURPOSE["hill_rep"], trail="climb"),
+        b.warm(12, N_("階梯步道輕鬆跑／走")),
+        b.rep(4, [b.t("work", 7 * 60, hr(0.95, 1.02), N_("上坡 9 成力（快崩但不爆）")),
+                  b.t("rest", 7 * 60, OPEN, N_("慢慢走下來"))], False, "4×7′ 上坡"),
+        b.t("cool", 5 * 60, OPEN, N_("收操、補給"))], conv=N_("來源是 RPE：心率推估"), purpose=PURPOSE["hill_rep"], trail="climb"),
     Template("dsw_endurance", "trail", "登山王耐力型 6×快走上坡", N_("江晏慶 登山王課表（耐力變化）Garmin 台灣 2021"), GARMIN_DSW, lambda b: [
-        b.warm(12, "輕鬆跑／走"),
+        b.warm(12, N_("輕鬆跑／走")),
         b.rep(6, [b.t("work", 7 * 60, hr(0.88, 0.93), "快走上坡"),
-                  b.t("rest", 5 * 60, AET, "慢跑下來")], False, "6×上坡"),
-        b.t("cool", 5 * 60, OPEN, "收操")], conv=N_("來源是 RPE：心率推估"), purpose=PURPOSE["long_tempo"], trail="climb"),
+                  b.t("rest", 5 * 60, AET, N_("慢跑下來"))], False, "6×上坡"),
+        b.t("cool", 5 * 60, OPEN, N_("收操"))], conv=N_("來源是 RPE：心率推估"), purpose=PURPOSE["long_tempo"], trail="climb"),
     Template("ua_hill_sprints", "trail", "陡坡衝刺 8×10″", N_("Uphill Athlete（House／Johnston）《Training for the Uphill Athlete》2019"),
              "https://uphillathlete.com/", lambda b: [
         b.warm(15),
-        b.rep(8, [b.t("work", 10, OPEN, "≥ 20% 陡坡 10″ 全力"), b.t("rest", 3 * 60, OPEN, "走到完全恢復")], False, "8×10″"),
+        b.rep(8, [b.t("work", 10, OPEN, N_("≥ 20% 陡坡 10″ 全力")), b.t("rest", 3 * 60, OPEN, N_("走到完全恢復"))], False, "8×10″"),
         b.cool(10)], note=N_("全力衝刺：心率、功率都不當目標"), purpose=PURPOSE["hill_sprint"], trail="climb"),
     Template("koop_uphill", "trail", "Koop 上坡 TempoRun 3×12′", KOOP, KOOP_URL, lambda b: [
         b.warm(15),
         b.rep(3, [b.t("work", 12 * 60, hr(0.95, 1.00), "上坡 RPE 8–9"),
-                  b.t("rest", 6 * 60, AET, "下坡或平路輕鬆")], False, "3×12′ 上坡"),
+                  b.t("rest", 6 * 60, AET, N_("下坡或平路輕鬆"))], False, "3×12′ 上坡"),
         b.cool(10)], conv=N_("來源只有 RPE：心率推估"), purpose=PURPOSE["cruise"], trail="climb"),
     Template("long_climb", "trail", "長爬坡有氧 90′", N_("Uphill Athlete（House／Johnston） Zone 2（AeT −10%～AeT）"),
              "https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/", lambda b: [
-        b.warm(15), b.t("work", 90 * 60, AET, "持續爬升，跑走混合，心率 ≤ 輕鬆跑上限"),
-        b.t("cool", 15 * 60, OPEN, "輕鬆下山")], src_kind="推估", purpose=PURPOSE["long"], trail="climb"),
+        b.warm(15), b.t("work", 90 * 60, AET, N_("持續爬升，跑走混合，心率 ≤ 輕鬆跑上限")),
+        b.t("cool", 15 * 60, OPEN, N_("輕鬆下山"))], src_kind="推估", purpose=PURPOSE["long"], trail="climb"),
     Template("steep_5", "trail", f"陡坡健走 {_S5['grade']:g}%（模擬背 5% 體重）", STEEP_SRC, STEEP_URL, _S5B,
              conv=STEEP_CONV, note=N_("不背包；百岳前的專項期，第 1 階段"), purpose=PURPOSE["me"], trail="climb"),
     Template("steep_10", "trail", f"陡坡健走 {_S10['grade']:g}%（模擬背 10% 體重）", STEEP_SRC, STEEP_URL, _S10B,
@@ -413,12 +413,12 @@ TEMPLATES: list[Template] = [
     # low, so hrTSS under-reads — the load is still the watch's record). Low RPE = the long-run
     # slot (aerobic), RPE ≥ 7 = a quality session (workout_steps.rpe_role).
     Template("tech_easy", "trail", "技術地形 60′（低 RPE）", TECH_SRC, KOOP_URL, lambda b: [
-        b.warm(10, "好走的路段暖身"), b.t("work", 60 * 60, rpe(3, 4, up=300), "技術路段，跑走混合，練腳步"),
-        b.t("cool", 5 * 60, OPEN, "收操")], basis="rpe", src_kind="推估", conv=TECH_CONV,
+        b.warm(10, N_("好走的路段暖身")), b.t("work", 60 * 60, rpe(3, 4, up=300), N_("技術路段，跑走混合，練腳步")),
+        b.t("cool", 5 * 60, OPEN, N_("收操"))], basis="rpe", src_kind="推估", conv=TECH_CONV,
         note=N_("基礎期：輕鬆的有氧課，可以取代部分長跑"), purpose=PURPOSE["technical"], trail="technical"),
     Template("tech_hard", "trail", "技術地形 90′（中高 RPE、爬升 600 m）", TECH_SRC, KOOP_URL, lambda b: [
-        b.warm(15, "好走的路段暖身"), b.t("work", 90 * 60, rpe(6, 7, up=600), "接近比賽路況的技術路段"),
-        b.t("cool", 10 * 60, OPEN, "收操")], basis="rpe", src_kind="推估", conv=TECH_CONV,
+        b.warm(15, N_("好走的路段暖身")), b.t("work", 90 * 60, rpe(6, 7, up=600), N_("接近比賽路況的技術路段")),
+        b.t("cool", 10 * 60, OPEN, N_("收操"))], basis="rpe", src_kind="推估", conv=TECH_CONV,
         note=N_("專項期每週 1 堂，路況接近比賽；RPE 7 算強度課（隔 48 小時、算進強度預算）"),
         purpose=PURPOSE["technical"], trail="technical"),
 ]

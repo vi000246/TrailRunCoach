@@ -1217,7 +1217,9 @@ def _estimate_pending(ds) -> Optional[dict]:
 @router.get("/threshold-estimate")
 def threshold_estimate():
     """Suggested LTHR / AeT from recent runs. Nothing is saved. An LTHR the runs were too easy for
-    (low against the runner's max HR / HRR, SP-749) carries `low_effort`: no one-click 「套用」."""
+    (low against the runner's max HR / HRR, SP-749) carries `low_effort`: no one-click 「套用」. With a
+    max HR of the runner's own the LTHR also carries `band` {lo, hi, basis}: where an LTHR usually sits
+    for them, the settings card's number line (SP-749 R1)."""
     from backend.engine.thresholds import estimate
     ds = _estimate_dataset()
     today = today_local()
@@ -1228,11 +1230,13 @@ def threshold_estimate():
         from backend.engine import threshold_confidence as TC
         try:
             acc = HP.account()
-            warn = TC.estimate_effort_warning(lt["value"], TC.mhr_info(ds, today, acc), TC.rhr_info(ds, today, acc))
+            mhr, rhr = TC.mhr_info(ds, today, acc), TC.rhr_info(ds, today, acc)
+            warn = TC.estimate_effort_warning(lt["value"], mhr, rhr)
+            band = TC.lthr_typical_band(mhr, rhr)
         except Exception:                   # noqa: BLE001 — no max HR to judge by: the estimate as before
-            warn = None
-        if warn:
-            out = {**out, "lthr": {**lt, "low_effort": warn}}
+            warn = band = None
+        if band or warn:
+            out = {**out, "lthr": {**lt, **({"band": band} if band else {}), **({"low_effort": warn} if warn else {})}}
     return out
 
 

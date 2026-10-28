@@ -328,8 +328,29 @@ def consistency_signals(lthr: Optional[float], mhr: Optional[float], rhr: Option
     return out
 
 
-EST_LOW_EFFORT = N_("入選跑步的強度可能不夠，這個估算可能偏低：不提供一鍵套用。做一次 30 分鐘測試比較準，"
-                    "或確認 CP 後再估")
+EST_LOW_EFFORT = N_("比通常的範圍低 {d} bpm：跑步可能不夠用力")
+EST_LOW_EFFORT_NO_BAND = N_("跑步可能不夠用力，這個估算可能偏低")
+
+
+def lthr_typical_band(mhr: Optional[dict], rhr: Optional[dict]) -> Optional[dict]:
+    """SP-749 R1: where an LTHR usually sits for this runner, in bpm — the typical ranges of
+    consistency_signals on the runner's own max HR (85–95 %) and, with a resting HR, HR reserve
+    (80–94 %), the stretch both agree on: {lo, hi, basis: "mhr_rhr" | "mhr"}. lo is rounded up and hi
+    down, so a whole-bpm estimate below lo is exactly one estimate_low_effort flags. The settings card
+    draws it as the number line's green stretch. None without a max HR of the runner's own (none, or
+    only the age formula), or when the two ranges do not overlap."""
+    mv = _f((mhr or {}).get("value"))
+    if not mv or (mhr or {}).get("source_kind") == "age":
+        return None
+    lo, hi = LTHR_HRMAX_TYPICAL[0] * mv, LTHR_HRMAX_TYPICAL[1] * mv
+    rv = _f((rhr or {}).get("value"))
+    basis = "mhr"
+    if rv and mv - rv > 0:
+        lo = max(lo, rv + LTHR_HRR_TYPICAL[0] * (mv - rv))
+        hi = min(hi, rv + LTHR_HRR_TYPICAL[1] * (mv - rv))
+        basis = "mhr_rhr"
+    lo, hi = math.ceil(lo - 1e-9), math.floor(hi + 1e-9)
+    return {"lo": lo, "hi": hi, "basis": basis} if lo <= hi else None
 
 
 def estimate_effort_warning(value, mhr: Optional[dict], rhr: Optional[dict]) -> Optional[dict]:
@@ -338,12 +359,16 @@ def estimate_effort_warning(value, mhr: Optional[dict], rhr: Optional[dict]) -> 
     runs pass and the median is the top of Z2, not the threshold — and the CP cannot tell, it is the
     premise. The HR can, the same way for everyone: an estimate below the usual share of the runner's
     own max HR / HR reserve (the typical ranges of consistency_signals: < 85 % HRmax or < 80 % HRR)
-    says the runs were not hard enough. {text, signals, test} — the settings card then shows the
-    warning instead of 「套用」 — or None. No max HR, or only the age formula's: None (no own data)."""
+    says the runs were not hard enough. {text, gap, signals, test} — the settings card then shows the
+    one-line warning (how many bpm under lthr_typical_band) and the test instead of 「套用」; the
+    signals (the two shares) go in its tooltip — or None. No max HR, or only the age formula's: None."""
     sigs = estimate_low_effort(value, mhr, rhr)
     if not sigs:
         return None
-    return {"text": _(EST_LOW_EFFORT), "signals": [s["text"] for s in sigs], "test": schedule_link("tt30")}
+    band = lthr_typical_band(mhr, rhr)
+    gap = max(1, round(band["lo"] - float(value))) if band else None
+    return {"text": _(EST_LOW_EFFORT, d=gap) if gap else _(EST_LOW_EFFORT_NO_BAND), "gap": gap,
+            "signals": [s["text"] for s in sigs], "test": schedule_link("tt30")}
 
 
 def estimate_low_effort(value, mhr: Optional[dict], rhr: Optional[dict]) -> list[dict]:

@@ -32,6 +32,10 @@ DEFAULTS: dict[str, Any] = {
     "athlete.timezone.auto": None,
     # 地區 (engine/region.py): tw | intl; None = auto from the home weather grid
     "athlete.region": None,
+    # 帳號語言 (SP-908): the interface language this account last used — the shell reports it when it changes
+    # (POST /api/v1/sync/locale); the COROS push writes the watch's workout names and step names in it
+    # (sync/coros_workouts.watch_locale). zh-TW | en; None = never reported (zh-TW)
+    "athlete.locale": None,
     # the first-run 精靈 (一般設定) was saved or dismissed (engine/athlete_profile.py)
     "athlete.setup.done": False,
     # 「稍後再說」 on the 精靈 (SP-211): ISO time; it asks again REMIND_DAYS later while
@@ -438,6 +442,10 @@ def validate(key: str, value: Any) -> None:
         if not isinstance(value, dict):
             raise ValueError("plan.prefs.type_basis must be an object")
         clean_type_basis(value, strict=True)
+    if key == "athlete.locale" and value is not None:
+        from backend.i18n import SUPPORTED
+        if value not in SUPPORTED:
+            raise ValueError(f"athlete.locale must be one of {', '.join(SUPPORTED)} or null")
     if key == "athlete.region" and value not in (None, "tw", "intl"):
         raise ValueError("athlete.region must be tw, intl or null (auto)")
     if key == "athlete.timezone" and value is not None:

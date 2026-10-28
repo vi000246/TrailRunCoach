@@ -90,6 +90,26 @@ tr.off td { color: var(--muted); }
 .est .v { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .est .v small { font-size: 12px; font-weight: 400; color: var(--muted); }
 .est button { margin-top: 6px; }
+/* SP-749 R1 (mock C): the LTHR estimate on a bpm number line — the green stretch is where an LTHR
+   usually sits for this runner (their own max / resting HR), the dot is the estimate (orange below the
+   stretch), the thin tick the value in use. Colours from the page's tokens (theme / palette follow). */
+.est .card.low { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.est .hrline { display: block; width: calc(100% - 20px); height: 62px; margin: 4px 10px 0; overflow: visible; }
+.est .hrline .track { fill: var(--line); }
+.est .hrline .band { fill: color-mix(in srgb, var(--ok) 28%, var(--panel)); }
+.est .hrline .edge { fill: var(--ok); font-size: 10px; }
+.est .hrline .tick { fill: var(--muted); font-size: 10px; }
+.est .hrline .cur { stroke: var(--text); stroke-width: 2; }
+.est .hrline .dot { stroke: var(--panel); stroke-width: 2; fill: var(--ok); }
+.est .hrline .lab { font-size: 12px; font-weight: 700; fill: var(--ok); }
+.est .hrline .gap { stroke: var(--warn); stroke-width: 2; stroke-dasharray: 2 2; }
+.est .low .hrline .dot, .est .low .hrline .lab { fill: var(--warn); }
+.est .hrkey { display: flex; flex-wrap: wrap; gap: 2px 12px; color: var(--muted); font-size: 11px; margin: 0 0 4px; }
+.est .hrkey i { display: inline-block; vertical-align: -1px; margin-right: 4px; }
+.est .hrkey .sw-band { width: 14px; height: 8px; border-radius: 2px; background: color-mix(in srgb, var(--ok) 28%, var(--panel)); }
+.est .hrkey .sw-cur { width: 2px; height: 10px; background: var(--text); }
+.est .lowline { color: var(--warn); font-size: 13px; font-weight: 600; margin: 2px 0 2px; }
+.est a.button.test { display: inline-block; margin-top: 6px; color: var(--accent); border-color: var(--accent); font-weight: 600; }
 /* 「± N bpm」 on an estimated AeT; the why on hover / long-press (title) */
 .pm { display: inline-block; font-size: 11px; font-weight: 500; padding: 0 6px; border-radius: 10px; border: 1px solid var(--line);
   color: var(--muted); cursor: help; vertical-align: 2px; white-space: nowrap; }
@@ -1858,6 +1878,30 @@ async function loadThrEstimate() {
 // ST11 (●◐▷, SP-488): 完整 shows both estimate cards; 標準 only one that differs from what is in use (≥ 1 bpm,
 // it has 「套用」) and folds the rest; 精簡 folds them all. The comparison folder line goes in the same fold unless it is
 // the red factory-default line (ST10). The fold's one line says what is inside.
+// SP-749 R1 (mock C): the LTHR estimate on a bpm number line with the runner's usual stretch {lo, hi, basis}
+// (threshold_confidence.lthr_typical_band) and the value in use; x in % so it fits any card width
+function hrLine(v, curV, band, low) {
+  const vals = [band.lo, band.hi, v].concat(curV != null ? [curV] : []);
+  const step = Math.max(...vals) - Math.min(...vals) > 50 ? 20 : 10;
+  const min = Math.floor((Math.min(...vals) - 6) / step) * step, max = Math.ceil((Math.max(...vals) + 6) / step) * step;
+  const x = (b) => `${((b - min) / (max - min) * 100).toFixed(2)}%`, Y = 32;
+  const ticks = [];
+  for (let b = min; b <= max; b += step) ticks.push(`<text class="tick" x="${x(b)}" y="${Y + 24}" text-anchor="middle">${b}</text>`);
+  const w = ((band.hi - band.lo) / (max - min) * 100).toFixed(2);
+  return `<svg class="hrline" role="img" aria-label="${esc(t("settings.thr.band_aria", { v, lo: band.lo, hi: band.hi }))}">
+      <rect class="track" x="0" y="${Y - 4}" width="100%" height="8" rx="4"/>
+      <rect class="band" x="${x(band.lo)}" y="${Y - 4}" width="${w}%" height="8" rx="2"/>
+      <text class="edge" x="${x(band.lo)}" y="${Y + 13}" text-anchor="middle">${band.lo}</text>
+      <text class="edge" x="${x(band.hi)}" y="${Y + 13}" text-anchor="middle">${band.hi}</text>
+      ${curV != null ? `<line class="cur" x1="${x(curV)}" x2="${x(curV)}" y1="${Y - 9}" y2="${Y + 9}"/>` : ""}
+      ${low ? `<line class="gap" x1="${x(v)}" x2="${x(band.lo)}" y1="${Y}" y2="${Y}"/>` : ""}
+      <circle class="dot" cx="${x(v)}" cy="${Y}" r="7"/>
+      <text class="lab" x="${x(v)}" y="${Y - 13}" text-anchor="middle">${esc(t("settings.thr.band_est", { v }))}</text>
+      ${ticks.join("")}
+    </svg>
+    <div class="hrkey"><span><i class="sw-band"></i>${esc(t(band.basis === "mhr_rhr" ? "settings.thr.band_key_rhr" : "settings.thr.band_key"))}</span>${curV != null ? `<span><i class="sw-cur"></i>${esc(t("settings.thr.band_cur"))}</span>` : ""}</div>`;
+}
+
 function drawEst() {
   if (!TS) return;
   const more = $("thr-more"), into = (shown, folded, wko5In, sum) => {
@@ -1880,13 +1924,17 @@ function drawEst() {
     // SP-749: the runs were too easy for this estimate (low against the runner's max HR / HRR): the
     // warning and the test instead of 「套用」 — the value can still be typed in by hand
     const low = ok && est.low_effort;
-    const html = `<div class="card" data-hint-id="ST11"><div class="k">${esc(t("settings.thr.est_k", { name: label }))}</div>
-      <div class="v">${ok ? est.value + " bpm" + pmBadge(est.pm) : "–"} <small>${ok && curV != null ? esc(t("settings.thr.est_cur", { v: num(curV) })) : ""}</small></div>
-      <div class="s">${esc(est ? est.reason : "")}${ok && est.spread ? esc(t("settings.thr.est_spread", { lo: est.spread[0], hi: est.spread[1] })) : ""}${est && est.days ? esc(t("settings.thr.est_days", { n: est.days })) : ""}</div>
-      ${help ? `<div class="s">${esc(help)}</div>` : ""}
+    // SP-749 R1 (mock C): with the runner's usual LTHR stretch (est.band) the card is the number line —
+    // the basis of the estimate (runs, spread, cross-check) moves into the value's tooltip
+    const band = ok && est.band;
+    const basis = `${est ? est.reason || "" : ""}${ok && est.spread ? t("settings.thr.est_spread", { lo: est.spread[0], hi: est.spread[1] }) : ""}${est && est.days ? t("settings.thr.est_days", { n: est.days }) : ""}`;
+    const html = `<div class="card${low ? " low" : ""}" data-hint-id="ST11"><div class="k">${esc(t("settings.thr.est_k", { name: label }))}</div>
+      <div class="v"${band ? ` title="${esc([basis, help].filter(Boolean).join("\n"))}"` : ""}>${ok ? est.value + " bpm" + pmBadge(est.pm) : "–"} <small>${ok && curV != null ? esc(t("settings.thr.est_cur", { v: num(curV) })) : ""}</small></div>
+      ${band ? hrLine(est.value, curV, est.band, !!low) : `<div class="s">${esc(basis)}</div>
+      ${help ? `<div class="s">${esc(help)}</div>` : ""}`}
       ${!ok && est && (est.links || []).length ? `<div class="s">${est.links.map((l) => `<a href="${esc(l.href)}">${esc(l.label)}</a>`).join(" ")}</div>` : ""}
-      ${low ? `<div class="s meta warn" data-low-effort>⚠ ${esc(est.low_effort.text)}${(est.low_effort.signals || []).map((x) => `<br>${esc(x)}`).join("")}</div>
-        ${est.low_effort.test ? `<div class="s"><a href="${esc(est.low_effort.test.href)}">${esc(est.low_effort.test.label)}</a></div>` : ""}`
+      ${low ? `<div class="lowline" data-low-effort title="${esc((est.low_effort.signals || []).join("\n"))}">⚠ ${esc(est.low_effort.text)}</div>
+        ${est.low_effort.test ? `<a class="button test" href="${esc(est.low_effort.test.href)}" title="${esc(est.low_effort.test.label)}">${esc(t("settings.thr.est_test"))}</a>` : ""}`
         : ok && !same ? `<button class="primary" data-apply="${key}" data-v="${est.value}">${esc(t("settings.thr.est_apply", { v: est.value }))}</button>`
         : ok ? `<div class="s">${esc(t("settings.thr.est_same"))}</div>` : ""}</div>`;
     // the condition (R-less, §1 ST11): the estimate differs from what is in use by ≥ 1

@@ -38,6 +38,7 @@ WORDS = (
     N_("LSD"), N_("長跑"), N_("長時間"), N_("山路"), N_("山路越野"), N_("平路"), N_("緩坡"), N_("上坡"), N_("下坡"),
     N_("有氧間歇"), N_("巡航"), N_("超閾值"), N_("VO2max 間歇"), N_("速度"), N_("間歇"), N_("連續"), N_("金字塔"),
     N_("節奏跑"), N_("上坡節奏跑"), N_("短強度"), N_("恢復週"), N_("減量期"), N_("強度課"),
+    N_("閾值"), N_("爬坡"), N_("熱適應"),                      # legacy titles 「閾值 3×8 分」「爬坡 4×4 分」, 「輕鬆跑（熱適應）」 (SP-908)
     N_("長爬坡有氧"), N_("長爬坡反覆"), N_("陡坡健走"), N_("模擬負重"), N_("負重爬坡"), N_("跑下山"), N_("穩定地形"),
     N_("坡道衝刺"), N_("坡道"), N_("上坡衝刺"), N_("加速跑"), N_("快步跑"), N_("馬拉松配速"),
     N_("肌力"), N_("肌力維持"), N_("下肢單腳"), N_("核心"), N_("高踏階"), N_("離心下階"), N_("引體向上"),
@@ -61,6 +62,8 @@ PATTERNS = (
     # the automatic run's reasons (plan_change_log; the 課表 card's ↻ marker)
     N_("自動調整：降一階到 {rung}（不算進階）"),                    # adapt
     N_("CP {old} → {new} W：功率目標依 % CP 重算"),                   # plan_auto.rescale_sessions
+    # a step's name on the watch (SP-908: the COROS push in the account's language)
+    N_("坡度 {g}%、{speed}，用走的"),                                # workout_templates: the 跑步機模擬 template
 )
 # templates read back although their own words are only punctuation (_parse wants two Chinese characters of
 # a template's own) — SP-905 R1: an injury's rule as injuries.condition_rule writes it, 「右膝・膝前痛進行中：…」,

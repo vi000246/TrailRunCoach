@@ -138,6 +138,8 @@ PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/estimate"} | {f"/api/v1/intro/exam
 PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/templates", "/api/v1/intro/plan"}
 # SP-969: the trail example's finish time factor by factor (frozen numbers, the waterfall) — exactly this path
 PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/breakdown"}
+# SP-975: the fictional runner's season as the phase planner cuts it (frozen days from today) — exactly this path
+PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/cycle"}
 # 方案與價格 (SP-846, api/billing.py): the prices and the plan table, linked from the 介紹頁 — exactly /pricing
 # (the plans page /plans and its checkout stay behind sign-in)
 PUBLIC_PATHS = PUBLIC_PATHS | {"/pricing"}

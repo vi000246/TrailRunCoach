@@ -335,6 +335,56 @@ html.modal-open { overflow: hidden; }
 .cairn-x { text-align: center; padding: 28px 0 36px; }
 .cairn-x h2 { font-size: clamp(19px, 2.4vw, 22px); }
 .cairn-x .muted { margin: 0 auto 10px; max-width: 48em; font-size: 14.5px; }
+/* SP-975: 賽事周期 — the example season as the app's planner cuts it (api/intro.cycle), one card beside the
+   text like the other features. Phase colours: the 賽事周期 page's for 原本, one step per Trig palette
+   (colour-blind separable; the two greys are told apart by their place and the legend) */
+:root { --cy-base: #16a34a; --cy-specific: #d97706; --cy-taper: #2563eb; --cy-event: #dc2626; --cy-recovery: #7c8796;
+  --cy-transition: #c5ccd6; --cy-rebuild: #38bdf8; --cy-race: #b45309;
+  --cy-base-ink: #fff; --cy-specific-ink: #1d1d1b; --cy-taper-ink: #fff; --cy-event-ink: #fff; --cy-recovery-ink: #fff;
+  --cy-transition-ink: #1d1d1b; --cy-rebuild-ink: #1d1d1b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --cy-base: #22c55e; --cy-specific: #f59e0b;
+  --cy-taper: #60a5fa; --cy-event: #f87171; --cy-recovery: #8b95a3; --cy-transition: #4b5563; --cy-rebuild: #38bdf8;
+  --cy-race: #fbbf24; --cy-base-ink: #111110; --cy-specific-ink: #111110; --cy-taper-ink: #111110; --cy-event-ink: #111110;
+  --cy-recovery-ink: #111110; --cy-transition-ink: #fff; --cy-rebuild-ink: #111110; } }
+:root[data-theme="dark"] { --cy-base: #22c55e; --cy-specific: #f59e0b; --cy-taper: #60a5fa; --cy-event: #f87171;
+  --cy-recovery: #8b95a3; --cy-transition: #4b5563; --cy-rebuild: #38bdf8; --cy-race: #fbbf24; --cy-base-ink: #111110;
+  --cy-specific-ink: #111110; --cy-taper-ink: #111110; --cy-event-ink: #111110; --cy-recovery-ink: #111110;
+  --cy-transition-ink: #fff; --cy-rebuild-ink: #111110; }
+:root[data-palette="trig-cream"] { --cy-base: #3d6e3a; --cy-specific: #e0912f; --cy-taper: #3d5fae; --cy-event: #b3361f;
+  --cy-recovery: #7d796c; --cy-transition: #c9c2ae; --cy-rebuild: #5b9bb5; --cy-race: #8a6410; --cy-base-ink: #fff;
+  --cy-specific-ink: #1f2a28; --cy-taper-ink: #fff; --cy-event-ink: #fff; --cy-recovery-ink: #fff;
+  --cy-transition-ink: #1f2a28; --cy-rebuild-ink: #fff; }
+:root[data-palette="trig-badge"] { --cy-base: #3d7a3a; --cy-specific: #e0912f; --cy-taper: #2a62c4; --cy-event: #b42318;
+  --cy-recovery: #74807d; --cy-transition: #c3cbc8; --cy-rebuild: #5b9bb5; --cy-race: #8a6410; --cy-base-ink: #fff;
+  --cy-specific-ink: #132629; --cy-taper-ink: #fff; --cy-event-ink: #fff; --cy-recovery-ink: #fff;
+  --cy-transition-ink: #132629; --cy-rebuild-ink: #fff; }
+.cy { margin: 0; width: 100%; min-width: 0; padding: 16px 18px 14px; border-radius: 16px; background: var(--panel);
+  border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; gap: 10px; }
+.cy-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; }
+.cy-top b { font-size: 15px; }
+.cy-sub { color: var(--muted); font-size: 12.5px; }
+.cy-legend { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+.cy-legend i { display: inline-block; width: 11px; height: 9px; border-radius: 2px; margin-right: 4px; }
+.cy-legend i.b { height: 3px; vertical-align: 3px; background: var(--muted); }
+.cy-tl { position: relative; height: 60px; margin-top: 18px; }
+.cy-tl .seg { position: absolute; top: 10px; height: 28px; padding: 0 5px; border: 0; border-radius: 3px; cursor: pointer;
+  font: 600 11.5px/28px system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; text-align: left;
+  overflow: hidden; white-space: nowrap; box-shadow: 0 0 0 1px var(--panel); }
+.cy-tl .seg:hover, .cy-tl .seg:focus-visible, .cy-tl .seg.on { outline: 2px solid var(--text); outline-offset: 1px; z-index: 3; }
+.cy-tl .ev { position: absolute; top: 2px; width: 2px; height: 40px; margin-left: -1px; background: var(--text); z-index: 2; pointer-events: none; }
+.cy-tl .ev.A { width: 3px; background: var(--cy-race); }
+.cy-tl .ev.B { opacity: .75; }
+.cy-tl .ev span { position: absolute; bottom: 100%; left: 3px; margin-bottom: 1px; font-size: 11.5px; font-weight: 700; white-space: nowrap; color: var(--text); }
+.cy-tl .ev.r span { left: auto; right: 3px; }
+.cy-tl .mini { position: absolute; top: 41px; height: 3px; border-radius: 2px; background: var(--muted); opacity: .8; pointer-events: none; }
+.cy-tl .today { position: absolute; top: 4px; height: 38px; border-left: 2px dashed var(--accent); z-index: 4; pointer-events: none; }
+.cy-tl .today span { position: absolute; top: 100%; left: 0; transform: translateX(-50%); padding: 0 3px; background: var(--panel);
+  color: var(--accent); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.cy-tl .mo { position: absolute; top: 44px; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.cy-tip { margin: 0; min-height: 1.6em; font-size: 13.5px; }
+@media (max-width: 560px) { .cy-tip { min-height: 3.2em; } }   /* a longer line wraps: nothing jumps on a tap */
+.cy-tip b { font-weight: 700; }
+.cy-note { margin: 0; color: var(--muted); font-size: 12px; }
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -460,6 +510,30 @@ html.modal-open { overflow: hidden; }
           <li><i class="lv1"></i><span data-i18n="intro.lv.1">很輕鬆</span></li><li><i class="lv2"></i><span data-i18n="intro.lv.2">輕鬆</span></li><li><i class="lv3"></i><span data-i18n="intro.lv.3">中等</span></li><li><i class="lv4"></i><span data-i18n="intro.lv.4">閾值</span></li><li><i class="lv5"></i><span data-i18n="intro.lv.5">高強度</span></li>
         </ul>
       </div>
+    </section>
+
+    <!-- SP-975: 賽事周期 — the fictional runner's season as the app's planner cuts it (GET /api/v1/intro/cycle,
+         frozen by scripts/intro_cycle.py), dated from the visitor's today; the sources are on the 關於 page -->
+    <section id="cycle" class="feature" aria-labelledby="cycle-h">
+      <div class="text">
+        <p class="kicker" data-i18n="intro.cyc.kicker">賽事周期</p>
+        <h2 id="cycle-h" data-i18n="intro.cyc.h">從比賽日往回排好整季</h2>
+        <p class="sec-lead" data-i18n="intro.cyc.lead">設好 A／B 賽事，自動切出基礎、專項、減量、恢復和轉換期，每一週的課表照著它排。</p>
+        <ul>
+          <li data-i18n="intro.cyc.li.back">A 賽前 10 天減量，再往前 8 週專項期，其餘是基礎期</li>
+          <li data-i18n="intro.cyc.li.recover">賽後依比賽大小恢復 1–2 週；比賽的下坡比你最近練過的多，再多休一級</li>
+          <li data-i18n="intro.cyc.li.b">B 賽事只在賽前 5 天小減量，不打亂周期</li>
+          <li data-i18n="intro.cyc.li.basis">每段多長都對照過教練系統與研究：Uphill Athlete、Pfitzinger、Daniels，以及兩份減量統合分析</li>
+        </ul>
+        <a class="more" href="/about#m-phases" data-i18n="intro.cyc.more">方法與出處 →</a>
+      </div>
+      <figure class="cy reveal" aria-labelledby="cy-h">
+        <div class="cy-top"><b id="cy-h" data-i18n="intro.cyc.card.h">示範賽季：示範山徑越野 50K</b><span class="cy-sub" data-i18n="intro.cyc.card.sub">虛構跑者，用 app 的排程規則算出來</span></div>
+        <ul class="cy-legend" id="cy-legend" aria-hidden="true"></ul>
+        <div class="cy-tl" id="cy-tl" role="group" aria-label="周期時間軸" data-i18n-attr="aria-label:intro.cyc.aria"></div>
+        <p class="cy-tip" id="cy-tip" aria-live="polite"></p>
+        <p class="cy-note" data-i18n="intro.cyc.note">點時間軸上的一段，看那段多長、依據是什麼。</p>
+      </figure>
     </section>
 
     <section id="race" aria-labelledby="race-h">
@@ -833,6 +907,92 @@ html.modal-open { overflow: hidden; }
   }
   fetch(API + "plan").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then(drawCal)
     .catch(() => { $("cal-detail").textContent = L.t("intro.calc.error"); });
+
+  // ---- SP-975: 賽事周期. The server's season in whole days from today (api/intro.cycle); dated here from the
+  // visitor's today, so 「今天」 always stands in the 50K's 專項期. One line under the band says the hovered or
+  // tapped phase's length and what it stands on (the sources: the 關於 page).
+  const CY = { d: null, pin: null };
+  const cyDays = (p) => p.end - p.start + 1;
+  const cyLabel = (p) => L.t("intro.cyc.ph." + (p.kind === "event" && p.trip ? "trip" : p.kind));
+  function cyLine(p) {
+    const n = cyDays(p);
+    if (p.kind === "event") return L.t("intro.cyc.ev." + p.event);
+    if (p.kind === "specific" || p.kind === "transition") return L.t("intro.cyc.tip." + p.kind, { n: Math.round(n / 7) });
+    if (p.kind === "recovery") return L.t("intro.cyc.tip.recovery", { n, size: L.t("intro.cyc.size." + (p.size || "medium")) });
+    if (p.kind === "taper") return L.t("intro.cyc.tip.taper", { n });
+    return L.t("intro.cyc.tip." + p.kind);
+  }
+  function cyTip(p) {
+    const now = CY.d.phases.find((x) => x.start <= 0 && 0 <= x.end);
+    const q = p || now;
+    $("cy-tip").textContent = (q === now ? L.t("intro.cyc.now") : "") + cyLine(q);
+  }
+  function drawCycle() {
+    const d = CY.d, tl = $("cy-tl");
+    const span = d.end - d.begin + 1;
+    const pos = (o) => Math.max(0, Math.min(100, (o - d.begin) / span * 100));
+    const W = tl.clientWidth || 600;
+    const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+    const day = (o) => new Date(t0.getFullYear(), t0.getMonth(), t0.getDate() + o);
+    const fmt = new Intl.DateTimeFormat(NF, { month: "numeric", day: "numeric" });
+    tl.textContent = "";
+    const add = (cls, css, txt) => { const e = document.createElement("div"); e.className = cls; Object.assign(e.style, css); if (txt) e.textContent = txt; tl.appendChild(e); return e; };
+    d.phases.forEach((p, i) => {
+      const l = pos(p.start), w = pos(p.end + 1) - l, k = p.kind;
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "seg" + (CY.pin === i ? " on" : "");
+      Object.assign(b.style, { left: l + "%", width: w + "%", background: `var(--cy-${k})`, color: `var(--cy-${k}-ink)` });
+      const lab = cyLabel(p);
+      b.setAttribute("aria-label", `${lab} ${fmt.format(day(p.start))}–${fmt.format(day(p.end))}`);
+      if (w / 100 * W > lab.length * (loc === "en" ? 7 : 12.5) + 10) b.textContent = lab;
+      const show = () => cyTip(p), back = () => cyTip(CY.pin == null ? null : d.phases[CY.pin]);
+      b.addEventListener("mouseenter", show); b.addEventListener("focus", show);
+      b.addEventListener("mouseleave", back); b.addEventListener("blur", back);
+      b.addEventListener("click", () => { CY.pin = CY.pin === i ? null : i; for (const x of tl.querySelectorAll(".seg")) x.classList.toggle("on", x === b && CY.pin === i); back(); });
+      tl.appendChild(b);
+    });
+    for (const w of d.b_windows) add("mini", { left: pos(w.start) + "%", width: (pos(w.end + 1) - pos(w.start)) + "%" });
+    // months: the 1st of each month inside the window, unless it would print over 「今天」
+    const today = pos(0);
+    for (let m = new Date(day(d.begin).getFullYear(), day(d.begin).getMonth() + 1, 1); m <= day(d.end); m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+      const x = pos(Math.round((m - t0) / 864e5));
+      if (Math.abs(x - today) / 100 * W < 34 || x > 96) continue;
+      add("mo", { left: x + "%", transform: "translateX(-50%)" }, new Intl.DateTimeFormat(NF, { month: "short" }).format(m));
+    }
+    const labs = [];
+    for (const e of d.events) {
+      const x = pos(e.start + (e.end - e.start) / 2), r = x > 88;
+      const m = add("ev " + e.priority + (r ? " r" : ""), { left: x + "%" });
+      const s = document.createElement("span");
+      s.textContent = `${e.priority} ${L.t("intro.cyc.evs." + e.id)}`;
+      s.title = L.t("intro.cyc.ev." + e.id);
+      m.appendChild(s); labs.push(s);
+    }
+    const t = add("today", { left: today + "%" });
+    const ts = document.createElement("span"); ts.textContent = L.t("intro.cyc.today"); t.appendChild(ts);
+    // race labels that would print over each other go up a row
+    const rows = [];
+    for (const s of labs.map((s) => ({ s, r: s.getBoundingClientRect() })).sort((a, b) => a.r.left - b.r.left)) {
+      let row = rows.findIndex((end) => s.r.left >= end + 6);
+      if (row < 0) { row = rows.length; rows.push(0); }
+      rows[row] = s.r.right;
+      if (row) { s.s.parentElement.style.top = 2 - 15 * row + "px"; s.s.parentElement.style.height = 40 + 15 * row + "px"; }
+    }
+    tl.style.marginTop = 18 + 15 * Math.max(0, rows.length - 1) + "px";
+    // the legend: only the phases this season has, and the B races' marks
+    const kinds = [...new Set(d.phases.map((p) => p.kind))];
+    const lg = $("cy-legend");
+    lg.textContent = "";
+    for (const k of ["base", "specific", "taper", "event", "recovery", "transition", "rebuild"].filter((k) => kinds.includes(k))) {
+      const li = document.createElement("li"); const i = document.createElement("i"); i.style.background = `var(--cy-${k})`;
+      li.append(i, L.t("intro.cyc.ph." + k)); lg.appendChild(li);
+    }
+    if (d.b_windows.length) { const li = document.createElement("li"); const i = document.createElement("i"); i.className = "b"; li.append(i, L.t("intro.cyc.legend_b")); lg.appendChild(li); }
+    cyTip(CY.pin == null ? null : d.phases[CY.pin]);
+  }
+  fetch(API + "cycle").then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((d) => { CY.d = d; drawCycle(); let q = 0; addEventListener("resize", () => { cancelAnimationFrame(q); q = requestAnimationFrame(drawCycle); }); })
+    .catch(() => { $("cycle").hidden = true; });
 
   // 新增一堂課 → 選範本 → 看結構 (the 課表 section)
   const TPL = { d: null, cat: "easy", key: null };

@@ -483,6 +483,26 @@ async def browser_timezone(body: BrowserZone, athlete_id: int = 1, db: AsyncSess
         raise HTTPException(400, str(e))
 
 
+class AccountLocale(BaseModel):
+    locale: str
+
+
+@router.post("/locale")
+async def account_locale(body: AccountLocale, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """帳號語言 (SP-908): the interface language this account is used in — shell.js sends it when it changes
+    in this browser (the 中文／EN switch, or a first visit in English). The COROS push writes the watch's
+    workout names and step names in it (sync/coros_workouts.watch_locale), automatic pushes too."""
+    from backend.i18n import normalize
+    loc = normalize(body.locale)
+    if not loc:
+        raise HTTPException(400, "unsupported locale")
+    repo = SettingsRepository(db, athlete_id)
+    if await repo.get("athlete.locale") != loc:
+        await repo.set("athlete.locale", loc)
+        await db.commit()
+    return {"locale": loc}
+
+
 @router.post("/dedup/rebuild")
 async def rebuild_dedup(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     from backend import cooldown
