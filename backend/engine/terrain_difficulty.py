@@ -26,14 +26,17 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backend.i18n import N_
+
 LEVELS = ("normal", "technical", "scramble")
-LABELS = {"normal": "一般", "technical": "技術路段多", "scramble": "需要手腳並用"}
+# msgids (SP-838): the race calculator shows them through _()
+LABELS = {"normal": N_("一般"), "technical": N_("技術路段多"), "scramble": N_("需要手腳並用")}
 # 推估 (SP-716 10/18: whole route 15–25 % slower at the same grade, its scramble 40 %)
 PRIOR = {"normal": 1.0, "technical": 1.15, "scramble": 1.35}
 SHRINK_K = 2.0          # 推估: the prior counts as 2 marked activities
 MULT_RANGE = (1.0, 2.5)  # a harder level is never faster than 一般; 2.5 guards a broken record
-SOURCE = ("地形難度倍率：你標過該級的越野跑，每筆「實際 ÷ 模型預估（不含該筆）」的中位數，往先驗收縮"
-          "（技術路段多 1.15、需要手腳並用 1.35，先驗當 2 筆）；一般 = 1；作用在努力距離（同心率下要走更多 effort km），推估")
+SOURCE = N_("地形難度倍率：你標過該級的越野跑，每筆「實際 ÷ 模型預估（不含該筆）」的中位數，往先驗收縮"
+            "（技術路段多 1.15、需要手腳並用 1.35，先驗當 2 筆）；一般 = 1；作用在努力距離（同心率下要走更多 effort km），推估")
 
 
 def valid(level) -> bool:

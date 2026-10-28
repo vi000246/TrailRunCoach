@@ -19,11 +19,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from backend.i18n import N_
+
 KEY = "athlete.region"
 REGIONS = ("tw", "intl")
 TW_BBOX = (21.5, 26.5, 118.0, 122.5)       # lat lo, lat hi, lon lo, lon hi
 TW_ZONES = ("Asia/Taipei",)
-LABEL = {"tw": "台灣", "intl": "台灣以外"}
+# the label and the how words are msgids: the APIs show them in the request's language (_())
+LABEL = {"tw": N_("台灣"), "intl": N_("台灣以外")}
 
 
 def in_taiwan(lat: Optional[float], lon: Optional[float]) -> bool:
@@ -60,12 +63,12 @@ def detect(root: Optional[Path] = None, auto_tz: Optional[dict] = None) -> tuple
     """(region, how) from the data only (steps 2–4)."""
     cell = home_cell(root)
     if cell is not None:
-        return ("tw" if in_taiwan(*cell) else "intl"), "住家天氣格點"
+        return ("tw" if in_taiwan(*cell) else "intl"), N_("住家天氣格點")
     br = (auto_tz or {}).get("browser")
     if br:
-        return ("tw" if br in TW_ZONES else "intl"), "瀏覽器時區"
+        return ("tw" if br in TW_ZONES else "intl"), N_("瀏覽器時區")
     from backend import site_config as SC
-    return SC.get("defaults.region"), "預設"           # the site's default region (the admin page, SP-351)
+    return SC.get("defaults.region"), N_("預設")           # the site's default region (the admin page, SP-351)
 
 
 def region(user_id: int = 1, root: Optional[Path] = None) -> tuple[str, str]:
@@ -73,7 +76,7 @@ def region(user_id: int = 1, root: Optional[Path] = None) -> tuple[str, str]:
     from backend.engine.wko5expr.datasource import read_setting
     v = read_setting(KEY, None, user_id)
     if v in REGIONS:
-        return v, "設定"
+        return v, N_("設定")
     return detect(root, read_setting("athlete.timezone.auto", None, user_id))
 
 

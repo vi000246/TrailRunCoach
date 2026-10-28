@@ -807,10 +807,11 @@ def is_short(s: dict) -> bool:
 def protocol_tip(key: str) -> str:
     """The 課表偏好 hover: duration, terrain, what is held, how it is judged, source."""
     if key == "auto":
-        return (_("自動：標準版＝{label}（放在週末長跑日，取代那次長跑）", label=_(PROTOCOLS[STANDARD]["label"])) + "；"
-                + _("長跑日上限 < 90 分放不下時改用備案 {label}（平日）", label=_(PROTOCOLS[BACKUP]["label"])) + "。"
-                + _("選標準版的理由：90 分鐘是徐國峰公開的測試長度（部落格 2016-12），測得太短看不出後段心率飄移") + "；"
-                + _("UA 接受 40 分、Evoke 60 分、Friel 1–2 小時") + "；" + _("沒有任何長度有同儕審查的驗證") + "。")
+        # SP-840: the joins too (the settings page's AeT ? shows this tip)
+        return (_("自動：標準版＝{label}（放在週末長跑日，取代那次長跑）", label=_(PROTOCOLS[STANDARD]["label"])) + _("；")
+                + _("長跑日上限 < 90 分放不下時改用備案 {label}（平日）", label=_(PROTOCOLS[BACKUP]["label"])) + _("。")
+                + _("選標準版的理由：90 分鐘是徐國峰公開的測試長度（部落格 2016-12），測得太短看不出後段心率飄移") + _("；")
+                + _("UA 接受 40 分、Evoke 60 分、Friel 1–2 小時") + _("；") + _("沒有任何長度有同儕審查的驗證") + _("。")).strip()
     p = PROTOCOLS[key]
     total = p["warm"] + p["main"] + p["cool"]
     head = (_("{label}：共 {total} 分（暖身 {warm}＋測試 {main}＋緩和 {cool} 分）", label=_(p["label"]), total=total,
@@ -818,7 +819,7 @@ def protocol_tip(key: str) -> str:
             _("{label}：共 {total} 分（暖身 {warm}＋測試 {main} 分）", label=_(p["label"]), total=total, warm=p["warm"],
               main=p["main"]))
     rule, src = _parts(p["rule"]), _parts(p["source"])
-    return "；".join([head, _("場地：{terrain}", terrain=_(p["terrain"])), _("固定：{hold}", hold=_(p["hold"])),
+    return _("；").join([head, _("場地：{terrain}", terrain=_(p["terrain"])), _("固定：{hold}", hold=_(p["hold"])),
                      _("判讀：{rule}", rule=_(rule[0]))] + [_(x) for x in rule[1:]]
                     + [_("來源：{src}", src=_(src[0]))] + [_(x) for x in src[1:]])
 

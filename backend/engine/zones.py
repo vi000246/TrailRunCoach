@@ -123,18 +123,18 @@ def _coros_table(kind: str) -> list[tuple]:
 
 
 SYSTEMS = {
-    "classichr": {"title": "Classic 心率區間（跑步）", "unit": "bpm", "basis": "lthr", "zones": CLASSIC_HR},
-    "frielhr": {"title": "Friel 心率區間（跑步）", "unit": "bpm", "basis": "lthr", "zones": FRIEL_HR},
+    "classichr": {"title": N_("Classic 心率區間（跑步）"), "unit": "bpm", "basis": "lthr", "zones": CLASSIC_HR},
+    "frielhr": {"title": N_("Friel 心率區間（跑步）"), "unit": "bpm", "basis": "lthr", "zones": FRIEL_HR},
     # the watch's COROS models (engine/hr_profile.py, 2026-10-03); hrr / hrmax rows are
     # computed in bpm from the max / resting HR in effect (zone_table)
-    "coroslthr": {"title": "COROS 乳酸閾心率區間（跑步）", "unit": "bpm", "basis": "lthr", "coros": "lthr",
+    "coroslthr": {"title": N_("COROS 乳酸閾心率區間（跑步）"), "unit": "bpm", "basis": "lthr", "coros": "lthr",
                   "zones": _coros_table("lthr")},
-    "coroshrr": {"title": "COROS 儲備心率區間（跑步）", "unit": "bpm", "basis": "hrr", "coros": "hrr",
+    "coroshrr": {"title": N_("COROS 儲備心率區間（跑步）"), "unit": "bpm", "basis": "hrr", "coros": "hrr",
                  "zones": _coros_table("hrr")},
-    "coroshrmax": {"title": "COROS 最大心率區間（跑步）", "unit": "bpm", "basis": "hrmax", "coros": "hrmax",
+    "coroshrmax": {"title": N_("COROS 最大心率區間（跑步）"), "unit": "bpm", "basis": "hrmax", "coros": "hrmax",
                    "zones": _coros_table("hrmax")},
-    "frielpace": {"title": "Friel 配速區間（跑步）", "unit": "min/km", "basis": "tpace", "zones": FRIEL_PACE},
-    "palladino": {"title": "Palladino 功率區間（跑步）", "unit": "W", "basis": "cp", "zones": PALLADINO_POWER_ZONES},
+    "frielpace": {"title": N_("Friel 配速區間（跑步）"), "unit": "min/km", "basis": "tpace", "zones": FRIEL_PACE},
+    "palladino": {"title": N_("Palladino 功率區間（跑步）"), "unit": "W", "basis": "cp", "zones": PALLADINO_POWER_ZONES},
 }
 
 
@@ -198,12 +198,12 @@ PLAN_SYSTEM_CARD = {"palladino": "palladino", "stryd": "stryd", "classic": "clas
 # COROS's HRR model (the account's rhrZone 59/74/84/88/95; the user's COROS app shows
 # Z2 141–163 at max 202 / rest 53), so this IS the COROS HRR table.
 RQ_HRR_ZONES = [
-    ("R", "恢復", 0.0, 0.59),
-    ("E", "輕鬆 E", 0.59, 0.74),
-    ("M", "馬拉松 M", 0.74, 0.84),
-    ("T", "閾值 T", 0.84, 0.88),
-    ("A", "無氧閾值 A", 0.88, 0.95),
-    ("I", "間歇 I", 0.95, None),
+    ("R", N_("恢復"), 0.0, 0.59),
+    ("E", N_("輕鬆 E"), 0.59, 0.74),
+    ("M", N_("馬拉松 M"), 0.74, 0.84),
+    ("T", N_("閾值 T"), 0.84, 0.88),
+    ("A", N_("無氧閾值 A"), 0.88, 0.95),
+    ("I", N_("間歇 I"), 0.95, None),
 ]
 
 
@@ -256,6 +256,18 @@ def _on_day(w, end_day: int):
     return dataclasses.replace(w, day=max(float(w.day), float(end_day)))
 
 
+def shown_source(text):
+    """A threshold's 來源 text in the request's language: a msgid (MFTP_SRC, a dataset label kept as its
+    msgid) or a msgid filled in (「你的測試 {day}」) through engine/stored_text; English / None as they are."""
+    from backend.engine import stored_text as ST
+    return ST.shown(text)
+
+
+# where a threshold comes from in the comparison mode (msgids: api/plan.py compares MFTP_SRC; shown through _())
+MFTP_SRC = N_("對照資料夾的 mFTP")
+WKO5_SETTING = N_("對照資料夾設定")
+
+
 def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
     """{"value", "source", "date", "wprime", "wprime_source"} of the zone
     basis (cp / lthr / tpace) in effect for the reference run, with where it
@@ -280,7 +292,7 @@ def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
             return {**out, "value": float(rows[-1].cp), "source": _("你的測試 {day}", day=rows[-1].date[:10]),
                     "date": rows[-1].date[:10], "wprime": rows[-1].wprime,
                     "wprime_source": _("測試（兩點法）") if rows[-1].wprime else None}
-        return {**out, "value": ds.cp(ref), "source": "對照資料夾的 mFTP" if ds.settings_from == "wko5" else None}
+        return {**out, "value": ds.cp(ref), "source": MFTP_SRC if ds.settings_from == "wko5" else None}
     if basis == "lthr":
         # an applied estimate is labelled as one, not 「你的測試」 (zones-and-thresholds.md §3.4 change 1)
         from backend.engine.planning import threshold_row
@@ -288,11 +300,11 @@ def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
         if r is not None:
             return {**out, "value": r["value"], "source": r["label"], "date": r["date"],
                     "method": r["method"], "measured": r["measured"]}
-        return {**out, "value": ds.sport_setting("thr", ref), "source": ds.setting_label("runthr", "對照資料夾設定")}
+        return {**out, "value": ds.sport_setting("thr", ref), "source": ds.setting_label("runthr", WKO5_SETTING)}
     # threshold pace: a dated setting, else the estimate
     v = ds.sport_setting("tpace", ref)
     if v is not None:
-        return {**out, "value": v, "source": ds.setting_label("runtpace", "對照資料夾設定")}
+        return {**out, "value": v, "source": ds.setting_label("runtpace", WKO5_SETTING)}
     from backend.engine.thresholds import estimate_tpace
     est = estimate_tpace(ds, day)
     return {**out, "value": est.get("value"), "source": est.get("reason"),
@@ -311,7 +323,7 @@ def cp_in_effect(ds, end_day: int) -> dict:
         return {"value": None, "source": None, "date": None, "kind": None}
     ci = threshold_info(ds, "cp", ref, end_day)
     return {"value": ds.cp(ref), "kind": ci.get("kind"), "date": ci.get("date"),
-            "source": ci.get("source") or ("對照資料夾的 mFTP" if ds.settings_from == "wko5" else ds.setting_label("runftp"))}
+            "source": ci.get("source") or (MFTP_SRC if ds.settings_from == "wko5" else ds.setting_label("runftp"))}
 
 
 def _no_data_reason(basis: str, T, n_runs: int, days: int) -> str:
@@ -382,9 +394,9 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
                      "to": None if (hi is None or T is None) else hi * T})
     for r in rows:
         r["share"] = r["seconds"] / total if total else None
-    return {"system": system, "title": spec["title"], "unit": spec["unit"], "basis": spec["basis"],
+    return {"system": system, "title": _(spec["title"]), "unit": spec["unit"], "basis": spec["basis"],
             "threshold": T, "threshold_is_default": is_default, "days": days, "runs": len(runs), "total_seconds": total, "rows": rows,
-            "threshold_source": info.get("source"), "threshold_date": info.get("date"),
+            "threshold_source": shown_source(info.get("source")), "threshold_date": info.get("date"),
             "wprime": info.get("wprime"), "wprime_source": info.get("wprime_source"),
             "no_data_reason": no_model or (None if total else _no_data_reason(spec["basis"], T, len(runs), days)),
             "source": {"palladino": SOURCE, "stryd": STRYD_SOURCE, "classic": _classic_source(),
@@ -398,7 +410,7 @@ HR_SYSTEMS = ("frielhr", "classichr", "coroslthr", "coroshrr", "coroshrmax")
 
 def hr_choices() -> list[dict]:
     """The HR zone tables a 「心率區間」 card can switch between (the viewer remembers the choice)."""
-    return [{"id": k, "title": SYSTEMS[k]["title"]} for k in HR_SYSTEMS]
+    return [{"id": k, "title": _(SYSTEMS[k]["title"])} for k in HR_SYSTEMS]
 
 
 def _classic_source() -> str:
@@ -437,8 +449,11 @@ def _zone_table_bpm(ds, system: str, spec: dict, end_day: int, days: int, runs: 
     z = HP.zone_rows(kind, None, mx.get("value"), rs.get("value"), acc)
     rat = HP.ratios(kind, acc)
     fr_lo, fr_hi = (0.0,) + tuple(rat), tuple(rat) + (None,)
-    srcs = "；".join(s for s in ((_("最大心率：{src}", src=mx["source"]) if mx.get("source") else ""),
-                                (_("靜息心率：{src}", src=rs["source"]) if rs.get("source") else "")) if s)
+    srcs = [s for s in ((_("最大心率：{src}", src=shown_source(mx["source"])) if mx.get("source") else ""),
+                        (_("靜息心率：{src}", src=shown_source(rs["source"])) if rs.get("source") else "")) if s]
+    basis_text = z.get("basis_text", "")
+    for x in srcs:
+        basis_text = _("{a}；{b}", a=basis_text, b=x) if basis_text else x
     T = None
     if "rows" in z:
         T = mx["value"] - rs["value"] if kind == "hrr" else mx["value"]
@@ -456,9 +471,9 @@ def _zone_table_bpm(ds, system: str, spec: dict, end_day: int, days: int, runs: 
     for r in rows:
         r["share"] = r["seconds"] / total if total else None
     reason = z.get("reason") if "reason" in z else (None if total else _no_data_reason("lthr", T, len(runs), days))
-    return {"system": system, "title": spec["title"], "unit": spec["unit"], "basis": spec["basis"],
+    return {"system": system, "title": _(spec["title"]), "unit": spec["unit"], "basis": spec["basis"],
             "threshold": T, "threshold_is_default": False, "days": days, "runs": len(runs), "total_seconds": total,
-            "rows": rows, "threshold_source": (z.get("basis_text", "") + (f"；{srcs}" if srcs else "")) or None,
+            "rows": rows, "threshold_source": basis_text or None,
             "threshold_date": None, "wprime": None, "wprime_source": None,
             "estimate": mx.get("kind") == "estimate", "no_data_reason": reason,
             "source": _coros_source(spec), "choices": hr_choices()}
@@ -488,38 +503,37 @@ def _blank_rows(kind: str) -> list[tuple]:
 # the practical tool (docs/research/coaching-dashboards-mountain.md §1.1). The
 # power bands themselves are Palladino's (% CP); applying them uphill above
 # ~8 % grade is 推估 (Stryd is validated to ~8 %).
-TERRAIN_NOTE = ("山路長天、越野輕鬆看心率（≤ 輕鬆跑上限）；越野只有約 9% 時間在 Stryd 驗證過的 3–8% 坡，功率只當參考。"
+TERRAIN_NOTE = N_("山路長天、越野輕鬆看心率（≤ 輕鬆跑上限）；越野只有約 9% 時間在 Stryd 驗證過的 3–8% 坡，功率只當參考。"
                 "爬坡重複（3–8% 坡）看功率（心率約慢 1 分鐘才反應，Hunt 2015；van Rassel 2026），心率當上限檢查。"
-                "長爬坡不設強制目標，能跑的坡參考功率、陡坡參考心率＋VAM。陡的技術下坡不看功率（Stryd），照感覺與安全。"
-                "")
+                "長爬坡不設強制目標，能跑的坡參考功率、陡坡參考心率＋VAM。陡的技術下坡不看功率（Stryd），照感覺與安全。")
 WORKOUT_TARGETS = [
     # (id, name, power lo, power hi, hr lo (×LTHR or "aet"), hr hi, primary, example, source)
-    ("recovery", "恢復跑", None, 0.75, None, 0.85, "心率", "20–40 分鐘，隔天有強度課時", "Palladino 1A–1B；Friel Z1"),
+    ("recovery", N_("恢復跑"), None, 0.75, None, 0.85, N_("心率"), N_("20–40 分鐘，隔天有強度課時"), N_("Palladino 1A–1B；Friel Z1")),
     # SP-378 (docs/research/power-zone-width.md, the user 2026-10-12): the easy run is the whole of
     # Zone 1 (65–80 % CP = Stryd Zone 1 = Palladino 1B + 1C), not 1C alone (75–80 %: a 10 W band that a
     # steady run's 30-s power, CV ≈ 9 %, stays in only ~27 % of the time); the long run 65–88 % (Z1–Z2)
-    ("z2", "輕鬆跑（Zone 1）", 0.65, 0.80, None, "aet", "心率",
-     "大部分的跑步；Zone 1 整段都算輕鬆，多數人落在 75–80% CP；心率不超過輕鬆跑上限",
-     "Palladino Zone 1（1B–1C）＝ Stryd Zone 1；Uphill Athlete AeT"),
-    ("long", "長跑（路跑）", 0.65, 0.88, None, "aet", "心率",
-     "60 分鐘以上；建議 75–88% CP，後段掉到 Zone 1 也沒關係；心率壓在輕鬆跑上限以下",
-     "Palladino Zone 1–2；Uphill Athlete"),
+    ("z2", N_("輕鬆跑（Zone 1）"), 0.65, 0.80, None, "aet", N_("心率"),
+     N_("大部分的跑步；Zone 1 整段都算輕鬆，多數人落在 75–80% CP；心率不超過輕鬆跑上限"),
+     N_("Palladino Zone 1（1B–1C）＝ Stryd Zone 1；Uphill Athlete AeT")),
+    ("long", N_("長跑（路跑）"), 0.65, 0.88, None, "aet", N_("心率"),
+     N_("60 分鐘以上；建議 75–88% CP，後段掉到 Zone 1 也沒關係；心率壓在輕鬆跑上限以下"),
+     N_("Palladino Zone 1–2；Uphill Athlete")),
     # primary = engine/target_policy.py (vo2max-gate-and-trail-metric.md §2.5: long trail days by HR)
-    ("trail", "山路長天 / 越野輕鬆", 0.75, 0.88, None, "aet", "心率",
-     "心率不超過輕鬆跑上限（可以走）；功率只當參考，陡坡、下坡不看功率",
-     "Uphill Athlete（AeT 心率）；越野只有約 9% 時間在 Stryd 驗證的 3–8% 坡（依活動資料統計）"),
-    ("climb", "長爬坡（自由練，建議值）", 0.88, 1.00, 0.90, 1.00, "建議",
-     "不設強制目標：能跑的坡參考功率，陡到要走的坡參考心率＋VAM（每小時爬升）；自己決定練法",
-     "功率 Palladino Z2–3B（% CP）、心率 Friel Z3–Z4；陡坡用心率＋VAM（推估）"),
-    ("downhill", "下坡練習", None, None, None, None, "體感",
-     "控制下降公尺數，練技術與步頻；不看功率也不看心率（離心負荷，量要慢慢加）",
-     "Uphill Athlete；下降量的上限是推估"),
-    ("hill", "爬坡重複", 0.95, 1.06, 0.95, 1.03, "功率",
-     "4–6×4 分鐘上坡，走或慢跑下來恢復；看 30 秒平均功率，心率只當參考（短坡上還沒升上來）",
-     "Palladino 3B–Z4（% CP）；心率延遲 Hunt 2015；坡度 > 8% 為推估"),
-    ("threshold", "閾值（Near threshold）", 0.95, 1.01, 0.95, 1.00, "功率", "3×10 分鐘 或 2×15 分鐘，休 2–3 分鐘", "Palladino 3B；Friel Z4"),
-    ("supra", "Supra threshold", 1.01, 1.06, 1.00, 1.03, "功率", "4–6×5 分鐘，休 2:45", "Palladino Z4；Friel Z5a"),
-    ("vo2", "VO2max", 1.06, 1.16, 1.03, 1.06, "功率", "5×3 分鐘，休 3 分鐘；FTP 紮實後、賽前 4–6 週", "Palladino Z5；Friel Z5b"),
+    ("trail", N_("山路長天 / 越野輕鬆"), 0.75, 0.88, None, "aet", N_("心率"),
+     N_("心率不超過輕鬆跑上限（可以走）；功率只當參考，陡坡、下坡不看功率"),
+     N_("Uphill Athlete（AeT 心率）；越野只有約 9% 時間在 Stryd 驗證的 3–8% 坡（依活動資料統計）")),
+    ("climb", N_("長爬坡（自由練，建議值）"), 0.88, 1.00, 0.90, 1.00, N_("建議"),
+     N_("不設強制目標：能跑的坡參考功率，陡到要走的坡參考心率＋VAM（每小時爬升）；自己決定練法"),
+     N_("功率 Palladino Z2–3B（% CP）、心率 Friel Z3–Z4；陡坡用心率＋VAM（推估）")),
+    ("downhill", N_("下坡練習"), None, None, None, None, N_("體感"),
+     N_("控制下降公尺數，練技術與步頻；不看功率也不看心率（離心負荷，量要慢慢加）"),
+     N_("Uphill Athlete；下降量的上限是推估")),
+    ("hill", N_("爬坡重複"), 0.95, 1.06, 0.95, 1.03, N_("功率"),
+     N_("4–6×4 分鐘上坡，走或慢跑下來恢復；看 30 秒平均功率，心率只當參考（短坡上還沒升上來）"),
+     N_("Palladino 3B–Z4（% CP）；心率延遲 Hunt 2015；坡度 > 8% 為推估")),
+    ("threshold", N_("閾值（Near threshold）"), 0.95, 1.01, 0.95, 1.00, N_("功率"), N_("3×10 分鐘 或 2×15 分鐘，休 2–3 分鐘"), N_("Palladino 3B；Friel Z4")),
+    ("supra", "Supra threshold", 1.01, 1.06, 1.00, 1.03, N_("功率"), N_("4–6×5 分鐘，休 2:45"), N_("Palladino Z4；Friel Z5a")),
+    ("vo2", "VO2max", 1.06, 1.16, 1.03, 1.06, N_("功率"), N_("5×3 分鐘，休 3 分鐘；FTP 紮實後、賽前 4–6 週"), N_("Palladino Z5；Friel Z5b")),
 ]
 
 
@@ -532,7 +546,7 @@ WORKOUT_TARGETS = [
 # below the ~3 bpm day-to-day HR variation (Lamberts & Lambert 2009).
 AET_PM_BORROWED = 16                 # Micheli 2025 LoA magnitude, borrowed (推估)
 AET_PM_FLOOR = 3                     # Lamberts & Lambert 2009: day-to-day HR 3 ± 1 bpm
-_PM_SRC = ("±16 bpm 借用 Micheli 2025（PeerJ 13:e19060）：CP 時的心率和 MLSS 心率的 95% 一致性界限"
+_PM_SRC = N_("±16 bpm 借用 Micheli 2025（PeerJ 13:e19060）：CP 時的心率和 MLSS 心率的 95% 一致性界限"
            " −15.8～+17.1 bpm。AeT 本身沒有驗證過的誤差，所以是推估")
 
 
@@ -544,13 +558,39 @@ def aet_uncertainty(kind: Optional[str], se: Optional[float] = None) -> Optional
         return None
     if kind == "regression" and se is not None and se > 0:
         n = max(AET_PM_FLOOR, int(round(2 * se)))
-        return {"pm": n, "tip": f"推估的誤差約 ±{n} bpm：多次穩定跑的飄移回歸，95% 範圍 ≈ 2 × 標準誤（{se:.1f}）；"
-                                f"至少 ±{AET_PM_FLOOR}（每天的心率本來就差約 3 bpm，Lamberts 2009）。"
-                                "單次飄移的標準誤可能被低估 2–3 倍（Golden Cheetah 驗證），實際可能更大。"
-                                "做一次 AeT 測試最準。"}
-    head = ("0.89 × LTHR 是 Friel 區間的慣例，不是量出來的 AeT。" if kind == "friel" else
-            "這是自動估算，不是測試。")
-    return {"pm": AET_PM_BORROWED, "tip": f"推估的誤差約 ±{AET_PM_BORROWED} bpm。{head}{_PM_SRC}。做一次 AeT 測試最準。"}
+        return {"pm": n, "tip": _("推估的誤差約 ±{n} bpm：多次穩定跑的飄移回歸，95% 範圍 ≈ 2 × 標準誤（{se:.1f}）；"
+                                  "至少 ±{floor}（每天的心率本來就差約 3 bpm，Lamberts 2009）。"
+                                  "單次飄移的標準誤可能被低估 2–3 倍（Golden Cheetah 驗證），實際可能更大。"
+                                  "做一次 AeT 測試最準。", n=n, se=se, floor=AET_PM_FLOOR)}
+    head = (_("0.89 × LTHR 是 Friel 區間的慣例，不是量出來的 AeT。") if kind == "friel" else
+            _("這是自動估算，不是測試。"))
+    return {"pm": AET_PM_BORROWED, "tip": _("推估的誤差約 ±{pm} bpm。{head}{src}。做一次 AeT 測試最準。",
+                                            pm=AET_PM_BORROWED, head=head, src=_(_PM_SRC))}
+
+
+AUTO_UNAPPLIED = N_("自動估算（尚未套用）")
+FRIEL_AET = N_("0.89 × LTHR（Friel Z2 上限，推估）")
+
+
+def _src_text(msgid: str, **params) -> str:
+    """A training_targets text in the source language (zh-TW: overview / the planner read these;
+    shown_targets gives them in the request's language)."""
+    from backend.i18n import DEFAULT_LOCALE, translate
+    return translate(msgid, DEFAULT_LOCALE, **params)
+
+
+def shown_targets(tt: dict) -> dict:
+    """training_targets' texts in the request's language, for a page (the 訓練目標 card): the rows'
+    name / primary / example / source, the sources and the terrain note (engine/stored_text)."""
+    from backend.engine import stored_text as ST
+    out = dict(tt)
+    for k in ("cp_source", "lthr_source", "aet_source", "terrain_note", "hr_zones", "power_zones"):
+        out[k] = ST.shown(tt.get(k))
+    if isinstance(tt.get("easy_cap"), dict):
+        out["easy_cap"] = {**tt["easy_cap"], "source": ST.shown(tt["easy_cap"].get("source"))}
+    out["rows"] = [{**r, **{k: ST.shown(r.get(k)) for k in ("name", "primary", "example", "source")}}
+                   for r in tt.get("rows") or []]
+    return out
 
 
 def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=None) -> dict:
@@ -574,10 +614,10 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
     # (zones-and-thresholds.md §3.4 change 1 — an LTHR that was an applied estimate shown as 「你的測試」)
     lr = threshold_row(ds.plan, "lthr", day_to_date(ref.day)) if ref is not None else None
     planned = lr is not None
-    lthr_src = lr["label"] if planned else ds.setting_label("runthr", "對照資料夾設定")
+    lthr_src = lr["label"] if planned else ds.setting_label("runthr", WKO5_SETTING)
     lthr_measured = bool(lr and lr["measured"])
     if not planned and hist and all(d == dt.date(1980, 1, 1) for d, _ in hist) and lthr_est:
-        lthr, lthr_src = float(lthr_est), "自動估算（尚未套用）"
+        lthr, lthr_src = float(lthr_est), AUTO_UNAPPLIED
     # SP-289: the LTHR prior (0.90 × max HR, hr_profile.lthr_prior) — the dataset's own (fitdataset
     # lthr_prior: in effect from the first run until a real LTHR), or, before any run, read here
     from backend.engine import hr_profile as HP
@@ -598,15 +638,15 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
     aet_measured = bool(ar and ar["measured"])
     if ar is not None:
         # the easy cap: a measured AeT; an applied estimate is used (the user approved it) but says so
-        aet, aet_src = ds.aethr(ref), ar["label"] + ("" if aet_measured else "（推估）")
+        aet, aet_src = ds.aethr(ref), ar["label"] if aet_measured else _src_text(N_("{label}（推估）"), label=ar["label"])
     elif aet_est:
-        aet, aet_src = float(aet_est), "自動估算（尚未套用）"
+        aet, aet_src = float(aet_est), AUTO_UNAPPLIED
     else:
-        aet, aet_src = (None if lthr is None else 0.89 * lthr), "0.89 × LTHR（Friel Z2 上限，推估）"
+        aet, aet_src = (None if lthr is None else 0.89 * lthr), FRIEL_AET
         if aet_below:
             # the AeT estimate failed: the highest HR of the runs that drifted < 5 % is a hint
             # that the easy cap may sit higher than 0.89 × LTHR (text only, the cap is unchanged)
-            aet_src += f"；參考：飄移 < 5% 的跑步最高心率 {aet_below:.0f} bpm"
+            aet_src = _src_text(N_("{src}；參考：飄移 < 5% 的跑步最高心率 {hr:.0f} bpm"), src=aet_src, hr=aet_below)
     # 課表心率區間 (engine/hr_profile.py, 設定): the workout HR targets in the chosen COROS model;
     # the WKO5 cross-check mode keeps the old Friel fractions
     hrz = None
@@ -627,7 +667,7 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
                      "power": [None if plo is None or not cp else plo * cp, None if phi is None or not cp else phi * cp],
                      "power_pct": [plo, phi], "hr": h})
     ci = threshold_info(ds, "cp", ref, end_day)
-    return {"cp": cp, "cp_source": ci.get("source") or ("對照資料夾的 mFTP" if ds.settings_from == "wko5"
+    return {"cp": cp, "cp_source": ci.get("source") or (MFTP_SRC if ds.settings_from == "wko5"
                                                         else ds.setting_label("runftp")),
             "cp_date": ci.get("date"), "terrain_note": TERRAIN_NOTE,
             "lthr": lthr, "lthr_source": lthr_src, "lthr_measured": lthr_measured,

@@ -10,6 +10,8 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from backend.i18n import M_, N_
+
 CP_DURATIONS = (180, 300, 420, 600, 720, 900, 1200)     # s, sampled from the envelope
 
 
@@ -40,19 +42,20 @@ def validity(points: Sequence[dict], envelope: bool = False) -> list[dict]:
     def add(cid, ok, level, text):
         out.append({"id": cid, "ok": bool(ok), "level": level, "text": text})
 
-    add("short", any(t <= 360 for t in ts), "error", "至少一個 ≤ 6:00 的努力")
-    add("long", any(t >= 900 for t in ts), "error", "至少一個 ≥ 15:00 的努力")
-    add("span", bool(ts) and max(ts) - min(ts) >= 360, "error", "最長與最短相差 ≥ 6 分鐘")
+    add("short", any(t <= 360 for t in ts), "error", M_("至少一個 ≤ 6:00 的努力"))
+    add("long", any(t >= 900 for t in ts), "error", M_("至少一個 ≥ 15:00 的努力"))
+    add("span", bool(ts) and max(ts) - min(ts) >= 360, "error", M_("最長與最短相差 ≥ 6 分鐘"))
     order = sorted(zip(ts, ps))
     add("falling", all(b[1] < a[1] for a, b in zip(order, order[1:])), "error",
-        "功率隨時間增加而遞減")
-    add("not_too_long", not ts or max(ts) <= 1800, "warn", "最長努力不超過 30 分鐘（再長會低估 CP）")
+        M_("功率隨時間增加而遞減"))
+    add("not_too_long", not ts or max(ts) <= 1800, "warn", M_("最長努力不超過 30 分鐘（再長會低估 CP）"))
     dates = sorted(p["date"] for p in points if p.get("date"))
     if dates:
         import datetime as dt
         span = (dt.date.fromisoformat(dates[-1][:10]) - dt.date.fromisoformat(dates[0][:10])).days
         add("dates", span <= 14, "warn" if envelope else "error",
-            f"所有努力在 14 天內（目前跨 {span} 天）" + ("；曲線包絡線必然跨多天" if envelope else ""))
+            M_("所有努力在 14 天內（目前跨 {span} 天）；曲線包絡線必然跨多天", span=span) if envelope
+            else M_("所有努力在 14 天內（目前跨 {span} 天）", span=span))
     return out
 
 
@@ -68,8 +71,9 @@ RWC_BANDS = {
     ("female", True, "kj"): (5.97, 6.65, 8.78, 9.46),
 }
 RATINGS = ("Too Low", "Low", "Medium", "High", "Too High")
+# rating_zh stays the Chinese word (the page shows it in zh-TW next to `rating`, which is English already)
 RATING_ZH = {"Too Low": "過低", "Low": "偏低", "Medium": "中等", "High": "偏高", "Too High": "過高"}
-RATING_NOTE = {"Too Low": "無氧容量過低 → CP 可能被高估", "Too High": "無氧容量過高 → CP 可能被低估"}
+RATING_NOTE = {"Too Low": N_("無氧容量過低 → CP 可能被高估"), "Too High": N_("無氧容量過高 → CP 可能被低估")}
 
 
 def _band(value: float, bounds) -> str:
@@ -88,7 +92,7 @@ def rwc_rating(w_prime_j: float, weight_kg: float, sex: str = "male", wind: bool
     main = r_kg or r_kj
     return {"j_per_kg": w_prime_j / weight_kg if weight_kg else None, "kj": w_prime_j / 1000.0,
             "rating": main, "rating_zh": RATING_ZH.get(main), "rating_kj": r_kj,
-            "note": RATING_NOTE.get(main), "sex": sex, "wind": bool(wind)}
+            "note": M_(RATING_NOTE[main]) if main in RATING_NOTE else None, "sex": sex, "wind": bool(wind)}
 
 
 def envelope_points(envelope: dict, durations=CP_DURATIONS) -> list[dict]:

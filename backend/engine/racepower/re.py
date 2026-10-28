@@ -14,17 +14,19 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from backend.i18n import N_
+
 FT_PER_M = 3.28084
 MI_PER_KM = 0.621371
 
 CVI_CATEGORIES = [      # (label, lower bound inclusive) — index = category number
-    ("下坡 Downhill", -25),
-    ("平路 Flat", 0),
-    ("微丘 Slightly Hilly", 26),
-    ("小丘 Somewhat Hilly", 36),
-    ("中丘 Moderately Hilly", 51),
-    ("多丘 Very Hilly", 76),
-    ("極多丘 Extremely Hilly", 101),
+    (N_("下坡 Downhill"), -25),
+    (N_("平路 Flat"), 0),
+    (N_("微丘 Slightly Hilly"), 26),
+    (N_("小丘 Somewhat Hilly"), 36),
+    (N_("中丘 Moderately Hilly"), 51),
+    (N_("多丘 Very Hilly"), 76),
+    (N_("極多丘 Extremely Hilly"), 101),
 ]
 
 

@@ -39,5 +39,42 @@ re ^(?:山路|越野)$
 re ^【草稿】$
 # SP-839: the units and punctuation engine/stored_text reads a stored zh-TW title by (its words are N_() msgids)
 file backend/engine/stored_text.py
+# SP-810: charts.html — the bundled views' names used as ids (CUSTOM_ORDER), and ECharts' zh-TW month-axis format
+re ^(?:我的訓練|周期化訓練)$
+re ^\{M\}月$
+# overview.WEEKDAYS: week_plan's long_weekday as data (projection reads it with .index), and the regexes that read
+# 「N×M 分」 / 「連續 M 分」 off a stored zh-TW title (session_tiz_min) # SP-810
+re ^一二三四五六日$
+re \\s\*分$
+# racepower: share.HEALTH_KEY (injury keys never leave the machine), share.REE_WORD (finds the fuel REE
+# warnings in a stored zh-TW text), trailhr.FUEL_YES / FUEL_NO (the user's own tags / titles)  # SP-838
+re ^injur\|pain\|傷病\|疼痛$
+re ^基礎代謝$
+re ^有補給 補給 吃膠 能量膠$
+re ^沒補給 無補給 不補給 沒吃 空腹$
+# suggestions.race_sim_rows: a stored session's title read as data (startswith 賽事模擬) # SP-810
+re ^賽事模擬$
+# workout_review: regexes that match the user's activity titles (a CP test, a race / time trial) # SP-810
+re ^\\bCP\\b\|測試$
+re ^計時\|\\bTT\\b\|
+# interval_eval.FLAG_TAG: the activity tag the 當作間歇判讀 button stores (data, the same in every language) # SP-810
+re ^當作間歇$
+# racepower (838 back-a): words matched against data, never shown — fuel.STOP_NAME_HINTS (a GPX waypoint's
+# name → an aid-station type), course.CAMP_WORDS (a waypoint that is a camp / hut), weather.parse_cwa's CWA
+# element names and the 主峰 stripped from a peak name, hike.is_yushan (a route's name). Not listed: 溫度 and
+# 玉山 (the same words are UI text elsewhere: wko5expr/render.py, racepower.html)  # SP-838
+re ^(?:醫護|大補|水站|自備|補給|檢查)$
+re ^(?:營地|山屋|營|山莊|避難)$
+re ^(?:露點溫度|相對濕度|平均溫度|平均露點溫度|平均相對濕度|最高溫度|最低溫度|降雨機率|主峰)$
+re ^南玉山$
+# SP-838: racepower.html's 玉山 2 日 preset fills the 地點 field with the peak's name as the peak list has it (data)
+re ^玉山$
+# SP-838: plan.html links to the 周期化訓練 view by its name (charts.html ?view=<name>)
+re ^周期化訓練$
+# SP-838: the threshold notes stored in plan.json (DB text, zh-TW source: api/plan.py writes them,
+# planning.threshold_method reads old rows by them); not shown on the season-plan page
+re ^設定頁手動輸入$
+re ^由活動資料自動估算$
+re ^\{…\} 自動估算$
 # SP-948: accounts/viewing's regexes over the redacted injury texts (they match 「傷病」 put in, and the 膝 of a label)
 re 傷病紀錄 #\\d|^傷病\(\?:|^\(\?=\[進

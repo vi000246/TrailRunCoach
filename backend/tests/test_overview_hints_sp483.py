@@ -82,7 +82,7 @@ def test_r15_the_easy_power_note_and_the_copied_indicator_line():
 def test_the_engine_gives_the_notes_their_src():
     src = (Path(__file__).resolve().parents[1] / "engine" / "overview.py").read_text("utf-8")
     assert '"src": "full_week", "text": _("剩下的每一天都排了東西' in src
-    assert '"src": "indicator", "text": f"{i.title}：{i.action}"' in src
+    assert '"src": "indicator", "text": _("{title}：{verdict}", title=i.title, verdict=i.action)' in src   # SP-810
     assert src.count('"src": "test_day"') == 2
     assert not re.search(r'notes\.append\(\{"level": "info", "text"', src)       # every week note has a src
 

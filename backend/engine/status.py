@@ -30,30 +30,31 @@ from backend.i18n import N_, _
 GOOD, WATCH, BAD, INFO, NA = "good", "watch", "bad", "info", "na"
 
 # ---- thresholds, each with its source --------------------------------------
-SRC_PALLADINO = "Palladino（訓練負荷圖的負荷與長期負荷週增量）"
-SRC_TP_TSB = ("Friel／TrainingPeaks（Simmons 2020）負荷平衡（Load balance）區間，換成長期負荷的 %（intervals.icu）："
+SRC_PALLADINO = N_("Palladino（訓練負荷圖的負荷與長期負荷週增量）")
+SRC_TP_TSB = N_("Friel／TrainingPeaks（Simmons 2020）負荷平衡（Load balance）區間，換成長期負荷的 %（intervals.icu）："
               "−30～−10% 有效訓練、< −30% 過度；A 賽 +10～+35%（Palladino +10～+20 的換算，推估）；長期負荷不到 30 以 30 計")
 # weekly volume step: > 20 % = the risk line (Nielsen et al. 2014 JOSPT 44:739, DOI 10.2519/jospt.2014.5164;
 # Damsted et al. 2019 JOSPT 49:230, DOI 10.2519/jospt.2019.8541 — peer-reviewed); 10 % = the coaches' mode and median
 # (COROS, Runna, Koop / CTS, UA, Fitzgerald, Gaudette …, SP-528 coach-consensus-sp518 A §1), 10–20 % hold, conservative.
 # The 「10 % 法則」 itself has no evidence (unsourced-rules.md §B2)
-SRC_VOLUME = ("週增量 > 20%：Nielsen 2014、Damsted 2019（同儕審查：增 20–30% 以上受傷風險升高；量的是跑步）；"
+SRC_VOLUME = N_("週增量 > 20%：Nielsen 2014、Damsted 2019（同儕審查：增 20–30% 以上受傷風險升高；量的是跑步）；"
               "10%：教練眾數（COROS、Runna、Koop／CTS、UA、Fitzgerald、Gaudette 等），10–20% 先維持（保守）；"
               "只算跑步時間、基準是前一週和前 4 週平均取大（SP-63）")
 SRC_UA = "Uphill Athlete"
-SRC_SEILER = "Seiler 2006 強度分配；Palladino 金字塔 70–90% 輕鬆"
+SRC_SEILER = N_("Seiler 2006 強度分配；Palladino 金字塔 70–90% 輕鬆")
 # 強度分配's floor (SP-528, coach-consensus-sp518 B §1): 75 % sits between the only stated floor, Campos 2022
 # (systematic review, ≥ 70 %), and the coaches' ≈ 80 % by time (80/20 Endurance, UA, CTS)
-SRC_LOW_SHARE = ("底線 75% 推估，介於 Campos 2022 系統性回顧（低強度 ≥ 70%）和 80/20 Endurance、Uphill Athlete、CTS"
+SRC_LOW_SHARE = N_("底線 75% 推估，介於 Campos 2022 系統性回顧（低強度 ≥ 70%）和 80/20 Endurance、Uphill Athlete、CTS"
                  "（依時間約 80%）之間；Seiler & Kjerland 2006 的 75／8／17 是堂數；Palladino 金字塔 70–90% 輕鬆")
-SRC_BOSQUET = "Bosquet 2007 減量統合分析"
-SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
-SRC_CHIANG = "江晏慶（越野跑周期化訓練）"
-SRC_NOTES = "教練常見做法（推估）"
+SRC_BOSQUET = N_("Bosquet 2007 減量統合分析")
+SRC_KOOP = N_("Koop《Training Essentials for Ultrarunning》")
+SRC_CHIANG = N_("江晏慶（越野跑周期化訓練）")
+SRC_NOTES = N_("教練常見做法（推估）")
 
+# SP-810: every SRC_* is a msgid, shown through _() where an indicator carries it
 # CTL ramp: the relative watch / block lines of engine/load_guard.py (SP-63; Friel 5–8, 10 the ceiling,
 # https://joefrieltraining.com/the-ctl-ramp-rate/ — as a share of CTL, 推估). Palladino's +1–3 long-term (display)
-SRC_RAMP_FRIEL = ("Friel：長期負荷週增量（Chronic load ramp）每週 5–8 適合多數人、10 是上限（教練），換算成長期負荷的 10%／15%（推估）；"
+SRC_RAMP_FRIEL = N_("Friel：長期負荷週增量（Chronic load ramp）每週 5–8 適合多數人、10 是上限（教練），換算成長期負荷的 10%／15%（推估）；"
                   "Palladino：每週 +1–3 可長期維持")
 # TSB lines: shares of CTL, one copy in load_guard (SP-670; was A +10～+20, −30～−10, −30, +25 points)
 TSB_A = LG.TSB_RACE["A"]                                     # A race, taper end: +10～+35 %
@@ -64,7 +65,7 @@ LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # by time, 推估 (
                                                              # ≥ 70 % and 80/20 / UA / CTS ≈ 80 %); Palladino
 TAPER_BAND = (0.40, 0.59)                                   # Bosquet: -41…-60%
 DRIFT_GOOD, DRIFT_WATCH = 0.05, 0.10                         # Friel (<5%), 徐國峰 (90' E <10%)
-SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%）；徐國峰（90 分鐘 E 跑 < 10%）"
+SRC_FRIEL = N_("Friel（TrainingPeaks：Aerobic decoupling < 5%）；徐國峰（90 分鐘 E 跑 < 10%）")
 EF_TREND = 0.02                                             # ±2% = meaningful (heuristic)
 VAM_TREND = 0.03
 SPECIFIC_SHARE = 0.70                                       # 江晏慶: 專項期練到比賽的七成
@@ -157,7 +158,7 @@ class Status:
             try:
                 ps = PST.current(self.ds, self.today, self.plan)
             except Exception:                   # noqa: BLE001 — a dataset without runs: as before (a meter)
-                ps = PST.state(self.today, None, source="stryd", how=PST.N_("預設"))
+                ps = PST.state(self.today, None, source="stryd", how=N_("預設"))
             self._pstate = ps
         return ps
 
@@ -264,7 +265,7 @@ class Status:
             try:
                 ind = fn()
             except Exception as e:  # one broken indicator must not hide the rest
-                ind = Indicator(fn.__name__[2:], fn.__name__[2:], NA, "–", f"計算失敗：{type(e).__name__}: {e}")
+                ind = Indicator(fn.__name__[2:], fn.__name__[2:], NA, "–", _("計算失敗：{err}", err=f"{type(e).__name__}: {e}"))
             if ind is not None:
                 self.indicators.append(ind)
         self._recommend()
@@ -297,10 +298,10 @@ class Status:
                 # SP-569: no 熱適應課 in the plan any more — the race-day heat reminder only
                 action = _("{race}（{date}）預估是熱天，比賽日熱適應預估 {s}：比賽當天配速放慢、多補水；"
                            "賽事計算機已把熱影響算進去", race=e.name, date=e.date, s=f"{pj['center']:.0%}")
-        verdict = (f"近 14 天有 {cur['days_14']} 天熱暴露" +
-                   (f"，最後一次 {cur['since_last_d']} 天前" if cur["since_last_d"] is not None else "，沒有熱暴露紀錄"))
+        verdict = (_("近 14 天有 {n} 天熱暴露，最後一次 {d} 天前", n=cur["days_14"], d=cur["since_last_d"])
+                   if cur["since_last_d"] is not None else _("近 14 天有 {n} 天熱暴露，沒有熱暴露紀錄", n=cur["days_14"]))
         if meta.get("missing"):
-            verdict = "還沒有每筆活動的歷史天氣（路線頁重建一次、含天氣）：S 當作 0"
+            verdict = _("還沒有每筆活動的歷史天氣（路線頁重建一次、含天氣）：S 當作 0")
             level = WATCH if race_low else INFO
         # HRC observation (§2.3): does the HR cost of heat fall as S rises?
         hrc = None
@@ -313,20 +314,21 @@ class Status:
                             and s > s28 + 0.05 and tr["recent"] >= tr["before"])
                 hrc = {**tr, "noise_bpm": rows["noise_bpm"], "rows": rows["rows"][-40:], "disagrees": disagree}
                 if disagree:
-                    verdict += "；觀測不支持模型（S 在升、熱天心率成本沒降）"
+                    verdict += _("；觀測不支持模型（S 在升、熱天心率成本沒降）")
         except Exception:                   # noqa: BLE001
             hrc = None
         spark = [[d.isoformat(), round(v, 3)] for d, v in cur["series"][-120:]]
         doses = [[d.isoformat(), round(v, 2)] for d, v in sorted(cur["doses"].items())
                  if d >= self.today - dt.timedelta(days=119)]
-        return Indicator("heat", _("熱適應"), level, f"{s:.0%}（{lv['label']}）", verdict,
-                         f"每天 Hadley ≥ {HT.HOT_HADLEY:.0f} 的移動分鐘（130–150 部分計入），≥ {HT.MIN_DOSE_MIN:.0f} 分 = 滿劑量；"
-                         f"有暴露 S += {HT.K_IN:.3f}·劑量·(1 − S)，沒有 S × (1 − {HT.DECAY})（Daanen 2018 每天 2.3–2.6 %）。"
-                         "S 的模型是推估；你的心率資料目前不支持「夏末熱懲罰比初夏小」",
-                         action, source="Pandolf 1998；Racinais 2015 共識；Daanen 2018；模型 [推估]", value=s,
+        return Indicator("heat", _("熱適應"), level, _("{s}（{label}）", s=f"{s:.0%}", label=_(lv["label"])), verdict,
+                         _("每天 Hadley ≥ {h} 的移動分鐘（130–150 部分計入），≥ {m} 分 = 滿劑量；"
+                           "有暴露 S += {k}·劑量·(1 − S)，沒有 S × (1 − {d})（Daanen 2018 每天 2.3–2.6 %）。"
+                           "S 的模型是推估；你的心率資料目前不支持「夏末熱懲罰比初夏小」",
+                           h=f"{HT.HOT_HADLEY:.0f}", m=f"{HT.MIN_DOSE_MIN:.0f}", k=f"{HT.K_IN:.3f}", d=HT.DECAY),
+                         action, source=_("Pandolf 1998；Racinais 2015 共識；Daanen 2018；模型 [推估]"), value=s,
                          spark=spark,
                          extra={"s_race": s_race, "hrc": hrc, "a": HT.A_RECOVER, "a_range": list(HT.A_RANGE), "doses": doses,
-                                "badge": "推估", "source": meta.get("attribution"), "passive": passive[-20:],
+                                "badge": _("推估"), "source": meta.get("attribution"), "passive": passive[-20:],
                                 "hot_race": ({"name": hr["event"].name, "date": hr["event"].date,
                                               "source": hr["source"]} if hr else None)})
 
@@ -336,8 +338,8 @@ class Status:
         nxt = next((e for e in self.plan.events if e.id == g["next_a"]), None)
         if p is None:
             return Indicator("phase", _("周期"), INFO, _("未設定"),
-                             "還沒有目標賽事，先當作基礎期來看",
-                             "到「賽事周期」頁加一場 A 賽事，周期會自動排出來", source=SRC_UA)
+                             _("還沒有目標賽事，先當作基礎期來看"),
+                             _("到「賽事周期」頁加一場 A 賽事，周期會自動排出來"), source=SRC_UA)
         left = (dt.date.fromisoformat(p.end) - self.today).days
         txt = phase_label(p, self.plan.events)        # an A 百岳 trip's days: 行程 (SP-504 R2)
         if getattr(p, "light", False):
@@ -353,10 +355,11 @@ class Status:
                              extra={"kind": p.kind, "maintain": True, "maintain_from": p.maintain_from,
                                     "days_left": left, "next_a": None, "days_to_next_a": g["days_to_next_a"]})
         if nxt:
-            why = f"{p.start} ～ {p.end}，還有 {left} 天；下一場 A 賽事「{nxt.name}」倒數 {g['days_to_next_a']} 天"
+            why = _("{a} ～ {b}，還有 {left} 天；下一場 A 賽事「{name}」倒數 {n} 天", a=p.start, b=p.end, left=left,
+                    name=nxt.name, n=g["days_to_next_a"])
         else:
-            why = "沒有接下來的 A 賽事，預設為基礎期；到「賽事周期」頁加一場，周期會自動排出來"
-        return Indicator("phase", _("周期"), INFO, txt, PHASE_GOAL[p.kind], why,
+            why = _("沒有接下來的 A 賽事，預設為基礎期；到「賽事周期」頁加一場，周期會自動排出來")
+        return Indicator("phase", _("周期"), INFO, txt, _(PHASE_GOAL[p.kind]), why,
                          extra={"kind": p.kind, "days_left": left, "next_a": None if not nxt else nxt.name,
                                 "days_to_next_a": g["days_to_next_a"]})
 
@@ -483,7 +486,7 @@ class Status:
                 lvl, v, act = WATCH, _("負荷平衡（Load balance）偏高，訓練量不足以進步"), _("把每週量加回來（每週 ≤ +10%）")
             else:
                 lvl, v, act = WATCH, _("負荷平衡（Load balance）> 長期負荷的 +35%，體能在流失"), _("恢復規律訓練")
-        return Indicator("form", _("負荷平衡（Load balance）"), lvl, txt, v, why, act, SRC_TP_TSB, now, spark,
+        return Indicator("form", _("負荷平衡（Load balance）"), lvl, txt, v, why, act, _(SRC_TP_TSB), now, spark,
                          {"share": sh, "ctl": c_prev, "zone": zone})
 
     def _planned_off_days(self, lo: Optional[int] = None, hi: Optional[int] = None) -> list[int]:
@@ -542,41 +545,46 @@ class Status:
                 n = brk[1] - brk[0] + 1
                 k = brk[2]
                 own = _("，另 {k} 天是自己排的休息（不排課日期／休息日／沒勾的可練日）", k=k) if k else ""
-                exempt = (f"上週跑步時間比基準多 {step * 100:+.0f}%，但前一週非計畫停跑 {n - k} 天{own}"
-                          f"（< {MIN_BREAK} 天、不進恢復期）把基準拉低了：這週不算增幅（推估）")
+                exempt = _("上週跑步時間比基準多 {step}%，但前一週非計畫停跑 {n} 天{own}"
+                           "（< {min} 天、不進恢復期）把基準拉低了：這週不算增幅（推估）",
+                           step=f"{step * 100:+.0f}", n=n - k, own=own, min=MIN_BREAK)
         base6 = _mean([h for _, h in wk[-8:-2]]) or 0
         txt = f"{last:.1f} h"
-        why = f"上週 {last:.1f} h，本週到目前 {this:.1f} h，前 4 週平均 {avg4:.1f} h"
+        why = _("上週 {last:.1f} h，本週到目前 {this:.1f} h，前 4 週平均 {avg4:.1f} h", last=last, this=this, avg4=avg4)
         if run_base is not None:
-            why += f"；跑步上週 {run_last:.1f} h，基準 {run_base:.1f} h（前一週、前 4 週平均取大{skip_note}）"
+            why += _("；跑步上週 {last:.1f} h，基準 {base:.1f} h（前一週、前 4 週平均取大{skip}）", last=run_last, base=run_base,
+                     skip=skip_note)
         k = self.kind
         if k in ("taper",):
             lo, hi = base6 * TAPER_BAND[0], base6 * TAPER_BAND[1]
-            why += f"；減量帶 {lo:.1f}–{hi:.1f} h（平常 {base6:.1f} h 的 40–59%）"
+            why += _("；減量帶 {lo:.1f}–{hi:.1f} h（平常 {base:.1f} h 的 40–59%）", lo=lo, hi=hi, base=base6)
             if lo <= last <= hi:
-                lvl, v, act = GOOD, "上週落在減量帶內", ""
+                lvl, v, act = GOOD, _("上週落在減量帶內"), ""
             elif last > hi:
-                lvl, v, act = WATCH, "減得不夠", f"本週壓到 {lo:.1f}–{hi:.1f} h，強度和次數維持"
+                lvl, v, act = WATCH, _("減得不夠"), _("本週壓到 {lo:.1f}–{hi:.1f} h，強度和次數維持", lo=lo, hi=hi)
             else:
-                lvl, v, act = WATCH, "減太多，體能會流失", f"本週回到 {lo:.1f}–{hi:.1f} h"
+                lvl, v, act = WATCH, _("減太多，體能會流失"), _("本週回到 {lo:.1f}–{hi:.1f} h", lo=lo, hi=hi)
         elif k in ("recovery", "transition"):
-            lvl, v, act = (GOOD, "量降下來了", "") if last <= base6 * 0.7 else (WATCH, "恢復期量還太多", "本週再降")
+            lvl, v, act = (GOOD, _("量降下來了"), "") if last <= base6 * 0.7 else (WATCH, _("恢復期量還太多"), _("本週再降"))
         elif k == "rebuild":
             # 回量期 (SP-98): the week plan steps it back up (50 → 75 % of the pre-race level)
-            lvl, v, act = GOOD, "回量期：量照計畫慢慢加回來", ""
+            lvl, v, act = GOOD, _("回量期：量照計畫慢慢加回來"), ""
         else:
+            stp = None if step is None else f"{step * 100:+.0f}"
             if exempt:
                 lvl, v, act = GOOD, exempt, ""
             elif step is not None and step > LG.STEP_BLOCK:
-                lvl, v, act = (BAD, f"上週跑步時間比基準多 {step * 100:+.0f}%（> 20%：Nielsen 2014、Damsted 2019 的受傷風險線）",
-                               "本週維持上週的量，不要再加")
+                lvl, v, act = (BAD, _("上週跑步時間比基準多 {step}%（> 20%：Nielsen 2014、Damsted 2019 的受傷風險線）", step=stp),
+                               _("本週維持上週的量，不要再加"))
             elif step is not None and step > LG.STEP_HOLD:
-                lvl, v, act = WATCH, f"上週跑步時間比基準多 {step * 100:+.0f}%（10–20%：先維持；10% 是教練眾數）", "本週維持，下週再加"
+                lvl, v, act = (WATCH, _("上週跑步時間比基準多 {step}%（10–20%：先維持；10% 是教練眾數）", step=stp),
+                               _("本週維持，下週再加"))
             elif last < avg4 * 0.6 and avg4 > 1:
-                lvl, v, act = WATCH, f"上週只有前 4 週平均的 {last / avg4 * 100:.0f}%", "如果不是刻意恢復，本週補回來"
+                lvl, v, act = (WATCH, _("上週只有前 4 週平均的 {p}%", p=f"{last / avg4 * 100:.0f}"),
+                               _("如果不是刻意恢復，本週補回來"))
             else:
-                lvl, v, act = GOOD, "量穩定" if step is None or abs(step) < 0.1 else f"跑步週增幅 {step * 100:+.0f}%，在範圍內", ""
-        return Indicator("volume", _("每週時數"), lvl, txt, v, why, act, SRC_VOLUME if k not in ("taper",) else SRC_BOSQUET,
+                lvl, v, act = GOOD, _("量穩定") if step is None or abs(step) < 0.1 else _("跑步週增幅 {step}%，在範圍內", step=stp), ""
+        return Indicator("volume", _("每週時數"), lvl, txt, v, why, act, _(SRC_VOLUME if k not in ("taper",) else SRC_BOSQUET),
                          last, spark, {"this_week": this, "last_week": last, "avg4": avg4, "step": step,
                                        "run_last_week": run_last, "run_base": run_base, "step_exempt": exempt})
 
@@ -586,7 +594,7 @@ class Status:
         hi = self.ws("athleterange(today-27, today, sum(if(heartrate >= lthr, deltatime)))")
         t_all = sum(tot.values())
         if t_all < 3600:
-            return Indicator("intensity", _("強度分配"), NA, "–", "最近 4 週沒有心率資料")
+            return Indicator("intensity", _("強度分配"), NA, "–", _("最近 4 週沒有心率資料"))
         share = sum(low.values()) / t_all
         hi_h = sum(hi.values()) / 3600
         # power view for runs (Palladino 3-zone: <80% CP low, ≥95% high)
@@ -601,21 +609,21 @@ class Status:
         if pshare is not None and not self.power_state()["power"]:
             pshare = None       # SP-950 ② / ③: the raw (wrist) power against an old CP blocks nothing
         txt = _pct(share)
-        why = f"4 週：低強度（< AeT）{_pct(share)}，高強度（≥ LTHR）{hi_h:.1f} h"
+        why = _("4 週：低強度（< AeT）{low}，高強度（≥ LTHR）{hi:.1f} h", low=_pct(share), hi=hi_h)
         if pshare is not None:
-            why += f"；跑步依功率 < 80% CP 佔 {_pct(pshare)}"
+            why += _("；跑步依功率 < 80% CP 佔 {p}", p=_pct(pshare))
         k = self.kind
         if share >= LOW_SHARE_GOOD:
-            lvl, v, act = GOOD, "低強度佔比過底線（底線 75%、目標 80%，基礎期目標 ≥ 90%）", ""
+            lvl, v, act = GOOD, N_("低強度佔比過底線（底線 75%、目標 80%，基礎期目標 ≥ 90%）"), ""
         elif share >= LOW_SHARE_WATCH:
-            lvl, v, act = WATCH, "輕鬆跑有點太快", "把輕鬆跑心率壓在 AeT 以下（{aet} bpm）"
+            lvl, v, act = WATCH, N_("輕鬆跑有點太快"), N_("把輕鬆跑心率壓在 AeT 以下（{aet} bpm）")
         else:
-            lvl, v, act = BAD, "太多時間在中強度（灰色地帶）", "接下來兩週輕鬆跑全部壓在 AeT 以下（{aet} bpm），強度課每週最多一次"
+            lvl, v, act = BAD, N_("太多時間在中強度（灰色地帶）"), N_("接下來兩週輕鬆跑全部壓在 AeT 以下（{aet} bpm），強度課每週最多一次")
         if k == "taper" and hi_h <= 0.05:
-            lvl, v, act = WATCH, "減量期高強度歸零了", "保留一次短的強度課（例：4×3 分鐘 @ 98–102% CP）"
+            lvl, v, act = WATCH, N_("減量期高強度歸零了"), N_("保留一次短的強度課（例：4×3 分鐘 @ 98–102% CP）")
         aet = self._aet_now()
-        act = act.format(aet=f"{aet:.0f}" if aet else "AeT")
-        return Indicator("intensity", _("強度分配"), lvl, txt, v, why, act, SRC_LOW_SHARE, share,
+        v, act = _(v), (_(act, aet=f"{aet:.0f}" if aet else "AeT") if act else "")
+        return Indicator("intensity", _("強度分配"), lvl, txt, v, why, act, _(SRC_LOW_SHARE), share,
                          extra={"low_share": share, "high_hours": hi_h, "power_low_share": pshare})
 
     def _aet_now(self) -> Optional[float]:
@@ -641,20 +649,20 @@ class Status:
         recent = [v for d, v in pts if d >= self.tday - 41]
         before = [v for d, v in pts if self.tday - 181 <= d < self.tday - 41]
         if len(recent) < 3 or len(before) < 3:
-            return Indicator("efficiency", _("有氧效率 EF"), NA, f"{len(recent)} 次",
-                             "輕鬆路跑不夠多（6 週內要 ≥ 3 次、前面也要 ≥ 3 次才能比）",
-                             "EF = 每下心跳換到的速度，只取心率 ≤ AeT 的路跑", spark=spark, source=SRC_UA)
+            return Indicator("efficiency", _("有氧效率 EF"), NA, _("{n} 次", n=len(recent)),
+                             _("輕鬆路跑不夠多（6 週內要 ≥ 3 次、前面也要 ≥ 3 次才能比）"),
+                             _("EF = 每下心跳換到的速度，只取心率 ≤ AeT 的路跑"), spark=spark, source=SRC_UA)
         r, b = _median(recent), _median(before)
         chg = r / b - 1
         txt = f"{r:.2f}"
-        why = f"最近 6 週中位數 {r:.2f}，之前 {b:.2f}（{chg * 100:+.1f}%）"
+        why = _("最近 6 週中位數 {r:.2f}，之前 {b:.2f}（{c}%）", r=r, b=b, c=f"{chg * 100:+.1f}")
         if chg >= EF_TREND:
-            lvl, v, act = GOOD, "同樣心率跑得更快：有氧引擎在進步", ""
+            lvl, v, act = GOOD, _("同樣心率跑得更快：有氧引擎在進步"), ""
         elif chg <= -EF_TREND:
-            lvl, v, act = WATCH, "同樣心率變慢了", "先排除天氣／疲勞；如果持續 4 週以上，增加輕鬆跑的量和長度"
+            lvl, v, act = WATCH, _("同樣心率變慢了"), _("先排除天氣／疲勞；如果持續 4 週以上，增加輕鬆跑的量和長度")
         else:
-            lvl, v, act = (WATCH if self.kind == "base" else INFO), "持平", \
-                ("基礎期 EF 沒動：拉長輕鬆跑（60–90 分鐘）並確認強度真的低" if self.kind == "base" else "")
+            lvl, v, act = (WATCH if self.kind == "base" else INFO), _("持平"), \
+                (_("基礎期 EF 沒動：拉長輕鬆跑（60–90 分鐘）並確認強度真的低") if self.kind == "base" else "")
         return Indicator("efficiency", _("有氧效率 EF"), lvl, txt, v, why, act, SRC_UA, r, spark,
                          {"recent": r, "before": b, "change": chg, "n": len(pts)})
 
@@ -682,9 +690,9 @@ class Status:
             by_band.setdefault(p.get("band") or "none", []).append(p)
         band = DA.pick_band(all_fair)
         fair = by_band.get(band, []) if band else []
-        bands = {b: {"n": len(v), "agg": DA.aggregate(v), "label": WR.TEMP_BAND_LABEL.get(b, b)}
+        bands = {b: {"n": len(v), "agg": DA.aggregate(v), "label": _(WR.TEMP_BAND_LABEL.get(b, b))}
                  for b, v in by_band.items()}
-        chip = "🌡 " + WR.TEMP_BAND_LABEL.get(band, "溫度不明") if band else ""
+        chip = "🌡 " + _(WR.TEMP_BAND_LABEL.get(band, N_("溫度不明"))) if band else ""
         heat = WR.is_heat(band)
         n_ref = sum(1 for p in fair if p.get("tier") == "ref")
         spark = [[p["date"], round(p["drift"], 4)] for p in fair]
@@ -692,20 +700,20 @@ class Status:
         # plain wording (owner 2026-10-02, the drift_bars chart's style): 「穩定 · 3.2%」, a plain caveat,
         # the method (mean ± SE, median, the rules) only in extra["tip"] (the card's ?), one line at the end
         ref_extra = {"ref": n_ref, "test": len(fair) - n_ref, "ref_label": _(WR.REF_LABEL), "ref_tip": _(WR.REF_TIP),
-                     "band": band, "band_label": WR.TEMP_BAND_LABEL.get(band) if band else None, "chip": chip,
+                     "band": band, "band_label": _(WR.TEMP_BAND_LABEL.get(band)) if band else None, "chip": chip,
                      "heat": heat, "bands": bands, "band_tip": _(WR.HEAT_TIP)}
         rules = _("只算暖身後還有 30 分鐘以上、平路、沒有停、配速穩、心率在 AeT 附近以下的輕鬆路跑，"
                   "而且只和同樣溫度的跑步比。")
         agg = DA.aggregate(fair)
         if len(fair) < DA.AGG_MIN:
-            other = (_("；分溫度區：{bands}", bands="、".join(f"{WR.TEMP_BAND_LABEL.get(b, b)} {x['n']} 次"
-                                                           for b, x in bands.items()))
+            other = (_("；分溫度區：{bands}", bands=_("、").join(_("{band} {n} 次", band=_(WR.TEMP_BAND_LABEL.get(b, b)), n=x["n"])
+                                                              for b, x in bands.items()))
                      if len(bands) > 1 else "")
             tip = _("方法：前 10 分鐘暖身不算、回程市區段當緩和；有坡、停頓、跑走、功率起伏（VI > 1.04）、"
                                    "前後半功率差 > 5%、快速結尾的不採用；溫度分 < 25／25–28／> 28 °C（推估）。")
             return Indicator("drift", _("心率飄移"), NA, "–",
                              _("8 週內同樣溫度、可以判讀的輕鬆路跑不到 2 次（{n} 次符合條件{other}）", n=len(pts), other=other),
-                             rules, "", SRC_FRIEL, spark=spark,
+                             rules, "", _(SRC_FRIEL), spark=spark,
                              extra={"fair": len(fair), "median": None, "agg": agg, "tip": tip, **ref_extra})
         med = _median([p["drift"] for p in fair])
         mean = agg["mean"]
@@ -713,11 +721,11 @@ class Status:
         txt = WR.drift_plain(mean)
         caveat = (_("都是比較短的跑步，只當參考") if n_ref == len(fair) else
                   _("其中 {n} 次比較短，只當參考", n=n_ref) if n_ref else "")
-        others = [f"{x['label']} {x['n']} 次" for b, x in bands.items() if b != band]
+        others = [_("{band} {n} 次", band=_(x["label"]), n=x["n"]) for b, x in bands.items() if b != band]
         why = (_("最近 {n} 次輕鬆路跑（{chip}）的平均；一次跑步會有誤差，所以看平均", n=agg["n"], chip=chip)
                + (_("；{c}", c=caveat) if caveat else "")
-               + (_("；其他溫度另外算（{o}）", o="、".join(others)) if others else "")
-               + (f"；{WR.HEAT_NOTE}" if heat else "") + f"；{note}")
+               + (_("；其他溫度另外算（{o}）", o=_("、").join(others)) if others else "")
+               + (_("；") + _(WR.HEAT_NOTE) if heat else "") + _("；") + note)
         tip = (rules + "\n" + _("方法：8 週內 {k} 次、取最近 {n} 次加權平均 {agg}，中位數 {med}；"
                                "速度÷心率（Pa:HR）前後半比較（Friel）。", k=len(fair), n=agg["n"], agg=DA.text(agg),
                                med=_pct(med, 1)))
@@ -738,7 +746,7 @@ class Status:
         elif lvl == BAD and heat:
             lvl, act = INFO, ""
             v = _("飄很多，但天熱本來就會偏高，只當參考：涼一點的日子再看")
-        return Indicator("drift", _("心率飄移"), lvl, txt, v, why, act, SRC_FRIEL, med, spark,
+        return Indicator("drift", _("心率飄移"), lvl, txt, v, why, act, _(SRC_FRIEL), med, spark,
                          {"fair": len(fair), "median": _median([p["drift"] for p in fair]), "agg": agg,
                           "verdict_level": word_lvl, "tip": tip, **ref_extra})
 
@@ -762,20 +770,20 @@ class Status:
         recent = [v for d, v in pts if d >= self.tday - 55]
         before = [v for d, v in pts if d < self.tday - 55]
         if len(recent) < 2 or len(before) < 2:
-            return Indicator("climb", _("爬坡速度 VAM"), NA, f"{len(recent)} 次",
-                             "8 週內爬升 > 200 m 的越野／登山不到 2 次", spark=spark, source=SRC_KOOP)
+            return Indicator("climb", _("爬坡速度 VAM"), NA, _("{n} 次", n=len(recent)),
+                             _("8 週內爬升 > 200 m 的越野／登山不到 2 次"), spark=spark, source=_(SRC_KOOP))
         r, b = _mean(recent), _mean(before)
         chg = r / b - 1
         txt = f"{r:.0f} m/h"
-        why = f"最近 8 週平均 {r:.0f} m/h（{len(recent)} 次），之前 {b:.0f}（{chg * 100:+.0f}%）"
+        why = _("最近 8 週平均 {r:.0f} m/h（{n} 次），之前 {b:.0f}（{c}%）", r=r, n=len(recent), b=b, c=f"{chg * 100:+.0f}")
         if chg >= VAM_TREND:
-            lvl, v, act = GOOD, "爬得比之前快", ""
+            lvl, v, act = GOOD, _("爬得比之前快"), ""
         elif chg <= -VAM_TREND:
-            lvl, v, act = (BAD if self.kind == "specific" else WATCH), "爬坡變慢", \
-                "每週一次山路長跑或爬坡課（VAM 不是越高越好，和心率一起看）"
+            lvl, v, act = (BAD if self.kind == "specific" else WATCH), _("爬坡變慢"), \
+                _("每週一次山路長跑或爬坡課（VAM 不是越高越好，和心率一起看）")
         else:
-            lvl, v, act = INFO, "持平", ""
-        return Indicator("climb", _("爬坡速度 VAM"), lvl, txt, v, why, act, SRC_KOOP, r, spark)
+            lvl, v, act = INFO, _("持平"), ""
+        return Indicator("climb", _("爬坡速度 VAM"), lvl, txt, v, why, act, _(SRC_KOOP), r, spark)
 
     def i_long(self) -> Indicator:
         ws = [w for w in self.since(28) if self.mountain(w) or self.is_road(w)]
@@ -788,25 +796,28 @@ class Status:
         g = self.goals["targets"].get("est_hours")
         txt = _hms(longest)
         if longest is None:
-            return Indicator("long", _("最長單次"), NA, "–", "4 週內沒有跑步／登山")
+            return Indicator("long", _("最長單次"), NA, "–", _("4 週內沒有跑步／登山"))
         if g:
             ratio = longest / (g["value"] * 3600)
-            why = f"4 週內最長 {_hms(longest)}（{best.sport_type}），目標賽事「{g['event']}」預估 {g['value']:.1f} h → {ratio * 100:.0f}%"
+            why = _("4 週內最長 {t}（{sport}），目標賽事「{event}」預估 {h:.1f} h → {p}%", t=_hms(longest), sport=best.sport_type,
+                    event=g["event"], h=g["value"], p=f"{ratio * 100:.0f}")
+            h7 = g["value"] * SPECIFIC_SHARE
             if self.kind == "specific":
                 if ratio >= SPECIFIC_SHARE:
-                    lvl, v, act = GOOD, "最長訓練已到比賽的七成以上", ""
+                    lvl, v, act = GOOD, _("最長訓練已到比賽的七成以上"), ""
                 elif ratio >= 0.5:
-                    lvl, v, act = WATCH, "最長訓練還不到比賽的七成", f"2 週內安排一次 {g['value'] * SPECIFIC_SHARE:.1f} h 的長天（慢、可以走）"
+                    lvl, v, act = WATCH, _("最長訓練還不到比賽的七成"), _("2 週內安排一次 {h:.1f} h 的長天（慢、可以走）", h=h7)
                 else:
-                    lvl, v, act = BAD, "最長訓練離比賽太遠", f"接下來每 2 週一次長天，逐步拉到 {g['value'] * SPECIFIC_SHARE:.1f} h"
+                    lvl, v, act = BAD, _("最長訓練離比賽太遠"), _("接下來每 2 週一次長天，逐步拉到 {h:.1f} h", h=h7)
             elif self.kind == "taper":
-                lvl, v, act = (GOOD, "減量期不需要長天", "") if ratio < 0.6 else (WATCH, "減量期還在做長天", "減量期長跑最多 90 分")
+                lvl, v, act = (GOOD, _("減量期不需要長天"), "") if ratio < 0.6 else \
+                    (WATCH, _("減量期還在做長天"), _("減量期長跑最多 90 分"))
             else:
-                lvl, v, act = INFO, "基礎期慢慢加長就好", ""
+                lvl, v, act = INFO, _("基礎期慢慢加長就好"), ""
         else:
-            why = f"4 週內最長 {_hms(longest)}，一年內最長 {_hms(ymax)}"
-            lvl, v, act = INFO, "沒有目標賽事，只看趨勢", "到「賽事周期」頁填目標賽事的預估時間"
-        src, extra = SRC_CHIANG, {}
+            why = _("4 週內最長 {t}，一年內最長 {y}", t=_hms(longest), y=_hms(ymax))
+            lvl, v, act = INFO, _("沒有目標賽事，只看趨勢"), _("到「賽事周期」頁填目標賽事的預估時間")
+        src, extra = _(SRC_CHIANG), {}
         hits = self._long_spikes()
         if hits:
             # SP-66: a run of the last week > +10 % over the longest of the 30 days before it — a 提醒
@@ -815,10 +826,10 @@ class Status:
             lvl = BAD if lvl == BAD else WATCH
             v = _("單次跑太長：比前 {d} 天最長一次多 {x:.0%}（> {cap:.0%}）", d=LG.LONG_DAYS, x=h["excess"],
                   cap=LG.LONG_CAP - 1)
-            why = LG.spike_text(h, f"{d.month}/{d.day} ") + "；" + why
+            why = LG.spike_text(h, f"{d.month}/{d.day} ") + _("；") + why
             act = _("接下來 1–2 週的長跑不要比這次長；之後每次長跑 ≤ 前 {d} 天最長一次的 {pct:.0%}，有疼痛就先減量",
                     d=LG.LONG_DAYS, pct=LG.LONG_CAP)
-            src = _(LG.SRC_SPIKE) + "；" + SRC_CHIANG
+            src = _(LG.SRC_SPIKE) + _("；") + _(SRC_CHIANG)
             extra = {"spike": {"date": d.isoformat(), "by": h["by"], "value": h["value"], "ref": h["ref"],
                                "excess": h["excess"]}}
         return Indicator("long", _("最長單次"), lvl, txt, v, why, act, src, longest, spark, extra)
@@ -852,21 +863,22 @@ class Status:
                  and self.m(w, "climbing") is not None]
         g = self.goals["targets"].get("climb_per_km")
         if not dens:
-            return Indicator("density", _("爬升密度"), NA, "–", "4 週內沒有越野／登山", spark=spark, source=SRC_KOOP)
+            return Indicator("density", _("爬升密度"), NA, "–", _("4 週內沒有越野／登山"), spark=spark, source=_(SRC_KOOP))
         top = max(dens)
         txt = f"{top:.0f} m/km"
         if g:
             ratio = top / g["value"]
-            why = f"4 週內最陡一次 {top:.0f} m/km（平均 {_mean(dens):.0f}），目標「{g['event']}」{g['value']:.0f} m/km → {ratio * 100:.0f}%"
+            why = _("4 週內最陡一次 {top:.0f} m/km（平均 {avg:.0f}），目標「{event}」{goal:.0f} m/km → {p}%", top=top,
+                    avg=_mean(dens), event=g["event"], goal=g["value"], p=f"{ratio * 100:.0f}")
             if self.kind == "specific":
-                lvl, v, act = (GOOD, "爬升密度接近比賽", "") if ratio >= SPECIFIC_SHARE else \
-                    (WATCH, "訓練路線比比賽平", f"挑每公里爬升 ≥ {g['value'] * SPECIFIC_SHARE:.0f} m 的路線做長跑")
+                lvl, v, act = (GOOD, _("爬升密度接近比賽"), "") if ratio >= SPECIFIC_SHARE else \
+                    (WATCH, _("訓練路線比比賽平"), _("挑每公里爬升 ≥ {m:.0f} m 的路線做長跑", m=g["value"] * SPECIFIC_SHARE))
             else:
-                lvl, v, act = INFO, "專項期再對照比賽", ""
+                lvl, v, act = INFO, _("專項期再對照比賽"), ""
         else:
-            why = f"4 週內最陡一次 {top:.0f} m/km，平均 {_mean(dens):.0f}"
-            lvl, v, act = INFO, "沒有目標賽事", ""
-        return Indicator("density", _("爬升密度"), lvl, txt, v, why, act, SRC_KOOP, top, spark)
+            why = _("4 週內最陡一次 {top:.0f} m/km，平均 {avg:.0f}", top=top, avg=_mean(dens))
+            lvl, v, act = INFO, _("沒有目標賽事"), ""
+        return Indicator("density", _("爬升密度"), lvl, txt, v, why, act, _(SRC_KOOP), top, spark)
 
     def i_descent(self) -> Indicator:
         # Downhill impact load, 7-day vs 28-day daily mean — the same per-workout
@@ -886,15 +898,15 @@ class Status:
                  for d, _ in self.weekly_hours(12)]
         ratio = CM.acute_chronic(daily)
         a7 = sum(daily[-7:])
-        src = "自訂指標（依 Gottschall & Kram 2005、Keller 1996）"
+        src = _("自訂指標（依 Gottschall & Kram 2005、Keller 1996）")
         if ratio is None:
-            return Indicator("descent", _("下坡負荷"), NA, "–", "近 4 週沒有下坡路段", spark=spark, source=src)
+            return Indicator("descent", _("下坡負荷"), NA, "–", _("近 4 週沒有下坡路段"), spark=spark, source=src)
         txt = f"{ratio:.1f}×"
-        why = f"近 7 天 {a7:.1f} 等效 km，近 28 天每週平均 {sum(daily) / 4:.1f}（參考指標，沒有驗證過的門檻）"
+        why = _("近 7 天 {a:.1f} 等效 km，近 28 天每週平均 {w:.1f}（參考指標，沒有驗證過的門檻）", a=a7, w=sum(daily) / 4)
         if ratio >= 1.5 and a7 >= 3:
-            lvl, v, act = WATCH, "這週下坡比最近一個月多很多", "接下來幾天避開長下坡，或下坡放慢；股四頭肌痠痛消了再加"
+            lvl, v, act = WATCH, _("這週下坡比最近一個月多很多"), _("接下來幾天避開長下坡，或下坡放慢；股四頭肌痠痛消了再加")
         else:
-            lvl, v, act = INFO, "下坡量跟最近一個月差不多" if ratio >= 0.8 else "這週下坡比平常少", ""
+            lvl, v, act = INFO, _("下坡量跟最近一個月差不多") if ratio >= 0.8 else _("這週下坡比平常少"), ""
         return Indicator("descent", _("下坡負荷"), lvl, txt, v, why, act, src, ratio, spark,
                          {"acute_7d": a7, "chronic_28d": sum(daily)})
 
@@ -904,15 +916,15 @@ class Status:
         spark = [[d.isoformat(), len([w for w in self.ds.workouts if w.sport == "strength"
                                        and date_to_day(d) <= math.floor(w.day) <= date_to_day(d) + 6])]
                  for d, _ in self.weekly_hours(12)]
-        txt = f"{per_wk:.1f} 次/週"
-        why = f"4 週內 {n} 次肌力（手錶有記錄的）"
+        txt = _("{n:.1f} 次/週", n=per_wk)
+        why = _("4 週內 {n} 次肌力（手錶有記錄的）", n=n)
         if per_wk >= STRENGTH_PER_WEEK:
-            lvl, v, act = GOOD, "每週 2 次，達標", ""
+            lvl, v, act = GOOD, _("每週 2 次，達標"), ""
         elif per_wk >= 1:
-            lvl, v, act = WATCH, "每週不到 2 次", "補到每週 2 次（下肢單腳、核心；膝主導＋臀中肌）"
+            lvl, v, act = WATCH, _("每週不到 2 次"), _("補到每週 2 次（下肢單腳、核心；膝主導＋臀中肌）")
         else:
             lvl, v, act = (BAD if self.kind in ("transition", "recovery", "rebuild", "base") else WATCH), \
-                "幾乎沒有肌力訓練", "每週 2 次 30–40 分鐘；轉換期／基礎期是打底的時候"
+                _("幾乎沒有肌力訓練"), _("每週 2 次 30–40 分鐘；轉換期／基礎期是打底的時候")
         return Indicator("strength", _("肌力"), lvl, txt, v, why, act, SRC_UA, per_wk, spark)
 
     def i_durability(self) -> Indicator:
@@ -924,17 +936,17 @@ class Status:
                and self.m(w, "pahr") is not None and abs(self.m(w, "pahr")) <= 0.30]
         spark = [[self._iso(d), round(v, 4)] for d, v in pts]
         if len(pts) < 2:
-            return Indicator("durability", _("耐久度"), NA, "–", "12 週內 > 90 分鐘的越野跑不到 2 次", spark=spark, source=SRC_KOOP)
+            return Indicator("durability", _("耐久度"), NA, "–", _("12 週內 > 90 分鐘的越野跑不到 2 次"), spark=spark, source=_(SRC_KOOP))
         med = _median([v for _, v in pts])
         txt = _pct(med, 1)
-        why = f"12 週內 {len(pts)} 次 > 90 分鐘越野跑，後段效率掉幅中位數 {_pct(med, 1)}"
+        why = _("12 週內 {n} 次 > 90 分鐘越野跑，後段效率掉幅中位數 {m}", n=len(pts), m=_pct(med, 1))
         if med < DRIFT_GOOD:
-            lvl, v, act = GOOD, "後段撐得住", ""
+            lvl, v, act = GOOD, _("後段撐得住"), ""
         elif med < 0.15:
-            lvl, v, act = WATCH, "後段明顯掉", "長天中段加補給（每小時 30–60 g 碳水），並在長天後段練「累了還能維持配速」"
+            lvl, v, act = WATCH, _("後段明顯掉"), _("長天中段加補給（每小時 30–60 g 碳水），並在長天後段練「累了還能維持配速」")
         else:
-            lvl, v, act = BAD, "後段掉很多", "拉長時間前先把長天配速放慢；檢查補給與水分"
-        return Indicator("durability", _("耐久度"), lvl, txt, v, why, act, SRC_KOOP, med, spark)
+            lvl, v, act = BAD, _("後段掉很多"), _("拉長時間前先把長天配速放慢；檢查補給與水分")
+        return Indicator("durability", _("耐久度"), lvl, txt, v, why, act, _(SRC_KOOP), med, spark)
 
     def _cp_protocol(self) -> str:
         """課表偏好 CP 測試方式 (plan.prefs.cp_test_protocol; default quick)."""
@@ -1130,21 +1142,21 @@ class Status:
         thr_default = bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist) and \
             self.plan.threshold_on("lthr", self.today) is None
         aet_missing = self.plan.threshold_on("aethr", self.today) is None
-        cp_src = "測試" if self.plan.threshold_on("cp", self.today) is not None else \
-            ("對照資料夾的 mFTP" if self.ds.mftp_run is not None else
-             "對照資料夾的設定值" if self.ds.settings_from == "wko5" else self.ds.setting_label("runftp"))
+        cp_src = _("測試") if self.plan.threshold_on("cp", self.today) is not None else \
+            (_("對照資料夾的 mFTP") if self.ds.mftp_run is not None else
+             _("對照資料夾的設定值") if self.ds.settings_from == "wko5" else self.ds.setting_label("runftp"))
         recent = self.since(28)
         tot = self.ws("athleterange(today-27, today, sum(if(heartrate > 0, deltatime)))")
         with_hr = sum(1 for w in recent if tot.get(w.idx, 0) > 0)
         issues, lvl = [], GOOD
         if thr_default:
-            issues.append("LTHR 還是出廠預設值 160")
+            issues.append(_("LTHR 還是出廠預設值 160"))
             lvl = BAD
         if aet_missing:
-            issues.append("AeT 用 0.89×LTHR 估（推估）")
+            issues.append(_("AeT 用 0.89×LTHR 估（推估）"))
             lvl = WATCH if lvl == GOOD else lvl
         if recent and with_hr / len(recent) < 0.8:
-            issues.append(f"4 週內 {len(recent) - with_hr}/{len(recent)} 筆活動沒心率")
+            issues.append(_("4 週內 {a}/{b} 筆活動沒心率", a=len(recent) - with_hr, b=len(recent)))
             lvl = WATCH if lvl == GOOD else lvl
         pend = 0
         try:
@@ -1153,18 +1165,19 @@ class Status:
         except Exception:
             pass
         if pend:
-            issues.append(f"{pend} 筆功率壞點待核准")
+            issues.append(_("{n} 筆功率壞點待核准", n=pend))
             lvl = WATCH if lvl == GOOD else lvl
-        txt = "OK" if not issues else f"{len(issues)} 項"
-        why = "；".join(issues) if issues else f"CP 來源：{cp_src}；4 週 {with_hr}/{len(recent)} 筆有心率"
+        txt = "OK" if not issues else _("{n} 項", n=len(issues))
+        SEP = _("；")
+        why = SEP.join(issues) if issues else _("CP 來源：{src}；4 週 {a}/{b} 筆有心率", src=cp_src, a=with_hr, b=len(recent))
         acts = []
         if thr_default:
-            acts.append("到「設定」頁的閾值測試紀錄填 LTHR 測試結果")
+            acts.append(_("到「設定」頁的閾值測試紀錄填 LTHR 測試結果"))
         if aet_missing:
-            acts.append("排一次 AeT 飄移測試（平日，10 分暖身＋40 分固定功率，跑步機或平路）；測了可以改用有氧基礎門檻")
-        act = "；".join(acts)
+            acts.append(_("排一次 AeT 飄移測試（平日，10 分暖身＋40 分固定功率，跑步機或平路）；測了可以改用有氧基礎門檻"))
+        act = SEP.join(acts)
         if pend:
-            act = (act + "；" if act else "") + "到圖表頁「資料校正」核准壞點修正"
+            act = (act + SEP if act else "") + _("到圖表頁「資料校正」核准壞點修正")
         return Indicator("data", _("資料品質"), lvl, txt, _("資料可信") if not issues else _("有幾項會影響判讀"), why, act, "",
                          extra={"cp_source": cp_src})
 
@@ -1178,13 +1191,13 @@ class Status:
         order = PHASE_PRIORITY.get(k, PHASE_PRIORITY["base"])
         for i in sorted((i for i in self.indicators if i.level in rank and i.action),
                         key=lambda i: (rank[i.level], order.index(i.id) if i.id in order else 99)):
-            acts.append(Action(len(acts) + 1, f"{i.title}：{i.verdict}", i.action, [i.id], i.source))
+            acts.append(Action(len(acts) + 1, _("{title}：{verdict}", title=i.title, verdict=i.verdict), i.action, [i.id], i.source))
         # 2. the phase's standing focus, if nothing above already says it
         focus = PHASE_FOCUS[k]
         title = _(focus[0])
         if not any(title in a.title for a in acts):
             acts.append(Action(len(acts) + 1, title, _(focus[1], aet=self._fmt_aet(), goal_h=self._goal("est_hours"),
-                                                       goal_d=self._goal("climb_per_km")), ["phase"], focus[2]))
+                                                       goal_d=self._goal("climb_per_km")), ["phase"], _(focus[2])))
         self.actions = acts[:5]
 
     def _fmt_aet(self) -> str:
@@ -1198,14 +1211,14 @@ class Status:
     # ---- output ------------------------------------------------------------
     def headline(self) -> str:
         p = self.phase
-        head = phase_label(p, self.plan.events) if p else "未設定周期"
+        head = phase_label(p, self.plan.events) if p else _("未設定周期")
         bad = [i for i in self.indicators if i.level == BAD]
         watch = [i for i in self.indicators if i.level == WATCH]
         if bad:
-            return f"{head}：先處理「{bad[0].title}」——{bad[0].verdict}"
+            return _("{head}：先處理「{title}」——{verdict}", head=head, title=bad[0].title, verdict=bad[0].verdict)
         if watch:
-            return f"{head}：大致上軌道，注意「{watch[0].title}」——{watch[0].verdict}"
-        return f"{head}：一切正常，照計畫練"
+            return _("{head}：大致上軌道，注意「{title}」——{verdict}", head=head, title=watch[0].title, verdict=watch[0].verdict)
+        return _("{head}：一切正常，照計畫練", head=head)
 
     def to_dict(self) -> dict:
         return {
@@ -1214,7 +1227,7 @@ class Status:
                 "kind": self.phase.kind, "label": phase_label(self.phase, self.plan.events),
                 "start": self.phase.start, "end": self.phase.end,
                 "goal": _(MAINTAIN_GOAL) if getattr(self.phase, "maintain", False) else
-                _(B_PREP_GOAL) if getattr(self.phase, "light", False) else PHASE_GOAL[self.phase.kind],
+                _(B_PREP_GOAL) if getattr(self.phase, "light", False) else _(PHASE_GOAL[self.phase.kind]),
                 "light": bool(getattr(self.phase, "light", False)),
                 # SP-102 維持期: the overview says it and why (no A race ahead to count down to)
                 "maintain": bool(getattr(self.phase, "maintain", False)),
@@ -1237,14 +1250,14 @@ B_PREP_GOAL = N_("把 B 賽當這段的目標：幾週專項塊＋1 週減量，
 # SP-102 維持期 (a base phase with maintain_from): the goal line
 MAINTAIN_GOAL = N_("維持體能：量不再往上加，每週一堂高強度，重點輪替；等下一場 A 賽事再加量")
 
-PHASE_GOAL = {
-    "transition": "恢復、重建習慣、肌力打底",
-    "recovery": "恢復——不追體能，等負荷平衡（Load balance）回正",
-    "rebuild": "回量：量慢慢加回賽前水準，不排強度課",
-    "base": "練有氧引擎：大量低強度、EF 往上",
-    "specific": "練比賽需要的能力：爬坡、長時間、爬升密度接近賽事",
-    "taper": "量減 40–60%、強度保留、負荷平衡（Load balance）回正",
-    "event": "比賽週：短、輕鬆，補給與睡眠",
+PHASE_GOAL = {                        # msgids: _(PHASE_GOAL[kind]) where shown
+    "transition": N_("恢復、重建習慣、肌力打底"),
+    "recovery": N_("恢復——不追體能，等負荷平衡（Load balance）回正"),
+    "rebuild": N_("回量：量慢慢加回賽前水準，不排強度課"),
+    "base": N_("練有氧引擎：大量低強度、EF 往上"),
+    "specific": N_("練比賽需要的能力：爬坡、長時間、爬升密度接近賽事"),
+    "taper": N_("量減 40–60%、強度保留、負荷平衡（Load balance）回正"),
+    "event": N_("比賽週：短、輕鬆，補給與睡眠"),
 }
 
 # which indicators matter most in each phase (for ordering the to-do list)
@@ -1262,10 +1275,10 @@ PHASE_PRIORITY = {
 PHASE_FOCUS = {
     "transition": (N_("轉換期重點"), N_("每週 2 次肌力、量低而穩定，等負荷平衡（Load balance）回正再進基礎期"), SRC_UA),
     "recovery": (N_("恢復期重點"), N_("先休；負荷平衡（Load balance）回正、想練了再開始"), SRC_UA),
-    "rebuild": (N_("回量期重點"), N_("只排輕鬆跑和肌力，每週量照計畫慢慢加，不排強度課"), "Higdon 反向減量；Koop；Uphill Athlete"),
+    "rebuild": (N_("回量期重點"), N_("只排輕鬆跑和肌力，每週量照計畫慢慢加，不排強度課"), N_("Higdon 反向減量；Koop；Uphill Athlete")),
     # the long run / AeT cap is UA's; 8–15 s hill sprints are Palladino's (UA: 8–10 s)
     "base": (N_("基礎期重點"), N_("每週一次 60–90 分鐘輕鬆長跑（心率 < {aet}），其餘輕鬆跑也壓在 AeT 以下；每週一次 8–15 秒坡衝刺"),
-             SRC_UA + "（輕鬆長跑、AeT 以下）；Palladino 基礎中期坡衝刺 8–15 秒"),
+             N_("Uphill Athlete（輕鬆長跑、AeT 以下）；Palladino 基礎中期坡衝刺 8–15 秒")),
     "specific": (N_("專項期重點"), N_("每週一次山路長跑，每公里爬升往 {goal_d} 靠；每 2 週一次長天往 {goal_h} 的七成靠；週中一次爬坡課"), SRC_KOOP),
     "taper": (N_("減量期重點"), N_("時數減到平常的 40–60%，次數不變，保留一次短強度；最後 3 天只做 30–40 分鐘輕鬆跑"), SRC_BOSQUET),
     "event": (N_("比賽週"), N_("前 2 天各 20–30 分鐘輕鬆跑＋幾趟加速；補給：每小時 30–60 g 碳水、每 15 分鐘 200 ml"), SRC_NOTES),

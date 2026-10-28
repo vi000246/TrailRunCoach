@@ -35,6 +35,8 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from backend.i18n import M_, N_
+
 HIKE_FILTER = {"min_kmh": 1.5, "min_run": 3, "min_grade": 0.10}
 # physical cap on a 100 m window: the Vertical Kilometer world record (Fully,
 # 29:42 in 2017) is ≈ 2000 m/h; faster windows are GPS / elevation noise
@@ -43,11 +45,11 @@ GRADE_BANDS = ((0.10, 0.20), (0.20, 0.30), (0.30, 1.0))
 ALT_MIN_N, ALT_MIN_RANGE_M = 30, 800.0
 FAT_MIN_N = 5
 WEHRLIN_PER_KM = 0.063
-EVIDENCE = {
-    "vam": "定義（描述統計）",
-    "altitude": "推估（個人資料），對照 Wehrlin & Hallén 2006 −6.3 %/1000 m（已驗證）",
-    "fatigue": "無外部來源（F17），僅個人資料",
-    "walking": "Tobler 1993 形狀為先驗（經驗法則），個人陡坡分箱為推估",
+EVIDENCE = {                    # msgids: M_() where shown
+    "vam": N_("定義（描述統計）"),
+    "altitude": N_("推估（個人資料），對照 Wehrlin & Hallén 2006 −6.3 %/1000 m（已驗證）"),
+    "fatigue": N_("無外部來源（F17），僅個人資料"),
+    "walking": N_("Tobler 1993 形狀為先驗（經驗法則），個人陡坡分箱為推估"),
 }
 
 
@@ -114,7 +116,7 @@ def altitude_factor(wins: Sequence[dict], aet: float, lthr: float) -> dict:
     zs = [w["z"] for w in wins if w.get("z") is not None]
     rng = (max(zs) - min(zs)) if zs else 0.0
     out = {"n": len(xs), "z_range_m": rng, "wehrlin_pct_per_km": -WEHRLIN_PER_KM * 100, "pct_per_km": None,
-           "evidence": EVIDENCE["altitude"], "enough": False}
+           "evidence": M_(EVIDENCE["altitude"]), "enough": False}
     sxx = sum(x * x for x in xs)
     if len(xs) >= ALT_MIN_N and rng >= ALT_MIN_RANGE_M and sxx > 0:
         b = sum(x * y for x, y in zip(xs, ys)) / sxx
@@ -145,18 +147,18 @@ def fatigue(wins: Sequence[dict]) -> dict:
             res = [w["hr"] - (a + b * w["vam"]) for w in ws if w["day"] == n]
             if res:
                 per_day.setdefault(n, []).append(float(median(res)))
-    return {"trips": trips, "evidence": EVIDENCE["fatigue"],
+    return {"trips": trips, "evidence": M_(EVIDENCE["fatigue"]),
             "days": [{"day": n, "trips": len(v), "hr_shift_bpm": float(median(v))} for n, v in sorted(per_day.items())]}
 
 
 def summary(wins: Sequence[dict], aet: Optional[float], lthr: Optional[float], n_days: int) -> dict:
     if not wins or not aet or not lthr:
         return {"n": 0, "days": n_days, "filter": HIKE_FILTER, "aet": aet, "lthr": lthr,
-                "uses": {k: {"n": 0, "evidence": e} for k, e in EVIDENCE.items()}}
+                "uses": {k: {"n": 0, "evidence": M_(e)} for k, e in EVIDENCE.items()}}
     alt = altitude_factor(wins, aet, lthr)
     fat = fatigue(wins)
     return {"n": len(wins), "days": n_days, "filter": HIKE_FILTER, "aet": aet, "lthr": lthr,
-            "uses": {"vam": {"n": len(wins), "evidence": EVIDENCE["vam"], "table": vam_table(wins, aet, lthr)},
+            "uses": {"vam": {"n": len(wins), "evidence": M_(EVIDENCE["vam"]), "table": vam_table(wins, aet, lthr)},
                      "altitude": alt,
                      "fatigue": {"n": sum(d["trips"] for d in fat["days"]), **fat},
-                     "walking": {"n": len(wins), "evidence": EVIDENCE["walking"]}}}
+                     "walking": {"n": len(wins), "evidence": M_(EVIDENCE["walking"])}}}

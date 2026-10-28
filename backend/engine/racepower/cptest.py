@@ -31,6 +31,7 @@ from typing import Optional
 import numpy as np
 
 from backend.engine.racepower import cp as CP
+from backend.i18n import M_, N_
 
 SHORT_S = (150.0, 210.0)       # 3′ ± 30 s
 LONG_S = (660.0, 780.0)        # 12′ ± 60 s
@@ -76,13 +77,16 @@ def detect(laps: list[dict]) -> Optional[dict]:
                       "maximal": True, "why": ""})
     s, lo = bouts
     if s["p"] <= lo["p"]:
-        s.update(maximal=False, why=f"3′ {s['p']:.0f} W 不高於 12′ {lo['p']:.0f} W（功率應隨時間遞減）")
+        # `why` is kept in the FIT scan cache (CACHE_NAME): the source text (zh-TW), never the request's
+        s.update(maximal=False, why=N_("3′ {p3:.0f} W 不高於 12′ {p12:.0f} W（功率應隨時間遞減）").format(p3=s["p"], p12=lo["p"]))
     if s.get("hr_max") and lo.get("hr_max"):
         gap = lo["hr_max"] - s["hr_max"]
         if gap >= HR_GAP_BPM:
-            s.update(maximal=False, why=(s["why"] + "；" if s["why"] else "") + f"最高心率 {s['hr_max']:.0f} 比 12′ 的 {lo['hr_max']:.0f} 低 {gap:.0f} bpm")
+            s.update(maximal=False, why=(s["why"] + "；" if s["why"] else "") +
+                     N_("最高心率 {hr:.0f} 比 12′ 的 {other:.0f} 低 {gap:.0f} bpm").format(hr=s["hr_max"], other=lo["hr_max"], gap=gap))
         elif -gap >= HR_GAP_BPM:
-            lo.update(maximal=False, why=f"最高心率 {lo['hr_max']:.0f} 比 3′ 的 {s['hr_max']:.0f} 低 {-gap:.0f} bpm")
+            lo.update(maximal=False,
+                      why=N_("最高心率 {hr:.0f} 比 3′ 的 {other:.0f} 低 {gap:.0f} bpm").format(hr=lo["hr_max"], other=s["hr_max"], gap=-gap))
     return {"bouts": bouts}
 
 
@@ -100,7 +104,8 @@ def w_prime_prior(weight: Optional[float], sex: str = "male", wind: bool = False
     m, sd = W_PRIME_PRIOR_KJ[sex]
     bands = CP.RWC_BANDS[(sex, bool(wind), "jkg")]
     return {"lo": (m - sd) * 1000.0, "hi": (m + sd) * 1000.0, "mid": m * 1000.0,
-            "source": f"Ruiz-Alias 2025 業餘{'男' if sex == 'male' else '女'}性 Stryd 9/3 測試無氧容量 {m} ± {sd} kJ",
+            "source": M_("Ruiz-Alias 2025 業餘男性 Stryd 9/3 測試無氧容量 {m} ± {sd} kJ", m=m, sd=sd) if sex == "male"
+            else M_("Ruiz-Alias 2025 業餘女性 Stryd 9/3 測試無氧容量 {m} ± {sd} kJ", m=m, sd=sd),
             "rwc_band_j": [bands[1] * weight, bands[2] * weight] if weight and weight > 0 else None}
 
 

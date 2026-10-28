@@ -300,7 +300,7 @@ def profile(rows) -> Optional[dict]:
         kinds[key] = kp
     return {"v": 3, "n": len(rs), "kinds": kinds,
             "params": {k: P[k] for k in ("t_lo_h", "t_cap_h", "share_max", "b_prior", "k_level", "k_slope")},
-            "source": SOURCE, "label": "推估"}
+            "source": SOURCE, "label": N_("推估")}         # stored with the model: the msgid
 
 
 def legacy_profile(rows) -> Optional[dict]:
@@ -317,7 +317,7 @@ def legacy_profile(rows) -> Optional[dict]:
     return {"n": len(rs), "long_per_h_s": float(median(rate)), "short_share": float(median(short)),
             "stop_len_s": float(median(lengths)) if lengths else None, "n_stops": len(lengths),
             "total_per_h_s": float(median(total)), "total_per_h_p25_s": float(q[0]), "total_per_h_p75_s": float(q[1]),
-            "source": SOURCE_LEGACY, "label": "推估"}
+            "source": SOURCE_LEGACY, "label": N_("推估")}
 
 
 def _user_and_stations(stops) -> tuple[float, list]:
@@ -426,7 +426,7 @@ def predict(prof: Optional[dict], moving_s: Optional[float], stops=None, kind: s
             basis += (_("（次數少，往你所有健行日的 {p:.0%} 收縮）", p=kp["prior"]) if sub else
                       _("（次數少，往先驗 {p:.0%} 收縮）", p=kp["prior"]))
         if alt:                             # SP-739: no class with enough trips → the hike kind as a whole
-            basis = alt["why"] + "；" + basis
+            basis = alt["why"] + _("；") + basis
     if capped:
         basis += _("；移動超過 {h:g} 小時後比例不再增加", h=NONMOVING["t_cap_h"])
     rng = {"kind": _("範圍是你同類活動停留的 25–75 百分位"),
@@ -436,8 +436,8 @@ def predict(prof: Optional[dict], moving_s: Optional[float], stops=None, kind: s
     label = _(KIND_LABEL[kind]) + (" · " + alt["short"] if alt else "")
     return {"total_s": total, "long_s": long_, "short_s": short, "p25_s": lo, "p75_s": hi, "method": method,
             "kind": kind, "kind_label": label, "alt": alt, "share": share, "n_kind": kp["n"], "capped": capped,
-            "why": basis + "；" + why, "range_why": rng, "n_runs": prof["n"],
-            "source": _(SOURCE), "badge": "推估"}
+            "why": basis + _("；") + why, "range_why": rng, "n_runs": prof["n"],
+            "source": _(SOURCE), "badge": _("推估")}
 
 
 def predict_legacy(prof: dict, moving_s: float, stops=None) -> dict:
@@ -463,7 +463,7 @@ def predict_legacy(prof: dict, moving_s: float, stops=None) -> dict:
             "kind": "race", "kind_label": _(KIND_LABEL["race"]),
             "why": why + _("；零碎停頓 {p:.1%} 的移動時間", p=prof["short_share"]), "n_runs": prof["n"],
             "range_why": _("範圍是你過去每移動小時停留的 25–75 百分位"),
-            "source": _(prof.get("source") or SOURCE_LEGACY), "badge": "推估"}
+            "source": _(prof.get("source") or SOURCE_LEGACY), "badge": _("推估")}
 
 
 def plan_kind(plan_type: Optional[str], event_kind: Optional[str] = None, trip_kind: Optional[str] = None) -> str:

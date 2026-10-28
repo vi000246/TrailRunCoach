@@ -31,6 +31,7 @@ from backend.engine.algorithms import minetti
 from backend.engine.racepower import hike as HK
 from backend.i18n import N_, _
 
+EST = N_("推估")                  # the 推估 badge, shown through _() (SP-838)
 J_PER_KCAL = 4184.0
 ETA_FLAT = 0.221                 # van Rassel 2026: Stryd ÷ metabolic power on the flat
 ETA_STEEP = 0.216                # 6 % grade (8 %: 0.213)
@@ -50,28 +51,28 @@ CHO_MAX = 90.0
 # the labels are msgids, shown through _() (carb_target; SP-831: a share's 補給 card rebuilds it from the category)
 CHO_RULES = {
     "short": {"lo": 0.0, "hi": 30.0, "dose_g": None, "every": None, "label": N_("< 75 分鐘：漱口或少量即可"),
-              "src": "Jeukendrup 2014；Burke 2011（約 1 h 的運動漱口或少量碳水即可）"},
+              "src": N_("Jeukendrup 2014；Burke 2011（約 1 h 的運動漱口或少量碳水即可）")},
     "half": {"lo": 30.0, "hi": 60.0, "dose_g": 30.0, "every": (30, 60), "label": N_("半馬級（< 2–2.5 h）"),
-             "src": "Jeukendrup 2014；Burke 2011；Vitale & Getzin 2019（< 2.5 h：30–60 g/h）"},
+             "src": N_("Jeukendrup 2014；Burke 2011；Vitale & Getzin 2019（< 2.5 h：30–60 g/h）")},
     "long": {"lo": 60.0, "hi": 90.0, "dose_g": 30.0, "every": (20, 30), "label": N_("全馬／越野 2–6 h：葡萄糖＋果糖"),
-             "src": "Jeukendrup 2014；Burke 2011（> 2.5 h 最多 90 g/h，混合醣）；Vitale & Getzin 2019；"
-                    "> 3 h 至少 60 g/h（常見建議，推估）"},
+             "src": N_("Jeukendrup 2014；Burke 2011（> 2.5 h 最多 90 g/h，混合醣）；Vitale & Getzin 2019；"
+                       "> 3 h 至少 60 g/h（常見建議，推估）")},
     "ultra": {"lo": 30.0, "hi": 90.0, "dose_g": 25.0, "every": (30, 45), "label": N_("超過 6 h：30–50 起步，能吃就往 60–90"),
-              "src": "Tiller 2019 ISSN 超馬立場（30–50 g/h、150–400 kcal/h）；Jeukendrup 2014（超耐力約 90 g/h）"},
+              "src": N_("Tiller 2019 ISSN 超馬立場（30–50 g/h、150–400 kcal/h）；Jeukendrup 2014（超耐力約 90 g/h）")},
     "hike": {"lo": 30.0, "hi": 50.0, "dose_g": 40.0, "every": (45, 60), "label": N_("登山行進間（推估）"),
-             "src": "推估：ISSN 超馬下限（Tiller 2019）＋低強度往下調（Jeukendrup 2014）；每 45–60 分鐘一次（§5.3 推估）"},
+             "src": N_("推估：ISSN 超馬下限（Tiller 2019）＋低強度往下調（Jeukendrup 2014）；每 45–60 分鐘一次（§5.3 推估）")},
 }
 # water (§4.2): ml/h band moved inside the source range by temperature (推估)
-WATER = {"long": (400.0, 800.0, "Vitale & Getzin 2019：400–800 ml/h；上限是流汗率，不能喝到體重增加（NATA 2017、Hew-Butler 2015）"),
-         "ultra": (450.0, 750.0, "Tiller 2019 ISSN：450–750 ml/h（約每 20 分鐘 150–250 ml）；不能喝到體重增加（Hew-Butler 2015）"),
-         "half": (0.0, 400.0, "Kenefick 2018：< 90 min、涼天口渴再喝；熱天改計畫性喝水")}
+WATER = {"long": (400.0, 800.0, N_("Vitale & Getzin 2019：400–800 ml/h；上限是流汗率，不能喝到體重增加（NATA 2017、Hew-Butler 2015）")),
+         "ultra": (450.0, 750.0, N_("Tiller 2019 ISSN：450–750 ml/h（約每 20 分鐘 150–250 ml）；不能喝到體重增加（Hew-Butler 2015）")),
+         "half": (0.0, 400.0, N_("Kenefick 2018：< 90 min、涼天口渴再喝；熱天改計畫性喝水"))}
 WATER_WIDTH = 200.0              # the band at one temperature: 400–600 cool … 600–800 hot (推估)
 T_COOL, T_HOT = 10.0, 30.0       # °C ends of the temperature shift (推估)
 HOT_HALF_C = 25.0                # a half marathon this hot: planned drinking (Kenefick 2018)
-SODIUM = {"long": (300.0, 600.0, "Vitale & Getzin 2019：300–600 mg/h（> 2 h、流汗多）；取 400 mg/h（推估）"),
-          "ultra": (300.0, 600.0, "Vitale 2019 300–600 mg/h；ISSN 超馬：飲料 ≥ 575 mg/L（Tiller 2019）"),
-          "hike": (200.0, 300.0, "推估：健行 200 mg/h ＋ Vitale 下限 300 mg/h"),
-          "half": (0.0, 0.0, "< 90 min：通常不必另外補鈉（§4.2）")}
+SODIUM = {"long": (300.0, 600.0, N_("Vitale & Getzin 2019：300–600 mg/h（> 2 h、流汗多）；取 400 mg/h（推估）")),
+          "ultra": (300.0, 600.0, N_("Vitale 2019 300–600 mg/h；ISSN 超馬：飲料 ≥ 575 mg/L（Tiller 2019）")),
+          "hike": (200.0, 300.0, N_("推估：健行 200 mg/h ＋ Vitale 下限 300 mg/h")),
+          "half": (0.0, 0.0, N_("< 90 min：通常不必另外補鈉（§4.2）"))}
 ULTRA_NA_PER_L = 575.0           # ISSN: drink sodium > 575 mg/L
 CARRY_SPARE = 1.2                # 筆記：補給多帶 20 %（補水補碳:178）
 HIKE_WATER_ML_PER_KCAL = (0.7, 0.8)   # Yamamoto: 補 70–80 % of ml ≈ kcal (app's existing rule)
@@ -110,6 +111,11 @@ STOP_DEFAULT = "aid"             # the old 「km:分」 text had no type
 STOP_NAME_HINTS = (("醫護", "medical"), ("medic", "medical"), ("大補", "big"), ("水站", "water"), ("water", "water"),
                    ("自備", "self"), ("drop", "self"), ("補給", "aid"), ("aid", "aid"),
                    ("檢查", "aid"), ("station", "aid"))
+
+
+def body_shown(body_src: dict) -> dict:
+    """fuel's body_src (推估 / 設定 / the profile's own source word) in the request's language."""
+    return {k: _(v) if isinstance(v, str) else v for k, v in body_src.items()}
 
 
 def stop_type(st: dict) -> str:
@@ -296,7 +302,7 @@ def carb_target(cls: str) -> dict:
     base = [30.0, 50.0] if cls == "ultra" else None
     return {"lo": lo, "hi": hi, "mid": (lo + hi) / 2.0 if base is None else sum(base) / 2.0, "base": base,
             "dose_g": r["dose_g"], "every_min": list(r["every"]) if r["every"] else None,
-            "label": _(r["label"]), "src": r["src"], "badge": "推估" if cls == "hike" else None,
+            "label": _(r["label"]), "src": _(r["src"]), "badge": _(EST) if cls == "hike" else None,
             "mix": cls in ("long", "ultra")}
 
 
@@ -322,7 +328,7 @@ def water_band(cls: str, temp_c: Optional[float], hot: bool) -> Optional[list[fl
         return None
     if cls == "half":
         return None
-    lo0, hi0, _ = WATER[cls]
+    lo0, hi0, _src = WATER[cls]
     p = 1.0 if hot else heat_pos(temp_c)
     width = min(WATER_WIDTH, hi0 - lo0)
     lo = lo0 + (hi0 - lo0 - width) * p
@@ -332,7 +338,7 @@ def water_band(cls: str, temp_c: Optional[float], hot: bool) -> Optional[list[fl
 def sodium_band(cls: str, temp_c: Optional[float], hot: bool, water_mid: Optional[float] = None) -> list[float]:
     if cls == "short":
         return [0.0, 0.0]
-    lo0, hi0, _ = SODIUM.get(cls, SODIUM["long"])
+    lo0, hi0, _src = SODIUM.get(cls, SODIUM["long"])
     if cls in ("half", "hike"):
         return [lo0, hi0]
     p = 1.0 if hot else heat_pos(temp_c)
@@ -359,7 +365,7 @@ def loading(weight: float, hours: float, cls: str) -> dict:
     energy, not only a higher carb share (`note`; Tarnopolsky 2001, worded for everyone). `when` /
     `amount` = the label's two parts (the share page shows them apart)."""
     if cls == "hike":
-        return {"kind": "normal", "label": _("前一晚正常吃，不必超補"), "badge": "推估", "carb_load": False,
+        return {"kind": "normal", "label": _("前一晚正常吃，不必超補"), "badge": _(EST), "carb_load": False,
                 "src": _("推估（§3.2：低強度、多日，重點是每日總熱量）")}
     full = hours * 60.0 > LOAD_MIN
     gk = list(LOAD_G_KG if full else NORMAL_G_KG)
@@ -541,7 +547,8 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
     km = float(s.get("km") or 0.0)
     cls = event_class(kind, hours, km)
     body = dict(body or {})
-    body_src = {k: ("推估" if body.get(k) is None else body.get(k + "_src") or "設定") for k in BODY_DEFAULTS}
+    # the source words stay the msgids (compared below); shown through _() (body_shown)
+    body_src = {k: (EST if body.get(k) is None else body.get(k + "_src") or N_("設定")) for k in BODY_DEFAULTS}
     for k, v in BODY_DEFAULTS.items():
         if body.get(k) is None:
             body[k] = v
@@ -564,7 +571,7 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
                                             a=total, b=fl["kcal"])))
     kj = sum(float(x.get("power") or 0) * float(x.get("t") or 0) for x in segs) / 1000.0
     keytel = None
-    if hr_bpm and body_src["age"] != "推估":
+    if hr_bpm and body_src["age"] != EST:
         keytel = keytel_kcal(hr_bpm, T / 60.0, weight, body["age"], body["sex"])
     cho = carb_target(cls)
     hot = hot_flags(segs)
@@ -707,19 +714,19 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
                            "hr_bpm": hr_bpm},
             "cho": {**cho, "per_h": [cho["lo"], cho["hi"]], "total": tot_cho},
             "water": {"per_h": water_h, "total_ml": tot_w if not thirst else None, "thirst": thirst,
-                      "src": (WATER["half"][2] if thirst else WATER[w_cls][2]),
-                      "caution": "別喝到體重增加（低血鈉；NATA 2017、Hew-Butler 2015）", "badge": "推估",
+                      "src": _(WATER["half"][2] if thirst else WATER[w_cls][2]),
+                      "caution": _("別喝到體重增加（低血鈉；NATA 2017、Hew-Butler 2015）"), "badge": _(EST),
                       "legs": legs, "sweat_l": sweat_l, "dehydration": dehyd, "t_mean": t_mean,
                       "hot_segments": sum(1 for h in hot if h)},
-            "sodium": {"per_h": na_h, "total_mg": tot_na, "src": SODIUM["half" if thirst else w_cls][2]},
+            "sodium": {"per_h": na_h, "total_mg": tot_na, "src": _(SODIUM["half" if thirst else w_cls][2])},
             "intake_kcal": intake, "deficit_kcal": total - intake,
             "loading": loading(weight, hours, cls), "schedule": events, "warnings": warnings,
             "stations": [{k: r[k] for k in ("km", "type", "name", "t_s")} for r in sts],
-            "body": {k: body[k] for k in BODY_DEFAULTS}, "body_src": body_src,
-            "src": {"power": "van Rassel 2026（Stryd 換算係數 22.1 %，6–8 % 坡 21.6 %）",
-                    "minetti": "Fletcher 2009 1.07 kcal/kg/km × Minetti 2002 坡度比例",
-                    "band": "Fletcher SD 約 8 %、Lacour & Bourdin 2015 個人差 20 %、疲勞 +10 %、van Rassel 陡坡 2–4 %（組合推估）",
-                    "keytel": "Keytel 2005（不含 VO2max 的式子，係數引自 Hsieh 2025）"}}
+            "body": {k: body[k] for k in BODY_DEFAULTS}, "body_src": body_shown(body_src),
+            "src": {"power": _("van Rassel 2026（Stryd 換算係數 22.1 %，6–8 % 坡 21.6 %）"),
+                    "minetti": _("Fletcher 2009 1.07 kcal/kg/km × Minetti 2002 坡度比例"),
+                    "band": _("Fletcher SD 約 8 %、Lacour & Bourdin 2015 個人差 20 %、疲勞 +10 %、van Rassel 陡坡 2–4 %（組合推估）"),
+                    "keytel": _("Keytel 2005（不含 VO2max 的式子，係數引自 Hsieh 2025）")}}
 
 
 SWEAT_REF_KCAL_H = 700.0        # a race-pace run; sweat scales with heat production (推估)
@@ -784,9 +791,10 @@ def _hike_fuel(plan: dict, segs: list, weight: float, cls: str, body: dict, body
     if mean_food is not None and abs(mean_food - PACK_DAILY_DROP) > 0.15:
         warnings.append(H.tag("RC18", _("每天糧食約 {kg:.2f} kg（每日熱量 × 85 % ÷ 4.4 kcal/g），和背負預設每天 −{drop:g} kg 不同",
                                         kg=mean_food, drop=PACK_DAILY_DROP)))
-    if any(v == "推估" for v in body_src.values()):
-        miss = "、".join({"height_cm": "身高", "age": "年齡", "sex": "性別"}[k] for k, v in body_src.items() if v == "推估")
-        warnings.append(H.tag("RC28", f"基礎代謝缺{miss}：用假設值（175 cm、40 歲、男，推估）；到設定頁「個人資料」填"))
+    if any(v == EST for v in body_src.values()):
+        names = {"height_cm": N_("身高"), "age": N_("年齡"), "sex": N_("性別")}
+        miss = _("、").join(_(names[k]) for k, v in body_src.items() if v == EST)
+        warnings.append(H.tag("RC28", _("基礎代謝缺{miss}：用假設值（175 cm、40 歲、男，推估）；到設定頁「個人資料」填", miss=miss)))
     # schedule: per day from that day's start, every 45–60 min
     events = []
     ev_s = sum(cho["every_min"]) / 2.0 * 60.0
@@ -834,15 +842,15 @@ def _hike_fuel(plan: dict, segs: list, weight: float, cls: str, body: dict, body
             "band_rel": BAND_MODEL, "kcal_yamamoto": tot_y, "kcal_per_h": tot_p / T if T else None,
             "methods": {"pandolf" if segs else "yamamoto": tot_p}, "daily": daily, "food_kg_mean": mean_food,
             "food_check": {"default_kg": PACK_DAILY_DROP, "density": FOOD_DENSITY, "coverage": FOOD_COVERAGE,
-                           "badge": "推估"},
+                           "badge": _(EST)},
             "cho": {**cho, "per_h": [cho["lo"], cho["hi"]], "total": [cho["lo"] * T, cho["hi"] * T]},
             "water": {"per_h": None, "total_ml": [sum(d["water_ml"][0] for d in daily), sum(d["water_ml"][1] for d in daily)],
-                      "thirst": False, "src": "Yamamoto：脫水量 ml ≈ kcal，補 70–80 %（0.7–0.8 ml/kcal）",
-                      "caution": "照量喝，不要刻意灌水；每天看尿色和體重（Hew-Butler 2015）", "badge": None, "legs": []},
-            "sodium": {"per_h": [na[0], na[1]], "total_mg": [na[0] * T, na[1] * T], "src": na[2]},
+                      "thirst": False, "src": _("Yamamoto：脫水量 ml ≈ kcal，補 70–80 %（0.7–0.8 ml/kcal）"),
+                      "caution": _("照量喝，不要刻意灌水；每天看尿色和體重（Hew-Butler 2015）"), "badge": None, "legs": []},
+            "sodium": {"per_h": [na[0], na[1]], "total_mg": [na[0] * T, na[1] * T], "src": _(na[2])},
             "loading": loading(weight, T, "hike"), "schedule": events, "warnings": warnings,
-            "body": {k: body[k] for k in BODY_DEFAULTS}, "body_src": body_src,
-            "src": {"pandolf": "Pandolf, Givoni & Goldman 1977（背負、速度、坡度；下坡用 Minetti 走路曲線推估）",
-                    "yamamoto": "中原・萩原・山本 2006 Yamamoto CC × (體重 + 背負)",
-                    "ree": "Mifflin-St Jeor 1990 × 營地活動係數 1.3（推估）",
-                    "band": "Pandolf ±15 %（推估），範圍含 Yamamoto"}}
+            "body": {k: body[k] for k in BODY_DEFAULTS}, "body_src": body_shown(body_src),
+            "src": {"pandolf": _("Pandolf, Givoni & Goldman 1977（背負、速度、坡度；下坡用 Minetti 走路曲線推估）"),
+                    "yamamoto": _("中原・萩原・山本 2006 Yamamoto CC × (體重 + 背負)"),
+                    "ree": _("Mifflin-St Jeor 1990 × 營地活動係數 1.3（推估）"),
+                    "band": _("Pandolf ±15 %（推估），範圍含 Yamamoto")}}

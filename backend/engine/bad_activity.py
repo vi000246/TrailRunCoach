@@ -47,6 +47,8 @@ from typing import Optional
 
 import numpy as np
 
+from backend.i18n import N_
+
 SETTING_KEY = "activities.exclude_bad"
 FOOT_GROUPS = ("run", "walk")
 KEEP, EXCLUDE = "keep", "exclude"
@@ -146,6 +148,14 @@ def _minute(s: float) -> str:
     return f"{int(s // 60)}"
 
 
+def _text(msgid: str, **params):
+    """A reason / label: kept in the Dataset (one per source, every language), so the zh-TW text that
+    remembers its msgid (i18n.M_); the API shows it in the request's language (stored_text.shown)."""
+    from backend.i18n import DEFAULT_LOCALE, M_, use_locale
+    with use_locale(DEFAULT_LOCALE):
+        return M_(msgid, **params)
+
+
 def judge(f: Optional[dict], sport_group: str, weight_kg: Optional[float] = None) -> Optional[dict]:
     """The auto verdict: None = fine, else {rule, reason, avg_kmh, ...}.
     Only foot sports (FOOT_GROUPS) are judged."""
@@ -155,21 +165,24 @@ def judge(f: Optional[dict], sport_group: str, weight_kg: Optional[float] = None
     base = {"avg_kmh": avg, "moving_s": mv, "distance_km": f.get("distance_km")}
     if avg is not None and mv >= MIN_MOVING_S and avg > limit_kmh(mv):
         return {**base, "rule": "avg_speed", "limit_kmh": limit_kmh(mv),
-                "reason": f"疑似交通工具／騎車（均速 {avg:.0f} km/h）"}
+                "reason": _text(N_("疑似交通工具／騎車（均速 {kmh:.0f} km/h）"), kmh=avg)}
     for w in WINDOWS_S:
         b = (f.get("best") or {}).get(str(w))
         if b and b[0] > limit_kmh(w):
-            lab = f"{w // 60} 分鐘" if w >= 60 else f"{w} 秒"
+            lab = _text(N_("{n} 分鐘"), n=w // 60) if w >= 60 else _text(N_("{n} 秒"), n=w)
             start = b[1]
+            p = {"a": _minute(start), "b": _minute(start + w), "lab": lab, "kmh": b[0]}
             return {**base, "rule": "window_speed", "window_s": w, "window_kmh": b[0], "window_start_s": start,
                     "limit_kmh": limit_kmh(w),
-                    "reason": (f"疑似交通工具／騎車（第 {_minute(start)}–{_minute(start + w)} 分鐘連續 {lab} "
-                               f"{b[0]:.0f} km/h" + (f"，全程均速 {avg:.0f} km/h" if avg is not None else "") + "）")}
+                    "reason": _text(N_("疑似交通工具／騎車（第 {a}–{b} 分鐘連續 {lab} {kmh:.0f} km/h）"), **p)
+                    if avg is None else
+                    _text(N_("疑似交通工具／騎車（第 {a}–{b} 分鐘連續 {lab} {kmh:.0f} km/h，全程均速 {avg:.0f} km/h）"),
+                          avg=avg, **p)}
     ap, n = f.get("avg_power"), f.get("power_n") or 0
     wt = weight_kg or DEFAULT_WEIGHT_KG
     if ap is not None and n >= MIN_POWER_SAMPLES and ap > POWER_WKG_MAX * wt:
         return {**base, "rule": "power", "avg_power": ap, "limit_w": POWER_WKG_MAX * wt,
-                "reason": f"功率不可能是跑步（平均 {ap:.0f} W = {ap / wt:.1f} W/kg）"}
+                "reason": _text(N_("功率不可能是跑步（平均 {w:.0f} W = {wkg:.1f} W/kg）"), w=ap, wkg=ap / wt)}
     return None
 
 
@@ -180,11 +193,12 @@ def decide(auto: Optional[dict], override: Optional[str], enabled: bool = True) 
     if override == KEEP:
         return None
     if override == EXCLUDE:
-        why = auto["reason"] if auto else "手動排除"
-        return {"reason": why, "manual": True, "auto": auto, "label": f"已排除：{why}" +
-                ("（手動）" if auto else "")}
+        why = auto["reason"] if auto else _text(N_("手動排除"))
+        return {"reason": why, "manual": True, "auto": auto,
+                "label": _text(N_("已排除：{why}（手動）") if auto else N_("已排除：{why}"), why=why)}
     if auto and enabled:
-        return {"reason": auto["reason"], "manual": False, "auto": auto, "label": f"已排除：{auto['reason']}"}
+        return {"reason": auto["reason"], "manual": False, "auto": auto,
+                "label": _text(N_("已排除：{why}"), why=auto["reason"])}
     return None
 
 

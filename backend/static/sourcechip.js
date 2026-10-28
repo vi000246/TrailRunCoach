@@ -10,6 +10,8 @@
  */
 (function () {
   "use strict";
+  // i18n: common.srcchip.* (static/i18n/<locale>/common.json)
+  const T = (k, p) => (window.I18N ? window.I18N.t("common.srcchip." + k, p) : k);
 
   async function mount() {
     // the demo has one fixed source and no folder cross-check: no chip
@@ -23,12 +25,12 @@
     let ss = {};
     try { ss = await (await fetch("/api/v1/sync/settings")).json(); } catch (_) {}
     const cur = ss.chart_data_source === "wko5" ? "wko5" : "source";
-    const LABEL = { source: ss.primary_label || "COROS", wko5: "對照資料夾（比對用）" };
+    const LABEL = { source: ss.primary_label || "COROS", wko5: T("wko5") };
     host.innerHTML = "";
     const lab = document.createElement("label");
     lab.style.cssText = "display:inline-flex;gap:6px;align-items:center;font-size:12.5px;padding:2px 8px;"
       + "border:1px solid currentColor;border-radius:12px;opacity:.85";
-    lab.title = "圖表、總覽和賽事計算機讀取的資料來源。COROS／TrainingPeaks 一次只用一個，在 設定 → 資料同步 切換";
+    lab.title = T("tip");
     const sel = document.createElement("select");
     sel.style.cssText = "font:inherit;border:0;background:transparent;color:inherit";
     for (const k of Object.keys(LABEL)) {
@@ -43,9 +45,9 @@
           body: JSON.stringify({ chart_data_source: sel.value }) });
         if (!r.ok) throw new Error(String(r.status));
         location.reload();
-      } catch (e) { sel.disabled = false; alert("切換資料來源失敗：" + e.message); }
+      } catch (e) { sel.disabled = false; alert(T("failed", { msg: e.message })); }
     };
-    lab.append("資料來源", sel);
+    lab.append(T("label"), sel);
     host.appendChild(lab);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);

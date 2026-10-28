@@ -11,6 +11,7 @@ from typing import Optional, Sequence
 from backend.engine import hints as H
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
+from backend.i18n import _
 
 SCENARIO_FACTORS = (0.8, 0.9, 0.95, 1.0, 1.05, 1.1, 1.2)
 CLIMB_POWER_CAP = 1.10            # heuristic: climbs ≤ 110 % of the race average
@@ -142,7 +143,7 @@ def predict_run(*, distance_km: float, cp: float, tte: float, k: float, re: floa
     if w:
         out["warnings"].append(H.tag("RC14", w))
     if t > 3 * 3600:
-        out["warnings"].append(H.tag("RC1", "超過 3 小時的比賽，訓練中很少有真正最大努力的紀錄——個人 k 通常偏負（預估偏慢），可與查表 k 比較"))
+        out["warnings"].append(H.tag("RC1", _("超過 3 小時的比賽，訓練中很少有真正最大努力的紀錄——個人 k 通常偏負（預估偏慢），可與查表 k 比較")))
     if target_time_s:
         imp = improvement_needed(d_m, target_time_s, re, mass, cp, tte, k, m)
         out["target"] = {"time_s": target_time_s, **imp,
@@ -201,11 +202,11 @@ def predict_baiyue(*, day_plan: list[dict], eph: float, weight: Optional[float],
                "water_ml": [0.7 * kcal, 0.8 * kcal] if has_w else None, "hr_cap": aet, "flags": []}
         if biggest_day:
             if ep > (biggest_day.get("ep") or 0):
-                row["flags"].append(f"EP {ep:.1f} 超過你最大的一天 {biggest_day['ep']:.1f}")
+                row["flags"].append(_("EP {ep:.1f} 超過你最大的一天 {max:.1f}", ep=ep, max=biggest_day["ep"]))
             if d["gain_m"] > (biggest_day.get("gain_m") or 0):
-                row["flags"].append(f"爬升 {d['gain_m']:.0f} m 超過你最大的一天 {biggest_day['gain_m']:.0f} m")
+                row["flags"].append(_("爬升 {gain:.0f} m 超過你最大的一天 {max:.0f} m", gain=d["gain_m"], max=biggest_day["gain_m"]))
             if h > (biggest_day.get("moving_h") or 0):
-                row["flags"].append(f"移動時間 {h:.1f} h 超過你最長的一天 {biggest_day['moving_h']:.1f} h")
+                row["flags"].append(_("移動時間 {h:.1f} h 超過你最長的一天 {max:.1f} h", h=h, max=biggest_day["moving_h"]))
         rows.append(row)
         for k_ in ("km", "gain_m", "loss_m", "ep"):
             tot[k_] += d[k_] if k_ in d else ep
@@ -218,8 +219,8 @@ def predict_baiyue(*, day_plan: list[dict], eph: float, weight: Optional[float],
     out = {"kind": "baiyue", "days": rows, "total": tot, "eph_personal": eph, "eph_used": rate,
            "pack_factor": pack_factor, "pack_kg": pack_kg, "hist_pack_kg": hist_pack_kg, "M": m,
            "time_s": tot["moving_h"] * 3600.0,
-           "warnings": [H.tag("RC1", "登山是步行模型：以你過去登山日的 EP/h（km + 爬升/100 每小時）推估移動時間，"
-                              "不含休息、拍照、排隊；環境係數與背負係數都是保守假設")]}
+           "warnings": [H.tag("RC1", _("登山是步行模型：以你過去登山日的 EP/h（km + 爬升/100 每小時）推估移動時間，"
+                                       "不含休息、拍照、排隊；環境係數與背負係數都是保守假設"))]}
     if target_moving_h:
         need = tot["ep"] / target_moving_h
         out["target"] = {"moving_h": target_moving_h, "ep_per_h_needed": need,

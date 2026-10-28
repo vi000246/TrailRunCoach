@@ -26,7 +26,7 @@ from typing import Optional
 
 from backend.engine import hints as H
 from backend.engine.racepower import weather as WX
-from backend.i18n import N_
+from backend.i18n import _, N_
 
 SHARES_DIR = None      # fixed folder (tests); None = the tenant's (private) racepower_shares/
 
@@ -88,7 +88,7 @@ def snapshot(plan: dict, *, title: str, include_weight: bool = False, expires_da
     """The frozen, whitelisted view of a /plan result. `cairn_curve` (SP-653, cairn_curve.py): the
     時間曲線 for 疊石 Cairn, only when the athlete ticked it — a share has none by default."""
     if expires_days not in EXPIRY_DAYS:
-        raise ShareError(f"有效期限只能是 {EXPIRY_DAYS}")
+        raise ShareError(_("有效期限只能是 {days}", days=EXPIRY_DAYS))
     now = now or _now()
     req = request or {}
     s = plan.get("summary") or {}
@@ -226,7 +226,7 @@ def localized(snap: dict, loc: Optional[str] = None) -> dict:
 
 def _path(sid: str, root: Optional[Path] = None) -> Path:
     if not ID_RE.match(sid or ""):
-        raise ShareError("分享連結格式不對")
+        raise ShareError(_("分享連結格式不對"))
     return (root or _shares_dir()) / f"{sid}.json"
 
 
@@ -234,7 +234,7 @@ def save(snap: dict, root: Optional[Path] = None) -> str:
     root = root or _shares_dir()
     root.mkdir(parents=True, exist_ok=True)
     if len(list(root.glob("*.json"))) >= MAX_SHARES:
-        raise ShareError(f"分享最多 {MAX_SHARES} 個：先刪掉舊的")
+        raise ShareError(_("分享最多 {n} 個：先刪掉舊的", n=MAX_SHARES))
     sid = new_id()
     _path(sid, root).write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
     return sid
@@ -308,7 +308,6 @@ def listing(root: Optional[Path] = None, now: Optional[dt.datetime] = None) -> l
         sm = s.get("summary") or {}
         t = s.get("title")
         if t == DEFAULT_TITLE:                          # SP-831: the untitled share's word in the page's language
-            from backend.i18n import _
             t = _(DEFAULT_TITLE)
         out.append({"id": p.stem, "title": t, "type": s.get("type"), "created": s.get("created"),
                     "expires": s.get("expires"), "expired": expired(s, now), "km": sm.get("km"),

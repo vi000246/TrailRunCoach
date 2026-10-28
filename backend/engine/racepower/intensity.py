@@ -54,6 +54,8 @@ from typing import Optional
 
 import numpy as np
 
+from backend.i18n import M_, N_
+
 INTENSITY = {
     "aet_frac_lthr": 0.89,
     "race_frac_lthr": 0.95,
@@ -67,17 +69,18 @@ INTENSITY = {
     "tte_s": 3000.0,
     "k": -0.07,
 }
+# msgids (SP-838): shown through _(); classify()'s reasons are M_() (cached with the runs' classes)
 SOURCES = {
-    "zones": "Seiler & Kjerland 2006 三區（低 < AeT、中 AeT–LTHR、高 ≥ LTHR）",
-    "race": "Friel 心率 Z4（SubThreshold）下緣 0.95 × LTHR",
-    "aet": "AeT：測試 > 自動估算 > 0.89 × LTHR（Friel Z2 上緣）",
-    "power": "Palladino 三區：低 < 80 % CP、高 ≥ 95 % CP",
-    "drift": "Uphill Athlete：Pw:HR 飄移 < 5 % = 有氧",
-    "gait": "步頻 < 130 spm = 走路（同活動判讀）",
-    "rule": "組合規則為推估（多數時間所在的區）",
+    "zones": N_("Seiler & Kjerland 2006 三區（低 < AeT、中 AeT–LTHR、高 ≥ LTHR）"),
+    "race": N_("Friel 心率 Z4（SubThreshold）下緣 0.95 × LTHR"),
+    "aet": N_("AeT：測試 > 自動估算 > 0.89 × LTHR（Friel Z2 上緣）"),
+    "power": N_("Palladino 三區：低 < 80 % CP、高 ≥ 95 % CP"),
+    "drift": N_("Uphill Athlete：Pw:HR 飄移 < 5 % = 有氧"),
+    "gait": N_("步頻 < 130 spm = 走路（同活動判讀）"),
+    "rule": N_("組合規則為推估（多數時間所在的區）"),
 }
 CLASSES = ("easy", "steady", "race")
-CLASS_ZH = {"easy": "輕鬆", "steady": "穩定", "race": "比賽強度"}
+CLASS_ZH = {"easy": N_("輕鬆"), "steady": N_("穩定"), "race": N_("比賽強度")}
 HR_LO, HR_HI = 40, 221          # histogram range (bpm)
 WARMUP_S = 600.0                # drift excludes the first 10 min (workout_review)
 DRIFT_MIN_S = 2400.0            # drift needs ≥ 40 min (workout_review.DRIFT_MIN_S)
@@ -179,7 +182,7 @@ def classify(st: Optional[dict], lthr: Optional[float], aet: Optional[float] = N
            "hr_pct_lthr": None, "if": None, "drift": None, "walk_share": None,
            "lthr": lthr, "aet": aet, "cp": cp}
     if not st:
-        out["reason"] = "沒有資料"
+        out["reason"] = M_("沒有資料")
         return out
     out.update(hr_avg=st.get("hr_avg"), drift=st.get("drift"), walk_share=st.get("walk_share"))
     if cp and st.get("p_avg"):
@@ -189,13 +192,13 @@ def classify(st: Optional[dict], lthr: Optional[float], aet: Optional[float] = N
     if lthr and st.get("hr_avg"):
         out["hr_pct_lthr"] = st["hr_avg"] / lthr
     if is_race:
-        out.update(cls="race", reason="賽季計畫的比賽", basis="plan")
+        out.update(cls="race", reason=M_("賽季計畫的比賽"), basis="plan")
         return out
     p_high = out["if"] is not None and out["if"] >= k["power_high"] and not cp_is_floor
     out["cp_is_floor"] = cp_is_floor
     has_hr = bool(st.get("hr_s")) and st["hr_s"] >= k["majority"] * st["moving_s"] and lthr and aet
     if p_high and not has_hr:
-        out.update(cls="race", reason=f"平均功率 {out['if']:.0%} CP ≥ {k['power_high']:.0%}", basis="power")
+        out.update(cls="race", reason=M_("平均功率 {x:.0%} CP ≥ {need:.0%}", x=out["if"], need=k["power_high"]), basis="power")
         return out
     if has_hr:
         sh = shares(st, aet, lthr)
@@ -205,29 +208,30 @@ def classify(st: Optional[dict], lthr: Optional[float], aet: Optional[float] = N
             f = out.get("f_power")
             if f is not None and f < k["race_min_f"]:
                 out.update(cls="steady", conflict=True,
-                           reason=f"{sh['high']:.0%} 時間 ≥ 0.95 × LTHR，但功率只有這個時長可持續功率的 {f:.0%}"
-                                  f"（< {k['race_min_f']:.0%}）：心率與功率不一致")
+                           reason=M_("{high:.0%} 時間 ≥ 0.95 × LTHR，但功率只有這個時長可持續功率的 {f:.0%}"
+                                     "（< {need:.0%}）：心率與功率不一致", high=sh["high"], f=f, need=k["race_min_f"]))
                 return out
-            out.update(cls="race", reason=f"{sh['high']:.0%} 時間 ≥ 0.95 × LTHR")
+            out.update(cls="race", reason=M_("{high:.0%} 時間 ≥ 0.95 × LTHR", high=sh["high"]))
             return out
         avg = st["hr_avg"]
         if sh["low"] >= k["majority"] and avg < aet + k["easy_tol_bpm"]:
             dr = st.get("drift")
             if abs(avg - aet) <= k["easy_tol_bpm"] and dr is not None and dr > k["drift_easy"]:
-                out.update(cls="steady", reason=f"平均心率貼近 AeT，Pw:HR 飄移 {dr:.1%} > 5 %")
+                out.update(cls="steady", reason=M_("平均心率貼近 AeT，Pw:HR 飄移 {dr:.1%} > 5 %", dr=dr))
             else:
-                out.update(cls="easy", reason=f"{sh['low']:.0%} 時間 < AeT，平均 {avg:.0f} bpm")
+                out.update(cls="easy", reason=M_("{low:.0%} 時間 < AeT，平均 {avg:.0f} bpm", low=sh["low"], avg=avg))
             return out
         if p_high:
-            out.update(cls="race", reason=f"平均功率 {out['if']:.0%} CP ≥ {k['power_high']:.0%}（心率不在低區）")
+            out.update(cls="race", reason=M_("平均功率 {x:.0%} CP ≥ {need:.0%}（心率不在低區）", x=out["if"], need=k["power_high"]))
             return out
-        out.update(cls="steady", reason=f"低區 {sh['low']:.0%}、高區 {sh['high']:.0%}，平均 {avg:.0f} bpm")
+        out.update(cls="steady", reason=M_("低區 {low:.0%}、高區 {high:.0%}，平均 {avg:.0f} bpm",
+                                           low=sh["low"], high=sh["high"], avg=avg))
         return out
     if out["if"] is not None and not cp_is_floor:
         x = out["if"]
         out["basis"] = "power"
         out.update(cls="easy" if x < k["power_low"] else "steady",
-                   reason=f"沒有心率：平均功率 {x:.0%} CP")
+                   reason=M_("沒有心率：平均功率 {x:.0%} CP", x=x))
         return out
-    out["reason"] = "沒有心率也沒有功率"
+    out["reason"] = M_("沒有心率也沒有功率")
     return out

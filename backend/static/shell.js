@@ -1159,6 +1159,29 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") qpopHide(); });
   addEventListener("scroll", qpopHide, { passive: true });
   window.ManualLink = { href: manHref, decorate: manDecorate, into: manInto, terms: glLoad, find: (t, skip) => glFind(t, skip) };
+  // SP-842: a pure-CSS ? (<span class="help" data-manual="race#fuel" tabindex="0">?<span class="tip">…</span></span>:
+  // the race calculator, the season plan, the race manager) gets 「看手冊 →」 at the end of its tip when it opens
+  // (hover or focus; again after a script refilled the tip). The tip is the page's own element: no popup, no
+  // removal — it stays open while the pointer is in it (a child of the .help) or the focus is (a tap on the link).
+  st.textContent += `
+  .help[data-manual]:focus-within > .tip { display: block; }
+  .help[data-manual] > .tip::before { content: ""; position: absolute; left: 0; right: 0; top: -9px; height: 9px; }
+  `;
+  function helpDecorate(h) {
+    const tip = h && h.querySelector ? h.querySelector(":scope > .tip") : null;
+    const href = h && h.dataset ? manHref(h.dataset.manual) : null;
+    if (!tip || !href || tip.querySelector(".an-man")) return;
+    const row = document.createElement("div");
+    row.className = "an-man-row";
+    const a = document.createElement("a");
+    a.className = "an-man"; a.href = href; a.textContent = T("manual.see"); a.title = T("manual.see_title");
+    row.appendChild(a);
+    tip.appendChild(row);
+  }
+  const helpOpen = (e) => { const h = e.target && e.target.closest ? e.target.closest(".help[data-manual]") : null; if (h) helpDecorate(h); };
+  document.addEventListener("mouseover", helpOpen);
+  document.addEventListener("focusin", helpOpen);
+  window.ManualLink.help = helpDecorate;
   // the words load while the page is idle, so the first ? already has its row
   if (!PUBLIC && !(cur && cur.id === "manual") && typeof setTimeout === "function") setTimeout(() => { glLoad(); }, 1500);
 

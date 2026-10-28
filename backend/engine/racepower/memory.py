@@ -38,6 +38,7 @@ from typing import Callable, Optional, Sequence
 import numpy as np
 
 from backend.engine.algorithms import route_match as RM
+from backend.i18n import M_, N_, _
 
 MEMORY = {
     "step_m": 25.0,            # the tracks resampled every 25 m (route_match.STEP_M)
@@ -49,7 +50,8 @@ MEMORY = {
     "r_range": (0.6, 1.8),     # 推估: one stretch never more than this far off the model
     "smooth_pts": 5,           # the elevation's moving average for the grade (5 × 25 m)
 }
-SOURCE = ("位置記憶（推估）：路線經過你以前跑過的地方（同方向、30 m 內），那一段用你當時「實際時間 ÷ 心率配速模型在同坡度的預期」"
+# a msgid: shown through _() (planner.memory_summary, SP-838)
+SOURCE = N_("位置記憶（推估）：路線經過你以前跑過的地方（同方向、30 m 內），那一段用你當時「實際時間 ÷ 心率配速模型在同坡度的預期」"
           "（那一天整體的快慢也算進去），一次經過算一半、越多次越接近當時的值；只改走過的那部分，地形難度倍率在那部分不再乘")
 
 
@@ -199,7 +201,7 @@ def segment_memory(plan: Optional[dict], segs: Sequence[dict], entries: Sequence
         R = math.exp(num / (wsum + K))
         rows[sj] = {"i": s.get("i", sj + 1), "f": f, "R": float(min(hi, max(lo, R))), "n": len(passes),
                     "passes": sorted(passes, key=lambda x: x["date"] or "")}
-    return {"segments": rows, "n_activities": len(meta), "k": K, "source": SOURCE, "badge": "推估"}
+    return {"segments": rows, "n_activities": len(meta), "k": K, "source": SOURCE, "badge": _("推估")}
 
 
 def apply(times: Sequence[float], mem: Optional[dict], terrain_mult: float = 1.0) -> list[float]:
@@ -331,7 +333,7 @@ def memory_backtest(model: dict, tracks: dict, course_of: Callable[[dict], Optio
            "total_plain": med("err_plain"), "total_memory": med("err_memory"),
            "seg_plain": med("seg_plain"), "seg_memory": med("seg_memory"),
            "cum_plain": med("cum_plain"), "cum_memory": med("cum_memory"),
-           "rows": rows, "source": "位置記憶留一回測（推估）：每一筆用不含它擬合的心率配速模型、只用它之前的活動當記憶"}
+           "rows": rows, "source": M_("位置記憶留一回測（推估）：每一筆用不含它擬合的心率配速模型、只用它之前的活動當記憶")}
     # the gate: the whole-run error and the cumulative error at the segment ends (SP-723's segment
     # measure: where you are when) both not worse; the median |segment error| is reported, not gated
     # (one slow place among many plain segments barely moves a median)

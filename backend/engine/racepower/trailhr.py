@@ -117,6 +117,8 @@ from typing import Optional
 
 import numpy as np
 
+from backend.i18n import M_, N_
+
 TRAILHR = {
     "divisor": None,           # None = the athlete's own (effort.divisor_of("fitted_run")); a number overrides
     "min_moving_s": 45 * 60.0,  # athlete.TRAIL_MIN_MOVING_S
@@ -151,10 +153,10 @@ XSTAR = {
     "auto_margin": 0.03,       # 推估 (§A2): an auto 全力 trail effort = x ≥ x*_prior(T) − 0.03
     "road_min_s": 15 * 60.0,   # 推估: a road sample needs ≥ 15 min moving
 }
-SOURCE = ("越野心率配速模型：effort km（km + 爬升/153）÷ 移動時間 對 移動心率/LTHR 的個人回歸，"
+SOURCE = N_("越野心率配速模型：effort km（km + 爬升/153）÷ 移動時間 對 移動心率/LTHR 的個人回歸，"
           "加耐久衰減（1 h 後每小時下降：你自己步調的越野跑活動內部、同坡度同心率的斜率，往先驗 0.05/h 收縮，"
           "降到 80 % 後持平）；比賽心率 x*(T) 隨時長下降（Fornasiero 2018、Kerhervé 2015 當形狀先驗）；推估")
-XSTAR_SOURCE = ("全力心率曲線 x*(T) = x₀ − s·ln(T)：先驗錨點 0.5 h 1.00（5K 最後 1/4 ≥ LTHR）、3 h 0.90"
+XSTAR_SOURCE = N_("全力心率曲線 x*(T) = x₀ − s·ln(T)：先驗錨點 0.5 h 1.00（5K 最後 1/4 ≥ LTHR）、3 h 0.90"
                 "（Friel Z3 下緣）、12 h 0.85（Fornasiero 2018 77 % HRmax 換算）；你的比賽／全力跑以當天 LTHR 擬合，"
                 "錨點當 3 場虛擬比賽收縮；推估")
 # terrain-matched within-run δ (module docstring step 7), all 推估
@@ -185,11 +187,12 @@ INSIDE = {
     "prior_sd": 0.02,           # σ₀: the 0.05 /h prior counts as a measurement with SE 0.02 /h
     "hr_lag_s": 60.0,           # athlete.HR_LAG_S
 }
-INSIDE_SOURCE = ("耐久衰減：你自己步調的越野跑（跟團健行不算）每 50 m 視窗扣掉你的坡度曲線，在同一筆活動內對"
+INSIDE_SOURCE = N_("耐久衰減：你自己步調的越野跑（跟團健行不算）每 50 m 視窗扣掉你的坡度曲線，在同一筆活動內對"
                  "「1 小時後的移動時數」回歸（每筆去截距、加心率項＝同坡度同心率），≥ 1.5 小時的活動合併成一條斜率，"
                  "長的活動權重自然大；再往 Clark 2019 的 5 %/h 先驗依精度收縮（先驗當作 ±2 %/h 的一次量測）；推估")
-FUEL_YES = ("有補給", "補給", "吃膠", "能量膠", "fuelled", "fueled", "fuel", "gel")
-FUEL_NO = ("沒補給", "無補給", "不補給", "沒吃", "空腹", "unfuelled", "unfueled", "no fuel", "fasted")
+# words of the user's own activity tags / titles (matched, never shown: backend/i18n/allow_cjk.txt)
+FUEL_YES = (*"有補給 補給 吃膠 能量膠".split(), "fuelled", "fueled", "fuel", "gel")
+FUEL_NO = (*"沒補給 無補給 不補給 沒吃 空腹".split(), "unfuelled", "unfueled", "no fuel", "fasted")
 
 
 def _floor() -> float:
@@ -527,7 +530,7 @@ def shrink_inside(info: Optional[dict]) -> dict:
     units of the measurement), source}."""
     prior, sd = TRAILHR["delta_prior"], INSIDE["prior_sd"]
     out = {"delta": prior, "raw": None, "se": None, "n": 0, "w": 0.0, "prior": prior, "prior_sd": sd,
-           "k": None, "source": INSIDE_SOURCE, "label": "推估"}
+           "k": None, "source": M_(INSIDE_SOURCE), "label": M_("推估")}
     if not info or info.get("raw") is None or not info.get("se") or not math.isfinite(info["raw"]):
         return out
     se = float(info["se"])
@@ -569,7 +572,7 @@ def fit(points: list[dict], delta: Optional[float]) -> dict:
     d = float(min(k["delta_max"], max(0.0, delta or 0.0)))
     pts = [p for p in points if p]
     out = {"n": len(pts), "delta": d, "delta_raw": delta, "a": None, "b": None, "c": None,
-           "kind": None, "valid": False, "source": SOURCE, "label": "推估"}
+           "kind": None, "valid": False, "source": M_(SOURCE), "label": M_("推估")}
     if not pts:
         return out
     x = np.array([p["x"] for p in pts])
@@ -613,8 +616,8 @@ def race_level(xs) -> tuple[float, str]:
     back-test's comparison row."""
     v = [float(x) for x in xs if x and math.isfinite(x)]
     if v:
-        return float(median(v)), f"之前 {len(v)} 場越野比賽／全力的移動心率中位數"
-    return TRAILHR["x_default"], "沒有之前的越野比賽：用 0.90 × LTHR（Friel Z3 下緣）"
+        return float(median(v)), M_("之前 {n} 場越野比賽／全力的移動心率中位數", n=len(v))
+    return TRAILHR["x_default"], M_("沒有之前的越野比賽：用 0.90 × LTHR（Friel Z3 下緣）")
 
 
 # ---- x*(T): the full-effort HR curve (module docstring step 5) ---------------
@@ -668,7 +671,7 @@ def fit_xstar(samples) -> dict:
     pts = [p for p in samples or [] if p and p.get("T_h") and p.get("x")
            and math.isfinite(p["x"]) and k["t_min_h"] <= p["T_h"] <= k["t_max_h"]]
     prior = xstar_prior()
-    out = {"prior": prior, "n": len(pts), "source": XSTAR_SOURCE, "label": "推估",
+    out = {"prior": prior, "n": len(pts), "source": M_(XSTAR_SOURCE), "label": M_("推估"),
            "anchors": [list(a) for a in k["anchors"]], "level_weight": k["level_weight"],
            "slope_weight": k["slope_weight"],
            "samples": [{q: p.get(q) for q in ("T_h", "x", "date", "label", "category", "idx")} for p in pts]}
@@ -734,8 +737,8 @@ def shrink_delta(deltas, ses=None) -> dict:
     d = float(min(k["delta_max"], max(0.0, d)))
     warn = None
     if raw is not None and raw > k["delta_warn_ratio"] * prior:
-        warn = (f"量到的耐久衰減 {raw:.0%}/h 超過先驗 {prior:.0%}/h 的 {k['delta_warn_ratio']:g} 倍：長跑裡可能還有"
-                "停等、走路或回程沒清掉（推估）")
+        warn = M_("量到的耐久衰減 {raw:.0%}/h 超過先驗 {prior:.0%}/h 的 {r:g} 倍：長跑裡可能還有停等、走路或回程沒清掉（推估）",
+                  raw=raw, prior=prior, r=k["delta_warn_ratio"])
     return {"delta": d, "raw_median": raw, "n": n, "prior": prior, "k": k["delta_k"], "warning": warn,
             "raw_ci95": pool["ci95"] if pool else None, "raw_se": pool["se"] if pool else None,
             "tau": pool["tau"] if pool else None, "method": "pooled" if pool else "median"}
@@ -814,13 +817,13 @@ def fit_terrain(points, delta: Optional[float], prior: Optional[dict] = None,
                     m = (n * float(median(raws[lv])) + k * prior[lv]) / (n + k)
                     mult[lv] = float(min(hi, max(lo, m)))
     levels = {"normal": {"mult": 1.0, "n": sum(1 for p in pts if p.get("terrain") == "normal"), "raw": None,
-                         "prior": 1.0, "label": "定義"}}
+                         "prior": 1.0, "label": M_("定義")}}
     for lv in marked:
         n = len(raws[lv])
         levels[lv] = {"mult": mult[lv], "n": n, "raw": float(median(raws[lv])) if n else None,
-                      "prior": prior[lv], "label": "你的紀錄" if n else "推估",
+                      "prior": prior[lv], "label": M_("你的紀錄") if n else M_("推估"),
                       "ratios": [round(x, 4) for x in raws[lv]]}
-    return {"mult": mult, "levels": levels, "k": k, "source": TD.SOURCE}
+    return {"mult": mult, "levels": levels, "k": k, "source": M_(TD.SOURCE)}
 
 
 def terrain_loo(points, delta: Optional[float]) -> dict:
@@ -939,7 +942,7 @@ FADE = {
     "min_bin_windows": 10,      # 推估: 100 m windows (≈ 1 km) a run needs in an hour to count it
     "k": 3.0,                   # 推估: = delta_k — the shrinkage toward even
 }
-FADE_SOURCE = ("後段變慢的形狀：你自己 ≥ 3 小時的越野跑，同坡度、同心率下每一小時的速度和第 1 小時比（100 m 視窗，"
+FADE_SOURCE = N_("後段變慢的形狀：你自己 ≥ 3 小時的越野跑，同坡度、同心率下每一小時的速度和第 1 小時比（100 m 視窗，"
                "清掉停等與收操），各次合併後往「不變慢」收縮；資料沒涵蓋的小時維持最後一個值；推估")
 
 
@@ -1001,7 +1004,7 @@ def fade_shape(rows, n_long: Optional[int] = None) -> dict:
     n = len(rs)
     out = {"applied": False, "points": [[0.5 * f["bin_h"], 1.0]], "bins": [], "n_runs": n,
            "n_long": n if n_long is None else int(n_long), "min_runs": f["min_runs"],
-           "min_run_h": f["min_run_s"] / 3600.0, "shrink": None, "source": FADE_SOURCE, "label": "推估"}
+           "min_run_h": f["min_run_s"] / 3600.0, "shrink": None, "source": M_(FADE_SOURCE), "label": M_("推估")}
     if n < f["min_runs"]:
         return out
     w = n / (n + f["k"])
@@ -1070,7 +1073,7 @@ SLOPE = {
     "k_min": 60.0,                                # 推估: pseudo-minutes of the default per bin
     "min_runs": 3,                                # fewer own runs → the default alone
 }
-SLOPE_SOURCE = ("分段時間：整場時間照心率配速模型，只依你自己的坡度成本重新分配（同一筆活動裡各坡度的實際時間 ÷ 努力距離的平均時間，"
+SLOPE_SOURCE = N_("分段時間：整場時間照心率配速模型，只依你自己的坡度成本重新分配（同一筆活動裡各坡度的實際時間 ÷ 努力距離的平均時間，"
                 "含下坡；陡下、下、平、上、陡上五段之間線性內插，資料少時往預設收縮）；預設值來自一位跑者的越野紀錄（SP-701），推估")
 
 
@@ -1116,7 +1119,7 @@ def fit_slope_cost(rows) -> dict:
     d = list(SLOPE["default"])
     if len(rs) < SLOPE["min_runs"]:
         return {"cost": d, "own": [None] * n, "minutes": [0.0] * n, "n_runs": len(rs), "applied": True,
-                "source": SLOPE_SOURCE, "label": "推估"}
+                "source": M_(SLOPE_SOURCE), "label": M_("推估")}
     num = [sum(r["num"][i] for r in rs) for i in range(n)]
     den = [sum(r["den"][i] for r in rs) for i in range(n)]
     own = [num[i] / den[i] if den[i] > 0 else None for i in range(n)]
@@ -1124,7 +1127,7 @@ def fit_slope_cost(rows) -> dict:
     k = SLOPE["k_min"]
     cost = [(mins[i] * own[i] + k * d[i]) / (mins[i] + k) if own[i] is not None else d[i] for i in range(n)]
     return {"cost": cost, "own": own, "minutes": mins, "n_runs": len(rs), "applied": True,
-            "source": SLOPE_SOURCE, "label": "推估"}
+            "source": M_(SLOPE_SOURCE), "label": M_("推估")}
 
 
 def slope_cost(fit: Optional[dict], g: float) -> float:
@@ -1171,8 +1174,8 @@ KIND = {
     "k_min": 60.0,                                # 推估: pseudo-minutes of "no difference" per class × band
     "min_runs": 3,                                # fewer runs with surface evidence → not applied
 }
-KIND_SOURCE = ("分段時間的路面：同一筆活動裡，每種路面（道路、林道、石階、步道、T3 以上的步道）的實際時間 ÷ 只用坡度成本分到的時間，"
-               "分下坡、平、上坡三段，從你自己的越野跑擬合、資料少時往 1 收縮；路面來自步道字典（OSM）。推估")
+KIND_SOURCE = N_("分段時間的路面：同一筆活動裡，每種路面（道路、林道、石階、步道、T3 以上的步道）的實際時間 ÷ 只用坡度成本分到的時間，"
+                  "分下坡、平、上坡三段，從你自己的越野跑擬合、資料少時往 1 收縮；路面來自步道字典（OSM）。推估")
 
 
 def kind_weights(g: float) -> list[float]:
@@ -1246,7 +1249,7 @@ def fit_kind_mult(rows, slope_fit: Optional[dict], divisor: Optional[float] = No
     if not applied:
         mult = {k: [1.0] * nb for k in ks}
     return {"mult": mult, "own": own, "minutes": mins, "n_runs": len(rs), "applied": applied,
-            "source": KIND_SOURCE, "label": "推估"}
+            "source": M_(KIND_SOURCE), "label": M_("推估")}
 
 
 def kind_mult(fit: Optional[dict], shares: Optional[dict], g: float) -> float:

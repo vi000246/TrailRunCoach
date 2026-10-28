@@ -11,6 +11,8 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from backend.i18n import M_, N_
+
 
 # ---- tasks 7 / 8 / 9 / 10 / 12 ---------------------------------------------
 
@@ -53,7 +55,7 @@ STD_DISTANCES = {           # category -> (standard m, lower threshold, upper ma
     "half": (21097.5, 20465.1, 21730.9),
     "marathon": (42195.0, 40929.15, 43460.8),
 }
-CATEGORY_LABEL = {"5k": "5K", "10k": "10K", "half": "半馬", "marathon": "全馬"}
+CATEGORY_LABEL = {"5k": "5K", "10k": "10K", "half": N_("半馬"), "marathon": N_("全馬")}     # msgids: M_() where shown
 
 
 def _hms(s: str) -> int:
@@ -115,15 +117,15 @@ def table_k(target_m: float, prior_m: float, prior_s: float) -> dict:
     out["prior_cat"] = prior_cat
     if target_m > STD_DISTANCES["marathon"][2]:
         out.update(k=ULTRA_K, lo=ULTRA_K, hi=ULTRA_K + 0.01, target_cat="ultra",
-                   warning="超出查表範圍（全馬以上）：k 取表中最慢值 −0.12")
+                   warning=M_("超出查表範圍（全馬以上）：k 取表中最慢值 −0.12"))
         return out
     target_cat = distance_category(target_m)
     out["target_cat"] = target_cat
     if target_cat is None:
-        out["warning"] = "目標距離不是標準距離（5K / 10K / 半馬 / 全馬 ±3%），表格不適用"
+        out["warning"] = M_("目標距離不是標準距離（5K / 10K / 半馬 / 全馬 ±3%），表格不適用")
         return out
     if prior_cat is None:
-        out["warning"] = "先前賽事不是標準距離（5K / 10K / 半馬 / 全馬 ±3%），表格不適用"
+        out["warning"] = M_("先前賽事不是標準距離（5K / 10K / 半馬 / 全馬 ±3%），表格不適用")
         return out
     bounds = BANDS[target_cat][prior_cat]
     for i, ub in enumerate(bounds):
@@ -131,7 +133,7 @@ def table_k(target_m: float, prior_m: float, prior_s: float) -> dict:
             k = MOST_LIKELY_K[target_cat][i]
             out.update(k=k, lo=max(K_MIN, round(k - 0.01, 2)), hi=min(K_MAX, round(k + 0.01, 2)), band=i)
             return out
-    out["warning"] = "先前賽事時間超出表格範圍"
+    out["warning"] = M_("先前賽事時間超出表格範圍")
     return out
 
 
@@ -187,8 +189,8 @@ def personal_k(xs: Sequence[float], ys: Sequence[float], tte_s: float,
 
 def extrapolation_warning(target_s: float, longest_s: Optional[float]) -> Optional[str]:
     if longest_s and target_s > 1.5 * longest_s:
-        return (f"預估時間 {target_s / 3600:.1f} h 超過你最長有效紀錄 {longest_s / 3600:.1f} h 的 1.5 倍"
-                "——Riegel 在此是外插")
+        return M_("預估時間 {t:.1f} h 超過你最長有效紀錄 {longest:.1f} h 的 1.5 倍——Riegel 在此是外插",
+                  t=target_s / 3600, longest=longest_s / 3600)
     return None
 
 

@@ -916,7 +916,7 @@ def _http_get(url: str, params: dict, timeout: float) -> dict:
     import httpx
     r = httpx.get(url, params=params, timeout=timeout, follow_redirects=True, headers={"User-Agent": user_agent()})
     if r.status_code in (401, 403):
-        raise RuntimeError(f"HTTP {r.status_code}（授權碼無效）")
+        raise RuntimeError(_("HTTP {code}（授權碼無效）", code=r.status_code))
     if r.status_code != 200:
         raise RuntimeError(f"HTTP {r.status_code}")
     return r.json()
@@ -1075,7 +1075,7 @@ def fetch_cwa(dataset: str, key: Optional[str], *, cache_dir: Optional[Path] = N
     if not key:
         if cached:
             return {**cached, "cache": "stale"}
-        raise RuntimeError("未設定 CWA 授權碼")
+        raise RuntimeError(_("未設定 CWA 授權碼"))
     lock = _cwa_lock(path)
     if not lock.acquire(blocking=cached is None):
         return {**cached, "cache": "stale"}            # someone is downloading it right now
@@ -1093,7 +1093,7 @@ def fetch_cwa(dataset: str, key: Optional[str], *, cache_dir: Optional[Path] = N
             raise
         doc = {**parse_cwa(raw), "dataset": dataset, "fetched_at": now.isoformat()}
         if not doc["locations"]:
-            raise RuntimeError("CWA 回應沒有任何地點")
+            raise RuntimeError(_("CWA 回應沒有任何地點"))
         _write_atomic(path, json.dumps(doc, ensure_ascii=False))
         try:
             st = path.stat()
@@ -1354,7 +1354,7 @@ def _fetch_climatology(path: Path, pt: tuple, lat, lon, elevation_m, date, days,
         answers.append((js, window))
     c = climatology_from(years, elevation_m)
     if c is None:
-        raise RuntimeError("; ".join(e for e in errs if e) or "沒有資料")
+        raise RuntimeError("; ".join(e for e in errs if e) or _("沒有資料"))
     result = {**c, "profile": diurnal_profile(answers), "offset_c": lapse(0.0, c["grid_elevation_m"], elevation_m),
               "failed": len(errs)}
     if not errs and all(w[2] for w in wins):

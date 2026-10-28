@@ -70,7 +70,7 @@ def test_the_popup_adds_edits_deletes_and_holds_cairn():
     assert "delRace({ name: e.name, event_id: e.id })" in js and 'method: "DELETE"' in js
     assert "CPUSH + encodeURIComponent(S.edit.id)" in js
     # the explanations sit behind a ? (hover / focus), not as paragraphs
-    assert re.search(r'<span class="help" tabindex="0">\?<span class="tip"><span data-i18n="races.cairn.import_how">', ed)
+    assert re.search(r'<span class="help"(?: data-manual="[^"]+")? tabindex="0">\?<span class="tip"><span data-i18n="races.cairn.import_how">', ed)  # SP-842: may link the manual
 
 
 def test_the_new_texts_in_both_languages():

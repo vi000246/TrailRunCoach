@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>訓練總覽</title>
+<title data-i18n="overview.page_title">訓練總覽</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
 <script src="/api/v1/static/readiness.js"></script>
@@ -299,15 +299,15 @@ details.ind-more > .ind { margin-top: 8px; }
     <h2><span data-i18n="overview.sec.log">做了什麼</span> <span class="meta" id="per-sub"></span></h2>
     <div class="toolbar">
       <div class="seg" id="unit"><button data-u="week" data-i18n="overview.unit.week">週</button><button data-u="month" data-i18n="overview.unit.month">月</button><button data-u="year" data-i18n="overview.unit.year">年</button></div>
-      <button class="btn" id="prev" aria-label="上一期">◀</button>
+      <button class="btn" id="prev" aria-label="上一期" data-i18n-attr="aria-label:overview.nav.prev">◀</button>
       <b id="per-label" class="num"></b>
-      <button class="btn" id="next" aria-label="下一期">▶</button>
+      <button class="btn" id="next" aria-label="下一期" data-i18n-attr="aria-label:overview.nav.next">▶</button>
       <button class="btn" id="now" data-i18n="overview.now">回到現在</button>
-      <button type="button" class="q" aria-label="說明" data-tip="每一期做了多少：上圖移動時間（依類別堆疊），下圖爬升（m）。&#10;怎麼看：點長條切到那一期，下方數字跟著換；◀ ▶ 換期、週／月／年換單位。&#10;看什麼：跟「平常」（詳細數字裡的典型一期）比，這期多還是少。&#10;方法：只算移動時間；類別同「我的訓練 → 訓練量」。">?</button>
+      <button type="button" class="q" aria-label="說明" data-manual="analysis#overview-more" data-i18n-attr="aria-label:overview.help;data-tip:overview.log.tip" data-tip="每一期做了多少：上圖移動時間（依類別堆疊），下圖爬升（m）。&#10;怎麼看：點長條切到那一期，下方數字跟著換；◀ ▶ 換期、週／月／年換單位。&#10;看什麼：跟「平常」（詳細數字裡的典型一期）比，這期多還是少。&#10;方法：只算移動時間；類別同「我的訓練 → 訓練量」。">?</button>
     </div>
     <div class="legend" id="cat-legend" style="margin:0 0 4px"></div>
     <div class="plot" id="trend"></div>
-    <div class="meta" style="margin:4px 0 0">爬升（m）</div>
+    <div class="meta" style="margin:4px 0 0" data-i18n="overview.log.climb_axis">爬升（m）</div>
     <div class="plot small" id="trend-climb"></div>
     <div id="period"><div class="loading">…</div></div>
   </section>
@@ -320,7 +320,7 @@ details.ind-more > .ind { margin-top: 8px; }
   <section data-sec id="s-week" aria-labelledby="wk-h">
     <h2 id="wk-h"><span id="wk-ic"></span><span data-i18n="overview.jump.week">本週</span> <span class="meta num" id="wk-sub"></span><span id="wk-cp"></span>
       <a class="to-sched" href="/api/v1/overview/plan/schedule/page" data-i18n="overview.to_sched">課表編輯 →</a></h2>
-    <div class="week" id="wk-days"><div class="loading">排本週課表中…</div></div>
+    <div class="week" id="wk-days"><div class="loading" data-i18n="overview.wk.loading">排本週課表中…</div></div>
     <div class="legend" id="wk-legend"></div>
     <div id="week"></div>
   </section>
@@ -339,7 +339,7 @@ details.ind-more > .ind { margin-top: 8px; }
     </section>
     <!-- 連續兩天長天 (engine/b2b.py card): only before a multi-day / ≥ 6 h A event, or once B2B weekends exist -->
     <section id="b2bcard" aria-labelledby="b2b-h" hidden>
-      <h2 id="b2b-h">B2B 連續長天 <span class="meta" id="b2b-sub"></span><span id="b2b-q"></span></h2>
+      <h2 id="b2b-h"><span data-i18n="overview.b2b.title">B2B 連續長天</span> <span class="meta" id="b2b-sub"></span><span id="b2b-q"></span></h2>
       <div id="b2b"><div class="loading">…</div></div>
     </section>
   </div>
@@ -352,35 +352,18 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const I = (n, c) => window.DI ? DI(n, c) : "";
 // ? help button: the text lives in data-tip (plain text, newlines kept)
-const q = (s, label = "說明") => s ? `<button type="button" class="q" aria-label="${esc(label)}" data-tip="${esc(s)}">?</button>` : "";
+// SP-842: every ? opens a manual section with 「看手冊 →」 (default: 做了什麼、指標、本週; the four status cards: 狀況)
+const q = (s, label = t("overview.help"), man = "analysis#overview-more") => s ? `<button type="button" class="q" aria-label="${esc(label)}" data-manual="${esc(man)}" data-tip="${esc(s)}">?</button>` : "";
 // glossary: terms in engine text get a hover (tap on touch) explanation
-const GLOSS = {
-  "AeT": "AeT 有氧閾值（≈ LT1、第一換氣閾值）：還能只用鼻子呼吸、能講完整句子的最高強度。基礎期的輕鬆課都壓在它以下。\n\n" +
-    "怎麼測（心率飄移測試）：\n" +
-    "1. 平日排 50 分：冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線（不要山路）；記下溫度，熱的時候結果會偏高；先暖身 10 分鐘到開始流汗\n" +
-    "2. 從你猜的 AeT 心率起跑，固定功率跑 40 分鐘（Uphill Athlete：只有 40 分就做 40 分，不建議更短），中途不停、不加速；主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天用較慢的配速再測（Evoke）；起始心率約降 5 bpm（推估）\n" +
-    "3. 比較前 20 分與後 20 分的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
-    "4. 判讀卡和總覽「測試」會出現「套用這次的 AeT」（沒測時用 0.89 × LTHR 估）",
-  "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
-    "怎麼測（課表偏好選一種）：\n" +
-    "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分\n" +
-    "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分\n" +
-    "• 用比賽：5–10 K 比賽或計時跑\n" +
-    "CP 自動計算（PD 模型擬合近 90 天功率曲線的上緣）：測試只是近 90 天功率曲線上的一次全力，課表的 CP 是這條曲線上緣擬合的模型閾值功率（Modelled threshold power）" +
-    "（差 3 W 以上才換），不用另外設定；每 4–6 週測一次，賽前 10 天內不要測",
-  "間歇門檻": "間歇門檻：基礎期什麼時候可以排間歇（課表偏好可以選方法，每個選項的 ? 有說明）。\n\n" +
-    "自動（預設）：有實測 AeT（16 週內）而且 LTHR 不是預設值 → Uphill Athlete 差距法（LTHR ÷ AeT − 1 ≤ 10%），" +
-    "或 Friel 飄移 < 5%；沒有實測 AeT → 不設門檻，每週最多 1 次，由護欄決定：低強度 ≥ 75%、長期訓練負荷（Chronic load）每週 < +5、週增量 ≤ 10%、" +
-    "3:1 恢復週改 fartlek、負荷平衡（Load balance）。劑量 5×1 分 → 6×1 → 4×3 上坡 → 5×3 → 4×4，之後閾值下 3×8／4×8 交替。\n\n" +
-    "選了某個方法但缺資料時不會永久鎖住，改照護欄排（自訂）。",
-};
+const GLOSS = Object.fromEntries([["overview.gloss.aet_term", "overview.gloss.aet"], ["overview.gloss.cp_term", "overview.gloss.cp"],
+  ["overview.gloss.gate_term", "overview.gloss.gate"]].map(([term, tip]) => [t(term), t(tip)]));
 const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
 const gl = (s) => esc(s).replace(GLOSS_RE, (m) => GLOSS[m] ? `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>` : m);
 // SP-954: without a power meter (③, engine/power_state.py) the AeT drift test runs at a fixed pace (SP-950 Q1-6) and
 // compares pace ÷ HR; the CP test is no term to explain (it is never suggested then)
 function glossNoMeter() {
-  GLOSS["AeT"] = GLOSS["AeT"].replace("固定功率跑 40 分鐘", "固定配速跑 40 分鐘").replace("「功率÷心率」", "「配速÷心率」");
-  delete GLOSS["CP 測試"];
+  GLOSS[t("overview.gloss.aet_term")] = t("overview.gloss.aet_nometer");
+  delete GLOSS[t("overview.gloss.cp_term")];
 }
 async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`); return r.json(); }
 const ls = { get(k, d) { try { const v = localStorage.getItem("overview." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -422,8 +405,8 @@ function spark(pts, level, last) {
   const col = level === "bad" ? "var(--bad)" : level === "watch" ? "var(--watch)" : level === "good" ? "var(--good)" : "var(--accent)";
   const lx = X(xs[xs.length - 1]), ly = Y(ys[ys.length - 1]);
   const zero = y0 < 0 && y1 > 0 ? `<line x1="0" x2="200" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--line)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` : "";
-  return `<svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none" role="img" aria-label="近 90 天走勢">
-    <title>近 90 天：${esc(P[0][0])} ${Math.round(ys[0])} → ${esc(P[P.length - 1][0])} ${Math.round(ys[ys.length - 1])}</title>${zero}
+  return `<svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none" role="img" aria-label="${esc(tO("spark.aria"))}">
+    <title>${esc(tO("spark.title", { a: P[0][0], va: Math.round(ys[0]), b: P[P.length - 1][0], vb: Math.round(ys[ys.length - 1]) }))}</title>${zero}
     <polyline fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"
       points="${P.map((p, i) => `${X(xs[i]).toFixed(1)},${Y(ys[i]).toFixed(1)}`).join(" ")}"/>
     <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="3.2" fill="${col}" stroke="var(--panel)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
@@ -431,7 +414,7 @@ function spark(pts, level, last) {
 // progress ring (done ÷ target)
 function ring(f, col = "var(--accent)") {
   const r = 19, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, f || 0));
-  return `<svg class="ring" viewBox="0 0 46 46" role="img" aria-label="完成 ${Math.round((f || 0) * 100)}%">
+  return `<svg class="ring" viewBox="0 0 46 46" role="img" aria-label="${esc(tO("ring.aria", { p: Math.round((f || 0) * 100) }))}">
     <circle cx="23" cy="23" r="${r}" fill="none" stroke="var(--line)" stroke-width="5"/>
     <circle cx="23" cy="23" r="${r}" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round"
       stroke-dasharray="${(c * v).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 23 23)"/>
@@ -452,10 +435,10 @@ function renderKpis() {
   const F = ind("fitness"), T = ind("form"), ph = ind("phase"), g = STATUS.goals;
   const out = [];
   const ramp = F?.extra?.ramp_week;
-  out.push(`<div class="kpi"><div class="k">${I("fitness")}${esc(t("overview.kpi.ctl"))}${q(tipOf(F))}</div>
+  out.push(`<div class="kpi"><div class="k">${I("fitness")}${esc(t("overview.kpi.ctl"))}${q(tipOf(F), undefined, "analysis#status")}</div>
     <div class="row"><div class="v">${esc(F?.text ?? "–")}</div>${spark(F?.spark, F?.level)}</div>
     <div class="sub"><span class="num">${ramp == null ? "" : esc(t("overview.kpi.ramp", { v: sgn(ramp, (v) => v.toFixed(1)) }))}</span>${F ? stw(F.level, kpiWord(F)) : ""}</div></div>`);
-  out.push(`<div class="kpi"><div class="k">${I("form")}${esc(t("overview.kpi.tsb"))}${q(tipOf(T))}</div>
+  out.push(`<div class="kpi"><div class="k">${I("form")}${esc(t("overview.kpi.tsb"))}${q(tipOf(T), undefined, "analysis#status")}</div>
     <div class="row"><div class="v">${esc(T?.text ?? "–")}</div>${spark(T?.spark, T?.level)}</div>
     <div class="sub"><span class="num">${T?.why ? esc(formWhy(T.why)) : ""}</span>${T ? stw(T.level, kpiWord(T)) : ""}</div></div>`);
   // this week: from the stored plan once loaded (the user's edits), else the generated targets
@@ -464,12 +447,12 @@ function renderKpis() {
   if (PLAN) {
     const f = th > 0 ? D.hours / th : 0;
     const wtip = [...(PLAN.why || []), t("overview.kpi.week_tip", { tph: n0(PLAN.target.tss_per_hour) })].join("\n");
-    out.push(`<div class="kpi"><div class="k">${I("volume")}${esc(t("overview.kpi.week"))}${q(wtip)}</div>
+    out.push(`<div class="kpi"><div class="k">${I("volume")}${esc(t("overview.kpi.week"))}${q(wtip, undefined, "analysis#status")}</div>
       <div class="row"><div class="v">${hrN(D.hours)}<small>/ ${hrs(th)}</small></div>${ring(f, f >= 1 ? "var(--good)" : "var(--accent)")}</div>
       <div class="sub"><span class="num">${esc(t("overview.kpi.load_of", { a: n0(D.tss), b: n0(tt) }))}</span>${stw(f >= 1 ? "good" : "info", t(f >= 1 ? "overview.kpi.done" : f >= 0.5 ? "overview.kpi.half" : "overview.kpi.going"))}</div></div>`);
   } else out.push(`<div class="kpi"><div class="k">${I("volume")}${esc(t("overview.kpi.week"))}</div><div class="loading">…</div></div>`);
   const name = ph?.extra?.next_a;
-  out.push(`<div class="kpi"><div class="k">${I("flag")}${esc(t("overview.kpi.next_a"))}${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "")}</div>
+  out.push(`<div class="kpi"><div class="k">${I("flag")}${esc(t("overview.kpi.next_a"))}${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "", undefined, "analysis#status")}</div>
     ${g.next_a ? `<div class="row"><div class="v">${g.days_to_next_a}<small>${esc(t("overview.kpi.days", { n: g.days_to_next_a }))}</small></div></div>
       <div class="sub"><span>${esc(name || "")}</span>${STATUS.phase ? stw("info", STATUS.phase.label).replace(I("info"), I("flag")) : ""}</div>`
       : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="/api/v1/app/races/page">${esc(t("overview.kpi.add_race"))}</a>${
@@ -646,15 +629,15 @@ function renderTodo() {
   // to-do: icon + short title; the detail opens on click
   const lvl = (a) => (ind((a.because || [])[0]) || {}).level || "info";
   const row = (a) => {
-    const [t, ...rest] = String(a.title).split("：");
+    const ti = String(a.title), m = /：|: /.exec(ti), k = m ? m.index : -1;
     const l = lvl(a);
-    return `<details class="al ${l}"><summary>${I(l)}<b>${gl(t)}</b><span class="s">${gl(rest.join("："))}</span></summary>
-      <div class="body">${gl(a.detail)}${a.source ? ` ${q("來源：" + a.source)}` : ""}</div></details>`;
+    return `<details class="al ${l}"><summary>${I(l)}<b>${gl(k < 0 ? ti : ti.slice(0, k))}</b><span class="s">${gl(k < 0 ? "" : ti.slice(k + m[0].length))}</span></summary>
+      <div class="body">${gl(a.detail)}${a.source ? ` ${q(t("overview.kpi.source", { src: a.source }))}` : ""}</div></details>`;
   };
   $("todo-sub").textContent = shown.length ? tO("todo_n", { n: shown.length }) : "";
-  $("actions").innerHTML = (shown.length ? shown.map(row).join("") : `<p class="meta">${I("good")} 沒有需要處理的項目</p>`)
+  $("actions").innerHTML = (shown.length ? shown.map(row).join("") : `<p class="meta">${I("good")} ${esc(tO("todo.none"))}</p>`)
     + (detail.length ? `<details class="more"><summary>${esc(tO("hint.detail"))}</summary><div class="body">${detail.map((a) =>
-      `<div><b>${gl(a.title)}</b>：${gl(a.detail)}</div>`).join("")}</div></details>` : "");
+      `<div><b>${gl(a.title)}</b>${esc(tO("sep"))}${gl(a.detail)}</div>`).join("")}</div></details>` : "");
 }
 function renderInd() {
   const s = STATUS;
@@ -696,11 +679,11 @@ function renderInd() {
 function heatExtra(i) {
   if (i.id !== "heat" || !i.extra) return "";
   const x = i.extra, doses = x.doses || [];
-  const bars = doses.length ? `<div class="heatbars" title="每天的熱劑量（近 60 天，1 = ≥ 60 分鐘 Hadley ≥ 150）">${doses.slice(-60).map(([d, v]) =>
+  const bars = doses.length ? `<div class="heatbars" title="${esc(tO("heat.bars"))}">${doses.slice(-60).map(([d, v]) =>
     `<i style="height:${Math.max(2, v * 18)}px" title="${esc(d)} ${Math.round(v * 100)}%"></i>`).join("")}</div>` : "";
-  const r = x.s_race ? `<div>${esc(x.s_race.event)}（${esc(x.s_race.date)}）比賽日預估 S ${Math.round(x.s_race.center * 100)} %（${Math.round(x.s_race.low * 100)}–${Math.round(x.s_race.high * 100)} %）</div>` : "";
-  const h = x.hrc && x.hrc.recent != null ? `<div>熱天心率成本 HRC：近 4 週 ${x.hrc.recent.toFixed(1)}、前 4 週 ${x.hrc.before != null ? x.hrc.before.toFixed(1) : "–"} bpm / 10 Hadley${x.hrc.disagrees ? " · <b>觀測不支持模型</b>" : ""}</div>` : "";
-  return `${bars}${r}${h}<div><span class="st watch">推估</span> a = ${x.a}（${(x.a_range || []).join("–")}）</div>`;
+  const r = x.s_race ? `<div>${esc(tO("heat.race", { event: x.s_race.event, date: x.s_race.date, c: Math.round(x.s_race.center * 100), lo: Math.round(x.s_race.low * 100), hi: Math.round(x.s_race.high * 100) }))}</div>` : "";
+  const h = x.hrc && x.hrc.recent != null ? `<div>${esc(tO("heat.hrc", { r: x.hrc.recent.toFixed(1), b: x.hrc.before != null ? x.hrc.before.toFixed(1) : "–" }))}${x.hrc.disagrees ? ` · <b>${esc(tO("heat.disagree"))}</b>` : ""}</div>` : "";
+  return `${bars}${r}${h}<div><span class="st watch">${esc(tO("est"))}</span> a = ${x.a}${esc(t("common.workout.paren", { x: (x.a_range || []).join("–") }))}</div>`;
 }
 
 // 心率飄移 card (status.i_drift): runs on the 參考 tier are counted for display — say so in plain
@@ -717,7 +700,7 @@ function driftTier(i) {
 function aetApply(i) {
   const at = i.id === "testing" && i.extra && i.extra.aet_test;
   if (!at || !at.apply) return "";
-  return `<div class="act"><button type="button" class="btn" data-aet-apply>套用這次的 AeT（${esc(at.apply.aethr)} bpm）</button>
+  return `<div class="act"><button type="button" class="btn" data-aet-apply>${esc(tO("aet.apply", { hr: at.apply.aethr }))}</button>
     <span class="meta" data-apply-msg>${esc(at.date)} ${at.drift != null ? esc(tD("overview.drift.value", { v: (at.drift * 100).toFixed(1) })) : ""}</span>${q(at.basis === "Pw:HR"
       ? tD("overview.drift.basis_power") : tD("overview.drift.basis_pace"))}</div>`;
 }
@@ -728,15 +711,15 @@ document.addEventListener("click", async (ev) => {
   if (!at || !at.apply) return;
   const a = at.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
   if (STATUS.stale) { msg.textContent = tO("stale.wait"); return; }      // from the previous status: wait
-  if (!confirm(`把 ${a.date} 的 AeT 設成 ${a.aethr} bpm？區間和間歇門檻會重新計算`)) return;
+  if (!confirm(tO("aet.confirm", { d: a.date, hr: a.aethr }))) return;
   b.disabled = true;
   try {
     const r = await fetch("/api/v1/plan/thresholds/apply-estimate", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(a) });
     if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
     b.remove();
-    msg.textContent = `已套用：${a.date} AeT ${a.aethr} bpm`;
-  } catch (e) { b.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
+    msg.textContent = tO("aet.applied", { d: a.date, hr: a.aethr });
+  } catch (e) { b.disabled = false; msg.textContent = tO("aet.failed", { e: e.message }); }
 });
 
 // 測試 card (SP-64): how believable the LTHR / max HR are, which one is likely wrong, and the
@@ -798,36 +781,36 @@ async function loadB2B() {
   $("b2bcard").hidden = false;
   const E = c.event, W = c.this_week || {}, T = c.trend || {};
   $("b2b-sub").textContent = E ? `${E.name} ${md(E.start)}` : "";
-  $("b2b-q").innerHTML = q(`B2B = 連續兩天、每天 ≥ 90 分的長天。\n判讀：第 2 天和第 1 天比，同 VAM 的心率差、同心率的 VAM 差。\n推估：判讀門檻 ±3 bpm、±5%、趨勢 ±2 個百分點都沒有來源。\n\n何時排：${c.rules.when}\n\n怎麼排：${c.rules.days}\n\n判讀：${c.rules.eval}`);
+  $("b2b-q").innerHTML = q(tO("b2b.tip", { when: c.rules.when, days: c.rules.days, eval: c.rules.eval }));
   let now;
-  if (W.due) now = [I("b2b"), `本週第 ${W.index} 次 · ${(W.minutes || []).join("＋")} 分`, (W.why || []).join("；")];
+  if (W.due) now = [I("b2b"), tO("b2b.due", { i: W.index, m: (W.minutes || []).join(tO("b2b.plus")) }), (W.why || []).join(tO("b2b.semi"))];
   // OV11 (SP-483): a suggested B2B is the suggestion box's — the card keeps the numbers and the 判讀
-  else if (W.suggest && OVH.b2bNow(W)) now = [I("b2b"), `本週建議 B2B（${(W.minutes || []).join("＋")} 分）`, "還沒排：在建議框挑兩天再排入"];
-  else if (W.post) now = [I("rest"), `B2B 後輕鬆日到 ${md(W.post.until)}`, c.rules.post];
-  else if ((W.blocked || []).length && E && E.qualifies) now = [I("na"), "本週不排", W.blocked[0]];
+  else if (W.suggest && OVH.b2bNow(W)) now = [I("b2b"), tO("b2b.suggest", { m: (W.minutes || []).join(tO("b2b.plus")) }), tO("b2b.suggest_why")];
+  else if (W.post) now = [I("rest"), tO("b2b.post", { d: md(W.post.until) }), c.rules.post];
+  else if ((W.blocked || []).length && E && E.qualifies) now = [I("na"), tO("b2b.none"), W.blocked[0]];
   const ahead = c.planned.filter((p) => !p.this_week);
   const out = [];
   if (now) out.push(`<p class="now-l">${now[0]}<span>${esc(now[1])}</span>${q(now[2])}</p>`);
   out.push(`<div class="stats">
-    <div class="stat"><div class="k">${I("check")}做過</div><div class="v">${c.done.length}<small> 次</small></div></div>
-    <div class="stat"><div class="k">${I("b2b")}下次</div><div class="v">${ahead.length ? esc(ahead[0].sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")) : "–"}</div></div>
-    <div class="stat"><div class="k">${I("durability")}耐久性好</div><div class="v">${T.durable_share != null ? Math.round(T.durable_share * 100) + "<small>%</small>" : "–"}</div></div>
-    <div class="stat"><div class="k">${I("flag")}賽事</div><div class="v">${E ? (E.days > 1 ? E.days + "<small> 天</small>" : "單日") : "–"}</div></div></div>`);
+    <div class="stat"><div class="k">${I("check")}${esc(tO("b2b.done"))}</div><div class="v">${c.done.length}<small> ${esc(tO("b2b.times", { n: c.done.length }))}</small></div></div>
+    <div class="stat"><div class="k">${I("b2b")}${esc(tO("b2b.next"))}</div><div class="v">${ahead.length ? esc(ahead[0].sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")) : "–"}</div></div>
+    <div class="stat"><div class="k">${I("durability")}${esc(tO("b2b.durable"))}</div><div class="v">${T.durable_share != null ? Math.round(T.durable_share * 100) + "<small>%</small>" : "–"}</div></div>
+    <div class="stat"><div class="k">${I("flag")}${esc(tO("b2b.race"))}</div><div class="v">${E ? (E.days > 1 ? E.days + `<small> ${esc(tO("b2b.days", { n: E.days }))}</small>` : esc(tO("b2b.one_day"))) : "–"}</div></div></div>`);
   const rows = c.done.map((d, i) => {
     const r = d.eval || {}, n = r.n || {}, d1 = r.day1 || {}, d2 = r.day2 || {};
     const share = (x) => x.over_aet_share == null ? "–" : Math.round(x.over_aet_share * 100) + "%";
     const lv = { good: "good", watch: "watch", bad: "bad" }[r.level] || "na";
     return `<details class="rw"><summary><b>#${i + 1}</b><span class="num">${md(d.start)}–${md(d.end)}</span>
-        <span class="meta num">${d.minutes.join("＋")} 分</span>${stw(lv, r.label || "–")}</summary>
+        <span class="meta num">${esc(tO("wk.min", { n: d.minutes.join(tO("b2b.plus")) }))}</span>${stw(lv, r.label || "–")}</summary>
       <div class="body">${esc(r.text || "")}
-      <div class="grid2"><span>同 VAM 的心率</span><span class="num">${r.hr_shift_bpm == null ? "–" : sgn(r.hr_shift_bpm, (v) => v.toFixed(1)) + " bpm"}</span><span>±${(r.thresholds || {}).hr_bpm ?? 3} bpm 內＝差不多</span>
-        <span>同心率的 VAM</span><span class="num">${r.vam_ratio == null ? "–" : pctS(r.vam_ratio - 1)}</span><span>±${Math.round(((r.thresholds || {}).vam ?? 0.05) * 100)}% 內＝差不多</span>
-        <span>心率 > AeT+3</span><span class="num">${share(d1)} → ${share(d2)}</span><span>≤ 10%＝達標</span>
-        <span>爬坡段（第 1／2 天）</span><span class="num">${n.day1 ?? 0} ／ ${n.day2 ?? 0}</span><span>每段 100 m、坡度 ≥ 10%</span></div></div></details>`;
+      <div class="grid2"><span>${esc(tO("b2b.hr_at_vam"))}</span><span class="num">${r.hr_shift_bpm == null ? "–" : sgn(r.hr_shift_bpm, (v) => v.toFixed(1)) + " bpm"}</span><span>${esc(tO("b2b.hr_within", { v: (r.thresholds || {}).hr_bpm ?? 3 }))}</span>
+        <span>${esc(tO("b2b.vam_at_hr"))}</span><span class="num">${r.vam_ratio == null ? "–" : pctS(r.vam_ratio - 1)}</span><span>${esc(tO("b2b.vam_within", { v: Math.round(((r.thresholds || {}).vam ?? 0.05) * 100) }))}</span>
+        <span>${esc(tO("b2b.over_aet"))}</span><span class="num">${share(d1)} → ${share(d2)}</span><span>${esc(tO("b2b.over_ok"))}</span>
+        <span>${esc(tO("b2b.climbs"))}</span><span class="num">${esc(tO("b2b.climbs_n", { a: n.day1 ?? 0, b: n.day2 ?? 0 }))}</span><span>${esc(tO("b2b.climbs_rule"))}</span></div></div></details>`;
   }).join("");
   if (rows) out.push(`<div class="rows">${rows}</div>`);
-  if (c.done.length) out.push(`<p class="meta" style="margin:6px 0 0">${I("fitness")} ${esc(T.text || "")}${T.judged ? ` · ${T.judged} 次有判讀` : ""}</p>`);
-  if (ahead.length > 1) out.push(`<p class="meta" style="margin:4px 0 0">之後：${ahead.slice(1).map((p) => p.sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")).join("、")} <span class="faint">暫定</span></p>`);
+  if (c.done.length) out.push(`<p class="meta" style="margin:6px 0 0">${I("fitness")} ${esc(T.text || "")}${T.judged ? ` · ${esc(tO("b2b.judged", { n: T.judged }))}` : ""}</p>`);
+  if (ahead.length > 1) out.push(`<p class="meta" style="margin:4px 0 0">${esc(tO("b2b.later", { list: ahead.slice(1).map((p) => p.sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")).join(tO("b2b.comma")) }))} <span class="faint">${esc(tO("b2b.tentative"))}</span></p>`);
   $("b2b").innerHTML = out.join("");
 }
 
@@ -854,7 +837,7 @@ function verdictTxt(s) {
   const head = SessChip.label(st, st === "partial" ? pct : null) + (st === "done" && pct != null ? ` ${pct}%` : "") + (why ? " · " + why : "");
   const nums = st === "missed" ? "" : [cp.tss_pct != null ? tO("week.load_pct", { pct: cp.tss_pct }) : "", cp.duration_pct != null ? tO("week.time_pct", { pct: cp.duration_pct }) : "",
     cp.intensity_pct != null ? tO("week.intensity_pct", { pct: cp.intensity_pct }) : ""].filter(Boolean).join(" · ");
-  return head + (nums ? `（${nums}）` : "");
+  return head + (nums ? tO("week.nums", { nums }) : "");
 }
 function sessHtml(s, today) {
   const ty = SessChip.kind(s), st = SessChip.status(s), done = s.state === "done";
@@ -866,14 +849,15 @@ function sessHtml(s, today) {
   const rated = done && s.done_by && s.done_by.self_rating ? s.done_by.self_rating.text : "";   // 自評：Hard（COROS）, SP-231
   const pm = window.PlanMark ? PlanMark.lines(s, SP && SP.kinds) : [];      // SP-318: ↻ auto / ✎ yours, as on the 課表 page
   const vd = verdictTxt(s);
-  const tip = [s.title, `${SessChip.typeName(ty)}${s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : ""}`,
-    done && s.done_by ? `完成：${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""} ${hm(s.done_by.moving_s)} · 負荷計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · 負荷 ${n0(est)}` : ""}`,
+  const tip = [s.title, `${SessChip.typeName(ty)}${s.origin === "custom" ? tO("wk.custom") : s.edited ? tO("wk.edited") : ""}`,
+    done && s.done_by ? tO("wk.done_tip", { what: `${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""}`,
+      time: hm(s.done_by.moving_s), p: n0(est), a: n0(s.done_by.tss) }) : `${s.minutes ? tO("wk.minutes", { n: s.minutes }) : ""}${est ? " · " + tO("wk.load", { n: n0(est) }) : ""}`,
     // SP-483 (OV9): rule D's ⚠ on a done session, as the 課表 page's hover (sesspop.js) has it
-    vd, SessChip.hrNote(cp), done && s.note ? "⚠ " + s.note : "", prov ? SessChip.label("todo", null, { prov: true }) : "", ...pm, rated, done ? "點一下看計畫 vs 實際、開啟活動" : "",
-    s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "", live && s.walk_hint ? s.walk_hint : "", live ? watchTxt(s.coros) : ""].filter(Boolean).join("\n");
+    vd, SessChip.hrNote(cp), done && s.note ? "⚠ " + s.note : "", prov ? SessChip.label("todo", null, { prov: true }) : "", ...pm, rated, done ? tO("wk.click_done") : "",
+    s.target ? tO("wk.target", { t: s.target }) : "", live && s.detail ? s.detail : "", live && s.walk_hint ? s.walk_hint : "", live ? watchTxt(s.coros) : ""].filter(Boolean).join("\n");
   const go = done ? ` data-go="${esc(`${SCHED}?day=${s.day}&uid=${encodeURIComponent(s.uid)}`)}"` : "";
   // §7.1: type：title, time / TSS, the verdict, 暫定, changed by
-  const lbl = [`${SessChip.typeName(ty)}：${s.title}`, info, vd, prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : ""].filter(Boolean).join("，");
+  const lbl = [`${SessChip.typeName(ty)}${tO("sep")}${s.title}`, info, vd, prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : ""].filter(Boolean).join(tO("wk.comma"));
   return `<button type="button" class="sx sc ${SessChip.cls(s)}" data-kind="${esc(s.kind)}" data-tip="${esc(tip)}"${go} aria-label="${esc(lbl)}">
     ${SessChip.icon(ty, { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="tl sc-t">${esc(s.title)}</span>${SessChip.ring(st, cp && cp.pct, { prov })}
     <span class="mn num">${info}</span></button>`;
@@ -888,7 +872,7 @@ function extraHtml(a) {
     ${SessChip.icon(a.race.kind === "baiyue" ? "hike" : "race")}<span class="tl sc-t">${esc(rl)}</span><span></span><span class="mn num">${hm(a.moving_s)} · ${esc(tO("wk.load", { n: n0(a.tss) }))}</span></button>`;
   }
   const se = a.session || {}, lab = se.type_label ? `${a.category_label} · ${se.type_label}` : a.category_label;
-  return `<button type="button" class="sx sc act" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`課表外：${lab} ${hm(a.moving_s)} · 負荷 ${n0(a.tss)}\n點一下看摘要、配對到課表`)}">
+  return `<button type="button" class="sx sc act" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(tO("wk.extra_tip", { lab, time: hm(a.moving_s), n: n0(a.tss) }))}">
     ${SessChip.icon(SessChip.actKind(a))}<span class="tl sc-t">${esc(lab)}</span><span></span><span class="mn num">${hm(a.moving_s)} · ${esc(tO("wk.load", { n: n0(a.tss) }))}</span></button>`;
 }
 // ---- end this week card ----
@@ -939,14 +923,14 @@ function paintPlanLoad() {
   if ($("wk-tsb")) $("wk-tsb").innerHTML = tsbHtml(S.tsb_next);
   PLAN.projection = S.projection;
   const weeks = SP.weeks || [];
-  if ($("later")) $("later").innerHTML = weeks.length ? `之後已排到 ${md(SP.horizon_end)}（${weeks.length} 週）· <a href="/api/v1/overview/plan/schedule/page">日曆、修改、同步到 COROS →</a>` : "";
+  if ($("later")) $("later").innerHTML = weeks.length ? `${esc(tO("wk.later", { d: md(SP.horizon_end), n: weeks.length }))} · <a href="/api/v1/overview/plan/schedule/page">${esc(tO("wk.later_link"))}</a>` : "";
 }
-const progHtml = (D, hours, tss) => `${bar("時間", D.hours, hours, hrs)}${bar("訓練負荷（Training load）", D.tss, tss, n0)}<span class="num">${hrs(D.hours)} / ${hrs(hours)} · 負荷 ${n0(D.tss)} / ${n0(tss)}</span>`;
+const progHtml = (D, hours, tss) => `${bar(esc(tO("wk.time")), D.hours, hours, hrs)}${bar(esc(tO("wk.tss")), D.tss, tss, n0)}<span class="num">${hrs(D.hours)} / ${hrs(hours)} · ${esc(tO("kpi.load_of", { a: n0(D.tss), b: n0(tss) }))}</span>`;
 // SP-394: during a first import's back-fill CTL / TSB are not shown (null + history_pending's message)
 const HP = () => (PLAN && PLAN.history_pending) || (SP && SP.summary && SP.summary.history_pending) || (STATUS && STATUS.history_pending);
-const ctlHtml = (c0, c1) => c0 == null || c1 == null ? `長期訓練負荷（Chronic load） ${esc(HP()?.message || "–")}`
-  : `長期訓練負荷（Chronic load） <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
-const tsbHtml = (t) => t == null ? "" : `下週一負荷平衡（Load balance） <b>${sgn(t)}</b>`;
+const ctlHtml = (c0, c1) => c0 == null || c1 == null ? `${esc(tO("wk.ctl"))} ${esc(HP()?.message || "–")}`
+  : tO("wk.ctl_line", { a: `<b>${n0(c0)}</b>`, b: `<b>${n0(c1)}</b>`, d: sgn(c1 - c0, (v) => v.toFixed(1)) });
+const tsbHtml = (v) => v == null ? "" : tO("wk.tsb_line", { v: `<b>${sgn(v)}</b>` });
 // one week note (its colour = the note's level): 「標題：一句」 split at the first ： (English: ": "). SP-551:
 // 「展開」 shows the note's own detail (engine/hints.make's `detail`) — a note without one is a plain row that
 // cannot open (it used to open onto its own text again)
@@ -977,9 +961,9 @@ async function loadWeek() {
     <details class="more"><summary>${esc(t("overview.hint.detail"))}</summary><div class="body">
       <div id="wk-notes-detail" hidden></div>
       <div class="bars" id="wk-prog" style="display:grid;gap:4px;max-width:360px">${progHtml(D, T.hours, T.tss)}</div>
-      <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；訓練負荷（Training load）以你近 6 週的每小時負荷 ${n0(T.tss_per_hour)} 換算</li></ul>
+      <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>${esc(tO("kpi.week_tip", { tph: n0(T.tss_per_hour) }))}</li></ul>
       <div><span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span> · <span id="wk-tsb">${tsbHtml(L.tsb_next)}</span></div>
-      <div>門檻：${USE_POWER ? `CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ` : ""}${esc(w.thresholds.easy_cap_label || `輕鬆跑上限 ${n0(w.thresholds.aet)} bpm`)}${q(w.thresholds.easy_cap_tip, "輕鬆跑上限")}${w.thresholds.aet_pm ? ` <span class="pmb">±${w.thresholds.aet_pm.pm} bpm${q(w.thresholds.aet_pm.tip, "AeT 誤差")}</span>` : ""}（${esc(w.thresholds.aet_source)}）</div>
+      <div>${esc(tO("wk.thr"))}${USE_POWER ? `${esc(tO("wk.thr_cp", { cp: n0(w.thresholds.cp), src: w.thresholds.cp_source }))} · ` : ""}${esc(w.thresholds.easy_cap_label || tO("wk.easy_cap_n", { n: n0(w.thresholds.aet) }))}${q(w.thresholds.easy_cap_tip, tO("wk.easy_cap"))}${w.thresholds.aet_pm ? ` <span class="pmb">±${w.thresholds.aet_pm.pm} bpm${q(w.thresholds.aet_pm.tip, tO("wk.aet_err"))}</span>` : ""}${esc(tO("week.nums", { nums: w.thresholds.aet_source }))}</div>
       <div id="later"></div></div></details>`;
   HST = await HSTP;                         // asked at the start, in parallel: no extra wait
   drawNotes(w, HST);
@@ -999,7 +983,7 @@ const N = { week: 16, month: 12, year: 6 };
 async function loadPeriod() {
   document.querySelectorAll("#unit button").forEach((b) => b.classList.toggle("on", b.dataset.u === PS.unit));
   const qs = `unit=${PS.unit}&n=${N[PS.unit]}${PS.anchor ? "&anchor=" + PS.anchor : ""}`;
-  $("period").innerHTML = `<div class="loading">計算中…</div>`;
+  $("period").innerHTML = `<div class="loading">${esc(tO("loading"))}</div>`;
   const R = PS.data = await j(`${API}/summary?${qs}`);
   if (R.pending) {                          // SP-394: older periods are still being back-filled
     $("period").innerHTML = `<p class="meta">${esc(R.pending.message)}</p>`;
@@ -1020,7 +1004,7 @@ async function loadPeriod() {
   chart("trend").setOption({
     animation: false, grid: { left: 40, right: 10, top: 10, bottom: 22 },
     tooltip: { ...tip, formatter: (ps) => { const b = B[ps[0].dataIndex];
-      return `<b>${b.label}</b>　${hrs(b.moving_s / 3600)} · ${b.sessions} 次<br>` +
+      return `<b>${esc(b.label)}</b> ${hrs(b.moving_s / 3600)} · ${esc(tO("log.n_sessions", { n: b.sessions }))}<br>` +
         ps.filter((p) => p.value > 0).map((p) => `${p.marker}${p.seriesName} ${hrs(p.value)}`).join("<br>"); } },
     xAxis: { type: "category", data: B.map((b) => b.label), ...axisStyle(), splitLine: { show: false } },
     yAxis: { type: "value", ...axisStyle(), axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => v + " h" } },
@@ -1028,7 +1012,7 @@ async function loadPeriod() {
   }, true);
   chart("trend-climb").setOption({
     animation: false, grid: { left: 40, right: 10, top: 6, bottom: 20 },
-    tooltip: { ...tip, formatter: (ps) => `<b>${B[ps[0].dataIndex].label}</b><br>爬升 ${m0(ps[0].value)}` },
+    tooltip: { ...tip, formatter: (ps) => `<b>${esc(B[ps[0].dataIndex].label)}</b><br>${esc(tO("log.climb_v", { v: m0(ps[0].value) }))}` },
     xAxis: { type: "category", data: B.map((b) => b.label), ...axisStyle(), splitLine: { show: false } },
     yAxis: { type: "value", min: 0, splitNumber: 2, ...axisStyle(), axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => Math.round(v) } },
     series: [{ type: "bar", barMaxWidth: 26, data: B.map((b, i) => ({ value: b.climbing_m, itemStyle: { opacity: i === cur ? 1 : 0.5 } })),
@@ -1043,7 +1027,7 @@ async function loadPeriod() {
 function delta(cur, ref, fmt) {
   if (ref == null) return "";
   const d = cur - ref;
-  if (Math.abs(d) < 1e-9) return `<span class="faint">持平</span>`;
+  if (Math.abs(d) < 1e-9) return `<span class="faint">${esc(tO("log.flat"))}</span>`;
   return `<span class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${sgn(d, fmt).slice(1)}</span>`;
 }
 // OV14 (SP-483): the 強度分配 target words inline (完整), behind the ? (標準) or not at all (精簡)
@@ -1052,41 +1036,41 @@ function splitHead(mode) {
   return q(tD(mode === "tip" ? "overview.split.tip" : "overview.split.tip_lean"));   // the ? says the target (標準) or not (精簡)
 }
 function renderPeriod(R) {
-  const C = R.current, P = C.vs_prev, T = C.typical, unitWord = { week: "週", month: "月", year: "年" }[R.unit];
-  $("per-sub").textContent = `${C.start} ～ ${C.end}${C.elapsed_share != null ? `（進行中 ${pct(C.elapsed_share)}）` : ""}`;
-  const tile = (icon, k, v, key, fmt) => `<div class="tile" title="${esc(T ? `平常 ${fmt(T[key])}` : "")}"><div class="k">${I(icon)}${k}</div><div class="v">${v}</div>
-    <div class="s">${P ? `比上${unitWord} ${delta(C[key], C[key] - P[key], fmt)}` : ""}</div></div>`;
+  const C = R.current, P = C.vs_prev, T = C.typical, unitWord = tO("log.unit_" + R.unit);
+  $("per-sub").textContent = tO("log.range", { a: C.start, b: C.end }) + (C.elapsed_share != null ? tO("log.in_progress", { p: pct(C.elapsed_share) }) : "");
+  const tile = (icon, k, v, key, fmt) => `<div class="tile" title="${esc(T ? tO("log.usual", { v: fmt(T[key]) }) : "")}"><div class="k">${I(icon)}${esc(k)}</div><div class="v">${v}</div>
+    <div class="s">${P ? `${esc(tO("log.vs_prev", { u: unitWord }))} ${delta(C[key], C[key] - P[key], fmt)}` : ""}</div></div>`;
   const I_ = C.intensity;
   const cats = Object.entries(C.by_category).sort((a, b) => b[1].moving_s - a[1].moving_s);
   const k = (r, label, val) => r ? `<div><span class="meta">${label}</span><br><b>${esc(r.date)}</b> ${esc(r.category_label)} · ${val}</div>` : "";
   $("period").innerHTML = `
     <div class="tiles">
-      ${tile("time", "移動時間", hrs(C.moving_s / 3600), "moving_s", (v) => hrs(v / 3600))}
-      ${tile("list", "次數", C.sessions, "sessions", (v) => Math.round(v * 10) / 10 + " 次")}
-      ${tile("distance", "距離", km(C.distance_km), "distance_km", km)}
-      ${tile("gain", "爬升", m0(C.climbing_m), "climbing_m", m0)}
-      ${tile("tss", "訓練負荷（Training load）", n0(C.tss), "tss", n0)}
-      <div class="tile"><div class="k">${I("climb")}努力距離 EP ${q("km + 爬升/100（跑步、登山）")}</div><div class="v">${km(C.ep_km)}</div></div>
-      <div class="tile"><div class="k">${I("check")}有練的天數</div><div class="v">${C.days}</div><div class="s">下降 ${m0(C.descending_m)}</div></div>
+      ${tile("time", tO("log.moving"), hrs(C.moving_s / 3600), "moving_s", (v) => hrs(v / 3600))}
+      ${tile("list", tO("log.sessions"), C.sessions, "sessions", (v) => tO("log.n_sessions", { n: Math.round(v * 10) / 10 }))}
+      ${tile("distance", tO("log.distance"), km(C.distance_km), "distance_km", km)}
+      ${tile("gain", tO("log.climb"), m0(C.climbing_m), "climbing_m", m0)}
+      ${tile("tss", tO("wk.tss"), n0(C.tss), "tss", n0)}
+      <div class="tile"><div class="k">${I("climb")}${esc(tO("log.ep"))} ${q(tO("log.ep_tip"))}</div><div class="v">${km(C.ep_km)}</div></div>
+      <div class="tile"><div class="k">${I("check")}${esc(tO("log.days"))}</div><div class="v">${C.days}</div><div class="s">${esc(tO("log.descent", { v: m0(C.descending_m) }))}</div></div>
     </div>
     ${I_.total > 0 ? `<div><b style="font-size:13px">${esc(tD("overview.split.title"))}</b> ${splitHead(OVH.splitTarget(OVH.level(HST)))}
-      <div class="split" role="img" aria-label="低 ${pct(I_.low / I_.total)}，中 ${pct(I_.mid / I_.total)}，高 ${pct(I_.high / I_.total)}">
+      <div class="split" role="img" aria-label="${esc(tO("log.split_aria", { lo: pct(I_.low / I_.total), mid: pct(I_.mid / I_.total), hi: pct(I_.high / I_.total) }))}">
         <i style="width:${I_.low / I_.total * 100}%;background:var(--lo)"></i><i style="width:${I_.mid / I_.total * 100}%;background:var(--mid)"></i><i style="width:${I_.high / I_.total * 100}%;background:var(--hi)"></i></div>
-      <div class="legend" style="margin:0"><span><i style="background:var(--lo)"></i>低 ${pct(I_.low / I_.total)} · ${hm(I_.low)}</span>
-        <span><i style="background:var(--mid)"></i>中 ${pct(I_.mid / I_.total)} · ${hm(I_.mid)}</span>
-        <span><i style="background:var(--hi)"></i>高 ${pct(I_.high / I_.total)} · ${hm(I_.high)}</span></div></div>` : ""}
+      <div class="legend" style="margin:0"><span><i style="background:var(--lo)"></i>${esc(tO("log.lo", { p: pct(I_.low / I_.total), t: hm(I_.low) }))}</span>
+        <span><i style="background:var(--mid)"></i>${esc(tO("log.mid", { p: pct(I_.mid / I_.total), t: hm(I_.mid) }))}</span>
+        <span><i style="background:var(--hi)"></i>${esc(tO("log.hi", { p: pct(I_.high / I_.total), t: hm(I_.high) }))}</span></div></div>` : ""}
     <details class="more"><summary>${esc(tO("sec.numbers"))}</summary><div class="body" style="color:var(--text)">
-    ${T ? `<div class="meta">平常（典型的一${unitWord}）：${hrs(T.moving_s / 3600)} · ${km(T.distance_km)} · ${m0(T.climbing_m)} · 負荷 ${n0(T.tss)}</div>` : ""}
+    ${T ? `<div class="meta">${esc(tO("log.typical", { u: unitWord, h: hrs(T.moving_s / 3600), km: km(T.distance_km), m: m0(T.climbing_m), tss: n0(T.tss) }))}</div>` : ""}
     <div class="keys">
-      ${k(C.longest, "最長一次", hm(C.longest?.moving_s))}
-      ${k(C.biggest_climb, "爬最多", m0(C.biggest_climb?.climbing_m))}
-      ${k(C.hardest, "負荷最大", "負荷 " + n0(C.hardest?.tss))}
+      ${k(C.longest, esc(tO("log.longest")), hm(C.longest?.moving_s))}
+      ${k(C.biggest_climb, esc(tO("log.biggest_climb")), m0(C.biggest_climb?.climbing_m))}
+      ${k(C.hardest, esc(tO("log.hardest")), esc(tO("wk.load", { n: n0(C.hardest?.tss) })))}
     </div>
-    ${cats.length ? `<div class="tablewrap"><table><thead><tr><th>類別</th><th class="n">次數</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">訓練負荷（Training load）</th></tr></thead>
+    ${cats.length ? `<div class="tablewrap"><table><thead><tr><th>${esc(tO("log.th_cat"))}</th><th class="n">${esc(tO("log.sessions"))}</th><th class="n">${esc(tO("log.moving"))}</th><th class="n">${esc(tO("log.distance"))}</th><th class="n">${esc(tO("log.climb"))}</th><th class="n">${esc(tO("wk.tss"))}</th></tr></thead>
       <tbody>${cats.map(([key, v]) => `<tr><td><span class="dot" style="background:${catColor(key)}"></span>${esc(R.categories[key].label)}</td>
         <td class="n">${v.sessions}</td><td class="n">${hm(v.moving_s)}</td><td class="n">${km(v.distance_km)}</td><td class="n">${m0(v.climbing_m)}</td><td class="n">${n0(v.tss)}</td></tr>`).join("")}</tbody></table></div>`
-      : `<p class="meta">這段期間沒有活動。</p>`}
-    ${C.activities.length ? `<div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>類型</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">訓練負荷（Training load）</th></tr></thead>
+      : `<p class="meta">${esc(tO("log.empty"))}</p>`}
+    ${C.activities.length ? `<div class="tablewrap"><table><thead><tr><th>${esc(tO("log.th_date"))}</th><th>${esc(tO("log.th_cat"))}</th><th>${esc(tO("log.th_type"))}</th><th class="n">${esc(tO("log.moving"))}</th><th class="n">${esc(tO("log.distance"))}</th><th class="n">${esc(tO("log.climb"))}</th><th class="n">${esc(tO("wk.tss"))}</th></tr></thead>
       <tbody>${C.activities.map((a) => `<tr><td>${esc(a.start.slice(0, 16).replace("T", " "))}</td><td><span class="dot" style="background:${catColor(a.category)}"></span>${esc(a.category_label)}</td>
         <td class="meta">${esc(a.sport_type)}</td><td class="n">${hm(a.moving_s)}</td><td class="n">${a.distance_km ? km(a.distance_km) : "–"}</td>
         <td class="n">${a.climbing_m ? m0(a.climbing_m) : "–"}</td><td class="n">${n0(a.tss)}</td></tr>`).join("")}</tbody></table></div>` : ""}
@@ -1108,7 +1092,7 @@ const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d
 async function sj(method, url, body) {
   const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
   const b = await r.json().catch(() => ({}));
-  if (r.status === 401) throw new Error("COROS 未登入或登入過期，請到設定頁重新登入");
+  if (r.status === 401) throw new Error(tO("coros_login"));
   if (!r.ok) throw new Error(typeof b.detail === "string" ? b.detail : `${r.status} ${JSON.stringify(b.detail || b).slice(0, 200)}`);
   return b;
 }
@@ -1215,7 +1199,7 @@ function renderPmc() {
   // OV13 (SP-483): the LTHR prior's mark on the chart and its legend; 精簡 says it in the chart's ? only
   const marks = PMC_MARKS.filter((m) => rows.some((r) => r.date === m.date));
   const onChart = OVH.pmcMarks(OVH.level(HST)) === "chart";
-  $("pmc-q").innerHTML = q([tO("pmc.tip", { n: pmcDays() }), ...(onChart ? [] : marks.map((m) => `${md(m.date)} ${m.text}`))].join("\n"));
+  $("pmc-q").innerHTML = q([tO("pmc.tip", { n: pmcDays() }), ...(onChart ? [] : marks.map((m) => `${md(m.date)} ${m.text}`))].join("\n"), undefined, "analysis#load-chart");
   $("pmc-legend").innerHTML = `<span><i style="background:${ctlC};height:3px"></i>${esc(tO("pmc.ctl"))}</span>`
     + `<span><i style="background:${atlC};height:3px"></i>${esc(tO("pmc.atl"))}</span>`
     + `<span><i style="background:linear-gradient(90deg,#1baf7a 50%,#e34948 50%)"></i>${esc(tO("pmc.tsb"))}</span>`
@@ -1225,12 +1209,12 @@ function renderPmc() {
     day: (d) => I18N.fmt.date(d, "mdw"), names: { ctl: tO("pmc.ctl"), atl: tO("pmc.atl"), tsb: tO("pmc.tsb") } }), true);
 }
 
-const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：${esc(e.message)}</p>`; };
+const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">${esc(tO("load_failed", { e: e.message }))}</p>`; };
 // the shared floating suggestion box (static/suggestions.js) fires this after 排入: reload the week
 addEventListener("suggestions:changed", () => { loadWeek().then(() => loadPlan()).catch(() => {}); });
 $("wk-ic").innerHTML = I("time");
 (async () => {
-  if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
+  if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">${esc(tO("echarts_failed"))}</p>`);
   // 使用功率 (設定): off = no CP / power fields or buttons on this page
   const us = await j("/api/v1/sync/settings").catch(() => ({}));
   USE_POWER = us.use_power !== false;

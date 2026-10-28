@@ -600,7 +600,8 @@ def _validate_pref(key: str, value: Any) -> None:
         if not (isinstance(value, list) and len(value) == 7 and all(isinstance(v, bool) for v in value)):
             raise ValueError("plan.prefs.days must be 7 true/false (Mon..Sun) or null")
         if not any(value):
-            raise ValueError("至少要有一天可以練")
+            from backend.i18n import _
+            raise ValueError(_("至少要有一天可以練"))
     if key == "plan.prefs.strength_days" and not (
             isinstance(value, list) and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 6
                                             for v in value) and len(set(value)) == len(value)):

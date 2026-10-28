@@ -20,6 +20,7 @@
   const MIN_GAP_MS = 10 * 60 * 1000;
   const SRC = { coros: "COROS", garmin: "Garmin", tp: "TP" };
   const T = (k, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, p) : k);
+  const names = (xs) => xs.map((s) => SRC[s]).join(T("autosync.sep"));
 
   function el() {
     let e = document.getElementById("nav-sync-status");
@@ -58,19 +59,19 @@
         const failed = sources.filter((s) => st[s] && st[s].last_result && st[s].last_result.status === "failed");
         const done = sources.filter((s) => !failed.includes(s));
         if (failed.length) {
-          show(T("autosync.failed", { src: failed.map((s) => SRC[s]).join("、") }), false, true);
+          show(T("autosync.failed", { src: names(failed) }), false, true);
         } else {
           const res = done.map((s) => {
             const r = st[s] && st[s].last_result;
             return `${SRC[s]} ${r ? `+${r.downloaded}` : ""}`;
-          }).join("、");
-          show(`已同步 ${res}`, true);
+          }).join(T("autosync.sep"));
+          show(T("autosync.done", { list: res }), true);
         }
         // the 登入已過期／同步失敗 banner (session_banner.js) reads the new state
         if (window.TRCSessionBanner) window.TRCSessionBanner.refresh();
         return;
       }
-      show(`同步中：${busy.map((s) => SRC[s]).join("、")}…`);
+      show(T("autosync.busy", { list: names(busy) }));
     }
   }
 
@@ -82,7 +83,7 @@
       r = await (await fetch("/api/v1/sync/auto", { method: "POST" })).json();
     } catch (_) { return; }
     if (r && r.started && r.started.length) {
-      show(`同步中：${r.started.map((s) => SRC[s]).join("、")}…`);
+      show(T("autosync.busy", { list: names(r.started) }));
       watch(r.started);
     }
   }

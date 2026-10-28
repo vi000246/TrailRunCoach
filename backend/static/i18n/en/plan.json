@@ -181,5 +181,6 @@
   "colon": ": ",
   "sep": "; ",
   "list_sep": ", ",
-  "paren": " ({x})"
+  "paren": " ({x})",
+  "range": "–"
 }

@@ -37,6 +37,7 @@ from contextlib import asynccontextmanager
 from typing import Callable, Optional
 
 from backend import site_settings as SS
+from backend.i18n import N_
 
 clock: Callable[[], float] = time.monotonic      # tests replace
 wall: Callable[[], float] = time.time
@@ -56,7 +57,7 @@ DISCLAIMER_VERSION = "coros-unofficial-v1-2026-10-12"
 # todo-multi-user-sharing.plan.md §7.5, worded for a hosted service and the 記住密碼 option, plus
 # SP-385's lock-out line. To be replaced by SP-60's third-party clause (a new version then)
 DISCLAIMER = {
-    "zh-TW": ("本服務透過 COROS Training Hub 網頁使用的非公開介面下載你自己的活動，並非 COROS 官方提供或支援。"
+    "zh-TW": N_("本服務透過 COROS Training Hub 網頁使用的非公開介面下載你自己的活動，並非 COROS 官方提供或支援。"
               "COROS 可能隨時變更或封鎖這個介面、暫時鎖住登入，也可能依其條款處置自動化存取的帳號，風險由你自行承擔。"
               "你的 COROS 密碼只用來登入；勾選「記住密碼」才會加密保存，登入憑證加密存放在本服務的伺服器上。"),
     "en": ("This service downloads your own activities through the non-public interface the COROS Training "

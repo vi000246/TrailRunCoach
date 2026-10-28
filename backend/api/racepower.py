@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.engine.localtime import today_local
-from backend.i18n import _, relocalize
+from backend.i18n import M_, _
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -114,12 +114,7 @@ def get_inputs(refresh: bool = False):
             cooldown.mark("racepower_inputs")
         else:
             refresh = False
-    d = inputs(refresh)
-    # SP-944: the cache is shared by every language; the From label is an M_() text shown in the request's
-    tc = d.get("training_conditions")
-    if tc and tc.get("label"):
-        d = {**d, "training_conditions": {**tc, "label": relocalize(tc["label"])}}
-    return d
+    return _py(inputs(refresh))         # SP-838: the cache's M_() texts in the request's language
 
 
 @router.get("/peaks")
@@ -168,7 +163,7 @@ def weather(date: Optional[str] = None, days: int = 1, event_id: Optional[str] =
     if peak:
         pk = WX.find_peak(peak)
         if pk is None:
-            raise HTTPException(404, f"找不到山名 {peak}")
+            raise HTTPException(404, _("找不到山名 {name}", name=peak))
         name = pk["name"]
         lat = pk["lat"] if lat is None else lat
         lon = pk["lon"] if lon is None else lon
@@ -244,10 +239,10 @@ def key_status():
 @router.post("/weather/key")
 def save_key(body: KeyIn):
     if not _tenancy.can("weather.key"):
-        raise HTTPException(403, "氣象署授權碼只有站主能設定")
+        raise HTTPException(403, _("氣象署授權碼只有站主能設定"))
     k = body.key.strip()
     if k and (len(k) < 10 or len(k) > 80 or any(c.isspace() for c in k)):
-        raise HTTPException(400, "授權碼格式不對")
+        raise HTTPException(400, _("授權碼格式不對"))
     WX.save_key(k)
     return WX.key_status()
 
@@ -549,7 +544,8 @@ def _fit_grade_models(ds, today, key) -> dict:
         # the back-test's held-out segment log-error SD (segment level: wider
         # than a whole day's, so conservative)
         cap.sigma_loo = float(hc["sigma_loo"])
-        cap.sigma_loo_src = f"回測：留一的段時間對數誤差 SD（{hc.get('today')}）"
+        # M_(): kept in the grade-model cache every language shares (SP-838)
+        cap.sigma_loo_src = M_("回測：留一的段時間對數誤差 SD（{day}）", day=hc.get("today"))
     # SP-724: the 跟團係數 (capacity × factor) only when the back-test found it better on your group days
     gm["group_factor"] = None
     if cap is not None and BT.group_factor_flag():
@@ -657,7 +653,9 @@ def _hrc_test() -> Optional[dict]:
         ds = None
     # SP-320 ④: the tenant and the dataset in the key, not the day alone (a second tenant
     # read the first one's test; a sync's new activities did not count until tomorrow)
-    key = (*(_tenancy.ds_key(ds) if ds is not None else (_tenancy.current().id, None)), today)
+    # SP-838: the test's `why` is in the request's language: one entry per language
+    from backend.i18n import current_locale
+    key = (*(_tenancy.ds_key(ds) if ds is not None else (_tenancy.current().id, None)), today, current_locale())
     hit = _cache.get("hrc_test")
     if hit and hit[0] == key:
         return hit[1]
@@ -737,7 +735,7 @@ def get_hike_meta():
     rows, val = _hike_rows()
     from backend.engine.racepower import capacity as CAP
     return _py({"days": rows, "validation": val, "pack_rule": CAP.pack_default_text(),
-                "note": "「看起來是自己走」只是建議；確認後才寫進自己走的清單"})
+                "note": _("「看起來是自己走」只是建議；確認後才寫進自己走的清單")})
 
 
 @router.post("/hike-meta")
@@ -977,13 +975,13 @@ def backtest_run():
     from backend.engine.racepower import backtest as BT
     st = BT.state()
     if st.get("running") or st.get("queued"):
-        return {"started": False, "already": True, "message": "已經在算", "state": st}
+        return {"started": False, "already": True, "message": _("已經在算"), "state": st}
     got = MS.consume("backtest")             # 429 past the plan's limit
     run = _backtest_runner()                 # None: workers off — start_background's default, as before
     started = BT.start_background(_dataset, run=run) if run is not None else BT.start_background(_dataset)
     if not started:                          # a concurrent click queued it first: this one counts nothing
         MS.refund("backtest", got)
-        return {"started": False, "already": True, "message": "已經在算", "state": BT.state()}
+        return {"started": False, "already": True, "message": _("已經在算"), "state": BT.state()}
     return {"started": started, "state": BT.state()}
 
 
@@ -1145,7 +1143,7 @@ def delete_share(sid: str):
     from backend.engine.racepower import share as SH
     try:
         if not SH.delete(sid):
-            raise HTTPException(404, "找不到這個分享")
+            raise HTTPException(404, _("找不到這個分享"))
     except SH.ShareError as e:
         raise HTTPException(400, str(e))
     _unregister_share(sid)
@@ -1336,10 +1334,10 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
     from backend.sync import workout_targets as WT
     eid = body.event_id or (body.course.event_id if body.course else None)
     if not eid:
-        raise HTTPException(400, "先選目標賽事：匯出至課表會放在那場比賽的日子")
+        raise HTTPException(400, _("先選目標賽事：匯出至課表會放在那場比賽的日子"))
     ev = _event(eid)                        # 404 for an event that is not in the plan
     if not ev.date:
-        raise HTTPException(400, "這場賽事沒有日期")
+        raise HTTPException(400, _("這場賽事沒有日期"))
     await run_in_threadpool(MS.use_calc, body)     # SP-713: the calculator's count (accounts.db: off the loop)
     p = _py(await run_in_threadpool(make_plan, body))      # reads the Dataset: never on the event loop
     why = WE.multi_day(p, body.start_time, max(int(body.days or 1), int(getattr(ev, "days", None) or 1)))
@@ -1352,7 +1350,7 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
     try:
         s["steps"] = WS.normalize(s["steps"])
     except WS.StepsError as e:
-        raise HTTPException(400, f"分段轉成課表步驟失敗：{e}")
+        raise HTTPException(400, _("分段轉成課表步驟失敗：{err}", err=e))
     # SP-632: the runnable legs as COROS gets them (Effort Pace; over power with 課表偏好「可跑坡目標」)
     pv = WS.watch_preview(s["steps"], WS.Ctx(cp=th["cp"], lthr=th["lthr"], aet=th["aet"],
                                              ep_power=WS.ep_power_of(PS.load_prefs_safe())),
@@ -1364,7 +1362,7 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
         try:
             r = await PS.upsert_external(db, key, s, today, blocked=blocked, write=False)
             if body.push and (r["previous"] or {}).get("user_edited") and not body.overwrite:
-                raise HTTPException(409, {"error": "EDITED", "message": "這堂比賽課在課表上改過，確認後才會覆蓋"})
+                raise HTTPException(409, {"error": "EDITED", "message": _("這堂比賽課在課表上改過，確認後才會覆蓋")})
             if body.push:
                 r = await PS.upsert_external(db, key, s, today, blocked=blocked, write=True)
                 # the raw estimate of this race, for the factor once it is done (one entry per race)

@@ -63,7 +63,7 @@ def pack_live_describe(it: dict) -> dict:
         return it
     from backend.engine.racepower import pack_defaults as PD
     r = PD.resolve(days, manual_kg=None)
-    tip = r["note"] + "。沒填背負的行程（計算機、能力模型裡過去的健行）用這個；在右邊填數字就固定用你填的。"
+    tip = _("{note}。沒填背負的行程（計算機、能力模型裡過去的健行）用這個；在右邊填數字就固定用你填的。", note=r["note"])
     if r["source"] == "own":
         return {**it, "value": r["kg"], "n": r["n"], "source": "fitted",
                 "chip": {"text": _("本人 n={n}", n=r["n"]), "tip": tip}}

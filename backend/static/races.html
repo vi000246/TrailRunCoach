@@ -266,11 +266,11 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
       <div class="dpgpx">
         <span class="meta" id="dpgpxhave" hidden></span>
         <label><span data-i18n="plan.ev.gpx_attach">附 GPX</span> <input type="file" id="evgpxfile" accept=".gpx,.fit"></label>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="plan.ev.gpx_help">附了 GPX（或勾「之後再上傳」）就不用逐日填：每天的距離和爬升從 GPX 算。存好之後按這場的「分日」（或賽事計算器的「分日預覽」）設每天的終點（營地航點、OSM 山屋、紀錄的過夜點會列成候選；Cairn 匯入的過夜點直接套用），設之前每天平均分距離（推估）。</span></span>
+        <span class="help" data-manual="race#races" tabindex="0">?<span class="tip" data-i18n="plan.ev.gpx_help">附了 GPX（或勾「之後再上傳」）就不用逐日填：每天的距離和爬升從 GPX 算。存好之後按這場的「分日」（或賽事計算器的「分日預覽」）設每天的終點（營地航點、OSM 山屋、紀錄的過夜點會列成候選；Cairn 匯入的過夜點直接套用），設之前每天平均分距離（推估）。</span></span>
         <label><input type="checkbox" id="evgpxlater"> <span data-i18n="plan.ev.gpx_later">之後再上傳 GPX，先不填</span></label>
       </div>
       <div id="dayplanold" class="hint" data-i18n="plan.ev.dayplan_old" hidden>這筆舊行程還沒填每天的距離和爬升，可以先照原樣存，總距離、總爬升也可以直接改；沒填時每天的量是用總距離、總爬升平均分的，補上會比較準。要補就每天的距離和爬升都要填。</div>
-      <table><thead><tr><th><span class="help" tabindex="0">?<span class="tip" data-i18n="plan.ev.dayplan_help">沒有 GPX 時，每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</span></span></th><th data-i18n="plan.ev.day_km">距離 km</th><th data-i18n="plan.ev.day_gain">爬升 m</th>
+      <table><thead><tr><th><span class="help" data-manual="race#races" tabindex="0">?<span class="tip" data-i18n="plan.ev.dayplan_help">沒有 GPX 時，每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</span></span></th><th data-i18n="plan.ev.day_km">距離 km</th><th data-i18n="plan.ev.day_gain">爬升 m</th>
         <th data-i18n="plan.ev.day_loss">下降 m（選填）</th></tr></thead><tbody id="dayplanrows"></tbody></table>
     </div>
     <label for="ed-est" data-i18n="races.ed.est">預估時間（小時）</label><input id="ed-est" name="est_hours" type="number" min="0" step="any" inputmode="decimal">
@@ -299,7 +299,7 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
          distance / climb / days follow the route), SP-655 push the course -->
     <div class="full edsec" id="ed-cairn">
       <h3><span data-i18n="races.cairn.import_h">從 Cairn 匯入 GPX</span>
-        <span class="help" tabindex="0">?<span class="tip"><span data-i18n="races.cairn.import_how"></span> <span data-i18n="races.cairn.import_pick_na"></span></span></span></h3>
+        <span class="help" data-manual="race#cairn" tabindex="0">?<span class="tip"><span data-i18n="races.cairn.import_how"></span> <span data-i18n="races.cairn.import_pick_na"></span></span></span></h3>
       <!-- SP-538: the person's own Cairn trips (linked: GET /api/v1/account/links/cairn/trips), 「重新同步」 when
            the trip's version in Cairn moved; not linked: a card to 設定 › 疊石 Cairn, 「不用了」 = the xp card's off -->
       <div id="ct-wrap" hidden>
@@ -323,7 +323,7 @@ details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; mar
       <div class="grp-ask hidden" id="ed-grp"></div>
       <div id="cp-wrap">
         <h3><span data-i18n="races.cairn.push_h">把路線推到 Cairn</span>
-          <span class="help" tabindex="0">?<span class="tip" data-i18n="races.cairn.what"></span></span></h3>
+          <span class="help" data-manual="race#cairn" tabindex="0">?<span class="tip" data-i18n="races.cairn.what"></span></span></h3>
         <div id="cp-body" class="note"></div>
         <label class="note hidden" id="cp-consent-row"><input type="checkbox" id="cp-consent"> <span id="cp-consent-text"></span></label>
         <div class="bar"><button id="cp-go" type="button" data-i18n="races.cairn.push_go">推到 Cairn</button><span class="meta" id="cp-msg"></span></div>
@@ -1190,7 +1190,7 @@ function renderGroupAsk() {
   if (!sc) { el.innerHTML = ""; return; }
   const pts = sc.points || [], days = Math.max(1, ...pts.map((p) => p.day || 1)), why = groupWhy(sc);
   el.innerHTML = `<label><input type="checkbox" id="grp-on"${sc.group ? " checked" : ""}><span>${esc(T("grp.ask"))}</span></label>`
-    + ` <span class="help" tabindex="0">?<span class="tip">${esc(why ? T("grp.tip", { why }) : T("grp.tip_none"))}</span></span>`
+    + ` <span class="help" data-manual="race#races" tabindex="0">?<span class="tip">${esc(why ? T("grp.tip", { why }) : T("grp.tip_none"))}</span></span>`
     + `<span class="meta">${esc(T("grp.sub", { days, n: pts.length }))}</span><span class="meta" id="grp-msg"></span>`;
   $("grp-on").onchange = (ev) => setGroup(ev.target);
 }

@@ -3023,6 +3023,7 @@ def _prefs_body(p, dropped=()) -> dict:
     # gate_options: the 間歇門檻 hover texts (the page adds "usable with your data"
     # from GET /prefs/gate, which needs the dataset)
     from backend.engine import aet_test as AT
+    from backend.i18n import _
     from backend.engine import strength_moves as SM
     # aet_options: the AeT 測試方式 hover texts (duration, terrain, what is held, judging, source)
     return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active,
@@ -3034,8 +3035,8 @@ def _prefs_body(p, dropped=()) -> dict:
             "gate_options": QG.option_texts(),
             # 肌力動作 (engine/strength_moves.py, SP-191): the types, their moves, the equipment
             "strength_options": SM.options(),
-            "aet_options": {k: {"label": "自動（標準：徐國峰 90 分；備案 UA 40 分）" if k == "auto"
-                                else AT.PROTOCOLS[k]["label"], "tip": AT.protocol_tip(k)}
+            "aet_options": {k: {"label": _("自動（標準：徐國峰 90 分；備案 UA 40 分）") if k == "auto"
+                                else _(AT.PROTOCOLS[k]["label"]), "tip": AT.protocol_tip(k)}
                             for k in AT.PROTOCOL_CHOICES}}
 
 

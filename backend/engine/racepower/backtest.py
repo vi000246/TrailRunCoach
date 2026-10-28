@@ -53,10 +53,11 @@ import datetime as dt
 import json
 from pathlib import Path
 import math
+import re
 import threading
 import time
 from statistics import median
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 
@@ -69,7 +70,7 @@ from backend.engine.racepower import pacing as PC
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
-from backend.i18n import _
+from backend.i18n import DEFAULT_LOCALE, _, N_, catalog, current_locale, translate, use_locale
 
 # trail 8 % pass / 6 % target (2026-10-02, docs/research/unsourced-rules.md §0.9: population
 # models reach 8–10 % MAPE, a 7-race median has a ±2–3 pp bootstrap interval, so 6 % cannot
@@ -101,15 +102,17 @@ GROUND_OF: Optional[Callable] = None
 
 def _store() -> Path:
     return Path(STORE) if STORE is not None else WX.home() / "racepower_backtest.json"
-CATEGORY_ZH = {"road": "路跑", "trail": "越野", "hike": "登山（自己走）"}
+# msgids. The stored result keeps the source text (zh-TW: backtest() / capacity_backtest() run in it);
+# load() shows it in the reader's language (SP-838)
+CATEGORY_ZH = {"road": N_("路跑"), "trail": N_("越野"), "hike": N_("登山（自己走）")}
 CLASSES = ("easy", "steady", "race")
-CLASS_ZH = {"easy": "輕鬆", "steady": "穩定", "race": "比賽強度"}
+CLASS_ZH = {"easy": N_("輕鬆"), "steady": N_("穩定"), "race": N_("比賽強度")}
 DOWN = ("down", "steep_down")
 # grade bins: ±2 % flat (course.py), 8 % = Stryd's validated range (van
 # Rassel 2026), 15 % = the walk / run label (Giovanelli 2016)
 GRADE_EDGES = (-0.15, -0.08, -0.02, 0.02, 0.08, 0.15)
 BIN_LABELS = ["≤ −15%", "−15…−8%", "−8…−2%", "±2%", "+2…+8%", "+8…+15%", "≥ +15%"]
-NO_CAPACITY_MSG = "沒有全力比賽或測試紀錄，無法驗證能力模型；請做 3'/12' CP 測試或報名一場 B 級比賽"
+NO_CAPACITY_MSG = N_("沒有全力比賽或測試紀錄，無法驗證能力模型；請做 3'/12' CP 測試或報名一場 B 級比賽")
 
 _run_lock = threading.Lock()
 # per tenant (SP-338 / SP-384): tenant id -> {running, queued, position, started, progress, error}
@@ -231,12 +234,12 @@ def pass_check(xs, thr: float, min_n: int = MIN_N) -> dict:
     lim = thr if s["n"] >= BOOT_FULL_N else thr + BOOT_SLACK
     reasons = []
     if s["n"] < min_n:
-        reasons.append(f"樣本 {s['n']} < {min_n}：只顯示誤差，不判定通過")
+        reasons.append(_("樣本 {n} < {min}：只顯示誤差，不判定通過", n=s["n"], min=min_n))
     else:
         if s["median_abs"] is not None and s["median_abs"] > thr:
-            reasons.append(f"時間誤差中位數 {s['median_abs']:.1%} > {thr:.0%}")
+            reasons.append(_("時間誤差中位數 {err:.1%} > {thr:.0%}", err=s["median_abs"], thr=thr))
         if ub is not None and ub > lim:
-            reasons.append(f"中位數的 80 % bootstrap 上界 {ub:.1%} > {lim:.0%}")
+            reasons.append(_("中位數的 80 % bootstrap 上界 {ub:.1%} > {lim:.0%}", ub=ub, lim=lim))
     return {"passed": not reasons, "reasons": reasons, "median_abs": s["median_abs"], "n": s["n"],
             "ub80": ub, "ub_limit": lim, "threshold": thr}
 
@@ -333,19 +336,19 @@ def summarise_terrain(rows: list[dict]) -> dict:
     runs = [r for r in rows if r.get("err_v2") is not None and r["category"] in ("road", "trail")]
     for cat in ("road", "trail", "hike"):
         rs = [r for r in rows if r["category"] == cat and r.get("err_v2") is not None]
-        c = {"label": CATEGORY_ZH[cat], "time": stats(r["err_v2"] for r in rs),
+        c = {"label": _(CATEGORY_ZH[cat]), "time": stats(r["err_v2"] for r in rs),
              "time_v1": stats(r.get("err_v1") for r in rs),
              "downhill": stats(_seg_errs(rs, sel=lambda s: s["cls"] in DOWN)),
              "by_class": {k: stats(r["err_v2"] for r in rs if r.get("intensity") == k) for k in CLASSES}}
         if cat == "trail":
             c["groups"] = {
-                "running": {"label": "跑為主", **stats(r["err_v2"] for r in rs if not r.get("walk_heavy"))},
-                "walking": {"label": f"走為主（≥ {WALK_HEAVY:.0%} 時間步頻 < 130 spm）",
+                "running": {"label": _("跑為主"), **stats(r["err_v2"] for r in rs if not r.get("walk_heavy"))},
+                "walking": {"label": _("走為主（≥ {share:.0%} 時間步頻 < 130 spm）", share=WALK_HEAVY),
                             **stats(r["err_v2"] for r in rs if r.get("walk_heavy"))}}
         out["categories"][cat] = c
     for k in CLASSES:
         rs = [r for r in runs if r.get("intensity") == k]
-        out["classes"][k] = {"label": CLASS_ZH[k], "activities": len(rs), "time": stats(r["err_v2"] for r in rs),
+        out["classes"][k] = {"label": _(CLASS_ZH[k]), "activities": len(rs), "time": stats(r["err_v2"] for r in rs),
                              "segments": stats(_seg_errs(rs)),
                              "time_class_model": stats(r.get("err_v2_cls") for r in rs),
                              "segments_class_model": stats(_seg_errs(rs, "err_cls"))}
@@ -376,7 +379,7 @@ def _hr_stats(rs: list[dict]) -> dict:
                         "time": stats(r.get("err_c_comb") if r.get("err_c_comb") is not None else r.get("err_c")
                                       for r in rs)}}
     for v, label in HR_VARIANTS:
-        out[f"hr_{v}"] = {"label": label, "power": stats(r.get(f"err_p_hr_{v}") for r in rs),
+        out[f"hr_{v}"] = {"label": _(label), "power": stats(r.get(f"err_p_hr_{v}") for r in rs),
                           "time": stats(r.get(f"err_c_hr_{v}") for r in rs)}
     return out
 
@@ -405,13 +408,13 @@ def summarise_capacity(rows: list[dict], lb_rows: list[dict]) -> dict:
         reasons = []
         pc = pass_check([r.get("err_c") for r in rs], thr)
         if len(rs) < MIN_N:
-            reasons.append(f"比賽強度／測試 {len(rs)} 次 < {MIN_N}")
+            reasons.append(_("比賽強度／測試 {n} 次 < {min}", n=len(rs), min=MIN_N))
         else:
             reasons += pc["reasons"]
         t["boot_ub80"] = pc["ub80"]
         if v:
-            reasons.append(f"{len(v)} 次跑步的功率高於模型可持續功率（下限檢查失敗）")
-        out["categories"][cat] = {"label": CATEGORY_ZH[cat], "n": len(rs), "threshold": thr, "time": t,
+            reasons.append(_("{n} 次跑步的功率高於模型可持續功率（下限檢查失敗）", n=len(v)))
+        out["categories"][cat] = {"label": _(CATEGORY_ZH[cat]), "n": len(rs), "threshold": thr, "time": t,
                                   "power": stats(r.get("err_p") for r in rs),
                                   "f_median": float(median(r["f"] for r in rs)) if rs else None,
                                   "passed": not reasons, "reasons": reasons, "hr": _hr_stats(rs),
@@ -423,12 +426,12 @@ def summarise_capacity(rows: list[dict], lb_rows: list[dict]) -> dict:
     fm = float(median(fs)) if fs else None
     reasons = []
     if len(fs) < MIN_N:
-        reasons.append(f"比賽強度／測試 {len(fs)} 次 < {MIN_N}")
+        reasons.append(_("比賽強度／測試 {n} 次 < {min}", n=len(fs), min=MIN_N))
     elif not (A_RACE_F[0] <= fm <= A_RACE_F[1]):
-        reasons.append(f"努力度中位數 {fm:.3f} 不在 {A_RACE_F[0]}–{A_RACE_F[1]}")
+        reasons.append(_("努力度中位數 {f:.3f} 不在 {lo}–{hi}", f=fm, lo=A_RACE_F[0], hi=A_RACE_F[1]))
     out["effort"] = {"n": len(fs), "median_f": fm, "passed": not reasons, "reasons": reasons}
     out["n_total"] = len(cap)
-    out["message"] = NO_CAPACITY_MSG if len(cap) < MIN_N else None
+    out["message"] = _(NO_CAPACITY_MSG) if len(cap) < MIN_N else None
     return out
 
 
@@ -485,13 +488,13 @@ def _k_of(d: dict, target_m: float) -> tuple[float, str]:
     −0.07 (≈ Stryd's table)."""
     rg = d.get("riegel") or {}
     if rg.get("valid"):
-        return rg["k"], "個人"
+        return rg["k"], _("個人")
     a = d.get("auto_prior")
     if a and target_m:
         tk = R.table_k(target_m, a["km"] * 1000.0, a["time_s"])
         if tk.get("k") is not None:
-            return tk["k"], "查表（比賽強度的前一場）"
-    return -0.07, "預設 −0.07"
+            return tk["k"], _("查表（比賽強度的前一場）")
+    return -0.07, _("預設 −0.07")
 
 
 def _cp_of(d: dict) -> dict:
@@ -504,7 +507,7 @@ def _cp_of(d: dict) -> dict:
             "base": s.get("base")}
 
 
-HR_VARIANTS = (("tt30", "TTE 1800 s（Friel 30 分計時）"), ("tte", "當時 PD 模型 TTE"))
+HR_VARIANTS = (("tt30", N_("TTE 1800 s（Friel 30 分計時）")), ("tte", N_("當時 PD 模型 TTE")))
 FEW_MAXIMAL = 3                 # 推估: < 3 capacity samples in the 365 days before → HR capacity as a second lower bound
 COMBINED_VARIANT = "tte"
 
@@ -516,7 +519,7 @@ def hr_psus(hc: Optional[dict], t_s: float, cap: dict, w_prime: Optional[float])
     if not hc or not hc.get("p_lthr"):
         return {}
     out = {}
-    for v, _ in HR_VARIANTS:
+    for v, _lbl in HR_VARIANTS:
         tte = 1800.0 if v == "tt30" else cap["tte"]
         out[v] = DF.p_sus(t_s, hc["p_lthr"], w_prime, tte, cap["k"])
     return out
@@ -528,7 +531,7 @@ def capacity_of(inp: dict, t_s: float, target_m: float) -> dict:
     cp = c["cp"]
     if cp and inp["cp"].get("lb_points"):
         from backend.engine.racepower.athlete import enforce_lower_bound
-        cp, _ = enforce_lower_bound(inp, cp, c["w_prime"], c["tte"], k, c["cp2"])
+        cp, _raised = enforce_lower_bound(inp, cp, c["w_prime"], c["tte"], k, c["cp2"])
         c["cp"] = cp
     return {**c, "k": k, "k_source": ksrc,
             "p_sus": DF.p_sus(t_s, cp, c["w_prime"], c["tte"], k, cp2=c["cp2"]) if cp else None,
@@ -539,7 +542,7 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
     arr = ctx["arrays"]
     tk = track_of(arr)
     if tk is None:
-        return {"error": "沒有 GPS 軌跡"}
+        return {"error": _("沒有 GPS 軌跡")}
     track, idx = tk
     course = CO.build_course(track)
     segs = course["segments"]
@@ -549,7 +552,7 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
     t_act = sum(a["t"] for a in act)
     e_act = sum(a["e"] for a in act)
     if t_act < 600 or e_act <= 0:
-        return {"error": "移動時間或功率不足"}
+        return {"error": _("移動時間或功率不足")}
     p_act = e_act / t_act
     inp = ctx["inputs"]
     weight = inp["weight"]["value"]
@@ -716,7 +719,7 @@ def evaluate_test(case: dict, ctx: dict) -> Optional[dict]:
     inp = ctx["inputs"]
     cap = capacity_of(inp, case["t_s"], 0.0)
     if not cap["cp"]:
-        return {"error": "沒有 CP"}
+        return {"error": _("沒有 CP")}
     def psus(t):
         return DF.p_sus(t, cap["cp"], cap["w_prime"], cap["tte"], cap["k"], cp2=cap["cp2"])
     return {"t_act": case["t_s"], "p_act": case["p"], "p_train": case["p"], "capacity": cap,
@@ -832,7 +835,7 @@ def summarise_terrain_difficulty(rows: list[dict]) -> dict:
            "given_terrain": stats(r.get("err_th_given_terrain") for r in rs),
            "race_level": stats(r.get("err_th_race") for r in rs),
            "race_level_terrain": stats(r.get("err_th_race_terrain") for r in rs),
-           "source": "地形難度倍率（推估）：每一筆都用前一天、不含該筆的資料擬合"}
+           "source": _("地形難度倍率（推估）：每一筆都用前一天、不含該筆的資料擬合")}
     a, b = out["given"]["median_abs"], out["given_terrain"]["median_abs"]
     out["better"] = None if a is None or b is None else b < a
     return out
@@ -871,7 +874,7 @@ def summarise_trail_hr(rows: list[dict]) -> dict:
                                                  "err_p", "error")}
                           | {"th": r.get("th"), "long": _is_long_race(r)}
                           for r in sorted(races, key=lambda r: r["date"])],
-            "source": "越野心率配速模型（推估）", "threshold": THRESHOLDS["trail"],
+            "source": _("越野心率配速模型（推估）"), "threshold": THRESHOLDS["trail"],
             "target": TARGETS["trail"]}
 
 
@@ -880,7 +883,7 @@ def evaluate_hike(case: dict, ctx: dict) -> Optional[dict]:
     arr = ctx["arrays"]
     tk = track_of(arr)
     if tk is None:
-        return {"error": "沒有 GPS 軌跡"}
+        return {"error": _("沒有 GPS 軌跡")}
     track, idx = tk
     course = CO.build_course(track)
     segs = course["segments"]
@@ -1056,6 +1059,13 @@ def _hike_days(arr: dict, start: dt.datetime) -> list[tuple[int, dict]]:
 
 
 def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[list] = None) -> dict:
+    """The stored back-test: computed in the source language whoever asks (save() keeps it as it is;
+    load() shows it in the reader's, SP-838). See _backtest."""
+    with use_locale(DEFAULT_LOCALE):
+        return _backtest(ds, today, progress, tags)
+
+
+def _backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[list] = None) -> dict:
     """`tags` = activity_tags rows (default: activity_tags.load(), the app DB
     or WKO5COACH_TAGS_DB)."""
     from backend.engine import activity_tags as AT
@@ -1125,11 +1135,12 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
             if b["maximal"]:
                 test_dates.append(t["date"])
                 cases.append({"idx": None, "date": t["date"], "category": "test", "t_s": b["t"], "p": b["p"],
-                              "label": f"{t['date']} CP 測試 {b['nominal_s'] // 60:.0f}′ {b['p']:.0f} W",
-                              "intensity": "race", "intensity_reason": "正式 CP 測試（全力段）",
+                              "label": _("{date} CP 測試 {min:.0f}′ {p:.0f} W", date=t["date"], min=b["nominal_s"] // 60,
+                                         p=b["p"]),
+                              "intensity": "race", "intensity_reason": _("正式 CP 測試（全力段）"),
                               "cap_sample": True, "cap_kind": "cp_test",
-                              "cap_reason": "FIT 偵測的 3′/12′ 測試" if t.get("source") != "workout_review"
-                              else "活動判讀認定的 CP 測試"})
+                              "cap_reason": _("FIT 偵測的 3′/12′ 測試") if t.get("source") != "workout_review"
+                              else _("活動判讀認定的 CP 測試")})
     cap_idx_dates = {w.idx: w.entry.start.date() for w in all_runs
                      if (classes.get(w.idx, {}).get("capacity") or {}).get("ok")}
     derived: dict = {}
@@ -1199,7 +1210,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
             return evaluate_hike(c, ctx)
         th = evaluate_trail_hr(c, ctx) if c["category"] == "trail" else {}
         if c.get("no_power"):
-            return {**th, "error": "沒有功率：只評估越野心率配速模型"} if th else {"error": "沒有功率"}
+            return {**th, "error": _("沒有功率：只評估越野心率配速模型")} if th else {"error": _("沒有功率")}
         if "error" in (ctx.get("inputs") or {}):
             return {**th, "error": ctx["inputs"]["error"]}
         try:
@@ -1304,26 +1315,26 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
             "hr_capacity": {k: v for k, v in hr_now.items() if k != "points"} | {"points": hr_now.get("points")},
             "trail_hr": trail_hr, "user_marked": len(marked), "tech_dirt": tech_dirt_summary(rows),
             "power_source": A.power_summary(ds, [w for w in all_runs if A.outdoor(w)]),
-            "notes": [A.GROUP_HIKE_NOTE + "；只有你標記為自己走的登山才會成為回測案例",
-                      "能力樣本看「努力度」不看「是不是比賽」：你標記的努力度優先（全力＝一定算、其他＝一定不算）；"
-                      "自動：路跑用全力路跑規則，越野用移動心率（≥ x*(T) − 0.03 × LTHR，x*(T) 是文獻先驗的全力心率曲線，"
-                      "2 小時 0.90、8 小時 0.83，推估）＋長休息（≥ 5 分的停留 ≤ 10 %）",
-                      "越野心率模型的比賽心率 x*(T)：你之前的比賽／全力跑（路跑＋越野，當天 LTHR）擬合，收縮到"
-                      "Fornasiero 2018／Kerhervé 2015 的形狀先驗；耐久 δ 收縮到 0.05/h（Clark 2019），只在清過的視窗上量；"
-                      "熱用你的熱 β（bpm／Hadley，設定 → 自動估算的參數）把心率移到 Hadley 120；推估",
-                      "越野通過門檻 8 %（目標 6 %）：n ≥ 5 且中位數 80 % bootstrap 上界 ≤ 門檻 + 2 個百分點（n ≥ 10 時 ≤ 門檻）",
-                      "總時間 = 移動時間（驗證目標）＋ 非移動時間（之前比賽的停留，另外預估、另外列）",
-                      "你標記為比賽或全力的活動不受 365 天限制（每場仍用前一天的資料預測）；自動偵測的樣本只看近 365 天",
-                      "越野心率配速模型（推估）：effort km ÷ 移動時間 對 移動心率/LTHR，加耐久衰減；不需要功率",
-                      "每一場都用活動前一天的資料、排除該活動；不用對照資料夾今天存的 mFTP / TTE，"
-                      "改用當天以前的 mean-max 重算 PD 模型（模型閾值功率 / TTE），再加上 CP 下限",
-                      "強度分類用每次活動當天以前的 LTHR / AeT（計畫測試只算當天以前做過的；否則用當天以前資料的自動估算，"
-                      "每次跑步對照它當天以前重算的 CP）",
-                      "地形模型回測餵實際功率，只檢驗「功率 → 速度」（坡度-RE、走跑、下坡上限、技術係數），不是預測準確度",
-                      "能力模型只用能力樣本檢驗：努力度＝全力的跑步（你的標記，或自動：自配速全力路跑、"
-                      "≥ 10 km / ≥ 90 分且心率全力、沒有長休息的越野）與 CP 測試全力段；賽季計畫比賽只標為「比賽」",
-                      "心率能力（推估）：近 90 天穩定平路跑的心率–功率回歸外插到 LTHR；"
-                      f"能力樣本 < {FEW_MAXIMAL} 次時當第二個下限（合併）"]}
+            "notes": [_("{note}；只有你標記為自己走的登山才會成為回測案例", note=_(A.GROUP_HIKE_NOTE)),
+                      _("能力樣本看「努力度」不看「是不是比賽」：你標記的努力度優先（全力＝一定算、其他＝一定不算）；"
+                        "自動：路跑用全力路跑規則，越野用移動心率（≥ x*(T) − 0.03 × LTHR，x*(T) 是文獻先驗的全力心率曲線，"
+                        "2 小時 0.90、8 小時 0.83，推估）＋長休息（≥ 5 分的停留 ≤ 10 %）"),
+                      _("越野心率模型的比賽心率 x*(T)：你之前的比賽／全力跑（路跑＋越野，當天 LTHR）擬合，收縮到"
+                        "Fornasiero 2018／Kerhervé 2015 的形狀先驗；耐久 δ 收縮到 0.05/h（Clark 2019），只在清過的視窗上量；"
+                        "熱用你的熱 β（bpm／Hadley，設定 → 自動估算的參數）把心率移到 Hadley 120；推估"),
+                      _("越野通過門檻 8 %（目標 6 %）：n ≥ 5 且中位數 80 % bootstrap 上界 ≤ 門檻 + 2 個百分點（n ≥ 10 時 ≤ 門檻）"),
+                      _("總時間 = 移動時間（驗證目標）＋ 非移動時間（之前比賽的停留，另外預估、另外列）"),
+                      _("你標記為比賽或全力的活動不受 365 天限制（每場仍用前一天的資料預測）；自動偵測的樣本只看近 365 天"),
+                      _("越野心率配速模型（推估）：effort km ÷ 移動時間 對 移動心率/LTHR，加耐久衰減；不需要功率"),
+                      _("每一場都用活動前一天的資料、排除該活動；不用對照資料夾今天存的 mFTP / TTE，"
+                        "改用當天以前的 mean-max 重算 PD 模型（模型閾值功率 / TTE），再加上 CP 下限"),
+                      _("強度分類用每次活動當天以前的 LTHR / AeT（計畫測試只算當天以前做過的；否則用當天以前資料的自動估算，"
+                        "每次跑步對照它當天以前重算的 CP）"),
+                      _("地形模型回測餵實際功率，只檢驗「功率 → 速度」（坡度-RE、走跑、下坡上限、技術係數），不是預測準確度"),
+                      _("能力模型只用能力樣本檢驗：努力度＝全力的跑步（你的標記，或自動：自配速全力路跑、"
+                        "≥ 10 km / ≥ 90 分且心率全力、沒有長休息的越野）與 CP 測試全力段；賽季計畫比賽只標為「比賽」"),
+                      _("心率能力（推估）：近 90 天穩定平路跑的心率–功率回歸外插到 LTHR；能力樣本 < {n} 次時當第二個下限（合併）",
+                        n=FEW_MAXIMAL)]}
 
 
 # ---------------------------------------------------------------------------
@@ -1377,11 +1388,14 @@ def _cap_summary(rows: list[dict], kind: str) -> dict:
     need = CAP_MIN[kind]
     reasons = []
     if s["n"] < need["segs"] or groups < need["groups"]:
-        reasons.append(f"段數 {s['n']}（需 ≥ {need['segs']}）、{'活動' if kind == 'trail' else '趟'} {groups}（需 ≥ {need['groups']}）")
+        reasons.append(_("段數 {n}（需 ≥ {segs}）、活動 {g}（需 ≥ {groups}）", n=s["n"], segs=need["segs"], g=groups,
+                         groups=need["groups"]) if kind == "trail" else
+                       _("段數 {n}（需 ≥ {segs}）、趟 {g}（需 ≥ {groups}）", n=s["n"], segs=need["segs"], g=groups,
+                         groups=need["groups"]))
     if s["median_abs"] is not None and s["median_abs"] > THRESHOLDS["hike_capacity"]:
-        reasons.append(f"時間誤差中位數 {s['median_abs']:.1%} > {THRESHOLDS['hike_capacity']:.0%}")
+        reasons.append(_("時間誤差中位數 {err:.1%} > {thr:.0%}", err=s["median_abs"], thr=THRESHOLDS["hike_capacity"]))
     if s["bias"] is not None and abs(s["bias"]) > CAP_BIAS_MAX:
-        reasons.append(f"偏差 {s['bias']:+.1%} 超過 ±{CAP_BIAS_MAX:.0%}")
+        reasons.append(_("偏差 {bias:+.1%} 超過 ±{max:.0%}", bias=s["bias"], max=CAP_BIAS_MAX))
     return {"time": s, "groups": groups, "prior": stats(r["err_prior"] for r in rows),
             "tobler": stats(r["err_tobler"] for r in rows), "passed": not reasons, "reasons": reasons,
             "log_sd": float(np.std([r["log_err"] for r in rows])) if len(rows) >= 5 else None}
@@ -1389,6 +1403,13 @@ def _cap_summary(rows: list[dict], kind: str) -> dict:
 
 def capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: bool = True,
                       boot_reps: int = 200) -> dict:
+    """_capacity_backtest in the source language (store_capacity keeps it; load() shows it, SP-838)."""
+    with use_locale(DEFAULT_LOCALE):
+        return _capacity_backtest(ds, today, progress, days, boot_reps)
+
+
+def _capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: bool = True,
+                       boot_reps: int = 200) -> dict:
     """§7.1 A–D, G: leave-one-activity-out on the walked trail windows,
     leave-one-trip-out on the HR-filtered 百岳 windows (z ≥ 2500 m reported
     separately, with the personal / shrunk / Wehrlin altitude slopes), the
@@ -1423,7 +1444,7 @@ def capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: 
     groups = sorted({s[0].get("a") for s in trail_segs} | {s[0].get("a") for s in hike_segs}, key=str)
     for i, a in enumerate(groups):
         if progress:
-            progress(i, len(groups), {"label": f"登山能力回測 {i + 1}/{len(groups)}"})
+            progress(i, len(groups), {"label": _("登山能力回測 {i}/{n}", i=i + 1, n=len(groups))})
         cap = fit_without(a)
         ta = [s for s in trail_segs if s[0].get("a") == a]
         hb = [s for s in hike_segs if s[0].get("a") == a]
@@ -1546,7 +1567,7 @@ def group_factor_backtest(ds, today: dt.date, x: dict, fit_without: Callable, fu
             # 自己走的日子：能力時間 ÷ 實際 − 1（能力模型對你自己步調的誤差）
             "solo_capacity_err": stats(1.0 / r["r"] - 1.0 for r in (sfull or {}).get("rows") or []),
             "rows": rows,
-            "source": "跟團時間留一趟回測（推估）：舊＝當天 EP ÷ 其他趟跟團日 EP/h 中位數；新＝不含這趟擬合的能力模型 × 其他趟的跟團係數"}
+            "source": _("跟團時間留一趟回測（推估）：舊＝當天 EP ÷ 其他趟跟團日 EP/h 中位數；新＝不含這趟擬合的能力模型 × 其他趟的跟團係數")}
 
 
 def capacity_days(ds, today: dt.date, cap, x: dict) -> dict:
@@ -1599,7 +1620,7 @@ def capacity_days(ds, today: dt.date, cap, x: dict) -> dict:
 def store_capacity(res: dict, path=None) -> dict:
     """Merge a capacity back-test into the stored version-2 result (creating
     a minimal one when none exists) and set validated["hike_capacity"]."""
-    cur = load(path) or {"version": 2, "validated": {k: False for k in THRESHOLDS}, "effort_validated": False,
+    cur = load(path, raw=True) or {"version": 2, "validated": {k: False for k in THRESHOLDS}, "effort_validated": False,
                          "rows": [], "notes": []}
     cur["hike_capacity"] = res
     cur.setdefault("validated", {})["hike_capacity"] = bool(res.get("passed"))
@@ -1617,17 +1638,67 @@ def save(result: dict, path=None) -> None:
     p.write_text(json.dumps(result, ensure_ascii=False, default=float), "utf-8")
 
 
-def load(path=None) -> Optional[dict]:
+def load(path=None, raw: bool = False) -> Optional[dict]:
+    """The stored result; shown in the request's language (shown()) unless `raw` (the store's own reads)."""
     try:
-        return json.loads((path or _store()).read_text("utf-8"))
+        r = json.loads((path or _store()).read_text("utf-8"))
     except (OSError, ValueError):
         return None
+    return r if raw else shown(r)
+
+
+from backend.engine.stored_text import CJK            # noqa: E402  (a Chinese character or full-width mark)
+# a stored text under these keys is the athlete's own (a file, an activity's / event's / peak's name)
+_KEEP_KEYS = frozenset({"file", "files", "name", "title", "peaks", "event", "fit_files", "path"})
+_LABEL_RX = re.compile(r"^(\d{4}-\d\d-\d\d) (\S+)(?: (\d+(?:\.\d+)?) km)?$")
+SEP = "；"                     # reasons joined in one text (maximal.join, cptest's bouts)
+
+
+def _join(parts: list, loc: str) -> str:
+    out = parts[0]
+    for p in parts[1:]:
+        out = translate("{a}；{b}", loc, a=out, b=p)
+    return out
+
+
+def _shown_text(s: str, loc: str) -> str:
+    from backend.engine import stored_text as STX
+    from backend.engine.racepower import athlete as A
+    m = _LABEL_RX.match(s)
+    if m and m.group(2) in A.SPORT_ZH.values():           # athlete.label: 「2026-05-01 越野跑 21.0 km」
+        sport = translate(m.group(2), loc)
+        if m.group(3):
+            return translate("{date} {sport} {km:.1f} km", loc, date=m.group(1), sport=sport, km=float(m.group(3)))
+        return translate("{date} {sport}", loc, date=m.group(1), sport=sport)
+    out = STX.shown(s, loc)
+    if out == s and SEP in s and s not in catalog(loc):
+        return _join([STX.shown(p, loc) for p in s.split(SEP)], loc)
+    return out
+
+
+def shown(result: Any, loc: Optional[str] = None) -> Any:
+    """A stored result (source text) with its texts in `loc` (default: the request's): each msgid as
+    written or filled in (engine/stored_text.shown), an activity label, reasons joined by 「；」; the
+    athlete's own names as they are. zh-TW: the result itself."""
+    loc = loc or current_locale()
+    if loc == DEFAULT_LOCALE or result is None:
+        return result
+
+    def walk(x, k=None):
+        if isinstance(x, str):
+            return x if k in _KEEP_KEYS or not CJK.search(x) else _shown_text(x, loc)
+        if isinstance(x, dict):
+            return {kk: walk(v, kk) for kk, v in x.items()}
+        if isinstance(x, list):
+            return [walk(v, k) for v in x]
+        return x
+    return walk(result)
 
 
 def flags(path=None) -> tuple[dict, bool]:
     """(validated per category, effort bar validated) from the stored run;
     nothing stored (or an old-format result) → nothing validated."""
-    r = load(path)
+    r = load(path, raw=True)
     if not r or r.get("version") != 2:
         return {k: False for k in THRESHOLDS}, False
     return {k: bool((r.get("validated") or {}).get(k)) for k in THRESHOLDS}, bool(r.get("effort_validated"))
@@ -1637,7 +1708,7 @@ def class_model_flag(path=None) -> bool:
     """True when the stored back-test found the error clearly different by
     class AND the race-like class's own RE(g) better than the pooled one
     (then the planner uses it)."""
-    r = load(path)
+    r = load(path, raw=True)
     cd = ((r or {}).get("terrain") or {}).get("class_differs") or {}
     return bool(cd.get("clear") and (cd.get("class_model_better") or {}).get("race"))
 
@@ -1646,7 +1717,7 @@ def surface_split_flag(path=None) -> bool:
     """True when the stored back-test kept the dry / wet technicality split (SP-250: the marked
     trail cases' downhill error not worse with it); nothing stored → False (the calculator then
     offers no 路況 choice and behaves as before)."""
-    r = load(path)
+    r = load(path, raw=True)
     return bool((((r or {}).get("terrain") or {}).get("surface_split") or {}).get("no_worse"))
 
 
@@ -1658,7 +1729,7 @@ def memory_flag(path=None) -> bool:
     over earlier ground (memory.memory_backtest: the whole-run error and the cumulative error at the
     segment ends both not worse);
     else the plan only says which segments you know and keeps their times."""
-    m = (((load(path) or {}).get("trail_hr") or {}).get("memory") or {})
+    m = (((load(path, raw=True) or {}).get("trail_hr") or {}).get("memory") or {})
     return bool(m.get("better")) and int(m.get("n") or 0) >= MEMORY_MIN_N
 
 
@@ -1678,7 +1749,7 @@ def group_factor_flag(path=None) -> bool:
     """SP-724: True when the stored capacity back-test found the 跟團係數 (capacity × factor) better than
     the old group EP/h on the athlete's own group days (group_factor_backtest, leave-one-trip-out);
     nothing stored / not better → False: the 跟團時間 stays the group days' EP/h."""
-    r = load(path)
+    r = load(path, raw=True)
     return bool((((r or {}).get("hike_capacity") or {}).get("group_factor") or {}).get("better"))
 
 
@@ -1688,7 +1759,7 @@ def speed_gait_flag(path=None, class_model: bool = False) -> bool:
     trail segments); `class_model` = the planner uses the race-class model (class_model_flag),
     so that model's own gate (speed_gait_cls) AND the pooled one must pass. Nothing stored →
     False (the planner keeps the majority gait, as before)."""
-    te = ((load(path) or {}).get("terrain") or {})
+    te = ((load(path, raw=True) or {}).get("terrain") or {})
     ok = bool((te.get("speed_gait") or {}).get("no_worse"))
     if class_model:
         ok = ok and bool((te.get("speed_gait_cls") or {}).get("no_worse"))
@@ -1700,6 +1771,8 @@ def state() -> dict:
     runs one back-test at a time, SP-338), progress, error."""
     from backend import jobs
     st = dict(_state_of())
+    if st.get("progress"):                  # the case's label, computed in the source language
+        st["progress"] = shown(st["progress"])
     job = jobs.find(("backtest", _tid()))
     if job is not None and job.state == "queued":
         st.update(queued=True, position=jobs.position(job))

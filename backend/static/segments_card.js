@@ -23,11 +23,12 @@
   // the kind of a segment, and an automatic name (written in Chinese on the server, engine/routes.py auto_name)
   // with its kind word translated — a peak name and the user's own names stay as they are (the same rule as
   // routes.html nameOf)
-  const AUTO_WORDS = { "爬坡": "climb", "下坡": "descent", "路段": "stretch", "路線": "route" };
+  // (regexes on the server's own words, not UI text)
+  const AUTO_WORDS = [[/^爬坡$/, "climb"], [/^下坡$/, "descent"], [/^路段$/, "stretch"], [/^路線$/, "route"]];
   const zh = () => !window.I18N || window.I18N.locale === "zh-TW";
   const kindOf = (r) => (zh() ? r.kind_zh : T("kind." + r.kind));
   const nameOf = (r) => (r.renamed || zh() ? r.name
-    : String(r.name).replace(/(^|\s)(爬坡|下坡|路段|路線)(?=\s)/, (m, sp, w) => sp + T("kind." + AUTO_WORDS[w])));
+    : String(r.name).replace(/(^|\s)(爬坡|下坡|路段|路線)(?=\s)/, (m, sp, w) => sp + T("kind." + AUTO_WORDS.find(([rx]) => rx.test(w))[1])));
   const cache = new Map();
   const none = new Set();       // workouts with no segment, card put away (標準／精簡): not added again
   let pending = null;

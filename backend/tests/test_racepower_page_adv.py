@@ -100,7 +100,7 @@ def test_trail_gap_is_marked_reference_only_with_its_sources():
     """SP-248: the trail segment table's GAP column says Minetti / reference only (Looney 2025, Koop);
     road tables don't get it. SP-485: said in the GAP column's ? (no line under the table any more)."""
     src = PAGE.read_text("utf-8")
-    assert '${trail ? `GAP / 垂直${help(esc(T("gap.tip")))}` : ""}' in src
+    assert '${trail ? `${esc(T("seg.c.gap"))}${help(esc(T("gap.tip")))}` : ""}' in src      # SP-838: GAP / 垂直 in the catalog
     assert 'T("gap.note")' not in src
     for loc in ("zh-TW", "en"):
         cat = json.loads((STATIC / "i18n" / loc / "racepower.json").read_text("utf-8"))

@@ -23,6 +23,7 @@ import math
 from typing import Optional, Sequence
 
 from backend.engine.racepower import hike as HK
+from backend.i18n import _
 
 MERGE_MIN_S = 45 * 60          # 推估 (SP-575 §3.4)
 PREFILL_COVER = 0.90           # the timetable covers ≥ 90 % of the route: its total can be the target
@@ -223,4 +224,4 @@ def compare(rows: Sequence[dict], lg: dict, cap=None, cap_r: Optional[float] = N
             "share_s": share, "main": max(TIERS, key=lambda k: share[k]), "speed_only": cap is None,
             "cuts": {"wait": CUT_WAIT, "easy": CUT_EASY, "right": CUT_RIGHT, "behind_r": BEHIND_R, "cap_r": cap_r},
             "group_s": sum(x["moving_s"] for x in out), "you_s": sum(x["you_s"] for x in out),
-            "rest_ratio": lg.get("ratio_used"), "badge": "推估"}
+            "rest_ratio": lg.get("ratio_used"), "badge": _("推估")}

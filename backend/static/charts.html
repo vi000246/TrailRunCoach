@@ -1057,7 +1057,8 @@ const tssSrcTitle = (a) => {
   if (!a.tss_source) return t("viewer.load_src");
   let s = t("viewer.load_src_is", { src: TSS_SRC.includes(a.tss_source) ? t("viewer.load_src." + a.tss_source) : a.tss_source });
   if (a.ftp_used != null) s += "\n" + t("viewer.tss.ftp", { w: Math.round(a.ftp_used), src: a.ftp_source || t("viewer.tss.ftp_nosrc") });
-  if (a.ftp_source && !a.ftp_source.startsWith("對照資料夾")) s += "\n" + t("viewer.load_src.wko5_ftp");
+  // ftp_wko5: the FTP is the comparison folder's (api/wko5views /workouts; ftp_source is shown text)
+  if (a.ftp_source && !a.ftp_wko5) s += "\n" + t("viewer.load_src.wko5_ftp");
   if (a.tss_source === "trainingpeaks") s += "\n" + t("viewer.load_src.tm");
   return s;
 };
@@ -1367,6 +1368,8 @@ function qtipShow(btn) {
   const d = document.createElement("div");
   d.className = "qtip-pop";
   d.textContent = btn.dataset.tip;
+  // SP-842: every ? here opens the manual — 單次活動判讀 in the activity mode, else 圖表分析 (a ? of its own wins)
+  if (!btn.dataset.manual) btn.dataset.manual = S.mode === "workout" ? "analysis#review" : "analysis#charts";
   window.ManualLink?.decorate(d, btn);          // SP-559: 「名詞表：…」 when the text names a glossary word
   if (QTIP.pinned === btn) d.dataset.pinned = "1";
   // inside the enlarge <dialog> (top layer) a popup on <body> would sit behind it
@@ -1866,7 +1869,7 @@ function drawReviewCards(card, res) {
   const one = (c) => {
     if (c.kind === "zones") {
       const Z = c.zones || [];
-      const tip = [c.tip, ...Z.map((z) => `${z.label}（${z.name}）${Math.round(z.share * 100)}% · ${hms(z.seconds)}`)].filter(Boolean).join("\n");
+      const tip = [c.tip, ...Z.map((z) => `${z.label}${t("viewer.paren", { x: z.name })}${Math.round(z.share * 100)}% · ${hms(z.seconds)}`)].filter(Boolean).join("\n");
       return `<div class="rv-c zn"><div class="k">${rvI(c.icon || "zones")}<span class="kt">${esc(c.label || t("viewer.three_zones"))}</span></div>${rvQ(tip)}
         <div class="rv-zbar" role="img" aria-label="${esc(Z.map((z) => `${z.label} ${Math.round(z.share * 100)}%`).join(t("viewer.list_sep")))}">${Z.filter((z) => z.share > 0).map((z) =>
           `<i style="flex:${z.share.toFixed(4)} 1 0;background:${ZC[z.key]}">${z.share >= 0.12 ? Math.round(z.share * 100) + "%" : ""}</i>`).join("")}</div>
@@ -1954,7 +1957,7 @@ function drawZones(card, res) {
     card.appendChild(bar);
   }
   card.insertAdjacentHTML("beforeend", `<p class="meta" style="margin:0 0 6px">
-    ${basis} ${Z.threshold == null ? esc(t("viewer.not_set")) : pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit}${Z.threshold_source ? `（${esc(Z.threshold_source)}）` : ""}${Z.wprime ? ` · ${esc(t("viewer.zones.wprime", { kj: (Z.wprime / 1000).toFixed(1), src: Z.wprime_source || "" }))}` : ""} · ${esc(t("viewer.zones.recent", { days: Z.days, n: Z.runs }))}</p>
+    ${basis} ${Z.threshold == null ? esc(t("viewer.not_set")) : pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit}${Z.threshold_source ? t("viewer.paren", { x: esc(Z.threshold_source) }) : ""}${Z.wprime ? ` · ${esc(t("viewer.zones.wprime", { kj: (Z.wprime / 1000).toFixed(1), src: Z.wprime_source || "" }))}` : ""} · ${esc(t("viewer.zones.recent", { days: Z.days, n: Z.runs }))}</p>
     ${Z.no_data_reason ? `<p class="badge" style="margin:0 0 6px">${esc(t("viewer.no_data_is", { why: Z.no_data_reason }))}</p>` : ""}
     ${Z.threshold_is_default ? `<p class="badge" style="margin:0 0 6px">⚠ ${esc(t(Z.basis === "lthr" ? "viewer.zones.default_lthr" : "viewer.zones.default_pace", { basis }))}</p>` : ""}
     <table class="zt"><thead><tr><th>${esc(t("viewer.zt.zone"))}</th><th>${esc(t("viewer.zt.name"))}</th><th class="num">${esc(Z.unit)}</th><th class="num">% ${basis}</th>
@@ -2071,7 +2074,7 @@ function pzStep(max) {                      // y-axis step in seconds: 10 min �
   const steps = [600, 900, 1800, 3600, 7200, 10800, 18000, 36000, 72000];
   return steps.find((s) => max / s <= 5) || 144000;
 }
-const pzTick = (v) => v === 0 ? "0" : v < 3600 ? `${Math.round(v / 60)} 分` : v % 3600 ? fmtDur(v, "hm") : `${v / 3600} h`;
+const pzTick = (v) => v === 0 ? "0" : v < 3600 ? t("viewer.pz.min", { n: Math.round(v / 60) }) : v % 3600 ? fmtDur(v, "hm") : `${v / 3600} h`;
 const pzPct = (x) => x == null ? "—" : `${Math.round(x * 100)}%`;
 function pzBar(card, res) {
   // the shared controls; a change saves the preference and re-renders every periodzones card
@@ -2112,22 +2115,22 @@ function pzBar(card, res) {
   };
 }
 function pzThresholdText(res) {
-  const t = res.thresholds || [];
-  if (!t.length) return "";
-  if (t.length === 1) return `門檻：${t[0].text}`;
-  const vals = [...new Set(t.map((r) => r.value))];
-  if (vals.length === 1) return `門檻：${vals[0]}（${t.length} 個來源，見下方）`;
-  return `門檻依每次活動當天：${vals.length <= 3 ? vals.join("、") : `${t[0].value} → ${t[t.length - 1].value}`}（${t.length} 組，見下方）`;
+  const th = res.thresholds || [];
+  if (!th.length) return "";
+  if (th.length === 1) return t("viewer.pz.thr_one", { t: th[0].text });
+  const vals = [...new Set(th.map((r) => r.value))];
+  if (vals.length === 1) return t("viewer.pz.thr_same", { v: vals[0], n: th.length });
+  return t("viewer.pz.thr_each", { v: vals.length <= 3 ? vals.join(t("viewer.enum_sep")) : `${th[0].value} → ${th[th.length - 1].value}`, n: th.length });
 }
 function pzSkipText(res) {
   const s = res.skipped || [];
-  return s.length ? "沒算進來：" + s.map((x) => `${x.reason} ${x.n} 次`).join("、") : "";
+  return s.length ? t("viewer.pz.skipped", { list: s.map((x) => t("viewer.pz.skip_n", { r: x.reason, n: x.n })).join(t("viewer.enum_sep")) }) : "";
 }
 function pzDetailsThresholds(res) {
-  const t = res.thresholds || [];
-  if (t.length < 2) return "";
-  return `<details class="pzdet"><summary>用到的門檻（${t.length} 組）</summary><table class="zt"><thead><tr><th>門檻</th><th class="num">活動</th><th>期間</th></tr></thead><tbody>
-    ${t.map((r) => `<tr><td>${esc(r.text)}</td><td class="num">${r.n}</td><td class="meta">${esc(r.first)} – ${esc(r.last)}</td></tr>`).join("")}</tbody></table></details>`;
+  const th = res.thresholds || [];
+  if (th.length < 2) return "";
+  return `<details class="pzdet"><summary>${esc(t("viewer.pz.thr_used", { n: th.length }))}</summary><table class="zt"><thead><tr><th>${esc(t("viewer.pz.th_thr"))}</th><th class="num">${esc(t("viewer.pz.th_acts"))}</th><th>${esc(t("viewer.pz.th_period"))}</th></tr></thead><tbody>
+    ${th.map((r) => `<tr><td>${esc(r.text)}</td><td class="num">${r.n}</td><td class="meta">${esc(r.first)} – ${esc(r.last)}</td></tr>`).join("")}</tbody></table></details>`;
 }
 function pzVerdict(v) {
   if (!v) return "";
@@ -2147,29 +2150,31 @@ function drawPeriodZones(card, res) {
   pzBar(card, res);
   if (res.view === "weekly") return pzWeekly(card, res);
   const per = res.period, ph = per.phase;
-  card.insertAdjacentHTML("beforeend", `<p class="pzhead"><b>${esc(per.label)}</b> ${esc(per.begin)} – ${esc(per.end)}（${per.days} 天）
-    · ${ph ? `階段：${esc(ph.label)}` : "沒有賽事周期"} · ${res.n_used}／${res.n_activities} 次活動 · 合計 <b>${fmtDur(res.total_s, "hm")}</b>
-    ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}${per.note ? ` · ${esc(per.note)}` : ""}</p>`);
+  card.insertAdjacentHTML("beforeend", `<p class="pzhead"><b>${esc(per.label)}</b> ${esc(per.begin)} – ${esc(per.end)}${esc(t("viewer.pz.days", { n: per.days }))}
+    · ${esc(ph ? t("viewer.pz.phase", { l: ph.label }) : t("viewer.pz.no_cycle"))} · ${esc(t("viewer.pz.used", { used: res.n_used, n: res.n_activities }))} · ${esc(t("viewer.total"))} <b>${fmtDur(res.total_s, "hm")}</b>
+    ${res.model.estimate ? ` <span class="badge">${esc(t("viewer.est"))}</span>` : ""}${per.note ? ` · ${esc(per.note)}` : ""}</p>`);
   if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
   // 3-zone summary against the phase target (the verdict's basis)
   const S_ = res.summary, tg = res.target, c3 = pzRamp(3, res.zone_kind);
   if (S_?.total_s) {
-    const tip = [`3 區摘要（${S_.title}）`, ...S_.rows.map((r) => `${r.name}（${r.pct}）${fmtDur(r.seconds, "hm")} · ${pzPct(r.share)}`),
-      `低強度至少 ${pzPct(tg.low_floor)}${tg.low_target ? `；${ph?.label || ""}目標 ≥ ${pzPct(tg.low_target)}` : ""}`, ...tg.sources].join("\n");
+    const lowT = !tg.low_target ? "" : ph?.label ? t("viewer.pz.low_target_ph", { phase: ph.label, t: pzPct(tg.low_target) })
+      : t("viewer.pz.low_target", { t: pzPct(tg.low_target) });
+    const tip = [t("viewer.pz.sum_of", { t: S_.title }), ...S_.rows.map((r) => t("viewer.pz.row_tip", { name: r.name, pct: r.pct, time: fmtDur(r.seconds, "hm"), share: pzPct(r.share) })),
+      t("viewer.pz.low_floor", { f: pzPct(tg.low_floor) }) + lowT, ...tg.sources].join("\n");
     card.insertAdjacentHTML("beforeend", `<div class="pzsum">
-      <div class="h"><b>3 區摘要</b><button type="button" class="qtip" aria-label="目標的來源" data-tip="${esc(tip)}">?</button>
-        <span>${S_.rows.map((r) => esc(r.pct)).join("／")}</span>${pzVerdict(res.verdict)}</div>
-      <div class="pztrack" role="img" aria-label="${esc(S_.rows.map((r) => `${r.name} ${pzPct(r.share)}`).join("，"))}">
+      <div class="h"><b>${esc(t("viewer.pz.sum"))}</b><button type="button" class="qtip" aria-label="${esc(t("viewer.pz.sources"))}" data-tip="${esc(tip)}">?</button>
+        <span>${S_.rows.map((r) => esc(r.pct)).join(esc(t("viewer.pz.slash")))}</span>${pzVerdict(res.verdict)}</div>
+      <div class="pztrack" role="img" aria-label="${esc(S_.rows.map((r) => `${r.name} ${pzPct(r.share)}`).join(t("viewer.list_sep")))}">
         ${S_.rows.map((r, i) => `<i style="width:${((r.share || 0) * 100).toFixed(2)}%;background:${c3[i].hex};color:${c3[i].ink}">${(r.share || 0) >= 0.08 ? `${esc(r.name.slice(0, 1))} ${pzPct(r.share)}` : ""}</i>`).join("")}
         <em style="left:${tg.low_floor * 100}%"><span>${pzPct(tg.low_floor)}</span></em>
-        ${tg.low_target ? `<em class="tgt" style="left:${tg.low_target * 100}%"><span>目標 ${pzPct(tg.low_target)}</span></em>` : ""}
+        ${tg.low_target ? `<em class="tgt" style="left:${tg.low_target * 100}%"><span>${esc(t("viewer.pz.target", { t: pzPct(tg.low_target) }))}</span></em>` : ""}
       </div></div>`);
   }
   const rows = res.rows, col = pzRamp(rows.length, res.zone_kind), max = Math.max(1, ...rows.map((r) => r.seconds));
   const el = document.createElement("div");
   el.className = "plot pzt";
   el.setAttribute("role", "img");
-  el.setAttribute("aria-label", `${res.model.title}：各區間的移動時間；表格在下方`);
+  el.setAttribute("aria-label", t("viewer.pz.aria_bars", { title: res.model.title }));
   card.appendChild(el);
   const chart = echarts.init(el);
   charts.push(chart);
@@ -2184,7 +2189,7 @@ function drawPeriodZones(card, res) {
       grid: { left: 46, right: 10, top: 34, bottom: rows.length > 7 ? 30 : 44 },
       tooltip: { trigger: "item", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: ink },
         formatter: (q) => { const r = rows[q.dataIndex];
-          return `<div style="font-size:11.5px;line-height:1.5"><b>${esc(r.id)} ${esc(r.name)}</b><br>${esc([r.pct, r.range].filter(Boolean).join(" · "))}<br>${fmtDur(r.seconds, "hm")}（${pzPct(r.share)}）</div>`; } },
+          return `<div style="font-size:11.5px;line-height:1.5"><b>${esc(r.id)} ${esc(r.name)}</b><br>${esc([r.pct, r.range].filter(Boolean).join(" · "))}<br>${esc(t("viewer.pz.time_share", { time: fmtDur(r.seconds, "hm"), share: pzPct(r.share) }))}</div>`; } },
       xAxis: { type: "category", data: rows.map((r) => r.id), axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
         axisLabel: { interval: 0, color: ink, fontSize: 11,
           formatter: (id, i) => rows.length > 7 ? `{z|${id}}` : `{z|${id}}\n{n|${short(rows[i].name)}}`,
@@ -2201,15 +2206,15 @@ function drawPeriodZones(card, res) {
   new ResizeObserver(() => { chart.resize(); paint(); }).observe(el);
   const meta = [pzThresholdText(res), pzSkipText(res)].filter(Boolean).map(esc).join(" · ");
   card.insertAdjacentHTML("beforeend", `${meta ? `<p class="pzmeta">${meta}</p>` : ""}${pzDetailsThresholds(res)}
-    <details class="pzdet"><summary>表格（${esc(res.model.title)}）</summary><table class="zt"><thead><tr><th>區</th><th>名稱</th><th>門檻 %</th><th>範圍</th><th class="num">時間</th><th class="num">佔比</th></tr></thead><tbody>
-    ${rows.map((r) => `<tr><td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="meta">${esc(r.pct || "—")}</td><td class="meta">${esc(r.range || "依活動")}</td><td class="num">${fmtDur(r.seconds, "hm")}</td><td class="num">${pzPct(r.share)}</td></tr>`).join("")}
+    <details class="pzdet"><summary>${esc(t("viewer.pz.table_of", { t: res.model.title }))}</summary><table class="zt"><thead><tr><th>${esc(t("viewer.pz.th_zone"))}</th><th>${esc(t("viewer.zt.name"))}</th><th>${esc(t("viewer.pz.th_pct"))}</th><th>${esc(t("viewer.pz.th_range"))}</th><th class="num">${esc(t("viewer.zt.time"))}</th><th class="num">${esc(t("viewer.pz.th_share"))}</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="meta">${esc(r.pct || "—")}</td><td class="meta">${esc(r.range || t("viewer.pz.by_act"))}</td><td class="num">${fmtDur(r.seconds, "hm")}</td><td class="num">${pzPct(r.share)}</td></tr>`).join("")}
     </tbody></table></details>`);
 }
 function pzWeekly(card, res) {
   const G = res.groups, Z = res.zones, col = pzRamp(Z.length, res.zone_kind), month = res.group_by === "month";
   const lab = (g) => { const [y, m, d] = g.start.split("-").map(Number); return month ? `${y}/${m}` : `${m}/${d}`; };
-  card.insertAdjacentHTML("beforeend", `<p class="pzhead">${esc(res.range.begin)} – ${esc(res.range.end)} · 每${month ? "月" : "週"}一根 · ${res.n_activities} 次活動 · 合計 <b>${fmtDur(res.total_s, "hm")}</b>
-    ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}</p>`);
+  card.insertAdjacentHTML("beforeend", `<p class="pzhead">${esc(res.range.begin)} – ${esc(res.range.end)} · ${esc(t(month ? "viewer.pz.bar_month" : "viewer.pz.bar_week"))} · ${esc(t("viewer.pz.n_acts", { n: res.n_activities }))} · ${esc(t("viewer.total"))} <b>${fmtDur(res.total_s, "hm")}</b>
+    ${res.model.estimate ? ` <span class="badge">${esc(t("viewer.est"))}</span>` : ""}</p>`);
   if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
   const tip = [t("viewer.pz.tip_mini"), t("viewer.pz.tip_floor", { floor: pzPct(res.low_floor) }), ...res.target_sources].join("\n");
   card.insertAdjacentHTML("beforeend", `<div class="pzleg" aria-label="${esc(t("viewer.legend"))}">${Z.map((z, i) => `<span><i style="background:${col[i].hex}"></i>${esc(z.id)} ${esc(z.name)}</span>`).join("")}</div>
@@ -2219,7 +2224,7 @@ function pzWeekly(card, res) {
   const el = document.createElement("div");
   el.className = "plot pzw";
   el.setAttribute("role", "img");
-  el.setAttribute("aria-label", `每${month ? "月" : "週"}各區間的時數（堆疊）與低強度佔比；表格在下方`);
+  el.setAttribute("aria-label", t(month ? "viewer.pz.aria_month" : "viewer.pz.aria_week"));
   card.appendChild(el);
   const chart = echarts.init(el);
   charts.push(chart);
@@ -2240,28 +2245,28 @@ function pzWeekly(card, res) {
         const i = [].concat(pp)[0]?.dataIndex; const g = G[i]; if (!g) return "";
         const zr = Z.map((z, k) => g.seconds[k] ? `<span style="color:${col[k].hex}">■</span> ${esc(z.id)} ${esc(z.name)} <b>${fmtDur(g.seconds[k], "hm")}</b>` : "").filter(Boolean);
         return `<div style="font-size:11.5px;line-height:1.5"><b>${esc(g.start)} – ${esc(g.end)}</b>${g.phase ? ` · ${esc(g.phase.label)}` : ""}<br>
-          合計 ${fmtDur(g.total_s, "hm")}（${g.n} 次）<br>${zr.join("<br>")}<br>低強度 ${pzPct(g.low_share)}${g.low_target ? `（目標 ≥ ${pzPct(g.low_target)}）` : ""}<br>${esc(g.verdict.icon)} ${esc(g.verdict.text)}</div>`;
+          ${esc(t("viewer.pz.tt_total", { t: fmtDur(g.total_s, "hm"), n: g.n }))}<br>${zr.join("<br>")}<br>${esc(t("viewer.pz.tt_low", { s: pzPct(g.low_share) }))}${g.low_target ? esc(t("viewer.pz.tt_target", { t: pzPct(g.low_target) })) : ""}<br>${esc(g.verdict.icon)} ${esc(g.verdict.text)}</div>`;
       } },
     xAxis: [{ type: "category", data: cats, gridIndex: 0, axisTick: { show: false }, axisLabel: { show: false }, axisLine: { lineStyle: { color: line } } },
       { type: "category", data: cats, gridIndex: 1, axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
         axisLabel: { color: muted, fontSize: 10.5, hideOverlap: true } }],
     yAxis: [{ type: "value", gridIndex: 0, min: 0, interval: step, max: (v) => Math.ceil(v.max * 1.12 / step) * step || step,
         axisLabel: { color: muted, fontSize: 10.5, formatter: pzTick }, splitLine: { lineStyle: { color: line, opacity: 0.7 } } },
-      { type: "value", gridIndex: 1, min: yMin, max: 1, interval: (1 - yMin) / 2, name: "低強度", nameLocation: "middle", nameGap: 42,
+      { type: "value", gridIndex: 1, min: yMin, max: 1, interval: (1 - yMin) / 2, name: t("viewer.pz.low"), nameLocation: "middle", nameGap: 42,
         nameTextStyle: { color: muted, fontSize: 10.5 },
         axisLabel: { color: muted, fontSize: 10, formatter: (v) => `${Math.round(v * 100)}%` }, splitLine: { lineStyle: { color: line, opacity: 0.5 } } }],
     series: [...zoneSeries,
-      { name: "合計", type: "bar", stack: "t", xAxisIndex: 0, yAxisIndex: 0, silent: true, data: G.map(() => 0), itemStyle: { color: "transparent" },
+      { name: t("viewer.total"), type: "bar", stack: "t", xAxisIndex: 0, yAxisIndex: 0, silent: true, data: G.map(() => 0), itemStyle: { color: "transparent" },
         label: { show: G.length <= 16, position: "top", color: ink, fontSize: 10, formatter: (q) => G[q.dataIndex].total_s ? fmtDur(G[q.dataIndex].total_s, "hm") : "" },
         tooltip: { show: false } },
-      { name: "目標帶", type: "custom", xAxisIndex: 1, yAxisIndex: 1, silent: true, z: 1, data: G.map((g, i) => [i, g.low_target || 0]),
+      { name: t("viewer.pz.band_name"), type: "custom", xAxisIndex: 1, yAxisIndex: 1, silent: true, z: 1, data: G.map((g, i) => [i, g.low_target || 0]),
         renderItem: (params, api) => {
           const g = G[params.dataIndex]; if (!g.low_target) return null;
           const x = api.coord([params.dataIndex, 0])[0], w = api.size([1, 0])[0];
           const y0 = api.coord([0, res.low_floor])[1], y1 = api.coord([0, g.low_target])[1];
           return { type: "rect", shape: { x: x - w / 2, y: y1, width: w, height: y0 - y1 }, style: { fill: bandColor } };
         } },
-      { name: "低強度佔比", type: "scatter", xAxisIndex: 1, yAxisIndex: 1, z: 3, symbolSize: 9,
+      { name: t("viewer.pz.low_share"), type: "scatter", xAxisIndex: 1, yAxisIndex: 1, z: 3, symbolSize: 9,
         data: G.map((g) => {
           if (g.low_share == null || g.verdict.level === "none") return { value: null };
           const ok = g.verdict.level === "good";
@@ -2274,7 +2279,7 @@ function pzWeekly(card, res) {
   new ResizeObserver(() => chart.resize()).observe(el);
   const meta = [pzThresholdText(res), pzSkipText(res)].filter(Boolean).map(esc).join(" · ");
   card.insertAdjacentHTML("beforeend", `${meta ? `<p class="pzmeta">${meta}</p>` : ""}${pzDetailsThresholds(res)}
-    <details class="pzdet"><summary>表格（每${month ? "月" : "週"}）</summary><div style="overflow-x:auto"><table class="zt"><thead><tr><th>${month ? "月" : "週"}</th>${Z.map((z) => `<th class="num">${esc(z.id)}</th>`).join("")}<th class="num">合計</th><th class="num">低強度</th><th>判定</th></tr></thead><tbody>
+    <details class="pzdet"><summary>${esc(t(month ? "viewer.pz.table_month" : "viewer.pz.table_week"))}</summary><div style="overflow-x:auto"><table class="zt"><thead><tr><th>${esc(t(month ? "viewer.per.month" : "viewer.per.week"))}</th>${Z.map((z) => `<th class="num">${esc(z.id)}</th>`).join("")}<th class="num">${esc(t("viewer.total"))}</th><th class="num">${esc(t("viewer.pz.low"))}</th><th>${esc(t("viewer.pz.verdict"))}</th></tr></thead><tbody>
     ${G.map((g, i) => `<tr><td>${esc(cats[i])}${g.phase ? ` <span class="meta">${esc(g.phase.label)}</span>` : ""}</td>${g.seconds.map((s) => `<td class="num">${s ? fmtDur(s, "hm") : "—"}</td>`).join("")}<td class="num">${fmtDur(g.total_s, "hm")}</td><td class="num">${pzPct(g.low_share)}</td><td>${esc(g.verdict.icon)} ${esc(g.verdict.text)}</td></tr>`).join("")}
     </tbody></table></div></details>`);
 }
@@ -2287,10 +2292,11 @@ function drawTargets(card, res) {
   // SP-954: without power in effect today (② CP stale, ③ no power meter — res.power_state) the 課表 trains by heart
   // rate / pace: no CP, no watts column (② says how old the CP is and how to get power back)
   const pwOff = !!T.power_off, ps = res.power_state;
-  const cpTxt = pwOff ? (ps?.state === "stale" ? `${esc(ps.reason || "")} · ` : "")
-    : `CP ${T.cp ? Math.round(T.cp) + " W" : "未設定"}（${esc(T.cp_source)}）· `;
-  card.insertAdjacentHTML("beforeend", `<div class="meta" style="margin-bottom:4px">${cpTxt}LTHR ${Math.round(T.lthr || 0)}（${esc(T.lthr_source)}）· AeT ${Math.round(T.aet || 0)}（${esc(T.aet_source)}）</div>
-    <table class="zt"><thead><tr><th>課表</th>${pwOff ? "" : `<th class="num">功率 W</th>`}<th class="num">心率</th><th>看哪個</th><th>怎麼練</th></tr></thead>
+  const hrArgs = { lthr: Math.round(T.lthr || 0), ls: T.lthr_source, aet: Math.round(T.aet || 0), as: T.aet_source };
+  const metaTxt = pwOff ? (ps?.state === "stale" ? `${ps.reason || ""} · ` : "") + t("viewer.tg.meta_hr", hrArgs)
+    : t("viewer.tg.meta", { cp: T.cp ? Math.round(T.cp) + " W" : t("viewer.not_set"), cps: T.cp_source, ...hrArgs });
+  card.insertAdjacentHTML("beforeend", `<div class="meta" style="margin-bottom:4px">${esc(metaTxt)}</div>
+    <table class="zt"><thead><tr><th>${esc(t("viewer.tg.session"))}</th>${pwOff ? "" : `<th class="num">${esc(t("viewer.tg.power"))}</th>`}<th class="num">${esc(t("viewer.tg.hr"))}</th><th>${esc(t("viewer.tg.primary"))}</th><th>${esc(t("viewer.tg.how"))}</th></tr></thead>
     <tbody>${T.rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
       ${pwOff ? "" : `<td class="num">${w(r.power)}</td>`}<td class="num">${w(r.hr)}</td><td>${esc(r.primary)}</td>
       <td class="meta" style="white-space:normal">${esc(r.example)}<br><span style="opacity:.8">${esc(r.source)}</span></td></tr>`).join("")}</tbody></table>`);
@@ -2978,8 +2984,7 @@ function drawCalendar(card, s) {
   const d28 = new Date(end); d28.setDate(d28.getDate() - 27);
   const n = (from) => pts.filter((p) => p[0] >= iso(from) && p[0] <= iso(end)).length;
   const weeks = Math.max(1, (end - begin) / (7 * 864e5));
-  card.insertAdjacentHTML("beforeend", `<p class="meta cal-sum">本週 <b>${n(mon)}</b> 次 · 近 4 週 <b>${n(d28)}</b> 次
-    · 這段期間 <b>${pts.length}</b> 次（平均每週 ${(pts.length / weeks).toFixed(1)} 次）</p>`);
+  card.insertAdjacentHTML("beforeend", `<p class="meta cal-sum">${t("viewer.cal.sum", { a: n(mon), b: n(d28), c: pts.length, d: (pts.length / weeks).toFixed(1) })}</p>`);
   const months = (end.getFullYear() - begin.getFullYear()) * 12 + end.getMonth() - begin.getMonth() + 1;
   const box = document.createElement("div");
   box.className = "plot";
@@ -2988,13 +2993,13 @@ function drawCalendar(card, s) {
   const css = (v) => getComputedStyle(document.body).getPropertyValue(v).trim();
   const ch = echarts.init(box);
   ch.setOption({
-    tooltip: { formatter: (p) => `${p.value[0]}：${p.value[1] > 0 ? "有練" : "沒練"}` },
+    tooltip: { formatter: (p) => esc(t(p.value[1] > 0 ? "viewer.cal.yes" : "viewer.cal.no", { d: p.value[0] })) },
     visualMap: { show: false, min: 0, max: 1, inRange: { color: [css("--line") || "#e5e5e5", s.color || "#e87ba4"] } },
     calendar: { range: [iso(begin), iso(end)], top: 24, left: 34, right: 12, cellSize: ["auto", 14],
       splitLine: { show: false },
       itemStyle: { color: css("--line") || "#e5e5e5", borderColor: css("--panel") || "#fff", borderWidth: 2 },
       dayLabel: { firstDay: 1, nameMap: I18N.fmt.weekdays("narrow", { sundayFirst: true }), color: css("--muted"), fontSize: 10 },
-      monthLabel: { nameMap: "cn", color: css("--muted"), fontSize: 10 }, yearLabel: { show: false } },
+      monthLabel: { nameMap: I18N.locale === "zh-TW" ? "cn" : "en", color: css("--muted"), fontSize: 10 }, yearLabel: { show: false } },
     series: [{ type: "heatmap", coordinateSystem: "calendar",
       data: s.data.points.filter((p) => p[1] != null).map((p) => [p[0], p[1] > 0 ? 1 : 0]) }],
   });
@@ -3032,7 +3037,7 @@ function drawGauges(card, gauges) {
     box.insertAdjacentHTML("beforeend", `<div class="g"><div class="desc">${esc(s.name)}</div>
       <div class="big">${f(cur)}${lab && !["duration", "percent"].includes(u.kind) ? ` <span class="desc">${esc(lab)}</span>` : ""}${target != null ? ` <span class="desc">/ ${f(target)}</span>` : ""}</div>
       ${pct != null ? `<div class="bar"><i style="width:${(pct * 100).toFixed(1)}%;background:${s.color || css("--accent")}"></i></div>` : ""}
-      ${cur == null ? `<div class="meta">${/startofweek\s*\(\s*today/i.test(s.expression || "") ? "本週還沒有活動" : "這段期間沒有資料"}</div>` : ""}</div>`);
+      ${cur == null ? `<div class="meta">${/startofweek\s*\(\s*today/i.test(s.expression || "") ? esc(t("viewer.g.none_week")) : esc(t("viewer.g.none"))}</div>` : ""}</div>`);
   }
   card.appendChild(box);
 }
@@ -3100,8 +3105,10 @@ function zonedSetup(out, srcOf, zoned) {
 }
 // 「1.12 · 正常（0.8–1.3）」: a band's name is「short range」 (views: 「正常 0.8–1.3」)
 function zonedHover(y, b, unit) {
-  const [short, ...rest] = String(b.name || "").split(" ");
-  return `${fmtU(y, unit, { label: false })} · ${short}${rest.length ? `（${rest.join(" ")}）` : ""}`;
+  // the name before the range (English names have spaces: "Too little < 0.8")
+  const nm = String(b.name || ""), m = /^(.*?)\s+([<>≤≥−+\-\d].*)$/.exec(nm);
+  const short = m ? m[1] : nm, rest = m ? m[2] : "";
+  return `${fmtU(y, unit, { label: false })} · ${short}${rest ? t("viewer.paren", { x: rest }) : ""}`;
 }
 
 function drawPlot(card, res, series) {
@@ -3280,7 +3287,7 @@ function drawPlot(card, res, series) {
     const yiP = Math.max(0, axisIds.indexOf(series.find((s) => s.role === "projection")?.y_axis || "NONE"));
     put({ type: "line", yAxisIndex: yiP, data: [], _proj: true,
       markLine: { silent: true, symbol: "none", lineStyle: { color: muted, type: [4, 3], width: 1 },
-        label: { show: true, position: "insideEndTop", color: muted, fontSize: 10, formatter: t("viewer.proj.today", "今天") },
+        label: { show: true, position: "insideEndTop", color: muted, fontSize: 10, formatter: t("viewer.proj.today") },
         data: [{ xAxis: cat ? catIdx.get(PJ.today) : PJ.today }] } }, null);
     // the band is a few days wide so a phone still shows it (one day is ~2 px on a 90-day axis)
     const hw = Math.max(0.6 * 864e5, (localMs(res.end) - localMs(res.begin)) * 0.012);
@@ -3596,7 +3603,7 @@ function drawActHrPower(card, res) {
         const i = pp[0].dataIndex, rows = [`<b>${fmtDur(res.x[i])}</b>`];
         if (res.hr) rows.push(`<span style="color:${T.hr}">●</span> ${esc(t("viewer.mapchart.hr"))} <b>${ACT.num(res.hr[i])}</b> bpm`);
         const hq = hqAt(res.x[i]);
-        if (hq.length) rows.push(`<span class="meta">⚠ ${esc(HQ.legend)} · ${esc([...new Set(hq)].join(HQ.sep || "、"))}</span>`);
+        if (hq.length) rows.push(`<span class="meta">⚠ ${esc(HQ.legend)} · ${esc([...new Set(hq)].join(HQ.sep || t("viewer.enum_sep")))}</span>`);
         if (usePw && res.power) rows.push(`<span style="color:${T.pw}">●</span> ${esc(t("viewer.hp.pw30"))} <b>${ACT.num(res.power[i])}</b> W`);
         return ACT.tipBox(rows.join("<br>"));
       } },
@@ -3686,7 +3693,7 @@ function drawActZones(card, res) {
     animation: false,
     grid: { left: 8, right: 92, top: 4, bottom: 4, containLabel: true },
     tooltip: { trigger: "item", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.text },
-      formatter: (p) => { const r = rows[p.dataIndex]; return ACT.tipBox(`<b>${esc(label(r))}</b><br>${esc(rng(r))} ${unit}<br>${fmtDur(r.seconds)}（${r.share == null ? "—" : Math.round(r.share * 100) + "%"}）`); } },
+      formatter: (p) => { const r = rows[p.dataIndex]; return ACT.tipBox(`<b>${esc(label(r))}</b><br>${esc(rng(r))} ${unit}<br>${fmtDur(r.seconds)}${t("viewer.paren", { x: r.share == null ? "—" : Math.round(r.share * 100) + "%" })}`); } },
     xAxis: { type: "value", show: false, max: (v) => v.max * 1.02 || 1 },
     yAxis: { type: "category", inverse: true, data: rows.map((r) => r), axisTick: { show: false }, axisLine: { lineStyle: { color: T.line } },
       axisLabel: { color: T.text, fontSize: 11, formatter: (_, i) => `{n|${label(rows[i])}}  {r|${rng(rows[i])}}`,
@@ -4260,7 +4267,7 @@ function drawGradeProfile(card, res) {
         const b = bins[p.dataIndex];
         if (!b) return "";
         const bb = b.base?.[g.key], v = val(b);
-        return cpTipBox(`<b>${esc(t("viewer.cp.grade_is", { g: b.label }))}</b><br>${esc(t("viewer.zt.time"))} <b>${cpDur(b.time_s)}</b>（${cpN(b.time_pct)}%）· ${cpN(b.distance_km, 2)} km`
+        return cpTipBox(`<b>${esc(t("viewer.cp.grade_is", { g: b.label }))}</b><br>${esc(t("viewer.zt.time"))} <b>${cpDur(b.time_s)}</b>${t("viewer.paren", { x: cpN(b.time_pct) + "%" })} · ${cpN(b.distance_km, 2)} km`
           + `<br>${esc(g.label)} <b>${v == null ? "–" : g.f(v)}</b> ${esc(g.unit)}${b.time_s < D.min_s ? esc(t("viewer.cp.short_ref", { s: Math.round(D.min_s) })) : ""}`
           + (bb?.ok ? `<br>${esc(t("viewer.gp.usual", { med: g.f(bb.median), q1: g.f(bb.q1), q3: g.f(bb.q3), n: bb.n, weeks: bb.weeks }))}<br>${cpOutside(v, bb, g.pace) || esc(t("viewer.cp.in_usual"))}`
             : `<br>${esc(t("viewer.gp.usual_few", { n: bb?.n || 0, s: Math.round(D.min_s) }))}`));
@@ -4413,8 +4420,8 @@ function drawRepProfile(card, res) {
     const vs = !test && b ? (r.status === "low" ? t("viewer.iv.under", { w: Math.round(b[0] - r.power) })
       : r.status === "high" && b[1] != null ? t("viewer.iv.over", { w: Math.round(r.power - b[1]) }) : "") : "";
     return cpTipBox(`<b>${test ? esc(r.label) : esc(t("viewer.rep_n", { n: r.k }))}</b> · ${cpDur(r.duration_s)}`
-      + `<br>${esc(t("viewer.st.power"))} <b>${Math.round(r.power)} W</b>（${cpPct(r.pct_cp)} CP）`
-      + `<br>${IV_ST[r.status].short}${esc(vs)}` + (test && r.pacing ? `（${esc(r.pacing)}）` : "")
+      + `<br>${esc(t("viewer.st.power"))} <b>${Math.round(r.power)} W</b>${t("viewer.paren", { x: cpPct(r.pct_cp) + " CP" })}`
+      + `<br>${IV_ST[r.status].short}${esc(vs)}` + (test && r.pacing ? t("viewer.paren", { x: esc(r.pacing) }) : "")
       + (!test && b ? `<br>${esc(bandWord(b))}` : "")
       + (r.expected ? `<br>${esc(t("viewer.iv.expected", { w: Math.round(r.expected), pct: Math.round(r.power / r.expected * 100) }))}` : "")
       + ivHrLine(r));
@@ -4528,7 +4535,7 @@ function drawRepBands(card, res) {
     if (!r) return "";
     const b = bands.find((x) => x.key === r.band);
     return cpTipBox(`<b>${esc(t("viewer.rep_n", { n: r.k }))}</b> · ${cpDur(r.duration_s)}`
-      + `<br>${esc(t("viewer.st.power"))} <b>${Math.round(r.power)} W</b>（${cpPct(r.pct_cp)} CP）`
+      + `<br>${esc(t("viewer.st.power"))} <b>${Math.round(r.power)} W</b>${t("viewer.paren", { x: cpPct(r.pct_cp) + " CP" })}`
       + `<br><span style="color:${colOf(r.band)}">●</span> ${esc(b ? t("viewer.iv.in_band_of", { name: b.name, band: fmt(b) }) : nameOf(r.band))}`
       + ivHrLine(r));
   };
@@ -4775,7 +4782,7 @@ function drawFormProfile(card, res) {
         const b = bins[p.dataIndex];
         if (!b) return "";
         const v = val(b);
-        return cpTipBox(`<b>${esc(t("viewer.cp.grade_is", { g: b.label }))}</b><br>${esc(t("viewer.fp.moving"))} <b>${cpDur(b.time_s)}</b>（${cpN(b.time_pct)}%）`
+        return cpTipBox(`<b>${esc(t("viewer.cp.grade_is", { g: b.label }))}</b><br>${esc(t("viewer.fp.moving"))} <b>${cpDur(b.time_s)}</b>${t("viewer.paren", { x: cpN(b.time_pct) + "%" })}`
           + fpSlowTip(b)
           + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${b.time_s < D.min_s ? esc(t("viewer.cp.short_ref", { s: min })) : ""}`
           + fpNoImpactTip(metric, v) + usualTip(v, b.base?.[metric], g) + cadTip(b));
@@ -4851,7 +4858,7 @@ function drawFormProfile(card, res) {
         const r = rows[ps?.[0]?.dataIndex];
         if (!r) return "";
         const v = val(r);
-        return cpTipBox(`<b>${esc(xname)} ${esc(r.label)}</b>${band !== "all" ? `（${esc(D.band_labels?.[band] || band)}）` : ""}`
+        return cpTipBox(`<b>${esc(xname)} ${esc(r.label)}</b>${band !== "all" ? t("viewer.paren", { x: esc(D.band_labels?.[band] || band) }) : ""}`
           + `<br>${esc(t("viewer.fp.moving"))} <b>${cpDur(r.time_s)}</b>`
           + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${r.time_s < D.min_s ? esc(t("viewer.cp.short_ref", { s: min })) : ""}`
           + fpNoImpactTip(metric, v) + usualTip(v, B(r), g) + cadTip(r));

@@ -108,13 +108,13 @@ def text(a: Optional[dict]) -> str:
     """「3.1% ± 1.8 pp（6 次平均）」."""
     if not a:
         return "–"
-    return f"{a['mean'] * 100:.1f}% ± {a['se'] * 100:.1f} pp（{a['n']} 次平均）"
+    return _("{m:.1f}% ± {se:.1f} pp（{n} 次平均）", m=a["mean"] * 100, se=a["se"] * 100, n=a["n"])
 
 
 AET_BANDS = ("cool", "warm", "none")   # the bands the AeT aggregate reads (warm: heat-adjusted, module doc)
 HEAT_REF_C = 25.0              # = workout_review.DRIFT_HEAT_C: the cool band's top, the AeT test's condition
 BETA_DEFAULT = 1.0             # bpm per °C: Jenkins 2023 (module doc); for running 推估
-BETA_DEFAULT_SRC = "Jenkins 2023（Exp Physiol，doi 10.1113/EP090969）：氣溫每 +1 °C 心率 +1 bpm（騎車，推估套用到跑步）"
+BETA_DEFAULT_SRC = N_("Jenkins 2023（Exp Physiol，doi 10.1113/EP090969）：氣溫每 +1 °C 心率 +1 bpm（騎車，推估套用到跑步）")
 BETA_MIN_N = 10                # 推估: runs needed before the athlete's own fit counts at all
 BETA_MIN_SD_C = 2.0            # 推估: the runs' temperatures must spread this much (else β is not identified)
 BETA_K = 20                    # 推估: shrinkage w = n / (n + 20) — 20 runs = half personal
@@ -229,9 +229,9 @@ def _calib_fit(ds, today: dt.date):
 def _register() -> None:
     from backend.engine import calibrate as CAL
     CAL.register(CAL.Item(
-        name=CALIB_NAME, label="AeT 熱 β", unit="bpm／°C", default=BETA_DEFAULT, default_src=BETA_DEFAULT_SRC,
+        name=CALIB_NAME, label=N_("AeT 熱 β"), unit=N_("bpm／°C"), default=BETA_DEFAULT, default_src=BETA_DEFAULT_SRC,
         k=BETA_K, min_n=BETA_MIN_N, fit=_calib_fit, bounds=BETA_BOUNDS, digits=2, default_is_literature=True,
-        help="氣溫每高 1 °C，輕鬆跑前半段心率多幾 bpm；AeT 飄移在 25–28 °C 時先扣掉這一段。"))
+        help=N_("氣溫每高 1 °C，輕鬆跑前半段心率多幾 bpm；AeT 飄移在 25–28 °C 時先扣掉這一段。")))
 
 
 _register()
@@ -240,11 +240,11 @@ _register()
 def beta_text(b: dict) -> str:
     """「β 0.85 bpm／°C（本人 24 次 × 0.55 ＋ 文獻 1.0）」."""
     if b.get("src") == "user":
-        return f"β {b['beta']:.2f} bpm／°C（你在進階設定手動指定）"
+        return _("β {beta:.2f} bpm／°C（你在進階設定手動指定）", beta=b["beta"])
     if b.get("src") == "personal":
-        return (f"β {b['beta']:.2f} bpm／°C（本人 {b['n']} 次跑步擬合 {b['personal']:.2f}，"
-                f"權重 {b['w']:.0%}，其餘用文獻 {BETA_DEFAULT:.1f}）")
-    return f"β {b['beta']:.2f} bpm／°C（文獻預設；本人有溫度的跑步 {b.get('n') or 0} 次，不夠自己擬合）"
+        return _("β {beta:.2f} bpm／°C（本人 {n} 次跑步擬合 {personal:.2f}，權重 {w:.0%}，其餘用文獻 {lit:.1f}）",
+                 beta=b["beta"], n=b["n"], personal=b["personal"], w=b["w"], lit=BETA_DEFAULT)
+    return _("β {beta:.2f} bpm／°C（文獻預設；本人有溫度的跑步 {n} 次，不夠自己擬合）", beta=b["beta"], n=b.get("n") or 0)
 
 
 def band_of(dr: dict) -> str:
@@ -364,8 +364,8 @@ def heat_note(pts: list[dict], beta: Optional[dict]) -> str:
         return ""
     lo, hi = min(p["heat_bpm"] for p in warm), max(p["heat_bpm"] for p in warm)
     amt = f"{lo:.1f}" if abs(hi - lo) < 0.05 else f"{lo:.1f}–{hi:.1f}"
-    return (f"含 {len(warm)} 次 25–28 °C 的跑步：前半心率先扣掉熱的影響 {amt} bpm（移到 25 °C，{beta_text(beta)}；"
-            f"推估），飄移本身不校正；> 28 °C 的不用")
+    return _("含 {n} 次 25–28 °C 的跑步：前半心率先扣掉熱的影響 {amt} bpm（移到 25 °C，{beta}；推估），飄移本身不校正；"
+             "> 28 °C 的不用", n=len(warm), amt=amt, beta=beta_text(beta))
 
 
 def aet_validity(ds, today: dt.date, lthr: Optional[float] = None) -> dict:
@@ -384,10 +384,10 @@ def aet_validity(ds, today: dt.date, lthr: Optional[float] = None) -> dict:
         agg = TE.aet_aggregate([(p["hr1"], p["drift"], p["se"]) for p in pts], lthr=lthr)
     except Exception as e:      # noqa: BLE001 — the gate must not break on one bad file
         return {"valid": False, "value": None, "se": None, "n": 0, "shift_bpm": None, "slope_per_10bpm": None,
-                "reason": f"AeT 聚合估計算不出來（{type(e).__name__}）：需要測試", "points": 0, "heat": None}
+                "reason": _("AeT 聚合估計算不出來（{err}）：需要測試", err=type(e).__name__), "points": 0, "heat": None}
     out = {**asdict(agg), "points": len(pts), "lower_bound": False, "bound": None,
            "heat": None if beta is None else {**beta, "warm": sum(1 for p in pts if p["band"] == "warm"),
-                                              "ref_c": HEAT_REF_C, "default_src": BETA_DEFAULT_SRC}}
+                                              "ref_c": HEAT_REF_C, "default_src": _(BETA_DEFAULT_SRC)}}
     if not agg.valid and agg.code in TE.AET_BOUND_NO_CROSSING:
         # no crossing: the temporary lower bound (threshold_estimate.aet_lower_bound, 推估)
         lb = TE.aet_lower_bound([(p["hr1"], p["drift"], p["se"], p.get("tier")) for p in pts], lthr=lthr)
@@ -395,18 +395,19 @@ def aet_validity(ds, today: dt.date, lthr: Optional[float] = None) -> dict:
         if lb["ok"]:
             x = lb["value"]
             out.update(valid=True, value=x, se=None, shift_bpm=None, lower_bound=True, code="bound",
-                       reason=f"{bound_label(x)}：{lb['reason']}。{_(BOUND_TIP, x=x, lo=x - 20, hi=x - 10)}")
+                       reason=_("{label}：{why}。{tip}", label=bound_label(x), why=lb["reason"],
+                                tip=_(BOUND_TIP, x=x, lo=x - 20, hi=x - 10)))
         elif lb.get("broken"):
-            out["reason"] = f"{out['reason']}（AeT 下限也不成立：{lb['reason']}）"
+            out["reason"] = _("{reason}（AeT 下限也不成立：{why}）", reason=out["reason"], why=lb["reason"])
     note = heat_note(pts, beta)
     if note:
-        out["reason"] = f"{out['reason']}（{note}）"
+        out["reason"] = _("{reason}（{note}）", reason=out["reason"], note=note)
     return out
 
 
 def bound_label(x: float) -> str:
     """「AeT ≥ 152 bpm（下限，推估）」."""
-    return f"AeT ≥ {x:.0f} bpm（下限，推估）"
+    return _("AeT ≥ {x:.0f} bpm（下限，推估）", x=x)
 
 
 BOUND_TIP = N_("暫時規則（推估）：輕鬆跑的心率都在 {x:.0f} bpm 附近、心率飄移都穩定（< 5%），還找不到會飄到 5% 的心率，"

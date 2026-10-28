@@ -37,15 +37,17 @@ LONG_RACE_H = 3.0               # longer: HR cap at AeT (「長距離壓在 AeT 
 CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 KIND_LABEL = {"run_climb": N_("可跑的爬坡"), "steep_climb": N_("陡坡（走）"), "descent": N_("下坡"), "flat": N_("平路／可跑")}
 FLAT_HIKE = N_("平緩")                      # a 百岳 plan's flat segment
+EST = N_("推估")
 # a steep_climb by its gait (SP-226): > 8 % keeps the HR cap + VAM target whatever the gait
 STEEP_LABEL = {"walk": N_("陡坡（走）"), "either": N_("陡坡（走跑皆可）"), "run": N_("陡坡（跑）")}
 WALKED_CLIMB_LABEL = N_("爬坡（走）")       # 3–8 % but slower than the walk–run transition speed
-SRC = {"run_climb": "3–8 % 坡：Stryd 功率 ≈ 固定代謝負荷（van Rassel 2026）；心率只當上限",
-       "steep_climb": "> 8 %：功率低估，改看心率上限與 VAM（Uphill Athlete）",
+# shown through _() (SP-838)
+SRC = {"run_climb": N_("3–8 % 坡：Stryd 功率 ≈ 固定代謝負荷（van Rassel 2026）；心率只當上限"),
+       "steep_climb": N_("> 8 %：功率低估，改看心率上限與 VAM（Uphill Athlete）"),
        # SP-247: Gravina-Cognetti et al. 2025 (Sports 13:294; power-gap-trail-validity.md §3 #2)
        "descent": N_("下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全"),
-       "flat": "平路與可跑段：功率（沒有 CP 時看心率）",
-       "hike": "登山揹重：心率 ≤ AeT（Uphill Athlete）＋ VAM；配速受地形與背負影響，不當目標"}
+       "flat": N_("平路與可跑段：功率（沒有 CP 時看心率）"),
+       "hike": N_("登山揹重：心率 ≤ AeT（Uphill Athlete）＋ VAM；配速受地形與背負影響，不當目標")}
 
 # SP-244 「會用登山杖」 hints (docs/research/trekking-poles.md §2.1–§2.3, §5 #3); no number changes
 POLE_DESCENT = -0.15            # steep descents only: the knee-load studies are 25° / −15 % and steeper
@@ -235,20 +237,20 @@ def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[floa
             if k != "descent":
                 basis = "hr"
                 if cap:
-                    chips.append({"icon": "❤️", "text": f"心率 ≤ {cap:.0f}", "role": "main"})
+                    chips.append({"icon": "❤️", "text": _("心率 ≤ {hr:.0f}", hr=cap), "role": "main"})
                 if v and k in ("steep_climb", "run_climb"):
                     chips.append({"icon": "⛰️", "text": f"VAM {v:.0f} m/h"})
-            src = SRC["hike"] if k != "descent" else _(SRC["descent"])
+            src = _(SRC["hike"]) if k != "descent" else _(SRC["descent"])
         elif k == "descent":
             src = _(SRC["descent"])
         elif k == "steep_climb":
             basis = "hr"
             if cap:
-                chips.append({"icon": "❤️", "text": f"心率 ≤ {cap:.0f}", "role": "main"})
+                chips.append({"icon": "❤️", "text": _("心率 ≤ {hr:.0f}", hr=cap), "role": "main"})
             if v:
                 chips.append({"icon": "⛰️", "text": f"VAM {v:.0f} m/h"})
-            badge = "推估"
-            src = SRC["steep_climb"]
+            badge = _(EST)
+            src = _(SRC["steep_climb"])
         else:
             p = s.get("power")
             if p and cp:
@@ -256,18 +258,18 @@ def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[floa
                 lo, hi = p * (1 - POWER_BAND), p * (1 + POWER_BAND)
                 chips.append({"icon": "⚡", "text": f"{lo:.0f}–{hi:.0f} W（{lo / cp:.0%}–{hi / cp:.0%} CP）", "role": "main"})
                 if cap:
-                    chips.append({"icon": "❤️", "text": f"心率上限 {cap:.0f}"})
+                    chips.append({"icon": "❤️", "text": _("心率上限 {hr:.0f}", hr=cap)})
                 if k == "run_climb" and v:
                     chips.append({"icon": "⛰️", "text": f"VAM {v:.0f} m/h"})
             elif cap:
                 basis = "hr"
-                chips.append({"icon": "❤️", "text": f"心率 ≤ {cap:.0f}", "role": "main"})
-            src = SRC[k]
+                chips.append({"icon": "❤️", "text": _("心率 ≤ {hr:.0f}", hr=cap), "role": "main"})
+            src = _(SRC[k])
             badge = s.get("badge")
         ref = []
         if s.get("pace_s_per_km") and not hike:
             pc = int(round(s["pace_s_per_km"]))
-            ref.append(f"配速參考 {pc // 60}:{pc % 60:02d} /km")
+            ref.append(_("配速參考 {pace} /km", pace=f"{pc // 60}:{pc % 60:02d}"))
         t = {"n": n, "mark": mark(n), "kind": k, "label": label_of(s, k, hike),
              "basis": basis, "chips": chips, "ref": ref, "badge": badge, "src": src, "vam": v,
              "hr_cap": cap, "hr_cap_src": cap_src,

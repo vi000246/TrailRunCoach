@@ -247,8 +247,14 @@ def next_test(inp: dict) -> Optional[dict]:
     return None
 
 
+def _shown_test(nt: Optional[dict], ST) -> Optional[dict]:
+    """next_test with its session title (a stored zh-TW name) in the request's language."""
+    return {**nt, "title": str(ST.shown(nt.get("title") or ""))} if nt else nt
+
+
 def summary(inp: dict) -> dict:
     """{phase: {kind, label, week, start, end} | None, mode_label, sport, week: week_structure, next_test}."""
+    from backend.engine import stored_text as ST
     cur = inp.get("cur") or {}
     ph = inp.get("phase") or None
     phase = None
@@ -256,9 +262,10 @@ def summary(inp: dict) -> dict:
         monday = _d((cur.get("week") or {}).get("start"))
         start = _d(ph.get("start"))
         n = (monday - (start - dt.timedelta(days=start.weekday()))).days // 7 + 1 if monday and start else None
-        phase = {"kind": ph.get("kind"), "label": str(ph.get("label") or ""), "week": n if n and n > 0 else None,
-                 "start": ph.get("start"), "end": ph.get("end")}
-    return {"phase": phase, "mode_label": str(cur.get("mode_label") or ""),
+        phase = {"kind": ph.get("kind"), "label": str(ST.shown(str(ph.get("label") or ""))),
+                 "week": n if n and n > 0 else None, "start": ph.get("start"), "end": ph.get("end")}
+    # the stored plan's words (zh-TW) in the request's language (SP-840)
+    return {"phase": phase, "mode_label": str(ST.shown(str(cur.get("mode_label") or ""))),
             "sport": "road" if cur.get("primary_sport") == "road" else "trail",
-            "week": week_structure(cur.get("sessions") or []), "next_test": next_test(inp),
+            "week": week_structure(cur.get("sessions") or []), "next_test": _shown_test(next_test(inp), ST),
             "mp_goal_pace_s": cur.get("mp_goal_pace_s")}

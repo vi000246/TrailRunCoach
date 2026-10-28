@@ -257,7 +257,8 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
         from backend.sync import garmin_limits as GL
         try:
             if GL.slot_busy():
-                yield {"status": "queued", "detail": "另一個帳號的 Garmin 同步進行中，排隊等候"}
+                from backend.i18n import _
+                yield {"status": "queued", "detail": _("另一個帳號的 Garmin 同步進行中，排隊等候")}
             slot = GL.sync_slot(trigger=trigger)
             await slot.__aenter__()
         except GL.GarminBlocked as e:

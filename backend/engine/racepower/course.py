@@ -22,6 +22,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 from backend.engine import hints as H
+from backend.i18n import N_, _
 
 EARTH_R = 6371008.8            # mean Earth radius, m
 DUP_M = 0.5
@@ -39,8 +40,8 @@ MAX_SEGMENTS = 15              # SP-700: the default grade split's cap (long fla
 PROFILE_MAX = 1500
 CAMP_WORDS = ("營地", "山屋", "營", "camp", "hut", "山莊", "避難")
 
-CLASSES = {
-    "steep_down": "陡下", "down": "下坡", "flat": "平", "up": "上坡", "steep_up": "陡上",
+CLASSES = {                    # msgids, shown through _() (cls_label, SP-838)
+    "steep_down": N_("陡下"), "down": N_("下坡"), "flat": N_("平"), "up": N_("上坡"), "steep_up": N_("陡上"),
 }
 
 
@@ -397,7 +398,7 @@ def segment_rows(bounds: list[int], xs: np.ndarray, zs: np.ndarray, flat_pct: fl
             "dist_m": float(xs[b] - xs[a]), "gain_m": gn, "loss_m": ls,
             "grade": g, "max_grade": _max_grade(xs, zs, a, b),
             "z_start": float(zs[a]), "z_end": float(zs[b]), "z_mean": zmean, "z_max": float(seg_z.max()),
-            "cls": cls, "cls_label": CLASSES[cls], "walk": None, "climb_no": cno,   # walk: the planner, from the speed
+            "cls": cls, "cls_label": _(CLASSES[cls]), "walk": None, "climb_no": cno,   # walk: the planner, from the speed
         })
     return rows
 
@@ -495,7 +496,7 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
     climb_kw: detect_climbs' thresholds for `climbs` (None: the race defaults; SP-639)."""
     td = track_distance(track)
     if len(td["d"]) < 2 or td["d"][-1] < 50:
-        raise ValueError("軌跡太短")
+        raise ValueError(_("軌跡太短"))
     xs, raw = resample(td["d"], td["z"], STEP_M)
     zs = smooth(raw, STEP_M, sigma_m)
     raw_gain = gain_loss(raw, HYST_M)[0]
@@ -504,7 +505,7 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
     if official_gain_m:
         g0 = gain_loss(zs, HYST_M)[0]
         if g0 > 0 and abs(g0 - official_gain_m) / official_gain_m > 0.15:
-            warnings.append(H.tag("RC17", f"官方爬升 {official_gain_m:.0f} m 與 GPX 平滑後 {g0:.0f} m 相差超過 15 %"))
+            warnings.append(H.tag("RC17", _("官方爬升 {o:.0f} m 與 GPX 平滑後 {g:.0f} m 相差超過 15 %", o=official_gain_m, g=g0)))
         zs, scale = _scale_to_gain(zs, official_gain_m)
     gain, loss = gain_loss(zs, HYST_M)
     total = float(xs[-1])
@@ -527,10 +528,11 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
     climbs = _climbs(xs, zs, **(climb_kw or {}))
     segs = segment_rows(bounds, xs, zs, flat_pct, climbs)
     if raw_gain > 0 and abs(raw_gain - gain) / raw_gain > 0.25 and not official_gain_m:
-        warnings.append(H.tag("RC17", f"平滑前後爬升相差 {abs(raw_gain - gain) / raw_gain:.0%}（原始 {raw_gain:.0f} m → {gain:.0f} m），海拔雜訊大"))
+        warnings.append(H.tag("RC17", _("平滑前後爬升相差 {d:.0%}（原始 {raw:.0f} m → {g:.0f} m），海拔雜訊大",
+                                        d=abs(raw_gain - gain) / raw_gain, raw=raw_gain, g=gain)))
     spacing = float(np.median(np.diff(td["d"]))) if len(td["d"]) > 1 else 0.0
     if spacing > 50:
-        warnings.append(H.tag("RC17", f"點距中位數 {spacing:.0f} m：像是路線規劃工具畫的線，坡度會被平均掉"))
+        warnings.append(H.tag("RC17", _("點距中位數 {m:.0f} m：像是路線規劃工具畫的線，坡度會被平均掉", m=spacing)))
     step = max(1, int(math.ceil(len(xs) / PROFILE_MAX)))
     idx = list(range(0, len(xs), step))
     if idx[-1] != len(xs) - 1:
@@ -606,7 +608,7 @@ def manual_course(km: float, gain_m: float = 0.0, loss_m: Optional[float] = None
         segs.append({"i": n, "start_m": a, "end_m": b, "start_km": a / 1000.0, "end_km": b / 1000.0,
                      "dist_m": b - a, "gain_m": gain_m * f, "loss_m": loss * f, "grade": g, "max_grade": g,
                      "z_start": altitude_m, "z_end": altitude_m, "z_mean": altitude_m, "z_max": altitude_m,
-                     "cls": cls, "cls_label": CLASSES[cls], "walk": None, "climb_no": None})
+                     "cls": cls, "cls_label": _(CLASSES[cls]), "walk": None, "climb_no": None})
     return {"totals": {"km": km, "gain_m": gain_m, "loss_m": loss, "segments": len(segs)},
             "segments": segs, "profile": None, "climbs": [], "wpts": [], "warnings": [],
             "opts": {"split": split}, "source": "manual"}

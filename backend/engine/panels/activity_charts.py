@@ -401,11 +401,11 @@ def expand(res: dict) -> dict:
 
 HR_MODELS = [
     {"id": "frielhr", "title": N_("Friel 7 區（% LTHR）"), "basis": "lthr", "zones": lambda: Z.FRIEL_HR,
-     "source": "Friel 心率區間（Friel HR 表，% LTHR）"},
+     "source": N_("Friel 心率區間（Friel HR 表，% LTHR）")},
     {"id": "classichr", "title": N_("Classic 5 區（% LTHR）"), "basis": "lthr", "zones": lambda: Z.CLASSIC_HR,
-     "source": "Classic HR 區間（% LTHR）"},
+     "source": N_("Classic HR 區間（% LTHR）")},
     {"id": "seiler3", "title": N_("Seiler 3 區（AeT／LTHR）"), "basis": "aet_lthr",
-     "source": "Seiler 三區模型：1 區 < 第一閾值、2 區 兩閾值之間、3 區 > 第二閾值；這裡第一閾值用 AeT、第二用 LTHR"},
+     "source": N_("Seiler 三區模型：1 區 < 第一閾值、2 區 兩閾值之間、3 區 > 第二閾值；這裡第一閾值用 AeT、第二用 LTHR")},
     # the watch's own three models (engine/hr_profile.py, user request 2026-10-03). The
     # 2026-10-01 decision dropped %HRmax zones (zones.py: Iannetta 2020); the user re-added
     # them 2026-10-03 as a choice — the limitation is in the model's 來源 text. A remembered
@@ -414,7 +414,8 @@ HR_MODELS = [
      "source": HP.SOURCE["lthr"]},
     # id kept from the RQ model (a remembered choice still works): COROS's HRR table is RQ's
     {"id": "rqhrr", "title": N_("COROS 儲備心率 6 區（% HRR，同 RQ）"), "basis": "coros", "coros": "hrr",
-     "source": HP.SOURCE["hrr"] + "；T 區 84–88% HRR 也見 runningquotient.com/article/single/52"},
+     "source": HP.SOURCE["hrr"],
+     "source_more": N_("T 區 84–88% HRR 也見 runningquotient.com/article/single/52")},
     {"id": "coroshrmax", "title": N_("COROS 最大心率 6 區（% HRmax）"), "basis": "coros", "coros": "hrmax",
      "source": HP.SOURCE["hrmax"]},
 ]
@@ -428,7 +429,7 @@ POWER_MODELS = [
      "zones": lambda: [("1", N_("低強度"), 0.0, Z.PALLADINO_3ZONE["low"]),
                        ("2", N_("中強度"), Z.PALLADINO_3ZONE["low"], Z.PALLADINO_3ZONE["high"]),
                        ("3", N_("高強度"), Z.PALLADINO_3ZONE["high"], None)],
-     "source": "Palladino 的三區摘要（低 < 80% CP、中 80–95%、高 ≥ 95%），即功率版的 Seiler 三區"},
+     "source": N_("Palladino 的三區摘要（低 < 80% CP、中 80–95%、高 ≥ 95%），即功率版的 Seiler 三區")},
     {"id": "stryd", "title": N_("Stryd 5 區（% CP）"), "basis": "cp", "zones": Z.stryd_rows,
      "source": Z.STRYD_SOURCE},
     # SP-363: the classic 7 levels (% threshold power = CP here) and the 個人化區間 (the runner's own PD
@@ -461,7 +462,17 @@ def _threshold_text(ds, w, basis: str) -> Optional[str]:
         i = Z.threshold_info(ds, basis, w, int(math.floor(w.day)))
     except Exception:            # noqa: BLE001 — a dataset without a plan (tests)
         return None
-    return i.get("source")
+    return Z.shown_source(i.get("source"))         # in the request's language (SP-810)
+
+
+def _with_src(text: str, srcs: list) -> str:
+    """「LTHR 160 bpm（你的測試 …；…）」 in the request's language."""
+    if not srcs:
+        return text
+    joined = srcs[0]
+    for x in srcs[1:]:
+        joined = _("{a}；{b}", a=joined, b=x)
+    return _("{what}（{why}）", what=text, why=joined)
 
 
 def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
@@ -475,7 +486,7 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
             return {"reason": _("沒有 AeT 或 LTHR")}
         return {"rows": [("1", N_("低強度（< AeT）"), 0.0, aet), ("2", N_("中強度（AeT–LTHR）"), aet, lthr),
                          ("3", N_("高強度（≥ LTHR）"), lthr, None)],
-                "basis_text": f"AeT {aet:.0f}、LTHR {lthr:.0f} bpm", "estimate": est}
+                "basis_text": _("AeT {aet:.0f}、LTHR {lthr:.0f} bpm", aet=aet, lthr=lthr), "estimate": est}
     if b == "coros":
         return _coros_bounds(ds, w, model["coros"], lthr, ctx)
     if b == "personal":
@@ -493,7 +504,7 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
         return {"reason": _("沒有 {name}，區間算不出來", name="LTHR" if b == "lthr" else "CP")}
     unit = "bpm" if b == "lthr" else "W"
     src = _threshold_text(ds, w, b)
-    text = f"{'LTHR' if b == 'lthr' else 'CP'} {T:.0f} {unit}" + (f"（{src}）" if src else "")
+    text = _with_src(f"{'LTHR' if b == 'lthr' else 'CP'} {T:.0f} {unit}", [src] if src else [])
     rows = [(zid, nm, (lo or 0.0) * T, None if hi is None else hi * T) for zid, nm, lo, hi in model["zones"]()]
     # the first zone takes everything below it too (Palladino starts at 50 % CP; zones.zone_of
     # counts below 50 % as 1A), so every second has a zone
@@ -519,7 +530,7 @@ def _coros_bounds(ds, w, kind: str, lthr: Optional[float], ctx: dict) -> dict:
     if kind == "lthr":
         src = _threshold_text(ds, w, "lthr")
         srcs = [src] if src else []
-    text = z["basis_text"] + (f"（{'；'.join(srcs)}）" if srcs else "")
+    text = _with_src(z["basis_text"], srcs)
     return {"rows": z["rows"], "basis_text": text, "estimate": mx.get("kind") == "estimate"}
 
 
@@ -537,6 +548,12 @@ def time_in(values: Optional[np.ndarray], rows: list[tuple]) -> tuple[list[float
     return secs, float(sum(secs))
 
 
+def _model_source(m: dict) -> str:
+    """A zone model's 來源 text in the request's language (Z.SOURCE etc. are English already)."""
+    s = _(m["source"])
+    return _("{a}；{b}", a=s, b=_(m["source_more"])) if m.get("source_more") else s
+
+
 def zone_times(ds, w, kind: str) -> dict:
     """Every model of `kind` ("hr" / "power") for this activity: boundaries,
     seconds and share per zone, or why the model isn't available."""
@@ -547,7 +564,7 @@ def zone_times(ds, w, kind: str) -> dict:
     out = []
     for m in MODELS[kind]:
         b = _bounds(ds, w, kind, m, ctx)
-        item = {"id": m["id"], "title": _(m["title"]), "source": m["source"]}
+        item = {"id": m["id"], "title": _(m["title"]), "source": _model_source(m)}
         if "reason" in b:
             out.append({**item, "available": False, "reason": b["reason"]})
             continue
@@ -609,7 +626,7 @@ def zone_sets(ds, w) -> dict:
     ctx = {"thr": _thresholds(ds, w)}
 
     def model(kind, m, b):
-        item = {"id": m["id"], "title": _(m["title"]), "source": m["source"]}
+        item = {"id": m["id"], "title": _(m["title"]), "source": _model_source(m)}
         if "reason" in b:
             return {**item, "available": False, "reason": b["reason"]}
         return {**item, "available": True, "estimate": bool(b.get("estimate")), "basis_text": b.get("basis_text"),
@@ -680,9 +697,10 @@ def hr_variation(t, hr, power=None, speed=None) -> Optional[dict]:
             "decoupling": out_ratio, "decoupling_basis": basis}
 
 
-# zh only: the viewer shows its own words for `variability` / `trend` (viewer.tr.v_* / t_*)
-VARIABILITY_LABEL = {"steady": "穩定", "mixed": "混合", "variable": "變化大"}
-TREND_LABEL = {"declining": "下降", "consistent": "持平", "increasing": "上升"}
+# the viewer shows its own words for `variability` / `trend` (viewer.tr.v_* / t_*); these labels follow the
+# request's language too (other readers of the JSON)
+VARIABILITY_LABEL = {"steady": N_("穩定"), "mixed": N_("混合"), "variable": N_("變化大")}
+TREND_LABEL = {"declining": N_("下降"), "consistent": N_("持平"), "increasing": N_("上升")}
 
 
 def hrtrend(ds, w, points: int = POINTS) -> dict:
@@ -708,8 +726,9 @@ def hrtrend(ds, w, points: int = POINTS) -> dict:
     return {"points": pts, "trend_line": [[_r(a, 0), _r(b, 2)] for a, b in line],
             "avg": _r(v["avg"], 2), "sd": _r(v["sd"], 2), "cv": _r(v["cv"], 4),
             "slope_bpm_h": _r(v["slope"] * 3600.0, 2), "change_bpm": _r(change, 1),
-            "variability": v["variability"], "variability_label": VARIABILITY_LABEL.get(v["variability"]),
-            "trend": v["trend"], "trend_label": TREND_LABEL[v["trend"]],
+            "variability": v["variability"], "variability_label": (_(VARIABILITY_LABEL[v["variability"]])
+                                                                 if v["variability"] in VARIABILITY_LABEL else None),
+            "trend": v["trend"], "trend_label": _(TREND_LABEL[v["trend"]]),
             "decoupling": _r(v["decoupling"], 4), "decoupling_basis": v["decoupling_basis"],
             "empty": None}
 

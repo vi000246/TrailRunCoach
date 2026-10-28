@@ -60,6 +60,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import AthleteSettings, SyncState, WorkoutFile
+from backend.i18n import _
 from backend.settings.secrets import SecretError, seal, unseal
 from backend.sync import events as EV
 from backend.sync import failures as FL
@@ -227,7 +228,7 @@ async def login_mfa(code: str, db: AsyncSession, athlete_id: int = 1) -> dict:
         raise LoginBusy("GARMIN_LOGIN_BUSY: a Garmin login is already running")
     async with lk:
         if not mfa_pending():
-            raise GarminLoginFailed("GARMIN_MFA_EXPIRED", "請重新輸入帳號密碼登入")
+            raise GarminLoginFailed("GARMIN_MFA_EXPIRED", _("請重新輸入帳號密碼登入"))
         p = _PENDING[_tid()]
         code = re.sub(r"\s+", "", str(code or ""))
         try:
@@ -241,8 +242,8 @@ async def login_mfa(code: str, db: AsyncSession, athlete_id: int = 1) -> dict:
                 EV.log(SOURCE, "mfa_wrong", tenant=_tid(), tries=p["tries"])
                 if p["tries"] >= MFA_MAX_TRIES:
                     forget_mfa()
-                    raise GarminLoginFailed("GARMIN_MFA_EXPIRED", "驗證碼錯太多次，請重新登入")
-                raise GarminLoginFailed("GARMIN_MFA_WRONG", "驗證碼不對，請再輸入一次")
+                    raise GarminLoginFailed("GARMIN_MFA_EXPIRED", _("驗證碼錯太多次，請重新登入"))
+                raise GarminLoginFailed("GARMIN_MFA_WRONG", _("驗證碼不對，請再輸入一次"))
             forget_mfa()
             EV.log(SOURCE, "login_failed", tenant=_tid(), kind="mfa_error", error=type(e).__name__,
                    lib=GL.lib_version())
@@ -270,7 +271,7 @@ async def _login_call(fn):
         kind = "auth" if _is_auth(e) else "error"
         EV.log(SOURCE, "login_failed", tenant=_tid(), kind=kind, error=type(e).__name__, lib=GL.lib_version())
         if kind == "auth":
-            raise GarminLoginFailed("GARMIN_LOGIN_FAILED", "Garmin 帳號或密碼不對") from None
+            raise GarminLoginFailed("GARMIN_LOGIN_FAILED", _("Garmin 帳號或密碼不對")) from None
         raise GarminLoginFailed("GARMIN_LOGIN_ERROR", type(e).__name__) from None
 
 
@@ -666,7 +667,7 @@ async def sync_workouts(db: AsyncSession, athlete_id: int = 1, since: Optional[s
     if not more:
         await refresh_hr_profile(db, athlete_id, api)
     yield {"status": "complete", "total_downloaded": run["downloaded"], "total_checked": total_checked,
-           "errors": run["errors"], "more": more, **({"detail": GL.REQUESTS_TEXT} if more else {})}
+           "errors": run["errors"], "more": more, **({"detail": _(GL.REQUESTS_TEXT)} if more else {})}
 
 
 # ---------------------------------------------------------------------------- heart rate

@@ -381,6 +381,37 @@ def status_but_hr(ds, today: dt.date) -> Optional[Status]:
     return None
 
 
+_WEEKDAY_EN = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_TH_KEYS = frozenset({"cp_source", "lthr_source", "aet_source", "easy_cap_label", "easy_cap_tip", "label", "short",
+                      "source", "name", "reason", "easy_source"})
+
+
+def _shown(out):
+    """SP-810: a summary / week answer in the request's language — the activity rows' category and type
+    words, the week's M_() texts and generated titles stay zh-TW in the engine (compliance, plan_match and
+    the 課表 inputs read them; one cache for every language) and are shown at read time
+    (engine/stored_text.shown_tree, as api/plan_sessions._shown); long_weekday (data: projection reads it
+    with overview.WEEKDAYS.index) as the weekday's name. zh-TW: as it is."""
+    from backend.i18n import DEFAULT_LOCALE, current_locale
+    if current_locale() == DEFAULT_LOCALE or not isinstance(out, dict):
+        return out
+    from backend.engine import stored_text as ST
+    th = out.get("thresholds")
+    out = ST.shown_tree(out)
+    if isinstance(th, dict):
+        out["thresholds"] = ST.shown_tree(th, keys=_TH_KEYS, skip=frozenset({"hr_model", "power_model", "walk_cap"}))
+        lab = th.get("easy_cap_label")
+        if isinstance(lab, str):            # hr_profile.easy_cap_label (its msgids): a label of its own here, so
+            from backend.i18n.reverse import from_source       # capitalised (the texts quote it mid-sentence)
+            shown = from_source(lab, current_locale())
+            if shown:
+                out["thresholds"]["easy_cap_label"] = shown[:1].upper() + shown[1:]
+    wd = out.get("long_weekday")
+    if isinstance(wd, str) and wd in O.WEEKDAYS:
+        out["long_weekday"] = _WEEKDAY_EN[O.WEEKDAYS.index(wd)]
+    return out
+
+
 def _day(s: Optional[str], default: dt.date) -> dt.date:
     if not s:
         return default
@@ -412,7 +443,7 @@ def summary(unit: str = "week", anchor: Optional[str] = None, n: int = 12):
     ds = _dataset()
     today = O.day_to_date(ds.today)
     n = max(1, min(n, {"week": 104, "month": 60, "year": 12}[unit]))
-    out = O.summary(ds, unit, _day(anchor, today), n)
+    out = _shown(O.summary(ds, unit, _day(anchor, today), n))
     # SP-394: periods older than a first import's hot-first Dataset holds are not zero: pending
     from backend.api import backfill as BF
     if BF.coverage(ds) is not None and out.get("buckets"):
@@ -463,7 +494,7 @@ def weekplan():
         monday = today - dt.timedelta(days=today.weekday())
     ctx = H.week_context(today, monday, phase_start=getattr(getattr(st, "phase", None), "start", None),
                          cold_week=(w.get("cold_start") or {}).get("week"))
-    return {**w, "notes": H.notes(w.get("notes"), ctx)}
+    return _shown({**w, "notes": H.notes(w.get("notes"), ctx)})
 
 
 @router.get("/z5")

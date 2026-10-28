@@ -404,7 +404,8 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     out["background"] = background.describe()
     # 地區 (engine/region.py): the map default follows it while none is chosen
     from backend.engine import region as RG
-    out["region"], out["region_how"] = RG.region(repo.user_id)
+    out["region"], how = RG.region(repo.user_id)
+    out["region_how"] = _(how)
     out["map_basemap_stored"] = out["map_basemap"]
     if out["map_basemap"] is None:
         out["map_basemap"] = RG.default_basemap(out["region"])

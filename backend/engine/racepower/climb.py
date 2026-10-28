@@ -32,6 +32,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 from backend.engine.algorithms import route_match as RM
+from backend.i18n import _
 
 STEP_M = 25.0                  # the tracks every 25 m (memory.compact)
 WIN = 2                        # a window: 2 steps = 50 m
@@ -346,7 +347,7 @@ def marks(fitted: Optional[dict], profile: dict) -> Optional[dict]:
     if not fitted:
         return None
     out = {"marks": [], "cv": dict(fitted.get("cv") or {}), "usable": bool(fitted.get("usable")),
-           "reason": fitted.get("reason"), "badge": "推估"}
+           "reason": fitted.get("reason"), "badge": _("推估")}
     if not fitted.get("usable"):
         return out
     line = plan_line(profile)

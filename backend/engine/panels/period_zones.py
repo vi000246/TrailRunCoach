@@ -39,12 +39,13 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import math
+import re
 from typing import Optional
 
 import numpy as np
 
 from backend.engine.panels import activity_charts as A
-from backend.i18n import _
+from backend.i18n import N_, _
 
 HIST_KEY = "period_zone_hist_v1"
 
@@ -57,12 +58,12 @@ MODEL_IDS = {"hr": HR_IDS, "power": POWER_IDS}
 DEFAULT_MODEL = {"hr": "frielhr", "power": "palladino"}
 SUMMARY_MODEL = {"hr": "seiler3", "power": "palladino3"}      # the 3 zones the targets are written in
 
-SPORTS = (("road", "路跑"), ("trail", "越野跑"), ("hike", "登山健行"))
+SPORTS = (("road", N_("路跑")), ("trail", N_("越野跑")), ("hike", N_("登山健行")))      # labels: msgids
 DEFAULT_SPORTS = ("road", "trail")   # all running by default; hiking (walk + hiking tag) is opt-in
 HIKE_TAGS = {"hiking", "mountaineering"}
 
-PERIODS = (("range", "日期範圍"), ("week", "本週"), ("lastweek", "上週"), ("4w", "近 4 週"),
-           ("phase", "本期"), ("custom", "自訂"))
+PERIODS = (("range", N_("日期範圍")), ("week", N_("本週")), ("lastweek", N_("上週")), ("4w", N_("近 4 週")),
+           ("phase", N_("本期")), ("custom", N_("自訂")))
 GROUPS = ("auto", "week", "month")
 AUTO_WEEK_MAX_DAYS = 182          # a longer range is grouped by month (26 weekly bars is the most that reads)
 MIN_VERDICT_S = 3600              # < 1 h of zoned time: no verdict (the PI chart's 1-h floor)
@@ -72,14 +73,14 @@ MIN_VERDICT_S = 3600              # < 1 h of zoned time: no verdict (the PI char
 # ---------------------------------------------------------------------------
 from backend.engine.status import LOW_SHARE_GOOD, LOW_SHARE_WATCH   # noqa: E402  0.75 / 0.65
 
-SRC_FLOOR = ("低強度 ≥ 75%：app 的強度護欄（status.LOW_SHARE_GOOD）。Seiler & Kjerland 2006（Scand J Med Sci Sports "
+SRC_FLOOR = N_("低強度 ≥ 75%：app 的強度護欄（status.LOW_SHARE_GOOD）。Seiler & Kjerland 2006（Scand J Med Sci Sports "
              "16:49–56）：約 75–80% 的『課』是低強度；Seiler & Tønnessen 2009（Sportscience 13）：同一批選手依時間算 "
              "91% 在第一閾值以下、約 6% 在兩閾值之間、2.6% 在第二閾值以上。依時間算 75% 已經偏寬（推估；Seiler 的 80/20 是堂數，不是時間）。< 65% = 太多中強度"
              "（LOW_SHARE_WATCH）")
-SRC_UA_BASE = ("基礎期 ≥ 90%：Uphill Athlete「90 percent or more in Zones 1 and 2」（UA 的 1–2 區在 AeT 以下；"
+SRC_UA_BASE = N_("基礎期 ≥ 90%：Uphill Athlete「90 percent or more in Zones 1 and 2」（UA 的 1–2 區在 AeT 以下；"
                "教練經驗，非同儕審查）")
-SRC_TAPER = "減量期：Bosquet 2007（MSSE 39:1358–65）量減 41–60%、強度維持——高強度不要砍光"
-SRC_SPECIFIC = ("專項期：Filipas 2022（Scand J Med Sci Sports 32:498–511）先金字塔、後極化進步最多，也就是後段高強度比例"
+SRC_TAPER = N_("減量期：Bosquet 2007（MSSE 39:1358–65）量減 41–60%、強度維持——高強度不要砍光")
+SRC_SPECIFIC = N_("專項期：Filipas 2022（Scand J Med Sci Sports 32:498–511）先金字塔、後極化進步最多，也就是後段高強度比例"
                 "可以提高；Rosenblat 2025 極化和金字塔沒有差別。沒有專項期的低強度百分比，所以只用 75% 護欄")
 TAPER_HIGH_MIN = 0.01             # 推估: below 1 % of the time above LTHR / 95 % CP counts as 「沒有高強度」
 
@@ -250,7 +251,8 @@ def phase_on(ds, day: dt.date) -> Optional[dict]:
         return None
     if p is None:
         return None
-    return {"kind": p.kind, "label": p.label, "start": p.start, "end": p.end}
+    from backend.engine import stored_text as ST       # the phase's name in the request's language (SP-810)
+    return {"kind": p.kind, "label": ST.shown(p.label), "start": p.start, "end": p.end}
 
 
 def resolve_period(ds, b: float, e: float, key: Optional[str], zbegin: Optional[str] = None,
@@ -260,7 +262,7 @@ def resolve_period(ds, b: float, e: float, key: Optional[str], zbegin: Optional[
     today = day_to_date(ds.today)
     monday = today - dt.timedelta(days=today.weekday())
     key = key if key in dict(PERIODS) else "range"
-    s, en, label, note = day_to_date(b), day_to_date(e), dict(PERIODS)[key], None
+    s, en, label, note = day_to_date(b), day_to_date(e), _(dict(PERIODS)[key]), None
     if key == "week":
         s, en = monday, today
     elif key == "lastweek":
@@ -270,15 +272,15 @@ def resolve_period(ds, b: float, e: float, key: Optional[str], zbegin: Optional[
     elif key == "phase":
         p = phase_on(ds, today)
         if p is None:
-            key, label, note = "range", dict(PERIODS)["range"], "沒有賽事周期，改用日期範圍"
+            key, label, note = "range", _(dict(PERIODS)["range"]), _("沒有賽事周期，改用日期範圍")
         else:
             s, en = dt.date.fromisoformat(p["start"]), min(dt.date.fromisoformat(p["end"]), today)
-            label = f"本期（{p['label']}）"
+            label = _("本期（{label}）", label=p["label"])
     elif key == "custom":
         try:
             s, en = dt.date.fromisoformat(zbegin), dt.date.fromisoformat(zend)
         except (TypeError, ValueError):
-            key, label, note = "range", dict(PERIODS)["range"], "自訂日期不完整，改用日期範圍"
+            key, label, note = "range", _(dict(PERIODS)["range"]), _("自訂日期不完整，改用日期範圍")
     if en < s:
         s, en = en, s
     return {"key": key, "label": label, "begin": s.isoformat(), "end": en.isoformat(),
@@ -289,25 +291,26 @@ def target_for(phase: Optional[dict]) -> dict:
     kind = (phase or {}).get("kind")
     low, sources, special = PHASE_TARGETS.get(kind, (None, [SRC_FLOOR], None))
     return {"phase": phase, "low_target": low, "low_floor": LOW_SHARE_GOOD, "low_watch": LOW_SHARE_WATCH,
-            "taper": special == "taper", "sources": sources}
+            "taper": special == "taper", "sources": [_(x) for x in sources]}
 
 
 def verdict(summary: Optional[dict], target: dict, kind: str) -> dict:
     """✓ / ⚠ on the 3-zone shares against the phase's target."""
     if not summary or summary["total_s"] < MIN_VERDICT_S:
-        return {"level": "none", "icon": "–", "text": "資料不足（有區間的時間 < 1 小時）"}
+        return {"level": "none", "icon": "–", "text": _("資料不足（有區間的時間 < 1 小時）")}
     low, mod, high = (r["share"] or 0.0 for r in summary["rows"])
     lbl = (target.get("phase") or {}).get("label")
     if low < target["low_floor"]:
-        why = "太多時間在中強度" if mod >= high else "高強度太多"
+        why = _("太多時間在中強度") if mod >= high else _("高強度太多")
         lvl = "serious" if low < target["low_watch"] else "warning"
-        return {"level": lvl, "icon": "⚠", "text": f"低強度不足：{why}（{low * 100:.0f}% < 75%）"}
+        return {"level": lvl, "icon": "⚠", "text": _("低強度不足：{why}（{p:.0f}% < 75%）", why=why, p=low * 100)}
     if target.get("low_target") and low < target["low_target"]:
         return {"level": "watch", "icon": "⚠",
-                "text": f"低強度略少：{lbl}目標 ≥ {target['low_target'] * 100:.0f}%（現在 {low * 100:.0f}%）"}
+                "text": _("低強度略少：{phase}目標 ≥ {t:.0f}%（現在 {p:.0f}%）", phase=lbl or "",
+                          t=target["low_target"] * 100, p=low * 100)}
     if target.get("taper") and high < TAPER_HIGH_MIN:
-        return {"level": "watch", "icon": "⚠", "text": "減量期幾乎沒有高強度：強度要保留"}
-    return {"level": "good", "icon": "✓", "text": "分配得當" + (f"（{lbl}）" if lbl else "")}
+        return {"level": "watch", "icon": "⚠", "text": _("減量期幾乎沒有高強度：強度要保留")}
+    return {"level": "good", "icon": "✓", "text": _("分配得當（{phase}）", phase=lbl) if lbl else _("分配得當")}
 
 
 # ---------------------------------------------------------------------------
@@ -329,12 +332,12 @@ def _per_activity(ds, ws, kind: str, m: dict, sm: dict) -> list[dict]:
     for w in ws:
         item = {"w": w, "day": day_to_date(w.day), "skip": None}
         if kind == "power" and hasattr(ds, "power_ok") and not ds.power_ok(w):
-            item["skip"] = "手錶推估功率不採用"
+            item["skip"] = _("手錶推估功率不採用")
             out.append(item)
             continue
         h = activity_hist(ds, w)[kind]
         if not h:
-            item["skip"] = "沒有心率" if kind == "hr" else "沒有功率"
+            item["skip"] = _("沒有心率") if kind == "hr" else _("沒有功率")
             out.append(item)
             continue
         wt = _as_run(w)
@@ -357,7 +360,7 @@ def _per_activity(ds, ws, kind: str, m: dict, sm: dict) -> list[dict]:
 
 
 def _summary(items: list[dict], sm: dict) -> Optional[dict]:
-    names = ["低強度", "中強度", "高強度"]
+    names = [_("低強度"), _("中強度"), _("高強度")]
     secs = [0.0, 0.0, 0.0]
     n = 0
     for it in items:
@@ -369,7 +372,7 @@ def _summary(items: list[dict], sm: dict) -> Optional[dict]:
             secs[i] += s["secs"][i]
     tot = sum(secs)
     pct = _pct_text(sm)
-    return {"model": sm["id"], "title": sm["title"], "total_s": tot, "n": n,
+    return {"model": sm["id"], "title": _(sm["title"]), "total_s": tot, "n": n,
             "rows": [{"id": str(i + 1), "name": names[i], "pct": pct[i], "seconds": secs[i],
                       "share": secs[i] / tot if tot else None} for i in range(3)]}
 
@@ -382,7 +385,7 @@ def _thresholds_used(items: list[dict]) -> list[dict]:
             continue
         t = s.get("basis_text") or "—"
         # value = the numbers without the source in brackets (「LTHR 160 bpm」), for the short on-chart line
-        r = seen.setdefault(t, {"text": t, "value": t.split("（")[0].strip(), "n": 0,
+        r = seen.setdefault(t, {"text": t, "value": re.split(r"\s*[（(]", t, maxsplit=1)[0].strip(), "n": 0,
                                 "first": it["day"].isoformat(), "last": it["day"].isoformat()})
         r["n"] += 1
         r["last"] = it["day"].isoformat()
@@ -410,8 +413,8 @@ def _zone_rows(items: list[dict], m: dict, kind: str) -> tuple[list[dict], float
         from backend.engine import power_zone_plan as PZP
         zs = [(str(i + 1), n, None, None) for i, n in enumerate(PZP.PERSONAL_NAMES)]
     else:                                   # seiler3: the names _bounds gives its rows
-        zs = [("1", "低強度（< AeT）", None, None), ("2", "中強度（AeT–LTHR）", None, None),
-              ("3", "高強度（≥ LTHR）", None, None)]
+        zs = [("1", N_("低強度（< AeT）"), None, None), ("2", N_("中強度（AeT–LTHR）"), None, None),
+              ("3", N_("高強度（≥ LTHR）"), None, None)]
     secs = [0.0] * len(zs)
     for it in used:
         for i, s in enumerate(it["main"]["secs"]):
@@ -455,12 +458,13 @@ def compute(ds, b: float, e: float, params: dict, view: str = "total") -> dict:
     today = day_to_date(ds.today)
     base = {"zone_kind": kind,
             # the model names in the page's language (activity_charts marks them N_; SP-363)
-            "model": {"id": m["id"], "title": _(m["title"]), "source": m["source"], "estimate": bool(m.get("estimate"))},
+            "model": {"id": m["id"], "title": _(m["title"]), "source": A._model_source(m),
+                      "estimate": bool(m.get("estimate"))},
             "models": {k: [{"id": x["id"], "title": _(x["title"]), "estimate": bool(x.get("estimate"))} for x in models(k)]
                        for k in ("hr", "power")},
             "default_model": {k: A.default_model(k) for k in DEFAULT_MODEL},
-            "sports": list(sports), "sport_choices": [{"id": s, "label": lb} for s, lb in SPORTS],
-            "summary_model": {"id": sm["id"], "title": sm["title"]}}
+            "sports": list(sports), "sport_choices": [{"id": s, "label": _(lb)} for s, lb in SPORTS],
+            "summary_model": {"id": sm["id"], "title": _(sm["title"])}}
     if view == "weekly":
         begin, end = day_to_date(b), min(day_to_date(e), today)
         if end < begin:
@@ -496,7 +500,7 @@ def compute(ds, b: float, e: float, params: dict, view: str = "total") -> dict:
     tg = target_for(ph)
     sumr = _summary(items, sm)
     return {**base, "view": "total", "period": {**per, "phase": ph},
-            "period_choices": [{"id": k, "label": lb} for k, lb in PERIODS],
+            "period_choices": [{"id": k, "label": _(lb)} for k, lb in PERIODS],
             "rows": rows, "total_s": tot, "n_activities": len(items),
             "n_used": sum(1 for it in items if it.get("main") and not it.get("skip")),
             "thresholds": _thresholds_used(items), "skipped": _skipped(items),
@@ -506,9 +510,10 @@ def compute(ds, b: float, e: float, params: dict, view: str = "total") -> dict:
 
 def _empty(items: list[dict], kind: str) -> str:
     if not items:
-        return "這段時間沒有選到的活動"
+        return _("這段時間沒有選到的活動")
     sk = _skipped(items)
-    return "沒有可用的" + ("心率" if kind == "hr" else "功率") + (f"（{sk[0]['reason']}）" if sk else "")
+    what = _("沒有可用的心率") if kind == "hr" else _("沒有可用的功率")
+    return _("{what}（{why}）", what=what, why=sk[0]["reason"]) if sk else what
 
 
 def render(ds, ch: dict, b: float, e: float, params: dict) -> dict:

@@ -43,12 +43,14 @@ from typing import Optional
 import numpy as np
 
 from backend.engine import calibrate as CAL
+from backend.i18n import N_
 
 H0 = 120.0
 BETA_DEFAULT = 0.3
 BETA_DEFAULT_SE = 0.15         # 推估: wide, so the fired-shift threshold stays conservative
-BETA_DEFAULT_SRC = ("推估：Jenkins 2023 氣溫每 +1 °C 心率 +1 bpm（騎車），換算成熱指數 Hadley"
-                    "（溫度和露點一起升時約 0.29 bpm／Hadley）")
+# the 進階設定 rows' words are msgids (calibrate.describe / chip show them through _(); SP-840)
+BETA_DEFAULT_SRC = N_("推估：Jenkins 2023 氣溫每 +1 °C 心率 +1 bpm（騎車），換算成熱指數 Hadley"
+                      "（溫度和露點一起升時約 0.29 bpm／Hadley）")
 MIN_N = 30
 MIN_SPAN = 40.0
 K = 60
@@ -204,22 +206,22 @@ def fit_home(field_names):
 
 def _register() -> None:
     CAL.register(CAL.Item(
-        name="hadley_hr_beta", label="熱 β（心率／熱指數）", unit="bpm／Hadley", default=BETA_DEFAULT,
+        name="hadley_hr_beta", label=N_("熱 β（心率／熱指數）"), unit=N_("bpm／Hadley"), default=BETA_DEFAULT,
         default_src=BETA_DEFAULT_SRC, k=K, min_n=MIN_N, fit=fit_hadley_beta, bounds=BOUNDS, digits=3,
-        help="熱指數（Hadley = °F 氣溫 + 相對濕度 %）每高 1，同樣強度的心率多幾 bpm；越野心率預測、"
-             "同功率心率的變化、爬坡 VAM 都先把心率移到 Hadley 120。"))
+        help=N_("熱指數（Hadley = °F 氣溫 + 相對濕度 %）每高 1，同樣強度的心率多幾 bpm；越野心率預測、"
+                "同功率心率的變化、爬坡 VAM 都先把心率移到 Hadley 120。")))
     CAL.register(CAL.Item(
-        name="humidity_default", label="沒有濕度時假設的濕度", unit="%", default=RH_DEFAULT,
-        default_src="推估（溫帶地區的中位數）", k=10, min_n=RH_MIN_N, fit=fit_rh, bounds=(10.0, 100.0), digits=0,
-        help="活動有溫度、沒有濕度時（例如只有手錶溫度）用這個濕度算熱指數。本人值 = 有天氣資料的活動濕度中位數。"))
+        name="humidity_default", label=N_("沒有濕度時假設的濕度"), unit="%", default=RH_DEFAULT,
+        default_src=N_("推估（溫帶地區的中位數）"), k=10, min_n=RH_MIN_N, fit=fit_rh, bounds=(10.0, 100.0), digits=0,
+        help=N_("活動有溫度、沒有濕度時（例如只有手錶溫度）用這個濕度算熱指數。本人值 = 有天氣資料的活動濕度中位數。")))
     for name, label, unit, fields_, lo_hi in (
-            ("home_temp_c", "平常訓練的氣溫", "°C", ("temp_c",), (-30.0, 45.0)),
-            ("home_rh_pct", "平常訓練的濕度", "%", ("rh_pct", "rh"), (5.0, 100.0))):
+            ("home_temp_c", N_("平常訓練的氣溫"), "°C", ("temp_c",), (-30.0, 45.0)),
+            ("home_rh_pct", N_("平常訓練的濕度"), "%", ("rh_pct", "rh"), (5.0, 100.0))):
         CAL.register(CAL.Item(
             name=name, label=label, unit=unit, default=HOME_DEFAULTS[name],
-            default_src="賽事計算機的參考條件（200 m／12 °C／70 %）", k=5, min_n=HOME_MIN_N,
+            default_src=N_("賽事計算機的參考條件（200 m／12 °C／70 %）"), k=5, min_n=HOME_MIN_N,
             fit=fit_home(fields_), bounds=lo_hi, digits=0,
-            help="比賽功率從你平常的訓練條件換算到比賽當天；比賽前 90 天沒有天氣資料時用這個。"))
+            help=N_("比賽功率從你平常的訓練條件換算到比賽當天；比賽前 90 天沒有天氣資料時用這個。")))
 
 
 _register()

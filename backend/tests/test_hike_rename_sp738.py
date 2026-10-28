@@ -35,8 +35,10 @@ def test_calculator_texts_say_hiking():
     for key in ("trip.tip", "coros.tip", "nm.tip", "noweight.banner"):
         assert "百岳" not in _cat("zh-TW", "racepower")[key], key
         assert "Baiyue" not in _cat("en", "racepower")[key], key
-    assert "百岳步行模型" not in PAGE and "登山步行模型" in PAGE
-    assert "體重 × 13 %" not in PAGE and "單日 4 kg、多日 9 kg" in PAGE
+    # SP-838: the page's own text moved to the racepower catalog
+    zh = _cat("zh-TW", "racepower")
+    assert "百岳步行模型" not in PAGE and zh["hk.model"] == "登山步行模型" and 'T("hk.model")' in PAGE
+    assert "體重 × 13 %" not in PAGE and zh["hm.pack_rule"] == "單日 4 kg、多日 9 kg" and 'T("hm.pack_rule")' in PAGE
     # the share page's type (SP-460: its words are the share catalog's)
     assert 'baiyue: JT("type.baiyue")' in (STATIC / "share.html").read_text("utf-8")
     assert _cat("zh-TW", "share")["type.baiyue"] == "登山" and _cat("en", "share")["type.baiyue"] == "Hiking"

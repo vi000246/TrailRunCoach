@@ -66,6 +66,7 @@ from typing import Optional
 import numpy as np
 
 from backend.engine.racepower import riegel as R
+from backend.i18n import M_
 
 MAXIMAL = {
     "dist_tol": 0.10,                       # user rule (±10 % of a standard distance)
@@ -153,35 +154,48 @@ def _check(cid: str, ok: bool, text: str) -> dict:
     return {"id": cid, "ok": bool(ok), "text": text}
 
 
+def join(texts) -> str:
+    """The failed checks' texts as one reason (「A；B」), still following the language (M_, SP-838)."""
+    out = ""
+    for t in texts:
+        out = M_("{a}；{b}", a=out, b=t) if out else t
+    return out
+
+
 def road_maximal(s: dict, lthr: Optional[float], hrmax: Optional[float]) -> dict:
     """s = {km, q4_hr, peak_hr, split}. See the module docstring (rule 3)."""
     k = MAXIMAL
     cat = race_category(s.get("km"))
+    km = s.get("km") or 0
     checks = [_check("distance", cat is not None,
-                     f"{(s.get('km') or 0):.2f} km {'≈ ' + R.CATEGORY_LABEL[cat] if cat else '不在 5K/10K/半馬/全馬 ±10 %'}")]
+                     M_("{km:.2f} km ≈ {cat}", km=km, cat=M_(R.CATEGORY_LABEL[cat])) if cat
+                     else M_("{km:.2f} km 不在 5K/10K/半馬/全馬 ±10 %", km=km))]
     if cat:
         f = k["q4_frac"][cat]
         q4 = s.get("q4_hr")
         checks.append(_check("q4_hr", bool(q4 and lthr and q4 >= f * lthr),
-                             f"最後 1/4 平均心率 {q4 or 0:.0f} vs {f:.2f} × LTHR {lthr or 0:.0f} = {f * (lthr or 0):.0f}"))
+                             M_("最後 1/4 平均心率 {q4:.0f} vs {f:.2f} × LTHR {lthr:.0f} = {need:.0f}",
+                                q4=q4 or 0, f=f, lthr=lthr or 0, need=f * (lthr or 0))))
         if cat in k["hrmax_cats"]:
             pk = s.get("peak_hr")
             need = (hrmax or 0) - k["hrmax_tol_bpm"]
             checks.append(_check("hrmax", bool(pk and hrmax and pk >= need),
-                                 f"30 秒最高心率 {pk or 0:.0f} vs 觀測最大心率 {hrmax or 0:.0f} − {k['hrmax_tol_bpm']:.0f}"))
+                                 M_("30 秒最高心率 {pk:.0f} vs 觀測最大心率 {hrmax:.0f} − {tol:.0f}",
+                                    pk=pk or 0, hrmax=hrmax or 0, tol=k["hrmax_tol_bpm"])))
         sp = s.get("split")
         checks.append(_check("split", sp is not None and sp >= k["split_min"],
-                             f"後半／前半速度 {sp or 0:.3f}（≥ {k['split_min']} = 平均或負分段）"))
+                             M_("後半／前半速度 {sp:.3f}（≥ {min} = 平均或負分段）", sp=sp or 0, min=k["split_min"])))
         lp = s.get("longer_p")
         if lp:
             pa = s.get("p_avg") or 0.0
             checks.append(_check("monotone", pa >= lp,
-                                 f"平均功率 {pa:.0f} W 低於之前 ≥ {k['longer_ratio']:g} 倍時長跑過的 {lp:.0f} W"
-                                 if pa < lp else f"平均功率 {pa:.0f} W ≥ 更長時間跑過的 {lp:.0f} W"))
+                                 M_("平均功率 {pa:.0f} W 低於之前 ≥ {r:g} 倍時長跑過的 {lp:.0f} W", pa=pa,
+                                    r=k["longer_ratio"], lp=lp)
+                                 if pa < lp else M_("平均功率 {pa:.0f} W ≥ 更長時間跑過的 {lp:.0f} W", pa=pa, lp=lp)))
     ok = all(c["ok"] for c in checks)
     return {"ok": ok, "kind": "road_maximal", "category": cat, "checks": checks,
-            "reason": "自配速全力（" + R.CATEGORY_LABEL[cat] + "）" if ok else
-            "；".join(c["text"] for c in checks if not c["ok"])}
+            "reason": M_("自配速全力（{cat}）", cat=M_(R.CATEGORY_LABEL[cat])) if ok else
+            join(c["text"] for c in checks if not c["ok"])}
 
 
 def trail_maximal(s: dict, lthr: Optional[float], aet: Optional[float], title: str = "",
@@ -191,9 +205,9 @@ def trail_maximal(s: dict, lthr: Optional[float], aet: Optional[float], title: s
     word = bool(RACE_WORDS.search(title or "") or any(RACE_WORDS.search(str(t)) for t in tags or ()))
     from backend.engine import effort_calib as EC      # per athlete (generalize-athlete P8)
     mkm, ms = EC.trail_min_km(), EC.trail_min_s()
-    checks = [_check("km", (s.get("km") or 0) >= mkm, f"{s.get('km') or 0:.1f} km（≥ {mkm:.0f}）"),
+    checks = [_check("km", (s.get("km") or 0) >= mkm, M_("{km:.1f} km（≥ {min:.0f}）", km=s.get("km") or 0, min=mkm)),
               _check("time", (s.get("moving_s") or 0) >= ms,
-                     f"移動 {(s.get('moving_s') or 0) / 60:.0f} 分（≥ {ms / 60:.0f}）")]
+                     M_("移動 {min:.0f} 分（≥ {need:.0f}）", min=(s.get("moving_s") or 0) / 60, need=ms / 60))]
     if not word:
         # 2026-10-02 (unsourced-rules.md §A2): the full-effort HR level depends on the
         # duration — x*(T) − 0.03 (trailhr.auto_max_frac) instead of 0.90 × LTHR + 2/3 above AeT
@@ -202,11 +216,12 @@ def trail_maximal(s: dict, lthr: Optional[float], aet: Optional[float], title: s
         mv = s.get("moving_s")
         f = TH.auto_max_frac(mv / 3600.0 if mv else None)
         checks.append(_check("hr_avg", bool(avg and lthr and avg >= f * lthr),
-                             f"平均心率 {avg or 0:.0f} vs x*(T) − 0.03 = {f:.2f} × LTHR {lthr or 0:.0f}（推估）"))
+                             M_("平均心率 {avg:.0f} vs x*(T) − 0.03 = {f:.2f} × LTHR {lthr:.0f}（推估）",
+                                avg=avg or 0, f=f, lthr=lthr or 0)))
     ok = all(c["ok"] for c in checks)
     return {"ok": ok, "kind": "trail_race_like", "category": "trail", "checks": checks, "title_word": word,
-            "reason": ("標題／標籤是比賽" if word else "心率顯示持續比賽強度") if ok else
-            "；".join(c["text"] for c in checks if not c["ok"])}
+            "reason": (M_("標題／標籤是比賽") if word else M_("心率顯示持續比賽強度")) if ok else
+            join(c["text"] for c in checks if not c["ok"])}
 
 
 def match_events(events, runs: list[dict]) -> dict[int, dict]:

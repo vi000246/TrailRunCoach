@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>設定</title>
+<title data-i18n="settings.page_title">設定</title>
 <style>
 :root {
   --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
@@ -363,7 +363,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
 <script src="/api/v1/static/device_storage.js"></script>
 <script src="/api/v1/static/zonecolors.js"></script>
 <header>
-  <h1>設定</h1>
+  <h1 data-i18n="settings.page_title">設定</h1>
 </header>
 <main>
   <!-- SP-718: the plan and what is left of its quotas, one line, to 方案與訂閱 (sign-in mode, a user
@@ -449,7 +449,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
          right under the running-experience block, the automatic level comes from it; every page's
          "too many tips?" link lands here (#hint-level) -->
     <div id="hint-level">
-      <h3 id="hint-level-title" data-i18n="settings.hints.title">提示多寡</h3>
+      <h3><span id="hint-level-title" data-i18n="settings.hints.title">提示多寡</span> <button type="button" class="q" data-manual="settings#hints" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hints.q" title="三段各顯示多少說明、自動怎麼選，手冊有完整說明。">?</button></h3>
       <p class="meta" data-i18n="settings.hints.intro">決定頁面上直接顯示多少說明和提醒。會改變做法或跟安全有關的提示（疼痛紅燈、課表待確認、關門時間這類）三段都會顯示；其他的依這裡的選擇收進「詳細」。每頁最多直接顯示 3 則提醒，多的收成「還有 N 則提醒」。</p>
       <div class="hl-grid" role="radiogroup" aria-labelledby="hint-level-title">
         <label><input type="radio" name="hint-level" value="full"><b><span data-i18n="settings.hints.full">完整</span><span class="hl-auto" data-i18n="settings.hints.auto_tag">自動</span></b>
@@ -482,26 +482,26 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
   </section>
 
   <section id="mode">
-    <h2>計算模式</h2>
-    <p class="meta">首頁、圖表分析和狀態判斷都會用這裡選的模式。</p>
+    <h2 data-i18n="settings.mode.title">計算模式</h2>
+    <p class="meta" data-i18n="settings.mode.intro">首頁、圖表分析和狀態判斷都會用這裡選的模式。</p>
     <!-- SP-464: sign-in mode only — the section is an admin's testing tool (hidden for everyone else) -->
     <p class="meta" id="mode-admin" hidden data-i18n="settings.mode.admin_only">只有管理員看得到這一區，用來測試算式；切換只影響你自己的畫面和計算，其他使用者一律用「我的算式」。</p>
     <div class="modes">
       <button class="mode" data-parity="false">
-        <b>我的算式（平常用）</b>
+        <b data-i18n="settings.mode.mine">我的算式（平常用）</b>
         <ul>
-          <li>心率負荷（HR load）只算實際移動的時間</li>
-          <li>爬升加成訓練負荷（Training load）</li>
-          <li>套用你核准的資料校正</li>
-          <li>用下方「閾值測試紀錄」的 LTHR／AeT／CP 測試值</li>
+          <li data-i18n="settings.mode.mine_1">心率負荷（HR load）只算實際移動的時間</li>
+          <li data-i18n="settings.mode.mine_2">爬升加成訓練負荷（Training load）</li>
+          <li data-i18n="settings.mode.mine_3">套用你核准的資料校正</li>
+          <li data-i18n="settings.mode.mine_4">用下方「閾值測試紀錄」的 LTHR／AeT／CP 測試值</li>
         </ul>
       </button>
       <button class="mode" data-parity="true">
-        <b>對照模式</b>
+        <b data-i18n="settings.mode.parity">對照模式</b>
         <ul>
-          <li>完全照對照資料夾的設定和公式算</li>
-          <li>用來驗證資料有沒有算對</li>
-          <li>不套用資料校正與你的測試值</li>
+          <li data-i18n="settings.mode.parity_1">完全照對照資料夾的設定和公式算</li>
+          <li data-i18n="settings.mode.parity_2">用來驗證資料有沒有算對</li>
+          <li data-i18n="settings.mode.parity_3">不套用資料校正與你的測試值</li>
         </ul>
       </button>
     </div>
@@ -517,7 +517,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
       <div class="basis-col basis-l">
         <p class="colh" data-i18n="settings.basis.given">你給的</p>
         <section id="equip">
-          <h2><span id="equip-l" data-i18n="settings.basis.equip_h">裝備</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.equip_help" title="只問有沒有功率計。有 Stryd 而且 42 天內做過 CP 測試或比賽，平路的強度課、路跑輕鬆跑才用功率；CP 過期或沒有功率計就用心率／配速。手錶推估的功率不算功率計（跟 Stryd 的量尺不同）。改了之後課表馬上重排、重推手錶。">?</button></h2>
+          <h2><span id="equip-l" data-i18n="settings.basis.equip_h">裝備</span> <button type="button" class="q" data-manual="settings#personal" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.equip_help" title="只問有沒有功率計。有 Stryd 而且 42 天內做過 CP 測試或比賽，平路的強度課、路跑輕鬆跑才用功率；CP 過期或沒有功率計就用心率／配速。手錶推估的功率不算功率計（跟 Stryd 的量尺不同）。改了之後課表馬上重排、重推手錶。">?</button></h2>
           <p class="meta full-only" data-i18n="settings.basis.equip_sub">只問這一題，其他都自動。有功率計而且 CP 在 42 天內測過，平路強度課才用功率。</p>
           <div class="seg" role="radiogroup" aria-labelledby="equip-l" style="margin-top:6px">
             <label><input type="radio" name="equip" value="stryd"><span>Stryd</span></label>
@@ -527,7 +527,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
           <div class="sub" id="sport">
             <div class="row" style="margin-top:0">
               <label class="sel-q"><span data-i18n="settings.basis.sport">主要訓練項目</span> <select id="u-sport"><option value="auto" data-i18n="settings.basis.sport_auto">自動</option><option value="trail" data-i18n="settings.basis.sport_trail">越野跑</option><option value="road" data-i18n="settings.basis.sport_road">路跑／馬拉松</option></select></label>
-              <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.sport_help" title="決定圖表分析顯示哪些圖、自動課表怎麼排、比賽計算機預設什麼，右邊「現在用什麼練」也照它切換。越野跑：爬升、下坡、コース定数、陡坡健走、B2B 都會出現。路跑／馬拉松：藏起爬坡和下坡的圖，改看平路的有氧效率、心率飄移、長跑距離和馬拉松配速的量；課表不排陡坡健走和 B2B，專項期的長跑加一段馬拉松配速。課表頁的「課表偏好」也能改，是同一個設定。自動 = 先看之後的 A 賽：只有越野賽或百岳就算越野，只有路跑賽就算路跑；兩種都有就看哪一場比較吃力（先比賽事大小，再比預估時間，再比 EP），一樣或比不出來就算越野；沒有 A 賽才照同樣方式看 B 賽；都沒有就看近 12 週越野＋登山的時間比例（≥ 25% 算越野，推估）。C 賽不算。">?</button>
+              <button type="button" class="q" data-manual="settings#personal" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.sport_help" title="決定圖表分析顯示哪些圖、自動課表怎麼排、比賽計算機預設什麼，右邊「現在用什麼練」也照它切換。越野跑：爬升、下坡、コース定数、陡坡健走、B2B 都會出現。路跑／馬拉松：藏起爬坡和下坡的圖，改看平路的有氧效率、心率飄移、長跑距離和馬拉松配速的量；課表不排陡坡健走和 B2B，專項期的長跑加一段馬拉松配速。課表頁的「課表偏好」也能改，是同一個設定。自動 = 先看之後的 A 賽：只有越野賽或百岳就算越野，只有路跑賽就算路跑；兩種都有就看哪一場比較吃力（先比賽事大小，再比預估時間，再比 EP），一樣或比不出來就算越野；沒有 A 賽才照同樣方式看 B 賽；都沒有就看近 12 週越野＋登山的時間比例（≥ 25% 算越野，推估）。C 賽不算。">?</button>
               <span class="meta" id="u-sport-note"></span>
             </div>
           </div>
@@ -559,14 +559,14 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
           <!-- SP-955: AeT / CP 測試方式 moved here from 課表偏好 (PATCH /api/v1/overview/plan/prefs); CP hidden in ③ -->
           <div class="row">
             <label class="sel-q"><span data-i18n="settings.basis.aetp">AeT 測試方式</span> <select id="b-aetp"></select></label>
-            <button type="button" class="q" id="b-aetp-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.aetp_help" title="「測試方式」決定排什麼、怎麼判讀；「間歇門檻」決定什麼時候開 5 區。90′ 長跑測試排在週末長跑日（台灣教練），其他方式照「AeT 排在」。只在需要時才排：聚合估計不準、有偏移、約 6 週沒有可判讀的跑步，或停跑 ≥ 4 週後（推估）。氣溫 25 °C 以下時開始。">?</button>
+            <button type="button" class="q" data-manual="start#thresholds" id="b-aetp-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.aetp_help" title="「測試方式」決定排什麼、怎麼判讀；「間歇門檻」決定什麼時候開 5 區。90′ 長跑測試排在週末長跑日（台灣教練），其他方式照「AeT 排在」。只在需要時才排：聚合估計不準、有偏移、約 6 週沒有可判讀的跑步，或停跑 ≥ 4 週後（推估）。氣溫 25 °C 以下時開始。">?</button>
           </div>
           <div class="row" id="b-cpp-row">
             <label class="sel-q"><span data-i18n="settings.basis.cpp">CP 測試方式</span> <select id="b-cpp">
               <option value="quick" data-i18n="settings.basis.cpp_quick">快速 20′</option>
               <option value="standard" data-i18n="settings.basis.cpp_standard">標準 12′＋3′</option>
               <option value="race" data-i18n="settings.basis.cpp_race">用比賽</option></select></label>
-            <button type="button" class="q" id="b-cpp-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.cpp_help" title="快速 20′：20 分全力，約 37 分；CP ≈ 0.95 × 20 分功率，誤差約 ±3%，不測無氧容量。標準 12′＋3′：12 分＋休 30 分＋3 分，約 70 分；兩點 CP＋無氧容量，最準，休息不能縮短。用比賽：5–10 K 比賽或計時跑，不另外排；Riegel 換算（外插），不測無氧容量。每 4–6 週或賽前 10–21 天做一次。">?</button>
+            <button type="button" class="q" data-manual="start#thresholds" id="b-cpp-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.cpp_help" title="快速 20′：20 分全力，約 37 分；CP ≈ 0.95 × 20 分功率，誤差約 ±3%，不測無氧容量。標準 12′＋3′：12 分＋休 30 分＋3 分，約 70 分；兩點 CP＋無氧容量，最準，休息不能縮短。用比賽：5–10 K 比賽或計時跑，不另外排；Riegel 換算（外插），不測無氧容量。每 4–6 週或賽前 10–21 天做一次。">?</button>
           </div>
           <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.how_h">怎麼測</summary>
             <ul class="meta" style="margin:4px 0;padding-left:18px">
@@ -625,7 +625,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
           </div>
           <div class="sub" id="race">
             <b data-i18n="settings.race.title">比賽成績（E 配速）</b>
-            <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.race.help" title="徐國峰 90 分鐘測試要用 E 配速跑，E 配速從一場比賽成績算（Daniels VDOT 公式；E 配速＝62–70 % VDOT 的速度，對齊 Daniels 的配速表，推估）。填最近一場路跑或田徑場的全力比賽（5 K 到全馬）；越野賽不算，爬升會讓成績失真。只用在 90 分鐘測試和它的說明，其他課表和區間不受影響。比賽超過 180 天就太舊了（推估），不會拿來算 90 分鐘測試的配速，改用 CP 測試結果或講話測試。比賽成績跟跑步經驗問卷共用同一份清單：這裡儲存或「用這場」確認的比賽都會加進去，E 配速用清單裡最新一場路跑。">?</button>
+            <button type="button" class="q" data-manual="settings#body" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.race.help" title="徐國峰 90 分鐘測試要用 E 配速跑，E 配速從一場比賽成績算（Daniels VDOT 公式；E 配速＝62–70 % VDOT 的速度，對齊 Daniels 的配速表，推估）。填最近一場路跑或田徑場的全力比賽（5 K 到全馬）；越野賽不算，爬升會讓成績失真。只用在 90 分鐘測試和它的說明，其他課表和區間不受影響。比賽超過 180 天就太舊了（推估），不會拿來算 90 分鐘測試的配速，改用 CP 測試結果或講話測試。比賽成績跟跑步經驗問卷共用同一份清單：這裡儲存或「用這場」確認的比賽都會加進去，E 配速用清單裡最新一場路跑。">?</button>
             <div class="est" id="race-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
             <div class="row">
               <label><span data-i18n="settings.race.dist">距離</span> <select id="race-dist">
@@ -643,7 +643,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
         </section>
 
         <section id="overrides">
-          <h2><span data-i18n="settings.basis.ovr_h">手動指定</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.ovr_help" title="預設全部自動，平常不用動。改過的那一項標「（手動）」，旁邊有「改回自動」；右邊「現在用什麼練」的那幾類課也會標（手動）。沒有功率計時，功率的選項不出現；之前選的功率設定留著不刪，換回 Stryd 就回來。">?</button></h2>
+          <h2><span data-i18n="settings.basis.ovr_h">手動指定</span> <button type="button" class="q" data-manual="settings#body" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.ovr_help" title="預設全部自動，平常不用動。改過的那一項標「（手動）」，旁邊有「改回自動」；右邊「現在用什麼練」的那幾類課也會標（手動）。沒有功率計時，功率的選項不出現；之前選的功率設定留著不刪，換回 Stryd 就回來。">?</button></h2>
           <p class="meta full-only" data-i18n="settings.basis.ovr_sub">預設全部自動；改過的標「（手動）」，右邊的結果卡也會標。</p>
           <div class="row ovr" id="b-basis-row">
             <label class="sel-q"><span data-i18n="settings.basis.basis">目標依據</span> <select id="b-basis">
@@ -651,7 +651,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
               <option value="hr" data-i18n="settings.basis.basis_hr">心率</option>
               <option value="pace" data-i18n="settings.basis.basis_pace">配速（平路間歇、節奏）</option>
               <option value="power" data-i18n="settings.basis.basis_power">功率</option></select></label>
-            <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.basis_help" title="課表的目標用心率還是功率。自動：照課的類型，結果看右邊「現在用什麼練」——有功率計而且 CP 有效時，路跑輕鬆跑、長跑、平路間歇、3–8% 坡的爬坡重複看功率（心率當保險）；越野輕鬆跑、山路長天、恢復跑看心率；陡坡健走看心率或 RPE；長爬坡、下坡不設目標。CP 過期或沒有功率計時，原本看功率的課改看心率。心率：全部用心率區間。功率：全部用功率區間（測試和下坡照它們自己的規則；CP 過期或沒有功率計時照樣改用心率）。只影響系統排的課；每一段也可以在課表的「結構」裡自己改。">?</button>
+            <button type="button" class="q" data-manual="settings#body" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.basis_help" title="課表的目標用心率還是功率。自動：照課的類型，結果看右邊「現在用什麼練」——有功率計而且 CP 有效時，路跑輕鬆跑、長跑、平路間歇、3–8% 坡的爬坡重複看功率（心率當保險）；越野輕鬆跑、山路長天、恢復跑看心率；陡坡健走看心率或 RPE；長爬坡、下坡不設目標。CP 過期或沒有功率計時，原本看功率的課改看心率。心率：全部用心率區間。功率：全部用功率區間（測試和下坡照它們自己的規則；CP 過期或沒有功率計時照樣改用心率）。只影響系統排的課；每一段也可以在課表的「結構」裡自己改。">?</button>
             <span class="man" hidden data-i18n="settings.basis.manual">（手動）</span>
             <button type="button" class="to-auto" hidden data-i18n="settings.basis.to_auto">改回自動</button>
           </div>
@@ -659,7 +659,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
             <label class="sel-q"><span data-i18n="settings.basis.climb">可跑坡目標（COROS）</span> <select id="b-climb">
               <option value="power" data-i18n="settings.basis.climb_power">自動（功率）</option>
               <option value="effort_pace">Effort Pace</option></select></label>
-            <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.climb_help" title="只在越野。賽事計算機匯出的比賽課，可跑的坡（−3～+15 %，不含技術段與高海拔）推到 COROS 時用什麼目標。有 Stryd（這些段是功率）：預設照舊送功率；選 Effort Pace 就改送 Effort Pace（COROS 手錶的坡度調整配速，跟計算機的平地等效配速是同一種換算）。沒有功率計時一律送 Effort Pace，所以這裡不出現。Garmin 推送不變：可以在手錶加 GAP（坡度調整配速）資料欄位當參考。">?</button>
+            <button type="button" class="q" data-manual="settings#body" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.climb_help" title="只在越野。賽事計算機匯出的比賽課，可跑的坡（−3～+15 %，不含技術段與高海拔）推到 COROS 時用什麼目標。有 Stryd（這些段是功率）：預設照舊送功率；選 Effort Pace 就改送 Effort Pace（COROS 手錶的坡度調整配速，跟計算機的平地等效配速是同一種換算）。沒有功率計時一律送 Effort Pace，所以這裡不出現。Garmin 推送不變：可以在手錶加 GAP（坡度調整配速）資料欄位當參考。">?</button>
             <span class="man" hidden data-i18n="settings.basis.manual">（手動）</span>
             <button type="button" class="to-auto" hidden data-i18n="settings.basis.to_auto">改回自動</button>
           </div>
@@ -673,7 +673,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
           <!-- SP-363 R2: 課表功率區間 — which set the 課表's power targets (texts, the push) and the power charts' default use; hidden in ③ -->
           <div class="row ovr" id="pz-model-row">
             <label class="sel-q"><span data-i18n="settings.thr.pz_model">課表功率區間</span> <select id="pz-model"></select></label>
-            <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.pz_model_help" title="課表（自動排課、課表步驟、推到手錶）的功率目標用哪一套區間，圖表的功率區間預設也跟著它。每種課照原本的強度對到這套最接近的一級：輕鬆跑、長跑、山路長天用這套的輕鬆級，恢復跑用含 75% CP 那一級的上緣當上限，間歇和爬坡用跟原本功率帶重疊最多的那一級。換了之後，接下來的課會重新排、已推到手錶的課照課表的規則重新推送；你在結構裡自己設的功率目標（% CP、區間、瓦數）不變，設成「自動」的段跟著新區間。個人化區間要有近 90 天的 Stryd 跑步算出功率–時間模型，沒有時先用 Palladino。">?</button>
+            <button type="button" class="q" data-manual="settings#body" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.pz_model_help" title="課表（自動排課、課表步驟、推到手錶）的功率目標用哪一套區間，圖表的功率區間預設也跟著它。每種課照原本的強度對到這套最接近的一級：輕鬆跑、長跑、山路長天用這套的輕鬆級，恢復跑用含 75% CP 那一級的上緣當上限，間歇和爬坡用跟原本功率帶重疊最多的那一級。換了之後，接下來的課會重新排、已推到手錶的課照課表的規則重新推送；你在結構裡自己設的功率目標（% CP、區間、瓦數）不變，設成「自動」的段跟著新區間。個人化區間要有近 90 天的 Stryd 跑步算出功率–時間模型，沒有時先用 Palladino。">?</button>
             <span class="man" hidden data-i18n="settings.basis.manual">（手動）</span>
             <button type="button" class="to-auto" hidden data-i18n="settings.basis.to_auto">改回自動</button>
             <span class="meta" id="pz-model-note" role="status"></span>
@@ -682,7 +682,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
           <!-- SP-964: 進階設定 — 目標依據 per session type of 主要訓練項目 (GET …/plan/basis types, PATCH …/plan/prefs type_basis) -->
           <details id="adv" class="adv">
             <summary><span data-i18n="settings.basis.adv_h">進階設定：每一類課分開設</span> <span class="man" id="adv-n"></span>
-              <button type="button" class="q" id="adv-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.adv_help" title="上面的「目標依據」是預設；這裡某一類課選了心率、配速或功率，就蓋過它，只影響那一類課（排課、推到手錶、右邊的結果卡都一樣）。「自動」＝跟著上面的目標依據，括號裡是現在的結果。配速只給平路間歇、節奏和馬拉松配速段（坡上配速沒有意義）。沒有功率計時沒有功率；CP 過期時選了功率也先改用配速或心率，做一次 CP 測試就回來。選了配速但沒有閾值配速時改用心率＋RPE。越野長天、長爬坡、陡坡健走、下坡和測試照它們自己的規則，不能改。">?</button></summary>
+              <button type="button" class="q" data-manual="settings#body" id="adv-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.adv_help" title="上面的「目標依據」是預設；這裡某一類課選了心率、配速或功率，就蓋過它，只影響那一類課（排課、推到手錶、右邊的結果卡都一樣）。「自動」＝跟著上面的目標依據，括號裡是現在的結果。配速只給平路間歇、節奏和馬拉松配速段（坡上配速沒有意義）。沒有功率計時沒有功率；CP 過期時選了功率也先改用配速或心率，做一次 CP 測試就回來。選了配速但沒有閾值配速時改用心率＋RPE。越野長天、長爬坡、陡坡健走、下坡和測試照它們自己的規則，不能改。">?</button></summary>
             <p class="meta full-only" data-i18n="settings.basis.adv_sub">某一類課選了心率／配速／功率，就蓋過上面的目標依據；「自動」跟著上面。</p>
             <div id="adv-rows"></div>
           </details>
@@ -692,7 +692,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
       <div class="basis-col basis-r">
         <p class="colh" data-i18n="settings.basis.system">系統用的（全自動）</p>
         <section id="now">
-          <h2><span data-i18n="settings.basis.now_h">現在用什麼練</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.now_help" title="只能看、全自動：跟著裝備、CP 有沒有過期、主要訓練項目和手動指定切換。每一類課寫現在的目標，點 ? 看原因。狀態一變（例如 CP 過期），課表會重排、重推手錶。">?</button></h2>
+          <h2><span data-i18n="settings.basis.now_h">現在用什麼練</span> <button type="button" class="q" data-manual="settings#body" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.basis.now_help" title="只能看、全自動：跟著裝備、CP 有沒有過期、主要訓練項目和手動指定切換。每一類課寫現在的目標，點 ? 看原因。狀態一變（例如 CP 過期），課表會重排、重推手錶。">?</button></h2>
           <div class="ps-box" id="now-status"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
           <dl class="kv now-kv" id="now-kv"></dl>
           <div class="now-rows" id="now-rows"></div>
@@ -700,7 +700,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
         <!-- SP-662: 我的區間 — the zone sets in use (heart rate always; pace when a session runs by pace; power in ① only),
              each a coloured bar and a tinted row per zone -->
         <section id="physio">
-          <h2><span data-i18n="settings.pv.title">我的區間</span> <button type="button" class="q" id="pv-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pv.help" title="課表、活動判讀和圖表預設用的區間，只列正在用的單位：心率一定有，配速有課看配速時才有，功率只在功率生效時。要改數字到左邊的「門檻與測試」，要換區間的算法用「手動指定」。">?</button></h2>
+          <h2><span data-i18n="settings.pv.title">我的區間</span> <button type="button" class="q" data-manual="settings#body" id="pv-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pv.help" title="課表、活動判讀和圖表預設用的區間，只列正在用的單位：心率一定有，配速有課看配速時才有，功率只在功率生效時。要改數字到左邊的「門檻與測試」，要換區間的算法用「手動指定」。">?</button></h2>
           <div class="pv-zones">
             <div class="pv-set" id="pv-hr"></div>
             <div class="pv-set" id="pv-pace" hidden></div>
@@ -741,15 +741,15 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
     </div>
     <details style="margin:4px 0 8px"><summary class="meta" data-i18n="settings.sync.adv">進階設定</summary>
       <div class="row">
-        <label>圖表資料來源 <select id="s-chart"><option value="source" id="s-chart-src">資料來源（預設）</option>
-          <option value="wko5">對照資料夾（比對用）</option></select></label>
+        <label><span data-i18n="settings.sync.chart_src">圖表資料來源</span> <select id="s-chart"><option value="source" id="s-chart-src" data-i18n="settings.sync.chart_src_default">資料來源（預設）</option>
+          <option value="wko5" data-i18n="settings.sync.chart_src_wko5">對照資料夾（比對用）</option></select></label>
       </div>
-      <div class="row"><label>時區 <input id="s-tz" placeholder="自動" style="width:160px" list="s-tz-list"></label>
+      <div class="row"><label><span data-i18n="settings.sync.tz">時區</span> <input id="s-tz" placeholder="自動" data-i18n-attr="placeholder:settings.sport.auto" style="width:160px" list="s-tz-list"></label>
         <datalist id="s-tz-list"><option value="Asia/Taipei"><option value="Asia/Tokyo"><option value="Asia/Hong_Kong"><option value="Europe/London"><option value="Europe/Berlin"><option value="America/New_York"><option value="America/Los_Angeles"></datalist>
-        <label>地區 <select id="s-region"><option value="">自動</option><option value="tw">台灣</option><option value="intl">台灣以外</option></select></label>
+        <label><span data-i18n="settings.sync.region">地區</span> <select id="s-region"><option value="" data-i18n="settings.sport.auto">自動</option><option value="tw" data-i18n="settings.sync.region_tw">台灣</option><option value="intl" data-i18n="settings.sync.region_intl">台灣以外</option></select></label>
         <span class="meta" id="s-tz-eff"></span></div>
-      <div class="row"><label class="sel-q"><span>課表推送到</span> <select id="s-push"></select></label>
-        <button type="button" class="q" data-manual="schedule#push" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
+      <div class="row"><label class="sel-q"><span data-i18n="settings.sync.push_to">課表推送到</span> <select id="s-push"></select></label>
+        <button type="button" class="q" data-manual="schedule#push" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.sync.push_help" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
       <div class="row" hidden><span class="meta" id="s-tl"></span>
         <button type="button" class="q" data-manual="glossary#training-load" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.tl.help" title="課表的「訓練負荷（Training load）」結束條件填的是本 app 算的負荷，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；同步到新活動後，距離上次估算滿 7 天才用你自己有 TL 的 COROS 活動重新擬合（最多每週一次，跟「進階設定 › 自動估算的參數」一起；要馬上重算按那裡的「現在重新估算」）：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
       <div class="row" hidden><span class="meta" id="s-rpe"></span>
@@ -761,9 +761,8 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
         <button type="button" class="q" data-manual="faq#missing-activity" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.synccheck.help" title="列出手錶／平台上的全部活動，用活動編號跟這裡的資料比對：平台有、這裡沒有的，可以按「補下載」只下載這幾筆；這裡有、平台沒有的只列出來，不會刪除；另外列出還在下載失敗清單的。COROS 大約要 40～60 秒，檢查時不能同步同一個來源，也不會改變同步進度。有開自動同步（開啟網站時自動同步或每日自動同步）時，每週也會自動檢查最近 60 天，缺的直接補下載；TrainingPeaks 上排了但沒做的課另外計數，不會下載。">?</button>
         <span class="meta" id="s-check-st"></span></div>
       <ul class="failed" id="s-check-res"></ul>
-      <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
-        （圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。
-        想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
+      <p class="meta" id="s-chart-note"><span data-i18n="settings.sync.chart_note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源（圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。想先看兩個來源的差異，可以用</span>
+        <a href="/api/v1/static/compare.html" data-i18n="settings.sync.chart_note_link">資料來源比對</a><span data-i18n="settings.sync.chart_note_end">。</span></p>
     </details>
     <div class="src" id="src-coros">
       <h3>COROS <span class="pill" data-f="login">…</span> <span class="pill" data-f="busy" hidden data-i18n="settings.sync.syncing">同步中</span>
@@ -933,7 +932,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
 
   <!-- SP-711: the server-side backup is the owner's alone (OWNER_ONLY_CAPS backup): hidden until CAN_BACKUP -->
   <section id="backup" hidden>
-    <h2><span data-i18n="settings.backup.title">備份</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.help" title="把資料庫（活動紀錄、課表、設定、傷病紀錄等）和你改過的檔案（賽季計畫、校正、標註、圖表檢視、路線名稱、上傳的 GPX）打包成一個 zip，存到下面設定的備份資料夾。這個資料夾在伺服器（執行 App 的那台機器）上，備份不會下載到你的手機或電腦。資料來源（COROS、Garmin、TrainingPeaks、intervals.icu）的登入憑證和記住的密碼不放進備份。伺服器上如果有雲端硬碟（iCloud Drive／OneDrive／Google 雲端硬碟／Dropbox）的資料夾，選它就由它們的同步程式自動上傳；App 不會登入任何雲端帳號。保留最近 7 天每天一份、加上最近 4 週每週一份，更舊的自動刪除——只會刪這個功能建立的備份檔，資料夾裡的其他檔案不會動。">?</button>
+    <h2><span data-i18n="settings.backup.title">備份</span> <button type="button" class="q" data-manual="settings#data" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.help" title="把資料庫（活動紀錄、課表、設定、傷病紀錄等）和你改過的檔案（賽季計畫、校正、標註、圖表檢視、路線名稱、上傳的 GPX）打包成一個 zip，存到下面設定的備份資料夾。這個資料夾在伺服器（執行 App 的那台機器）上，備份不會下載到你的手機或電腦。資料來源（COROS、Garmin、TrainingPeaks、intervals.icu）的登入憑證和記住的密碼不放進備份。伺服器上如果有雲端硬碟（iCloud Drive／OneDrive／Google 雲端硬碟／Dropbox）的資料夾，選它就由它們的同步程式自動上傳；App 不會登入任何雲端帳號。保留最近 7 天每天一份、加上最近 4 週每週一份，更舊的自動刪除——只會刪這個功能建立的備份檔，資料夾裡的其他檔案不會動。">?</button>
       <span class="pill" id="b-pill" hidden></span></h2>
     <div class="row" id="b-cloud"></div>
     <div class="row">
@@ -942,26 +941,26 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
     </div>
     <div class="row">
       <label><input type="checkbox" id="b-auto"> <span data-i18n="settings.backup.auto">每天自動備份</span></label>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.auto_help" title="App 開著時，距離上次成功備份超過 24 小時就自動備份一次（開啟 App 時也會檢查）。失敗的話一小時後再試。">?</button>
+      <button type="button" class="q" data-manual="settings#data" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.auto_help" title="App 開著時，距離上次成功備份超過 24 小時就自動備份一次（開啟 App 時也會檢查）。失敗的話一小時後再試。">?</button>
     </div>
     <dl class="kv" id="b-kv"></dl>
     <div class="row">
       <button class="primary" id="b-run" data-i18n="settings.backup.run">立即備份</button>
       <button id="b-restore" data-i18n="settings.backup.restore_btn">還原…</button>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.restore_help" title="選備份資料夾裡的一份備份，或從你的裝置上傳一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫和檔案另存一份到伺服器上 app 資料夾的 backups（也列在清單裡，可以還原回去），然後換成備份裡的資料；備份裡沒有的檔案不會動，分享連結不會還原。完成後重新整理頁面就會看到還原的資料（伺服器不用重新啟動；圖表會重算，第一次打開會比較慢）。不會被覆蓋的：伺服器上的備份設定（資料夾、每天自動備份）、課表訂閱網址、Debug API，以及資料來源（COROS、Garmin、TrainingPeaks、intervals.icu）的登入——登入不在備份裡，在另一台伺服器還原後要登入一次。舊版的加密備份（.zip.enc）不能還原。">?</button>
+      <button type="button" class="q" data-manual="settings#data" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.restore_help" title="選備份資料夾裡的一份備份，或從你的裝置上傳一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫和檔案另存一份到伺服器上 app 資料夾的 backups（也列在清單裡，可以還原回去），然後換成備份裡的資料；備份裡沒有的檔案不會動，分享連結不會還原。完成後重新整理頁面就會看到還原的資料（伺服器不用重新啟動；圖表會重算，第一次打開會比較慢）。不會被覆蓋的：伺服器上的備份設定（資料夾、每天自動備份）、課表訂閱網址、Debug API，以及資料來源（COROS、Garmin、TrainingPeaks、intervals.icu）的登入——登入不在備份裡，在另一台伺服器還原後要登入一次。舊版的加密備份（.zip.enc）不能還原。">?</button>
       <span class="meta" id="b-msg" role="status"></span>
     </div>
     <details style="margin-top:6px"><summary class="meta" data-i18n="settings.backup.advanced">進階設定</summary>
       <div class="row">
         <label><input type="checkbox" id="b-fit"> <span data-i18n="settings.backup.fit">同時備份 FIT 原始檔</span></label>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.fit_help" title="同步下來的 FIT 檔（伺服器上 app 資料夾的 fit）以 gzip 壓縮放進備份，備份檔會大很多。不勾也沒關係：FIT 檔之後可以從 COROS／TrainingPeaks 重新同步。還原時只補回伺服器上還沒有的 FIT 檔，已經有的不會覆蓋。">?</button>
+        <button type="button" class="q" data-manual="settings#data" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.backup.fit_help" title="同步下來的 FIT 檔（伺服器上 app 資料夾的 fit）以 gzip 壓縮放進備份，備份檔會大很多。不勾也沒關係：FIT 檔之後可以從 COROS／TrainingPeaks 重新同步。還原時只補回伺服器上還沒有的 FIT 檔，已經有的不會覆蓋。">?</button>
       </div>
     </details>
   </section>
 
   <!-- SP-317: 運動紀錄保留 (api/archive.py, engine/fit_archive.py) -->
   <section id="archive">
-    <h2><span data-i18n="settings.arch.title">運動紀錄保留</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.arch.help" title="超過保留期限的活動，每月 1 號凌晨 3～5 點自動移除 FIT 原始檔和逐秒快取，不會事先通知。每筆活動的指標、訓練負荷圖（Training load chart）、最佳成績、成就與百岳登頂都留在摘要裡，長期圖表不會變；活動列表照樣列出，標「已封存，原始檔已移除」，只是不能再打開單次活動圖表。被目前門檻或課表測試用到的活動會先保留。想留原始檔，請先下載。">?</button></h2>
+    <h2><span data-i18n="settings.arch.title">運動紀錄保留</span> <button type="button" class="q" data-manual="settings#data" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.arch.help" title="超過保留期限的活動，每月 1 號凌晨 3～5 點自動移除 FIT 原始檔和逐秒快取，不會事先通知。每筆活動的指標、訓練負荷圖（Training load chart）、最佳成績、成就與百岳登頂都留在摘要裡，長期圖表不會變；活動列表照樣列出，標「已封存，原始檔已移除」，只是不能再打開單次活動圖表。被目前門檻或課表測試用到的活動會先保留。想留原始檔，請先下載。">?</button></h2>
     <p class="meta" data-i18n="settings.arch.intro">超過期限的 FIT 原始檔每月自動移除；摘要、訓練負荷圖（Training load chart）、最佳成績和成就都會留下。</p>
     <div class="row">
       <label for="ar-years" data-i18n="settings.arch.keep">保留最近</label>
@@ -974,13 +973,13 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
     <p class="meta" id="ar-last"></p>
     <div class="row">
       <a class="button" id="ar-dl" href="/api/v1/archive/fit.zip" download data-i18n="settings.arch.download">下載我的全部 FIT</a>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.arch.download_help" title="把你所有同步、匯入的 FIT 原始檔打包成一個 zip 下載，隨時都能用，跟清理無關。檔案多的話要等一下才會開始。">?</button>
+      <button type="button" class="q" data-manual="settings#data" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.arch.download_help" title="把你所有同步、匯入的 FIT 原始檔打包成一個 zip 下載，隨時都能用，跟清理無關。檔案多的話要等一下才會開始。">?</button>
     </div>
   </section>
 
   <!-- SP-322: 這台裝置的離線資料 (device_storage.js; the copy itself: SP-314, offline_core.js) -->
   <section id="device">
-    <h2><span data-i18n="settings.device.title">這台裝置的離線資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.device.help" title="沒訊號時，總覽、課表和活動列表從這台裝置存的資料打開（只能看、不能改）。存的內容分三層：P0 一定要有（總覽、課表）、P1 應該要有（活動列表、成就）、P2 有空間再存（近 30 天打開過的單次活動）；全部加起來最多 20 MB，超過時先清 P2、再清 P1。連上網路時會自動更新。每台裝置、每個瀏覽器各存一份，登出就刪掉。">?</button></h2>
+    <h2><span data-i18n="settings.device.title">這台裝置的離線資料</span> <button type="button" class="q" data-manual="settings#data" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.device.help" title="沒訊號時，總覽、課表和活動列表從這台裝置存的資料打開（只能看、不能改）。存的內容分三層：P0 一定要有（總覽、課表）、P1 應該要有（活動列表、成就）、P2 有空間再存（近 30 天打開過的單次活動）；全部加起來最多 20 MB，超過時先清 P2、再清 P1。連上網路時會自動更新。每台裝置、每個瀏覽器各存一份，登出就刪掉。">?</button></h2>
     <p class="meta" data-i18n="settings.device.intro">沒訊號時從這裡打開總覽和課表。這裡看存了多少、會不會被瀏覽器清掉。</p>
     <div id="ds-body" aria-live="polite"><span class="meta" data-i18n="settings.device.loading">讀取中…</span></div>
   </section>
@@ -998,18 +997,18 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
   </dialog>
 
   <dialog id="src-dlg">
-    <h2 id="sd-title">切換資料來源</h2>
+    <h2 id="sd-title" data-i18n="settings.srcdlg.title">切換資料來源</h2>
     <p id="sd-body" class="meta"></p>
-    <div class="row"><button class="primary" id="sd-ok">切換</button><button id="sd-cancel">取消</button></div>
+    <div class="row"><button class="primary" id="sd-ok" data-i18n="settings.srcdlg.ok">切換</button><button id="sd-cancel" data-i18n="settings.backup.dlg_cancel">取消</button></div>
   </dialog>
 
   <dialog id="purge-dlg">
-    <h2 id="pd-title">刪除同步檔案</h2>
+    <h2 id="pd-title" data-i18n="settings.purge.title">刪除同步檔案</h2>
     <p id="pd-body" class="meta"></p>
-    <div class="row"><label>只刪這段期間（可留空＝全部）<input type="date" id="pd-from"> ~ <input type="date" id="pd-to"></label></div>
-    <p class="meta">請輸入 <b id="pd-word"></b> 或 <b>刪除</b> 以確認：</p>
+    <div class="row"><label><span data-i18n="settings.purge.range">只刪這段期間（可留空＝全部）</span><input type="date" id="pd-from"> ~ <input type="date" id="pd-to"></label></div>
+    <p class="meta"><span data-i18n="settings.purge.type">請輸入</span> <b id="pd-word"></b> <span data-i18n="settings.purge.or">或</span> <b data-i18n="settings.purge.word">刪除</b> <span data-i18n="settings.purge.to_confirm">以確認：</span></p>
     <div class="row"><input type="text" id="pd-input" autocomplete="off">
-      <button class="danger primary" id="pd-ok" disabled>確認刪除</button><button id="pd-cancel">取消</button></div>
+      <button class="danger primary" id="pd-ok" disabled data-i18n="settings.purge.ok">確認刪除</button><button id="pd-cancel" data-i18n="settings.backup.dlg_cancel">取消</button></div>
   </dialog>
 
   <section id="calendar">
@@ -1062,21 +1061,21 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
   </section>
 
   <section id="map">
-    <h2>地圖</h2>
-    <p class="meta">單次活動的路線地圖一開始用的底圖和疊圖。在地圖右上角可以臨時切換，這台瀏覽器會記住；這裡的預設改了之後，會回到新的預設。</p>
+    <h2 data-i18n="settings.map.title">地圖</h2>
+    <p class="meta" data-i18n="settings.map.intro">單次活動的路線地圖一開始用的底圖和疊圖。在地圖右上角可以臨時切換，這台瀏覽器會記住；這裡的預設改了之後，會回到新的預設。</p>
     <div class="row">
-      <label>預設底圖 <select id="m-base">
-        <option value="rudy" data-tw-only>魯地圖</option><option value="google-terrain">Google 地形</option>
-        <option value="nlsc-emap" data-tw-only>NLSC 電子地圖</option><option value="nlsc-photo" data-tw-only>正射影像</option>
+      <label><span data-i18n="settings.map.base">預設底圖</span> <select id="m-base">
+        <option value="rudy" data-tw-only data-i18n="settings.map.rudy">魯地圖</option><option value="google-terrain" data-i18n="settings.map.google_terrain">Google 地形</option>
+        <option value="nlsc-emap" data-tw-only data-i18n="settings.map.nlsc_emap">NLSC 電子地圖</option><option value="nlsc-photo" data-tw-only data-i18n="settings.map.nlsc_photo">正射影像</option>
         <option value="osm">OSM</option></select></label>
     </div>
-    <div class="row">預設疊圖
-      <label data-tw-only><input type="checkbox" name="m-ovl" value="contour"> 等高線</label>
-      <label><input type="checkbox" name="m-ovl" value="google-roads"> Google 道路</label>
-      <label data-tw-only><input type="checkbox" name="m-ovl" value="nlsc-roads"> NLSC 道路</label>
-      <button class="primary" id="m-save">儲存地圖設定</button>
+    <div class="row"><span data-i18n="settings.map.overlays">預設疊圖</span>
+      <label data-tw-only><input type="checkbox" name="m-ovl" value="contour"> <span data-i18n="settings.map.contour">等高線</span></label>
+      <label><input type="checkbox" name="m-ovl" value="google-roads"> <span data-i18n="settings.map.google_roads">Google 道路</span></label>
+      <label data-tw-only><input type="checkbox" name="m-ovl" value="nlsc-roads"> <span data-i18n="settings.map.nlsc_roads">NLSC 道路</span></label>
+      <button class="primary" id="m-save" data-i18n="settings.map.save">儲存地圖設定</button>
     </div>
-    <p class="meta">魯地圖和等高線的主機有時不回應，地圖載不出來時換個底圖就好。</p>
+    <p class="meta" data-i18n="settings.map.note">魯地圖和等高線的主機有時不回應，地圖載不出來時換個底圖就好。</p>
   </section>
 
   <!-- SP-386: 帳號 — 下載我的資料、跨使用者分析的同意、刪除帳號 (api/account.py). Shown only when
@@ -1201,30 +1200,27 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
       <table class="wt"><tbody id="calib-rows"></tbody></table>
       <p class="meta" id="calib-rpe-title" data-i18n="settings.rpe_load.calib_title" data-i18n-attr="title:settings.rpe_load.calib_tip" title="預設是通用規則（Coggan 公開的公式：每小時負荷＝強度比² × 100，強度的取點是推估），不是照哪個人調的；每個人的值只從他自己有自評的活動擬合。標籤：本人 n＝自己的資料、預設（推估）＝通用規則、依相鄰檔調整＝沒有自己的資料，為了讓高一檔不會比低一檔少而調整。" hidden>「負荷」用 RPE 填：每一檔的每小時負荷</p>
       <table class="wt" id="calib-rpe" hidden><tbody></tbody></table>
-      <div class="row"><button id="calib-run">現在重新估算</button><span class="meta" id="calib-msg"></span></div>
+      <div class="row"><button id="calib-run" data-i18n="settings.calib.run">現在重新估算</button><span class="meta" id="calib-msg"></span></div>
     </details>
   </section>
 
   <section id="fixes">
-    <h2>資料校正</h2>
-    <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到原始活動檔，隨時可以撤銷。</p>
+    <h2 data-i18n="settings.fixes.title">資料校正</h2>
+    <p class="meta"><span data-i18n="settings.fixes.intro">找出功率異常尖峰（例如 1800 W）。只會列出建議，</span><b data-i18n="settings.fixes.intro_b">按下套用才會生效</b><span data-i18n="settings.fixes.intro_end">；不會改到原始活動檔，隨時可以撤銷。</span></p>
     <div class="row">
-      <button id="scanbtn">掃描壞點</button>
-      <button id="fixbtn" class="primary" disabled>套用勾選的修正</button>
+      <button id="scanbtn" data-i18n="settings.fixes.scan">掃描壞點</button>
+      <button id="fixbtn" class="primary" disabled data-i18n="settings.fixes.apply">套用勾選的修正</button>
       <span class="meta" id="scanmsg"></span>
     </div>
     <div class="list" id="fixlist"></div>
-    <h2 style="margin-top:14px">已套用的修正</h2>
-    <div class="list" id="applied"><span class="meta">載入中…</span></div>
+    <h2 style="margin-top:14px" data-i18n="settings.fixes.applied">已套用的修正</h2>
+    <div class="list" id="applied"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
 
-    <h2 style="margin-top:14px" id="badfiles">排除壞掉的活動檔</h2>
-    <p class="meta">跑步／登山的檔案如果速度或功率不可能是人跑出來的（例如忘了停錶就騎車、開車），整筆活動會被排除：
-      留在資料庫和活動清單（標「已排除」），但不進訓練負荷（Training load）與訓練負荷圖、功率曲線／CP、比賽功率、飄移／AeT、課表比對和圖表。
-      門檻：持續 1 分鐘以上比同時間的世界紀錄均速快 15%（推估餘裕），或平均功率超過 10 W/kg（推估）。
-      在單次活動的「活動資訊」卡也可以手動排除或標成正常。</p>
-    <div class="row"><label><input type="checkbox" id="ex-on"> 自動排除疑似交通工具／騎車的活動（預設開）</label>
+    <h2 style="margin-top:14px" id="badfiles" data-i18n="settings.excl.title">排除壞掉的活動檔</h2>
+    <p class="meta" data-i18n="settings.excl.intro">跑步／登山的檔案如果速度或功率不可能是人跑出來的（例如忘了停錶就騎車、開車），整筆活動會被排除：留在資料庫和活動清單（標「已排除」），但不進訓練負荷（Training load）與訓練負荷圖、功率曲線／CP、比賽功率、飄移／AeT、課表比對和圖表。門檻：持續 1 分鐘以上比同時間的世界紀錄均速快 15%（推估餘裕），或平均功率超過 10 W/kg（推估）。在單次活動的「活動資訊」卡也可以手動排除或標成正常。</p>
+    <div class="row"><label><input type="checkbox" id="ex-on"> <span data-i18n="settings.excl.auto">自動排除疑似交通工具／騎車的活動（預設開）</span></label>
       <span class="meta" id="ex-msg"></span></div>
-    <div class="list" id="exlist"><span class="meta">載入中…</span></div>
+    <div class="list" id="exlist"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
     <div class="list" id="keptlist"></div>
   </section>
 
@@ -1322,50 +1318,50 @@ document.querySelectorAll(".mode").forEach((b) => b.onclick = async () => {
   const body = parity ? { parity: true } : { ...(await j(`${API}/config`)).mountain_preset, parity: false };
   await j(`${API}/config`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   await loadMode();
-  toast(parity ? "已切到對照模式" : "已切到我的算式");
+  toast(t(parity ? "settings.mode.to_parity" : "settings.mode.to_mine"));
 });
 
 async function loadApplied() {
   const { applied } = await j(`${API}/corrections`);
   $("applied").innerHTML = applied.length ? applied.map((c) => `<label>
-      <button class="x" data-id="${esc(c.id)}">撤銷</button>
-      ${esc(c.file)} · ${esc(c.channel)} · ${num(c.t_start)}–${num(c.t_end)} 秒</label>`).join("")
-    : `<span class="meta">沒有。</span>`;
+      <button class="x" data-id="${esc(c.id)}">${esc(t("settings.fixes.undo"))}</button>
+      ${esc(t("settings.fixes.applied_row", { file: c.file, ch: c.channel, from: num(c.t_start), to: num(c.t_end) }))}</label>`).join("")
+    : `<span class="meta">${esc(t("settings.fixes.none"))}</span>`;
 }
 $("applied").onclick = async (e) => {
   const id = e.target.dataset.id; if (!id) return;
-  if (!confirm("撤銷這筆修正？")) return;
+  if (!confirm(t("settings.fixes.undo_confirm"))) return;
   await j(`${API}/corrections/${encodeURIComponent(id)}`, { method: "DELETE" });
-  toast("已撤銷"); loadApplied();
+  toast(t("settings.fixes.undone")); loadApplied();
 };
 
 $("scanbtn").onclick = async () => {
-  $("scanmsg").textContent = "掃描中…（第一次會比較久）"; $("scanbtn").disabled = true;
+  $("scanmsg").textContent = t("settings.fixes.scanning"); $("scanbtn").disabled = true;
   try {
     ({ proposals } = await j(`${API}/corrections/proposals`));
-    $("scanmsg").textContent = proposals.length ? `找到 ${proposals.length} 筆` : "沒有偵測到壞點";
+    $("scanmsg").textContent = proposals.length ? t("settings.fixes.found", { n: proposals.length }) : t("settings.fixes.found_none");
     $("fixlist").innerHTML = proposals.map((p, i) => `<label><input type="checkbox" data-i="${i}" checked>
-      ${esc(p.start.slice(0, 10))} ${esc(p.sport)} · ${p.samples} 筆 · 峰值 ${num(p.peak)} W → ${num(p.peak_after)} W
+      ${esc(p.start.slice(0, 10))} ${esc(p.sport)} · ${esc(t("settings.fixes.prop_row", { n: p.samples, peak: num(p.peak), after: num(p.peak_after) }))}
       <div class="meta" style="margin-left:22px">${esc(p.reason || "")}</div></label>`).join("");
     $("fixbtn").disabled = !proposals.length;
-  } catch (e) { $("scanmsg").textContent = "錯誤：" + e.message; }
+  } catch (e) { $("scanmsg").textContent = t("settings.fixes.error", { msg: e.message }); }
   $("scanbtn").disabled = false;
 };
 $("fixbtn").onclick = async () => {
   const picked = [...$("fixlist").querySelectorAll("input:checked")].map((el) => proposals[+el.dataset.i]);
   if (!picked.length) return;
-  if (!confirm(`要套用 ${picked.length} 筆修正嗎？（不會改到原始活動檔，隨時可以撤銷）`)) return;
+  if (!confirm(t("settings.fixes.apply_confirm", { n: picked.length }))) return;
   const res = await j(`${API}/corrections/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ proposals: picked }) });
-  toast(`已套用 ${res.added.length} 筆`); $("fixlist").innerHTML = ""; $("fixbtn").disabled = true;
+  toast(t("settings.fixes.applied_toast", { n: res.added.length })); $("fixlist").innerHTML = ""; $("fixbtn").disabled = true;
   $("scanmsg").textContent = ""; loadApplied();
 };
 
 // ---- bad activity files (engine/bad_activity.py) --------------------------
 const km = (v) => v == null ? "–" : (+v).toFixed(2) + " km";
-const mins = (s) => s == null ? "–" : Math.round(s / 60) + " 分";
+const mins = (s) => s == null ? "–" : t("settings.excl.mins", { n: Math.round(s / 60) });
 async function loadExclusions() {
-  $("exlist").innerHTML = `<span class="meta">載入中…（第一次會比較久）</span>`;
+  $("exlist").innerHTML = `<span class="meta">${esc(t("settings.excl.loading"))}</span>`;
   try {
     const r = await j(`${API}/exclusions`);
     $("ex-on").checked = !!r.enabled;
@@ -1374,14 +1370,14 @@ async function loadExclusions() {
       ${esc((x.start || "").slice(0, 16).replace("T", " "))} ${esc(x.sport_type)} · ${km(x.distance)} · ${mins(x.duration)}
       <div class="meta" style="margin-left:4px">${esc(x.label || x.reason || "")} · ${esc(x.file)}</div></label>`;
     $("exlist").innerHTML = r.excluded.length
-      ? `<div class="meta">目前排除 ${r.excluded.length} 筆（資料來源：${esc(r.source)}）</div>` +
-        r.excluded.map((x) => row(x, x.auto ? "這筆是正常的，不要排除" : "取消手動排除", x.auto ? "keep" : "auto")).join("")
-      : `<span class="meta">目前沒有被排除的活動（資料來源：${esc(r.source)}）。</span>`;
+      ? `<div class="meta">${esc(t("settings.excl.now", { n: r.excluded.length, src: r.source }))}</div>` +
+        r.excluded.map((x) => row(x, esc(t(x.auto ? "settings.excl.keep" : "settings.excl.unexclude")), x.auto ? "keep" : "auto")).join("")
+      : `<span class="meta">${esc(t("settings.excl.none", { src: r.source }))}</span>`;
     $("keptlist").innerHTML = r.kept.length
-      ? `<div class="meta" style="margin-top:8px">你標成正常、規則會排除的：</div>` +
-        r.kept.map((x) => row(x, "恢復自動判定", "auto")).join("")
+      ? `<div class="meta" style="margin-top:8px">${esc(t("settings.excl.kept"))}</div>` +
+        r.kept.map((x) => row(x, esc(t("settings.excl.to_auto")), "auto")).join("")
       : "";
-  } catch (e) { $("exlist").innerHTML = `<span class="meta">讀取失敗：${esc(e.message.slice(0, 120))}</span>`; }
+  } catch (e) { $("exlist").innerHTML = `<span class="meta">${esc(t("settings.excl.load_failed", { msg: e.message.slice(0, 120) }))}</span>`; }
 }
 async function setExclusion(key, file, exclusion) {
   await j(`${API}/exclusions`, { method: "PUT", headers: { "Content-Type": "application/json" },
@@ -1392,13 +1388,13 @@ for (const id of ["exlist", "keptlist"]) $(id).onclick = async (e) => {
   b.disabled = true;
   try {
     await setExclusion(b.dataset.key, b.dataset.file, b.dataset.act === "keep" ? "keep" : null);
-    toast(b.dataset.act === "keep" ? "已標成正常，這筆會重新算進去" : "已恢復自動判定"); loadExclusions();
-  } catch (err) { toast("失敗：" + err.message.slice(0, 80)); b.disabled = false; }
+    toast(t(b.dataset.act === "keep" ? "settings.excl.kept_toast" : "settings.excl.auto_toast")); loadExclusions();
+  } catch (err) { toast(t("settings.failed", { msg: err.message.slice(0, 80) })); b.disabled = false; }
 };
 $("ex-on").onchange = async (e) => {
   try { await putSetting({ exclude_bad_activities: e.target.checked });
-    toast(e.target.checked ? "已開啟自動排除" : "已關閉自動排除（手動排除仍有效）"); loadExclusions(); }
-  catch (err) { toast("失敗：" + err.message.slice(0, 80)); }
+    toast(t(e.target.checked ? "settings.excl.on_toast" : "settings.excl.off_toast")); loadExclusions(); }
+  catch (err) { toast(t("settings.failed", { msg: err.message.slice(0, 80) })); }
 };
 
 // ---- profile -------------------------------------------------------------
@@ -1414,7 +1410,7 @@ async function loadProfile() {
     : t("settings.general.no_weight");
   // 性別、年齡、體重 calibrate the calculations (SP-211): say which are still missing
   const miss = (PROF.setup && PROF.setup.missing) || [];
-  if (miss.length) $("profnow").textContent += "　" + t("settings.general.missing",
+  if (miss.length) $("profnow").textContent += t("settings.gap") + t("settings.general.missing",
     { list: miss.map((k) => t(`settings.general.f_${k}`)).join(t("settings.general.sep")) });
   const hasWko5 = wk.height_cm || wk.sex || wk.weights.length;
   $("profwko5").textContent = !hasWko5 ? "" : t("settings.general.wko5", { h: wk.height_cm ?? "–",
@@ -1587,7 +1583,7 @@ function renderHr(r) {
   HR = r; drawPhysio();
   const v = (x) => x && x.value != null ? `${Math.round(x.value)} bpm` : t("settings.hr.unset");
   // ST6 (●●▷): where the value comes from — 精簡 on hover only; a missing value's reason stays
-  const src = (x) => x && x.source ? (LEAN() ? "" : `<span class="meta" data-hint-id="ST6">（${esc(x.source)}）</span>`)
+  const src = (x) => x && x.source ? (LEAN() ? "" : `<span class="meta" data-hint-id="ST6">${esc(t("settings.paren", { x: x.source }))}</span>`)
     : x && x.reason ? `<span class="meta" data-hint-id="ST6">${esc(x.reason)}</span>` : "";
   const tip = (x) => (LEAN() && x && x.source ? ` title="${esc(x.source)}"` : "");
   $("hr-kv").innerHTML = `<dt>${esc(t("settings.hr.max"))}</dt><dd${tip(r.max_hr)}>${v(r.max_hr)} ${src(r.max_hr)} <span id="hr-conf"></span></dd>
@@ -1601,7 +1597,7 @@ function renderHr(r) {
   // SP-493: 自動 says which zones are in effect and why (「自動 → 目前用：儲備心率（…）」)
   const auto = r.model === "auto" && ef ? t("settings.hr.auto_now", { model: ef.label, reason: ef.reason || "" }) : "";
   $("hr-model-note").textContent = [auto, !z ? "" : z.fallback ? z.fallback
-    : t("settings.hr.easy", { lo: z.easy[0], hi: z.easy[1], src: z.easy_source })].filter(Boolean).join("　");
+    : t("settings.hr.easy", { lo: z.easy[0], hi: z.easy[1], src: z.easy_source })].filter(Boolean).join(t("settings.gap"));
   const man = (x) => x && x.kind === "manual";
   $("hr-max").value = man(r.max_hr) ? Math.round(r.max_hr.value) : "";
   $("hr-max").placeholder = r.estimate && r.estimate.value ? r.estimate.value : (r.account && r.account.max_hr) || "";
@@ -1613,7 +1609,7 @@ function renderHr(r) {
     e.value ? t("settings.hr.est", { v: e.value, reason: e.reason }) : e.reason ? t("settings.hr.est_reason", { reason: e.reason }) : "",
     e.peaks && e.peaks.length ? t("settings.hr.peaks", { list: e.peaks.map((p) => `${p[0]} ${p[1]}`).join(t("settings.upstream.list_sep")) }) : "",
     r.account ? t("settings.hr.watch", { max: r.account.max_hr ?? "–", rest: r.account.rest_hr ?? "–" }) : t("settings.hr.watch_none"),
-  ].filter(Boolean).join("　");
+  ].filter(Boolean).join(t("settings.gap"));
   renderHrCompare(r.compare);
 }
 // ---- app 和手錶數值對照 (SP-67; engine/coros_compare.py, the "compare" of GET hr-profile) ----
@@ -1652,7 +1648,7 @@ function renderHrCompare(c) {
       <tbody>${rows}${zrows}</tbody></table></div>`;
   const notes = `<p class="meta">${esc(c.note)}</p>
     <p class="meta">${esc([c.read_day ? t("settings.hr.cmp_read", { day: c.read_day }) : "",
-      h.last_change ? t("settings.hr.cmp_last", { day: h.last_change.day || "–", text: h.last_change.text }) : ""].filter(Boolean).join("　"))}</p>`;
+      h.last_change ? t("settings.hr.cmp_last", { day: h.last_change.day || "–", text: h.last_change.text }) : ""].filter(Boolean).join(t("settings.gap")))}</p>`;
   const fixes = c.fixes.length ? `<ul>${c.fixes.map((f) => `<li>${esc(f)}</li>`).join("")}</ul><p>${esc(c.where)}</p>` : "";
   const body = table + fixes + notes;
   box.dataset.hintId = "ST9";
@@ -1993,7 +1989,7 @@ function renderThrCheck() {
   const tests = (kind) => res(kind).map((r) => `<div class="s">${esc(t(kind === "tt30" ? "settings.thr.chk_tt30" : "settings.thr.chk_hrmax_test", {
       date: r.date, v: r.result ? (r.result.lthr ?? r.result.value) : "–",
       p: r.result && r.result.power != null ? `${r.result.power} W` : "–",
-      cp: r.result && r.result.vs_cp != null ? `${(r.result.vs_cp * 100).toFixed(1)}%` : "–" }))}${r.reason ? "：" + esc(r.reason) : ""}</div>
+      cp: r.result && r.result.vs_cp != null ? `${(r.result.vs_cp * 100).toFixed(1)}%` : "–" }))}${r.reason ? esc(t("settings.colon")) + esc(r.reason) : ""}</div>
       ${r.apply ? btn(r.apply, t("settings.thr.chk_apply", { v: r.result.lthr ?? r.result.value })) : r.applied ? `<div class="s">${esc(t("settings.thr.chk_applied"))}</div>` : ""}`).join("");
   const cand = TC.hrmax && TC.hrmax.candidate && (TC.hrmax.signals || []).some((s) => s.id === "sustained") ? TC.hrmax.candidate : null;
   const candHtml = cand ? `<div class="s">${esc(t("settings.thr.chk_cand", { v: cand.value, hold: cand.hold_s, date: cand.date }))}</div>`
@@ -2243,12 +2239,12 @@ function showTl(t) {
   el.parentElement.hidden = !(t && t.groups);           // SP-748: no lone ?
   if (!t || !t.groups) { el.textContent = ""; return; }
   const pct = (x) => x == null ? "–" : `${Math.round(x * 100)}%`;
-  const g = t.groups.map((r) => `${r.label}：${r.text}` + (r.fitted
+  const g = t.groups.map((r) => r.label + I18N.t("settings.colon") + r.text + (r.fitted
     ? I18N.t("settings.tl.fitted", { n: r.n, w: Math.round(r.w * 100), extra: r.backtest
       ? I18N.t("settings.tl.backtest", { days: r.backtest.holdout_days, err: pct(r.backtest.mape) }) : r.loo ? I18N.t("settings.tl.loo", { err: pct(r.loo.mape) }) : "" })
     : I18N.t("settings.tl.default", { err: r.err_pct })));
   const lf = t.load && t.load.n ? I18N.t("settings.tl.load", { f: (1 / t.load.factor).toFixed(2), n: t.load.n }) : "";
-  el.textContent = I18N.t("settings.tl.summary", { groups: g.join("；") + lf });
+  el.textContent = I18N.t("settings.tl.summary", { groups: g.join(I18N.t("settings.semi")) + lf });
 }
 
 // 「負荷」 by RPE (engine/rpe_load.describe, SP-57): each level's TSS per hour — the default IF² × 100
@@ -2282,12 +2278,12 @@ async function loadSyncSettings() {
     : bg.why === "off" ? t("settings.sync.background_off") : "";
   $("s-bg-row").hidden = bg.why === "demo";
   showSource(SS.primary_source || "coros");
-  $("s-chart-src").textContent = `${SS.primary_label || "COROS"}（資料來源，預設）`;
+  $("s-chart-src").textContent = t("settings.sync.chart_src_named", { src: SS.primary_label || "COROS" });
   $("s-chart").value = SS.chart_data_source === "wko5" ? "wko5" : "source";
   // 時區 / 地區: blank = automatic (engine/localtime.py, engine/region.py)
   $("s-tz").value = SS.timezone || ""; $("s-region").value = SS.region_override || "";
-  const RL = { tw: "台灣", intl: "台灣以外" };
-  $("s-tz-eff").textContent = `目前：${SS.timezone_effective || "–"}、${RL[SS.region] || "–"}（${SS.region_how || "–"}）`;
+  const RL = { tw: t("settings.sync.region_tw"), intl: t("settings.sync.region_intl") };
+  $("s-tz-eff").textContent = t("settings.sync.tz_now", { tz: SS.timezone_effective || "–", region: RL[SS.region] || "–", how: SS.region_how || "–" });
   $("s-push").innerHTML = (SS.push_providers || [{ id: "coros", label: "COROS", enabled: true }])
     .map((p) => `<option value="${esc(p.id)}"${p.enabled ? "" : " disabled"}>${esc(p.label)}</option>`).join("");
   $("s-push").value = SS.push_provider || "coros";
@@ -2306,7 +2302,7 @@ async function loadSyncSettings() {
   f("garmin", "enabled").checked = SS.garmin_enabled !== false;
   f("intervals", "enabled").checked = SS.intervals_enabled !== false;
   $("keystat").innerHTML = SS.secret_key_status === "missing"
-    ? ` <span class="pill err">找不到加密金鑰</span> ${esc(SS.secret_key_hint || "")}` : "";
+    ? ` <span class="pill err">${esc(tSy("no_key"))}</span> ${esc(SS.secret_key_hint || "")}` : "";
 }
 
 // how long the last run took and where the time went (SP-215; sync/runner.SyncClock)
@@ -2465,7 +2461,7 @@ $("s-save").onclick = async () => {
   };
   try { await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     toast(tSy("saved")); loadSyncSettings(); }
-  catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
+  catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
 };
 
 // 資料來源: one source at a time; only its panel (login, sync, status) is shown
@@ -2482,29 +2478,27 @@ $("s-source").addEventListener("change", (e) => {
   if (!SS || to === SS.primary_source) return;
   SWITCH_TO = to;
   const name = { coros: "COROS", garmin: "Garmin", trainingpeaks: "TrainingPeaks", intervals: "intervals.icu" }, from = name[SS.primary_source] || "";
-  $("sd-title").textContent = `改用 ${name[to]} 當資料來源？`;
-  $("sd-body").innerHTML = `圖表、總覽、功率計算機和 CP 測試會<b>只用 ${esc(name[to])} 的資料重新計算</b>`
-    + `（第一次要讀完所有 FIT 檔，會比較久），自動同步也只同步 ${esc(name[to])}。`
-    + `${esc(from)} 的活動不會拿來補。<br>${esc(from)} 的同步檔案和登入資料都會保留，隨時可以切回來；`
-    + `活動的標籤、RPE、疼痛、背包重量和課表配對也都會保留。`;
+  $("sd-title").textContent = t("settings.srcdlg.ask", { to: name[to] });
+  $("sd-body").innerHTML = esc(t("settings.srcdlg.body_1")) + `<b>${esc(t("settings.srcdlg.body_b", { to: name[to] }))}</b>`
+    + esc(t("settings.srcdlg.body_2", { to: name[to], from })) + "<br>" + esc(t("settings.srcdlg.body_3", { from }));
   showSource(SS.primary_source);                 // the radio moves only once confirmed
   $("src-dlg").showModal();
 });
 $("sd-cancel").onclick = () => $("src-dlg").close();
 $("sd-ok").onclick = async (e) => {
   try {
-    await busy(e.currentTarget, "切換中…", () => putSetting({ primary_source: SWITCH_TO }));
+    await busy(e.currentTarget, t("settings.srcdlg.switching"), () => putSetting({ primary_source: SWITCH_TO }));
     $("src-dlg").close();
-    toast("已切換資料來源：圖表會用新來源重新計算");
+    toast(t("settings.srcdlg.done"));
     await loadSyncSettings(); loadSources();
-  } catch (err) { toast("切換失敗：" + reason(err)); }
+  } catch (err) { toast(t("settings.srcdlg.failed", { msg: reason(err) })); }
 };
 
 $("m-save").onclick = async () => {
   const body = { map_basemap: $("m-base").value,
     map_overlays: [...document.querySelectorAll('input[name="m-ovl"]:checked')].map((c) => c.value) };
-  try { await putSetting(body); toast("已儲存地圖設定"); loadSyncSettings(); }
-  catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
+  try { await putSetting(body); toast(t("settings.map.saved")); loadSyncSettings(); }
+  catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
 };
 
 // 外觀 (SP-974; theme.js): this browser's `theme` cookie, applied at once. Not chosen yet, the menu shows
@@ -2804,11 +2798,9 @@ async function loadCorosSite() {
     const st = await j("/api/v1/auth/coros/site");
     const el = f("coros", "sitemsg");
     const txt = {
-      disabled: st.tripped
-        ? "COROS 同步全站暫停中：短時間內有多個帳號被 COROS 擋下登入，為了不讓整台伺服器被封鎖，已自動暫停，管理員確認後才會恢復。已匯入的活動都還在。"
-        : "COROS 同步全站暫停中（管理員關閉）。已匯入的活動都還在。",
-      cooldown: `COROS 最近常拒絕連線，全站先暫停 ${Math.ceil(st.cooldown_s / 60)} 分鐘再試。已匯入的活動都還在。`,
-      paused: "你的 COROS 帳號上次被 COROS 暫時擋下（請求太頻繁或登入被拒），為了保護帳號，下一次每日自動同步才會再試；在那之前請不要反覆按同步。",
+      disabled: tSy(st.tripped ? "coros_tripped" : "coros_off"),
+      cooldown: tSy("coros_cooldown", { n: Math.ceil(st.cooldown_s / 60) }),
+      paused: tSy("coros_paused"),
     }[st.state];
     el.textContent = txt || ""; el.hidden = !txt;
   } catch (_) { /* the rest of the page still works */ }
@@ -2889,16 +2881,14 @@ async function loadGarmin() {
   if (expired && gs.email && !f("garmin", "user").value) f("garmin", "user").value = gs.email;
   if (expired) {
     f("garmin", "connect").hidden = closed;
-    authMsg("garmin", gs.password_saved
-      ? "Garmin 不再接受登入憑證；下一次同步會用記住的密碼自動重新登入一次，失敗的話請重新連接 Garmin。"
-      : "請重新連接 Garmin（登入憑證已失效，沒有記住密碼，無法自動重新登入）。", "err-text");
+    authMsg("garmin", tSy(gs.password_saved ? "garmin_expired_auto" : "garmin_expired_reconnect"), "err-text");
   }
   const msg = f("garmin", "sitemsg");
   msg.textContent = site.message || ""; msg.hidden = !site.message;
   f("garmin", "busy").hidden = !s.busy;
   const left = site.left || {};
   f("garmin", "left").textContent = gs.authenticated
-    ? `今天還可以手動同步 ${left.manual ?? "–"} 次（自動同步 ${left.auto ?? "–"} 次）` : "";
+    ? tSy("garmin_left", { n: left.manual ?? "–", auto: left.auto ?? "–" }) : "";
   const sync = box("garmin").querySelector('[data-act="sync"]');
   sync.disabled = !gs.authenticated || site.state !== "ok";
   sync.title = site.state === "limit" ? site.message : "";
@@ -2908,43 +2898,40 @@ async function loadGarmin() {
 }
 function garminErr(e) {
   const m = String(e.message || e), code = (m.match(/GARMIN_[A-Z_]+/) || [""])[0];
-  return { code, text: {
-    GARMIN_LOGIN_FAILED: "Garmin 帳號或密碼不對",
-    GARMIN_MFA_WRONG: "驗證碼不對，請再輸入一次",
-    GARMIN_MFA_EXPIRED: "驗證碼已過期或錯太多次，請重新輸入帳號密碼",
-    GARMIN_CONSENT_REQUIRED: "請先閱讀並勾選上面的聲明",
-    GARMIN_PAUSED: GARMIN.site.message || "Garmin 暫時鎖住登入，通常 2–3 天會恢復，這段時間會自動暫停同步",
-    GARMIN_RATE_LIMITED: "Garmin 暫時鎖住登入，通常 2–3 天會恢復，這段時間會自動暫停同步",
-    GARMIN_DISABLED: "Garmin 同步全站暫停中，已匯入的活動都還在",
-    GARMIN_UNAVAILABLE: "這台伺服器沒有安裝 Garmin 同步需要的套件",
-  }[code] || (m.startsWith("409") ? "另一個登入還在進行中，請稍候" : reason(e)) };
+  const G = {
+    GARMIN_LOGIN_FAILED: "garmin_e_login", GARMIN_MFA_WRONG: "garmin_e_mfa_wrong", GARMIN_MFA_EXPIRED: "garmin_e_mfa_expired",
+    GARMIN_CONSENT_REQUIRED: "consent_first", GARMIN_RATE_LIMITED: "garmin_e_locked", GARMIN_DISABLED: "garmin_e_off",
+    GARMIN_UNAVAILABLE: "garmin_e_missing",
+  };
+  return { code, text: code === "GARMIN_PAUSED" ? (GARMIN.site.message || tSy("garmin_e_locked"))
+    : G[code] ? tSy(G[code]) : (m.startsWith("409") ? tSy("login_busy") : reason(e)) };
 }
 async function garminLogin(btn) {
   const user = f("garmin", "user").value.trim(), pass = f("garmin", "pass").value;
-  if (!user || !pass) { toast("請輸入帳號與密碼"); return; }
+  if (!user || !pass) { toast(tSy("need_user_pass")); return; }
   const body = { email: user, password: pass, remember: f("garmin", "remember").checked };
   if (!f("garmin", "consentrow").hidden) {
     // no connection without the disclaimer ticked; its version goes with the login
-    if (!f("garmin", "consent").checked) { toast("請先閱讀並勾選上面的聲明"); return; }
+    if (!f("garmin", "consent").checked) { toast(tSy("consent_first")); return; }
     body.consent_version = GARMIN.disclaimer.version;
   }
-  authMsg("garmin", "連接中…（Garmin 登入可能要 10–30 秒）");
+  authMsg("garmin", tSy("garmin_connecting_long"));
   try {
-    const r = await busy(btn, "連接中…", () => j("/api/v1/auth/garmin/login", { method: "POST",
+    const r = await busy(btn, tSy("garmin_connecting"), () => j("/api/v1/auth/garmin/login", { method: "POST",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
-    if (r.mfa_required) { authMsg("garmin", "請輸入 Garmin 寄給你的驗證碼"); toast("請輸入驗證碼"); }
-    else { authMsg("garmin", "已連接 Garmin" + (r.password_saved ? "，已記住密碼" : ""), "ok-text"); toast("已連接 Garmin"); }
-  } catch (e) { authMsg("garmin", "連接失敗：" + garminErr(e).text, "err-text"); toast("連接失敗"); }
+    if (r.mfa_required) { authMsg("garmin", tSy("garmin_mfa_sent")); toast(tSy("garmin_mfa_need")); }
+    else { authMsg("garmin", tSy(r.password_saved ? "garmin_connected_saved" : "garmin_connected"), "ok-text"); toast(tSy("garmin_connected")); }
+  } catch (e) { authMsg("garmin", tSy("garmin_connect_failed", { msg: garminErr(e).text }), "err-text"); toast(tSy("garmin_connect_failed_short")); }
   finally { f("garmin", "pass").value = ""; loadSources(); }
 }
 async function garminMfa(btn) {
   const code = f("garmin", "mfa").value.trim();
-  if (!code) { toast("請輸入驗證碼"); return; }
+  if (!code) { toast(tSy("garmin_mfa_need")); return; }
   try {
-    const r = await busy(btn, "驗證中…", () => j("/api/v1/auth/garmin/mfa", { method: "POST",
+    const r = await busy(btn, tSy("garmin_verifying"), () => j("/api/v1/auth/garmin/mfa", { method: "POST",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }));
     f("garmin", "mfa").value = "";
-    authMsg("garmin", "已連接 Garmin" + (r.password_saved ? "，已記住密碼" : ""), "ok-text"); toast("已連接 Garmin");
+    authMsg("garmin", tSy(r.password_saved ? "garmin_connected_saved" : "garmin_connected"), "ok-text"); toast(tSy("garmin_connected"));
     loadSources();
   } catch (e) {
     const g = garminErr(e);
@@ -2956,30 +2943,30 @@ async function garminMfa(btn) {
 
 async function login(src, method, btn) {
   const user = f(src, "user").value.trim(), pass = f(src, "pass").value;
-  if (!user || !pass) { toast("請輸入帳號與密碼"); return; }
+  if (!user || !pass) { toast(tSy("need_user_pass")); return; }
   const url = src === "coros" ? "/api/v1/auth/coros/login" : "/api/v1/auth/tp/login";
   const remember = f(src, "remember").checked;
   const body = src === "coros" ? { email: user, password: pass, remember } : { username: user, password: pass, method, remember };
   if (src === "coros" && !f("coros", "consentrow").hidden) {
     // SP-385: no connection without the disclaimer ticked; its version goes with the login
-    if (!f("coros", "consent").checked) { toast("請先閱讀並勾選上面的聲明"); return; }
+    if (!f("coros", "consent").checked) { toast(tSy("consent_first")); return; }
     body.consent_version = COROS_DISCLAIMER.version;
   }
   // every login / logout / sync button of this source waits for this one
   const others = [...box(src).querySelectorAll("button[data-act]")].filter((b) => b !== btn);
   others.forEach((b) => b.disabled = true);
-  authMsg(src, "登入中…");
+  authMsg(src, tSy("logging_in"));
   try {
-    await busy(btn, "登入中…", async () => {
+    await busy(btn, tSy("logging_in"), async () => {
       const r = await j(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const how = src === "tp" ? `（${r.method === "oauth" ? "OAuth" : "網站"}）` : "";
-      const saved = r.password_saved ? "，已記住密碼" : "";
-      authMsg(src, `登入成功${how}${saved}`, "ok-text");
-      toast(`登入成功${how}`);
+      const how = src === "tp" ? tSy("login_via", { how: r.method === "oauth" ? "OAuth" : tSy("login_via_web") }) : "";
+      const saved = r.password_saved ? tSy("login_saved") : "";
+      authMsg(src, tSy("login_ok", { how, saved }), "ok-text");
+      toast(tSy("login_ok", { how, saved: "" }));
     });
   } catch (e) {
-    const why = e.message.startsWith("409") ? "另一個登入還在進行中，請稍候" : reason(e);
-    authMsg(src, "登入失敗：" + why, "err-text"); toast("登入失敗");
+    const why = e.message.startsWith("409") ? tSy("login_busy") : reason(e);
+    authMsg(src, tSy("login_failed", { msg: why }), "err-text"); toast(tSy("login_failed_short"));
   } finally {
     others.forEach((b) => b.disabled = false);
     f(src, "pass").value = "";                 // never kept in the page
@@ -2987,18 +2974,18 @@ async function login(src, method, btn) {
   }
 }
 async function logout(src, btn) {
-  authMsg(src, "登出中…");
+  authMsg(src, tSy("logging_out"));
   try {
-    const out = await busy(btn, "登出中…", () => j(`/api/v1/auth/${src}/logout`, { method: "POST" }));
-    if (src === "garmin") { authMsg(src, "已中斷連接（登入憑證和儲存的密碼已刪除，已匯入的活動保留）", "ok-text"); toast("已中斷連接"); }
+    const out = await busy(btn, tSy("logging_out"), () => j(`/api/v1/auth/${src}/logout`, { method: "POST" }));
+    if (src === "garmin") { authMsg(src, tSy("garmin_disconnected"), "ok-text"); toast(tSy("garmin_disconnected_short")); }
     else if (src === "intervals") {
       // disconnect-app failed at intervals.icu: the token is deleted here anyway; say where to remove the app
       authMsg(src, tSy(out && out.remote === "failed" ? "icu_disconnected_remote_failed" : "icu_disconnected"),
         out && out.remote === "failed" ? "err-text" : "ok-text");
       toast(tSy("icu_disconnected_short"));
     }
-    else { authMsg(src, "已登出（儲存的密碼已刪除）", "ok-text"); toast("已登出"); }
-  } catch (e) { authMsg(src, "登出失敗：" + reason(e), "err-text"); }
+    else { authMsg(src, tSy("logged_out_msg"), "ok-text"); toast(tSy("logged_out_short")); }
+  } catch (e) { authMsg(src, tSy("logout_failed", { msg: reason(e) }), "err-text"); }
   loadSources();
 }
 for (const src of ["coros", "garmin", "tp"]) {
@@ -3007,8 +2994,8 @@ for (const src of ["coros", "garmin", "tp"]) {
     try {
       const r = await j(`/api/v1/auth/${src}/remember`, { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ remember: false }) });
-      authMsg(src, r.password_saved ? "刪除失敗" : "已刪除儲存的密碼", r.password_saved ? "err-text" : "ok-text");
-    } catch (err) { authMsg(src, "刪除失敗：" + reason(err), "err-text"); e.target.checked = true; }
+      authMsg(src, tSy(r.password_saved ? "pw_delete_failed_short" : "pw_deleted"), r.password_saved ? "err-text" : "ok-text");
+    } catch (err) { authMsg(src, tSy("pw_delete_failed", { msg: reason(err) }), "err-text"); e.target.checked = true; }
   };
 }
 
@@ -3037,7 +3024,7 @@ async function syncNow(src) {
       else if (ev.status === "error" || ev.error) logLine(src, `✗ ${day} ${id} ${ev.error || ""} ${ev.detail || ""}`, "e");
       else if (ev.status === "complete") {
         logLine(src, t("settings.sync.ev_complete", { dl: ev.total_downloaded, checked: ev.total_checked, err: (ev.errors || []).length }), "d");
-        if (ev.more) logLine(src, ev.detail || "今天的下載量已到上限，剩下的明天自動繼續", "d");
+        if (ev.more) logLine(src, ev.detail || tSy("ev_more"), "d");
       }
       if (st.total) { prog.max = st.total; prog.value = Math.min(st.checked, st.total); }
       txt.textContent = t("settings.sync.progress", { checked: st.checked + (st.total ? " / " + st.total : ""), dl: st.downloaded, err: st.errors });
@@ -3061,18 +3048,22 @@ let PURGE_SRC = null;
 function openPurge(src) {
   PURGE_SRC = src;
   const st = SOURCES[src].stats, name = SRC_NAME[src];
-  $("pd-title").textContent = `刪除 ${name} 的同步檔案`;
-  $("pd-body").innerHTML = `會刪除 <b>${esc(name)}</b> 的 <b>${st.files}</b> 個 FIT 檔（<b>${esc(st.size)}</b>，${esc(st.folder)}），`
-    + `以及資料庫裡的 ${st.rows} 筆活動紀錄，並重設同步進度（之後重新同步會重新下載）。`
-    + `對照資料夾和另一個來源的檔案不受影響。`
+  $("pd-title").textContent = t("settings.purge.title_src", { src: name });
+  // the source, the file count and the size are bold: the sentence is escaped, then the marks become <b>
+  const b = (v) => `<b>${esc(v)}</b>`;
+  const files = t("settings.purge.files", { n: st.files }).replace(String(st.files), "\u0002");
+  $("pd-body").innerHTML = esc(t("settings.purge.body", { src: "\u0001", files, size: "\u0003", folder: st.folder, rows: st.rows }))
+      .replace("\u0001", b(name)).replace("\u0002", b(st.files)).replace("\u0003", b(st.size))
     + (SS.chart_data_source !== "wko5" && SS.primary_folder === src
-      ? `<br><b>這是目前的資料來源：刪除後圖表沒有資料${SS.wko5_available ? "，會改用對照資料夾" : ""}，重新同步才會回來。</b>` : "");
+      ? `<br><b>${esc(t(SS.wko5_available ? "settings.purge.current_wko5" : "settings.purge.current"))}</b>` : "");
   $("pd-word").textContent = name; $("pd-input").value = ""; $("pd-from").value = ""; $("pd-to").value = "";
   $("pd-ok").disabled = true; $("purge-dlg").showModal();
 }
 $("pd-input").oninput = (e) => {
   const v = e.target.value.trim();
-  $("pd-ok").disabled = !(v === "刪除" || v.toLowerCase() === SRC_NAME[PURGE_SRC].toLowerCase());
+  // the page's word (刪除 / delete) or the source's name
+  $("pd-ok").disabled = !(v.toLowerCase() === t("settings.purge.word").toLowerCase()
+    || v.toLowerCase() === SRC_NAME[PURGE_SRC].toLowerCase());
 };
 $("pd-cancel").onclick = () => $("purge-dlg").close();
 $("pd-ok").onclick = async () => {
@@ -3081,13 +3072,13 @@ $("pd-ok").onclick = async () => {
   if ($("pd-to").value) q.set("date_to", $("pd-to").value);
   try {
     const r = await fetch(`${SYNC}/${PURGE_SRC}/files?${q}`, { method: "DELETE" });
-    if (r.status === 409) { toast("這個來源正在同步中，請稍後再刪"); return; }
+    if (r.status === 409) { toast(t("settings.purge.busy")); return; }
     if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
     const res = await r.json();
-    toast(`已刪除 ${res.files_deleted} 個檔案、${res.rows_deleted} 筆紀錄`
-      + (res.chart_source_switched_to_wko5 ? "；圖表已改回對照資料夾" : ""));
+    toast(t("settings.purge.done", { files: res.files_deleted, rows: res.rows_deleted })
+      + (res.chart_source_switched_to_wko5 ? t("settings.purge.done_wko5") : ""));
     $("purge-dlg").close(); loadSyncSettings(); loadSources();
-  } catch (e) { toast("刪除失敗：" + e.message.slice(0, 100)); }
+  } catch (e) { toast(t("settings.purge.failed", { msg: e.message.slice(0, 100) })); }
 };
 
 for (const src of ["coros", "garmin", "tp", "intervals"]) {
@@ -3221,9 +3212,9 @@ function calibRows(items) {
   $("calib-rows").innerHTML = items.map((it) => `<tr data-n="${esc(it.name)}">
     <td>${esc(it.label)}${it.warn ? `<div class="err-text">⚠ ${esc(it.warn)}</div>` : ""}</td>
     <td>${Number(it.value).toFixed(it.digits)} ${esc(it.unit)} ${calibChip(it.chip, it.source)}</td>
-    <td><input type="number" step="${it.integer ? 1 : "any"}" style="width:80px" placeholder="手動" ${it.source === "user" ? `value="${it.value}"` : ""}
+    <td><input type="number" step="${it.integer ? 1 : "any"}" style="width:80px" placeholder="${esc(t("settings.calib.manual"))}" ${it.source === "user" ? `value="${it.value}"` : ""}
       ${it.bounds ? `min="${it.bounds[0]}" max="${it.bounds[1]}"` : ""}>
-      <button data-a="set">指定</button>${it.source === "user" ? ' <button data-a="auto">改回自動</button>' : ""}</td></tr>`).join("");
+      <button data-a="set">${esc(t("settings.calib.set"))}</button>${it.source === "user" ? ` <button data-a="auto">${esc(t("settings.pmc.clear"))}</button>` : ""}</td></tr>`).join("");
 }
 async function loadCalib() {
   try { calibRows((await j(CAL)).items); } catch (e) { $("calib").hidden = true; return; }
@@ -3235,47 +3226,47 @@ $("calib-rows").onclick = async (e) => {
   // the chip's explanation on a tap too (title is hover only — phones have none; SP-69)
   const c = e.target.closest(".cchip");
   if (c) { const tip = $("calib-tip"), row = c.closest("tr");
-    tip.textContent = `${row.cells[0].textContent}：${c.title}`; tip.hidden = false; tip.classList.remove("err-text"); return; }
+    tip.textContent = row.cells[0].textContent + t("settings.colon") + c.title; tip.hidden = false; tip.classList.remove("err-text"); return; }
   const b = e.target.closest("button"); if (!b) return;
   const tr = b.closest("tr"), name = tr.dataset.n;
   try {
     if (b.dataset.a === "auto") await j(`${CAL}/${name}`, { method: "DELETE" });
     else {
       const v = parseFloat(tr.querySelector("input").value);
-      if (!Number.isFinite(v)) return toast("請輸入數字");
+      if (!Number.isFinite(v)) return toast(t("settings.calib.need_number"));
       await j(`${CAL}/${name}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: v }) });
     }
-    toast("已儲存"); $("calib-tip").hidden = true; loadCalib();
+    toast(t("settings.calib.saved")); $("calib-tip").hidden = true; loadCalib();
   } catch (err) {
     // the API's own message (e.g. SP-295: re-lock ≥ max gap), kept under the table — the toast goes after 1.8 s
     const m = reason(err), tip = $("calib-tip");
-    tip.textContent = `${tr.cells[0].textContent}：${m}`; tip.hidden = false; tip.classList.add("err-text");
-    toast("儲存失敗：" + m);
+    tip.textContent = tr.cells[0].textContent + t("settings.colon") + m; tip.hidden = false; tip.classList.add("err-text");
+    toast(t("settings.calib.save_failed", { msg: m }));
   }
 };
 $("calib-rpe").onclick = (e) => {          // a level's chip: its explanation on a tap too (as the rows above)
   const c = e.target.closest(".cchip"); if (!c) return;
-  const tip = $("calib-tip"); tip.textContent = `${c.closest("tr").cells[0].textContent}：${c.title}`; tip.hidden = false; tip.classList.remove("err-text");
+  const tip = $("calib-tip"); tip.textContent = c.closest("tr").cells[0].textContent + t("settings.colon") + c.title; tip.hidden = false; tip.classList.remove("err-text");
 };
 // SP-714: the fit is queued on the server (jobs); poll GET /run until it is done
 async function waitCalib(b) {
   for (;;) {
     const r = await j(`${CAL}/run`), job = r.job || { state: "done", written: [] };
     if (job.state === "queued" || job.state === "running") {
-      $("calib-msg").textContent = job.state === "queued" && job.position > 1 ? `已排入，前面還有 ${job.position - 1} 件` : "估算中…";
+      $("calib-msg").textContent = job.state === "queued" && job.position > 1 ? t("settings.calib.queued_n", { n: job.position - 1 }) : t("settings.calib.running");
       await new Promise((ok) => setTimeout(ok, 2000)); continue;
     }
     calibRows(r.items);
     j(`${SYNC}/settings`).then((s) => showRpe(s.rpe_load)).catch(() => {});      // the RPE levels refit too (SP-57)
-    $("calib-msg").textContent = job.state === "failed" ? "失敗：" + String(job.error || "").slice(0, 80)
-      : (job.written || []).length ? `更新了 ${job.written.length} 項` : "資料還不夠，維持原值";
+    $("calib-msg").textContent = job.state === "failed" ? t("settings.failed", { msg: String(job.error || "").slice(0, 80) })
+      : (job.written || []).length ? t("settings.calib.updated", { n: job.written.length }) : t("settings.calib.not_enough");
     return;
   }
 }
 $("calib-run").onclick = async (e) => {
-  const b = e.currentTarget; b.disabled = true; $("calib-msg").textContent = "已排入…";
+  const b = e.currentTarget; b.disabled = true; $("calib-msg").textContent = t("settings.calib.queued");
   try { await j(`${CAL}/run`, { method: "POST" }); await waitCalib(b); }
-  catch (err) { $("calib-msg").textContent = window.AppCooldown?.is(err) ? "" : "失敗：" + err.message.slice(0, 80); }
+  catch (err) { $("calib-msg").textContent = window.AppCooldown?.is(err) ? "" : t("settings.failed", { msg: err.message.slice(0, 80) }); }
   b.disabled = false;
 };
 
@@ -3841,7 +3832,7 @@ loadMode(); loadApplied(); loadProfile().then(drawEquip); loadHr(); loadThr(); l
 loadPowerState(); loadPrefs(); loadBasis();          // 訓練依據 (SP-955)
 loadArchive(); loadCalib(); loadCal();
 loadAccount();
-loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
+loadSyncSettings().then(loadSources).catch((e) => toast(tSy("load_failed", { msg: e.message.slice(0, 80) })));
 // 匯入 FIT (SP-323): the imported files sit in the 資料來源's folder, so its stats change too
 if (window.FitImport) FitImport.mount($("fit-import"), { listLink: true, onDone: (r) => { if (r.added || r.duplicate) loadSources(); } });
 // 匯入匯出檔 (SP-349): a whole-account export in the background; its activities change the sources' stats too

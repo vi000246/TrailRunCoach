@@ -275,8 +275,12 @@ def _src(value, source, **extra):
 
 
 def py(o):
-    """numpy scalars → Python, recursively; non-finite floats → None (FastAPI cannot encode them)."""
+    """numpy scalars → Python, recursively; non-finite floats → None (FastAPI cannot encode them);
+    an M_() text (a cached result's: athlete.derive, intensity) in the request's language (SP-838)."""
     import numpy as np
+    from backend.i18n import Msg, relocalize
+    if isinstance(o, Msg):
+        return relocalize(o)
     if isinstance(o, dict):
         return {k: py(v) for k, v in o.items()}
     if isinstance(o, (list, tuple)):

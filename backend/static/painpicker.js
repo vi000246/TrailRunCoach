@@ -13,7 +13,9 @@
   const API = "/api/v1/app/injuries";
   const PAGE = `${API}/page`;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const LEVELS = [[0, "沒痛"], [1, "痠"], [2, "痛"], [3, "中斷"]];
+  // i18n: common.painpicker.* (static/i18n/<locale>/common.json; read when drawn, after i18n.js)
+  const T = (k, p) => (window.I18N ? window.I18N.t("common.painpicker." + k, p) : k);
+  const LEVELS = [0, 1, 2, 3];
   const CSS = `
   .pp { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .pp .pp-seg { display: inline-flex; border: 1px solid var(--line, #e1e5ea); border-radius: 8px; overflow: hidden; width: max-content; max-width: 100%; }
@@ -64,8 +66,9 @@
   function linkChip(inj) {
     if (!inj) return "";
     const cls = inj.status === "draft" ? "draft" : inj.open ? "" : "ok";
-    const txt = `傷病紀錄 #${inj.id}・${inj.label}（${inj.status_label}${inj.open ? `，第 ${inj.day_n} 天` : ""}）`;
-    return `<a class="pp-link ${cls}" href="${PAGE}?id=${inj.id}" title="打開傷病紀錄">${esc(txt)} ›</a>`;
+    const st = inj.open ? T("status_day", { status: inj.status_label, n: inj.day_n }) : inj.status_label;
+    const txt = T("link", { id: inj.id, label: inj.label, status: st });
+    return `<a class="pp-link ${cls}" href="${PAGE}?id=${inj.id}" title="${esc(T("open"))}">${esc(txt)} ›</a>`;
   }
 
   function html(state, m, opts = {}) {
@@ -73,17 +76,17 @@
     const s = state || {};
     const p = s.pain;
     const areas = (m && m.areas) || [];
-    const seg = LEVELS.map(([v, t]) => `<button type="button" data-p="${v}" aria-pressed="${p === v}">${t}</button>`).join("");
+    const seg = LEVELS.map((v) => `<button type="button" data-p="${v}" aria-pressed="${p === v}">${esc(T("level." + v))}</button>`).join("");
     const showAreas = p != null && p >= 1;
     const area = s.pain_area;
     const noSide = (m && m.no_side) || [];
-    const chips = showAreas ? `<div class="pp-chips" role="group" aria-label="部位">
+    const chips = showAreas ? `<div class="pp-chips" role="group" aria-label="${esc(T("area"))}">
         ${areas.map((a) => `<button type="button" data-area="${esc(a.key)}" aria-pressed="${area === a.key}">${esc(a.label)}</button>`).join("")}
-        <input type="text" data-add-area maxlength="12" placeholder="＋其他部位" aria-label="新增部位，Enter">
+        <input type="text" data-add-area maxlength="12" placeholder="${esc(T("add_ph"))}" aria-label="${esc(T("add_aria"))}">
         ${p >= 2 && area && !noSide.includes(area) ? `<span class="pp-sep"></span>
           ${Object.entries((m && m.sides) || {}).map(([k, t]) => `<button type="button" data-side="${k}" aria-pressed="${(s.side ?? s.injury?.side) === k}">${esc(t)}</button>`).join("")}` : ""}
       </div>` : "";
-    const re = s.reentry ? `<div class="pp-re">恢復期：跑完記一下有沒有痛${opts.qtip ? opts.qtip(s.reentry.monitor || "") : ""}</div>` : "";
+    const re = s.reentry ? `<div class="pp-re">${esc(T("reentry"))}${opts.qtip ? opts.qtip(s.reentry.monitor || "") : ""}</div>` : "";
     // SP-271: the optional 0–10 「跑的時候最痛幾分」 next to a mark (labels server-translated)
     const lab = (m && m.labels) || {};
     const sc = s.pain_score;
@@ -95,7 +98,7 @@
     const mon = s.injury && s.injury.open && s.injury.monitor
       ? `<div class="pp-mon">${esc(s.injury.monitor + (m && m.disclaimer ? "\n" + m.disclaimer : ""))}</div>` : "";
     return `<div class="pp ${s.reentry && p == null ? "pp-hl" : ""}">
-      <div class="pp-seg" role="group" aria-label="疼痛">${seg}</div>${score}${chips}${linkChip(s.injury)}${mon}${re}
+      <div class="pp-seg" role="group" aria-label="${esc(T("pain"))}">${seg}</div>${score}${chips}${linkChip(s.injury)}${mon}${re}
       <div class="pp-msg" aria-live="polite"></div></div>`;
   }
 
@@ -103,12 +106,12 @@
     const s = state || {};
     const msg = (t, err) => { const el = root.querySelector(".pp-msg"); if (el) { el.textContent = t || ""; el.className = "pp-msg" + (err ? " err" : ""); } };
     const go = async (patch) => {
-      msg("儲存中…");
+      msg(T("saving"));
       root.querySelectorAll(".pp button").forEach((b) => { b.disabled = true; });
       try {
         await save(patch);
       } catch (e) {
-        msg("儲存失敗：" + e.message, true);
+        msg(T("save_failed", { msg: e.message }), true);
         root.querySelectorAll(".pp button").forEach((b) => { b.disabled = false; });
       }
     };
@@ -134,7 +137,7 @@
       e.preventDefault();
       const v = add.value.trim();
       if (!v) return;
-      if (v.length > 12) { msg("部位名稱最多 12 字", true); return; }
+      if (v.length > 12) { msg(T("too_long", { n: 12 }), true); return; }
       await go({ pain: s.pain, pain_area: v });
       meta(true);
     });

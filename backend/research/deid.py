@@ -324,8 +324,8 @@ def daily_load(donor_id: str, per_day: dict, injury_days: set) -> list[dict]:
 
 def person_params(tracks: list[Track], donor: Donor) -> Optional[dict]:
     """A layer: one row per person (sex, age band, numbers), aggregated across people and dropped.
-    The prototype's three parameters; the research doc §14.5 item 5 would take engine/calibrate.py's
-    fitted ones instead (a later step)."""
+    The prototype's three parameters from the tracks; engine/calibrate.py's fitted items join them in
+    research/a_layer.collect (SP-812, research doc §14.5 item 5)."""
     band = age_band(donor.age)
     if not tracks or band is None:
         return None

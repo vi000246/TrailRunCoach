@@ -45,6 +45,7 @@ import numpy as np
 
 from backend.engine import zones as _Z
 from backend.engine.hr_quality import cadence_lock     # noqa: F401 — the shared definition (SP-265)
+from backend.i18n import N_, _
 
 # Palladino's running power zones (owner 2026-10-02: Palladino everywhere): a VO2 bout is
 # zone 5 (≥ 106 % CP) for ≥ 2 min, or the upper part of zone 4 (supra-threshold, 103–106 %)
@@ -69,19 +70,26 @@ MOVING_MS = 0.5
 HR_BPM_LO, HR_BPM_HI = 130, 215          # the HR path's stored threshold range
 HRPEAK_RANK, HRPEAK_DAYS = 3, 365
 
-SRC = {
-    "t_vo2": "Buchheit & Laursen 2013（Sports Med 43:313）：每堂 ≥ 90% VO2max「at least several minutes」，目標約 10 分",
-    "z5_min": "推估：等效 T@VO2max ≥ 4 分（「幾分鐘」；5×2 分做完是 4.5 分）",
-    "bouts": "VO2 段：Palladino 5 區（≥ 106% CP）撐 ≥ 2 分，或 4 區上段（103–106%）撐 ≥ 5 分。"
-             "教練常見做法：106–120% CP 2–5 分、100–105% 5–8 分（未標出處，推估）；台灣教練：每趟 ≥ 2 分；"
-             "103% 比 CP 高 3% 是推估的緩衝（CP 本身有誤差），也是 Palladino MAP 間歇的下限",
-    "lag": "Buchheit §3.1.1.2：攝氧量 1:20–2:20 才到最大；每段扣 60／90／180 秒是推估",
-    "hr": "手腕心率只當替代：≥ 93% 最高心率（推估；Swain 1994 換算 90% VO2max ≈ 95% HRmax、Daniels T 上緣 92%），"
-          "時間 ÷ 1.6（Fleckenstein 2025：胸帶心率 > 90% 的時間是攝氧量的 1.7 倍）",
-    "z3": "Zone 3：功率 ≥ 88% CP、每段 ≥ 2.5 分；心率 ≥ 95% LTHR、扣每段前 3 分（心率延遲）；累積 ≥ 10 分",
-    "trail": "越野只在 −3…8% 坡用功率（van Rassel 2026），陡坡用心率，下坡都不算；百岳不自動判 5 區",
-    "hrpeak": "最高心率：計畫裡的最大心率；沒填時用 365 天內每趟 60 秒最高心率的第 3 高（推估：最高的幾個常是光學錯誤）",
-}
+class _Texts(dict):
+    """SRC[key] is the text in the request's language (the values are msgids; .get / .values give them as is)."""
+
+    def __getitem__(self, key):
+        return _(dict.__getitem__(self, key))
+
+
+SRC = _Texts({
+    "t_vo2": N_("Buchheit & Laursen 2013（Sports Med 43:313）：每堂 ≥ 90% VO2max「at least several minutes」，目標約 10 分"),
+    "z5_min": N_("推估：等效 T@VO2max ≥ 4 分（「幾分鐘」；5×2 分做完是 4.5 分）"),
+    "bouts": N_("VO2 段：Palladino 5 區（≥ 106% CP）撐 ≥ 2 分，或 4 區上段（103–106%）撐 ≥ 5 分。"
+                "教練常見做法：106–120% CP 2–5 分、100–105% 5–8 分（未標出處，推估）；台灣教練：每趟 ≥ 2 分；"
+                "103% 比 CP 高 3% 是推估的緩衝（CP 本身有誤差），也是 Palladino MAP 間歇的下限"),
+    "lag": N_("Buchheit §3.1.1.2：攝氧量 1:20–2:20 才到最大；每段扣 60／90／180 秒是推估"),
+    "hr": N_("手腕心率只當替代：≥ 93% 最高心率（推估；Swain 1994 換算 90% VO2max ≈ 95% HRmax、Daniels T 上緣 92%），"
+             "時間 ÷ 1.6（Fleckenstein 2025：胸帶心率 > 90% 的時間是攝氧量的 1.7 倍）"),
+    "z3": N_("Zone 3：功率 ≥ 88% CP、每段 ≥ 2.5 分；心率 ≥ 95% LTHR、扣每段前 3 分（心率延遲）；累積 ≥ 10 分"),
+    "trail": N_("越野只在 −3…8% 坡用功率（van Rassel 2026），陡坡用心率，下坡都不算；百岳不自動判 5 區"),
+    "hrpeak": N_("最高心率：計畫裡的最大心率；沒填時用 365 天內每趟 60 秒最高心率的第 3 高（推估：最高的幾個常是光學錯誤）"),
+})
 
 
 def _grid(t: np.ndarray, x, g: np.ndarray) -> Optional[np.ndarray]:
@@ -290,12 +298,13 @@ def verdict(stim: Optional[dict], category: str, hrpeak: Optional[float] = None,
     out = {"t_vo2_eq_s": eq, "t_vo2_power_s": t_p, "t_vo2_hr_s": t_h, "hr_thr": thr, "hrpeak": hrpeak, "z3_s": z3,
            "goal_s": Z5_GOAL_S, "need_s": Z5_MIN_S}
     if category in ("road", "trail") and (t_p >= Z5_MIN_S or (not easy_hr and eq >= Z5_MIN_S)):
-        return {**out, "stimulus": "z5", "why": f"等效 T@VO2max {eq / 60:.1f} 分 ≥ {Z5_MIN_S // 60} 分"}
+        return {**out, "stimulus": "z5", "why": _("等效 T@VO2max {eq:.1f} 分 ≥ {need} 分", eq=eq / 60, need=Z5_MIN_S // 60)}
     if not easy_hr and z3 >= Z3_NEED_S:
-        return {**out, "stimulus": "z3", "why": f"Zone 3 {z3 / 60:.0f} 分 ≥ {Z3_NEED_S // 60} 分；"
-                                                 f"等效 T@VO2max {eq / 60:.1f} 分 < {Z5_MIN_S // 60} 分"}
-    return {**out, "stimulus": None, "why": "平均心率 ≤ 輕鬆跑上限+3" if easy_hr else
-            f"Zone 3 {z3 / 60:.0f} 分 < {Z3_NEED_S // 60} 分、等效 T@VO2max {eq / 60:.1f} 分 < {Z5_MIN_S // 60} 分"}
+        return {**out, "stimulus": "z3", "why": _("Zone 3 {z3:.0f} 分 ≥ {z3need} 分；等效 T@VO2max {eq:.1f} 分 < {need} 分",
+                                                 z3=z3 / 60, z3need=Z3_NEED_S // 60, eq=eq / 60, need=Z5_MIN_S // 60)}
+    return {**out, "stimulus": None, "why": _("平均心率 ≤ 輕鬆跑上限+3") if easy_hr else
+            _("Zone 3 {z3:.0f} 分 < {z3need} 分、等效 T@VO2max {eq:.1f} 分 < {need} 分",
+              z3=z3 / 60, z3need=Z3_NEED_S // 60, eq=eq / 60, need=Z5_MIN_S // 60)}
 
 
 def planned_mp(v: dict, mp_s: Optional[float]) -> dict:

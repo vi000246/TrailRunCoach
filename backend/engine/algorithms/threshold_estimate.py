@@ -26,7 +26,7 @@ from typing import Iterable, Optional, Sequence
 
 import numpy as np
 
-from backend.i18n import _
+from backend.i18n import N_, _
 
 FRIEL_WINDOW_S = 1800
 FRIEL_TAIL_S = 1200
@@ -105,11 +105,13 @@ def estimate_lthr(runs: Iterable[RunThreshold], cp: float, min_runs: int = MIN_R
     hcp = round(statistics.median(at_cp)) if at_cp else None
     if len(friel) < min_runs:
         return LthrEstimate(None, len(friel), hcp, len(at_cp), None,
-                            f"只有 {len(friel)} 次跑步有 30 分鐘 ≥ {MIN_EFFORT_OF_CP:.0%} CP 的強度（需要 ≥ {min_runs} 次）")
+                            _("只有 {n} 次跑步有 30 分鐘 ≥ {pct:.0%} CP 的強度（需要 ≥ {k} 次）",
+                              n=len(friel), pct=MIN_EFFORT_OF_CP, k=min_runs))
     q = statistics.quantiles(friel, n=4) if len(friel) >= 4 else [friel[0], 0, friel[-1]]
     return LthrEstimate(round(statistics.median(friel)), len(friel), hcp, len(at_cp),
                         (round(q[0]), round(q[-1])),
-                        f"{len(friel)} 次跑步的最佳 30 分鐘（≥ {MIN_EFFORT_OF_CP:.0%} CP）後 20 分鐘平均心率的中位數")
+                        _("{n} 次跑步的最佳 30 分鐘（≥ {pct:.0%} CP）後 20 分鐘平均心率的中位數",
+                          n=len(friel), pct=MIN_EFFORT_OF_CP))
 
 
 # ---------------------------------------------------------------------------
@@ -204,33 +206,35 @@ def estimate_aet(points: Iterable[DriftPoint], lthr: Optional[float] = None,
     hi_ok = round(max(below)) if below else None
     if len(pts) < min_runs:
         return AetEstimate(None, len(pts), None, hi_ok,
-                           f"只有 {len(pts)} 次 ≥ 45 分鐘的穩定輕鬆跑（需要 ≥ {min_runs} 次）")
+                           _("只有 {n} 次 ≥ 45 分鐘的穩定輕鬆跑（需要 ≥ {k} 次）", n=len(pts), k=min_runs))
     x = np.array([p.hr1 for p in pts])
     y = np.array([p.drift for p in pts])
     if x.std() < 3:
-        return AetEstimate(None, len(pts), None, hi_ok, "這些跑步的心率都差不多，看不出飄移隨心率的變化")
+        return AetEstimate(None, len(pts), None, hi_ok, _("這些跑步的心率都差不多，看不出飄移隨心率的變化"))
     slope, icpt = np.polyfit(x, y, 1)
     if slope <= 0:
         return AetEstimate(None, len(pts), float(slope * 10), hi_ok,
-                           "心率越高飄移沒有跟著變大，資料不足以找出轉折點")
+                           _("心率越高飄移沒有跟著變大，資料不足以找出轉折點"))
     aet = (AET_DRIFT - icpt) / slope
     lo, hi = x.min() - 5, x.max() + 5                     # don't extrapolate far
     if lthr:
         hi = min(hi, lthr - 3)
     if not lo <= aet <= hi:
         return AetEstimate(None, len(pts), float(slope * 10), hi_ok,
-                           f"推算值 {aet:.0f} 超出資料範圍（{x.min():.0f}–{x.max():.0f} bpm），先不採用")
+                           _("推算值 {aet:.0f} 超出資料範圍（{lo:.0f}–{hi:.0f} bpm），先不採用",
+                             aet=aet, lo=x.min(), hi=x.max()))
     se = None
     try:
         # the crossing's SE for the 「± N bpm」 badge: aet = (5 % − c) / b, delta method
-        _, cov = np.polyfit(x, y, 1, cov=True)
+        _fit, cov = np.polyfit(x, y, 1, cov=True)
         g = np.array([-aet / slope, -1.0 / slope])
         v = float(g @ cov @ g)
         se = float(np.sqrt(v)) if np.isfinite(v) and v >= 0 else None
     except (ValueError, np.linalg.LinAlgError):
         se = None
     return AetEstimate(round(aet), len(pts), float(slope * 10), hi_ok,
-                       f"{len(pts)} 次穩定輕鬆跑：心率每 +10 bpm 飄移 +{slope * 1000:.1f}%，在 {aet:.0f} bpm 達到 5%",
+                       _("{n} 次穩定輕鬆跑：心率每 +10 bpm 飄移 +{d:.1f}%，在 {aet:.0f} bpm 達到 5%",
+                         n=len(pts), d=slope * 1000, aet=aet),
                        se)
 
 
@@ -278,12 +282,12 @@ def aet_aggregate(points: Sequence[tuple], lthr: Optional[float] = None, min_run
     n = len(pts)
     bad = lambda why, code, slope=None, est=None, se=None: AetAggregate(est, se, n, slope, None, False, why, code)
     if n < min_runs:
-        return bad(f"只有 {n} 次可用的穩定跑飄移（需要 ≥ {min_runs} 次）：AeT 需要測試", "few")
+        return bad(_("只有 {n} 次可用的穩定跑飄移（需要 ≥ {k} 次）：AeT 需要測試", n=n, k=min_runs), "few")
     x = np.array([p[0] for p in pts])
     y = np.array([p[1] for p in pts])
     w = 1.0 / np.array([p[2] for p in pts]) ** 2
     if x.std() < 3:
-        return bad("這些跑步的心率都差不多，看不出飄移隨心率的變化：AeT 需要測試", "flat")
+        return bad(_("這些跑步的心率都差不多，看不出飄移隨心率的變化：AeT 需要測試"), "flat")
     X = np.column_stack([np.ones(n), x])
     A = X.T @ (X * w[:, None])
     beta = np.linalg.solve(A, X.T @ (w * y))
@@ -292,7 +296,7 @@ def aet_aggregate(points: Sequence[tuple], lthr: Optional[float] = None, min_run
     cov = np.linalg.inv(A) * max(1.0, chi2)
     a, b = float(beta[0]), float(beta[1])
     if b <= 0:
-        return bad("心率越高飄移沒有跟著變大，找不出 AeT：需要測試", "slope", b * 10)
+        return bad(_("心率越高飄移沒有跟著變大，找不出 AeT：需要測試"), "slope", b * 10)
     aet = (AET_DRIFT - a) / b
     lo, hi = x.min() - 5, x.max() + 5
     if lthr:
@@ -300,18 +304,23 @@ def aet_aggregate(points: Sequence[tuple], lthr: Optional[float] = None, min_run
     g = np.array([-1.0 / b, -aet / b])
     se = float(np.sqrt(max(0.0, g @ cov @ g)))
     if not lo <= aet <= hi:
-        return bad(f"推算值 {aet:.0f} 超出資料範圍（{x.min():.0f}–{x.max():.0f} bpm）：AeT 需要測試", "range_hi" if aet > hi else "range_lo",
-                   b * 10, None, se)
+        return bad(_("推算值 {aet:.0f} 超出資料範圍（{lo:.0f}–{hi:.0f} bpm）：AeT 需要測試", aet=aet, lo=x.min(), hi=x.max()),
+                   "range_hi" if aet > hi else "range_lo", b * 10, None, se)
     shift = float(-np.mean(r[-last:]) / b)
     if se > AET_MAX_SE_BPM:
-        why = f"{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm（標準誤 > {AET_MAX_SE_BPM:.0f}）：還不夠準，需要測試"
+        why = _("{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm（標準誤 > {max:.0f}）：還不夠準，需要測試",
+                n=n, aet=aet, se=se, max=AET_MAX_SE_BPM)
         return AetAggregate(aet, se, n, b * 10, shift, False, why, "se")
     if abs(shift) > AET_SHIFT_BPM:
-        why = (f"{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm，但最近 {min(last, n)} 次一致偏"
-               f"{'高' if shift > 0 else '低'} {abs(shift):.0f} bpm（> {AET_SHIFT_BPM:.0f}）：AeT 可能變了，需要測試")
+        msg = (N_("{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm，但最近 {k} 次一致偏高 {d:.0f} bpm（> {max:.0f}）："
+                  "AeT 可能變了，需要測試") if shift > 0 else
+               N_("{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm，但最近 {k} 次一致偏低 {d:.0f} bpm（> {max:.0f}）："
+                  "AeT 可能變了，需要測試"))
+        why = _(msg, n=n, aet=aet, se=se, k=min(last, n), d=abs(shift), max=AET_SHIFT_BPM)
         return AetAggregate(aet, se, n, b * 10, shift, False, why, "shift")
-    return AetAggregate(aet, se, n, b * 10, shift, True, code="ok", reason=
-                        f"{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm（≤ {AET_MAX_SE_BPM:.0f}），最近 {min(last, n)} 次沒有偏移")
+    return AetAggregate(aet, se, n, b * 10, shift, True, code="ok", reason=_(
+                        "{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm（≤ {max:.0f}），最近 {k} 次沒有偏移",
+                        n=n, aet=aet, se=se, max=AET_MAX_SE_BPM, k=min(last, n)))
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +379,7 @@ def aet_lower_bound(points: Sequence[tuple], lthr: Optional[float] = None) -> di
     upper = mean + AET_BOUND_Z * se
     out = {**out, "value": x, "top_n": top_n, "mean": mean, "upper": upper}
     if top_n < AET_BOUND_TOP_N:
-        return {**out, "reason": f"{x:.0f} bpm 附近 5 bpm 內只有 {top_n} 次（要 ≥ {AET_BOUND_TOP_N}）"}
+        return {**out, "reason": _("{x:.0f} bpm 附近 5 bpm 內只有 {n} 次（要 ≥ {k}）", x=x, n=top_n, k=AET_BOUND_TOP_N)}
     if upper >= AET_DRIFT:
         return {**out, "reason": _("心率最高的 {k} 次平均飄移 {m:.1f}%，算上誤差可能到 {u:.1f}%（≥ 5%）：還不夠確定",
                                    k=k, m=mean * 100, u=upper * 100)}

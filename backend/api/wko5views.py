@@ -1444,9 +1444,10 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
             return {**base, "zones": zone_table(ds, system, end_day, ch.get("days", 30))}
         from backend.engine.thresholds import estimate
         est = estimate(ds, today_local()) if not ds.config.parity else {}
-        return {**base, "targets": training_targets(
+        from backend.engine.zones import shown_targets       # the texts in the request's language (SP-810)
+        return {**base, "targets": shown_targets(training_targets(
             ds, end_day, (est.get("lthr") or {}).get("value"), (est.get("aethr") or {}).get("value"),
-            (est.get("aethr") or {}).get("below"))}
+            (est.get("aethr") or {}).get("below")))}
     if ch.get("kind") != "athlete":
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     return render_chart(ch, ds, b, e, keep=_kind_filter(ds, sports))
@@ -1470,6 +1471,8 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
         plan = done_by_index() if not ds.config.parity else {}
     except Exception:                       # noqa: BLE001 — the list never breaks on the plan
         plan = {}
+    from backend.engine.stored_text import shown as _shown
+    from backend.engine.zones import WKO5_SETTING as _WKO5_SETTING
     out = []
     # SP-954: how much power each activity's page shows (full / stale / none, engine/power_display.py)
     from backend.engine import power_display as PWD
@@ -1500,7 +1503,10 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
             "tss_source": m.get("tss_source"),
             # power TSS: the FTP it divided by and where it came from (Dataset.tss_ftp),
             # e.g. 「你的測試 2026-09-30」 / 「推估：Stryd PD 模型 mFTP（…）」 / WKO5 設定
-            "ftp_used": m.get("ftp_used"), "ftp_source": m.get("ftp_source"),
+            # shown in the request's language (stored_text: a msgid, or one filled in); ftp_wko5 = the
+            # comparison folder's FTP, which the page reads instead of the source's words (SP-810)
+            "ftp_used": m.get("ftp_used"), "ftp_source": _shown(m.get("ftp_source")),
+            "ftp_wko5": (m.get("ftp_source") or "").startswith(_WKO5_SETTING),
         })
     # bad activity files (engine/bad_activity.py) are in no model, but stay in
     # the list, marked 「已排除：…」, without an index (nothing reads them)
@@ -1523,8 +1529,11 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
 
 
 def _exclusion_json(x: dict) -> dict:
-    return {k: x.get(k) for k in ("key", "file", "label", "reason", "rule", "auto", "manual", "override",
-                                  "avg_kmh", "distance", "duration", "start", "sport_type")}
+    # label / reason: zh-TW texts kept in the Dataset (bad_activity._text), shown in the request's language
+    from backend.engine.stored_text import shown
+    out = {k: x.get(k) for k in ("key", "file", "label", "reason", "rule", "auto", "manual", "override",
+                                 "avg_kmh", "distance", "duration", "start", "sport_type")}
+    return {**out, "label": shown(out["label"]), "reason": shown(out["reason"])}
 
 
 @router.get("/exclusions")

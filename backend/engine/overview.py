@@ -38,15 +38,17 @@ from backend.i18n import M_, N_, _
 # ---------------------------------------------------------------------------
 
 # colours: the validated categorical palette in its fixed slot order (light
-# mode); the page swaps in the dark-mode steps itself
+# mode); the page swaps in the dark-mode steps itself. The labels are msgids kept in zh-TW in the
+# rows (compliance / plan_match read them; the 課表 inputs are one cache for every language): the
+# API shows them in the request's language (api/overview._shown, engine/stored_text) — SP-810
 CATEGORIES = {
-    "road": ("路跑", "#2a78d6"),
-    "trail": ("越野跑", "#eb6834"),
-    "hike": ("登山健行", "#1baf7a"),
-    "bike": ("騎車", "#eda100"),
-    "strength": ("肌力", "#e87ba4"),
-    "walk": ("走路", "#008300"),
-    "other": ("其他", "#4a3aa7"),
+    "road": (N_("路跑"), "#2a78d6"),
+    "trail": (N_("越野跑"), "#eb6834"),
+    "hike": (N_("登山健行"), "#1baf7a"),
+    "bike": (N_("騎車"), "#eda100"),
+    "strength": (N_("肌力"), "#e87ba4"),
+    "walk": (N_("走路"), "#008300"),
+    "other": (N_("其他"), "#4a3aa7"),
 }
 ENDURANCE = {"road", "trail", "hike", "bike"}
 FOOT = {"road", "trail", "hike"}
@@ -363,11 +365,11 @@ def project(ctl0: float, atl0: float, planned: list[float], cc: float, ac: float
 # this week's plan
 # ---------------------------------------------------------------------------
 
-SRC_RAMP = ("每週長期訓練負荷（Chronic load）目標：基礎期 max(2, 長期負荷的 4%)、專項期 max(2.5, 長期負荷的 5%)"
+SRC_RAMP = N_("每週長期訓練負荷（Chronic load）目標：基礎期 max(2, 長期負荷的 4%)、專項期 max(2.5, 長期負荷的 5%)"
             "（Palladino：多數跑者每週約 2～5% 可撐幾週到幾個月，取上緣；至少 +2／+2.5 點是推估）")
-SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；系統性回顧找不到「10% 法則」的證據）；受傷風險線 > 20–30%："
+SRC_TEN = N_("週量增幅 ≤ 10%：保守做法（推估；系統性回顧找不到「10% 法則」的證據）；受傷風險線 > 20–30%："
            "Nielsen 2014、Damsted 2019（同儕審查）")
-SRC_31 = ("3:1 週期（三週加量、一週恢復；Friel / Uphill Athlete 常見做法，沒有試驗比較過 3:1 和 2:1）；"
+SRC_31 = N_("3:1 週期（三週加量、一週恢復；Friel / Uphill Athlete 常見做法，沒有試驗比較過 3:1 和 2:1）；"
           "恢復週是前 3 週平均的 70%（減 30%，推估，沒有研究）：查證過的 11 位教練與做法最常見減 30%"
           "（中位數也是 30%），範圍減 10–60%：跑步教練多在 15–35%，Uphill Athlete 登山課表約減一半")
 # SP-905: the parts are msgids (a session's 出處 is read part by part, engine/stored_text)
@@ -712,7 +714,7 @@ SRC_KOOP = N_("Koop《Training Essentials for Ultrarunning》")
 SRC_PALLADINO = N_("Palladino 功率區間")
 SRC_PFITZ = N_("Pfitzinger & Douglas《Advanced Marathoning》")
 SRC_DANIELS = N_("Daniels《Daniels' Running Formula》")
-SRC_TRANSITION = "Friel（Transition 3–4 週，for fun rather than fitness）；Canova（4 週輕鬆跑 ≤ 1 小時）"
+SRC_TRANSITION = N_("Friel（Transition 3–4 週，for fun rather than fitness）；Canova（4 週輕鬆跑 ≤ 1 小時）")
 
 # ---- 轉換期 (SP-73; coach-schools-zones-periodization.md R5) ---------------------------------
 # The volume is a share of the training level before the race (the 4 complete weeks before its
@@ -869,6 +871,8 @@ def _mmss(sec: float) -> str:
     return f"{s // 60}:{s % 60:02d}"
 
 # the weekly CTL goal: load_guard.ramp_goal(kind, CTL) = base max(2, 4 %), specific max(2.5, 5 %) (SP-669, Palladino)
+# data, not UI text: week_plan's long_weekday, which projection reads back with WEEKDAYS.index (SP-810: the API
+# shows it in the request's language, api/overview._shown)
 WEEKDAYS = "一二三四五六日"
 
 
@@ -2862,7 +2866,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if i is not None and i.level in ("bad", "watch") and i.action \
                 and not (iid == "testing" and (test_s is not None or cs is not None)):       # SP-288: no CP test yet
             # SP-483: the copied indicator line is OV8k — the overview's 待辦 says it, so it is not shown
-            notes.append({"level": i.level, "src": "indicator", "text": f"{i.title}：{i.action}"})
+            notes.append({"level": i.level, "src": "indicator", "text": _("{title}：{verdict}", title=i.title, verdict=i.action)})
 
     # ---- tests: suggested, not scheduled -----------------------------------
     test_suggestions = []
@@ -2944,7 +2948,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                  "activities": [activity_row(w, ds) for w in sorted(week_ws, key=lambda w: w.day)]},
         "remaining": {"hours": max(0.0, hours - done_h), "tss": max(0.0, tss_target - done_tss)},
         "why": why,
-        "rules": [SRC_RAMP, SRC_TEN, SRC_31] if kind in ("base", "specific") else [SRC_BOSQUET if kind == "taper" else SRC_UA],
+        "rules": [_(x) for x in ([SRC_RAMP, SRC_TEN, SRC_31] if kind in ("base", "specific")
+                                 else [SRC_BOSQUET if kind == "taper" else SRC_UA])],
         "history": [{"start": s.isoformat(), "hours": h, "tss": t} for s, h, t in hist],
         "load": {"ctl_week_start": ctl0, "ctl_today": ctl_today, "atl_today": atl_today,
                  "tsb_today": tsb_today, "ctl_yesterday": ctl_yday, "ctl_end": ctl_end, "atl_end": atl_end,

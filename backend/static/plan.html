@@ -247,7 +247,7 @@ function renderTimeline() {
   let h = "";
   for (const p of phases) {
     const l = pos(p.start), w = Math.max(0.3, pos(p.end) + 100 / span - l);
-    h += `<div class="seg" style="left:${l}%;width:${w}%;background:${PCOL(PKEY(p))}" title="${esc(PLAB(p))} ${p.start}～${p.end}${p.note ? "\n" + esc(p.note) : ""}">${w > 6 ? esc(PLAB(p)) : ""}</div>`;
+    h += `<div class="seg" style="left:${l}%;width:${w}%;background:${PCOL(PKEY(p))}" title="${esc(PLAB(p))} ${p.start}${esc(t("plan.range"))}${p.end}${p.note ? "\n" + esc(p.note) : ""}">${w > 6 ? esc(PLAB(p)) : ""}</div>`;
   }
   for (const w of S.b_windows) {
     const l = pos(w.start), wd = pos(w.end) + 100 / span - l;
@@ -281,7 +281,7 @@ function renderTimeline() {
     + " " + t("plan.tl.specific_src", { n: r.specific_weeks });   // SP-669: where the 8 weeks come from
   // phases cut short around two A races close together, a skipped 轉換期 (SP-90, SP-73)
   const pn = S.manual_phases ? [] : phases.filter((p) => p.note && p.end >= S.today);
-  $("#phnotes").innerHTML = pn.map((p) => `<li>${esc(PLAB(p))} ${p.start.slice(5)}～${p.end.slice(5)}${esc(t("plan.colon"))}${esc(p.note)}</li>`).join("");
+  $("#phnotes").innerHTML = pn.map((p) => `<li>${esc(PLAB(p))} ${p.start.slice(5)}${esc(t("plan.range"))}${p.end.slice(5)}${esc(t("plan.colon"))}${esc(p.note)}</li>`).join("");
 }
 
 function renderGoals() {
@@ -309,7 +309,7 @@ function renderEvents() {
     ? esc(t("plan.ev.past_hide")) : esc(t("plan.ev.past_show", { n: past.length }))}</button></td></tr>` : "";
   if (S.showPast && past.length && RACE_RES === null) loadRaceResults();
   $("#events").innerHTML = (shown.map((e) => `<tr style="${done(e) ? "opacity:.55" : ""}">
-    <td><span class="pri ${e.priority}">${e.priority}</span></td><td>${e.date}${e.days > 1 ? "～" + e.end.slice(5) : ""}</td>
+    <td><span class="pri ${e.priority}">${e.priority}</span></td><td>${e.date}${e.days > 1 ? t("plan.range") + e.end.slice(5) : ""}</td>
     <td><a href="${raceHref(e)}">${esc(e.name)}</a>${evHints(e)}${done(e) ? raceResult(e) : ""}</td><td>${esc(e.kind_label)}</td><td class="num">${e.days}</td>
     <td class="num">${fmt(e.distance_km, 1)}</td><td class="num">${fmt(e.climbing_m)}</td><td class="num">${fmt(e.climb_per_km)}</td>
     <td class="num">${fmt(e.est_hours, 1)}</td><td class="num">${esc(e.days_to >= 0 ? t("plan.ev.days_to", { n: e.days_to }) : t("plan.ev.past"))}</td>

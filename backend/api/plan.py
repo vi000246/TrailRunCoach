@@ -127,7 +127,8 @@ def _effective(plan: P.Plan, today: dt.date) -> dict:
         # the 課表's own CP and its words (zones.cp_in_effect): estimate (the PD fit) / setting / wko5
         ci = _cp_in_effect(today)
         kind = ci.get("kind")
-        src = ("estimate" if kind == "estimate" else "wko5_mftp" if ci.get("source") == "對照資料夾的 mFTP"
+        from backend.engine.zones import MFTP_SRC          # the source msgid cp_in_effect gives (untranslated)
+        src = ("estimate" if kind == "estimate" else "wko5_mftp" if ci.get("source") == MFTP_SRC
                else "setting" if ci.get("value") is not None else "none")
         cp_eff = {"value": None if ci.get("value") is None else round(float(ci["value"]), 1), "source": src,
                   "label": ci.get("source"), "date": ci.get("date")}
@@ -295,7 +296,7 @@ def get_event_gpx(eid: str):
     except EG.EventGpxError as x:
         raise HTTPException(400, str(x))
     if row is None:
-        raise HTTPException(404, "這場賽事沒有 GPX")
+        raise HTTPException(404, _("這場賽事沒有 GPX"))
     return {"gpx": EG.meta(row), "days": EG.day_stats(eid, e.days or 1)}
 
 
@@ -368,7 +369,7 @@ def put_event_gpx_splits(eid: str, body: SplitsIn):
     try:
         row = EG.set_splits(eid, body.day_splits_km)
     except EG.EventGpxError as x:
-        raise HTTPException(404 if "沒有 GPX" in str(x) else 400, str(x))
+        raise HTTPException(404 if EG.get(eid) is None else 400, str(x))       # no GPX stored: 404
     _notify(False)
     return {"gpx": EG.meta(row), "days": EG.day_stats(eid, e.days or 1)}
 
@@ -471,7 +472,7 @@ def get_event_gpx_file(eid: str):
     row = EG.get(eid)
     data = EG.read_bytes(eid) if row else None
     if data is None:
-        raise HTTPException(404, "這場賽事沒有 GPX")
+        raise HTTPException(404, _("這場賽事沒有 GPX"))
     name = row.get("filename") or "course.gpx"
     mt = "application/gpx+xml" if not name.lower().endswith(".fit") else "application/octet-stream"
     return Response(content=data, media_type=mt,
@@ -483,7 +484,7 @@ def delete_event_gpx(eid: str):
     from backend.engine import event_gpx as EG
     _plan_event(eid)
     if not EG.delete(eid):
-        raise HTTPException(404, "這場賽事沒有 GPX")
+        raise HTTPException(404, _("這場賽事沒有 GPX"))
     _notify(False)
     return {"removed": eid}
 
@@ -591,7 +592,7 @@ def get_profile():
     app_w = _app_weight()
     w_src = _("設定頁") if eff_w is not None else None
     if eff_w is None and wk["weights"]:
-        eff_w, w_src = wk["weights"][-1]["kg"], "對照資料夾"
+        eff_w, w_src = wk["weights"][-1]["kg"], _("對照資料夾")
     sex = plan.profile.get("sex") or wk["sex"]
     from backend.engine import athlete_profile as AP
     from backend.engine import experience as EX

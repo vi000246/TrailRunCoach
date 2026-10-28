@@ -808,8 +808,8 @@ _THRESHOLD_KEYS = ("date", "lthr", "aethr", "mhr", "rhr", "cp", "note", "wprime"
 LTHR_METHODS = ("estimate", "friel30", "race", "lab", "manual")
 AETHR_METHODS = ("estimate", "test", "lab", "manual")
 MHR_METHODS = ("test", "race", "lab", "estimate", "manual")
-METHOD_LABEL = {"estimate": "自動估算", "friel30": "30 分鐘測試", "test": "AeT 測試", "race": "比賽",
-                "lab": "實驗室測試", "manual": "手動輸入"}
+METHOD_LABEL = {"estimate": N_("自動估算"), "friel30": N_("30 分鐘測試"), "test": N_("AeT 測試"), "race": N_("比賽"),
+                "lab": N_("實驗室測試"), "manual": N_("手動輸入")}      # msgids: shown through _()
 _FIELD_NAME = {"lthr": "LTHR", "aethr": "AeT"}
 
 
@@ -1559,12 +1559,12 @@ def b_event_windows(events: list[Event]) -> list[dict]:
 # combined targets across several upcoming events
 # ---------------------------------------------------------------------------
 
-GOAL_FIELDS = {
-    "distance_km": "距離",
-    "climbing_m": "爬升",
-    "climb_per_km": "每公里爬升",
-    "est_hours": "預估時間",
-    "days": "天數",
+GOAL_FIELDS = {                      # msgids: goals() gives them in the request's language
+    "distance_km": N_("距離"),
+    "climbing_m": N_("爬升"),
+    "climb_per_km": N_("每公里爬升"),
+    "est_hours": N_("預估時間"),
+    "days": N_("天數"),
 }
 
 
@@ -1590,7 +1590,7 @@ def goals(plan: Plan, today: dt.date, horizon_days: int = 182) -> dict:
             if best is None or v > best[0]:
                 best = (v, e)
         out[key] = None if best is None else {
-            "label": label, "value": best[0], "event_id": best[1].id, "event": best[1].name}
+            "label": _(label), "value": best[0], "event_id": best[1].id, "event": best[1].name}
     return {
         "events": [e.id for e in pool],
         "next_a": None if next_a is None else next_a.id,

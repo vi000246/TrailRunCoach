@@ -26,9 +26,11 @@ import statistics
 from pathlib import Path
 from typing import Optional
 
+from backend.i18n import N_, _
+
 MIN_TRIPS = 3                     # 推估 (SP-740): recorded trips of a kind before their median is used
 MANUAL = {"single": "pack_default_single_kg", "multi": "pack_default_multi_kg"}
-KIND_ZH = {"single": "單日", "multi": "多日"}
+KIND_ZH = {"single": N_("單日"), "multi": N_("多日")}          # msgids, shown through _() (SP-838)
 
 _MEMO: dict = {}
 
@@ -89,25 +91,26 @@ def resolve(days=1, meta=None, manual_kg: Optional[float] = ..., user_id: int = 
     trips of the kind), median (theirs, or None), text (「5 kg（你記過的 5 趟單日，中位數）」),
     note (one sentence: where the number comes from)}. `manual_kg` ... = read the setting."""
     kind = kind_of(days)
-    zh = KIND_ZH[kind]
+    zh = _(KIND_ZH[kind])
     packs = recorded(meta)[kind]
     n = len(packs)
     med = round(statistics.median(packs), 1) if packs else None
     m = manual(kind, user_id) if manual_kg is ... else manual_kg
     if m is not None:
         kg, src = float(m), "manual"
-        text = f"{kg:g} kg（{zh}，進階設定）"
-        note = f"{zh}預設背負 {kg:g} kg：你在進階設定手動指定"
+        text = _("{kg:g} kg（{kind}，進階設定）", kg=kg, kind=zh)
+        note = _("{kind}預設背負 {kg:g} kg：你在進階設定手動指定", kind=zh, kg=kg)
     elif n >= MIN_TRIPS:
         kg, src = float(med), "own"
-        text = f"{kg:g} kg（你記過的 {n} 趟{zh}，中位數）"
-        note = f"你記過的 {n} 趟{zh}，中位數 {kg:g} kg"
+        text = _("{kg:g} kg（你記過的 {n} 趟{kind}，中位數）", kg=kg, n=n, kind=zh)
+        note = _("你記過的 {n} 趟{kind}，中位數 {kg:g} kg", n=n, kind=zh, kg=kg)
     else:
         kg, src = _fallback(kind), "default"
-        text = f"{kg:g} kg（{zh}）"
-        note = (f"{zh}通用值 {kg:g} kg（推估）；你記過的{zh}背負 {n} 趟，滿 {MIN_TRIPS} 趟改用自己的中位數")
-    short = {"manual": "預設背負，進階設定", "own": f"預設背負：你記過的 {n} 趟{zh}，中位數",
-             "default": "預設背負"}[src]
+        text = _("{kg:g} kg（{kind}）", kg=kg, kind=zh)
+        note = _("{kind}通用值 {kg:g} kg（推估）；你記過的{kind}背負 {n} 趟，滿 {need} 趟改用自己的中位數",
+                 kind=zh, kg=kg, n=n, need=MIN_TRIPS)
+    short = {"manual": _("預設背負，進階設定"), "own": _("預設背負：你記過的 {n} 趟{kind}，中位數", n=n, kind=zh),
+             "default": _("預設背負")}[src]
     return {"kind": kind, "kg": kg, "source": src, "n": n, "median": med, "text": text, "note": note,
             "short": short}
 
@@ -126,12 +129,12 @@ def rule_text(meta=None) -> str:
     for k in ("single", "multi"):
         r = b[k]
         if r["source"] == "default":
-            parts.append(f"{KIND_ZH[k]} {r['kg']:g} kg")
+            parts.append(_("{kind} {kg:g} kg", kind=_(KIND_ZH[k]), kg=r["kg"]))
         elif r["source"] == "own":
-            parts.append(f"{KIND_ZH[k]} {r['kg']:g} kg（你記過的 {r['n']} 趟，中位數）")
+            parts.append(_("{kind} {kg:g} kg（你記過的 {n} 趟，中位數）", kind=_(KIND_ZH[k]), kg=r["kg"], n=r["n"]))
         else:
-            parts.append(f"{KIND_ZH[k]} {r['kg']:g} kg（進階設定）")
-    return "、".join(parts)
+            parts.append(_("{kind} {kg:g} kg（進階設定）", kind=_(KIND_ZH[k]), kg=r["kg"]))
+    return _("、").join(parts)
 
 
 def forget() -> None:

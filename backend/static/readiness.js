@@ -34,11 +34,11 @@
     st.id = "rd-style";
     st.textContent = `
 .rd { --rd-good: var(--ok, #15803d); --rd-bad: var(--err, #b91c1c); --rd-warn: var(--warn, #b45309);
-  /* SP-685: the taper's colour is a light, bright cyan (the 減量期 page's 每週時數 bars are cyan too), not purple:
-     --rd-tap fills, --rd-tap-ink its text / thin marks (readable on the panel), --rd-tap-big the big 「賽前 N 天」,
+  /* SP-685: the taper's colour is a light, bright cyan (the taper page's weekly-hours bars are cyan too), not purple:
+     --rd-tap fills, --rd-tap-ink its text / thin marks (readable on the panel), --rd-tap-big the big “N days to the race”,
      --rd-tap-on the text on a fill.
      --rd-on: the text on a filled chip (white on the light theme, the dark panel on the dark one, where the
-     fills are light). --rd-rule: the table's lines, --rd-head: the 賽前第幾週 row. */
+     fills are light). --rd-rule: the table's lines, --rd-head: the weeks-to-race row. */
   --rd-tap: #22c3dd; --rd-tap-ink: #0e7490; --rd-tap-big: #0891b2; --rd-tap-on: #083344; --rd-on: var(--panel, #fff);
   --rd-rule: color-mix(in srgb, var(--muted) 22%, transparent); --rd-head: var(--accent-soft);
   container-type: inline-size; display: grid; gap: 10px; min-width: 0; font-size: 13px; }
@@ -78,7 +78,7 @@
 .rd-desk { overflow-x: auto; }
 .rd-cal { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
 .rd-cal th, .rd-cal td { padding: 4px 3px; text-align: center; border-bottom: 1px solid var(--rd-rule); }
-/* SP-685: the 賽前第幾週 row has its own band (the accent's soft tint) and a firm line under it, so it does not
+/* SP-685: the weeks-to-race row has its own band (the accent's soft tint) and a firm line under it, so it does not
    read as one more item row; the current week's column is a stronger tint of the same colour */
 .rd-cal thead th { color: var(--text); background: var(--rd-head); font-weight: 600; font-size: 11.5px; line-height: 1.3;
   padding: 6px 3px; border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
@@ -289,8 +289,8 @@
 .rd-rf { width: 100%; height: auto; display: block; margin-top: 6px; } .rd-rf text { font-size: 9px; fill: var(--muted); }
 .rd-rf .ref { stroke: color-mix(in srgb, var(--muted) 50%, var(--text)); stroke-width: 1.5; }
 .rd-rf .ln { stroke: color-mix(in srgb, var(--muted) 70%, var(--text)); stroke-width: 1.75; stroke-linejoin: round; }
-/* SP-690: the 強度分配 colours are the 區間時數 chart's 3-zone summary (the heart-rate red ramp, light → dark;
-   on the dark theme dark → light), and the 每週增量 bands are tinted as lightly as the 負荷平衡 % chart's */
+/* SP-690: the intensity-split colours are the time-in-zones chart's 3-zone summary (the heart-rate red ramp, light → dark;
+   on the dark theme dark → light), and the weekly-increase bands are tinted as lightly as the load-balance % chart's */
 .rd { --rd-z1: #faa39c; --rd-z2: #b94642; --rd-z3: #570e10; --rd-band-op: .12; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rd { --rd-z1: #8c2525; --rd-z2: #e77d75; --rd-z3: #ffefec; --rd-band-op: .16; } }
 :root[data-theme="dark"] .rd { --rd-z1: #8c2525; --rd-z2: #e77d75; --rd-z3: #ffefec; --rd-band-op: .16; }

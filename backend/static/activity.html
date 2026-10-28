@@ -234,7 +234,7 @@ dialog#exp .row .sp { flex: 1; }
 <script src="/api/v1/static/shell.js" data-page="activity"></script>
 <main>
   <div class="head">
-    <h1><span data-i18n="activity.title">活動列表</span><button type="button" class="qtip" aria-label="?"
+    <h1><span data-i18n="activity.title">活動列表</span><button type="button" class="qtip" aria-label="?" data-manual="analysis#activities"
       data-i18n-attr="data-tip:activity.help.page" data-tip="">?</button></h1>
     <div class="tabs" role="tablist" data-i18n-attr="aria-label:activity.tab.label" aria-label="">
       <button type="button" role="tab" id="tab-acts" data-tab="acts" aria-selected="true" aria-controls="acts-view" data-i18n="activity.tab.acts">活動</button>
@@ -253,9 +253,9 @@ dialog#exp .row .sp { flex: 1; }
     <select id="f-type" data-acts-only data-i18n-attr="aria-label:activity.f.type" aria-label=""></select>
     <select id="f-src" data-acts-only data-i18n-attr="aria-label:activity.f.src" aria-label=""></select>
     <label class="ck" data-pain-only data-acts-only hidden><input type="checkbox" id="f-pain"><span data-i18n="activity.f.pain">只看有疼痛</span></label>
-    <label class="ck" data-acts-only><input type="checkbox" id="f-race"><span data-i18n="activity.f.race">只看比賽</span></label><button type="button" class="qtip" data-acts-only aria-label="?" data-i18n-attr="data-tip:activity.help.race" data-tip="" style="margin-left:-4px">?</button>
-    <label class="ck" data-acts-only><input type="checkbox" id="f-unmarked"><span data-i18n="activity.f.unmarked">只看還沒標的健行</span></label><button type="button" class="qtip" data-acts-only aria-label="?" data-i18n-attr="data-tip:activity.help.f_unmarked" data-tip="" style="margin-left:-4px">?</button>
-    <label class="ck" data-acts-only><input type="checkbox" id="f-ach"><span data-i18n="activity.f.ach">有成就</span></label><button type="button" class="qtip" aria-label="?"
+    <label class="ck" data-acts-only><input type="checkbox" id="f-race"><span data-i18n="activity.f.race">只看比賽</span></label><button type="button" class="qtip" data-acts-only aria-label="?" data-manual="analysis#mark" data-i18n-attr="data-tip:activity.help.race" data-tip="" style="margin-left:-4px">?</button>
+    <label class="ck" data-acts-only><input type="checkbox" id="f-unmarked"><span data-i18n="activity.f.unmarked">只看還沒標的健行</span></label><button type="button" class="qtip" data-acts-only aria-label="?" data-manual="analysis#mark" data-i18n-attr="data-tip:activity.help.f_unmarked" data-tip="" style="margin-left:-4px">?</button>
+    <label class="ck" data-acts-only><input type="checkbox" id="f-ach"><span data-i18n="activity.f.ach">有成就</span></label><button type="button" class="qtip" aria-label="?" data-manual="analysis#activities"
       data-acts-only data-i18n-attr="data-tip:activity.help.f_ach" data-tip="" style="margin-left:-4px">?</button>
     <button type="button" class="reset" id="f-reset" data-i18n="activity.f.reset">清除篩選</button>
   </div>
@@ -277,7 +277,7 @@ dialog#exp .row .sp { flex: 1; }
       <span id="a-cls"></span>
       <label class="ck"><input type="checkbox" id="a-hidden"><span data-i18n="activity.ach.show_hidden">含隱藏</span></label>
       <button type="button" class="primary" id="a-copy" data-i18n="activity.ach.copy">複製給登山團</button>
-      <button type="button" class="qtip" aria-label="?" data-i18n-attr="data-tip:activity.ach.help" data-tip="">?</button>
+      <button type="button" class="qtip" aria-label="?" data-manual="analysis#activities" data-i18n-attr="data-tip:activity.ach.help" data-tip="">?</button>
       <span class="cnt" id="a-cnt"></span>
     </div>
     <div class="tablewrap">
@@ -787,7 +787,8 @@ async function loadAuto() {
 }
 
 // ---- 「?」 help: hover shows it, a tap / click pins it (touch has no hover) -----------
-const qt = (tip) => `<button type="button" class="qtip" aria-label="?" data-tip="${esc(tip)}">?</button>`;
+// SP-842: the mark editor's ? open the manual's 補上標記 section (pain: the injury chapter's)
+const qt = (tip, man = "analysis#mark") => `<button type="button" class="qtip" aria-label="?" data-manual="${esc(man)}" data-tip="${esc(tip)}">?</button>`;
 const QTIP = { el: null, pinned: null };
 function qtipShow(btn) {
   qtipHide();
@@ -996,7 +997,7 @@ function renderEditor() {
         const s = v && !groupOf(a) && sugGroup(a) === v;
         return `<button type="button" class="cchip${s ? " sug" : ""}" data-grp-ed="${v}" aria-pressed="${groupOf(a) === v}"${s ? ` title="${esc(T("grp.sug_tip", { v: T("grp." + v) }))}"` : ""}>${esc(v ? T("grp." + v) : T("tdiff.none"))}${s ? "?" : ""}</button>`;
       }).join("")}</div>${grpWhy(a)}</div>` : ""}
-    ${S.pain ? `<div class="fld"><span class="lab">${esc(T("col.pain"))}${qt(T("help.pain"))}</span><div class="ctl" id="pain-ctl">${PainPicker.html(painState(a), S.pain, { qtip: qt })}</div></div>` : ""}
+    ${S.pain ? `<div class="fld"><span class="lab">${esc(T("col.pain"))}${qt(T("help.pain"), "injury#pain")}</span><div class="ctl" id="pain-ctl">${PainPicker.html(painState(a), S.pain, { qtip: (t, man) => qt(t, man || "injury#pain") })}</div></div>` : ""}
     ${a.index != null ? `<div class="fld"><span class="lab">${esc(T("f_pack"))}${qt(T("help.pack"))}</span>
       <div class="ctl">${!d ? esc(T("loading")) : `<input type="number" data-pack min="0" max="40" step="0.5" inputmode="decimal" style="width:6em" value="${pk?.pack_kg ?? ""}" placeholder="—" aria-label="${esc(T("f_pack"))}"> kg`}</div></div>` : ""}
     <div class="fld"><span class="lab">${esc(T("f_tags"))}${qt(T("help.tags"))}</span>

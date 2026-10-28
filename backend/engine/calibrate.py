@@ -171,7 +171,7 @@ def chip(item: Item, entry: dict) -> dict:
                 default=fmt.format(item.default), src=dsrc)
     else:
         text = _("預設（文獻）") if item.default_is_literature else _("預設（推估）")
-        tip = (f"{label} {fmt.format(item.default)} {unit}：{dsrc}。"
+        tip = (_("{label} {value} {unit}：{src}。", label=label, value=fmt.format(item.default), unit=unit, src=dsrc)
                + (_("只有確定時才手動指定。") if item.manual_only
                   else _("本人資料 {n} 筆，滿 {min_n} 筆才會自己擬合。", n=entry.get("n") or 0, min_n=item.min_n)))
     if item.help:

@@ -15,6 +15,7 @@ from statistics import median
 from typing import Iterable, Optional
 
 from backend.engine import heat as HT
+from backend.i18n import _
 
 FROM_WINDOW_DAYS = 90            # the training-conditions window of racepower (athlete.CP_WINDOW_DAYS)
 HOT_MONTH_WINDOW_D = 15
@@ -144,13 +145,14 @@ def project_status(base: dict, race_day: Optional[dt.date] = None, planned: Opti
     if race_day:
         pj = HT.project(base["s"], dt.date.fromisoformat(base["today"]), race_day, planned)
         out["s_race"] = {"center": pj["center"], "low": pj["low"], "high": pj["high"], "date": race_day.isoformat()}
-        out["source"] = (f"近 14 天 {base['days_14']} 天熱暴露" +
-                         (f"，最後一次 {base['since_last_d']} 天前" if base["since_last_d"] is not None else "") +
-                         f"，推算到比賽日 {race_day.month}/{race_day.day}")
+        # the request's language (SP-838: the calculator's 熱適應 line)
+        out["source"] = (_("近 14 天 {n} 天熱暴露", n=base['days_14']) +
+                         (_("，最後一次 {d} 天前", d=base['since_last_d']) if base["since_last_d"] is not None else "") +
+                         _("，推算到比賽日 {m}/{d}", m=race_day.month, d=race_day.day))
     else:
-        out["source"] = f"近 14 天 {base['days_14']} 天熱暴露"
+        out["source"] = _("近 14 天 {n} 天熱暴露", n=base['days_14'])
     if (base.get("data") or {}).get("missing"):
-        out["warning"] = "還沒有每筆活動的歷史天氣（路線頁重建一次、含天氣）：S 當作 0"
+        out["warning"] = _("還沒有每筆活動的歷史天氣（路線頁重建一次、含天氣）：S 當作 0")
     return out
 
 

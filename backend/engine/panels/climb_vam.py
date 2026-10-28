@@ -19,6 +19,7 @@ import re
 from typing import Optional
 
 from backend.engine import climb_vam as CV
+from backend.i18n import _
 
 SERIES_KEY = "climb_vam_v2"      # v2: glitch rule
 WINDOW_DAYS = 56                 # 8-week rolling median
@@ -106,7 +107,7 @@ def route_map(route_index: dict, names: dict) -> tuple[dict, dict, list]:
                 continue
             key = r["id"] if d == "same" else f"{r['id']}~rev"
             of[f] = key
-            name[key] = base if d == "same" else f"{base}（反向）"
+            name[key] = base if d == "same" else _("{name}（反向）", name=base)
         for e in r.get("efforts") or []:
             k = of.get(e.get("file"))
             if k and e.get("start"):
@@ -198,9 +199,10 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
                                  "longest_s": r.get("longest_s"), "segments": len(segs),
                                  "reason": r.get("reason")})
             for s in segs:
-                if s.get("mode") == "走":
+                mk = CV.mode_key(s)
+                if mk == "walk":
                     counts["walked"] += 1
-                elif s.get("mode") == "跑":
+                elif mk == "run":
                     counts["ran"] += 1
             for x in r.get("rejected") or []:
                 counts["rejected"][x["reason"]] = counts["rejected"].get(x["reason"], 0) + 1
@@ -223,7 +225,7 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
                 "at_min": round(s["start_s"] / 60.0, 1), "duration_s": s["duration_s"],
                 "measured_s": s["measured_s"], "grade": s["grade"], "gain_m": s["gain_m"],
                 "vam": s["vam"], "hr": s["avg_hr"], "vam_hr": s["vam_hr"],
-                "mode": s["mode"], "run_share": s["run_share"], "cadence_spm": s["cadence_spm"],
+                "mode": s["mode"], "mode_key": CV.mode_key(s), "run_share": s["run_share"], "cadence_spm": s["cadence_spm"],
                 "hr_adj": hr_adj, "vam_hr_adj": round(s["vam"] / hr_adj, 3) if hr_adj else None,
                 "hadley": had, "temp_c": wx.get("temp_c"),
                 "zone": _zone(s["avg_hr"], aet, lthr), "aet": aet, "lthr": lthr,
@@ -251,15 +253,16 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
     if route is None:
         top = max((x["longest_s"] or 0 for x in runs_longest), default=0)
         n = counts["trail_runs"] + counts["hikes"]
-        rule = f"坡度 ≥ +{CV.GRADE_MIN * 100:.0f}%、連續 ≥ {CV.MIN_SEG_S / 60:.0f} 分、有心率"
+        rule = _("坡度 ≥ +{g:.0f}%、連續 ≥ {m:.0f} 分、有心率", g=CV.GRADE_MIN * 100, m=CV.MIN_SEG_S / 60)
         if n == 0:
-            out["empty"] = "這段期間沒有越野跑或登山健行"
+            out["empty"] = _("這段期間沒有越野跑或登山健行")
         elif counts["segments"] == 0:
-            out["empty"] = (f"這段期間 {n} 次越野跑／登山，都沒有符合條件的穩定爬坡段（{rule}）："
-                            f"最長的一段只有 {top / 60:.1f} 分鐘。下圖是每次活動裡最長的一段，虛線 = 門檻。")
+            out["empty"] = _("這段期間 {n} 次越野跑／登山，都沒有符合條件的穩定爬坡段（{rule}）："
+                             "最長的一段只有 {top:.1f} 分鐘。下圖是每次活動裡最長的一段，虛線 = 門檻。",
+                             n=n, rule=rule, top=top / 60)
         else:
-            out["empty"] = (f"有 {counts['segments']} 段符合條件的爬坡，但沒有一條路線（同方向）在這段期間"
-                            "有 2 次以上的活動可以比較。下圖是每次活動裡最長的一段。")
+            out["empty"] = _("有 {n} 段符合條件的爬坡，但沒有一條路線（同方向）在這段期間"
+                             "有 2 次以上的活動可以比較。下圖是每次活動裡最長的一段。", n=counts["segments"])
         return out
     pts = by_route[route["id"]]
     med = CV.rolling_median([(p["day"], p["vam_hr"]) for p in pts], WINDOW_DAYS)

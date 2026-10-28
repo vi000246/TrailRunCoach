@@ -123,7 +123,7 @@ details.mon .mon-full { margin-top: 3px; white-space: normal; }
 <body>
 <script src="/api/v1/static/shell.js" data-page="injuries"></script>
 <header>
-  <h1><span data-i18n="injuries.title">傷病紀錄</span><button type="button" class="qtip" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.tip.page" aria-label="說明" data-tip="在活動上點「痛」或「中斷」會自動開一筆紀錄（草稿），細節在這裡補。
+  <h1><span data-i18n="injuries.title">傷病紀錄</span><button type="button" class="qtip" data-manual="injury#log" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.tip.page" aria-label="說明" data-tip="在活動上點「痛」或「中斷」會自動開一筆紀錄（草稿），細節在這裡補。
 好了按「好了」。好了之後同部位又痛，會開新的一筆；離上次「好了」42 天內的會標「復發」（推估）。
 資料只存在這台電腦：不同步、也不會出現在分享連結。">?</button></h1>
   <span class="meta" id="hdr"></span>
@@ -133,7 +133,7 @@ details.mon .mon-full { margin-top: 3px; white-space: normal; }
 <main>
   <section class="panel" data-i18n-attr="aria-label:injuries.sec.timeline" aria-label="時間軸">
     <div class="ph">
-      <h2><span data-i18n="injuries.tl.title">時間軸</span><button type="button" class="qtip" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.tl.tip" aria-label="說明" data-tip="灰色長條＝每週的量（可切換），線＝長期訓練負荷（Chronic load）。
+      <h2><span data-i18n="injuries.tl.title">時間軸</span><button type="button" class="qtip" data-manual="injury#log" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.tl.tip" aria-label="說明" data-tip="灰色長條＝每週的量（可切換），線＝長期訓練負荷（Chronic load）。
 色帶＝傷病期間：顏色是部位，越深越嚴重；斜線＝還沒好。
 下面的刻度＝活動上點的「痠」（黃）、「痛／中斷」（紅），看得出痛之前有沒有連續痠。
 細線 ACWR 只參考，不預測受傷（Lövdal 2021）。">?</button></h2>
@@ -157,7 +157,7 @@ details.mon .mon-full { margin-top: 3px; white-space: normal; }
 
   <section class="panel" data-i18n-attr="aria-label:injuries.sec.analysis" aria-label="分析">
     <div class="ph">
-      <h2><span data-i18n="injuries.an.title">受傷前 vs 平常</span><button type="button" class="qtip" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.an.tip" aria-label="說明" data-tip="每次受傷前 21 天（不含開始痛那天），跟你自己其他時間的 21 天比（每 7 天取一段；傷前後 28 天、傷病期間到好了後 42 天、量太少的段不算）。
+      <h2><span data-i18n="injuries.an.title">受傷前 vs 平常</span><button type="button" class="qtip" data-manual="injury#log" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.an.tip" aria-label="說明" data-tip="每次受傷前 21 天（不含開始痛那天），跟你自己其他時間的 21 天比（每 7 天取一段；傷前後 28 天、傷病期間到好了後 42 天、量太少的段不算）。
 灰帶＝平常的中間一半（P25–P75），細線＝P10–P90，直線＝中位。彩色點＝每次受傷（顏色＝部位），點越靠右＝受傷前越高。
 次數少於 5 次只畫點，不算統計；5–14 次加「中位百分位、幾次高於中位」；15 次以上才加 OR（探索性）。
 「高於平常」＝第 75 百分位以上（推估）。急性傷（跌倒、扭到）、草稿、復發不算進來。">?</button></h2>
@@ -175,9 +175,9 @@ details.mon .mon-full { margin-top: 3px; white-space: normal; }
   <details class="panel adv" data-i18n-attr="aria-label:injuries.sec.adv" aria-label="進階設定">
     <summary data-i18n="injuries.adv.title">進階設定</summary>
     <div class="set" style="margin-top:8px">
-      <label id="set-pat-l"><input type="checkbox" id="set-pat"> <span data-i18n="injuries.adv.pattern">「跟受傷前很像」提醒</span><button type="button" class="qtip" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.adv.pattern_tip" aria-label="說明" data-tip="打開後，如果這 3 週（含課表上未來 7 天）的某個指標跟你受傷前的型態很像，建議框會出現一則提醒。
+      <label id="set-pat-l"><input type="checkbox" id="set-pat"> <span data-i18n="injuries.adv.pattern">「跟受傷前很像」提醒</span><button type="button" class="qtip" data-manual="injury#log" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.adv.pattern_tip" aria-label="說明" data-tip="打開後，如果這 3 週（含課表上未來 7 天）的某個指標跟你受傷前的型態很像，建議框會出現一則提醒。
 只是提醒，不會改課表，也不會擋課。要有 5 次以上進分析的受傷紀錄才能打開。ACWR、單調度不會觸發。">?</button></label>
-      <label><input type="checkbox" id="set-up"> <span data-i18n="injuries.adv.step_up">傷停後恢復期往上一級</span><button type="button" class="qtip" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.adv.step_up_tip" aria-label="說明" data-tip="停跑的空檔跟傷病紀錄重疊時，恢復期照下一級排（例如停 10 天照 14–28 天那一級）：傷後回來不只體能，組織也還沒適應（推估）。">?</button></label>
+      <label><input type="checkbox" id="set-up"> <span data-i18n="injuries.adv.step_up">傷停後恢復期往上一級</span><button type="button" class="qtip" data-manual="injury#comeback" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.adv.step_up_tip" aria-label="說明" data-tip="停跑的空檔跟傷病紀錄重疊時，恢復期照下一級排（例如停 10 天照 14–28 天那一級）：傷後回來不只體能，組織也還沒適應（推估）。">?</button></label>
       <span class="msg" id="set-msg"></span>
     </div>
   </details>
@@ -188,18 +188,18 @@ details.mon .mon-full { margin-top: 3px; white-space: normal; }
   <form method="dialog" id="fm">
     <h2 id="dlg-h" data-i18n="injuries.title">傷病紀錄</h2>
     <div class="fr"><span data-i18n="injuries.f.cat">種類</span><div class="c chips" id="f-cat"></div></div>
-    <div class="fr ill-only"><span><span data-i18n="injuries.f.ill">生病</span><button type="button" class="qtip" data-i18n-attr="aria-label:injuries.help" aria-label="說明" id="f-ill-tip" data-tip="">?</button></span><div class="c"><div class="chips" id="f-ill"></div><div class="meta" id="f-ill-help" style="flex-basis:100%"></div></div></div>
+    <div class="fr ill-only"><span><span data-i18n="injuries.f.ill">生病</span><button type="button" class="qtip" data-manual="injury#illness" data-i18n-attr="aria-label:injuries.help" aria-label="說明" id="f-ill-tip" data-tip="">?</button></span><div class="c"><div class="chips" id="f-ill"></div><div class="meta" id="f-ill-help" style="flex-basis:100%"></div></div></div>
     <div class="fr inj-only"><span data-i18n="injuries.f.area">部位</span><div class="c chips" id="f-area"></div></div>
-    <div class="fr inj-only"><span id="f-cond-l"><span data-i18n="injuries.f.condition">傷別（選填）</span><button type="button" class="qtip" data-i18n-attr="aria-label:injuries.help" aria-label="說明" id="f-cond-tip" data-tip="">?</button></span><div class="c"><div class="chips" id="f-cond"></div><div class="meta" id="f-cond-help" style="flex-basis:100%;white-space:pre-line"></div></div></div>
+    <div class="fr inj-only"><span id="f-cond-l"><span data-i18n="injuries.f.condition">傷別（選填）</span><button type="button" class="qtip" data-manual="injury#log" data-i18n-attr="aria-label:injuries.help" aria-label="說明" id="f-cond-tip" data-tip="">?</button></span><div class="c"><div class="chips" id="f-cond"></div><div class="meta" id="f-cond-help" style="flex-basis:100%;white-space:pre-line"></div></div></div>
     <div class="fr inj-only" id="f-side-r"><span data-i18n="injuries.f.side">側邊</span><div class="c chips" id="f-side"></div></div>
-    <div class="fr inj-only"><span><span data-i18n="injuries.f.sev">嚴重度</span><button type="button" class="qtip" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.f.sev_tip" aria-label="說明" data-tip="用對訓練的影響分：輕＝照練、中＝減量或改練、重＝停跑（推估的分法）。">?</button></span><div class="c chips" id="f-sev"></div></div>
+    <div class="fr inj-only"><span><span data-i18n="injuries.f.sev">嚴重度</span><button type="button" class="qtip" data-manual="injury#log" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.f.sev_tip" aria-label="說明" data-tip="用對訓練的影響分：輕＝照練、中＝減量或改練、重＝停跑（推估的分法）。">?</button></span><div class="c chips" id="f-sev"></div></div>
     <div class="fr inj-only"><span data-i18n="injuries.f.kind">類型</span><div class="c chips" id="f-kind"></div></div>
     <div class="fr inj-only"><span data-i18n="injuries.f.pain">最痛（選填）</span><div class="c"><input type="range" id="f-pain" min="0" max="10" step="1"><b id="f-pain-v">—</b><button type="button" class="x" id="f-pain-x" data-i18n-attr="aria-label:injuries.f.clear" aria-label="清掉">✕</button></div></div>
     <div class="fr"><span data-i18n="injuries.f.onset">開始</span><div class="c"><input type="date" id="f-onset" required></div></div>
     <div class="fr"><span id="f-res-l" data-i18n="injuries.f.res">好了</span><div class="c"><input type="date" id="f-res"><button type="button" id="f-today" data-i18n="injuries.f.today">今天好了</button><button type="button" class="x" id="f-res-x" data-i18n-attr="aria-label:injuries.f.clear" aria-label="清掉">✕</button></div></div>
     <div class="fr"><span data-i18n="injuries.f.days">停跑天數</span><div class="c"><input type="number" id="f-days" min="0" max="730" style="width:6em"><span class="meta" id="f-days-auto"></span></div></div>
     <div class="fr inj-only"><span data-i18n="injuries.f.quality">強度課</span><div class="c"><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="f-pause"> <span data-i18n="injuries.f.pause">受傷期間暫停強度課</span></label>
-      <button type="button" class="qtip" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.f.pause_tip" aria-label="說明" data-tip="勾了之後，這筆還沒好以前課表不排間歇（每一週、每個階段）。預設不勾：「輕」的痛照練是常態。">?</button></div></div>
+      <button type="button" class="qtip" data-manual="injury#log" data-i18n-attr="aria-label:injuries.help;data-tip:injuries.f.pause_tip" aria-label="說明" data-tip="勾了之後，這筆還沒好以前課表不排間歇（每一週、每個階段）。預設不勾：「輕」的痛照練是常態。">?</button></div></div>
     <div class="fr"><span data-i18n="injuries.f.note">備註</span><div class="c"><textarea id="f-note" rows="2" maxlength="1000" placeholder="例如：下坡右膝外側；看過復健科" data-i18n-attr="placeholder:injuries.f.note_ex_injury"></textarea></div></div>
     <div class="msg" id="f-msg"></div>
     <div class="dact">
@@ -372,7 +372,8 @@ function renderList() {
   }
   $("cards").innerHTML = L.map((x) => `<div class="card ${x.status === "draft" ? "draft" : ""} ${S.sel === x.id ? "on" : ""}" data-id="${x.id}">
       <div class="t"><span class="dot" style="background:${evCol(x)}"></span><span class="lab">${esc(x.label)}</span>${x.category === "illness" ? "" : `<span class="sev ${x.severity}">${esc(sevName(x.severity))}</span>`}
-        ${x.light ? `<span class="badge light-${esc(x.light.color)}" data-hint-id="IJ1" title="${esc(x.light.reason)}">${esc(x.light.label)}${x.light.phase === "walkrun" ? "・" + esc(walkrunText(x.light)) : ""}</span>` : ""}${x.condition_label ? `<span class="badge" title="${esc((S.meta?.labels || {}).condition || "")}">${esc(x.condition_label)}</span>` : ""}${x.kind === "acute" ? `<span class="badge">${esc(tr("card.acute"))}</span>` : ""}${x.recurrence_of ? `<span class="badge" title="${esc(tr("card.recur_tip"))}">${esc(tr("card.recur"))}</span>` : ""}</div>
+        ${x.light ? `<span class="badge light-${esc(x.light.color)}" data-hint-id="IJ1" title="${esc(x.light.reason)}">${esc(x.light.label)}${x.light.phase === "walkrun" ? "・" + esc(walkrunText(x.light)) : ""}</span>`
+          + (x.light.reason ? `<button type="button" class="qtip" data-manual="injury#lights" aria-label="${esc(tr("help"))}" data-tip="${esc(x.light.reason)}">?</button>` : "") : ""}${x.condition_label ? `<span class="badge" title="${esc((S.meta?.labels || {}).condition || "")}">${esc(x.condition_label)}</span>` : ""}${x.kind === "acute" ? `<span class="badge">${esc(tr("card.acute"))}</span>` : ""}${x.recurrence_of ? `<span class="badge" title="${esc(tr("card.recur_tip"))}">${esc(tr("card.recur"))}</span>` : ""}</div>
       <div class="s"><span>${ymd(x.onset_date)} – ${x.status === "resolved" ? ymd(x.resolved_date) : esc(tr(x.category === "illness" ? "card.open_ill" : "card.open"))}</span><span>${esc(tr("card.days", { n: x.day_n }))}</span>
         ${x.days_off != null ? `<span>${esc(tr("card.off", { n: x.days_off }))}${x.days_missed == null ? esc(tr("card.off_auto")) : ""}</span>` : ""}
         ${x.linked ? `<span>${esc(tr("card.linked", { n: x.linked }))}</span>` : ""}${x.pain_max != null ? `<span>${esc(tr("card.pain_max", { n: x.pain_max }))}</span>` : ""}${x.pause_quality ? `<span>${esc(tr("card.pause"))}</span>` : ""}</div>
@@ -393,7 +394,7 @@ function monitorLine(x) {
 function walkrunBtn(x) {
   const lab = S.meta?.labels || {};
   return x.open && x.light && x.light.phase === "red" ? `<button data-a="walkrun" data-hint-id="IJ2">${esc(lab.walkrun_button || tr("act.walkrun"))}</button>`
-    + (lab.walkrun_help ? `<button type="button" class="qtip" aria-label="${esc(tr("help"))}" data-tip="${esc(lab.walkrun_help)}">?</button>` : "") : "";
+    + (lab.walkrun_help ? `<button type="button" class="qtip" data-manual="injury#walk-run" aria-label="${esc(tr("help"))}" data-tip="${esc(lab.walkrun_help)}">?</button>` : "") : "";
 }
 function walkrunText(l) {
   const lab = S.meta?.labels || {};

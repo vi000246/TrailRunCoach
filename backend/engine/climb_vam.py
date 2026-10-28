@@ -38,6 +38,8 @@ from typing import Optional
 
 import numpy as np
 
+from backend.i18n import N_
+
 GRADE_MIN = 0.08                # 推估 from the athlete's data (module docstring)
 GRADE_HALF_M = 50.0             # ±50 m distance baseline for the grade
 MIN_SEG_S = 480.0               # 推估 from the athlete's data: ≥ 8 min sustained climbing
@@ -50,13 +52,21 @@ MIN_COVER = 0.9                 # share of measured seconds with HR
 MAX_GRADE = 1.0                 # 推估: a net grade above 100 % (45°) is a data glitch
 MAX_GAP_S = 30.0                # a sample gap longer than this is no data (workout_review.MAX_DT)
 
-REASONS = {
-    "no_hr": "沒有心率",
-    "no_elevation": "沒有高度",
-    "short": "連續爬坡不到門檻",
-    "coverage": "心率資料不足 90%",
-    "glitch": "淨坡度 > 100%（高度或 GPS 異常）",
+REASONS = {                     # msgids: shown through _()
+    "no_hr": N_("沒有心率"),
+    "no_elevation": N_("沒有高度"),
+    "short": N_("連續爬坡不到門檻"),
+    "coverage": N_("心率資料不足 90%"),
+    "glitch": N_("淨坡度 > 100%（高度或 GPS 異常）"),
 }
+# a segment's `mode` as stored in the disk-cached series (the word, kept as it was); code reads mode_key()
+MODE_WORD = {"run": N_("跑"), "walk": N_("走")}
+
+
+def mode_key(seg: dict) -> "Optional[str]":
+    """"run" / "walk" / None of a segment — from run_share, the rule `mode` was written by."""
+    rs = seg.get("run_share")
+    return None if rs is None else "run" if rs >= 0.5 else "walk"
 
 
 def _arr(a, n: int) -> np.ndarray:
@@ -207,7 +217,7 @@ def extract_climbs(t, dist_m, elev, hr, cadence=None, speed_kmh=None, *,
             "vam_hr": round(vam / ah, 3), "grade": round(gr, 4), "gain_m": round(float(dz), 1),
             "dist_m": None if not np.isfinite(dd) else round(float(dd), 0),
             "run_share": None if rs is None else round(rs, 2),
-            "mode": None if rs is None else ("跑" if rs >= 0.5 else "走"),
+            "mode": None if rs is None else MODE_WORD["run" if rs >= 0.5 else "walk"],
             "cadence_spm": None if cad is None else round(float(np.nanmean(g["cad"][m0:b])) * 2, 0),
         })
     return out

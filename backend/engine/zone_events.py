@@ -109,7 +109,7 @@ import statistics
 from typing import Optional
 
 from backend.engine import heat as HT
-from backend.i18n import _
+from backend.i18n import N_, _
 
 COOL_C = 25.0                 # 台灣教練：熱天心率偏高、飄移失真
 HOT_HADLEY = HT.HOT_HADLEY    # Hadley's 151–160 band (route_weather.HOT_HADLEY)
@@ -143,29 +143,30 @@ SUMMER_DAYS, SUMMER_MIN, SUMMER_SHARE = 60, 10, 0.5   # 推估
 SEASON_ACTIVE_DAYS = 60       # 推估: the cool-season suggestion stays this long after the spell starts
 APPLIED_DAYS = 14             # 推估
 
-SRC_LABEL = {"route_weather": "Open-Meteo 路線歷史天氣", "watch": "手錶溫度（扣掉手腕體溫偏差，較不準）",
-             "season": "同季節的歷史平均（沒有當天溫度，最不準）"}
-WRIST_NOTE = ("手腕光學心率在變速和低溫時誤差較大（推估）：用固定強度、穩定配速，"
+# msgids (N_): shown through _() where a suggestion is built
+SRC_LABEL = {"route_weather": N_("Open-Meteo 路線歷史天氣"), "watch": N_("手錶溫度（扣掉手腕體溫偏差，較不準）"),
+             "season": N_("同季節的歷史平均（沒有當天溫度，最不準）")}
+WRIST_NOTE = N_("手腕光學心率在變速和低溫時誤差較大（推估）：用固定強度、穩定配速，"
               "每次變速後的前 1–2 分鐘心率不採用。腕式對胸帶 rc 0.67–0.92 vs 0.996（Gillinov 2017），"
               "光學 MAE 4.5–14 bpm（Gielen 2026），腕式反應較慢（徐國峰）")
-TEST_LABEL = {"tt30": "30 分鐘獨跑測試（LTHR＋CP 檢查）", "aet": "AeT 測試", "cp": "CP 測試",
-              "hrmax": "最大心率測試"}          # hrmax: engine/threshold_confidence.py (SP-64)
+TEST_LABEL = {"tt30": N_("30 分鐘獨跑測試（LTHR＋CP 檢查）"), "aet": N_("AeT 測試"), "cp": N_("CP 測試"),
+              "hrmax": N_("最大心率測試")}          # hrmax: engine/threshold_confidence.py (SP-64)
 CONDITIONS = {
-    "tt30": "< 25 °C、平路；暖身 15 分後 30 分鐘均勻用力（不要衝開頭），第 10 分按 lap；"
-            "LTHR＝後 20 分平均心率，30 分平均功率和 CP 比對（Friel；Jones 2019）",
-    "aet": "< 25 °C、平地；固定功率 40–60 分（Uphill Athlete）或固定 E 配速 90 分（徐國峰），不要調速",
-    "cp": "< 25 °C；照課表偏好的 CP 測試方式，全力段要真的全力",
-    "hrmax": "戴胸帶、休息充足、沒生病；暖身 15 分後 3 趟 2–3 分鐘上坡，最後一趟全力（Polar）；"
-             "有心血管風險的人不要做，不舒服立刻停",
+    "tt30": N_("< 25 °C、平路；暖身 15 分後 30 分鐘均勻用力（不要衝開頭），第 10 分按 lap；"
+               "LTHR＝後 20 分平均心率，30 分平均功率和 CP 比對（Friel；Jones 2019）"),
+    "aet": N_("< 25 °C、平地；固定功率 40–60 分（Uphill Athlete）或固定 E 配速 90 分（徐國峰），不要調速"),
+    "cp": N_("< 25 °C；照課表偏好的 CP 測試方式，全力段要真的全力"),
+    "hrmax": N_("戴胸帶、休息充足、沒生病；暖身 15 分後 3 趟 2–3 分鐘上坡，最後一趟全力（Polar）；"
+                "有心血管風險的人不要做，不舒服立刻停"),
 }
 # SP-954 (owner 2026-10-27): without a Stryd (③ 沒有功率計) the 30-min test is an LTHR test only — no 「＋CP
-# 檢查」, no 30-min power against the CP
-TEST_LABEL_NO_METER = {"tt30": "30 分鐘獨跑測試（LTHR）"}
+# 檢查」, no 30-min power against the CP (msgids, shown through _())
+TEST_LABEL_NO_METER = {"tt30": N_("30 分鐘獨跑測試（LTHR）")}
 CONDITIONS_NO_METER = {
-    "tt30": "< 25 °C、平路；暖身 15 分後 30 分鐘均勻用力（不要衝開頭），第 10 分按 lap；"
-            "LTHR＝後 20 分平均心率（Friel）",
+    "tt30": N_("< 25 °C、平路；暖身 15 分後 30 分鐘均勻用力（不要衝開頭），第 10 分按 lap；"
+               "LTHR＝後 20 分平均心率（Friel）"),
 }
-SRC = "門檻在事件後重測：CP 變化、停跑、季節轉換（Friel；推估）"
+SRC = N_("門檻在事件後重測：CP 變化、停跑、季節轉換（Friel；推估）")
 
 
 def test_label(t: str, meter: bool = True) -> str:
@@ -553,7 +554,7 @@ def heat_confidence(recent: list[dict]) -> str:
     return "medium" if other <= len(recent) / 3.0 else "low"
 
 
-CONF_ZH = {"high": "高", "medium": "中", "low": "低"}
+CONF_ZH = {"high": N_("高"), "medium": N_("中"), "low": N_("低")}
 
 
 def hr_shift(points: list[dict], today: dt.date, beta: Optional[float] = None,
@@ -643,24 +644,29 @@ def hr_shift(points: list[dict], today: dt.date, beta: Optional[float] = None,
                         "residual": round(r, 1)} for p, r in zip(recent, res)])
     big = abs(shift) > thr and side >= need
     if big and seasonal["used"] and abs(shift - seasonal["residual_bpm"]) <= thr:
-        out["reason"] = (f"同功率心率偏 {shift:+.1f} ± {se:.1f} bpm（已熱校正），但去年同季也偏 "
-                         f"{seasonal['residual_bpm']:+.1f} bpm（{seasonal['n']} 次）：扣掉季節只剩 "
-                         f"{shift - seasonal['residual_bpm']:+.1f} bpm，比較像季節（熱校正沒完全吃掉），不是體能變化")
+        out["reason"] = _("同功率心率偏 {shift:+.1f} ± {se:.1f} bpm（已熱校正），但去年同季也偏 {ly:+.1f} bpm"
+                          "（{n} 次）：扣掉季節只剩 {net:+.1f} bpm，比較像季節（熱校正沒完全吃掉），不是體能變化",
+                          shift=shift, se=se, ly=seasonal["residual_bpm"], n=seasonal["n"],
+                          net=shift - seasonal["residual_bpm"])
     elif big:
         out["fired"] = True
     else:
-        out["reason"] = (f"最近 {m} 次穩定路跑同功率心率偏 {shift:+.1f} ± {se:.1f} bpm（已熱校正，{side}/{m} 次同方向）："
-                         f"沒有持續偏 > {thr:.1f} bpm（max({SHIFT_BPM:.0f}, {SE_K:.0f}·SE)，推估）")
+        out["reason"] = _("最近 {m} 次穩定路跑同功率心率偏 {shift:+.1f} ± {se:.1f} bpm（已熱校正，{side}/{m} 次同方向）："
+                          "沒有持續偏 > {thr:.1f} bpm（max({k5:.0f}, {k2:.0f}·SE)，推估）",
+                          m=m, shift=shift, se=se, side=side, thr=thr, k5=SHIFT_BPM, k2=SE_K)
     return out
 
 
 def heat_note(sh: dict) -> str:
     """「已依熱指數校正（β …；天氣來源 …；信心 …）」 for the message."""
     h = sh.get("heat") or {}
-    srcs = "、".join(f"{SRC_LABEL.get(k, k)} {v} 次" for k, v in sorted((h.get("recent_sources") or {}).items(),
-                                                                       key=lambda kv: -kv[1]))
-    return (f"已依熱指數校正（β {h.get('beta', 0.0):.2f} ± {h.get('beta_se', 0.0):.2f} bpm/Hadley，"
-            f"{'本人回測' if h.get('beta_source') == 'fitted' else '手動' if h.get('beta_source') == 'user' else '預設，推估'}；天氣：{srcs or '—'}；校正信心{CONF_ZH.get(h.get('confidence'), '—')}）")
+    srcs = _("、").join(_("{src} {n} 次", src=_(SRC_LABEL[k]) if k in SRC_LABEL else k, n=v)
+                       for k, v in sorted((h.get("recent_sources") or {}).items(), key=lambda kv: -kv[1]))
+    how = {"fitted": N_("本人回測"), "user": N_("手動")}.get(h.get("beta_source"), N_("預設，推估"))
+    conf = h.get("confidence")
+    return _("已依熱指數校正（β {beta:.2f} ± {se:.2f} bpm/Hadley，{how}；天氣：{srcs}；校正信心{conf}）",
+             beta=h.get("beta", 0.0), se=h.get("beta_se", 0.0), how=_(how), srcs=srcs or "—",
+             conf=_(CONF_ZH[conf]) if conf in CONF_ZH else "—")
 
 
 def day_weather(rows: list[dict], mornings: Optional[dict] = None) -> list[tuple[dt.date, float, Optional[float], str]]:
@@ -745,11 +751,17 @@ def tested_since(plan, since: str) -> set:
 
 
 def _suggestion(sid: str, tests: list, title: str, text: str, detected, earliest=None, evidence=None,
-                source: str = SRC) -> dict:
+                source: Optional[str] = None) -> dict:
+    """`source`: SRC with what this detector adds (_src_plus, shown text); None = SRC alone."""
     return {"id": sid, "kind": "test_suggestion", "tests": list(tests), "title": title, "text": text,
             "earliest": None if earliest is None else _iso(earliest), "detected": _iso(detected),
-            "conditions": [f"{TEST_LABEL[t]}：{CONDITIONS[t]}" for t in tests], "caveat": WRIST_NOTE,
-            "estimate": True, "source": source, "evidence": evidence or {}}
+            "conditions": [_("{test}：{how}", test=_(TEST_LABEL[t]), how=_(CONDITIONS[t])) for t in tests],
+            "caveat": _(WRIST_NOTE), "estimate": True, "source": source or _(SRC), "evidence": evidence or {}}
+
+
+def _src_plus(more: str) -> str:
+    """SRC + 「；」 + what a detector adds (both shown)."""
+    return _("{a}；{b}", a=_(SRC), b=more) if more else _(SRC)
 
 
 def applied_events(plan, today: dt.date) -> list[dict]:
@@ -764,10 +776,11 @@ def applied_events(plan, today: dt.date) -> list[dict]:
         t = max(rows, key=lambda r: r.date)
         r = threshold_row(plan, name, today) if name != "cp" else None
         unit = "W" if name == "cp" else "bpm"
-        how = (r or {}).get("label") or f"測試 {t.date[:10]}"
+        how = (r or {}).get("label") or _("測試 {day}", day=t.date[:10])
         out.append({"id": "test_applied", "kind": "zone_update", "field": name, "date": t.date[:10],
                     "value": float(getattr(t, name)),
-                    "text": f"{label} {float(getattr(t, name)):.0f} {unit}（{how}）：從 {t.date[:10]} 起區間已重算"})
+                    "text": _("{label} {v:.0f} {unit}（{how}）：從 {day} 起區間已重算", label=label,
+                              v=float(getattr(t, name)), unit=unit, how=how, day=t.date[:10])})
     return out
 
 
@@ -837,11 +850,11 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
         checks["break"] = {"days": brk["days"], "return": brk["return"], "end": brk.get("end"), "stale": bool(todo)}
         if todo:
             out.append(_suggestion(
-                "break", todo, f"停跑 {brk['days']} 天：門檻已過期，恢復期後重測",
-                f"停跑 ≥ 4 週，同功率心率會升高（停訓 2–4 週次大心率約 +11 bpm）；區間先照用，"
-                f"{brk.get('end') or brk['return']} 恢復期結束後再測", today, brk.get("end") or brk["return"],
+                "break", todo, _("停跑 {n} 天：門檻已過期，恢復期後重測", n=brk["days"]),
+                _("停跑 ≥ 4 週，同功率心率會升高（停訓 2–4 週次大心率約 +11 bpm）；區間先照用，"
+                  "{day} 恢復期結束後再測", day=brk.get("end") or brk["return"]), today, brk.get("end") or brk["return"],
                 {"break_days": brk["days"], "return": brk["return"], "block_end": brk.get("end")},
-                SRC + "；停訓：Coyle 1986、Houmard 1992"))
+                _src_plus(_("停訓：Coyle 1986、Houmard 1992"))))
     # heat-adjusted HR-at-power shift
     if points is None:
         try:
@@ -861,19 +874,25 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
         if todo:
             up = sh["direction"] == "up"
             ss = sh["seasonal"] or {}
-            season_txt = (f"；去年同季偏 {ss['residual_bpm']:+.1f} bpm（{ss['n']} 次），扣掉後仍偏 {ss['net_bpm']:+.1f} bpm"
-                          if ss.get("used") else "；去年同季資料不足，沒做季節對照")
+            season_txt = (_("；去年同季偏 {ly:+.1f} bpm（{n} 次），扣掉後仍偏 {net:+.1f} bpm",
+                            ly=ss["residual_bpm"], n=ss["n"], net=ss["net_bpm"])
+                          if ss.get("used") else _("；去年同季資料不足，沒做季節對照"))
+            fmt = dict(n=sh["n"], d=abs(sh["shift_bpm"]), se=sh["se_bpm"], thr=sh["threshold_bpm"], k5=SHIFT_BPM,
+                       k2=SE_K, side=sh["same_side"], noise=sh["noise_bpm"])
+            head = (_("最近 {n} 次穩定路跑，同功率心率比基準線高 {d:.1f} ± {se:.1f} bpm（推估；門檻 {thr:.1f} bpm＝"
+                      "max({k5:.0f}, {k2:.0f}·SE)，{side}/{n} 次同方向，基準線雜訊 ±{noise} bpm）；", **fmt) if up else
+                    _("最近 {n} 次穩定路跑，同功率心率比基準線低 {d:.1f} ± {se:.1f} bpm（推估；門檻 {thr:.1f} bpm＝"
+                      "max({k5:.0f}, {k2:.0f}·SE)，{side}/{n} 次同方向，基準線雜訊 ±{noise} bpm）；", **fmt))
+            heat_src = (sh.get("heat") or {}).get("source", "")
             out.append(_suggestion(
                 "hr_shift", todo,
-                f"同功率心率持續{'升高' if up else '下降'} {abs(sh['shift_bpm']):.0f} bpm（已熱校正）：建議重測",
-                f"最近 {sh['n']} 次穩定路跑，同功率心率比基準線{'高' if up else '低'} "
-                f"{abs(sh['shift_bpm']):.1f} ± {sh['se_bpm']:.1f} bpm（推估；門檻 {sh['threshold_bpm']:.1f} bpm＝"
-                f"max({SHIFT_BPM:.0f}, {SE_K:.0f}·SE)，{sh['same_side']}/{sh['n']} 次同方向，基準線雜訊 ±{sh['noise_bpm']} bpm）；"
-                + heat_note(sh) + season_txt
-                + ("：可能累積疲勞或體能下降，先確認恢復再測" if up else "：體能可能進步了，CP／AeT 可能偏低"),
+                _("同功率心率持續升高 {d:.0f} bpm（已熱校正）：建議重測", d=abs(sh["shift_bpm"])) if up else
+                _("同功率心率持續下降 {d:.0f} bpm（已熱校正）：建議重測", d=abs(sh["shift_bpm"])),
+                head + heat_note(sh) + season_txt
+                + (_("：可能累積疲勞或體能下降，先確認恢復再測") if up else _("：體能可能進步了，CP／AeT 可能偏低")),
                 last, None, {k: sh[k] for k in ("shift_bpm", "se_bpm", "threshold_bpm", "n", "same_side",
                                                  "noise_bpm", "line", "recent", "heat", "seasonal")},
-                SRC + "；" + (sh.get("heat") or {}).get("source", "")))
+                _("{a}；{b}", a=_(SRC), b=_(heat_src)) if heat_src else _("{a}；", a=_(SRC))))
     # the first cool spell of the season (the dawn at home, not the run's hour)
     if mornings is None:
         mornings = {}
@@ -888,13 +907,14 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
     if cs and (today - _date(cs["start"])).days <= SEASON_ACTIVE_DAYS:
         todo = [t for t in ("tt30", "aet") if t not in tested_since(plan, cs["start"])]
         if todo:
-            basis = "清晨（05–07 時，Open-Meteo）" if all(b == "morning" for b in cs["basis"]) else "清晨或跑步當時"
+            basis = _("清晨（05–07 時，Open-Meteo）") if all(b == "morning" for b in cs["basis"]) else _("清晨或跑步當時")
             out.append(_suggestion(
-                "cool_season", todo, "天氣轉涼了：做一次 30 分鐘測試和 AeT 測試",
-                f"{cs['start']} 起連續 {SPELL_DAYS} 個路跑日{basis} < {COOL_C:.0f} °C、Hadley < {HOT_HADLEY:.0f}"
-                f"（之前 {SUMMER_DAYS} 天有 {cs['summer_days']} 天 Hadley ≥ {HOT_HADLEY:.0f}）：夏天測的門檻受熱影響，"
-                f"清晨涼的時候重測比較準",
-                cs["start"], None, cs, SRC + "；台灣教練：等天氣轉涼再做；Hadley 150"))
+                "cool_season", todo, _("天氣轉涼了：做一次 30 分鐘測試和 AeT 測試"),
+                _("{start} 起連續 {k} 個路跑日{basis} < {c:.0f} °C、Hadley < {h:.0f}"
+                  "（之前 {sd} 天有 {n} 天 Hadley ≥ {h:.0f}）：夏天測的門檻受熱影響，清晨涼的時候重測比較準",
+                  start=cs["start"], k=SPELL_DAYS, basis=basis, c=COOL_C, h=HOT_HADLEY, sd=SUMMER_DAYS,
+                  n=cs["summer_days"]),
+                cs["start"], None, cs, _src_plus(_("台灣教練：等天氣轉涼再做；Hadley 150"))))
     # the AeT is only a lower bound (drift_agg.aet_validity): one AeT test every 8 weeks, low priority
     val = aet_validity
     if val is None and real:
@@ -929,11 +949,11 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
             from backend.engine import drift_agg as DA
             x = float(val["value"])
             sg = _suggestion(
-                f"aet_bound:{due}", ["aet"], f"AeT 目前只知道下限（≥ {x:.0f} bpm）：有空做一次 AeT 測試",
-                f"{DA.bound_label(x)}。每 {BOUND_REMIND_DAYS // 7} 週建議一次（推估），不擋課表、可以關掉；"
-                f"多跑 {x - 20:.0f}–{x - 10:.0f} bpm 的輕鬆跑，回歸就能自己找出 AeT",
+                f"aet_bound:{due}", ["aet"], _("AeT 目前只知道下限（≥ {x:.0f} bpm）：有空做一次 AeT 測試", x=x),
+                _("{label}。每 {w} 週建議一次（推估），不擋課表、可以關掉；多跑 {lo:.0f}–{hi:.0f} bpm 的輕鬆跑，"
+                  "回歸就能自己找出 AeT", label=DA.bound_label(x), w=BOUND_REMIND_DAYS // 7, lo=x - 20, hi=x - 10),
                 due, None, {"bound": val.get("bound"), "value": x},
-                SRC + "；下限規則與 8 週提醒為推估")
+                _src_plus(_("下限規則與 8 週提醒為推估")))
             out.append({**sg, "priority": "low"})
     return {"suggestions": without_cp_tests(out, ds, today), "events": applied_events(plan, today), "checks": checks}
 
@@ -954,8 +974,9 @@ def without_cp_tests(out: list[dict], ds, today: dt.date) -> list[dict]:
             continue
         # SP-954: the 30-min test is an LTHR test only without a Stryd — its name (`labels`, read by the
         # suggestion box and the 測試 indicator) and its condition line
-        s = {**s, "tests": tests, "labels": {t: test_label(t, False) for t in tests},
-             "conditions": [f"{test_label(t, False)}：{test_condition(t, False)}" for t in tests]}
+        s = {**s, "tests": tests, "labels": {t: _(test_label(t, False)) for t in tests},
+             "conditions": [_("{test}：{how}", test=_(test_label(t, False)), how=_(test_condition(t, False)))
+                            for t in tests]}
         kept.append(s)
     return kept
 

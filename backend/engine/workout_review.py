@@ -65,7 +65,22 @@ from backend.engine.algorithms.threshold_estimate import (
 )
 from backend.engine import hints as H
 from backend.engine.panels.workout import MAX_DT, durability, grade_bins
-from backend.i18n import N_, _
+from backend.i18n import DEFAULT_LOCALE, N_, _, translate
+
+
+def _zh(msgid: str, **params) -> str:
+    """A text kept in the measure cache that every language shares (drift_of's reasons): written in
+    zh-TW, the words other code reads (short_reason, gc_drift), and shown through reason_text()."""
+    return translate(msgid, DEFAULT_LOCALE, **params)
+
+
+def reason_text(s: Optional[str]) -> Optional[str]:
+    """A drift_of reason (zh-TW, from the shared cache) in the request's language: the msgid it was
+    written from, filled in with the same values (stored_text.shown)."""
+    if not s:
+        return s
+    from backend.engine import stored_text as ST
+    return ST.shown(s)
 
 # cached_series keys on the file, the thresholds and (since SP-339) the code _measure reaches
 # (engine/codehash.py), so an edit there recomputes by itself; bump the version only for a change
@@ -117,7 +132,7 @@ REF_LABEL = N_("暖身後不到 40 分鐘，只當參考")
 REF_TIP = N_("暖身後只跑了 30–40 分鐘，比有氧閾值測試要的 40 分鐘短：只當參考，不拿來開放間歇、不算 AeT 測試。\n"
              "方法：30 分是推估的門檻（心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001；"
              "40 分是 Uphill Athlete 的測試標準）。")
-START_TIP = ("出門先過市區路口、到河濱才開始穩定跑時，前 20 分鐘內的停等不算穩定跑：飄移從最後一次停等後 1 分鐘、"
+START_TIP = N_("出門先過市區路口、到河濱才開始穩定跑時，前 20 分鐘內的停等不算穩定跑：飄移從最後一次停等後 1 分鐘、"
              "而且至少第 10 分鐘起算。20 分鐘和 1 分鐘都是推估（未找到來源；UA／Friel 只說要排除暖身）。"
              "坡道、快步不排除：上坡後心率不一定回得來，排除會把真的影響藏起來。")
 DRIFT_FINISH_SHARE = 0.10    # 推估 (doc §6.2 / §7): the last 10 % of the measured time …
@@ -131,8 +146,8 @@ DRIFT_HOT_C = 28.0            # 推估: the warm / hot split. Beiter 2025 (Physi
 # not Hadley: the drift sources (台灣教練, Lafrenz, Beiter) give °C, and the watch path has no humidity of its
 # own (Hadley there would rest on the season's RH). ≤ 25 cool (the old rule let 25.0 through), ≤ 28 warm.
 TEMP_BANDS = ("cool", "warm", "hot")
-TEMP_BAND_LABEL = {"cool": "< 25 °C", "warm": "25–28 °C", "hot": "> 28 °C", "none": "溫度不明"}
-HEAT_NOTE = "熱環境，結果可能偏高"
+TEMP_BAND_LABEL = {"cool": "< 25 °C", "warm": "25–28 °C", "hot": "> 28 °C", "none": N_("溫度不明")}
+HEAT_NOTE = N_("熱環境，結果可能偏高")          # marked only: other modules put it in their own text
 HEAT_TIP = N_("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只和同一區的跑步比。25 °C 是台灣教練的條件"
               "（Lafrenz 2008：35 °C 心率升 11%、22 °C 升 2%）；28 °C 是推估的分界（Beiter 2025：28.7 對 19.2 °C，"
               "最高心率 +16 bpm）。熱會讓飄移偏高：熱天通過門檻仍算數（保守），沒通過可能是熱造成的。"
@@ -174,7 +189,7 @@ RAMP_GRADE = 0.03             # 推估 (DRIFT §1.2): |grade over a 15-s span| �
 RAMP_SPAN_S = 15              # ramp-free comparison also drops the 120 s after each (≈ 2τ). Ramps are NOT excluded
 RAMP_MIN_S = 10               # from the drift (the user's decision): the ramp-free value and the per-half counts
 RAMP_AFTER_S = 120            # are display only
-TEMP_SRC_LABEL = {"route_weather": "路線天氣（Open-Meteo 檔案）", "watch": "手錶溫度（扣手腕偏差，較不準）"}
+TEMP_SRC_LABEL = {"route_weather": N_("路線天氣（Open-Meteo 檔案）"), "watch": N_("手錶溫度（扣手腕偏差，較不準）")}
 DRIFT_GOOD = 0.05
 DRIFT_WATCH = 0.10
 STREAK_NEED = 3               # legacy only: the old unsourced 「連續 3 次」 rule (gate: engine/quality_gate.py)
@@ -395,15 +410,41 @@ def _halves_drift(h: np.ndarray, x: np.ndarray, d: np.ndarray, m: np.ndarray) ->
     return float((r1 - r2) / r1), h1, h2, x1, x2
 
 
+# drift_of's refusals (msgids; written in zh-TW into the shared cache, short_reason reads their words)
+SHORT_REASON = N_("暖身後只有 {m} 分鐘（< {lim} 分，UA 不建議採用），飄移不採用")
+TOO_SHORT_REASON = N_("暖身後只有 {m} 分鐘（< {lim} 分，參考值也不採用），飄移不採用")
+NO_HR_REASON = N_("沒有心率或速度")
+NOT_RUN_REASON = N_("不是跑步")
+HILL_REASON = N_("有坡（越野或每公里爬升 ≥ 20 m），飄移數字不採用")
+STOP_REASON = N_("中途停了 {t}（> 5%），飄移數字不採用")
+WALK_REASON = N_("有一段 {t} 明顯放慢（30 秒速度 < 中位速度的 {frac:.0f}%，≥ {m} 分）："
+                 "跑走交替不是穩定跑，飄移不採用（門檻推估）")
+VI_REASON = N_("功率起伏大（VI {vi:.3f} > {lim:.2f}，只算移動中的樣本）：不是穩定跑，飄移不採用（門檻推估、用你的跑步校正）")
+INTENSITY_REASON = N_("強度 {pct:.0f}% CP（> 90%），不是有氧跑，飄移不採用")
+# SP-952's gates without power (SP-810: msgids, kept in zh-TW in the cache like the others)
+HR_INTENSITY_REASON = N_("強度：平均心率 {pct:.0f}% LTHR（> {lim:.0f}%，推估），不是有氧跑，飄移不採用")
+PACE_INTENSITY_REASON = N_("強度：配速是閾值配速的 {pct:.0f}%（> {lim:.0f}%），不是有氧跑，飄移不採用")
+NO_DATA_REASON = N_("有效資料不夠")
+NO_POWER_REASON = N_("這次沒有功率")
+COVER_REASON = N_("功率只涵蓋 {pct:.0f}% 的時間（< {lim:.0f}%），用功率算的心率飄移不採用")
+POWER_DATA_REASON = N_("功率資料不夠")
+# the halves / fast-finish refusals, one msgid per wording (the words were put together before)
+HALVES_REASON = {(True, True): N_("後半功率比前半高 {pct:.0f}%（> {lim:.0f}%）：強度沒有維持，飄移不採用（5% 推估）"),
+                 (True, False): N_("後半功率比前半低 {pct:.0f}%（> {lim:.0f}%）：強度沒有維持，飄移不採用（5% 推估）"),
+                 (False, True): N_("後半速度比前半高 {pct:.0f}%（> {lim:.0f}%）：強度沒有維持，飄移不採用（5% 推估）"),
+                 (False, False): N_("後半速度比前半低 {pct:.0f}%（> {lim:.0f}%）：強度沒有維持，飄移不採用（5% 推估）")}
+FINISH_REASON = {"power": N_("最後 10% 的功率比前段高 {pct:.0f}%（> {lim:.0f}%）：快速結尾會讓飄移看起來比較小，飄移不採用"),
+                 "pace": N_("最後 10% 的配速比前段高 {pct:.0f}%（> {lim:.0f}%）：快速結尾會讓飄移看起來比較小，飄移不採用")}
+
+
 def _short_reason(measured_s: float) -> str:
     """The strict tier's refusal (also the `reason` of a reference-tier result)."""
-    return f"暖身後只有 {int(max(0.0, measured_s) // 60)} 分鐘（< {DRIFT_MIN_S // 60} 分，UA 不建議採用），飄移不採用"
+    return _zh(SHORT_REASON, m=int(max(0.0, measured_s) // 60), lim=DRIFT_MIN_S // 60)
 
 
 def _too_short_reason(measured_s: float) -> str:
     """Below the reference tier too."""
-    return (f"暖身後只有 {int(max(0.0, measured_s) // 60)} 分鐘（< {DRIFT_REF_MIN_S // 60} 分，"
-            "參考值也不採用），飄移不採用")
+    return _zh(TOO_SHORT_REASON, m=int(max(0.0, measured_s) // 60), lim=DRIFT_REF_MIN_S // 60)
 
 
 def fast_finish(x: np.ndarray, d: np.ndarray, m: np.ndarray,
@@ -434,7 +475,7 @@ def is_heat(band: Optional[str]) -> bool:
 
 def band_chip(dr: dict) -> str:
     """「🌡 25–28 °C」 — the band chip every drift value carries."""
-    return "🌡 " + TEMP_BAND_LABEL.get(dr.get("temp_band") or temp_band(dr.get("temp_c")), "溫度不明")
+    return "🌡 " + _(TEMP_BAND_LABEL.get(dr.get("temp_band") or temp_band(dr.get("temp_c")), TEMP_BAND_LABEL["none"]))
 
 
 def heat_band(dr: dict, temp_c: Optional[float], src: Optional[str], bias: Optional[dict] = None) -> dict:
@@ -532,7 +573,7 @@ def steady_start(t, hr, speed, end: Optional[float] = None) -> tuple[float, Opti
 def start_text(dr: dict) -> str:
     """「前 10 分鐘不算」 or the adaptive start's 「前 11:41 不算」."""
     w = _f(dr.get("warmup_s")) or WARMUP_S
-    return "前 10 分鐘不算" if abs(w - WARMUP_S) < 1 else f"前 {_hms(w)} 不算"
+    return _("前 10 分鐘不算") if abs(w - WARMUP_S) < 1 else _("前 {t} 不算", t=_hms(w))
 
 
 def _start_text(dr: dict) -> Optional[str]:
@@ -540,10 +581,11 @@ def _start_text(dr: dict) -> Optional[str]:
     if not r:
         return None
     if r.get("fallback"):
-        return (f"前 20 分鐘內有路口停等（最後一次在 {_hms(r['last_stop_s'])}），但從那之後起算會不夠"
-                f" {DRIFT_REF_MIN_S // 60}／{DRIFT_MIN_S // 60} 分鐘，所以仍從第 10 分鐘起算，停等計入 5% 停頓（推估）")
-    return (f"前段路口停等 {r['stops']} 次（共 {_hms(r['stopped_s'])}）：從最後一次停等後 1 分鐘、"
-            f"第 {_hms(_f(dr.get('warmup_s')))} 起算，多排除 {_hms(r['shifted_s'])}（推估）")
+        return _("前 20 分鐘內有路口停等（最後一次在 {t}），但從那之後起算會不夠 {ref}／{test} 分鐘，"
+                 "所以仍從第 10 分鐘起算，停等計入 5% 停頓（推估）",
+                 t=_hms(r['last_stop_s']), ref=DRIFT_REF_MIN_S // 60, test=DRIFT_MIN_S // 60)
+    return _("前段路口停等 {n} 次（共 {t}）：從最後一次停等後 1 分鐘、第 {start} 起算，多排除 {cut}（推估）",
+             n=r['stops'], t=_hms(r['stopped_s']), start=_hms(_f(dr.get('warmup_s'))), cut=_hms(r['shifted_s']))
 
 
 def tail_text(dr: dict) -> Optional[str]:
@@ -551,12 +593,12 @@ def tail_text(dr: dict) -> Optional[str]:
     parts = []
     r = dr.get("tail")
     if r:
-        parts.append(f"回程市區段 {_hms(r['excluded_s'])}（當緩和：從 {_hms(r['first_stop_s'])} 起、"
-                     f"停等 {r['stops']} 次；門檻推估）")
+        parts.append(_("回程市區段 {t}（當緩和：從 {start} 起、停等 {n} 次；門檻推估）",
+                       t=_hms(r['excluded_s']), start=_hms(r['first_stop_s']), n=r['stops']))
     idle = _f(dr.get("idle_s"))
     if idle:
-        parts.append(f"結尾靜止 {_hms(idle)}（錶沒按停，已裁掉；門檻推估）")
-    return "；".join(parts) or None
+        parts.append(_("結尾靜止 {t}（錶沒按停，已裁掉；門檻推估）", t=_hms(idle)))
+    return _("；").join(parts) or None
 
 
 def excluded_text(dr: dict) -> Optional[str]:
@@ -564,19 +606,19 @@ def excluded_text(dr: dict) -> Optional[str]:
     the trailing idle cut left out (None when nothing), e.g.
     「已排除：回程市區段 6:12（當緩和…）」."""
     parts = [x for x in (_start_text(dr), tail_text(dr)) if x]
-    return "；".join(parts) or None
+    return _("；").join(parts) or None
 
 
 SE_TIP = N_("一次跑步的飄移本來就會差個幾 %，看最近幾次的走向比只看一次準。\n"
             "方法：單次誤差約 ±4–6 個百分點（心率樣本前後高度相關），用回歸法的標準誤估；"
             "心率延遲 τ = 60 s 取自 Hunt 2015／2019、Wang & Hunt 2021，接成一個回歸是推估。")
-TAIL_TIP = ("回程市區段：從結尾往回，最後一群相隔 ≤ 6 分、離結束 ≤ 12 分、在第 20 分鐘之後的停等，從第一次停等起當緩和排除"
+TAIL_TIP = N_("回程市區段：從結尾往回，最後一群相隔 ≤ 6 分、離結束 ≤ 12 分、在第 20 分鐘之後的停等，從第一次停等起當緩和排除"
             "（UA／Friel 都說不含暖身和緩和；12／6 分是推估，用你的跑步校正）。錶沒按停的結尾靜止 ≥ 2 分整段裁掉，"
             "不算進 5% 停頓（推估）。")
-STABILITY_TIP = ("穩定度只算量測視窗內移動中的樣本：VI = 加權功率（Weighted power，30 秒）／平均功率 ≤ 1.04（VI 是 Coggan 的定義，1.04 推估、用你的跑步校正）；"
+STABILITY_TIP = N_("穩定度只算量測視窗內移動中的樣本：VI = 加權功率（Weighted power，30 秒）／平均功率 ≤ 1.04（VI 是 Coggan 的定義，1.04 推估、用你的跑步校正）；"
                  "30 秒速度 < 中位速度 75% 連續 ≥ 3 分 = 跑走（推估）；後半功率和前半差 ≤ 5%（UA／Evoke 固定強度，5% 推估）。"
                  "舊的「30 秒功率變異 > 15%」沒有來源，只留數字參考。")
-RAMP_TIP = ("坡道不排除：|15 秒坡度| ≥ 3% 連續 ≥ 10 秒算一段。「去坡道」是把坡道和坡後 120 秒拿掉再算一次前後半，"
+RAMP_TIP = N_("坡道不排除：|15 秒坡度| ≥ 3% 連續 ≥ 10 秒算一段。「去坡道」是把坡道和坡後 120 秒拿掉再算一次前後半，"
             "只當對照：河濱的小坡 Stryd 功率幾乎不升、心率會升，坡又多在後半，所以飄移會被往上推約 1–2 個百分點"
             "（門檻推估）。")
 
@@ -739,14 +781,15 @@ def stability_text(dr: dict, power: bool = True) -> Optional[str]:
     difference and the old 30-s CV (information only)."""
     parts = []
     if dr.get("vi") is not None:
-        parts.append(f"VI {dr['vi']:.3f}（≤ {DRIFT_MAX_VI:.2f}）")
+        parts.append(_("VI {vi:.3f}（≤ {lim:.2f}）", vi=dr['vi'], lim=DRIFT_MAX_VI))
     if dr.get("walk_max_s") is not None:
-        parts.append(f"最長慢段 {_hms(dr['walk_max_s'])}（< {_hms(WALK_MAX_S)}）")
+        parts.append(_("最長慢段 {t}（< {lim}）", t=_hms(dr['walk_max_s']), lim=_hms(WALK_MAX_S)))
     if dr.get("halves_diff") is not None:
-        name = "功率" if dr.get("halves_basis") == "power" else "速度"
-        parts.append(f"後半{name} {_pct(dr['halves_diff'], sign=True)}（±{DRIFT_HALVES_DIFF * 100:.0f}% 內）")
+        msg = (N_("後半功率 {pct}（±{lim:.0f}% 內）") if dr.get("halves_basis") == "power"
+               else N_("後半速度 {pct}（±{lim:.0f}% 內）"))
+        parts.append(_(msg, pct=_pct(dr['halves_diff'], sign=True), lim=DRIFT_HALVES_DIFF * 100))
     if dr.get("cv30") is not None:
-        parts.append(f"舊規則 30 秒變異 {dr['cv30'] * 100:.0f}%（只供參考）")
+        parts.append(_("舊規則 30 秒變異 {pct:.0f}%（只供參考）", pct=dr['cv30'] * 100))
     return " · ".join(parts) or None
 
 
@@ -756,8 +799,9 @@ def ramps_text(dr: dict, power: bool = True) -> Optional[str]:
     if not r:
         return None
     wo = r.get("pw_drift" if power else "drift")
-    tail = f"；去坡道 {_pct(wo)}（只當對照，不排除）" if wo is not None else "；去坡道後資料不夠"
-    return f"前半 {r['n1']} 段／後半 {r['n2']} 段（爬升 {r['climb1']:.0f}／{r['climb2']:.0f} m）{tail}"
+    tail = _("；去坡道 {pct}（只當對照，不排除）", pct=_pct(wo)) if wo is not None else _("；去坡道後資料不夠")
+    return _("前半 {n1} 段／後半 {n2} 段（爬升 {c1:.0f}／{c2:.0f} m）{tail}",
+             n1=r['n1'], n2=r['n2'], c1=r['climb1'], c2=r['climb2'], tail=tail)
 
 
 def trailing_idle(t, speed) -> tuple[float, float]:
@@ -1048,7 +1092,7 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
            "drift_se": None, "pw_drift_se": None,
            "noisy": None, "ramps": None}
     if hr is None or speed is None or not _has(hr) or not _has(speed):
-        out["reason"] = "沒有心率或速度"
+        out["reason"] = _zh(NO_HR_REASON)
         return out
     t = np.asarray(t, dtype=float)
     n = len(t)
@@ -1061,7 +1105,7 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         out["reason"] = _too_short_reason(elapsed - WARMUP_S)
         return out
     if trail or (climb_m_per_km is not None and climb_m_per_km >= TRAIL_CLIMB_RATE_M_PER_KM):
-        out["reason"] = "有坡（越野或每公里爬升 ≥ 20 m），飄移數字不採用"
+        out["reason"] = _zh(HILL_REASON)
         return out
     end, idle = trailing_idle(t, s)
     end, tail = steady_end(t, s, end)
@@ -1073,7 +1117,7 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     span = float(d[inwin].sum())
     stopped = float(d[inwin & ~mov].sum())       # standing still + recording gaps, inside the window only
     if span > 0 and stopped / span > MAX_STOPPED_SHARE:
-        out["reason"] = f"中途停了 {_hms(stopped)}（> 5%），飄移數字不採用"
+        out["reason"] = _zh(STOP_REASON, t=_hms(stopped))
         return out
     has_power = power is not None and _has(power)
     if has_power:
@@ -1115,8 +1159,7 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     out["walks"] = [[float(rg[a]), dur] for a, dur in walks]
     out["walk_max_s"] = max((dur for _, dur in walks), default=0.0)
     if out["walk_max_s"] >= WALK_MAX_S:
-        out["reason"] = (f"有一段 {_hms(out['walk_max_s'])} 明顯放慢（30 秒速度 < 中位速度的 {WALK_FRAC * 100:.0f}%，"
-                         f"≥ {WALK_MAX_S // 60} 分）：跑走交替不是穩定跑，飄移不採用（門檻推估）")
+        out["reason"] = _zh(WALK_REASON, t=_hms(out['walk_max_s']), frac=WALK_FRAC * 100, m=WALK_MAX_S // 60)
         return out
     if has_power:
         pv = gp if pw_same else None
@@ -1125,62 +1168,56 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         vi, cvw = power_vi(pv, wg)
         out.update(vi=vi, cv30_w1=cvw)
         if vi is not None and vi > DRIFT_MAX_VI:
-            out["reason"] = (f"功率起伏大（VI {vi:.3f} > {DRIFT_MAX_VI:.2f}，只算移動中的樣本）：不是穩定跑，"
-                             "飄移不採用（門檻推估、用你的跑步校正）")
+            out["reason"] = _zh(VI_REASON, vi=vi, lim=DRIFT_MAX_VI)
             return out
         pm = _wmean(pw, d, m0 & np.isfinite(pw) & (pw > 0))
         if cp and pm and pm > AET_MAX_OF_CP * cp:
-            out["reason"] = f"強度 {pm / cp * 100:.0f}% CP（> 90%），不是有氧跑，飄移不採用"
+            out["reason"] = _zh(INTENSITY_REASON, pct=pm / cp * 100)
             return out
     else:
         # SP-952: the intensity gate without power — HR against LTHR, pace against the threshold pace
         hm_ = _wmean(h, d, win)
         if lthr and hm_ and hm_ > DRIFT_MAX_OF_LTHR * lthr:
-            out["reason"] = (f"強度：平均心率 {hm_ / lthr * 100:.0f}% LTHR（> {DRIFT_MAX_OF_LTHR * 100:.0f}%，推估），"
-                             "不是有氧跑，飄移不採用")
+            out["reason"] = _zh(HR_INTENSITY_REASON, pct=hm_ / lthr * 100, lim=DRIFT_MAX_OF_LTHR * 100)
             return out
         sm_ = _wmean(s, d, win)
         if tspeed and sm_ and sm_ > AET_MAX_OF_CP * tspeed:
-            out["reason"] = (f"強度：配速是閾值配速的 {sm_ / tspeed * 100:.0f}%（> {AET_MAX_OF_CP * 100:.0f}%），"
-                             "不是有氧跑，飄移不採用")
+            out["reason"] = _zh(PACE_INTENSITY_REASON, pct=sm_ / tspeed * 100, lim=AET_MAX_OF_CP * 100)
             return out
     hx = _halves_drift(h, pw if pw_same else s, d, win)
     if hx is not None:
         out["halves_diff"] = hx[4] / hx[3] - 1.0
         out["halves_basis"] = "power" if pw_same else "pace"
         if abs(out["halves_diff"]) > DRIFT_HALVES_DIFF:
-            name = "功率" if pw_same else "速度"
-            out["reason"] = (f"後半{name}比前半{'高' if out['halves_diff'] > 0 else '低'} "
-                             f"{abs(out['halves_diff']) * 100:.0f}%（> {DRIFT_HALVES_DIFF * 100:.0f}%）：強度沒有維持，"
-                             "飄移不採用（5% 推估）")
+            out["reason"] = _zh(HALVES_REASON[(pw_same, out["halves_diff"] > 0)],
+                                pct=abs(out['halves_diff']) * 100, lim=DRIFT_HALVES_DIFF * 100)
             return out
-    fin = [(name, fast_finish(x, d, win)) for name, x in (("功率", pw if pw_same else None), ("配速", s))
+    fin = [(name, fast_finish(x, d, win)) for name, x in (("power", pw if pw_same else None), ("pace", s))
            if x is not None]
     fin = [(name, ff) for name, ff in fin if ff is not None]
     if fin:
         name, ff = max(fin, key=lambda z: z[1])
         out["finish"] = ff
         if ff > DRIFT_FAST_FINISH:
-            out["reason"] = (f"最後 10% 的{name}比前段高 {ff * 100:.0f}%（> {DRIFT_FAST_FINISH * 100:.0f}%）："
-                             "快速結尾會讓飄移看起來比較小，飄移不採用")
+            out["reason"] = _zh(FINISH_REASON[name], pct=ff * 100, lim=DRIFT_FAST_FINISH * 100)
             return out
     r = _halves_drift(h, s, d, win)
     if r is None:
-        out["reason"] = "有效資料不夠"
+        out["reason"] = _zh(NO_DATA_REASON)
         return out
     out.update(drift=r[0], ok=strict, ref_ok=not strict, tier="test" if strict else "ref",
                hr1=r[1], hr2=r[2], v1=r[3], v2=r[4])
     if not strict:
         out["reason"] = _short_reason(measured)      # what the strict tier says; the value is a reference
     if not has_power:
-        out["pw_reason"] = "這次沒有功率"
+        out["pw_reason"] = _zh(NO_POWER_REASON)
     elif not pw_same:
         cover = float(d[m0 & np.isfinite(pw) & (pw > 0)].sum()) / max(1e-9, float(d[m0].sum()))
-        out["pw_reason"] = f"功率只涵蓋 {cover * 100:.0f}% 的時間（< {DRIFT_POWER_COVER * 100:.0f}%），用功率算的心率飄移不採用"
+        out["pw_reason"] = _zh(COVER_REASON, pct=cover * 100, lim=DRIFT_POWER_COVER * 100)
     else:
         rp = _halves_drift(h, pw, d, win)
         if rp is None:
-            out["pw_reason"] = "功率資料不夠"
+            out["pw_reason"] = _zh(POWER_DATA_REASON)
         else:
             out.update(pw_drift=rp[0], pw_ok=strict, pw_ref_ok=not strict, pw_hr1=rp[1], pw_hr2=rp[2],
                        p1=rp[3], p2=rp[4])
@@ -1219,10 +1256,10 @@ def basis_drift(dr: dict, basis: str = "pace", ref: bool = False) -> tuple[Optio
     Strict (the test tier) by default — gates and thresholds; `ref=True`
     (display only) also returns a reference-tier value (drift_tier says which)."""
     if not (dr.get("ok") or (ref and dr.get("ref_ok"))):
-        return None, hr_reason(dr) or dr.get("reason") or "飄移數字不採用"
+        return None, hr_reason(dr) or reason_text(dr.get("reason")) or _("飄移數字不採用")
     if basis == "power":
         good = dr.get("pw_ok") or (ref and dr.get("pw_ref_ok"))
-        return (dr["pw_drift"], "") if good else (None, dr.get("pw_reason") or "這次沒有功率")
+        return (dr["pw_drift"], "") if good else (None, reason_text(dr.get("pw_reason")) or _("這次沒有功率"))
     return dr["drift"], ""
 
 
@@ -1413,7 +1450,9 @@ def cp_test(t, power) -> Optional[dict]:
 def _cp_test_1pt(p3: float, p12: float, w: float, sd: float) -> dict:
     return {"p3": p3, "p12": p12, "cp": p12 - w / 720.0, "wprime": w, "separate": True, "method": "1pt_prior",
             "cp_range": [p12 - (w + sd) / 720.0, p12 - (w - sd) / 720.0],
-            "note": f"3 分段 {p3:.0f} W 不高於 12 分段 {p12:.0f} W（不是全力）：只用 12 分段，無氧容量用先驗 {w / 1000:.1f} kJ"}
+            # kept in the measure cache (zh-TW, like drift_of's reasons): reason_text() where shown
+            "note": _zh(N_("3 分段 {p3:.0f} W 不高於 12 分段 {p12:.0f} W（不是全力）：只用 12 分段，無氧容量用先驗 {kj:.1f} kJ"),
+                        p3=p3, p12=p12, kj=w / 1000)}
 
 
 def cp_test_for_sex(res: Optional[dict], sex: Optional[str]) -> Optional[dict]:
@@ -2113,7 +2152,7 @@ def _measure(ds, w, judge: Optional[tuple] = None) -> Optional[dict]:
                                 cadence_spm=None if s["cadence"] is None else np.asarray(s["cadence"], float) * 2.0,
                                 lthr=None if pon else lthr, tspeed=None if pon else tsp)
     else:
-        out["drift"] = {"drift": None, "ok": False, "reason": "不是跑步"}
+        out["drift"] = {"drift": None, "ok": False, "reason": _zh(NOT_RUN_REASON)}
     # hikes too: session_type needs a detected effort next to hard_power_s; SP-952: a road run judged
     # without power finds its efforts on speed (a climb's pace says nothing of the effort: road only)
     efforts = detect_efforts(t, pw_j, s["hr"], cp, aet=aet,
@@ -2314,6 +2353,14 @@ def apply_calibration() -> str:
     return _CAL_MEMO["suffix"]
 
 
+def _measure_src(ds, w, judge: Optional[tuple] = None) -> Optional[dict]:
+    """_measure in zh-TW: its result is one cache for every language, so any text in it (drift_of's
+    reasons, the HR-quality note) is the source text; display translates it (reason_text, hr_reason)."""
+    from backend.i18n import use_locale
+    with use_locale(DEFAULT_LOCALE):
+        return _measure(ds, w, judge)
+
+
 def measure(ds, w) -> Optional[dict]:
     """Per-workout measurements (disk-memoised on CACHE_KEY + the drift
     calibration in effect), with drift_of's temperature band applied on read
@@ -2325,11 +2372,11 @@ def measure(ds, w) -> Optional[dict]:
     # threshold pace it is then judged with are inputs of the measurements: part of the cache key
     judge = _judge_inputs(ds, w)
     if cache is None:
-        m = _nan_free(_measure(ds, w, judge))
+        m = _nan_free(_measure_src(ds, w, judge))
     elif judge[0]:
-        m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure(ds, w, judge)))
+        m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure_src(ds, w, judge)))
     else:
-        m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure(ds, w, judge)),
+        m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure_src(ds, w, judge)),
                   extra={"power_on": False, "tpace": judge[1]})
     if m and isinstance(m.get("drift"), dict):
         # the band (and the same-band baseline's peers, each through here) follows the dataset's
@@ -2369,9 +2416,9 @@ SAME_DAY_BOUT = 1.05          # an unfinished test that day counts with a ≥ 3�
 QUICK_PATTERN = 1.03          # 推估: a 20′ window ≥ 1.03 × CP without a test session = a 20′ all-out
 METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "pd_model": "standard", "tt20": "quick", "race": "race"}
 CP_HINT = N_("功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」")
-MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
-               "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑",
-               "user": "你標記為測試（活動資訊）"}
+MATCH_LABEL = {"done_by": N_("課表對應"), "same_day": N_("當天課表"), "race": N_("比賽／計時跑"),
+               "threshold": N_("已套用的門檻"), "title": N_("標題"), "pattern": N_("功率型態"),
+               "steady": N_("≥ 55 分鐘穩定跑"), "user": N_("你標記為測試（活動資訊）")}
 AET_TITLE = re.compile(r"(?<![A-Za-z])AeT(?![A-Za-z])")
 
 
@@ -2929,22 +2976,24 @@ def interval_lines(m: dict) -> list[str]:
     iv = m.get("intervals") or {}
     n = iv.get("n") or 0
     if not n:
-        return ["沒有偵測到 ≥ 1 分鐘的用力段"]
+        return [_("沒有偵測到 ≥ 1 分鐘的用力段")]
     lines = []
     b = iv.get("band")
     if b:
-        lines.append(f"{n} 組中 {iv['in_band']} 組落在 {b[0]} 帶（{b[1] * 100:.0f}–{min(b[2], 2) * 100:.0f}% CP）")
+        # b[0] is the BANDS msgid (cached zh-TW, compared below): translated only here
+        lines.append(_("{n} 組中 {k} 組落在 {band} 帶（{lo:.0f}–{hi:.0f}% CP）", n=n, k=iv['in_band'], band=_(b[0]),
+                       lo=b[1] * 100, hi=min(b[2], 2) * 100))
     else:
-        lines.append(f"{n} 組（沒有 CP，無法判斷目標帶）")
+        lines.append(_("{n} 組（沒有 CP，無法判斷目標帶）", n=n))
     fade = iv.get("fade")
     if fade is not None and fade < -FADE:
-        lines.append(f"最後一組比第一組低 {-fade * 100:.0f}%：下次組數減 1 或多休")
+        lines.append(_("最後一組比第一組低 {pct:.0f}%：下次組數減 1 或多休", pct=-fade * 100))
     rest = rest_aet_line(m)
     if rest:
         lines.append(rest)
     aet, lthr, hr = m.get("aet"), m.get("lthr"), iv.get("hr")
-    if len(lines) < 3 and b and b[0] in ("閾值下", "閾值") and aet and lthr and hr and aet <= hr < lthr:
-        lines.append(f"功率有到、心率 {hr:.0f} 在 AeT–LTHR 之間：屬於閾值下")
+    if len(lines) < 3 and b and b[0] in (N_("閾值下"), N_("閾值")) and aet and lthr and hr and aet <= hr < lthr:
+        lines.append(_("功率有到、心率 {hr:.0f} 在 AeT–LTHR 之間：屬於閾值下", hr=hr))
     return lines[:3]
 
 
@@ -2955,29 +3004,33 @@ def stimulus_lines(c: dict) -> list[str]:
         return []
     from backend.engine import session_stimulus as SS
     eq, tp, th = st.get("t_vo2_eq_s") or 0.0, st.get("t_vo2_power_s") or 0.0, st.get("t_vo2_hr_s") or 0.0
-    out = [f"等效 T@VO2max {eq / 60:.1f} 分（≥ {SS.Z5_MIN_S // 60} 分算 5 區，目標 ≥ {SS.Z5_GOAL_S // 60} 分）"]
+    out = [_("等效 T@VO2max {eq:.1f} 分（≥ {z5} 分算 5 區，目標 ≥ {goal} 分）",
+             eq=eq / 60, z5=SS.Z5_MIN_S // 60, goal=SS.Z5_GOAL_S // 60)]
     parts = []
     if tp:
-        parts.append(f"功率 {tp / 60:.1f} 分")
+        parts.append(_("功率 {m:.1f} 分", m=tp / 60))
     if th:
-        parts.append(f"心率 {th / 60:.1f} 分 ÷ {SS.HR_FACTOR}")
+        parts.append(_("心率 {m:.1f} 分 ÷ {f}", m=th / 60, f=SS.HR_FACTOR))
     if parts:
-        out[0] += "：" + " + ".join(parts)
+        out[0] += _("：") + " + ".join(parts)
     bouts = st.get("bouts") or []
     if bouts:
-        out.append("VO2 段：" + "、".join(f"{b['duration_s'] / 60:.1f} 分 @ {b['pct_cp'] * 100:.0f}% CP" for b in bouts[:6]))
+        out.append(_("VO2 段：") + _("、").join(_("{m:.1f} 分 @ {pct:.0f}% CP", m=b['duration_s'] / 60,
+                                                     pct=b['pct_cp'] * 100) for b in bouts[:6]))
     elif st.get("top_pct_cp") and c.get("category") != "hike":
-        out.append(f"沒有 VO2 段：最高的 30 秒功率 {st['top_pct_cp'] * 100:.0f}% CP（要 ≥ 106% 撐 2 分，或 ≥ 103% 撐 5 分）")
-    out.append(f"Zone 3 {(st.get('z3_s') or 0) / 60:.0f} 分（≥ {SS.Z3_NEED_S // 60} 分算閾值刺激）")
+        out.append(_("沒有 VO2 段：最高的 30 秒功率 {pct:.0f}% CP（要 ≥ 106% 撐 2 分，或 ≥ 103% 撐 5 分）",
+                     pct=st['top_pct_cp'] * 100))
+    out.append(_("Zone 3 {m:.0f} 分（≥ {need} 分算閾值刺激）", m=(st.get('z3_s') or 0) / 60, need=SS.Z3_NEED_S // 60))
     if th or st.get("hrpeak_source"):
-        src = "計畫的最大心率" if st.get("hrpeak_source") == "plan" else "365 天內第 3 高的 60 秒心率"
-        out.append(f"心率門檻 {_num(st.get('hr_thr'))} bpm = 93% × {_num(st.get('hrpeak'))}（{src}；手腕心率只當替代）")
+        src = _("計畫的最大心率") if st.get("hrpeak_source") == "plan" else _("365 天內第 3 高的 60 秒心率")
+        out.append(_("心率門檻 {thr} bpm = 93% × {peak}（{src}；手腕心率只當替代）",
+                     thr=_num(st.get('hr_thr')), peak=_num(st.get('hrpeak')), src=src))
     if c.get("type") == "hard_long":
-        out.append("長天裡有閾值強度：不算間歇次數，算硬課（和下一堂強度課隔 48 小時）")
+        out.append(_("長天裡有閾值強度：不算間歇次數，算硬課（和下一堂強度課隔 48 小時）"))
     if c.get("category") == "hike":
-        out.append("健行／百岳不自動判 5 區（心率受海拔、負重影響）；要算就標「當作間歇判讀」")
+        out.append(_("健行／百岳不自動判 5 區（心率受海拔、負重影響）；要算就標「當作間歇判讀」"))
     if st.get("easy_hr") and c.get("stimulus") == "z5":
-        out.append("平均心率 ≤ 輕鬆跑上限+3，但功率證據 ≥ 4 分：照功率算")
+        out.append(_("平均心率 ≤ 輕鬆跑上限+3，但功率證據 ≥ 4 分：照功率算"))
     return out
 
 
@@ -2987,7 +3040,7 @@ def stimulus_tip(c: dict) -> Optional[str]:
     if not lines:
         return None
     from backend.engine import session_stimulus as SS
-    return "\n".join(lines + ["", "來源：", SS.SRC["t_vo2"], SS.SRC["bouts"], SS.SRC["lag"], SS.SRC["hr"],
+    return "\n".join(lines + ["", _("來源："), SS.SRC["t_vo2"], SS.SRC["bouts"], SS.SRC["lag"], SS.SRC["hr"],
                               SS.SRC["z3"], SS.SRC["trail"], SS.SRC["hrpeak"]])
 
 
@@ -3058,14 +3111,14 @@ def review(ds, w, section: str = "summary", basis: str = "pace") -> dict:
     base = {"kind": "review", "section": section, "workout": w.idx, "axes": [], "series": [],
             "empty": None, "description": None, "basis": basis if basis == "power" else "pace"}
     if not m:
-        return {**base, "empty": "這筆活動沒有逐秒資料"}
+        return {**base, "empty": _("這筆活動沒有逐秒資料")}
     c = classify(ds, w, m)
     base["classification"] = c
     base["suggested_dashboard"] = (2 if c["type"] == "test_cp" else 4 if c["terrain"] in ("trail", "hike")
                                    else SUGGESTED.get(c["type"], 0))
     fn = _SECTIONS.get(section)
     if fn is None:
-        return {**base, "empty": f"沒有這個判讀：{section}"}
+        return {**base, "empty": _("沒有這個判讀：{section}", section=section)}
     return fn(ds, w, m, c, base)
 
 
@@ -3097,20 +3150,29 @@ def drift_level(d: Optional[float]) -> str:
     return "na" if d is None else "good" if d < DRIFT_GOOD else "warn" if d < DRIFT_WATCH else "bad"
 
 
+def _head(msgid: str) -> str:
+    """A reason msgid's words before its first field: what its zh-TW text (cached) always holds."""
+    return msgid.split("{")[0]
+
+
+# short_reason: (a drift_of reason's msgid, its few words), matched on the cached zh-TW reason
+SHORT_WORDS = ((NO_HR_REASON, N_("沒有心率或速度")), (NOT_RUN_REASON, N_("不是跑步")), (HILL_REASON, N_("有坡（越野）")),
+               (STOP_REASON, N_("停太久")), (WALK_REASON, N_("跑走交替")), (VI_REASON, N_("功率起伏大")),
+               (INTENSITY_REASON, N_("強度太高")), *((m, N_("前後半強度不同")) for m in HALVES_REASON.values()),
+               *((m, N_("結尾加速")) for m in FINISH_REASON.values()), (NO_POWER_REASON, N_("沒有功率")),
+               (COVER_REASON, N_("功率不完整")), (POWER_DATA_REASON, N_("功率不夠")), (NO_DATA_REASON, N_("資料不夠")))
+
+
 def short_reason(dr: dict, basis: str = "pace") -> str:
     """≤ 8 words for a refused drift: 「太短（28 分）」, 「有坡」, 「太熱（29 °C）」 …"""
     why = (dr.get("pw_reason") if basis == "power" and (dr.get("ok") or dr.get("ref_ok")) else dr.get("reason")) or ""
     ms = _f(dr.get("measured_s"))
     if dr.get("hot") and dr.get("temp_c") is not None:
         return _("太熱（{t:.0f} °C）", t=dr['temp_c'])
-    for key, text in (("沒有心率或速度", N_("沒有心率或速度")), ("不是跑步", N_("不是跑步")), ("有坡", N_("有坡（越野）")),
-                      ("中途停了", N_("停太久")), ("明顯放慢", N_("跑走交替")), ("功率起伏大", N_("功率起伏大")),
-                      ("% CP", N_("強度太高")), ("強度沒有維持", N_("前後半強度不同")), ("快速結尾", N_("結尾加速")),
-                      ("沒有功率", N_("沒有功率")), ("功率只涵蓋", N_("功率不完整")), ("功率資料不夠", N_("功率不夠")),
-                      ("有效資料不夠", N_("資料不夠"))):
-        if key in why:
+    for msgid, text in SHORT_WORDS:
+        if _head(msgid) in why:
             return _(text)
-    if "暖身後只有" in why:
+    if _head(SHORT_REASON) in why or _head(TOO_SHORT_REASON) in why:
         return _("太短（{m} 分）", m=int((ms or 0) // 60)) if ms is not None else _("太短")
     return _("不採用")
 
@@ -3432,7 +3494,8 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
     sport_run = m.get("category") in ("road", "trail")
     # 飄移 (easy / long / AeT test judged; other runs shown, not judged)
     if typ in ("easy", "long", "test_aet"):
-        cards.append(drift_card(dr, "pace", [x for x in lines if "飄移" in x or "AeT" in x], True))
+        kw = _("飄移").lower()           # the lines are in the request's language
+        cards.append(drift_card(dr, "pace", [x for x in lines if kw in x.lower() or "AeT" in x], True))
     elif sport_run and basis_drift(dr, "pace", ref=True)[0] is not None:
         cards.append(drift_card(dr, "pace", [], False, c["type_label"]))
     # 耐久
@@ -3548,30 +3611,30 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
     ex = excluded_text(dr)
     if cut or ex:
         chip(id="cut", icon="scissors", text=_("已排除 {what}", what="・".join(cut)) if cut else _("已排除"), level="info",
-             tip="\n".join(x for x in (ex, START_TIP, TAIL_TIP) if x))
+             tip="\n".join(x for x in (ex, _(START_TIP), _(TAIL_TIP)) if x))
     elif abs((_f(dr.get("warmup_s")) or WARMUP_S) - WARMUP_S) >= 1:
-        chip(id="cut", icon="scissors", text=start_text(dr), level="info", tip=START_TIP)
+        chip(id="cut", icon="scissors", text=start_text(dr), level="info", tip=_(START_TIP))
     # ramps: the ramp-free comparison
     rp = dr.get("ramps")
     if rp:
         wo = rp.get("pw_drift" if power else "drift")
         chip(id="ramps", icon="ramp", text=_("去坡道 {v}", v=_pct(wo)) if wo is not None else _("去坡道 —"), level="info",
-             tip="\n".join(x for x in (ramps_text(dr, power), RAMP_TIP) if x))
+             tip="\n".join(x for x in (ramps_text(dr, power), _(RAMP_TIP)) if x))
     # heat
     tc = dr.get("temp_c")
     if tc is not None:
         chip(id="heat", icon="temp", text=f"{tc:.0f} °C", level="good" if tc <= DRIFT_HEAT_C else "warn", smart=tc > DRIFT_HEAT_C,
              tip="\n".join(x for x in (
                  _("{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（台灣教練 < 25 °C；Lafrenz 2008）",
-                   src=TEMP_SRC_LABEL.get(dr.get("temp_src"), "溫度"), tc=tc, hot=DRIFT_HEAT_C),
+                   src=_(TEMP_SRC_LABEL.get(dr.get("temp_src"), N_("溫度"))), tc=tc, hot=DRIFT_HEAT_C),
                  bias_text(dr)) if x))
     elif m.get("category") in ("road", "trail"):
         chip(id="heat", icon="temp", text=_("沒有溫度"), level="na",
-             tip=f"沒有溫度資料：> {DRIFT_HEAT_C:.0f} °C 的熱檢查不到")
+             tip=_("沒有溫度資料：> {hot:.0f} °C 的熱檢查不到", hot=DRIFT_HEAT_C))
     # stability (road)
     st = stability_text(dr, power)
     if st and m.get("category") == "road" and dr.get("vi") is not None:
-        chip(id="stability", icon="gauge", text=f"VI {dr['vi']:.2f}", level="info", tip=f"{st}\n{STABILITY_TIP}")
+        chip(id="stability", icon="gauge", text=f"VI {dr['vi']:.2f}", level="info", tip=f"{st}\n{_(STABILITY_TIP)}")
     # HR quality (SP-266): the downgrade's reason
     if dr.get("hr_ref"):
         chip(id="hr_quality", icon="noise", text=_(HRQ_LABEL), level="warn", hid="AN4",
@@ -3596,25 +3659,27 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
         b = baseline_for(ds, w, lambda pm: basis_drift(pm.get("drift") or {}, basis, ref=True)[0])
         if b.get("ok"):
             chip(id="baseline", icon="baseline", text=_("同類中位 {v}", v=_pct(b['median'])), level="info",
-                 tip="同類課表基準：" + _base_text(b, lambda x: _pct(x)))
+                 tip=_("同類課表基準：") + _base_text(b, lambda x: _pct(x)))
     return cards
 
 
 def _summary(ds, w, m, c, base):
     typ = c["type"]
-    rows = [_row("課表", f"{c['type_label']}" + (f" · {c['terrain_label']}" if c["terrain_label"] else "")
-                 + f" · {c['phase_label']}"),
-            _row("時間", f"移動 {_hms(m.get('moving_s'))} ／ 全程 {_hms(m.get('elapsed_s'))}")]
+    rows = [_row(_("課表"), _(c['type_label']) + (f" · {_(c['terrain_label'])}" if c["terrain_label"] else "")
+                 + f" · {_(c['phase_label'])}"),
+            _row(_("時間"), _("移動 {moving} ／ 全程 {elapsed}", moving=_hms(m.get('moving_s')),
+                                elapsed=_hms(m.get('elapsed_s'))))]
     aet, lthr, cp = m.get("aet"), m.get("lthr"), m.get("cp")
     if m.get("avg_hr"):
-        rows.append(_row("心率", f"平均 {m['avg_hr']:.0f} bpm（AeT {_num(aet)}、LTHR {_num(lthr)}）"))
+        rows.append(_row(_("心率"), _("平均 {hr:.0f} bpm（AeT {aet}、LTHR {lthr}）", hr=m['avg_hr'], aet=_num(aet),
+                                     lthr=_num(lthr))))
     z = m.get("zones")
     if z and sum(z.values()) > 0:
         tot = sum(z.values())
-        rows.append(_row("三區", f"< AeT {z['low'] / tot * 100:.0f}% · AeT–LTHR {z['mid'] / tot * 100:.0f}% · "
-                                 f"≥ LTHR {z['high'] / tot * 100:.0f}%"))
+        rows.append(_row(_("三區"), f"< AeT {z['low'] / tot * 100:.0f}% · AeT–LTHR {z['mid'] / tot * 100:.0f}% · "
+                                    f"≥ LTHR {z['high'] / tot * 100:.0f}%"))
     if typ in ("strength", "bike", "walk", "other"):
-        return {**base, "series": rows + _verdict_rows([f"{c['type_label']}：只看時間與心率，沒有其他判讀"]),
+        return {**base, "series": rows + _verdict_rows([_("{type}：只看時間與心率，沒有其他判讀", type=_(c['type_label']))]),
                 "cards": _summary_cards(ds, w, m, c, [], None)}
     ev = None
     if typ == "test_aet":
@@ -3632,11 +3697,11 @@ def _summary(ds, w, m, c, base):
     if c["terrain"] in ("trail", "hike"):
         cl = m.get("climbs") or []
         if cl:
-            rows.append(_row("爬坡", f"{len(cl)} 段、共 {sum(x['gain_m'] for x in cl):.0f} m；"
-                                     f"每 100 m 心跳 {_num(m.get('hr_per_100m'))} 下"))
+            rows.append(_row(_("爬坡"), _("{n} 段、共 {m:.0f} m；每 100 m 心跳 {beats} 下", n=len(cl),
+                                         m=sum(x['gain_m'] for x in cl), beats=_num(m.get('hr_per_100m')))))
         lines = (_trail_lines(ds, w, m) + lines)[:3]
     if c.get("cp_hint"):
-        rows.append(_row("CP 測試？", CP_HINT))
+        rows.append(_row(_("CP 測試？"), _(CP_HINT)))
     # (the 「建議分頁」 row is gone: the user asked for it to be removed; `suggested_dashboard` stays in the JSON)
     return {**base, "series": rows + _verdict_rows(lines), "cards": cards}
 
@@ -3656,11 +3721,11 @@ def _aerobic(ds, w, m, c, base):
         tip = "\n".join(x for x in (_(REF_TIP) if ref else _(SE_TIP).split("\n")[0], drift_method(basis, se)) if x)
         rows.append(_row(name, _("{plain}（{start}）", plain=drift_plain(d), start=start_text(dr)), tip))
     if d is not None and power:
-        rows += [_row("前半／後半心率", f"{dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm"),
-                 _row("前半／後半功率", f"{dr['p1']:.0f} → {dr['p2']:.0f} W")]
+        rows += [_row(_("前半／後半心率"), f"{dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm"),
+                 _row(_("前半／後半功率"), f"{dr['p1']:.0f} → {dr['p2']:.0f} W")]
     elif d is not None:
-        rows += [_row("前半／後半心率", f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
-                 _row("前半／後半速度", f"{dr['v1']:.2f} → {dr['v2']:.2f} km/h")]
+        rows += [_row(_("前半／後半心率"), f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
+                 _row(_("前半／後半速度"), f"{dr['v1']:.2f} → {dr['v2']:.2f} km/h")]
     if d is not None:
         # one plain 「可信度」 row: the 參考 tier, a noisy run, or fine (the method only in the ?)
         cav = drift_caveat(dr, basis)
@@ -3676,13 +3741,13 @@ def _aerobic(ds, w, m, c, base):
                          _("量測的這段沒有發現可疑的心率"), _(HRQ_TIP)))
     ex = excluded_text(dr)
     if ex and m.get("category") == "road":
-        rows.append(_row("已排除", ex, START_TIP + " " + TAIL_TIP))
+        rows.append(_row(_("已排除"), ex, _(START_TIP) + " " + _(TAIL_TIP)))
     st = stability_text(dr, power)
     if st and m.get("category") == "road" and (d is not None or dr.get("vi") is not None):
-        rows.append(_row("穩定度", st, STABILITY_TIP))
+        rows.append(_row(_("穩定度"), st, _(STABILITY_TIP)))
     rt = ramps_text(dr, power)
     if rt and d is not None:
-        rows.append(_row("坡道", rt, RAMP_TIP))
+        rows.append(_row(_("坡道"), rt, _(RAMP_TIP)))
     if d is None and power and (dr.get("ok") or dr.get("ref_ok") or m.get("avg_power") is None):
         # nothing to show on this basis (no power, or too little): say so, not 0 %
         rows.append(_row(drift_name("power"), _("這次沒有功率") if m.get("avg_power") is None else why))
@@ -3690,16 +3755,16 @@ def _aerobic(ds, w, m, c, base):
     if m.get("category") in ("road", "trail"):
         tc = dr.get("temp_c")
         bt = bias_text(dr)
-        rows.append(_row("溫度", (f"{TEMP_SRC_LABEL.get(dr.get('temp_src'), '溫度')} {tc:.0f} °C · {band_chip(dr)}"
-                                  + (f"（{HEAT_NOTE}）" if dr.get("heat") and d is not None else "")
-                                  + (f" · {bt}" if bt else ""))
-                         if tc is not None else "沒有溫度資料（溫度不明，只和溫度不明的跑步比）", _(HEAT_TIP)))
+        rows.append(_row(_("溫度"), (f"{_(TEMP_SRC_LABEL.get(dr.get('temp_src'), N_('溫度')))} {tc:.0f} °C · {band_chip(dr)}"
+                                     + (_("（{note}）", note=_(HEAT_NOTE)) if dr.get("heat") and d is not None else "")
+                                     + (f" · {bt}" if bt else ""))
+                         if tc is not None else _("沒有溫度資料（溫度不明，只和溫度不明的跑步比）"), _(HEAT_TIP)))
         # the band chip (the viewer's card header): every drift value says its band
         base = {**base, "chip": {"text": band_chip(dr), "tip": _(HEAT_TIP), "heat": bool(dr.get("heat")),
                                  "band": band}}
     over, tot = _easy_view(m)[1], m.get("hr_s") or 0
     if over is not None and tot > 0:
-        rows.append(_row("超過輕鬆跑上限+3", f"{_hms(over)}（{over / tot * 100:.0f}%）", _cap_src(m)))
+        rows.append(_row(_("超過輕鬆跑上限+3"), _("{t}（{pct:.0f}%）", t=_hms(over), pct=over / tot * 100), _cap_src(m)))
     if c["type"] in ("easy", "long", "test_aet") and d is not None:
         # compared only within the same temperature band
         def same_band(pm):
@@ -3708,9 +3773,9 @@ def _aerobic(ds, w, m, c, base):
                 return None
             return basis_drift(pd, basis, ref=True)[0]
         b = baseline_for(ds, w, same_band)
-        rows.append(_row("同類課表基準", _base_text(b, lambda x: _pct(x)) + f"（同溫度區 {band_chip(dr)}）"))
+        rows.append(_row(_("同類課表基準"), _base_text(b, lambda x: _pct(x)) + _("（同溫度區 {band}）", band=band_chip(dr))))
     if c["type"] not in ("easy", "long", "test_aet"):
-        lines = [f"這次是{c['type_label']}，飄移只在輕鬆跑、長跑、AeT 測試判讀"]
+        lines = [_("這次是{type}，飄移只在輕鬆跑、長跑、AeT 測試判讀", type=_(c['type_label']))]
     elif c["type"] == "test_aet":
         lines = _aet_test_lines(ds, w, m, base) or aerobic_lines("test_aet", m)
     else:
@@ -3736,10 +3801,11 @@ def _aet_test_lines(ds, w, m, base: dict) -> Optional[list[str]]:
     body = AT.apply_body(t)
     plan = getattr(ds, "plan", None)
     if body and not AT.applied(plan, t):
-        base["action"] = {"kind": "apply_aet", "label": f"套用這次的 AeT（{body['aethr']} bpm）", "method": "POST",
+        base["action"] = {"kind": "apply_aet", "label": _("套用這次的 AeT（{hr} bpm）", hr=body['aethr']), "method": "POST",
                           "url": "/api/v1/plan/thresholds/apply-estimate", "body": body,
-                          "done": f"已套用：{body['date']} AeT {body['aethr']} bpm",
-                          "confirm": f"把 {body['date']} 的 AeT 設成 {body['aethr']} bpm？區間和間歇門檻會重新計算"}
+                          "done": _("已套用：{date} AeT {hr} bpm", date=body['date'], hr=body['aethr']),
+                          "confirm": _("把 {date} 的 AeT 設成 {hr} bpm？區間和間歇門檻會重新計算",
+                                       date=body['date'], hr=body['aethr'])}
     return AT.lines(r, m.get("aet"))
 
 
@@ -3949,9 +4015,10 @@ def _climb_lines(cards: list[dict]) -> list[str]:
     if not any(c["base"]["vam"].get("ok") for c in cards):
         return []
     if not hi and not lo:
-        return ["每段的 VAM 都在你平常（相近坡度）的四分位範圍內"]
-    parts = ([f"VAM 高於平常：{''.join(hi)}"] if hi else []) + ([f"低於平常：{''.join(lo)}"] if lo else [])
-    return ["；".join(parts) + "（和近期相近坡度的爬坡比）"]
+        return [_("每段的 VAM 都在你平常（相近坡度）的四分位範圍內")]
+    parts = ([_("VAM 高於平常：{climbs}", climbs="".join(hi))] if hi else []) + \
+        ([_("低於平常：{climbs}", climbs="".join(lo))] if lo else [])
+    return [_("；").join(parts) + _("（和近期相近坡度的爬坡比）")]
 
 
 RUN_SHARE_COVER = 0.5         # 推估: a climb's 跑／走 split needs cadence on ≥ half its moving seconds
@@ -4010,21 +4077,21 @@ def _climbs(ds, w, m, c, base):
         cards = [{**x, "run_share": climb_run_share(s, x.get("start_km"), x.get("end_km"))} for x in cards]
     cols = []                     # the table for GET /workouts/{i}/review readers (the viewer draws its own)
     if cards:
-        cols = [_col("段", [x["no"] for x in cards]),
-                _col("開始", [_hms(x["t_start"]) for x in cards]),
-                _col("從 km", [_num(x.get("start_km"), 1) for x in cards]),
-                _col("爬升 m", [_num(x["gain_m"]) for x in cards]),
-                _col("距離 km", [_num(x["distance_km"], 2) for x in cards]),
-                _col("坡度", [_pct(x["grade"], 0) for x in cards]),
-                _col("時間", [_hms(x["duration_s"]) for x in cards]),
+        cols = [_col(_("段"), [x["no"] for x in cards]),
+                _col(_("開始"), [_hms(x["t_start"]) for x in cards]),
+                _col(_("從 km"), [_num(x.get("start_km"), 1) for x in cards]),
+                _col(_("爬升 m"), [_num(x["gain_m"]) for x in cards]),
+                _col(_("距離 km"), [_num(x["distance_km"], 2) for x in cards]),
+                _col(_("坡度"), [_pct(x["grade"], 0) for x in cards]),
+                _col(_("時間"), [_hms(x["duration_s"]) for x in cards]),
                 _col("VAM m/h", [_num(x["vam"]) for x in cards]),
-                _col("VAM 平常", [_num(x["base"]["vam"].get("median")) if x["base"]["vam"].get("ok") else "–"
-                                for x in cards]),
-                _col("平均心率", [_num(x.get("avg_hr")) for x in cards]),
-                _col("每 100 m 心跳", [_num(x.get("hr_per_100m")) for x in cards]),
-                _col("功率 W", [_num(x.get("avg_power")) for x in cards]),
+                _col(_("VAM 平常"), [_num(x["base"]["vam"].get("median")) if x["base"]["vam"].get("ok") else "–"
+                                   for x in cards]),
+                _col(_("平均心率"), [_num(x.get("avg_hr")) for x in cards]),
+                _col(_("每 100 m 心跳"), [_num(x.get("hr_per_100m")) for x in cards]),
+                _col(_("功率 W"), [_num(x.get("avg_power")) for x in cards]),
                 _col("%CP", [_pct(x.get("pct_cp"), 0) for x in cards]),
-                _col("配速 /km", [_pace(x.get("pace_s_per_km")) for x in cards]),
+                _col(_("配速 /km"), [_pace(x.get("pace_s_per_km")) for x in cards]),
                 _col("GAP /km", [_pace(x.get("gap_s_per_km")) for x in cards])]
     lines = (_trail_lines(ds, w, m) + _climb_lines(cards))[:3] if cards else []
     if cards and not lines:
@@ -4201,7 +4268,7 @@ def _form(ds, w, m, c, base):
 FORM_DEC = {"ilr": 1, "impact_g": 2, "impact_km": 0, "lss": 1, "kleg": 1, "gct": 0, "cadence": 0, "vo": 1}
 FORM_LABEL = {"ilr": "ILR", "impact_g": N_("衝擊 G"), "impact_km": N_("每公里衝擊量（推估）"), "lss": "LSS", "kleg": "kleg",
               "gct": N_("觸地時間"), "cadence": N_("步頻"), "vo": N_("垂直振幅")}
-CADENCE_HINT = "衝擊高於平常、步頻低於平常 → 可試著把步頻提高 5–10%（Heiderscheit 2011）"
+CADENCE_HINT = N_("衝擊高於平常、步頻低於平常 → 可試著把步頻提高 5–10%（Heiderscheit 2011）")
 # SP-236 (docs/research/downhill-knee-load-display.md §3.2): the same pattern on a downhill bin gets the
 # downhill wording — a higher step rate lowers the cumulative load on the knee and the other tissues
 # downhill (Van Hooren 2024, downhill-recovery.md [D21]); +5 / +10 % step rate cut the energy absorbed
@@ -4233,14 +4300,15 @@ def cadence_hint(rows: list[dict], names: list[str]) -> list[str]:
         high = any(compare(m.get(k), b.get(k) or {}) == "high" for k in IMPACT_KEYS)
         if high and compare(m.get("cadence"), b.get("cadence") or {}) == "low":
             (down if hi is not None and hi <= HINT_DOWN_MAX else other).append(name)
-    out = [f"{'、'.join(down)}：{_(DOWN_CADENCE_HINT)}"] if down else []
-    return out + ([f"{'、'.join(other)}：{CADENCE_HINT}"] if other else [])
+    sep, colon = _("、"), _("：")
+    out = [f"{sep.join(down)}{colon}{_(DOWN_CADENCE_HINT)}"] if down else []
+    return out + ([f"{sep.join(other)}{colon}{_(CADENCE_HINT)}"] if other else [])
 
 
 def _hint_rows(hints: list[str]) -> list[dict]:
     return _verdict_rows(hints) if hints else []
 BAND_LABEL = {"all": N_("全部坡度"), "flat": N_("平路 −3～+3%"), "up": N_("上坡 ≥ 3%"), "down": N_("下坡 < −3%")}
-NO_STRYD_NOTE = ("這次沒有 Stryd：ILR（衝擊負荷率）和 LSS（腿部剛性）是 Stryd 腳掌感測器算的，手錶沒有，"
+NO_STRYD_NOTE = N_("這次沒有 Stryd：ILR（衝擊負荷率）和 LSS（腿部剛性）是 Stryd 腳掌感測器算的，手錶沒有，"
                  "所以只看步頻、觸地時間、垂直振幅、kleg、衝擊 G")
 
 
@@ -4300,7 +4368,7 @@ def _form_cell(v, b: dict, k: str) -> str:
 
 
 def _form_note_rows(m: dict) -> list[dict]:
-    return [] if m.get("stryd") else [_row("說明", NO_STRYD_NOTE)]
+    return [] if m.get("stryd") else [_row(_("說明"), _(NO_STRYD_NOTE))]
 
 
 # SP-235: the knee-load card counts walked / small steps too; on the owner's trail downhills Stryd
@@ -4318,8 +4386,8 @@ def _no_impact_rows(bins: list[dict], keys: list[str]) -> list[dict]:
     for b in bins:
         gone = [k for k in shown if (b.get("m") or {}).get(k) is None]
         if gone:
-            miss.append(f"{b['label']}（{'、'.join(FORM_LABEL[k] for k in gone)}）")
-    return [_row("說明", f"{'、'.join(miss)}：{_(NO_IMPACT_NOTE)}")] if miss else []
+            miss.append(_("{label}（{what}）", label=b['label'], what=_("、").join(_(FORM_LABEL[k]) for k in gone)))
+    return [_row(_("說明"), f"{_('、').join(miss)}{_('：')}{_(NO_IMPACT_NOTE)}")] if miss else []
 
 
 def _form_grades(ds, w, m, c, base):
@@ -4347,11 +4415,11 @@ def _form_grades(ds, w, m, c, base):
     if any(b["slow_share"] is not None for b in bins):
         cols.append(_col(_(SLOW_SHARE_LABEL), [_pct(b["slow_share"], 0) for b in bins]))
     cols += [_col(_("{label}（平常）", label=_(FORM_LABEL[k])), [_form_cell(b["m"][k], b["base"][k], k) for b in bins]) for k in keys]
-    hint = cadence_hint(bins, [f"坡度 {b['label']}" for b in bins])     # bins carry lo / hi (SP-236)
+    hint = cadence_hint(bins, [_("坡度 {label}", label=b['label']) for b in bins])     # bins carry lo / hi (SP-236)
     return {**base, "series": cols + _form_note_rows(m) + _no_impact_rows(bins, keys) + _hint_rows(hint),
             "form_profile": {"mode": "grade", "bins": bins, "keys": keys, "min_s": BIN_MIN_S,
                              "pool_weeks": list(POOL_WEEKS), "stryd": bool(m.get("stryd")),
-                             "note": None if m.get("stryd") else NO_STRYD_NOTE}}
+                             "note": None if m.get("stryd") else _(NO_STRYD_NOTE)}}
 
 
 def _form_work(ds, w, m, c, base):
@@ -4381,13 +4449,13 @@ def _form_work(ds, w, m, c, base):
             _col(_("移動時間"), [_hms(r["time_s"]) for rows in bands.values() for r in rows])]
     cols += [_col(_("{label}（平常）", label=_(FORM_LABEL[k])), [_form_cell(r["m"][k], r["base"][k], k)
                                               for rows in bands.values() for r in rows]) for k in keys]
-    word = "作功" if split == "work" else "時間"
+    word = _("作功") if split == "work" else _("時間")
     hint = cadence_hint(bands["all"], [f"{word} {r['label']}" for r in bands["all"]])
     return {**base, "series": cols + _form_note_rows(m) + _hint_rows(hint),
             "form_profile": {"mode": "work", "split": split, "bands": bands,
                              "band_labels": {b: _(BAND_LABEL[b]) for b in bands}, "keys": keys, "min_s": BIN_MIN_S,
                              "pool_weeks": list(POOL_WEEKS), "stryd": bool(m.get("stryd")),
-                             "note": None if m.get("stryd") else NO_STRYD_NOTE}}
+                             "note": None if m.get("stryd") else _(NO_STRYD_NOTE)}}
 
 
 CW_SUGGEST = (1.05, 1.10)     # Heiderscheit 2011: +5 % / +10 % step rate (at the same speed)
@@ -4424,17 +4492,19 @@ def _form_cadence(ds, w, m, c, base):
     a = np.array([r[:4] for r in cw], dtype=float)
     med_cad, v_ref, g_ref = (float(np.median(a[:, i])) for i in (1, 2, 3))
     if fit is None:
-        return {**base, "series": [_row("步頻與衝擊", f"過去的穩定跑不夠（{len(pool)} 次，要 ≥ {CW_MIN_RUNS} 次、"
-                                                f"每次 ≥ {CW_MIN_WIN} 段），還算不出你自己的趨勢")],
+        return {**base, "series": [_row(_("步頻與衝擊"), _("過去的穩定跑不夠（{n} 次，要 ≥ {runs} 次、每次 ≥ {win} 段），"
+                                                       "還算不出你自己的趨勢", n=len(pool), runs=CW_MIN_RUNS, win=CW_MIN_WIN))],
                 "cadence_profile": {"weak": True, "points": []}}
     lo_ci, hi_ci = (fit["b_cad"] - 1.96 * fit["se_cad"]) * 5, (fit["b_cad"] + 1.96 * fit["se_cad"]) * 5
-    rel = (f"同速度、同坡度下，步頻每 +5 spm，ILR {fit['b_cad'] * 5:+.1f} BW/s（95% CI {lo_ci:+.1f}～{hi_ci:+.1f}；"
-           f"{fit['n_runs']} 次跑步、{fit['n_windows']} 段 30 秒，近 {weeks} 週；推估）")
+    rel = _("同速度、同坡度下，步頻每 +5 spm，ILR {b:+.1f} BW/s（95% CI {lo:+.1f}～{hi:+.1f}；"
+            "{runs} 次跑步、{win} 段 30 秒，近 {weeks} 週；推估）", b=fit['b_cad'] * 5, lo=lo_ci, hi=hi_ci,
+            runs=fit['n_runs'], win=fit['n_windows'], weeks=weeks)
     if hi_ci >= 0 or abs(fit["partial_r"]) < 0.1:
         # weak or not clearly negative: say so, no trend chart (it would mislead)
-        why = "95% CI 碰到 0" if hi_ci >= 0 else f"偏相關只有 {fit['partial_r']:+.2f}（|r| < 0.1）"
-        return {**base, "series": [_row("步頻與衝擊", rel), _row(_("判讀"), f"關係不明顯（{why}）：在你的資料裡，同速度下"
-                                                                      "步頻高低和衝擊沒有清楚的關係，不畫趨勢線")],
+        why = _("95% CI 碰到 0") if hi_ci >= 0 else _("偏相關只有 {r:+.2f}（|r| < 0.1）", r=fit['partial_r'])
+        return {**base, "series": [_row(_("步頻與衝擊"), rel),
+                                   _row(_("判讀"), _("關係不明顯（{why}）：在你的資料裡，同速度下步頻高低和衝擊沒有清楚的關係，"
+                                                     "不畫趨勢線", why=why))],
                 "cadence_profile": {"weak": True, "points": [], "fit": fit, "weeks": weeks}}
     adj = a[:, 0] - fit["b_speed"] * (a[:, 2] - v_ref) - fit["b_grade"] * (a[:, 3] - g_ref)
     pts = [[round(float(x), 1), round(float(y), 2), r[0], r[2], r[3]] for x, y, r in zip(a[:, 1], adj, cw)]
@@ -4442,10 +4512,11 @@ def _form_cadence(ds, w, m, c, base):
     sug = [med_cad * CW_SUGGEST[0], med_cad * CW_SUGGEST[1]]
     pred5 = fit["b_cad"] * med_cad * 0.05
     sd = float(np.std(a[:, 1]))
-    rows = [_row("步頻與衝擊", rel),
-            _row("這次", f"中位步頻 {med_cad:.0f} spm；+5–10% = {sug[0]:.0f}–{sug[1]:.0f} spm（Heiderscheit 2011）"),
-            _row("預估（推估）", f"照你的趨勢，步頻 +5% 約讓 ILR {pred5:+.1f} BW/s（{pred5 / cy * 100:+.0f}%）；你這次的步頻"
-                              f"只在 ±{sd:.0f} spm 內變化，+5% 是外推")]
+    rows = [_row(_("步頻與衝擊"), rel),
+            _row(_("這次"), _("中位步頻 {cad:.0f} spm；+5–10% = {a:.0f}–{b:.0f} spm（Heiderscheit 2011）",
+                             cad=med_cad, a=sug[0], b=sug[1])),
+            _row(_("預估（推估）"), _("照你的趨勢，步頻 +5% 約讓 ILR {d:+.1f} BW/s（{pct:+.0f}%）；你這次的步頻只在 ±{sd:.0f} spm "
+                                     "內變化，+5% 是外推", d=pred5, pct=pred5 / cy * 100, sd=sd))]
     return {**base, "series": rows,
             "cadence_profile": {"points": pts, "fit": fit, "weeks": weeks, "center": [cx, cy],
                                 "speed_ref": v_ref, "grade_ref": g_ref, "median_cad": med_cad, "suggest": sug}}
@@ -4460,10 +4531,11 @@ def _cp(ds, w, m, c, base):
         return {**base, "empty": _("沒有功率，算不出 CP") if m.get("avg_power") is None
                 else _("找不到這個流程的全力段，算不出 CP")}
     how = MATCH_LABEL.get(c.get("test_match"))
-    rows = [_row("流程", ev["protocol_label"] + (f"（依{how}）" if how else ""))]
+    rows = [_row(_("流程"), _(ev["protocol_label"]) + (_("（依{how}）", how=_(how)) if how else ""))]
     for b in ev.get("bouts") or []:
-        hr = f"，最高心率 {b['hr_peak']:.0f}" if b.get("hr_peak") is not None else ""
-        rows.append(_row(f"{b['duration_s'] / 60:.0f} 分段", f"{b['power']:.0f} W（{_hms(b['start_s'])} 開始{hr}）"))
+        hr = _("，最高心率 {hr:.0f}", hr=b['hr_peak']) if b.get("hr_peak") is not None else ""
+        rows.append(_row(_("{m:.0f} 分段", m=b['duration_s'] / 60),
+                         _("{w:.0f} W（{t} 開始{hr}）", w=b['power'], t=_hms(b['start_s']), hr=hr)))
     # SP-468: the test's CP is WKO5's mFTP after it; the checks only describe the effort
     from backend.engine.cp_protocols import NO_FIT
     rows.append(_row(_("模型閾值功率（Modelled threshold power）"), f"{ev['cp']:.0f} W · {_(ev['method_label'])}" if ev.get("cp") is not None
@@ -4554,25 +4626,29 @@ def _iv_verdict(ds, w, m, c, base):
                             _("無氧儲備最低 {pct:.0f}%", pct=e['dfrc_min_pct'] * 100)],
                      tip=_("整趟高於 CP 的功（含回充後再用）÷ 無氧容量（Anaerobic capacity）{kj:.1f} kJ；無氧儲備最低 = 無氧容量最低剩多少。", kj=e['wprime_j'] / 1000) + wtip)
     if e.get("kind") == "test":
-        rows = [_row("判定", e["verdict_label"], "測試照流程判讀：每一段是不是平均分配（不是對照目標帶的「達標」）"),
-                _row("流程", e["label"])]
+        rows = [_row(_("判定"), e["verdict_label"], _("測試照流程判讀：每一段是不是平均分配（不是對照目標帶的「達標」）")),
+                _row(_("流程"), e["label"])]
         for i, r in enumerate(e["reasons"]):
-            rows.append(_row("各段" if i == 0 else "", r))
-        rows.append(_row("無氧容量用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% 無氧容量）；"
-                         f"無氧儲備最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
+            rows.append(_row(_("各段") if i == 0 else "", r))
+        rows.append(_row(_("無氧容量用掉"), _("{kj:.1f} kJ（{pct:.0f}% 無氧容量）；無氧儲備最低 {low:.0f}%",
+                                          kj=e['wprime_used_j'] / 1000, pct=e['wprime_used_j'] / e['wprime_j'] * 100,
+                                          low=e['dfrc_min_pct'] * 100), wtip))
         chips = []
         for r in e["reps"]:
             exp = r.get("expected")
-            nums = [f"{r['power']:.0f} W", f"{r['pct_cp'] * 100:.0f}% CP"] + ([f"做到 {r['power'] / exp * 100:.0f}%"] if exp else [])
-            word = r.get("pacing") or ""
-            tip = (f"前半 {r['p1']:.0f} → 後半 {r['p2']:.0f} W（{r['split'] * 100:+.0f}%）" if r.get("p1") else "")
+            nums = [f"{r['power']:.0f} W", f"{r['pct_cp'] * 100:.0f}% CP"] + \
+                ([_("做到 {pct:.0f}%", pct=r['power'] / exp * 100)] if exp else [])
+            word = r.get("pacing") or ""            # interval_eval: already in the request's language
+            tip = (_("前半 {p1:.0f} → 後半 {p2:.0f} W（{pct:+.0f}%）", p1=r['p1'], p2=r['p2'], pct=r['split'] * 100)
+                   if r.get("p1") else "")
             if r.get("last_ratio") is not None:
-                tip += f"；最後 1 分比整段 {r['last_ratio'] * 100:+.0f}%"
-            tip += f"——{word}。"
+                tip += _("；最後 1 分比整段 {pct:+.0f}%", pct=r['last_ratio'] * 100)
+            tip += _("——{word}。", word=word)
             if exp:
-                tip += (f"\n預期全力 ≈ {exp:.0f} W = 測試前 CP {e['cp_ref']:.0f} + 無氧容量 {e['wprime_j'] / 1000:.1f} kJ ÷ "
-                        f"{r['duration_s']:.0f} 秒（CP 模型，Monod & Scherrer 1965，推估）。")
-            chips.append(_chip_row(r["name"], nums, ("平均" if r["even"] else word.split("（")[0]),
+                tip += "\n" + _("預期全力 ≈ {exp:.0f} W = 測試前 CP {cp:.0f} + 無氧容量 {kj:.1f} kJ ÷ {s:.0f} 秒"
+                                "（CP 模型，Monod & Scherrer 1965，推估）。",
+                                exp=exp, cp=e['cp_ref'], kj=e['wprime_j'] / 1000, s=r['duration_s'])
+            chips.append(_chip_row(r["name"], nums, (_("平均") if r["even"] else r.get("pacing_short") or word),
                                    "good" if r["even"] else "warn", tip))
         for x in e.get("notes") or []:
             chips.append(_chip_row(x["label"], [x["text"]], tip=x["tip"]))
@@ -4593,13 +4669,14 @@ def _iv_verdict(ds, w, m, c, base):
         return _iv_verdict_bands(e, base, sub, auto_note, wrow, wtip)
     # SP-521: a verdict short of 達到 says why (e.g. every rep 達標 but the time in the zone short) — words only
     why = e.get("verdict_why")
-    rows = [_row("判定", _("{verdict}：{why}", verdict=e["verdict_label"], why=why) if why else e["verdict_label"],
-                 "對照「這次選的課表」本身的計畫；同等與否在選課時已決定"),
-            _row("課表", sub, auto_note)]
+    rows = [_row(_("判定"), _("{verdict}：{why}", verdict=e["verdict_label"], why=why) if why else e["verdict_label"],
+                 _("對照「這次選的課表」本身的計畫；同等與否在選課時已決定")),
+            _row(_("課表"), sub, auto_note)]
     for i, r in enumerate(e["reasons"]):
-        rows.append(_row("理由" if i == 0 else "", r))
-    rows.append(_row("無氧容量用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% 無氧容量）；"
-                     f"無氧儲備最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
+        rows.append(_row(_("理由") if i == 0 else "", r))
+    rows.append(_row(_("無氧容量用掉"), _("{kj:.1f} kJ（{pct:.0f}% 無氧容量）；無氧儲備最低 {low:.0f}%",
+                                      kj=e['wprime_used_j'] / 1000, pct=e['wprime_used_j'] / e['wprime_j'] * 100,
+                                      low=e['dfrc_min_pct'] * 100), wtip))
     src_name, src_rule = _SRC_NAME.get(e["rep_source"]), _SRC_RULE.get(e["rep_source"])
     src = _("{name}（{rule}）", name=_(src_name), rule=_(src_rule)) if src_name else "—"
     rows.append(_row(_("找趟"), src))
@@ -4665,11 +4742,12 @@ def _iv_verdict_bands(e, base, sub, auto_note, wrow, wtip):
             "想照目標判 → 把這堂排進課表。", rule=rule)
     head = (_("{verdict}：{n} 趟中 {k} 趟落在這一帶", verdict=e["verdict_label"], n=len(reps), k=nb.get(main, 0))
             if main else e["verdict_label"])
-    rows = [_row("判定", head, why), _row("課表", sub, auto_note)]
+    rows = [_row(_("判定"), head, why), _row(_("課表"), sub, auto_note)]
     for i, r in enumerate(e["reasons"]):
-        rows.append(_row("理由" if i == 0 else "", r))
-    rows.append(_row("無氧容量用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% 無氧容量）；"
-                     f"無氧儲備最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
+        rows.append(_row(_("理由") if i == 0 else "", r))
+    rows.append(_row(_("無氧容量用掉"), _("{kj:.1f} kJ（{pct:.0f}% 無氧容量）；無氧儲備最低 {low:.0f}%",
+                                      kj=e['wprime_used_j'] / 1000, pct=e['wprime_used_j'] / e['wprime_j'] * 100,
+                                      low=e['dfrc_min_pct'] * 100), wtip))
     src_name, src_rule = _SRC_NAME.get(e["rep_source"]), _SRC_RULE.get(e["rep_source"])
     src = _("{name}（{rule}）", name=_(src_name), rule=_(src_rule)) if src_name else "—"
     rows.append(_row(_("找趟"), src))
@@ -4772,15 +4850,16 @@ def _iv_reps(ds, w, m, c, base):
             + (_("，{k} 趟偏低", k=k_lo) if k_lo else ""))
     if len(reps) < n:
         head += _("，少做 {k} 趟", k=n - len(reps))
-    band = (f"{e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP（{lo_w:.0f}–{hi_w:.0f} W）" if hi_w is not None
-            else f"≥ {e['lo'] * 100:.0f}% CP（≥ {lo_w:.0f} W）")
+    band = (_("{lo:.0f}–{hi:.0f}% CP（{lo_w:.0f}–{hi_w:.0f} W）", lo=e['lo'] * 100, hi=e['hi'] * 100, lo_w=lo_w, hi_w=hi_w)
+            if hi_w is not None else _("≥ {lo:.0f}% CP（≥ {lo_w:.0f} W）", lo=e['lo'] * 100, lo_w=lo_w))
     tol_kw = dict(floor=e["floor"], tol=e.get("in_band_tol_text", "0.98"), basis=e.get("in_band_basis", ""))
-    desc = (f"每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 目標 {band}。長條頂端在綠色帶裡或上面 = 達標："
+    desc = (_("每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 目標 {band}。長條頂端在綠色帶裡或上面 = 達標：",
+              band=band)
             + _("綠 ✓ 在目標內、黃 ▼ 偏低（< {floor:.0f} W = 下限 × {tol}，{basis}）", **tol_kw)
-            + (f"、紅 ▲ 偏高（> {ceil:.0f} W = 上限 × 1.02，推估）" if ceil is not None else ""))
-    desc += ("。偏高在判讀裡仍算達標，只是提醒做太重。"
-             + (f"掉速 {e['fade'] * 100:+.0f}%（最後一趟比第一趟）。" if e.get("fade") is not None else "")
-             + "滑過點看那趟的時間長度、% CP 和後半心率。")
+            + (_("、紅 ▲ 偏高（> {ceil:.0f} W = 上限 × 1.02，推估）", ceil=ceil) if ceil is not None else ""))
+    desc += (_("。偏高在判讀裡仍算達標，只是提醒做太重。")
+             + (_("掉速 {pct:+.0f}%（最後一趟比第一趟）。", pct=e['fade'] * 100) if e.get("fade") is not None else "")
+             + _("滑過點看那趟的時間長度、% CP 和後半心率。"))
     prof = {"mode": "plan", "cp": round(cp, 1), "band": [round(lo_w, 1), None if hi_w is None else round(hi_w, 1)],
             "floor": round(e["floor"], 1), "ceil": None if ceil is None else round(ceil, 1), "n_plan": n, "reps": reps,
             "counts": {"in": k_in, "high": k_hi, "low": k_lo, "missing": n - len(reps)},
@@ -4824,13 +4903,13 @@ def _iv_reps_test(e, base):
              "expected": None if not r.get("expected") else round(r["expected"], 1), "pacing": r.get("pacing"),
              "status": "even" if r["even"] else "uneven"} for r in e["reps"]]
     k_even = sum(1 for r in reps if r["status"] == "even")
-    head = f"{len(reps)} 段中 {k_even} 段配速平均"
+    head = _("{n} 段中 {k} 段配速平均", n=len(reps), k=k_even)
     exp = any(r["expected"] for r in reps)
-    desc = (f"{e['label']}：每段一根長條，頂端 = 那段的平均功率（綠 ✓ 前後半配速平均、黃 ■ 不平均）。"
-            + ("滑過看這段長度的預期全力功率，用測試前的 CP 和無氧容量（Anaerobic capacity，W′）依 CP 模型 P = CP + W′/t 算"
-               f"（Monod & Scherrer 1965；{e['wprime_src']}，推估）。" if exp else "")
-            + "平均＝後半和前半差 ±" + ("5" if e.get("intent") == "max" else "3")
-            + "% 內、最後 1 分 ≤ 該段 × 1.08（推估）。測試不用目標帶判「達標」。")
+    desc = (_("{label}：每段一根長條，頂端 = 那段的平均功率（綠 ✓ 前後半配速平均、黃 ■ 不平均）。", label=e['label'])
+            + (_("滑過看這段長度的預期全力功率，用測試前的 CP 和無氧容量（Anaerobic capacity，W′）依 CP 模型 P = CP + W′/t 算"
+                 "（Monod & Scherrer 1965；{src}，推估）。", src=e['wprime_src']) if exp else "")
+            + _("平均＝後半和前半差 ±{tol}% 內、最後 1 分 ≤ 該段 × 1.08（推估）。測試不用目標帶判「達標」。",
+                tol="5" if e.get("intent") == "max" else "3"))
     prof = {"mode": "test", "cp": round(cp, 1), "band": None, "n_plan": len(reps), "reps": reps,
             "counts": {"even": k_even, "uneven": len(reps) - k_even}}
     return {**base, "series": [], "rep_profile": prof, "subtitle": head, "description": desc}
@@ -4881,15 +4960,16 @@ def _iv_power(ds, w, m, c, base):
              "dfrc_end": None if not len(dfrc) or not math.isfinite(dfrc[-1]) else round(float(dfrc[-1]), 4),
              "wprime_kj": round(b["wprime_j"] / 1000, 1)}
     pdc = e.get("pdc5") if ok else None
-    desc = ("上：橘色面積 = 功率（30 秒平均，左軸 W），虛線 = CP"
+    desc = (_("上：橘色面積 = 功率（30 秒平均，左軸 W），虛線 = CP")
             + (_("，灰帶 = 偵測到的趟落在的{band}", band=e.get("band_text") or "") if det and band else
-               f"，灰帶 = 目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP" if band and band[1] else
-               f"，灰帶 = 目標 ≥ {e['lo'] * 100:.0f}% CP" if band else "")
-            + (f"；淺色底 + 數字 = 第幾{'段' if test else '趟'}" if reps else "")
-            + f"。藍線 = 無氧儲備（Anaerobic reserve）：無氧容量剩多少（右軸 %，{b['wprime_j'] / 1000:.1f} kJ = 100%）：高於 CP（{cp:.0f} W）就耗，"
-            "低於 CP 回充（30% 25 秒＋70% 300 秒回充），跑步沒驗證（推估）。"
-            f"{b['wprime_src']}。下：心率（bpm，5 秒平均，手腕光學有延遲）。滑過任一處兩格一起看同一秒。"
-            + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，參考值）。" if pdc else ""))
+               _("，灰帶 = 目標帶 {lo:.0f}–{hi:.0f}% CP", lo=e['lo'] * 100, hi=e['hi'] * 100) if band and band[1] else
+               _("，灰帶 = 目標 ≥ {lo:.0f}% CP", lo=e['lo'] * 100) if band else "")
+            + ((_("；淺色底 + 數字 = 第幾段") if test else _("；淺色底 + 數字 = 第幾趟")) if reps else "")
+            + _("。藍線 = 無氧儲備（Anaerobic reserve）：無氧容量剩多少（右軸 %，{kj:.1f} kJ = 100%）：高於 CP（{cp:.0f} W）就耗，"
+                "低於 CP 回充（30% 25 秒＋70% 300 秒回充），跑步沒驗證（推估）。"
+                "{src}。下：心率（bpm，5 秒平均，手腕光學有延遲）。滑過任一處兩格一起看同一秒。",
+                kj=b['wprime_j'] / 1000, cp=cp, src=b['wprime_src'])
+            + (_("近 90 天最佳 5 分鐘 {w:.0f} W（{pct:.0f}% CP，參考值）。", w=pdc, pct=pdc / cp * 100) if pdc else ""))
     sub = _("無氧儲備最低 {pct:.0f}%（{t}）· 整趟高於 CP 的功 {kj:.1f} kJ（{share:.0f}% 無氧容量，含回充後再用）",
             pct=b['dfrc_min_pct'] * 100, t=_hms(trace['dfrc_min']['t']), kj=b['wprime_used_j'] / 1000,
             share=b['wprime_used_j'] / b['wprime_j'] * 100)
@@ -4922,13 +5002,13 @@ def _iv_battery(ds, w, m, c, base, compact: bool = False):
          {"name": _("最低"), "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
           "labels": [_("最低 {pct:.0f}%", pct=lo_v * 100)], "data": {"kind": "points", "x": "seconds",
                                                           "points": [[round(lo_t, 1), round(lo_v, 4)]]}}]
-    desc = (f"無氧儲備 = 還剩多少無氧容量（{e['wprime_j'] / 1000:.1f} kJ = 100%）。高於 CP（{e['cp']:.0f} W）就消耗，"
-            f"休息或低於 CP 時回充（30% 25 秒＋70% 300 秒回充），"
-            f"推估，跑步沒驗證。{e['wprime_src']}")
+    desc = _("無氧儲備 = 還剩多少無氧容量（{kj:.1f} kJ = 100%）。高於 CP（{cp:.0f} W）就消耗，"
+             "休息或低於 CP 時回充（30% 25 秒＋70% 300 秒回充），推估，跑步沒驗證。{src}",
+             kj=e['wprime_j'] / 1000, cp=e['cp'], src=e['wprime_src'])
     sub = _("整趟高於 CP 的功 {kj:.1f} kJ（{share:.0f}% 無氧容量，含回充後再用），無氧儲備最低 {pct:.0f}%（{t}）",
             kj=e['wprime_used_j'] / 1000, share=e['wprime_used_j'] / e['wprime_j'] * 100, pct=lo_v * 100, t=_hms(lo_t))
     if compact:
-        desc = "無氧儲備（Anaerobic reserve）：無氧容量剩多少，100% = 滿。和功率、心率疊在一起看在「間歇」分頁。" + desc
+        desc = _("無氧儲備（Anaerobic reserve）：無氧容量剩多少，100% = 滿。和功率、心率疊在一起看在「間歇」分頁。") + desc
     return {**base, "axes": [{"id": "PERCENT", "unit": pct, "max": 1.0}], "series": s, "description": desc,
             "subtitle": sub}
 
@@ -4962,7 +5042,8 @@ def _iv_tiz(ds, w, m, c, base):
     tlo = e.get("tiz_lo", e["lo"])                  # SP-647: the recovery fartlek from Zone 3B's lower edge
     zone = f"≥ {tlo * 100:.0f}% CP" if e["z5"] else f"{tlo * 100:.0f}–{e['hi'] * 105:.0f}% CP"
     return {**base, "axes": [{"id": "HHMMSS", "unit": du, "min": 0}], "series": s,
-            "description": f"目標區 = 10 秒功率 {zone}、連續 ≥ {e.get('tiz_run_s') or IE.TIZ_RUN_S:g} 秒才算（推估）。"
+            "description": _("目標區 = 10 秒功率 {zone}、連續 ≥ {s:g} 秒才算（推估）。", zone=zone,
+                             s=e.get('tiz_run_s') or IE.TIZ_RUN_S)
                            + _("≥ {goal:.0%} 算達到，{basis}（TrainingPeaks、intervals.icu、TrainerPlan 的「完成」都從 80% 起）。",
                                goal=e.get("tiz_goal", IE.TIZ_GOAL), basis=e.get("tiz_basis", ""))}
 
@@ -5010,11 +5091,11 @@ def _iv_hr(ds, w, m, c, base):
           "labels": [_("這次 {v:.0f}", v=cur[0][1])] if cur else None,
           "data": {"kind": "points", "x": "datetime", "points": cur}}]
     if med:
-        s.append({"name": "之前的中位 ±3%", "type": "line", "expression": "", "y_axis": "BPM", "unit": bu, "color": MUTED,
+        s.append({"name": _("之前的中位 ±3%"), "type": "line", "expression": "", "y_axis": "BPM", "unit": bu, "color": MUTED,
                   "data": {"kind": "band", "range": [round(med * 0.97, 1), round(med * 1.03, 1)]}})
     return {**base, "axes": [{"id": "BPM", "unit": bu}], "series": s,
-            "description": "每趟後半段的平均心率，只比平均功率相差 ±3% 以內的同類課（Buchheit 2014：運動中心率雜訊約 3%，"
-                           "同功率心率越低越好；超出灰帶才算有變化）。"}
+            "description": _("每趟後半段的平均心率，只比平均功率相差 ±3% 以內的同類課（Buchheit 2014：運動中心率雜訊約 3%，"
+                             "同功率心率越低越好；超出灰帶才算有變化）。")}
 
 
 # ---------------------------------------------------------------------------

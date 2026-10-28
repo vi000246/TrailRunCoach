@@ -35,6 +35,7 @@ from backend.engine.algorithms import minetti
 from backend.engine.racepower import hike as HK
 from backend.engine.racepower.env import bassett_pct
 from backend.engine.racepower.grade_model import BIN, SHRINK_N, tobler_kmh
+from backend.i18n import _, M_, N_
 
 CR0 = minetti.FLAT_RUN          # 3.6 J/kg/m, Minetti 2002 polynomial constant (measured 3.40 ± 0.24)
 STAND_W_PER_KG = 1.5            # Pandolf's standing term 1.5·W
@@ -105,18 +106,19 @@ SIGMA_TIME_CAP = 0.10
 SIGMA_DAY = 0.03                # per day after the first (no source)
 SIGMA_PACK = 0.08               # Looney 2022 / Weyand 2021 ±15 % order (推估)
 SIGMA_LOO_DEFAULT = 0.10        # until the back-test gives one
+SIGMA_LOO_SRC = N_("回測前預設 0.10")
 BAND_Z = 1.2816                 # p10–p90
 HR_BANDS = ("aet", "cap")       # β ≈ 0 → only AeT and the capacity ceiling (§2.2 finding 1)
 CAP_BAND_MAX_H = 3.0
 BETA_MIN_T = 2.0                # |β/SE| below this → β fixed at 0 (推估)
-EVIDENCE = {
-    "prior": "B1 推估（Minetti 2002 平地跑步成本 + Pandolf 站立項）；B2 Pandolf 1977 已驗證（二手核對，G ≥ 0）",
-    "pack": "B3 Pandolf 比值（已驗證二手核對；陡坡與 Ludlow & Weyand 2017 一致）；下坡 B3' 線性（推估）",
-    "delta": "個人 2 % 坡度箱修正，往 0 收縮 n/(n + 30)（推估）",
-    "altitude": "Wehrlin & Hallén 2006 −6.3 %/1000 m 先驗，寬度依 Wehrlin 個體範圍 4.6–7.5 與 Coffman 2020（推估）",
-    "time": "當天第幾小時：個人斜率往 0 收縮，τ 0.03/h（Nuuttila 2025 量級，推估）",
-    "day": "多日：心率差 × β；β 不可靠時 1.0（無來源）",
-    "down": "下坡：個人走路窗 × 背負線性 ÷ η，上限 c_cap × Tobler（經驗法則 + 推估）",
+EVIDENCE = {                    # msgids: M_() where shown (to_json)
+    "prior": N_("B1 推估（Minetti 2002 平地跑步成本 + Pandolf 站立項）；B2 Pandolf 1977 已驗證（二手核對，G ≥ 0）"),
+    "pack": N_("B3 Pandolf 比值（已驗證二手核對；陡坡與 Ludlow & Weyand 2017 一致）；下坡 B3' 線性（推估）"),
+    "delta": N_("個人 2 % 坡度箱修正，往 0 收縮 n/(n + 30)（推估）"),
+    "altitude": N_("Wehrlin & Hallén 2006 −6.3 %/1000 m 先驗，寬度依 Wehrlin 個體範圍 4.6–7.5 與 Coffman 2020（推估）"),
+    "time": N_("當天第幾小時：個人斜率往 0 收縮，τ 0.03/h（Nuuttila 2025 量級，推估）"),
+    "day": N_("多日：心率差 × β；β 不可靠時 1.0（無來源）"),
+    "down": N_("下坡：個人走路窗 × 背負線性 ÷ η，上限 c_cap × Tobler（經驗法則 + 推估）"),
 }
 
 
@@ -353,14 +355,14 @@ def run_speed_at_aet(grade_samples: Sequence[dict], aet_of, date_lo: Optional[st
             if abs(hr - aet) <= tol:
                 out.append(s["v"])
         return out
-    tries = [(AET_TOL_BPM, date_lo, f"近 {AET_WINDOW_DAYS} 天平路跑步、心率在 AeT ± 3 bpm 的速度中位數"),
-             (5.0, date_lo, f"近 {AET_WINDOW_DAYS} 天平路跑步、心率在 AeT ± 5 bpm（± 3 不足 30 窗）"),
-             (5.0, None, "近一年平路跑步、心率在 AeT ± 5 bpm（近 90 天不足 30 窗）")]
+    tries = [(AET_TOL_BPM, date_lo, M_("近 {days} 天平路跑步、心率在 AeT ± 3 bpm 的速度中位數", days=AET_WINDOW_DAYS)),
+             (5.0, date_lo, M_("近 {days} 天平路跑步、心率在 AeT ± 5 bpm（± 3 不足 30 窗）", days=AET_WINDOW_DAYS)),
+             (5.0, None, M_("近一年平路跑步、心率在 AeT ± 5 bpm（近 90 天不足 30 窗）"))]
     for tol, lo, label in tries:
         vs = pick(tol, lo)
         if len(vs) >= 30:
             return {"v": float(median(vs)), "n": len(vs), "source": label, "fallback": tol != AET_TOL_BPM or lo is None}
-    return {"v": None, "n": 0, "source": "沒有心率在 AeT 附近的平路跑步", "fallback": True}
+    return {"v": None, "n": 0, "source": M_("沒有心率在 AeT 附近的平路跑步"), "fallback": True}
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +391,7 @@ class WalkCapacity:
     tech: float = 1.0
     basis: dict = field(default_factory=dict)
     sigma_loo: float = SIGMA_LOO_DEFAULT
-    sigma_loo_src: str = "回測前預設 0.10"
+    sigma_loo_src: str = SIGMA_LOO_SRC               # a msgid (to_json shows it through M_), or a set text
     pack_range: tuple = (L_TRAIL, L_TRAIL)
     z_range: tuple = (0.0, 0.0)
     v_run_info: dict = field(default_factory=dict)
@@ -493,9 +495,10 @@ class WalkCapacity:
                 "e_aet_w_per_kg": self.e_aet / self.weight, "alpha": self.alpha, "gamma": self.gamma,
                 "gamma_info": self.gamma_info, "beta": self.beta, "v_flat_obs": self.v_flat_obs,
                 "flat_n": self.flat_n, "c_cap": self.c_cap, "c_cap_n": self.c_cap_n, "tech": self.tech,
-                "basis": self.basis, "sigma_loo": self.sigma_loo, "sigma_loo_src": self.sigma_loo_src,
+                "basis": self.basis, "sigma_loo": self.sigma_loo,
+                "sigma_loo_src": M_(self.sigma_loo_src) if self.sigma_loo_src == SIGMA_LOO_SRC else self.sigma_loo_src,
                 "pack_range": list(self.pack_range), "z_range": list(self.z_range), "bins": rows,
-                "evidence": EVIDENCE, "hr_bands": list(HR_BANDS)}
+                "evidence": {k: M_(v) for k, v in EVIDENCE.items()}, "hr_bands": list(HR_BANDS)}
 
 
 def _residuals(wins, e_aet, weight, alpha_pct, gamma):
@@ -603,7 +606,8 @@ def fit_walk_capacity(*, weight: float, v_run: dict, trail: Sequence[dict], hike
         # no flat AeT running: the personal walked 10–20 % windows fix Ė
         # instead (a labelled fallback; the plan must never fail)
         vr = 2.0
-        v_run = {**v_run, "v": vr, "source": v_run.get("source", "") + "；改用預設 2.0 m/s（推估）", "fallback": True}
+        v_run = {**v_run, "v": vr, "source": M_("{src}；改用預設 2.0 m/s（推估）", src=v_run.get("source", "")),
+                 "fallback": True}
     e = aet_power(weight, vr)
     tw = [{**w, "L": L_TRAIL, "h": (w.get("t") or 0.0) / 3600.0} for w in trail]
     hw = [{**w, "L": pack_of(w.get("trip")), "h": (w.get("t") or 0.0) / 3600.0} for w in hike]
@@ -710,8 +714,8 @@ def group_time(ep: float, group_days: Sequence[dict]) -> Optional[dict]:
 # that are not stops). The plan's 跟團時間 = the route's capacity time at AeT (its pack, altitude, snow,
 # heat) × the median r, p25 / p75 = × the r quartiles. ≥ GROUP_MIN_DAYS group days, as before.
 GROUP_MIN_DAYS = 3
-GROUP_SOURCE = ("跟團係數（推估）：過去每個跟團日的實際移動時間 ÷ 能力模型算的同一天移動時間（那天自己的軌跡、背負、"
-                "每段海拔、走了幾小時），取中位數與 p25–p75；海拔與背包已經在能力模型裡，係數只剩跟團的步調")
+GROUP_SOURCE = N_("跟團係數（推估）：過去每個跟團日的實際移動時間 ÷ 能力模型算的同一天移動時間（那天自己的軌跡、背負、"
+                   "每段海拔、走了幾小時），取中位數與 p25–p75；海拔與背包已經在能力模型裡，係數只剩跟團的步調")
 
 
 def day_capacity_time(cap: "WalkCapacity", segs: Sequence, load: float, n_day: int = 1) -> float:
@@ -747,7 +751,7 @@ def group_factor(cap: Optional["WalkCapacity"], days: Sequence[dict],
         return None
     q25, q50, q75 = (float(x) for x in np.percentile([r["r"] for r in rows], [25, 50, 75]))
     return {"median": q50, "p25": q25, "p75": q75, "n": len(rows), "trips": len({r["trip"] for r in rows}),
-            "rows": rows, "source": GROUP_SOURCE}
+            "rows": rows, "source": M_(GROUP_SOURCE)}
 
 
 def band(t_s: float, sigma: float) -> dict:
@@ -781,7 +785,7 @@ def classify_day(wins: Sequence[dict], aet: Optional[float], cap: Optional[WalkC
     steep = sorted((w for w in wins if w["g"] >= STEEP_MIN_G), key=lambda w: w["k"])
     if not steep or not aet:
         return {"suggest": None, "own_share": None, "limited_share": None, "n": len(steep),
-                "reason": "沒有陡坡窗或沒有 AeT"}
+                "reason": _("沒有陡坡窗或沒有 AeT")}
     plateau = set()
     ws = sorted(wins, key=lambda w: w["k"])
     for i in range(len(ws) - PLATEAU_N + 1):
@@ -807,8 +811,8 @@ def classify_day(wins: Sequence[dict], aet: Optional[float], cap: Optional[WalkC
     stops_ok = stops_per_km is None or stops_per_km < STOPS_PER_KM_MAX
     suggest = "solo" if (so >= SOLO_SHARE_MIN and sl <= GROUP_SHARE_MAX and stops_ok) else "group"
     return {"suggest": suggest, "own_share": so, "limited_share": sl, "n": n, "stops_per_km": stops_per_km,
-            "reason": f"自己走的段 {so:.0%}、被限制的段 {sl:.0%}" +
-                      ("" if stops_per_km is None else f"、短停 {stops_per_km:.1f} 次/km")}
+            "reason": _("自己走的段 {own:.0%}、被限制的段 {lim:.0%}", own=so, lim=sl) if stops_per_km is None
+            else _("自己走的段 {own:.0%}、被限制的段 {lim:.0%}、短停 {stops:.1f} 次/km", own=so, lim=sl, stops=stops_per_km)}
 
 
 def classifier_validation(days: Sequence[dict]) -> dict:
@@ -822,4 +826,4 @@ def classifier_validation(days: Sequence[dict]) -> dict:
     enough = all(len(v) >= VALIDATE_MIN_DAYS for v in per.values())
     return {"n_solo": len(per["solo"]), "n_group": len(per["group"]), "agreement": rate,
             "validated": bool(enough and rate is not None and rate >= VALIDATE_MIN_AGREE),
-            "rule": f"每類 ≥ {VALIDATE_MIN_DAYS} 天手動標記且符合率 ≥ {VALIDATE_MIN_AGREE:.0%} 才自動套用"}
+            "rule": _("每類 ≥ {n} 天手動標記且符合率 ≥ {rate:.0%} 才自動套用", n=VALIDATE_MIN_DAYS, rate=VALIDATE_MIN_AGREE)}

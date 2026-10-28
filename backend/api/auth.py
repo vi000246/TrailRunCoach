@@ -177,7 +177,7 @@ def put_coros_site(body: CorosSiteIn):
     from backend import tenancy, site_settings as SS
     from backend.sync import coros_limits as CL
     if not tenancy.is_owner():
-        raise HTTPException(403, "只有站主能切換 COROS 全站開關")
+        raise HTTPException(403, _("只有站主能切換 COROS 全站開關"))
     vals = {}
     for k in ("rate_per_s", "rate_per_min", "max_concurrent"):
         v = getattr(body, k)
@@ -311,7 +311,7 @@ def put_garmin_site(body: GarminSiteIn):
     from backend import tenancy, site_settings as SS
     from backend.sync import garmin_limits as GL
     if not tenancy.is_owner():
-        raise HTTPException(403, "只有站主能切換 Garmin 全站開關")
+        raise HTTPException(403, _("只有站主能切換 Garmin 全站開關"))
     vals = {}
     for k in ("auto_per_day", "manual_per_day", "requests_per_day", "gap_s"):
         v = getattr(body, k)

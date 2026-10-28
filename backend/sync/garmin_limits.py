@@ -42,6 +42,7 @@ from contextlib import asynccontextmanager
 from typing import Callable, Optional
 
 from backend import site_settings as SS
+from backend.i18n import N_, _
 
 clock: Callable[[], float] = time.monotonic       # tests replace
 wall: Callable[[], float] = time.time
@@ -55,14 +56,14 @@ BREAKER_ACCOUNTS = 3
 BREAKER_WINDOW_S = 24 * 3600.0
 MANUAL_TRIGGERS = ("manual", "retry")             # a person pressed a button
 
-PAUSED_TEXT = "Garmin 暫時鎖住登入，通常 2–3 天會恢復，這段時間會自動暫停同步"
-LIMIT_TEXT = "今天的 Garmin 同步次數已用完（每天自動 1 次＋手動「立即同步」3 次，自動重新登入也算一次），明天會恢復"
-REQUESTS_TEXT = "今天向 Garmin 下載的量已到上限，剩下的活動明天會自動接著同步"
+PAUSED_TEXT = N_("Garmin 暫時鎖住登入，通常 2–3 天會恢復，這段時間會自動暫停同步")
+LIMIT_TEXT = N_("今天的 Garmin 同步次數已用完（每天自動 1 次＋手動「立即同步」3 次，自動重新登入也算一次），明天會恢復")
+REQUESTS_TEXT = N_("今天向 Garmin 下載的量已到上限，剩下的活動明天會自動接著同步")
 
 DISCLAIMER_VERSION = "garmin-unofficial-v1-2026-10-12"
 # todo-multi-user-sharing.plan.md §7.5 (COROS) worded for Garmin, the trial and 記住密碼
 DISCLAIMER = {
-    "zh-TW": ("Garmin 同步是試運行功能：本服務透過 Garmin Connect 網站與 App 使用的非公開介面（非官方套件 "
+    "zh-TW": N_("Garmin 同步是試運行功能：本服務透過 Garmin Connect 網站與 App 使用的非公開介面（非官方套件 "
               "garminconnect）下載你自己的活動，並非 Garmin 官方提供或支援。Garmin 的使用條款禁止用網站沒提供的方式"
               "自動存取：Garmin 可能隨時變更或封鎖這個介面、暫時鎖住登入（通常 2–3 天），也可能依其條款處置帳號，"
               "風險由你自行承擔。你的 Garmin 密碼只用來登入；勾選「記住密碼」才會加密保存，登入憑證加密存放在本服務的"
@@ -414,18 +415,18 @@ def status(tenant_id: Optional[str] = None) -> dict:
     p = paused(tenant_id)
     lf = left(tenant_id)
     if not available():
-        state, msg = "unavailable", "這台伺服器沒有安裝 Garmin 同步需要的套件（garminconnect），目前無法連接 Garmin。"
+        state, msg = "unavailable", _("這台伺服器沒有安裝 Garmin 同步需要的套件（garminconnect），目前無法連接 Garmin。")
     elif not enabled():
         state = "disabled"
-        msg = ("Garmin 同步全站暫停中：短時間內有多個帳號被 Garmin 鎖住登入，為了不讓整台伺服器被封鎖，已自動暫停，"
-               "站主確認後才會恢復。已匯入的活動都還在。" if SS.get("garmin.tripped")
-               else "Garmin 同步全站暫停中（站主關閉）。已匯入的活動都還在。")
+        msg = (_("Garmin 同步全站暫停中：短時間內有多個帳號被 Garmin 鎖住登入，為了不讓整台伺服器被封鎖，已自動暫停，"
+                 "站主確認後才會恢復。已匯入的活動都還在。") if SS.get("garmin.tripped")
+               else _("Garmin 同步全站暫停中（站主關閉）。已匯入的活動都還在。"))
     elif p:
-        state, msg = "paused", PAUSED_TEXT + "（下一次每日自動同步會再試一次；在那之前請不要反覆登入或同步）。"
+        state, msg = "paused", _(PAUSED_TEXT) + _("（下一次每日自動同步會再試一次；在那之前請不要反覆登入或同步）。")
     elif lf["manual"] <= 0:
-        state, msg = "limit", LIMIT_TEXT
+        state, msg = "limit", _(LIMIT_TEXT)
     elif lf["requests"] <= 0:
-        state, msg = "limit", REQUESTS_TEXT
+        state, msg = "limit", _(REQUESTS_TEXT)
     else:
         state, msg = "ok", ""
     return {"state": state, "message": msg, "enabled": enabled(), "available": available(),

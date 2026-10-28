@@ -22,7 +22,7 @@ from backend.engine.racepower import difficulty as DF
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
-from backend.i18n import M_, _
+from backend.i18n import _, M_, N_
 
 CP_WINDOW_DAYS = 90
 RIEGEL_WINDOW_DAYS = 365
@@ -44,8 +44,9 @@ TRAINING_ENV_CACHE = None      # fixed file (tests); None = <tenant shared>/race
 def _training_env_cache() -> Path:
     return Path(TRAINING_ENV_CACHE) if TRAINING_ENV_CACHE is not None else WX.home() / "racepower_training_env.json"
 
-SPORT_ZH = {"running": "路跑", "trail running": "越野跑", "indoor running": "跑步機",
-            "hiking": "健行", "mountaineering": "登山"}
+# msgids (wko5views shows them as they are; label() through M_: the labels sit in the cached inputs)
+SPORT_ZH = {"running": N_("路跑"), "trail running": N_("越野跑"), "indoor running": N_("跑步機"),
+            "hiking": N_("健行"), "mountaineering": N_("登山")}
 
 
 def _grid() -> list[float]:
@@ -64,8 +65,10 @@ GRID = _grid()
 
 def label(w) -> str:
     km = w.metrics.get("distance")
-    return f"{w.entry.start:%Y-%m-%d} {SPORT_ZH.get(w.sport_type, w.sport_type)}" + \
-        (f" {km:.1f} km" if km else "")
+    sport = M_(SPORT_ZH[w.sport_type]) if w.sport_type in SPORT_ZH else w.sport_type
+    date = f"{w.entry.start:%Y-%m-%d}"
+    return M_("{date} {sport} {km:.1f} km", date=date, sport=sport, km=km) if km else \
+        M_("{date} {sport}", date=date, sport=sport)
 
 
 def act_ref(w) -> dict:
@@ -265,7 +268,7 @@ SOLO_HIKES = None      # fixed file (tests); None = the tenant's (private) racep
 def _solo_hikes_path() -> Path:
     from backend import tenancy
     return Path(SOLO_HIKES) if SOLO_HIKES is not None else tenancy.private_path("racepower_solo_hikes.json")
-GROUP_HIKE_NOTE = "登山多為跟團，速度不代表個人能力，不列入目標時間推算"
+GROUP_HIKE_NOTE = N_("登山多為跟團，速度不代表個人能力，不列入目標時間推算")      # a msgid: M_() where shown
 HIKE_SPORTS = ("hiking", "mountaineering")
 HIKE_TAGS = {"hiking", "mountaineering"}
 
@@ -476,7 +479,7 @@ def _aet(ds, today: dt.date) -> dict:
                               (est.get("lthr") or {}).get("value"), (est.get("aethr") or {}).get("value"))
         return {"aet": tt.get("aet"), "source": tt.get("aet_source"), "lthr": tt.get("lthr")}
     except Exception as e:                  # noqa: BLE001
-        return {"aet": None, "source": f"無法估算（{str(e)[:60]}）", "lthr": None}
+        return {"aet": None, "source": M_("無法估算（{err}）", err=str(e)[:60]), "lthr": None}
 
 
 # ---- thresholds and intensity as of a date (no future values) ------------------
@@ -570,34 +573,35 @@ def thresholds_as_of(ds, day: dt.date) -> dict:
     if lt:
         # an applied estimate says so (zones-and-thresholds.md §3.4 change 1)
         out.update(lthr=float(lt[1]), lthr_source=(threshold_row(ds.plan, "lthr", day) or {}).get("label")
-                   or f"測試 {lt[0]}")
+                   or M_("測試 {date}", date=lt[0]))
     elif (est.get("lthr") or {}).get("value"):
-        out.update(lthr=float(est["lthr"]["value"]), lthr_source="自動估算（當天以前的跑步）")
+        out.update(lthr=float(est["lthr"]["value"]), lthr_source=M_("自動估算（當天以前的跑步）"))
     else:
         # the dataset's own dated setting: WKO5's (WKO5 source / opt-in), or for
         # a COROS / TP source the as-of estimates made at load (fitdataset.py)
         v = ds.athlete.setting_on("runthr", day)
         hist = ds.athlete.settings.get("runthr") or []
         default = bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist)
-        out.update(lthr=v, lthr_source="出廠預設值（未設定）" if default
-                   else ds.setting_label("runthr", "對照資料夾設定") if v is not None else "未設定")
+        out.update(lthr=v, lthr_source=M_("出廠預設值（未設定）") if default
+                   else ds.setting_label("runthr", M_("對照資料夾設定")) if v is not None else M_("未設定"))
     ae = _plan_last(ds, "aethr", day)
     if ae:
         out.update(aet=float(ae[1]), aet_source=(threshold_row(ds.plan, "aethr", day) or {}).get("label")
-                   or f"測試 {ae[0]}")
+                   or M_("測試 {date}", date=ae[0]))
     elif (est.get("aethr") or {}).get("value"):
-        out.update(aet=float(est["aethr"]["value"]), aet_source="自動估算（當天以前的跑步）")
+        out.update(aet=float(est["aethr"]["value"]), aet_source=M_("自動估算（當天以前的跑步）"))
     else:
         out.update(aet=None if not out["lthr"] else I.INTENSITY["aet_frac_lthr"] * out["lthr"],
-                   aet_source="0.89 × LTHR（Friel Z2 上限）")
+                   aet_source=M_("0.89 × LTHR（Friel Z2 上限）"))
         below = (est.get("aethr") or {}).get("below")
         if below:
             # the estimate failed; the highest HR of the runs with drift < 5 % is shown as a hint
             # (text only — the easy cap stays 0.89 × LTHR)
             out.update(aet_below=float(below),
-                       aet_source=out["aet_source"] + f"；參考：飄移 < 5% 的跑步最高心率 {below:.0f} bpm")
+                       aet_source=M_("{src}；參考：飄移 < 5% 的跑步最高心率 {hr:.0f} bpm", src=out["aet_source"],
+                                     hr=float(below)))
     c = _plan_last(ds, "cp", day)
-    out.update(cp=float(c[1]) if c else None, cp_source=f"測試 {c[0]}" if c else None)
+    out.update(cp=float(c[1]) if c else None, cp_source=M_("測試 {date}", date=c[0]) if c else None)
     return out
 
 
@@ -720,7 +724,7 @@ def baiyue_on(ds, day: dt.date) -> Optional[str]:
             continue
         d0 = e.start
         if d0 <= day < d0 + dt.timedelta(days=max(1, int(e.days or 1))):
-            return getattr(e, "name", "") or "登山"
+            return getattr(e, "name", "") or M_("登山")
     return None
 
 
@@ -853,22 +857,25 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
                        "effort_reason": eff["reason"]}, user)
         ue = AT.user_effort(user)
         if tg["activity_type"] == "test":
-            ok, kind, why = False, "test", "活動類型是測試：走 CP 測試路徑"
+            ok, kind, why = False, "test", M_("活動類型是測試：走 CP 測試路徑")
         elif ue is not None:
             ok, kind = ue == "max", "user"
-            why = f"你標記為「{AT.EFFORTS[ue]}」" + ("" if ok else "：不列入能力樣本")
+            why = M_("你標記為「{effort}」", effort=M_(AT.EFFORTS[ue])) if ok else \
+                M_("你標記為「{effort}」：不列入能力樣本", effort=M_(AT.EFFORTS[ue]))
         else:
             ok = auto_ok
             kind = "plan_race" if ev else r["kind"]
             if ok:
-                why = f"自動判定全力：{eff['reason']}"
+                why = M_("自動判定全力：{reason}", reason=eff["reason"])
             elif eff["effort"] == "max":
-                why = "全力但未達越野樣本長度：" + "；".join(
-                    c["text"] for c in r["checks"] if c["id"] in ("km", "time") and not c["ok"])
+                why = M_("全力但未達越野樣本長度：{why}", why=MX.join(
+                    [c["text"] for c in r["checks"] if c["id"] in ("km", "time") and not c["ok"]]))
             else:
-                why = f"自動努力度「{AT.EFFORTS.get(eff['effort'], '?')}」：{eff['reason']}"
+                why = M_("自動努力度「{effort}」：{reason}",
+                         effort=M_(AT.EFFORTS[eff["effort"]]) if eff["effort"] in AT.EFFORTS else "?",
+                         reason=eff["reason"])
             if ev:
-                why = f"賽季計畫的比賽「{ev['name']}」（{ev['priority'] or '-'} 級）；" + why
+                why = M_("賽季計畫的比賽「{name}」（{p} 級）；{why}", name=ev["name"], p=ev["priority"] or "-", why=why)
         out[w.idx] = {**r, "ok": bool(ok), "kind": kind, "reason": why, "rule": r["kind"], "rule_ok": r["ok"],
                       "category": "trail" if trail else (r.get("category") or "road"), "event": ev,
                       "effort": eff, "tags": tg, "user_marked": user is not None,
@@ -1021,7 +1028,7 @@ def classify_runs(ds, runs, cp_of: Optional[dict] = None, tags: Optional[list] =
         cp = cp or floor.get(w.idx)
         c = I.classify(model_stats(ds, w), th["lthr"], th["aet"], cp, w.idx in races, is_floor)
         c.update(lthr_source=th["lthr_source"], aet_source=th["aet_source"],
-                 cp_source=th["cp_source"] or ("之前跑步的 CP 下限" if cp else None))
+                 cp_source=th["cp_source"] or (M_("之前跑步的 CP 下限") if cp else None))
         if w.idx in races:
             c["event"] = races[w.idx]
         out[w.idx] = c
@@ -1140,7 +1147,7 @@ def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bo
     # and stores (1895 vs the snapshot's 1897 s on WKO5's data alone)
     return {"mftp": float(f["FTP"]), "tte": float(f["tte"]), "frc": float(f["FRC"]), "pmax": float(f["Pmax"]),
             "d": float(f["D"]), "fit_files": [c["path"] for c in extra], "n_points": len(pts),
-            "source": "PD 模型（擬合近 90 天 mean-max 上緣；已和對照資料夾存的快照比對過）"}
+            "source": M_("PD 模型（擬合近 90 天 mean-max 上緣；已和對照資料夾存的快照比對過）")}
 
 
 CP_FIT_MIN_RUNS = 5              # = fitdataset.CP_FIT_MIN_RUNS (a Dataset without stryd_cp_fit)
@@ -1228,25 +1235,26 @@ def body_profile(ds, today: dt.date) -> dict:
     prof = getattr(ds.plan, "profile", None) or {}
     ath = getattr(ds, "athlete", None)
     out = {"height_cm": prof.get("height_cm"), "sex": prof.get("sex"), "age": None,
-           "height_cm_src": "設定頁" if prof.get("height_cm") else None, "sex_src": "設定頁" if prof.get("sex") else None,
+           "height_cm_src": M_("設定頁") if prof.get("height_cm") else None,
+           "sex_src": M_("設定頁") if prof.get("sex") else None,
            "age_src": None}
     from backend.engine import athlete_profile as AP
     if AP.age(prof, today) is not None:
-        out["age"], out["age_src"] = AP.age(prof, today), "設定頁（出生年）"
+        out["age"], out["age_src"] = AP.age(prof, today), M_("設定頁（出生年）")
     try:
         root = ath.root.get(3001) if ath is not None and getattr(ath, "root", None) is not None else None
         if out["height_cm"] is None and ath is not None:
             h = (ath.settings.get("height") or [(None, None)])[-1][1]
             if h:
-                out["height_cm"], out["height_cm_src"] = round(float(h) * 100.0), "對照資料夾"
+                out["height_cm"], out["height_cm_src"] = round(float(h) * 100.0), M_("對照資料夾")
         if root is not None:
             if out["sex"] is None and root.get(3017) in ("male", "female"):
-                out["sex"], out["sex_src"] = root.get(3017), "對照資料夾"
+                out["sex"], out["sex_src"] = root.get(3017), M_("對照資料夾")
             b = root.get(3033)
             if out["age"] is None and isinstance(b, str) and len(b) >= 10:
                 bd = dt.date.fromisoformat(b[:10])
                 out["age"] = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
-                out["age_src"] = "對照資料夾的生日"
+                out["age_src"] = M_("對照資料夾的生日")
     except (AttributeError, TypeError, ValueError, IndexError):
         pass
     return out
@@ -1265,7 +1273,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     today = today or dt.date.today()
     tday = date_to_day(today)
     weight = ds.setting("weight", tday)
-    weight_src = "賽季計畫體重" if ds.plan.weight_on(today) is not None else ds.setting_label("weight", "對照資料夾設定")
+    weight_src = M_("賽季計畫體重") if ds.plan.weight_on(today) is not None else \
+        ds.setting_label("weight", M_("對照資料夾設定"))
     prof = ds.plan.profile or {}
     exclude = exclude or set()
     runs_365 = [w for w in ds.workouts if w.sport == "run" and tday - RIEGEL_WINDOW_DAYS < w.day <= tday + 1
@@ -1305,8 +1314,9 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                 "dates_ok": all(c["ok"] for c in checks if c["id"] == "dates"),
                 "errors_ok": all(c["ok"] for c in checks if c["level"] == "error")}
     tte = pd.get(("tte", "Run"))
-    tte_src = "對照資料夾的模型 TTE" if tte else (
-        "回測：預設 50 分鐘（不用對照資料夾今天的 TTE，沒有當時的 TTE 測試）" if strict_as_of else "預設 50 分鐘（試算表預設）")
+    tte_src = M_("對照資料夾的模型 TTE") if tte else (
+        M_("回測：預設 50 分鐘（不用對照資料夾今天的 TTE，沒有當時的 TTE 測試）") if strict_as_of
+        else M_("預設 50 分鐘（試算表預設）"))
     tte_v = tte or DEFAULT_TTE_S
 
     # ---- Riegel -------------------------------------------------------------
@@ -1325,34 +1335,36 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
             lo, hi = pk["t_min"], pk["t_max"]
             span_who = sorted({i for x, i in zip(env_race["xs"], env_race["who"]) if lo <= x <= hi})
             if not R.is_reasonable_k(pk["k"]):
-                why.append("k 不在 −0.25…−0.01 的合理範圍")
+                why.append(M_("k 不在 −0.25…−0.01 的合理範圍"))
             if pk["n"] < 5:
-                why.append("擬合點少於 5 個")
+                why.append(M_("擬合點少於 5 個"))
             if pk["r2"] < 0.8:
                 why.append("R² < 0.8")
         if len(span_who) < 3:
-            why.append(f"全力努力（比賽／自配速全力）的長時間努力只有 {len(span_who)} 次，至少要 3 次")
+            why.append(M_("全力努力（比賽／自配速全力）的長時間努力只有 {n} 次，至少要 3 次", n=len(span_who)))
         base = pk or {"k": None, "r2": None, "n": 0, "t_min": None, "t_max": None}
         riegel = {**base, "valid": not why, "invalid_reasons": why, "n_activities": len(span_who),
                   "longest_s": base.get("t_max") or (env365["xs"][-1] if env365["xs"] else None),
                   "envelope_longest_s": env365["xs"][-1] if env365["xs"] else None,
                   "uncut": None if raw is None else {k_: raw[k_] for k_ in ("k", "r2", "n", "t_max")},
                   "activities": [act_ref(by_idx[i]) for i in span_who][:40],
-                  "basis": "只用能力樣本（計畫比賽、自配速全力、比賽型越野）", "window_days": RIEGEL_WINDOW_DAYS}
+                  "basis": M_("只用能力樣本（計畫比賽、自配速全力、比賽型越野）"), "window_days": RIEGEL_WINDOW_DAYS}
     k0 = riegel["k"] if riegel and riegel["valid"] else DEFAULT_K
-    k0_src = "個人擬合" if riegel and riegel["valid"] else "預設 −0.07（≈ Stryd 表的 k −0.069）"
+    k0_src = M_("個人擬合") if riegel and riegel["valid"] else M_("預設 −0.07（≈ Stryd 表的 k −0.069）")
 
     # ---- WKO5 PD model recomputed on today's data (incl. synced FIT files) ----
     pdm = pd_model(ds, today, runs_90, ref_cp)
     # the short-range (F2) pair: a CP test (plan, else detected) with its W′
     if plan_cp and plan_cp["fresh"]:
         short = {"cp2": plan_cp["cp"], "w_prime": (test or {}).get("estimate", {}).get("w_prime") or
-                 cptest_prior(weight, sex)["mid"], "label": f"計畫 CP 測試 {plan_cp['date']}"}
+                 cptest_prior(weight, sex)["mid"], "label": M_("計畫 CP 測試 {date}", date=plan_cp["date"])}
     elif test and test["fresh"] and test["estimate"].get("cp"):
         e = test["estimate"]
-        short = {"cp2": e["cp"], "w_prime": e["w_prime"], "label": f"偵測到的 CP 測試 {test['date']}（{e['label']}）"}
+        short = {"cp2": e["cp"], "w_prime": e["w_prime"],
+                 "label": M_("偵測到的 CP 測試 {date}（{label}）", date=test["date"], label=e["label"])}
     elif pdm:
-        short = {"cp2": pdm["mftp"], "w_prime": pdm["frc"], "label": "PD 模型：模型閾值功率 + 無氧容量"}
+        # `pd`: the pair only mirrors the PD model (the lower bound below raises it with the anchor)
+        short = {"cp2": pdm["mftp"], "w_prime": pdm["frc"], "label": M_("PD 模型：模型閾值功率 + 無氧容量"), "pd": True}
     else:
         short = None
 
@@ -1383,24 +1395,30 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
 
     sources = []
     if pdm:
-        sources.append({"id": "pdmodel", "label": f"PD 模型重算（近 {CP_WINDOW_DAYS} 天 mean-max，含同步的 FIT）：模型閾值功率（Modelled threshold power）"
-                        f"{pdm['mftp']:.0f} W、TTE {pdm['tte'] / 60:.0f} 分", "cp": pdm["mftp"], "tte": pdm["tte"],
+        sources.append({"id": "pdmodel", "label": M_("PD 模型重算（近 {days} 天 mean-max，含同步的 FIT）：模型閾值功率（Modelled threshold power）"
+                                                     "{cp:.0f} W、TTE {tte:.0f} 分", days=CP_WINDOW_DAYS,
+                                                     cp=pdm["mftp"], tte=pdm["tte"] / 60),
+                        "name": M_("PD 模型重算"), "cp": pdm["mftp"], "tte": pdm["tte"],
                         "cp2": (short or {}).get("cp2"), "w_prime": (short or {}).get("w_prime"),
                         "short_label": (short or {}).get("label"), "frc": pdm["frc"], "fit": pdm})
     if plan_cp:
-        sources.append({"id": "plan", "label": f"賽季計畫 CP 測試（{plan_cp['date']}）", "cp": plan_cp["cp"],
+        sources.append({"id": "plan", "label": M_("賽季計畫 CP 測試（{date}）", date=plan_cp["date"]),
+                        "name": M_("賽季計畫 CP 測試"), "cp": plan_cp["cp"],
                         "date": plan_cp["date"], "fresh": plan_cp["fresh"]})
     if test and test["estimate"].get("cp"):
         # SP-468: WKO5's mFTP after the test (nothing to apply: the 課表 follows the same fit)
         e = test["estimate"]
-        sources.append({"id": "cptest", "label": f"偵測到的 CP 測試 {test['date']}（{e['label']}）",
+        sources.append({"id": "cptest", "label": M_("偵測到的 CP 測試 {date}（{label}）", date=test["date"], label=e["label"]),
+                        "name": M_("偵測到的 CP 測試 {date}", date=test["date"]),
                         "cp": e["cp"], "w_prime": e["w_prime"], "cp_range": e.get("cp_range"),
                         "date": test["date"], "fresh": test["fresh"]})
     if pd.get(("mftp", "Run")):
-        sources.append({"id": "wko5", "label": "對照資料夾的 mFTP（資料夾存的快照）", "cp": pd[("mftp", "Run")],
+        sources.append({"id": "wko5", "label": M_("對照資料夾的 mFTP（資料夾存的快照）"), "name": M_("對照資料夾的 mFTP"),
+                        "cp": pd[("mftp", "Run")],
                         "tte": pd.get(("tte", "Run")), "frc": pd.get(("frc", "Run")), "w_prime": pd.get(("frc", "Run"))})
     if acts:
-        sources.append({"id": "activities", "label": f"近 {CP_WINDOW_DAYS} 天活動（3–20 分鐘最佳功率擬合）",
+        sources.append({"id": "activities", "label": M_("近 {days} 天活動（3–20 分鐘最佳功率擬合）", days=CP_WINDOW_DAYS),
+                        "name": M_("近 {days} 天活動", days=CP_WINDOW_DAYS),
                         "cp": acts["cp"], "w_prime": acts["w_prime"], "dates_ok": acts["dates_ok"]})
     for s in sources:
         s["lower_bound"] = bound(s.get("w_prime") or (acts or {}).get("w_prime"), s.get("tte") or tte_v, s.get("cp2"))
@@ -1422,23 +1440,23 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     lb = (pref or {}).get("lower_bound")
     lb_msg = None
     if pref and not pref["meets_lower_bound"] and lb:
-        lb_msg = (f"模型 CP 低於你實際撐過的功率（{lb['t_s'] / 60:.0f} 分鐘 {lb['p']:.0f} W）："
-                  f"CP 至少 ≥ {lb['cp_min']:.0f} W，請重測")
+        lb_msg = M_("模型 CP 低於你實際撐過的功率（{min:.0f} 分鐘 {p:.0f} W）：CP 至少 ≥ {cp:.0f} W，請重測",
+                    min=lb["t_s"] / 60, p=lb["p"], cp=lb["cp_min"])
     if default_cp is None and pref and lb:
-        sources.append({**{k_: v for k_, v in pref.items() if k_ not in ("id", "label", "fit")},
+        sources.append({**{k_: v for k_, v in pref.items() if k_ not in ("id", "label", "name", "fit")},
                         "id": "lower_bound", "cp": lb["cp_min"], "meets_lower_bound": True, "base": pref["id"],
                         # a short-range CP that only mirrors mFTP follows the raised anchor
                         **({"cp2": lb["cp_min"]} if pref.get("cp2") and pdm and short and
-                           short.get("label", "").startswith("PD 模型") and pref["cp2"] < lb["cp_min"] else {}),
-                        "label": f"下限：{pref['label'].split('（')[0]} 提高到你撐過的功率所需的最低值"
-                                 f"（{lb['t_s'] / 60:.0f} 分鐘 {lb['p']:.0f} W，k {k0:+.2f}）"})
+                           short.get("pd") and pref["cp2"] < lb["cp_min"] else {}),
+                        "label": M_("下限：{name} 提高到你撐過的功率所需的最低值（{min:.0f} 分鐘 {p:.0f} W，k {k:+.2f}）",
+                                    name=pref.get("name") or pref["label"], min=lb["t_s"] / 60, p=lb["p"], k=k0)})
         default_cp = "lower_bound"
     if default_cp is None and sources:
         default_cp = sources[0]["id"]
     dsrc = next((s for s in sources if s["id"] == default_cp), None)
     if dsrc and dsrc.get("tte"):
         tte_v = dsrc["tte"]
-        tte_src = "PD 模型重算的 TTE" if dsrc.get("fit") or dsrc.get("base") == "pdmodel" else "對照資料夾的模型 TTE"
+        tte_src = M_("PD 模型重算的 TTE") if dsrc.get("fit") or dsrc.get("base") == "pdmodel" else M_("對照資料夾的模型 TTE")
     lb = (dsrc or {}).get("lower_bound") or lb
     # thin the envelope for charts: log-spaced points only
     chart_env = [{"t": x, "p": y, "idx": i} for x, y, i in zip(env365["xs"], env365["ys"], env365["who"])
@@ -1475,8 +1493,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
             road_rows.append(row)
     road = RE.summary([r["re_flat"] for r in road_rows])
     if road:
-        road["basis"] = f"{len(road_rows)} 次路跑（CVI < {ROAD_MAX_CVI_ADJ:g}），各自用 CVI 調整到平路"
-    road_cvi = {"median": 0.0, "n": len(road_rows), "note": "RE 已調到平路（CVI 0）"} if road_rows else None
+        road["basis"] = M_("{n} 次路跑（CVI < {cvi:g}），各自用 CVI 調整到平路", n=len(road_rows), cvi=ROAD_MAX_CVI_ADJ)
+    road_cvi = {"median": 0.0, "n": len(road_rows), "note": M_("RE 已調到平路（CVI 0）")} if road_rows else None
     trail = {f: RE.summary([r["re_trail"][f] for r in trail_rows]) for f in ("fitted_run", "itra", "scarf")}
     train_cvi = RE.summary([RE.cvi(w.metrics.get("climbing"), w.metrics.get("distance"))
                             for w in runs_90 if w.metrics.get("distance")])
@@ -1532,7 +1550,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         "body": body_profile(ds, today),
         "profile": {"sex": sex, "sex_source": sex_src,
                     "power_meter": _power_label(prof), "wind": wind_any,
-                    "wind_source": "資料中有 Stryd air power" if wind_any else "資料中沒有 air power"},
+                    "wind_source": M_("資料中有 Stryd air power") if wind_any else M_("資料中沒有 air power")},
         "cp": {"sources": sources, "default": default_cp, "activities": acts, "plan": plan_cp,
                "dropped": dropped, "dropped_365": dropped365, "ref_cp": ref_cp,
                "lower_bound": lb, "lower_bound_message": lb_msg, "tests": tests, "pd_model": pdm, "short": short,
@@ -1551,7 +1569,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                "window_days": RE_WINDOW_DAYS},
         "hiking": {"eph": eph, "days": hdays, "biggest": biggest, "error": hike_err,
                    "window_days": HIKE_WINDOW_DAYS, "solo_n": len(solo_days),
-                   "group_n": len(hdays) - len(solo_days), "note": GROUP_HIKE_NOTE},
+                   "group_n": len(hdays) - len(solo_days), "note": M_(GROUP_HIKE_NOTE)},
         "priors": priors[:40], "auto_prior": auto_prior,
         "training_conditions": training,
         "altitude_normalised": True,
@@ -1570,8 +1588,8 @@ def power_summary(ds, runs) -> dict:
     srcs = [power_source(ds, w) for w in runs]
     return {"accept_watch_power": accept, "setting": PS.SETTING_KEY, "counts": PS.counts(s for s in srcs if s),
             "unused": watch_unused(ds, runs)[-40:], "unused_label": PS.UNUSED_LABEL,
-            "note": "只用 Stryd 功率（有 Form Power／Air Power／LSS 欄位）；手錶推估功率不進功率模型" if not accept
-            else "手錶推估功率也採用"}
+            "note": M_("只用 Stryd 功率（有 Form Power／Air Power／LSS 欄位）；手錶推估功率不進功率模型") if not accept
+            else M_("手錶推估功率也採用")}
 
 
 # ---- racepower v2: per-activity samples (docs/research/racepower-v2.md §10.1) ----
@@ -1882,7 +1900,7 @@ def activity_pack(w, meta: Optional[dict] = None) -> dict:
     rec = (_trip_of(meta, w) or {}).get("pack_kg")
     return {"pack_kg": None if rec is None else float(rec), "recorded": rec is not None,
             "default_kg": None if rec is None else float(rec), "range": [0, 40], "file": w.entry.file,
-            "note": "這次背多少（kg）：記下來，登山預測會用；空白 = 沒記錄"}
+            "note": _("這次背多少（kg）：記下來，登山預測會用；空白 = 沒記錄")}
 
 
 def walk_capacity_inputs(ds, today: dt.date, exclude: Optional[set] = None, runs: Optional[list] = None,
@@ -2094,7 +2112,7 @@ def walk_capacity(ds, today: Optional[dt.date] = None, exclude: Optional[set] = 
                                 flat=x["flat"], hike_down=x["hike_down"], aet_of=x["aet"].get,
                                 pack_of=x["pack_of"], tech=tech, boot_reps=boot_reps, sigma_loo=sigma_loo)
     cap.basis.update(packs_recorded=len(x["packs_recorded"]), packs_default=len(x["packs"]) - len(x["packs_recorded"]),
-                     pack_default_rule=f"沒填的趟：{CAP.pack_default_text(x['weight'])}（預設背負）")
+                     pack_default_rule=M_("沒填的趟：{rule}（預設背負）", rule=CAP.pack_default_text(x["weight"])))
     return cap
 
 
@@ -2171,7 +2189,7 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
             "walk_capacity": cap,
             "hike_hr": HH.summary(hr_wins, th.get("aet"), th.get("lthr"), n_days),
             "hike_basis": {"solo_hikes": len(solo_w), "solo_windows": len(hs_solo), "steep_hr_windows": len(steep),
-                           "group_hikes": len(hikes) - len(solo_w), "note": GROUP_HIKE_NOTE},
+                           "group_hikes": len(hikes) - len(solo_w), "note": M_(GROUP_HIKE_NOTE)},
             "classes": cmap}
 
 
@@ -2718,8 +2736,8 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
     # the planner's x_race: the curve at the old "race" length (shown as the HR level); the
     # prediction itself solves x*(T) at the predicted T (trailhr.predict_race)
     m["x_race"] = TH.xstar_at(m["xstar"], 3.0)
-    m["x_race_source"] = (f"全力心率曲線 x*(T)（{m['xstar']['n']} 次比賽／全力跑，收縮到文獻先驗）"
-                          if m["xstar"]["n"] else "沒有之前的比賽／全力跑：用文獻先驗 x*(T)")
+    m["x_race_source"] = (M_("全力心率曲線 x*(T)（{n} 次比賽／全力跑，收縮到文獻先驗）", n=m["xstar"]["n"])
+                          if m["xstar"]["n"] else M_("沒有之前的比賽／全力跑：用文獻先驗 x*(T)"))
     # SP-721: the stop profile per kind (race / solo / hike) from every earlier activity
     m["nonmoving"] = NM.profile(nonmoving_history(ds, tday, race_idx, exclude, tags=tags))
     m["today"] = today.isoformat()

@@ -201,7 +201,7 @@ def apply(plan: dict, *, date: Optional[str], start_time: Optional[str], stops=N
         r.pop("_n")
         r["from"], r["to"] = CD.clock(r["from"], date), CD.clock(r["to"], date)
     plan["night"] = {"slow_pct": pct, "applied": slow, "added_s": added, "n": sum(1 for s in segs if s["night"]),
-                     "ranges": ranges, "sun": sun, "badge": "推估" if slow else None}
+                     "ranges": ranges, "sun": sun, "badge": _("推估") if slow else None}
     return plan
 
 
