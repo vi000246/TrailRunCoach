@@ -236,6 +236,9 @@ class PlanIn(PredictIn):
     # 地形難度 (SP-725, engine/terrain_difficulty.py): the route's 一般 / 技術路段多 / 需要手腳並用 — the trail
     # HR model's per-level multiplier (fitted from the user's marked runs, else the prior) on the effort km
     terrain_difficulty: Optional[Literal["normal", "technical", "scramble"]] = None
+    # SP-969: a what-if durability δ (per hour, trailhr step 6) for the trail HR model instead of the
+    # athlete's own — the 介紹頁 example's assumed setting (scripts/intro_example.py); None = the athlete's
+    assume_delta: Optional[float] = Field(None, ge=0.0, le=0.15)
     # SP-244: the plan event is marked 會用登山杖 → a hint on steep segments (seg_targets.pole_hint);
     # text only, no number changes
     poles: bool = False
@@ -751,6 +754,7 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
                                          effort_validated=effort_ok, longest_s=(inp.get("riegel") or {}).get("longest_s"),
                                          capacity=capacity, trail_hr=th), o.get("mode") or "auto")
             out = run(opts, v1)
+            PL.breakdown_after(out)              # SP-969: the night slowdown, when it moved the time
             if body.mode in ("time", "power"):
                 # the goal against the model's own prediction (auto, 100 %), same course and conditions
                 from backend.engine.racepower import goal as GOAL

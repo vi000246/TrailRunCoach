@@ -255,6 +255,86 @@ html.anim .reveal.in { opacity: 1; transform: none; }
   html.anim .reveal { opacity: 1; transform: none; transition: none; }
   html { scroll-behavior: auto; }
 }
+/* SP-969: the try buttons carry the example's result (距離、爬升、預估、段數) and open it in a dialog */
+.trybtn { display: inline-grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 1px 12px;
+  max-width: 100%; min-height: 56px; padding: 9px 18px 9px 12px; border-radius: 12px; border: 2px solid var(--accent);
+  background: var(--panel); color: var(--text); text-decoration: none; text-align: left; cursor: pointer; }
+.trybtn:hover { background: var(--soft); }
+.trybtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.trybtn .play { grid-row: span 2; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; }
+.trybtn .play::before { content: ""; margin-left: 3px; border-left: 11px solid #fff; border-top: 7px solid transparent; border-bottom: 7px solid transparent; }
+.trybtn b { font-size: 15.5px; line-height: 1.3; }
+.trybtn small { color: var(--muted); font-size: 13px; line-height: 1.35; font-variant-numeric: tabular-nums; min-height: 1.35em; }
+.trybtn.demo { grid-template-columns: minmax(0, 1fr); }
+.trybtn.demo .play, .trybtn.demo small { display: none; }
+.try-end { margin-top: 22px; }
+/* the dialog: the example's own share page in a same-origin frame */
+.modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(10,10,10,.55);
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.dlg { width: min(960px, 100%); height: min(900px, 100%); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden;
+  border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.dlg-h { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 18px; border-bottom: 1px solid var(--line); }
+.dlg-h h2 { margin: 0; flex: 1; min-width: 0; font-size: 16px; line-height: 1.35; }
+.dlg-h a { font-size: 13.5px; white-space: nowrap; }
+.dlg-x { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  font: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
+.dlg-x:hover { border-color: var(--accent); color: var(--accent); }
+.dlg-x:focus-visible, .dlg-h a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dlg iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--bg); }
+.dlg-f { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; padding: 10px 18px;
+  border-top: 1px solid var(--line); font-size: 13px; }
+html.modal-open { overflow: hidden; }
+@media (max-width: 560px) { .modal { padding: 8px; } .dlg-h { padding-left: 14px; } .dlg-f { padding: 8px 14px; } }
+/* SP-969: 為什麼不一樣 — four numbers the repo counts */
+.why { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 6px; }
+@media (max-width: 980px) { .why { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .why { grid-template-columns: 1fr; } }
+.why .card { display: flex; flex-direction: column; gap: 6px; }
+.why .num { font-size: 34px; font-weight: 750; line-height: 1.1; color: var(--accent); font-variant-numeric: tabular-nums; }
+.why .numl { color: var(--muted); font-size: 13px; font-weight: 600; margin-top: -2px; }
+.why .card p { color: var(--text); }
+.why .ex { margin-top: auto !important; padding-top: 10px; border-top: 1px dashed var(--line); color: var(--muted) !important; font-size: 13px !important; }
+/* SP-969: the race calculator's waterfall — the example's finish time, factor by factor (api/intro.breakdown) */
+.race-head { margin-bottom: 16px; }
+.wf-card { padding: 16px 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); min-width: 0; }
+.wf-title { margin: 0 0 6px; font-weight: 700; }
+.wf-assumed { margin: 0 0 6px; padding: 6px 10px; border-radius: 8px; background: var(--soft); font-size: 13px; color: var(--muted); }
+.wf-assumed b { color: var(--text); }
+.wf { display: grid; }
+.wf-row { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr) 4.6rem; gap: 14px; align-items: center;
+  padding: 9px 0; border-bottom: 1px solid var(--line); }
+.wf-row .lab { min-width: 0; font-size: 14.5px; line-height: 1.35; }
+.wf-row .lab small { display: block; color: var(--muted); font-size: 12.5px; }
+.wf-row .track { position: relative; height: 18px; }
+.wf-row .bar { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--warm); min-width: 3px; }
+.wf-row .bar.base { background: var(--muted); opacity: .55; }
+.wf-row .bar.neg { background: var(--c-run); }
+.wf-row .bar.total { background: var(--accent); }
+.wf-row .t { text-align: right; font-weight: 650; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wf-row.sum { border-bottom: 0; border-top: 2px solid var(--text); margin-top: -1px; }
+.wf-row.sum .t { color: var(--accent); font-size: 16px; }
+.wf-row.axis { border-bottom: 0; padding: 4px 0 0; }
+.wf-row.axis .track { height: 16px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.wf-row.axis .track span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.wf-row.axis .track span:first-child { transform: none; }
+@media (max-width: 640px) {
+  .wf-row { grid-template-columns: minmax(0, 1fr) 4.4rem; gap: 4px 10px; }
+  .wf-row .track { grid-column: 1 / -1; grid-row: 2; height: 12px; }
+  .wf-row.axis { grid-template-columns: minmax(0, 1fr); }
+  .wf-row.axis .track { grid-row: 1; }
+}
+.bt { margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--soft); font-size: 14px; }
+.bt b { font-variant-numeric: tabular-nums; }
+.cmp { margin: 14px 0 22px; }
+.cmp > div { padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.cmp > .us { background: var(--soft); border-color: var(--soft); }
+.cmp h3 { margin: 0; color: var(--muted); font-size: 13.5px; }
+.cmp .big { margin: 2px 0 6px; font-size: 24px; font-weight: 750; line-height: 1.25; }
+.cmp ul { margin: 0; padding-left: 1.2em; font-size: 14.5px; }
+/* SP-969 (追加): 疊石 Cairn, the sister project — one quiet block before the footer */
+.cairn-x { text-align: center; padding: 28px 0 36px; }
+.cairn-x h2 { font-size: clamp(19px, 2.4vw, 22px); }
+.cairn-x .muted { margin: 0 auto 10px; max-width: 48em; font-size: 14.5px; }
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -281,7 +361,8 @@ html.anim .reveal.in { opacity: 1; transform: none; }
         <p class="lead" data-kind-text="lead" data-i18n="intro.hero.lead">給越野跑、百岳、路跑的備賽工具：依目標賽事排好課表、每一堂課照你的狀況調，比賽前再算好每一段怎麼跑。</p>
         <div class="cta">
           <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
-          <a class="btn" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
+          <!-- SP-969: the example with its result; a click opens it in the dialog below (a new tab still works) -->
+          <a class="trybtn" data-try data-try-big href="/share/example-trail-50k"><span class="play" aria-hidden="true"></span><b data-try-h data-i18n="intro.try.trail">看一場 50K 越野賽的完整試算</b><small data-try-sub></small></a>
         </div>
         <p class="price"><span data-i18n="intro.cta.price">免費方案可以一直用，名額有限、額滿收候補；訂閱即將開放（每月 NT$99 或每年 NT$890）。</span> <a href="/pricing" data-i18n="intro.cta.pricing">看方案與價格 →</a></p>
       </div>
@@ -298,6 +379,35 @@ html.anim .reveal.in { opacity: 1; transform: none; }
         <div id="cal-weeks" class="cal-weeks"></div>
         <div class="cal-detail" id="cal-detail" aria-live="polite"><p class="muted" data-i18n="intro.cal.hint">點一天，看那天的課和結構。</p></div>
         <p class="calc-note"><span data-i18n="intro.shot.fictional">畫面是示範資料：虛構跑者、虛構賽事。</span> <span data-i18n="intro.cal.later_note">斜線的日子還沒排：課表先排到下週，越接近比賽越照你當時的狀況排。</span></p>
+      </div>
+    </section>
+
+    <!-- SP-969: 為什麼不一樣 — the numbers come with the page from the server (api/intro.why: counted in the repo) -->
+    <section id="why" aria-labelledby="why-h">
+      <p class="kicker" data-i18n="intro.why.kicker">為什麼不一樣</p>
+      <h2 id="why-h" data-i18n="intro.why.h">算法全部攤開，每個數字都查得到出處</h2>
+      <p class="sec-lead" data-i18n="intro.why.lead">很多腳程計算機用「距離 ÷ 速度、每爬 100 公尺加幾分鐘」。這裡把坡度、背包、天氣、海拔分開算，用的是運動科學文獻的模型，再拿你自己的紀錄校正。</p>
+      <div class="why">
+        <div class="card reveal">
+          <div class="num" data-why="sources">–</div><div class="numl" data-why-l="sources"></div>
+          <p data-i18n="intro.why.sources.p">坡度用 Minetti 的能量成本、背包用 Pandolf、CP 用 Monod、距離換算用 Riegel、熱用國際共識。</p>
+          <p class="ex"><a href="/about#methods" data-i18n="intro.why.sources.ex">「關於」頁列出每一篇，方法與名稱屬於原作者 →</a></p>
+        </div>
+        <div class="card reveal">
+          <div class="num" data-why="zones">–</div><div class="numl" data-why-l="zones"></div>
+          <p data-i18n="intro.why.zones.p">Daniels、Friel、Seiler、80/20、Lydiard、Canova、Pfitzinger、Uphill Athlete、Koop…課表的強度跟這些教練說的是同一件事。</p>
+          <p class="ex" data-why-ex="zones"></p>
+        </div>
+        <div class="card reveal">
+          <div class="num" data-why="calibrated">–</div><div class="numl" data-why-l="calibrated"></div>
+          <p data-i18n="intro.why.calibrated.p">熱對心率的影響、爬升換成多少平路、什麼算全力、心率飄移怎麼切、輕鬆跑的強度…都用你跑過的資料擬合。</p>
+          <p class="ex" data-i18n="intro.why.calibrated.ex">資料不夠時先用文獻值，累積越多越像你。</p>
+        </div>
+        <div class="card reveal">
+          <div class="num" data-i18n="intro.why.estimate.num">推估</div><div class="numl" data-i18n="intro.why.estimate.l">不確定的就照實標出來</div>
+          <p data-i18n="intro.why.estimate.p">沒有直接出處的數字一律標「推估」，回測沒變準的也照實寫。</p>
+          <p class="ex" data-why-ex="estimate"></p>
+        </div>
       </div>
     </section>
 
@@ -352,68 +462,37 @@ html.anim .reveal.in { opacity: 1; transform: none; }
       </div>
     </section>
 
-    <section id="race" class="feature flip" aria-labelledby="race-h">
-      <div class="text">
+    <section id="race" aria-labelledby="race-h">
+      <div class="race-head">
         <p class="kicker" data-i18n="intro.race.kicker">比賽前</p>
-        <h2 id="race-h" data-i18n="intro.race.h">賽事計算機</h2>
-        <p class="sec-lead" data-i18n="intro.race.lead">丟一條賽道 GPX，算出完賽時間、每一段的配速、心率上限和補給量；有功率計而且 CP 有效時也算功率。</p>
-        <ul>
-          <li data-i18n="intro.race.li.legs">逐段配速：哪段該跑、哪段改用走的、陡下坡先求安全</li>
-          <li data-i18n="intro.race.li.weather">比賽日天氣：每一段用「跑到那裡時」的氣溫和濕度算熱負荷，也算海拔</li>
-          <li data-i18n="intro.race.li.fuel">補給：每小時碳水、水分、鈉，什麼時候吃</li>
-          <li data-i18n="intro.race.li.baiyue">百岳多日：按山屋與營地分日預覽，背包重量一起算</li>
-          <li data-i18n="intro.race.li.group">跟團對照：拿開團的時刻表比一比，逐段看跟不跟得上</li>
-          <li data-i18n="intro.race.li.share">算好的配速表可以存成課表，或用一個連結分享給同團的人</li>
-          <li><span data-i18n="intro.race.li.pace">揪團估腳程：上傳一趟爬山紀錄和路線，看這條路線大約幾小時、比一般登山客快還是慢（不用登入）</span> <a href="/share/pace" data-i18n="intro.race.pace_link">試算腳程 →</a></li>
-        </ul>
-      <!-- SP-637: the small calculator — the server computes (/api/v1/intro/estimate), the page only formats
-           (R1: here in the race section, the 課表 calendar is the hero) -->
-      <form class="calc reveal" id="calc" aria-labelledby="calc-h" onsubmit="return false">
-        <h3 id="calc-h" class="calc-h" data-i18n="intro.calc.h">試算一場比賽</h3>
-        <div class="field">
-          <label for="calc-km"><span data-i18n="intro.calc.km">距離</span><output id="calc-km-v" for="calc-km">50 km</output></label>
-          <input type="range" id="calc-km" min="5" max="100" step="1" value="50">
-        </div>
-        <div class="field">
-          <label for="calc-gain"><span data-i18n="intro.calc.gain">爬升</span><output id="calc-gain-v" for="calc-gain">2,750 m</output></label>
-          <input type="range" id="calc-gain" min="0" max="6000" step="50" value="2750">
-        </div>
-        <div class="calc-res" aria-live="polite">
-          <div class="k" id="calc-k" data-i18n="intro.calc.finish">預估完賽</div>
-          <div class="big" id="calc-time">–</div>
-          <div class="s" id="calc-pace"></div>
-        </div>
-        <p class="calc-note" data-i18n="intro.calc.note">一位虛構跑者的試算。登入後，用你自己的跑步資料算。</p>
-      </form>
-        <p class="origin" data-i18n="intro.race.origin">完賽預估、環境修正與 CP 的公式移植自 Steve Palladino 的 SuperPower Calculator（跑步功率社群公開流通的試算表），不是我們發明的；越野與百岳的坡度、背包換算另外依照公開文獻。</p>
-        <a class="more" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
+        <h2 id="race-h" data-i18n="intro.race.h">賽事計算機：把完賽時間拆開算給你看</h2>
+        <p class="sec-lead" data-i18n="intro.wf.lead">示範的 50K 從平路開始，一層一層加上爬升、地形、長時間的疲勞、比賽日的天氣和海拔。每一層都是計算機拿掉那個因素重算的差，加起來就是預估完賽；每一層都寫出用了什麼模型。</p>
       </div>
-      <div class="race-side">
-      <!-- SP-637: the example's elevation profile — hover (desktop) or tap (phone) a leg -->
-      <div class="prof reveal" id="profile">
-        <div class="kinds small" role="group" aria-label="範例" data-i18n-attr="aria-label:intro.prof.kinds">
-          <button type="button" data-kind="trail" aria-pressed="true" data-i18n="intro.tags.trail">越野跑</button><button type="button" data-kind="baiyue" aria-pressed="false" data-i18n="intro.tags.baiyue">百岳／多日縱走</button><button type="button" data-kind="road" aria-pressed="false" data-i18n="intro.tags.road">路跑</button>
-        </div>
-        <p class="prof-title" data-kind-text="profile" data-i18n="intro.kind.trail.profile">示範山徑越野 50K</p>
-        <dl class="stats">
-          <div><dt data-i18n="intro.prof.km">距離</dt><dd><span data-stat="km">–</span> km</dd></div>
-          <div><dt data-i18n="intro.prof.gain">爬升</dt><dd><span data-stat="gain">–</span> m</dd></div>
-          <div><dt data-i18n="intro.prof.time">預估完賽</dt><dd><span data-stat="time">–</span></dd></div>
-          <div><dt data-i18n="intro.prof.legs">分段</dt><dd><span data-stat="legs">–</span></dd></div>
-        </dl>
-        <div class="chart">
-          <svg id="prof-svg" viewBox="0 0 1000 220" preserveAspectRatio="none" role="img" tabindex="0"
-               aria-label="高度剖面：左右鍵切換分段" data-i18n-attr="aria-label:intro.prof.aria"></svg>
-        </div>
-        <div class="axis"><span>0 km</span><span id="prof-end"></span></div>
-        <ul class="legend">
-          <li><i class="c-run"></i><span data-i18n="intro.prof.run">跑</span></li>
-          <li><i class="c-mix"></i><span data-i18n="intro.prof.mix">走跑皆可</span></li>
-          <li><i class="c-walk"></i><span data-i18n="intro.prof.walk">走</span></li>
-        </ul>
-        <div class="leg" id="prof-leg" aria-live="polite"><p class="muted" data-i18n="intro.prof.hint">滑過或點一下剖面，看每一段的配速、心率和補給。</p></div>
-        <p class="calc-note" data-i18n="intro.shot.fictional">畫面是示範資料：虛構跑者、虛構賽事。</p>
+      <!-- SP-969: the trail example's finish time factor by factor (/api/v1/intro/breakdown: frozen with the
+           example from the calculator's own plan); this only draws the numbers -->
+      <div class="wf-card reveal" id="wf-card">
+        <p class="wf-title" data-i18n="intro.wf.title">示範山徑越野 50K（虛構跑者）：預估完賽怎麼算出來</p>
+        <p class="wf-assumed" id="wf-assumed" hidden></p>
+        <div class="wf" id="wf" role="list" aria-label="完賽時間的組成" data-i18n-attr="aria-label:intro.wf.aria"></div>
+        <p class="calc-note" data-i18n="intro.wf.note">陡坡改走、下坡怎麼跑不會改變整場時間：計算機用你自己的坡度成本，決定每一段分到多少時間。</p>
       </div>
+      <p class="bt" id="bt"></p>
+      <div class="two cmp">
+        <div class="them">
+          <h3 data-i18n="intro.cmp.them.h">常見的腳程計算機</h3>
+          <div class="big" data-i18n="intro.cmp.them.big">一個數字</div>
+          <ul><li data-i18n="intro.cmp.them.li1">距離 ÷ 平均速度，或每 100 m 爬升加幾分鐘</li><li data-i18n="intro.cmp.them.li2">不分段、不管天氣、不看你的身體</li></ul>
+        </div>
+        <div class="us">
+          <h3 data-i18n="intro.cmp.us.h">這裡</h3>
+          <div class="big" id="cmp-us-big" data-i18n="intro.cmp.us.big_plain">每一段都有自己的目標</div>
+          <ul><li data-i18n="intro.cmp.us.li1">每段的配速、心率上限、該跑還是該走、補給</li><li data-i18n="intro.cmp.us.li2">天氣用「跑到那段時」的預報，不是起跑時的</li></ul>
+        </div>
+      </div>
+      <!-- SP-969 Q2-3: the old list, the small calculator and the profile are gone; the credit stays -->
+      <p class="origin" data-i18n="intro.race.origin">完賽預估、環境修正與 CP 的公式移植自 Steve Palladino 的 SuperPower Calculator（跑步功率社群公開流通的試算表），不是我們發明的；越野與百岳的坡度、背包換算另外依照公開文獻。</p>
+      <div class="try-end">
+        <a class="trybtn" data-try data-try-big href="/share/example-trail-50k"><span class="play" aria-hidden="true"></span><b data-try-h data-i18n="intro.try.trail">看一場 50K 越野賽的完整試算</b><small data-try-sub></small></a>
       </div>
     </section>
 
@@ -486,6 +565,15 @@ html.anim .reveal.in { opacity: 1; transform: none; }
       </div>
       <p class="price"><span data-i18n="intro.cta.price">免費方案可以一直用，名額有限、額滿收候補；訂閱即將開放（每月 NT$99 或每年 NT$890）。</span> <a href="/pricing" data-i18n="intro.cta.pricing">看方案與價格 →</a></p>
     </section>
+
+    <!-- SP-969 (2026-10-27 追加): the sister project 疊石 Cairn, low-key, last before the footer. The link is the
+         cross-promotion's own (api/xp.cairn_url, window.TRC_CAIRN from the server); without it, no link -->
+    <section id="cairn" class="cairn-x" aria-labelledby="cairn-h">
+      <p class="kicker" data-i18n="intro.cairn.kicker">另一個專案</p>
+      <h2 id="cairn-h">以基石備戰，隨疊石回家</h2>
+      <p class="muted" data-i18n="intro.cairn.what">疊石 Cairn 管上山那幾天：路線與每天的行程、揪團，出發後把即時位置分享給山下的家人。</p>
+      <a class="more" id="cairn-link" target="_blank" rel="noopener" hidden data-i18n="intro.cairn.link">看看疊石 Cairn →</a>
+    </section>
   </div>
 </main>
 <footer>
@@ -499,7 +587,25 @@ html.anim .reveal.in { opacity: 1; transform: none; }
     <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:intro.lang.title" data-i18n="intro.lang.other">English</button>
   </div>
 </footer>
+<!-- SP-969: the example in a dialog — its own share page (/share/<id>) in a same-origin frame; × , the
+     background or Esc close it and the focus goes back to the button that opened it -->
+<div class="modal" id="ex-modal" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="ex-title">
+    <div class="dlg-h">
+      <h2 id="ex-title" data-i18n="intro.kind.trail.profile">示範山徑越野 50K（虛構賽事）</h2>
+      <a id="ex-new" href="/share/example-trail-50k" target="_blank" rel="noopener" data-i18n="intro.dlg.new_tab">在新分頁開啟</a>
+      <button type="button" class="dlg-x" id="ex-close" aria-label="關閉" title="關閉" data-i18n-attr="aria-label:intro.dlg.close;title:intro.dlg.close">×</button>
+    </div>
+    <iframe id="ex-frame" title="示範試算" data-i18n-attr="title:intro.dlg.frame"></iframe>
+    <div class="dlg-f">
+      <span class="muted" data-i18n="intro.calc.note">一位虛構跑者的試算。登入後，用你自己的跑步資料算。</span>
+      <a class="btn small primary" href="/login" data-i18n="intro.dlg.own">用自己的資料算</a>
+    </div>
+  </div>
+</div>
 <!--fill:try-->
+<!--fill:why-->
+<!--fill:cairn-->
 <script>
 (() => {
   const L = window.I18N || { locale: "zh-TW", t: (k) => k, setLocale: () => {} };
@@ -514,7 +620,9 @@ html.anim .reveal.in { opacity: 1; transform: none; }
   if (tr && tr.kind === "demo" && /^https:\/\//.test(tr.url)) {
     for (const a of document.querySelectorAll("[data-try]")) {
       a.href = tr.url;
-      a.textContent = L.t("intro.cta.demo");
+      // SP-969: the big buttons keep their frame, without the example's numbers (the demo is another site)
+      if (a.hasAttribute("data-try-big")) { a.classList.add("demo"); a.querySelector("[data-try-h]").textContent = L.t("intro.cta.demo"); }
+      else a.textContent = L.t("intro.cta.demo");
     }
   }
   // the screenshots (backend/scripts/intro_shots.json): this language's, the dark ones in dark mode
@@ -541,6 +649,48 @@ html.anim .reveal.in { opacity: 1; transform: none; }
     : Number(v).toLocaleString(NF, { minimumFractionDigits: d, maximumFractionDigits: d }));
   const hm = (s) => { if (s == null || !isFinite(s)) return "–"; const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
   const mmss = (s) => { if (s == null || !isFinite(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  // H:MM:SS, as the share page writes a duration
+  const hms = (s) => { if (s == null || !isFinite(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
+  const lapse = (s) => (Math.abs(s) < 3600 ? mmss(Math.abs(s)) : hms(Math.abs(s)));
+
+  // ---- SP-969 (追加): 疊石 Cairn's link, the server's (window.TRC_CAIRN); none → the block stays without a link
+  // the slogan names the product (SP-971: one key, shell.brand): zh takes its Chinese part 「基石」 (the name is
+  // 「Trig 基石」), en the whole name 「Trig」
+  {
+    const b = L.t("shell.brand");
+    const name = b && b !== "shell.brand" ? (loc === "en" ? b : b.split(" ").pop()) : null;
+    if (name) $("cairn-h").textContent = L.t("intro.cairn.h", { name });
+  }
+  const CA = window.TRC_CAIRN;
+  if (CA && /^https:\/\//.test(CA.url || "")) { const a = $("cairn-link"); a.href = CA.url; a.hidden = false; }
+
+  // ---- SP-969: 為什麼不一樣 — the server's counts (window.TRC_WHY, api/intro.why); the page only words them
+  const WHY = window.TRC_WHY || {};
+  const setTxt = (sel, t) => { for (const e of document.querySelectorAll(sel)) e.textContent = t; };
+  if (WHY.sources != null) {
+    setTxt('[data-why="sources"]', num(WHY.sources));
+    setTxt('[data-why-l="sources"]', L.t("intro.why.sources.l", { m: num(WHY.methods) }));
+  }
+  if (WHY.zone_systems != null) {
+    setTxt('[data-why="zones"]', num(WHY.zone_systems));
+    setTxt('[data-why-l="zones"]', L.t("intro.why.zones.l"));
+    setTxt('[data-why-ex="zones"]', L.t("intro.why.zones.ex", { n: num(WHY.zone_refs) }));
+  }
+  if (WHY.calibrated != null) {
+    setTxt('[data-why="calibrated"]', num(WHY.calibrated));
+    setTxt('[data-why-l="calibrated"]', L.t("intro.why.calibrated.l"));
+  } else setTxt('[data-why-l="calibrated"]', L.t("intro.why.calibrated.l"));
+  const BT = WHY.backtest || null;
+  if (BT) {
+    setTxt('[data-why-ex="estimate"]', L.t("intro.why.estimate.ex", { a: num(BT.durability_without_pct, 1), b: num(BT.durability_with_pct, 1), n: num(BT.trail_races) }));
+    // the back-test line under the waterfall (Q1: C's one line); every number from the server
+    const bt = $("bt");
+    bt.textContent = "";
+    const parts = L.t("intro.bt.line", { n: "\u0001", full: "\u0002", formula: "\u0003", races: "\u0004", trail: "\u0005" }).split(/([\u0001-\u0005])/);
+    const V = { "\u0001": num(BT.walk_n), "\u0002": num(BT.walk_full_pct, 1) + "%", "\u0003": num(BT.walk_formula_pct, 1) + "%",
+      "\u0004": num(BT.trail_races), "\u0005": num(BT.trail_pct, 1) + "%" };
+    for (const p of parts) { if (V[p]) { const b = document.createElement("b"); b.textContent = V[p]; bt.appendChild(b); } else if (p) bt.appendChild(document.createTextNode(p)); }
+  } else $("bt").hidden = true;
 
   // fade in on scroll (style: html.anim .reveal); nothing moves with 「減少動態效果」
   if (!reduce && "IntersectionObserver" in window) {
@@ -551,155 +701,10 @@ html.anim .reveal.in { opacity: 1; transform: none; }
     for (const el of document.querySelectorAll(".reveal")) io.observe(el);
   }
 
-  // the numbers above the profile count up the first time they are seen (at once with reduced motion)
-  let statsSeen = reduce || !("IntersectionObserver" in window);
-  let statsWant = null;
-  function countTo(el, to, fmt) {
-    if (statsSeen && !reduce && window.requestAnimationFrame) {
-      const t0 = performance.now(), dur = 800;
-      const step = (t) => {
-        const p = Math.min(1, (t - t0) / dur), e = 1 - (1 - p) * (1 - p) * (1 - p);
-        el.textContent = fmt(to * e);
-        if (p < 1) requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
-    } else el.textContent = fmt(to);
-  }
-  function setStats(d) {
-    statsWant = d;
-    const s = d.summary;
-    const F = { km: [s.km, (v) => num(v, 1)], gain: [s.gain_m, (v) => num(v)], time: [s.time_s, hm], legs: [s.legs, (v) => num(v)] };
-    for (const el of document.querySelectorAll("[data-stat]")) {
-      const [v, fmt] = F[el.dataset.stat];
-      if (statsSeen) countTo(el, v, fmt); else el.textContent = fmt(0);
-    }
-  }
-  if (!statsSeen) {
-    const so = new IntersectionObserver((es) => {
-      if (!es.some((e) => e.isIntersecting)) return;
-      so.disconnect(); statsSeen = true;
-      if (statsWant) setStats(statsWant);
-    }, { threshold: 0.4 });
-    so.observe(document.querySelector(".stats"));
-  }
-
-  // the small calculator: the server's answer for the fictional runner, asked after the slider rests
-  const kmIn = $("calc-km"), gainIn = $("calc-gain"), res = document.querySelector(".calc-res");
-  let kind = "trail", timer = 0, seq = 0;
-  const memo = new Map();
-  function labels() {
-    $("calc-km-v").textContent = num(Number(kmIn.value)) + " km";
-    $("calc-gain-v").textContent = num(Number(gainIn.value)) + " m";
-  }
-  function show(r) {
-    res.classList.remove("busy");
-    $("calc-time").textContent = hm(r.time_s);
-    $("calc-pace").textContent = r.kind === "baiyue" ? L.t("intro.calc.moving_note")
-      : L.t("intro.calc.pace", { pace: mmss(r.pace_s_per_km) });
-  }
-  function ask() {
-    clearTimeout(timer);
-    res.classList.add("busy");
-    timer = setTimeout(async () => {
-      const q = { kind, km: kmIn.value, gain: gainIn.value }, key = JSON.stringify(q), my = ++seq;
-      let r = memo.get(key), err = null;
-      if (!r) {
-        try {
-          const x = await fetch(API + "estimate?" + new URLSearchParams(q));
-          if (x.ok) { r = await x.json(); memo.set(key, r); } else err = x.status;
-        } catch { err = 0; }
-      }
-      if (my !== seq) return;
-      if (r) { show(r); return; }
-      res.classList.remove("busy");
-      $("calc-time").textContent = "–";
-      $("calc-pace").textContent = L.t(err === 429 ? "intro.calc.busy" : "intro.calc.error");
-    }, 200);
-  }
-  for (const el of [kmIn, gainIn]) el.addEventListener("input", () => { labels(); ask(); });
-  function setCalc(d) {
-    const c = d.calc;
-    kmIn.min = c.km[0]; kmIn.max = c.km[1]; kmIn.step = c.km_step; kmIn.value = c.default.km;
-    gainIn.min = c.gain[0]; gainIn.max = c.gain[1]; gainIn.step = c.gain_step; gainIn.value = c.default.gain;
-    labels();
-    $("calc-k").textContent = L.t(d.kind === "baiyue" ? "intro.calc.moving" : "intro.calc.finish");
-    if (c.result) { memo.set(JSON.stringify({ kind: d.kind, km: kmIn.value, gain: gainIn.value }), c.result); show(c.result); }
-    else ask();
-  }
-
-  // the example's elevation profile: hand-drawn SVG; hover (mouse) or tap a leg, ← → on the keyboard
-  const svg = $("prof-svg"), NS = "http://www.w3.org/2000/svg", W = 1000, H = 220, BAND = 14, TOP = 8;
-  let P = null, sel = -1;
+  // SP-969 Q2-3: the small calculator and the elevation profile are gone (the waterfall tells the race)
+  let kind = "trail";
+  const NS = "http://www.w3.org/2000/svg";
   const el = (name, attrs) => { const n = document.createElementNS(NS, name); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
-  function drawProfile(d) {
-    svg.textContent = "";
-    P = null; sel = -1;
-    const pts = d.profile || [];
-    if (pts.length < 2) return;
-    const k0 = pts[0][0], k1 = pts[pts.length - 1][0];
-    let lo = Infinity, hi = -Infinity;
-    for (const p of pts) { lo = Math.min(lo, p[1]); hi = Math.max(hi, p[1]); }
-    if (hi - lo < 120) { const mid = (hi + lo) / 2; lo = mid - 60; hi = mid + 60; }   // a flat road stays flat
-    const base = H - BAND - 6;
-    const X = (km) => ((km - k0) / (k1 - k0 || 1)) * W;
-    const Y = (z) => TOP + ((hi - z) / (hi - lo)) * (base - TOP);
-    let line = "";
-    pts.forEach((p, i) => { line += `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`; });
-    svg.appendChild(el("path", { class: "area", d: `${line}L${W},${base}L0,${base}Z` }));
-    svg.appendChild(el("path", { class: "line", d: line }));
-    for (const g of d.legs) {
-      svg.appendChild(el("rect", { class: "band " + (g.mode || "run"), x: X(g.a).toFixed(1), y: H - BAND,
-        width: Math.max(1, X(g.b) - X(g.a) - 1).toFixed(1), height: BAND, rx: 2 }));
-    }
-    let day = null;
-    for (const g of d.legs) {
-      if (g.day && day != null && g.day !== day) svg.appendChild(el("line", { class: "day", x1: X(g.a), x2: X(g.a), y1: 0, y2: H }));
-      day = g.day;
-    }
-    const hl = el("rect", { class: "sel", x: 0, y: 0, width: 0, height: H });
-    svg.appendChild(hl);
-    P = { d, X, k0, k1, hl };
-    $("prof-end").textContent = num(k1, 1) + " km";
-    showLeg(-1);
-  }
-  function showLeg(i) {
-    const box = $("prof-leg");
-    if (!P || i < 0) { box.innerHTML = ""; const p = document.createElement("p"); p.className = "muted"; p.textContent = L.t("intro.prof.hint"); box.appendChild(p); return; }
-    const g = P.d.legs[i];
-    P.hl.setAttribute("x", P.X(g.a).toFixed(1));
-    P.hl.setAttribute("width", Math.max(2, P.X(g.b) - P.X(g.a)).toFixed(1));
-    const head = L.t("intro.prof.leg_h", { n: g.n, a: num(g.a, 1), b: num(g.b, 1) }) + (g.day ? " · " + L.t("intro.prof.day", { day: g.day }) : "");
-    const rows = [
-      [L.t("intro.prof.climb", { gain: num(g.gain_m), loss: num(g.loss_m), grade: num(g.grade == null ? null : g.grade * 100, 0) }),
-       L.t("intro.prof.mode_" + (g.mode || "run"))],
-      [L.t("intro.prof.pace", { pace: mmss(g.pace_s_per_km) }), g.hr_cap ? L.t("intro.prof.hr", { hr: num(g.hr_cap) }) : "",
-       L.t("intro.prof.at", { time: hm(g.cum_s) })],
-      [L.t("intro.prof.fuel", { cho: num(g.cho_g), water: num(g.water_ml), na: num(g.na_mg) })],
-    ];
-    box.innerHTML = "";
-    const h = document.createElement("p"); h.className = "h"; h.textContent = head; box.appendChild(h);
-    for (const r of rows) {
-      const p = document.createElement("p"); p.className = "row";
-      for (const t of r.filter(Boolean)) { const s = document.createElement("span"); s.textContent = t; p.appendChild(s); }
-      box.appendChild(p);
-    }
-  }
-  function select(i) { sel = i; showLeg(i); }
-  function pick(e) {
-    if (!P) return;
-    const r = svg.getBoundingClientRect();
-    const km = P.k0 + ((e.clientX - r.left) / r.width) * (P.k1 - P.k0);
-    const i = P.d.legs.findIndex((g) => km >= g.a && km <= g.b);
-    if (i >= 0 && i !== sel) select(i);
-  }
-  svg.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") pick(e); });
-  svg.addEventListener("pointerdown", pick);
-  svg.addEventListener("keydown", (e) => {
-    if (!P || (e.key !== "ArrowRight" && e.key !== "ArrowLeft")) return;
-    e.preventDefault();
-    const n = P.d.legs.length;
-    select(sel < 0 ? 0 : Math.max(0, Math.min(n - 1, sel + (e.key === "ArrowRight" ? 1 : -1))));
-  });
 
   // ---- SP-637 R1: the 課表. Steps come as length + level 1–5 (api/intro.structure); this only draws them.
   const dur = (s) => (s < 60 ? `${s}″` : s % 60 ? `${Math.floor(s / 60)}′${String(s % 60).padStart(2, "0")}″` : `${s / 60}′`);
@@ -872,10 +877,117 @@ html.anim .reveal.in { opacity: 1; transform: none; }
   fetch(API + "templates").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then((d) => { TPL.d = d; setTplCat(TPL.cat); })
     .catch(() => { $("tpl-view").textContent = L.t("intro.calc.error"); });
 
-  // 越野／百岳／路跑: the hero's words, the calculator's range and first answer, the profile
+  // ---- SP-969: the waterfall — the trail example's finish time factor by factor, as the server froze it from
+  // the calculator's own plan (/api/v1/intro/breakdown). This only lays the numbers out: no layer is computed here.
+  function drawWaterfall(d) {
+    const box = $("wf");
+    box.textContent = "";
+    const LV = { normal: "intro.wf.level.normal", technical: "intro.wf.level.technical", scramble: "intro.wf.level.scramble" };
+    const P = {
+      km: num(d.km, 1), gain: num(d.gain_m), div: num(d.divisor), mult: num(d.terrain && d.terrain.mult, 2),
+      level: L.t(LV[(d.terrain && d.terrain.level) || "normal"] || LV.normal), delta: num(d.delta == null ? null : d.delta * 100, 1),
+      temp: num(d.temp_c, 1), rh: num(d.rh_pct), legs: num(d.legs),
+    };
+    // Q2: the example's assumed race settings (scripts/intro_example.ASSUMED), named above the layers
+    const A = d.assumed;
+    if (A) {
+      const p = $("wf-assumed");
+      p.textContent = L.t("intro.wf.assumed", { effort: num(A.effort == null ? null : A.effort * 100),
+        level: L.t(LV[A.terrain] || LV.normal), delta: num(A.delta == null ? null : A.delta * 100, 1),
+        n: A.stops || 0, min: num(A.stop_min) });
+      p.hidden = false;
+    }
+    let cum = 0, top = d.time_s;
+    for (const x of d.layers) { cum += x.t_s; top = Math.max(top, cum); }
+    const hours = Math.max(1, Math.ceil(top / 3600)), step = hours > 6 ? 2 : 1, max = hours * 3600;
+    const pct = (s) => `${((s / max) * 100).toFixed(2)}%`;
+    const row = (lab, sub, a, b, cls, t) => {
+      const r = document.createElement("div"); r.className = "wf-row" + (cls === "total" ? " sum" : ""); r.setAttribute("role", "listitem");
+      const l = document.createElement("div"); l.className = "lab";
+      const h = document.createElement(cls === "total" ? "b" : "span"); h.textContent = lab; l.appendChild(h);
+      const s = document.createElement("small"); s.textContent = sub; l.appendChild(s);
+      const tk = document.createElement("div"); tk.className = "track"; tk.setAttribute("aria-hidden", "true");
+      const bar = document.createElement("div"); bar.className = "bar " + cls;
+      bar.style.left = pct(Math.min(a, b)); bar.style.width = pct(Math.abs(b - a)); tk.appendChild(bar);
+      const v = document.createElement("div"); v.className = "t"; v.textContent = t;
+      r.append(l, tk, v); box.appendChild(r);
+    };
+    cum = 0;
+    d.layers.forEach((x, i) => {
+      const a = cum; cum += x.t_s;
+      if (i === 0) {
+        P.pace = mmss(d.km ? x.t_s / d.km : null);
+        row(L.t("intro.wf." + x.key, P), L.t("intro.wf." + x.key + "_s", P), 0, cum, "base", hms(x.t_s));
+      } else {
+        const sign = x.t_s < 0 ? "−" : "+";
+        row(L.t("intro.wf." + x.key, P), L.t("intro.wf." + x.key + "_s", P), a, cum, x.t_s < 0 ? "neg" : "", sign + lapse(x.t_s));
+      }
+    });
+    row(L.t("intro.wf.total"), L.t("intro.wf.total_s", P), 0, d.time_s, "total", hms(d.time_s));
+    const ax = document.createElement("div"); ax.className = "wf-row axis"; ax.setAttribute("aria-hidden", "true");
+    const tk = document.createElement("div"); tk.className = "track";
+    for (let h = 0; h <= hours; h += step) { const s = document.createElement("span"); s.style.left = pct(h * 3600); s.textContent = h + " h"; tk.appendChild(s); }
+    ax.append(document.createElement("span"), tk, document.createElement("span"));
+    box.appendChild(ax);
+    if (d.legs) $("cmp-us-big").textContent = L.t("intro.cmp.us.big", { n: d.legs });
+  }
+  fetch(API + "breakdown").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then(drawWaterfall)
+    .catch(() => { $("wf-card").hidden = true; });
+
+  // ---- SP-969: the example in a dialog (a same-origin frame of its share page). Plain links stay: a click
+  // with a modifier, or the public demo (another site), opens the link as before.
+  const modal = $("ex-modal"), frame = $("ex-frame");
+  const outside = [document.querySelector("header.top"), document.querySelector("main"), document.querySelector("footer")];
+  let opener = null;
+  function openEx(a) {
+    opener = a;
+    const url = a.getAttribute("href");
+    const src = url + (url.indexOf("?") < 0 ? "?" : "&") + "lang=" + encodeURIComponent(loc);
+    if (frame.getAttribute("src") !== src) frame.src = src;
+    $("ex-new").href = url;
+    $("ex-title").textContent = L.t(`intro.kind.${kind}.profile`);
+    modal.hidden = false;
+    document.documentElement.classList.add("modal-open");
+    for (const el of outside) if (el) el.inert = true;
+    $("ex-close").focus();
+  }
+  function closeEx() {
+    if (modal.hidden) return;
+    modal.hidden = true;
+    document.documentElement.classList.remove("modal-open");
+    for (const el of outside) if (el) el.inert = false;
+    if (opener) opener.focus();
+  }
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest && e.target.closest("a[data-try]");
+    if (!a || demoTry || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    openEx(a);
+  });
+  $("ex-close").addEventListener("click", closeEx);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeEx(); });
+  const onKey = (e) => { if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); closeEx(); } };
+  document.addEventListener("keydown", onKey);
+  // Esc inside the frame (the share page has the focus): its document is ours, the same origin
+  frame.addEventListener("load", () => { try { frame.contentWindow.document.addEventListener("keydown", onKey); } catch { /* not ours */ } });
+
+  // the big buttons carry the chosen example's numbers (the example API's summary)
+  function setTry(k, d) {
+    const s = d.summary || {};
+    const sub = L.t(k === "baiyue" ? "intro.try.sub_baiyue" : "intro.try.sub",
+      { km: num(s.km, 1), gain: num(s.gain_m), time: hms(s.time_s), legs: num(s.legs) });
+    for (const a of document.querySelectorAll("a[data-try-big]")) {
+      if (demoTry) continue;
+      a.querySelector("[data-try-h]").textContent = L.t("intro.try." + k);
+      a.querySelector("[data-try-sub]").textContent = sub;
+    }
+  }
+
+  // 越野／百岳／路跑: the hero's words and the try buttons' example (SP-969: the calculator and profile are gone)
   const EX = {};
   const example = (k) => EX[k] || (EX[k] = fetch(API + "example/" + k).then((r) => (r.ok ? r.json() : Promise.reject(r.status))));
-  // 「先看一場比賽的試算」 opens the chosen kind's example (the public demo, when the server says so, stays)
+  // 「先看一場比賽的試算」 opens the chosen kind's example (the public demo, when the server says so, stays);
+  // SP-969: in the dialog above
   const SHARE = { trail: "example-trail-50k", baiyue: "example-baiyue-3day", road: "example-road-half" };
   const demoTry = !!(tr && tr.kind === "demo" && /^https:\/\//.test(tr.url));
   async function setKind(k) {
@@ -883,12 +995,10 @@ html.anim .reveal.in { opacity: 1; transform: none; }
     if (!demoTry) for (const a of document.querySelectorAll("[data-try]")) a.href = "/share/" + SHARE[k];
     for (const b of document.querySelectorAll("button[data-kind]")) b.setAttribute("aria-pressed", String(b.dataset.kind === k));
     for (const t of document.querySelectorAll("[data-kind-text]")) t.textContent = L.t(`intro.kind.${k}.${t.dataset.kindText}`);
-    const tl = document.querySelector('[data-i18n="intro.prof.time"]');
-    if (tl) tl.textContent = L.t(k === "baiyue" ? "intro.prof.time_baiyue" : "intro.prof.time");
     let d;
-    try { d = await example(k); } catch { delete EX[k]; $("calc-pace").textContent = L.t("intro.calc.error"); return; }
+    try { d = await example(k); } catch { delete EX[k]; return; }     // the buttons stay plain links
     if (k !== kind) return;
-    setCalc(d); drawProfile(d); setStats(d);
+    setTry(k, d);
   }
   for (const b of document.querySelectorAll("button[data-kind]")) b.addEventListener("click", () => setKind(b.dataset.kind));
   setKind("trail");

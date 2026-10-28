@@ -25,6 +25,17 @@ calculation core staying on the server (SP-500: the page only formats what these
         (cache misses) site-wide at most MISS_PER_MIN a minute (503). The answer: kind, the rounded
         km / gain, time_s (whole minutes), pace_s_per_km, fictional — nothing of the model.
   Without the core (the public mirror's stub: CoreNotIncluded) or the runner file: 503, nothing cached.
+
+SP-969, what sets the calculator apart:
+
+  GET /api/v1/intro/breakdown   the trail example's finish time factor by factor (backend/demo/
+        intro_breakdown.json, frozen with the example by scripts/intro_example.py from the calculator's own
+        plan: planner.trail_breakdown — each layer the calculator run again with one factor more); numbers
+        only, the page words them and draws the waterfall. 404 when the file is missing or no longer adds
+        up to the example.
+  「為什麼不一樣」's numbers (why()): counted from the repo (the 關於 page's literature and methods, the
+        calibrated items) or, for documents, constants with their source; handed to the page with it
+        (window.TRC_WHY).
 """
 from __future__ import annotations
 
@@ -46,7 +57,7 @@ from backend.security import ratelimit as RL
 PAGE = "intro"
 PREFIX = "/api/v1/intro"
 KINDS = ("trail", "baiyue", "road")
-PUBLIC_PATHS = frozenset({PREFIX + "/estimate", PREFIX + "/templates", PREFIX + "/plan"}
+PUBLIC_PATHS = frozenset({PREFIX + "/estimate", PREFIX + "/templates", PREFIX + "/plan", PREFIX + "/breakdown"}
                          | {f"{PREFIX}/example/{k}" for k in KINDS})
 
 RUNNER_FILE = Path(__file__).resolve().parents[1] / "demo" / "intro_runner.json"
@@ -78,11 +89,12 @@ class Unavailable(Exception):
 
 def reset() -> None:
     """Forget the cache, the runner and the limits (tests)."""
-    global _runner
+    global _runner, _why
     with _lock:
         _CACHE.clear()
         _ratios.clear()
         _runner = None
+        _why = None
     PER_CLIENT.reset()
     MISS.reset()
 
@@ -95,7 +107,102 @@ def cache_size() -> int:
 def page() -> PageResponse:
     from backend.accounts import login as LG
     link = json.dumps(LG.try_link()).replace("<", "\\u003c")
-    return render_page(PAGE, fill={"try": f"<script>window.TRC_TRY = {link};</script>"})
+    facts = json.dumps(why()).replace("<", "\\u003c")
+    cairn = json.dumps({"url": cairn_url()}).replace("<", "\\u003c")
+    return render_page(PAGE, fill={"try": f"<script>window.TRC_TRY = {link};</script>",
+                                   "why": f"<script>window.TRC_WHY = {facts};</script>",
+                                   "cairn": f"<script>window.TRC_CAIRN = {cairn};</script>"})
+
+
+def cairn_url() -> Optional[str]:
+    """SP-969 (2026-10-27 追加): the 介紹頁's 疊石 Cairn block links where the app's own cross-promotion does
+    (api/xp.cairn_url: Cairn's front page — TRC_CAIRN_ORIGIN, else its production host — marked from=trc);
+    None when that is not an https address (the block then shows no link)."""
+    try:
+        from backend.api import xp as XP
+        u = XP.cairn_url()
+    except Exception:                       # noqa: BLE001 — no Cairn module: the block goes without a link
+        return None
+    return u if isinstance(u, str) and u.startswith("https://") else None
+
+
+# ---------------------------------------------------------------------------- 為什麼不一樣 (SP-969)
+#
+# The four numbers of 「為什麼不一樣」 and the back-test line under the waterfall, handed to the page by the
+# server (the page words them): what the repo itself counts is counted here, each time the process starts —
+# never typed into the page. The research and the back-test are documents, not code: their numbers are
+# constants with where they come from.
+
+# docs/research/coach-schools-zones-periodization.md:9 (「把 13 套區間系統換算成 % LT2」) — the zone systems the
+# 課表's intensities were aligned with; its bibliography (:361-753) runs [1]…[196]
+ZONE_SYSTEMS = 13
+ZONE_REFS = 196
+# docs/spec/racepower.spec.md:764 (test C, A + B: 50 trail walking segments + 16 百岳 segments, median |err|:
+# the full model 7.7 %, the physiological prior 21.9 %, Tobler 51.1 %) and :1029 (the trail HR model on 7 races,
+# race level, median |err| 7.6 %); :1034 (durability: 7.6 % with it, 5.5 % without — kept, marked 推估).
+# All on one runner's data, the author's (the page says so).
+BACKTEST = {"walk_n": 66, "walk_full_pct": 7.7, "walk_prior_pct": 21.9, "walk_formula_pct": 51.1,
+            "trail_races": 7, "trail_pct": 7.6, "durability_with_pct": 7.6, "durability_without_pct": 5.5}
+
+_why: Optional[dict] = None
+
+
+def _calibrated() -> Optional[int]:
+    """How many numbers are fitted on the athlete's own records (engine/calibrate.py's registry: the items
+    with a fit, not the 進階 C 類 ones that are only set by hand); None without the core."""
+    try:
+        from backend.engine import calibrate as CAL
+        return sum(1 for it in CAL._registry().values() if not it.manual_only)
+    except Exception:                       # noqa: BLE001 — the public mirror's stub: the card goes without it
+        return None
+
+
+def why() -> dict:
+    """「為什麼不一樣」's numbers: the 關於 page's literature and methods (about.SOURCES / METHODS), the
+    calibrated items, the zone systems and their references, the back-test (computed once a process)."""
+    global _why
+    if _why is None:
+        from backend.api import about as AB
+        _why = {"sources": len(AB.SOURCES), "methods": len(AB.METHODS), "calibrated": _calibrated(),
+                "zone_systems": ZONE_SYSTEMS, "zone_refs": ZONE_REFS, "backtest": dict(BACKTEST)}
+    return copy.deepcopy(_why)
+
+
+# ---------------------------------------------------------------------------- the waterfall (SP-969)
+
+BREAKDOWN_FILE = Path(__file__).resolve().parents[1] / "demo" / "intro_breakdown.json"
+BREAKDOWN_KEYS = ("flat", "climb", "terrain", "durability", "heat", "altitude", "memory", "night")
+
+
+def breakdown() -> Optional[dict]:
+    """The trail example's finish time factor by factor (backend/demo/intro_breakdown.json, frozen by
+    scripts/intro_example.py from the calculator's own plan of the example: planner.trail_breakdown) —
+    numbers only, the page words them; None without the file or when it no longer adds up to the example."""
+    from backend.engine.racepower import share as SH
+    try:
+        d = json.loads(BREAKDOWN_FILE.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    snap = SH.example(SH.EXAMPLE_ID) or {}
+    t = (snap.get("summary") or {}).get("time_s")
+    layers = [{"key": x.get("key"), "t_s": _r(x.get("t_s"), 1)} for x in d.get("layers") or []
+              if isinstance(x, dict) and x.get("key") in BREAKDOWN_KEYS and _r(x.get("t_s"), 1) is not None]
+    if not layers or not isinstance(t, (int, float)) or abs(sum(x["t_s"] for x in layers) - t) > 2.0:
+        return None                          # an example frozen again without its breakdown: no waterfall
+    terr = d.get("terrain") if isinstance(d.get("terrain"), dict) else {}
+    a = d.get("assumed") if isinstance(d.get("assumed"), dict) else None
+    # SP-969 Q2: the example's assumed race settings (scripts/intro_example.ASSUMED), for the page to name
+    assumed = {"effort": _r(a.get("effort"), 3),
+               "terrain": a.get("terrain") if a.get("terrain") in ("normal", "technical", "scramble") else None,
+               "delta": _r(a.get("delta"), 4), "stops": _r(a.get("stops")), "stop_min": _r(a.get("stop_min"))} \
+        if a else None
+    return {"time_s": _r(t, 1), "layers": layers, "assumed": assumed, "km": _r(d.get("km"), 2), "gain_m": _r(d.get("gain_m")),
+            "divisor": _r(d.get("divisor")), "terrain": {"level": terr.get("level") if terr.get("level") in
+                                                         ("normal", "technical", "scramble") else None,
+                                                         "mult": _r(terr.get("mult"), 3)},
+            "delta": _r(d.get("delta"), 4), "heat_beta": bool(d.get("heat_beta")),
+            "temp_c": _r(d.get("temp_c"), 1), "rh_pct": _r(d.get("rh_pct")), "altitude_m": _r(d.get("altitude_m")),
+            "legs": len(snap.get("segments") or [])}
 
 
 # ---------------------------------------------------------------------------- the limits
@@ -460,6 +567,14 @@ def get_plan():
     d = plan()
     if d is None:
         raise HTTPException(404, "no example plan")
+    return JSONResponse(d, headers=CACHE_HEADERS)
+
+
+@router.get("/breakdown")
+def get_breakdown():
+    d = breakdown()
+    if d is None:
+        raise HTTPException(404, "no breakdown")
     return JSONResponse(d, headers=CACHE_HEADERS)
 
 

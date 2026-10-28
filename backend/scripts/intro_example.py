@@ -5,6 +5,15 @@ served at /share/<id> (api/racepower.share_data) and, trimmed, to the 介紹頁'
 (api/intro.example) without any account, tenant or file of anyone's. The runner and the races are
 fictional (backend/demo), nothing in them is a real person's.
 
+SP-969: with the trail example, its finish time taken apart factor by factor (planner.trail_breakdown: the
+calculator run again with one factor more each time, the layers adding up to the example's time) is frozen
+beside it (backend/demo/intro_breakdown.json, api/intro.breakdown: the 介紹頁's waterfall). --breakdown-only keeps
+the frozen example and writes only its breakdown — refused unless it adds up to the example's time. SP-969 Q2:
+the trail example is computed with assumed race settings (ASSUMED: effort, 地形難度, fatigue δ, aid stations)
+on top of the page's own request; the 介紹頁 names them.
+
+    python -m backend.scripts.intro_example --breakdown-only        # the waterfall for the example as it is
+
 SP-637: the same run also freezes the fictional runner the 介紹頁's small calculator computes for
 (backend/demo/intro_runner.json, api/intro.estimate): the part of the demo athlete's /inputs that the
 road / trail / 百岳 prediction reads — never anyone else's.
@@ -36,6 +45,17 @@ KINDS = {
     "trail": ("demo-50k", "示範山徑越野 50K（虛構跑者）", 40.0),
     "baiyue": ("demo-baiyue", "示範百岳 3 日縱走（虛構跑者）", 25.0),
     "road": ("demo-half", "示範城市半程馬拉松（虛構跑者）", 18.0),
+}
+# SP-969 (Q2): the trail example's assumed race settings — what a runner would set in the calculator for a
+# typical mountain 50K, so every layer of the waterfall shows something real: a race effort (95 %, 吃力) below all-out,
+# 技術路段多 (the 地形難度 prior × 1.15), the long-race fatigue at the model's prior δ (Clark 2019, 5 %/h
+# after 1 h; the demo athlete's own runs measure none) and three aid stations with the minutes typed in
+# (the stop model's share would put 2.5 h of stops on a 6 h race). Sent with the page's own request
+# (replay); the 介紹頁 says these are the example's assumptions (intro_breakdown.json "assumed").
+ASSUMED = {
+    "trail": {"effort_target": 0.95, "terrain_difficulty": "technical", "assume_delta": 0.05,
+              "stops": [{"km": 12.0, "type": "aid", "minutes": 3.0}, {"km": 25.0, "type": "big", "minutes": 8.0},
+                        {"km": 38.0, "type": "aid", "minutes": 3.0}]},
 }
 # the /inputs keys calc.predict reads (road / trail / 百岳): the fictional runner, nothing else
 RUNNER_KEYS = ("weight", "training_conditions", "cp", "tte", "re", "auto_prior", "riegel", "hiking", "aet")
@@ -110,6 +130,59 @@ def runner(url: str) -> dict:
 
 
 PLAN = DEMO / "intro_plan.json"
+BREAKDOWN = DEMO / "intro_breakdown.json"
+# the factors the breakdown names, in the calculator's order (planner.trail_breakdown)
+BREAKDOWN_KEYS = ("flat", "climb", "terrain", "durability", "heat", "altitude", "memory", "night")
+
+
+def assumed(req: dict, kind: str) -> dict:
+    """SP-969: the captured /plan request with the example's assumed settings (ASSUMED) on top."""
+    body = json.loads(json.dumps(req))
+    body.update(json.loads(json.dumps(ASSUMED.get(kind) or {})))
+    return body
+
+
+def replay(url: str, req: dict, snap: Optional[dict] = None) -> dict:
+    """SP-969: the /plan request sent again — with `snap`, under the frozen example's race-day temperature and
+    humidity (its inputs.temp_c / rh_pct; the course and the runner as captured): the plan whose breakdown
+    goes with an example kept as it is (--breakdown-only: the forecast for a race day a few weeks out moves
+    with the day the script runs)."""
+    body = json.loads(json.dumps(req))
+    if snap is not None:
+        inp = snap.get("inputs") or {}
+        body["env_to"] = {**(body.get("env_to") or {}), "temp_c": inp.get("temp_c"), "rh_pct": inp.get("rh_pct")}
+    return _get(url, "/api/v1/racepower/plan", body)
+
+
+def breakdown(plan: dict, snap: dict) -> dict:
+    """SP-969: the trail example's moving time factor by factor, as the calculator gave it with the plan
+    (summary.breakdown) — refused unless its layers add up to the frozen example's time (±1 s)."""
+    bd = (plan.get("summary") or {}).get("breakdown") or {}
+    layers = bd.get("layers") or []
+    t = float((snap.get("summary") or {}).get("time_s") or 0.0)
+    if not layers or any(x.get("key") not in BREAKDOWN_KEYS for x in layers):
+        raise SystemExit("the trail plan came without its breakdown (not the HR model's total?)")
+    total = sum(float(x["t_s"]) for x in layers)
+    if abs(total - t) > 1.0:
+        s = plan.get("summary") or {}
+        raise SystemExit(f"the breakdown adds up to {total:.1f} s, the example is {t:.1f} s "
+                         f"(the plan: {len(plan.get('segments') or [])} segments, M̄ {s.get('M')}; the example: "
+                         f"{len(snap.get('segments') or [])} segments, M̄ {(snap.get('summary') or {}).get('M')}; "
+                         + ", ".join(f"{x['key']} {float(x['t_s']):.0f} s" for x in layers) + ")")
+    inp = snap.get("inputs") or {}
+    terr = bd.get("terrain") or {}
+    return {"_about": "SP-969: the 介紹頁's waterfall (backend/scripts/intro_example.py: the trail example's plan, "
+                      "planner.trail_breakdown; a fictional runner)",
+            "time_s": t, "layers": [{"key": x["key"], "t_s": float(x["t_s"])} for x in layers],
+            "km": bd.get("km"), "gain_m": bd.get("gain_m"), "divisor": bd.get("divisor"),
+            "terrain": {"level": terr.get("level"), "mult": terr.get("mult")}, "delta": bd.get("delta"),
+            "heat_beta": bd.get("heat_beta"), "temp_c": inp.get("temp_c"), "rh_pct": inp.get("rh_pct"),
+            "altitude_m": inp.get("altitude_m"), "legs": len(snap.get("segments") or []),
+            # the example's assumed settings as the plan took them (ASSUMED): the page names them
+            "assumed": {"effort": (snap.get("effort") or {}).get("f"), "terrain": terr.get("level"),
+                        "delta": bd.get("delta"),
+                        "stops": len(inp.get("stops") or []),
+                        "stop_min": sum(float(s.get("minutes") or 0) for s in inp.get("stops") or [])}}
 PLAN_WEEKS = 4          # 賽前 4 週 … the race week (the 50K on its Saturday)
 
 
@@ -173,6 +246,9 @@ def freeze(req: dict, plan: dict, title: str = KINDS["trail"][1], min_km: float 
     now = dt.datetime.now().replace(microsecond=0)
     snap = SH.snapshot(plan, title=title, include_weight=False, expires_days=None, request=req, now=now)
     snap["example"] = True           # the share page's own: never a user's
+    # SP-784: an example's 分段目標 rows are derived from its own segments when it is read (share.with_rows),
+    # as for the other examples — the file keeps none (SP-969: frozen again after SP-784 had added them)
+    snap.pop("chart_rows", None)
     return undated(snap, now.date())
 
 
@@ -216,6 +292,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--no-runner", action="store_true", help="leave backend/demo/intro_runner.json as it is")
     ap.add_argument("--no-plan", action="store_true", help="leave backend/demo/intro_plan.json as it is")
     ap.add_argument("--race-day", help="with --url: the 50K's date (YYYY-MM-DD) for the 課表 calendar")
+    ap.add_argument("--breakdown-only", action="store_true",
+                    help="SP-969: keep the frozen trail example, write only its breakdown (it must add up to it)")
     a = ap.parse_args(argv)
     race_day = dt.date.fromisoformat(a.race_day) if a.race_day else None
     home = srv = None
@@ -232,15 +310,34 @@ def main(argv: list[str]) -> int:
             race_day = race_day or event_day(base / "plan.json", KINDS["trail"][0])
             srv = _server.Server(base, home / "uvicorn.log")
             url = srv.url
+        if a.breakdown_only:
+            # SP-969: the trail example stays as it is; only its breakdown, from the calculator run again on
+            # the captured request under the example's own race-day conditions — written when it adds up
+            req, _plan = capture(url, KINDS["trail"][0])
+            snap = json.loads(out_file("trail").read_text("utf-8"))
+            bd = breakdown(replay(url, assumed(req, "trail"), snap), snap)
+            BREAKDOWN.write_text(json.dumps(bd, ensure_ascii=False, indent=1) + "\n", "utf-8")
+            print(f"→ {BREAKDOWN.relative_to(BREAKDOWN.parents[2])}: "
+                  + ", ".join(f"{x['key']} {x['t_s']:.0f} s" for x in bd["layers"]))
+            return 0
         for kind in (list(KINDS) if a.kind == "all" else [a.kind]):
             event, title, min_km = KINDS[kind]
             req, plan = capture(url, event)
+            if ASSUMED.get(kind):
+                # SP-969: the page's own request with the example's assumed settings, computed again
+                req = assumed(req, kind)
+                plan = replay(url, req)
             snap = freeze(req, plan, title, min_km)
             out = out_file(kind)
             out.write_text(json.dumps(snap, ensure_ascii=False, indent=1) + "\n", "utf-8")
             s = snap["summary"]
             print(f"→ {out.relative_to(out.parents[2])}: {s.get('km', 0):.1f} km ↑{s.get('gain_m', 0):.0f} m, "
                   f"{len(snap['segments'])} segments")
+            if kind == "trail":
+                bd = breakdown(plan, snap)
+                BREAKDOWN.write_text(json.dumps(bd, ensure_ascii=False, indent=1) + "\n", "utf-8")
+                print(f"→ {BREAKDOWN.relative_to(BREAKDOWN.parents[2])}: "
+                      + ", ".join(f"{x['key']} {x['t_s']:.0f} s" for x in bd["layers"]))
         if not a.no_runner:
             RUNNER.write_text(json.dumps(runner(url), ensure_ascii=False, indent=1) + "\n", "utf-8")
             print(f"→ {RUNNER.relative_to(RUNNER.parents[2])}")

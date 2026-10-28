@@ -92,6 +92,8 @@ function joinLink(el) {
   el.textContent = JT("join.button");
   el.dataset.kind = JOIN.kind;
   if (/^https:/.test(JOIN.url)) el.rel = "noopener";
+  // SP-969: shown in the 介紹頁's dialog (a same-origin frame), the sign-up opens as the whole page
+  if (window.top !== window.self) el.target = "_top";
   el.hidden = false;
   return el;
 }

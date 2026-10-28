@@ -167,7 +167,9 @@ def test_the_share_data_of_an_example_follows_the_language(share_client):
     en = share_client.get("/share/example-trail-50k/data?lang=en").json()
     assert en["title"] == "Demo mountain trail 50K (fictional runner)" and _cjk(_shown_texts(en)) == []
     zh = share_client.get("/share/example-trail-50k/data?lang=zh-TW").json()
-    assert zh["title"] == "示範山徑越野 50K（虛構跑者）" and zh["effort"]["label"] == "輕鬆"
+    # SP-969 Q2-2 (the user, 2026-10-28): the effort word is frozen data (it changes when the example is frozen
+    # again) — the Chinese page reads in Chinese, the English one has none
+    assert zh["title"] == "示範山徑越野 50K（虛構跑者）" and _cjk([zh["effort"]["label"]])
 
 
 def test_the_link_preview_of_an_example_in_english(share_client):

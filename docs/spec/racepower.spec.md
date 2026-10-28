@@ -696,6 +696,17 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
     race-day heat moves the HR level with the athlete's β (`trailhr.heat_shift`), so the HR-model
     time takes only the altitude part of M; with hourly heat the time-weighted race-day Hadley of the
     segments' hours is used (推估).
+  - **Breakdown** (SP-969, `planner.trail_breakdown`, `summary.breakdown`): the HR-model moving time
+    taken apart — the same calculation run again with one more factor each time, in this order: flat
+    (km only, no durability / heat / altitude) → + climb (gain ÷ the effort divisor) → × 地形難度 →
+    + durability δ → + race-day heat (β) → ÷ M̄ of the altitude (without the β: altitude, then heat in M)
+    → the 位置記憶 and `night.apply`'s slowdown when they moved the total (`planner.breakdown_after`).
+    Each layer = the time with it − the time without it, so the layers add up to `summary.time_s`; a
+    layer that lengthens the race also lowers the race HR level x*(T) it is run at. Walking the steep
+    climbs and the descents are not layers: they only split the total (the slope cost, SP-723). The
+    介紹頁 shows the trail example's (`backend/demo/intro_breakdown.json`, `scripts/intro_example.py`), computed
+    at assumed race settings (`intro_example.ASSUMED`: effort 95 %, 技術路段多, three aid stations, and
+    `PlanIn.assume_delta` 0.05 /h — a what-if durability δ in place of the athlete's own, 0…0.15).
 - **百岳** (`planner.plan_hike`): the walking-capacity model below. The old HikeSpeed path
   (tᵢ = dᵢ/(λ_h·v_h·pack·Aᵢ·f_day/η), `planner._plan_hike_v1`) only runs when no capacity model
   can be fitted.
@@ -1806,3 +1817,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-25 | feature | SP-946 (SP-844 Q1 option A) | The 百岳 list's provenance: `backend/data/baiyue.json` `source` = `build_baiyue.SOURCE` 「百岳與小百岳點位：地圖產生器（happyman，twmap.happyman.idv.tw）；百岳名單：中華民國山岳協會」 (the old row-format note moved to `rows`), the build script's docstring names the upstream point API, new `backend/data/README.md`; the About page lists it as data entry `baiyue` (`api/about.py` `DATA`, zh-TW + en, link twmap.happyman.idv.tw). Coordinates unchanged (not rebuilt from OSM). Tests: `backend/tests/test_about_baiyue_sp946.py` |
 | 2026-10-25 | bugfix | SP-944 | 環境 card in English: the To chip's line (白天 06–18 平均, 取得於, CWA 地點／最近, 逐時 N 筆／沒有逐時資料), 環境係數 M／海拔影響／熱影響, the 進階 From / To boxes (titles, 海拔／溫度／濕度 labels, 氣壓／海拔係數／露點／熱負荷／無), 「嘗試：」, 未取得 and the CWA key box's 儲存／已設定／已清除 through `racepower.env.*` (zh-TW word for word as before); the CWA 登山 step's `tried` reasons through `_()`; the From label (`training_conditions.label`: fallback, median-altitude and Open-Meteo archive wording) is an `M_()` text that `GET /inputs` relocalizes (the inputs cache is shared by every language), and the daily `racepower_training_env.json` keeps `activities` instead of the text. Place names stay as written; `backend/tests/test_racepower_env_en_sp944.py`, `backend/tests/e2e/test_racepower_env_en_sp944_e2e.py` |
 | 2026-10-27 | feature | SP-953 (SP-950 Q2-2 (a)) | The calculator follows the plan's one power rule (power_state): in ② CP stale / ③ no power meter, trail = the trail HR pace model directly (split by grade-adjusted pace), else / road = the race-results estimate (`nopower.py`); no power, % CP, W/kg, CP / RE inputs, power goal, power segment targets or watch-export power; the page says which model and why; `/estimate` texts per state; race_refs / 賽事可行性 take the same route, the wrong 「沒有越野心率配速模型」 replaced by the real reason, 百岳 W/kg only in ① (was the cleared legacy `power_meter`) |
+| 2026-10-27 | feature | SP-969 | `summary.breakdown` (trail HR model in auto mode): the moving time factor by factor — flat, climb, 地形難度, durability, race-day heat, altitude (+ 位置記憶 / night when they moved it), each the calculation run again with one more factor, adding up to `time_s` (`planner.trail_breakdown`, `breakdown_after`); frozen for the 介紹頁 trail example by `scripts/intro_example.py --breakdown-only` |

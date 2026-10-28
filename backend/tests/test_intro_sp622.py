@@ -93,9 +93,9 @@ def test_the_page_in_both_languages_in_the_decided_order(c):
                                            'id="sources"', 'id="privacy"', 'id="faq"', "<footer>")]
         assert order == sorted(order), loc
     zh = c.get("/?lang=zh-TW", headers=HTML).text
-    # no e-mail field: the waitlist is the sign-in's (SP-637: the only inputs are the small calculator's sliders)
-    assert "type=\"email\"" not in zh and re.findall(r"<input[^>]*>", zh)
-    assert all('type="range"' in i for i in re.findall(r"<input[^>]*>", zh))
+    # no e-mail field: the waitlist is the sign-in's (SP-637: the only inputs were the small calculator's sliders;
+    # SP-969 Q2-3 took the calculator off the page, so there is no input at all now)
+    assert "type=\"email\"" not in zh and re.findall(r"<input[^>]*>", zh) == []
 
 
 def test_the_calculator_is_credited_to_palladino():

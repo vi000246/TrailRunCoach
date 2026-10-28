@@ -1,0 +1,50 @@
+{
+ "_about": "SP-969: the 介紹頁's waterfall (backend/scripts/intro_example.py: the trail example's plan, planner.trail_breakdown; a fictional runner)",
+ "time_s": 32007.76121447202,
+ "layers": [
+  {
+   "key": "flat",
+   "t_s": 14140.411704745586
+  },
+  {
+   "key": "climb",
+   "t_s": 8460.095736948982
+  },
+  {
+   "key": "terrain",
+   "t_s": 3625.0775565955664
+  },
+  {
+   "key": "durability",
+   "t_s": 4151.862108964626
+  },
+  {
+   "key": "heat",
+   "t_s": 1180.2637971974327
+  },
+  {
+   "key": "altitude",
+   "t_s": 450.0503100198257
+  }
+ ],
+ "km": 49.94385224944645,
+ "gain_m": 2768.8182366525025,
+ "divisor": 100.0,
+ "terrain": {
+  "level": "technical",
+  "mult": 1.15
+ },
+ "delta": 0.05,
+ "heat_beta": true,
+ "temp_c": 21.8,
+ "rh_pct": 73.0,
+ "altitude_m": 411.97317677354425,
+ "legs": 11,
+ "assumed": {
+  "effort": 0.95,
+  "terrain": "technical",
+  "delta": 0.05,
+  "stops": 3,
+  "stop_min": 14.0
+ }
+}

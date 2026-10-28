@@ -73,13 +73,10 @@ def test_the_answer_names_no_model_parameter(c):
     assert runner["cp"] and runner["re"]                # the runner has them; the answer never shows them
 
 
-def test_at_the_example_the_calculator_agrees_with_its_profile(c):
-    # the small calculator next to the profile: the same race reads the same finish time (± the grid)
-    from backend.engine.racepower import share as SH
-    for kind in KINDS:
-        s = SH.example(SH.example_id(kind))["summary"]
-        d = c.get(EST, params={"kind": kind, "km": s["km"], "gain": s["gain_m"]}).json()
-        assert d["time_s"] == pytest.approx(s["time_s"], rel=0.04), kind
+# SP-969 Q2-3 (the user, 2026-10-28): the small calculator and the profile left the page, so "the calculator next
+# to the profile reads the example's finish time" has nothing to compare any more — that test went with them (the
+# trail example is now run at assumed race settings, SP-969 Q2: 95 % effort, 技術路段多, fatigue; the total-only
+# estimate of the same km / climb cannot read the same)
 
 
 def test_more_climb_takes_longer_and_more_distance_too(c):
@@ -304,7 +301,8 @@ def test_the_page_script_computes_no_finish_time():
     # SP-500: the core stays on the server — the page asks /api/v1/intro/estimate and only formats the answer
     html = _page()
     script = "".join(re.findall(r"<script>(.*?)</script>", html, re.S))
-    assert 'API = "/api/v1/intro/"' in script and '"estimate?"' in script and '"example/"' in script
+    # (SP-969 Q2-3: the small calculator — the page's /estimate call — left the page; the API stays)
+    assert 'API = "/api/v1/intro/"' in script and '"example/"' in script
     for w in ("Math.pow", "Math.exp", "Math.log", "**", "riegel", "Riegel", "tobler", "eph", "cp *", "cp*"):
         assert w not in script, w
 
@@ -321,7 +319,8 @@ def test_the_hero_is_the_schedule_calendar_and_the_calculator_supports_the_race_
     assert 'id="tpl"' in plan and 'id="tpl-cats"' in plan and 'id="tpl-list"' in plan and 'id="tpl-view"' in plan
     assert "data-shot" not in plan
     race = html[html.index('id="race"'):html.index('id="read"')]
-    assert 'id="calc"' in race and 'type="range"' in race and 'id="profile"' in race and "data-shot" not in race
+    # SP-969 Q2-3: the race section is the waterfall now — the small calculator and the profile left the page
+    assert 'id="wf"' in race and 'id="calc"' not in race and 'id="profile"' not in race and "data-shot" not in race
     shots = {s["name"] for s in json.loads(SHOTS.read_text("utf-8"))["shots"]}
     assert "intro-race" not in shots and "intro-legs" not in shots and "intro-schedule" not in shots
     assert "intro-status" in shots

@@ -618,6 +618,75 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
             "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": "推估"}
 
 
+def trail_breakdown(model: Optional[dict], hr_est: Optional[dict], km: float, gain_m: float,
+                    f_target: float, mbar_alt: float, mbar: float, t_whole: float, t_final: float) -> Optional[dict]:
+    """SP-969: the trail HR model's moving time taken apart, factor by factor — each layer is the same
+    calculation (trail_hr_estimate) run again with one more factor switched on, so the layers add up to
+    the plan's time exactly (each one = the time with it − the time without it, in this order):
+
+      flat        km on the flat (no climb, terrain ×1, no durability, no heat, no altitude)
+      climb       + the climb as effort km (gain ÷ the effort divisor)
+      terrain     × the 地形難度 multiplier (SP-725; ×1 on a 一般 course)
+      durability  + the same-HR speed loss after 1 h (δ, SP-239 / SP-722)
+      heat        + the race-day heat (the athlete's β moves the HR level, trailhr.heat_shift)
+      altitude    ÷ M̄ of the altitude (the HR model's time takes only the altitude part of M)
+      memory      the 位置記憶 (SP-726) when it moved the total
+
+    Without the β (no LTHR) the heat is in M as for the other models: altitude comes before heat then
+    (each is still the plan's own M with that part on). The race HR level x*(T) falls with the
+    duration, so a layer that lengthens the race also lowers the HR it is run at — part of that layer.
+    The walk / run choice and the descents do not change this total: the athlete's slope cost only
+    splits it over the segments (SP-723). None without the HR model."""
+    from backend.engine.racepower import trailhr as TH
+    if not model or not hr_est or not km or not hr_est.get("time_s"):
+        return None
+    xs = model.get("xstar")
+
+    def t(e: float, delta: Optional[float], sh: float) -> Optional[float]:
+        if xs:
+            return TH.predict_race(model, e, xs, f=f_target, delta=delta, x_shift=sh)[0]
+        x = f_target * (model.get("x_race") or TH.TRAILHR["x_default"]) - sh
+        return TH.predict_time(model, e, x, delta)
+
+    div = TH.effort_divisor()
+    mult = float((hr_est.get("terrain") or {}).get("mult") or 1.0)
+    e_climb = km + (gain_m or 0.0) / div
+    t_flat, t_climb = t(km, 0.0, 0.0), t(e_climb, 0.0, 0.0)
+    t_terr, t_dur = t(e_climb * mult, 0.0, 0.0), t(e_climb * mult, None, 0.0)
+    if not all((t_flat, t_climb, t_terr, t_dur)) or not mbar_alt or not mbar:
+        return None
+    t_hr = float(hr_est["time_s"])                    # = t(E, None, heat shift): the plan's own number
+    if hr_est.get("heat_beta"):
+        steps = [("heat", t_hr), ("altitude", t_whole)]
+    else:
+        steps = [("altitude", t_dur / mbar_alt), ("heat", t_whole)]
+    seq = [("flat", t_flat), ("climb", t_climb), ("terrain", t_terr), ("durability", t_dur), *steps]
+    if abs(t_final - t_whole) > 0.5:
+        seq.append(("memory", t_final))
+    layers, prev = [], 0.0
+    for k, cum in seq:
+        layers.append({"key": k, "t_s": cum - prev, "cum_s": cum})
+        prev = cum
+    return {"layers": layers, "time_s": t_final, "km": km, "gain_m": gain_m, "divisor": div,
+            "eff_km": e_climb * mult, "terrain": {"level": (hr_est.get("terrain") or {}).get("level"), "mult": mult},
+            "delta": model.get("delta"), "heat_beta": bool(hr_est.get("heat_beta")), "hadley": hr_est.get("hadley"),
+            "m_alt": mbar_alt, "f": f_target, "badge": "推估"}
+
+
+def breakdown_after(plan: dict) -> dict:
+    """SP-969: the breakdown after the plan's later steps (night.apply's slowdown in the dark): a last
+    layer `night` with what they added, so the layers still add up to summary.time_s."""
+    s = plan.get("summary") or {}
+    bd = s.get("breakdown")
+    if not bd or not bd.get("layers") or not isinstance(s.get("time_s"), (int, float)):
+        return plan
+    cum = bd["layers"][-1]["cum_s"]
+    if abs(s["time_s"] - cum) > 0.5:
+        bd["layers"].append({"key": "night", "t_s": s["time_s"] - cum, "cum_s": s["time_s"]})
+    bd["time_s"] = s["time_s"]
+    return plan
+
+
 def terrain_info(model: Optional[dict], level: Optional[str]) -> dict:
     """SP-725: the 地形難度 the plan uses — {level, name, mult, n, label: 你的紀錄 | 推估 | 定義, levels:
     every level's {mult, n, label, prior, name} (the page's ? text), source}. The model's fitted
@@ -678,6 +747,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     used, env, r1 = v1["used"], v1["env"], v1["result"]
     kind = v1["type"]
     capacity = capacity or {}
+    if trail_hr and opts.get("assume_delta") is not None:
+        # SP-969: a what-if durability δ (the 介紹頁 example's assumed setting) in place of the athlete's
+        trail_hr = {**trail_hr, "delta": float(opts["assume_delta"])}
     cp, w_prime, tte, k = used["cp"]["value"], used["w_prime"]["value"], used["tte"]["value"], used["k"]["value"]
     cp2 = (used.get("cp2") or {}).get("value")
     if kind == "trail" and hasattr(grade_re, "for_trail"):
@@ -1092,6 +1164,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                "loss_m": course["totals"].get("loss_m"), "M": mbar,
                "total_method": "trail_hr" if hr_est is not None else "v2" if v2_primary else "v1",
                "trail_hr": hr_est,
+               # SP-969: the HR-model time factor by factor (the 介紹頁's waterfall reads the example's)
+               "breakdown": trail_breakdown(trail_hr, hr_est, km, course["totals"].get("gain_m") or 0.0, f_target,
+                                            mbar_alt, mbar, t_whole, T) if hr_est is not None else None,
                # SP-222: whether the segment times carry the athlete's own fade
                "fade": {"applied": bool(res.get("faded")), "n_runs": (hr_est.get("fade") or {}).get("n_runs"),
                         "badge": "推估"} if hr_est is not None and hr_est.get("fade") else None,
