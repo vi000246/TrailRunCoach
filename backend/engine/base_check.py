@@ -69,7 +69,7 @@ XU_GOOD = 0.10                       # < 10 % = 有氧基礎夠（5 % 內國家�
 XU_STOP_S = 30.0                     # 補給每次停不超過 30 秒
 XU_HEAT_C = 25.0                     # 當天氣溫 25 °C 以下（課表文字的建議；不再拒絕，heat bands）
 XU_FLAT_M_PER_KM = 20.0              # 「全程平坦」 = drift_of's flat rule (推估 mapping)
-SRC_XU = "徐國峰部落格（2016-12，有氧基礎檢測）；徐國峰《跑者都該懂的跑步數據》"
+SRC_XU = N_("徐國峰部落格（2016-12，有氧基礎檢測）；徐國峰《跑者都該懂的跑步數據》")
 # SP-275 (lthr-low-confidence-testing.md §2.2, §6.1 第 3 點): every drift test holds the output and
 # lets the HR drift; slowing down hides the drift (a false pass). A scheduled 90-minute test whose
 # minutes 80–90 are > 5 % slower (pace; power when there is power) than minutes 10–20 is refused
@@ -78,8 +78,8 @@ XU_HOLD_A = (600.0, 1200.0)          # minutes 10–20
 XU_HOLD_B = (4800.0, 5400.0)         # minutes 80–90
 XU_HOLD_DROP = 0.05                  # 推估 (UA's 5 %)
 XU_HOLD_COVER = 0.5                  # 推估: a window needs half its samples valid (moving / power > 0)
-SRC_Z3_FIRST = "台灣教練：入門轉進階先練 3 區，3 區穩定、恢復正常後再加 5 區"
-SRC_Z5_LIMIT = "台灣教練：5 區每趟至少 2 分鐘；一週最多 2 次、間隔至少 2 天"
+SRC_Z3_FIRST = N_("台灣教練：入門轉進階先練 3 區，3 區穩定、恢復正常後再加 5 區")
+SRC_Z5_LIMIT = N_("台灣教練：5 區每趟至少 2 分鐘；一週最多 2 次、間隔至少 2 天")
 
 # ---- weekly Z1 volume (the chart's reference band; the pause rule's measure) -----
 RQ_E_PER_MIN = 0.2                   # Daniels E intensity points / min (RQ 訓練指數; 徐國峰 blog, verified)
@@ -115,10 +115,12 @@ SRC_REBASE = N_("徐國峰：打底 → 練強度 → 比賽 → 跑力提升 �
 # No stable-weekly-volume precondition before a test (owner 2026-10-03): the rule
 # (3 weeks within ±15 %) had no source, so tests are suggested and counted without it.
 
-STATE_LABEL = {"unconfirmed": "未確認", "confirmed": "已確認", "paused": "暫停", "open": "不設門檻",
-               "reentry": "恢復期"}
-PATH_LABEL = {"xu90": "徐國峰 90 分鐘飄移", "aet_ua_gap": "實測 AeT（UA 差距法）",
-              "aet_friel_drift": "實測 AeT（Friel 飄移）", "method": "你選的間歇門檻"}
+# msgids (SP-810): a state's `label` stays the msgid (quality_gate.z5_card shows it with _()); a path's
+# `path_label` is put in the request's language where the state is made
+STATE_LABEL = {"unconfirmed": N_("未確認"), "confirmed": N_("已確認"), "paused": N_("暫停"), "open": N_("不設門檻"),
+               "reentry": N_("恢復期")}
+PATH_LABEL = {"xu90": N_("徐國峰 90 分鐘飄移"), "aet_ua_gap": N_("實測 AeT（UA 差距法）"),
+              "aet_friel_drift": N_("實測 AeT（Friel 飄移）"), "method": N_("你選的間歇門檻")}
 
 
 def _f(v) -> Optional[float]:
@@ -288,29 +290,29 @@ def xu_run(ds, w, m: Optional[dict] = None) -> Optional[dict]:
            "hr10": r and r["hr10"], "hr90": r and r["hr90"], "why": []}
     why = out["why"]
     if r is None:
-        why.append("第 10／90 分鐘沒有心率")
+        why.append(_("第 10／90 分鐘沒有心率"))
     cpm = m.get("climb_m_per_km")
     if "runningtrail" in w.tags or (cpm is not None and cpm >= XU_FLAT_M_PER_KM):
-        why.append("不是平路（越野或每公里爬升 ≥ 20 m）")
+        why.append(_("不是平路（越野或每公里爬升 ≥ 20 m）"))
     out["scheduled"] = sched = is_scheduled_xu(ds, w)
     if sched:
         h = out["hold"] = output_hold(s["t"], s.get("speed"), s.get("power"))
         if h["basis"] is not None and not h["ok"]:
             why.append(hold_text(h))
     elif not _z1(m):
-        why.append("心率不是全程 1 區（平均 ≤ AeT+3、超過的時間 ≤ 10%）")
+        why.append(_("心率不是全程 1 區（平均 ≤ AeT+3、超過的時間 ≤ 10%）"))
     # heat bands: the temperature is a band, not a refusal (> 25 °C was one before). Heat inflates
     # the drift, so a pass in heat is conservative and counts; a fail in heat says it may be the heat
     tc, src = WR.activity_temp(ds, w, m)
     band = WR.temp_band(tc)
     out.update(temp_c=tc, temp_src=src, band=band, heat=WR.is_heat(band),
-               chip="🌡 " + WR.TEMP_BAND_LABEL.get(band, "溫度不明"))
+               chip="🌡 " + _(WR.TEMP_BAND_LABEL.get(band, WR.TEMP_BAND_LABEL["none"])))
     stop = longest_stop(s["t"], s["speed"])
     if stop > XU_STOP_S:
-        why.append(f"第 10–90 分鐘停了 {stop:.0f} 秒（每次 ≤ 30 秒）")
+        why.append(_("第 10–90 分鐘停了 {s:.0f} 秒（每次 ≤ 30 秒）", s=stop))
     if r is not None and r["drift"] >= XU_GOOD:
-        why.append(f"飄移 {r['drift'] * 100:.1f}%（≥ 10%）" + (f"（{out['chip']}，{WR.HEAT_NOTE}，可能是熱造成的）"
-                                                              if out["heat"] else ""))
+        why.append(_("飄移 {d:.1f}%（≥ 10%）", d=r["drift"] * 100)
+                   + (_("（{chip}，{note}，可能是熱造成的）", chip=out["chip"], note=_(WR.HEAT_NOTE)) if out["heat"] else ""))
     out["ok"] = r is not None and not why
     return out
 
@@ -428,15 +430,15 @@ def long_check(ds, today: dt.date, days: int = LONG_DAYS) -> dict:
     WR._flush(ds)
     runs = runs[-LONG_LAST_N:]
     if not runs:
-        return {"state": "missing", "runs": [], "why": f"{days} 天內沒有 ≥ 75 分鐘的路跑長跑"}
+        return {"state": "missing", "runs": [], "why": _("{n} 天內沒有 ≥ 75 分鐘的路跑長跑", n=days)}
     bad = [r for r in runs if not r["ok"]]
     if bad:
         r = bad[-1]
         return {"state": "fail", "runs": runs, "date": runs[-1]["date"],
-                "why": f"{r['date']} 長跑後段心率 {r['hr_rise'] * 100:+.0f}%、配速 {-r['pace_drop'] * 100:+.0f}%"
-                       f"（各 ±5% 內，推估）"}
+                "why": _("{date} 長跑後段心率 {hr}%、配速 {pace}%（各 ±5% 內，推估）", date=r["date"],
+                         hr=f"{r['hr_rise'] * 100:+.0f}", pace=f"{-r['pace_drop'] * 100:+.0f}")}
     return {"state": "ok", "runs": runs, "date": runs[-1]["date"],
-            "why": f"最近 {len(runs)} 次長跑後段心率、配速都穩（±5% 內，推估）"}
+            "why": _("最近 {n} 次長跑後段心率、配速都穩（±5% 內，推估）", n=len(runs))}
 
 
 # ---------------------------------------------------------------------------
@@ -487,8 +489,8 @@ def easy_targets(ds, today: dt.date, aet: Optional[float], power: bool = True) -
         txt = _("最近 {n} 次輕鬆跑：AeT {aet:.0f} bpm ≈ {pace}/km（同心率跑更快就自動跟著調；推估）",
                 n=len(ev), aet=aet, pace=ps)
     else:
-        txt = (f"最近 {len(ev)} 次輕鬆跑：AeT {aet:.0f} bpm ≈ " + (f"、{pw:.0f} W" if pw else "")
-               + "（同心率跑更快就自動跟著調；推估）")
+        txt = (_("最近 {n} 次輕鬆跑：AeT {aet:.0f} bpm ≈ 、{pw:.0f} W（同心率跑更快就自動跟著調；推估）", n=len(ev), aet=aet, pw=pw)
+               if pw else _("最近 {n} 次輕鬆跑：AeT {aet:.0f} bpm ≈ （同心率跑更快就自動跟著調；推估）", n=len(ev), aet=aet))
     return {"pace_s_km": pace, "power": pw, "n": len(ev), "text": txt}
 
 
@@ -705,8 +707,8 @@ def maintenance(ds, today: dt.date, since: dt.date, brk: Optional[dict] = None) 
         low = low + 1 if frac is not None and frac < Z1_KEEP else 0
         if low >= Z1_LOW_WEEKS and out["ok"]:
             out.update(ok=False, at=r["monday"],
-                       why=f"連續 {Z1_LOW_WEEKS} 週 1 區時間 < 確認時的 2/3（{level / 60:.0f} 分／週；"
-                           "Hickson 1982；3 週推估）")
+                       why=_("連續 {w} 週 1 區時間 < 確認時的 2/3（{m:.0f} 分／週；Hickson 1982；3 週推估）",
+                             w=Z1_LOW_WEEKS, m=level / 60))
     return out
 
 
@@ -770,33 +772,33 @@ def _z5_status(ds, today: dt.date, mode: str, method_state: Optional[str], aet_p
     ret, end, qf = brk["return"], brk["end"], brk["quality_from"]
     iso = today.isoformat()
     if iso < qf:
-        why = f"{brk['text']}：恢復期內 3 區、5 區都不排（Daniels：只有 E 日）"
-        return {"state": "reentry", "label": "恢復期", "open": False, "since": None, "path": None, "path_label": "",
-                "reason": why, "maintenance": None, "xu_last": None, "reentry": brk, "pause": None,
-                "text": f"Zone 5：恢復期（{why}）"}
+        why = _("{text}：恢復期內 3 區、5 區都不排（Daniels：只有 E 日）", text=brk["text"])
+        return {"state": "reentry", "label": STATE_LABEL["reentry"], "open": False, "since": None, "path": None,
+                "path_label": "", "reason": why, "maintenance": None, "xu_last": None, "reentry": brk, "pause": None,
+                "text": _("Zone 5：恢復期（{why}）", why=why)}
     after = ret if brk.get("reconfirm") else None
     st = z5_status_base(ds, today, mode, method_state, aet_paths, after=after, brk=brk)
     st["reentry"] = brk
     if not st["open"]:
         if brk.get("reconfirm") and st["state"] == "unconfirmed":
-            st["reason"] = f"停跑 {brk['days']} 天（≥ 4 週）：要在 {ret} 之後重新做 AeT 測試（UA 差距或 Friel 飄移）"
-            st["text"] = f"Zone 5：未確認（{st['reason']}；Mujika & Padilla 2000）"
+            st["reason"] = _("停跑 {n} 天（≥ 4 週）：要在 {d} 之後重新做 AeT 測試（UA 差距或 Friel 飄移）", n=brk["days"], d=ret)
+            st["text"] = _("Zone 5：未確認（{why}；Mujika & Padilla 2000）", why=st["reason"])
         return st
     n = sum(1 for d in (quality_dates or []) if d >= qf)
     need = int(brk.get("z3_before_z5") or 1)
     if n < need:
-        why = f"恢復期後先完成 {need} 堂 3 區（已 {n} 堂；台灣教練：先 3 區後 5 區，堂數推估）"
+        why = _("恢復期後先完成 {need} 堂 3 區（已 {n} 堂；台灣教練：先 3 區後 5 區，堂數推估）", need=need, n=n)
         return {**st, "state": "paused", "label": STATE_LABEL["paused"], "open": False, "reason": why,
                 "pause": {"kind": "reentry_z3", "done": n, "need": need},
-                "text": f"Zone 5：暫停（{why}）"}
+                "text": _("Zone 5：暫停（{why}）", why=why)}
     if brk.get("drift_check"):
         # the post-break long-run check (UA: re-read after a layoff) — a re-entry rule, not an unlock signal
         lc = long_check(ds, today, days=max(7, (today - dt.date.fromisoformat(ret)).days + 1))
         if lc["state"] == "fail":
-            why = f"恢復期後的長跑飄移檢查沒過（{lc['why']}；UA：中斷後重新讀）"
+            why = _("恢復期後的長跑飄移檢查沒過（{why}；UA：中斷後重新讀）", why=lc["why"])
             return {**st, "state": "paused", "label": STATE_LABEL["paused"], "open": False, "reason": why,
                     "pause": {"kind": "drift_check", "why": lc["why"]},
-                    "text": f"Zone 5：暫停（{why}）"}
+                    "text": _("Zone 5：暫停（{why}）", why=why)}
     return st
 
 
@@ -813,32 +815,32 @@ def z5_status_base(ds, today: dt.date, mode: str = "auto", method_state: Optiona
     "drift_check", …}), None otherwise."""
     if mode == "none":
         return {"state": "open", "label": STATE_LABEL["open"], "open": True, "since": None, "path": None,
-                "path_label": "", "reason": "不設門檻（Seiler）：5 區照 80/20 安排", "pause": None,
-                "maintenance": None, "xu_last": None, "text": "Zone 5：不設門檻（Seiler）"}
+                "path_label": "", "reason": _("不設門檻（Seiler）：5 區照 80/20 安排"), "pause": None,
+                "maintenance": None, "xu_last": None, "text": _("Zone 5：不設門檻（Seiler）")}
     paths = _paths_for(mode)
     events: list[tuple[str, str, str]] = []
     for k, d in (aet_paths or {}).items():
         if d and k in paths:
-            events.append((str(d)[:10], k, PATH_LABEL[k]))
+            events.append((str(d)[:10], k, _(PATH_LABEL[k])))
     if after:
         # a break ≥ 4 weeks: confirmations from before it no longer count (Mujika & Padilla 2000)
         events = [e for e in events if e[0] >= after]
     base = {"xu_last": None, "maintenance": None, "pause": None}
     if not events:
-        why = ("還沒有實測 AeT 通過：實測 AeT＋實測 LTHR 差距 ≤ 10%，或在 AeT 附近 Friel 飄移 < 5%"
-               if len(paths) > 1 else "這個測試還沒做到" if paths else "這個間歇門檻不開 5 區")
+        why = (_("還沒有實測 AeT 通過：實測 AeT＋實測 LTHR 差距 ≤ 10%，或在 AeT 附近 Friel 飄移 < 5%")
+               if len(paths) > 1 else _("這個測試還沒做到") if paths else _("這個間歇門檻不開 5 區"))
         return {**base, "state": "unconfirmed", "label": STATE_LABEL["unconfirmed"], "open": False, "since": None,
                 "path": None, "path_label": "", "reason": why,
-                "text": f"Zone 5：未確認（{why}）"}
+                "text": _("Zone 5：未確認（{why}）", why=why)}
     # the latest confirmation; on a tie the first listed (UA, then Friel)
     since_s, path, detail = max(events, key=lambda e: e[0])
     since = dt.date.fromisoformat(since_s)
     mt = maintenance(ds, today, since, brk)
     base["maintenance"] = mt
-    common = {"since": since_s, "path": path, "path_label": PATH_LABEL[path], "detail": detail}
+    common = {"since": since_s, "path": path, "path_label": _(PATH_LABEL[path]), "detail": detail}
     if not mt["ok"]:
         return {**base, **common, "state": "paused", "label": STATE_LABEL["paused"], "open": False,
                 "reason": mt["why"], "pause": {"kind": "z1", "at": mt.get("at")},
-                "text": f"Zone 5：暫停（{mt['why']}）；3 區照排，下次確認後恢復"}
+                "text": _("Zone 5：暫停（{why}）；3 區照排，下次確認後恢復", why=mt["why"])}
     return {**base, **common, "state": "confirmed", "label": STATE_LABEL["confirmed"], "open": True,
-            "reason": detail, "text": f"Zone 5：已確認（{since_s}，{PATH_LABEL[path]}）"}
+            "reason": detail, "text": _("Zone 5：已確認（{d}，{path}）", d=since_s, path=_(PATH_LABEL[path]))}

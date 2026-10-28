@@ -30,6 +30,8 @@ fresh_on(...)     was the CP fresh on a past day — SP-952 / SP-954's per-activ
                   (「照那次活動當天」); with `ds`, the all-out efforts count too (SP-963)
 efforts_on(ds, d) the short / long efforts that anchor the PD fit on `d` and until when (SP-963)
 no_meter(ds)      ③ for a Dataset: the source gate of the live threshold estimate
+cp_check(ps, d)   SP-965 / SP-967: the CP valid, the CP test due (a week before the efforts lapse) — the
+                  testing card, the week plan's CP test and the AeT test's 75–80 % CP read it
 """
 from __future__ import annotations
 
@@ -508,6 +510,64 @@ def of(th: Optional[dict]) -> Optional[dict]:
     """The power state a thresholds dict carries (week_plan's thresholds["power_state"]); None."""
     ps = (th or {}).get("power_state")
     return ps if isinstance(ps, dict) and ps.get("state") in STATES else None
+
+
+# ---------------------------------------------------------------------------
+# SP-965 / SP-967: one 「CP 有效」 for the testing card, the week plan's CP test and the AeT test
+# ---------------------------------------------------------------------------
+# Owner 2026-10-28 (SP-965 Q1 (b), SP-967 Q1 (b): 「CP 有效的定義要全 app 統一」): the CP is valid exactly
+# when the power state says it is fresh (a CP test or a race in fresh_days(), or the PD fit anchored by
+# recent all-out efforts — SP-963). While the efforts keep it valid no CP test is suggested; a week
+# before they lapse (CP_REMIND_DAYS) the testing card and the week plan remind: 「再跑一次強度課或做 CP
+# 測試」. No ceiling on how long the efforts may stand in for a formal test (SP-965 Q2 (a)). A CP valid by
+# a CP test / race keeps its cadence (a test after fresh_days(), status.TEST_DAYS_WATCH). The 90-minute
+# AeT test's 「75–80 % 實測 CP」 counts a valid CP (aet_test.cp_tested(cp_valid=...)).
+CP_REMIND_DAYS = 7                  # 推估 (SP-965 選項 B): the hard session / CP test a week before it lapses
+
+
+def cp_check(ps: Optional[dict], today: dt.date, last_cp_test=None) -> dict:
+    """The CP's validity as every page reads it (SP-965 / SP-967), from a power state (state() / current()):
+
+        valid    the CP is valid (ps["fresh"])
+        basis    test | race | efforts | None — what keeps it valid longest (ps["basis"])
+        until, left   the last valid day (ISO) and the days left (ps["valid_until"] / ["left"])
+        remind   valid only by the efforts and ≤ CP_REMIND_DAYS left: time for a hard session or a CP test
+        date     the day the CP's age counts from: the efforts' older one while they keep it valid, else
+                 the later of the CP test (the power state's, or the caller's own `last_cp_test` — the
+                 testing card also reads the plan's CP rows) and the race; None without any
+        by       test | race | efforts | None — where `date` comes from
+        age      days from `date` to `today`; None without it
+        due      a CP test (or a hard session) is due: a meter, and the efforts about to lapse
+                 (remind) — or, not kept valid by them, no date or older than fresh_days()
+
+    `today` is the power state's day."""
+    ps = ps or {}
+    valid = bool(ps.get("fresh"))
+    basis = ps.get("basis") if valid else None
+    left = ps.get("left")
+    eff = ps.get("efforts") or {}
+    by_efforts = valid and basis == "efforts"
+    date = by = None
+    if by_efforts:
+        days = [x for x in (_d((eff.get("short") or {}).get("date")), _d((eff.get("long") or {}).get("date")))
+                if x is not None]
+        if days:
+            date, by = min(days), "efforts"
+    if date is None:
+        test = max([x for x in (_d(last_cp_test), _d(ps.get("last_cp_test"))) if x is not None and x <= today],
+                   default=None)
+        race = _d(ps.get("last_race"))
+        race = race if race is not None and race <= today else None
+        if test is not None and (race is None or test >= race):
+            date, by = test, "test"
+        elif race is not None:
+            date, by = race, "race"
+    age = (today - date).days if date is not None else None
+    remind = by_efforts and left is not None and left <= CP_REMIND_DAYS
+    stale = not by_efforts and (age is None or age > fresh_days())
+    return {"valid": valid, "basis": basis, "until": ps.get("valid_until") if valid else None,
+            "left": left if valid else None, "remind": remind, "date": date.isoformat() if date else None,
+            "by": by, "age": age, "due": bool(ps.get("meter", True)) and (remind or stale)}
 
 
 # ---------------------------------------------------------------------------

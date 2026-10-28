@@ -43,7 +43,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from backend.i18n import M_, _
+from backend.i18n import M_, M_list, N_, _
 
 RUN_KINDS = ("easy", "long", "quality", "test", "hike")
 _CLEAR = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
@@ -311,6 +311,17 @@ def race_days(events, monday: dt.date, sunday: dt.date) -> set:
     return out
 
 
+# the B race / trip week note (bc_apply); *_SAID: with what the week changed in its last bracket (SP-988)
+B_TRIP_NOTE = N_("B 行程「{race}」{date}：出發前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，行程是這週的重點課"
+                 "（Pfitzinger、Friel，教練級）")
+B_RACE_NOTE = N_("B 賽事「{race}」{date}：賽前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，比賽是這週的重點課"
+                 "（Pfitzinger、Friel，教練級）")
+B_TRIP_NOTE_SAID = N_("B 行程「{race}」{date}：出發前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，行程是這週的重點課"
+                      "（Pfitzinger、Friel，教練級）（{rules}）")
+B_RACE_NOTE_SAID = N_("B 賽事「{race}」{date}：賽前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，比賽是這週的重點課"
+                      "（Pfitzinger、Friel，教練級）（{rules}）")
+
+
 def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, today: Optional[dt.date] = None,
              blocked=(), rate: float = RACE_TSS_PER_H, done_days=(), easy_target: str = "",
              races: Optional[list] = None) -> list:
@@ -346,15 +357,15 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
             k = _get(s, "kind")
             if monday <= e.start <= sunday and (k == "long" or _get(s, "id") in ("long", "long2")) and out != 0:
                 _as_easy(keep, s, B_EASY_MAX, put, easy_target)
-                said.append(_("不排長跑"))
+                said.append(M_("不排長跑"))
             elif 1 <= out <= B_TEMPO_LONG_DAYS and (k in ("quality", "test", "long")):
                 _as_easy(keep, s, B_EASY_MAX, put, easy_target)
-                said.append(_("出發前 {n} 天內不排節奏跑、長跑", n=B_TEMPO_LONG_DAYS) if trip else
-                            _("賽前 {n} 天內不排節奏跑、長跑", n=B_TEMPO_LONG_DAYS))
+                said.append(M_("出發前 {n} 天內不排節奏跑、長跑", n=B_TEMPO_LONG_DAYS) if trip else
+                            M_("賽前 {n} 天內不排節奏跑、長跑", n=B_TEMPO_LONG_DAYS))
             elif out == B_INTERVAL_DAYS and k in ("quality", "test") and not _tempo(s):
                 _as_easy(keep, s, B_EASY_MAX, put, easy_target)
-                said.append(_("出發前 {n} 天內不排間歇", n=B_INTERVAL_DAYS) if trip else
-                            _("賽前 {n} 天內不排間歇", n=B_INTERVAL_DAYS))
+                said.append(M_("出發前 {n} 天內不排間歇", n=B_INTERVAL_DAYS) if trip else
+                            M_("賽前 {n} 天內不排間歇", n=B_INTERVAL_DAYS))
         if monday <= e.start <= sunday:
             rdays = race_days([e], e.start, e.end)
             keep = [s for s in keep if _get(s, "done") or _get(s, "day") not in rdays]
@@ -363,12 +374,12 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
         if notes is not None and (said or monday <= e.start <= sunday):
             kw = {"race": e.name, "date": _md(e.start), "a": B_INTERVAL_DAYS, "b": B_TEMPO_LONG_DAYS}
             # a 百岳 trip (kind baiyue) is a 行程, not a 賽事 / 比賽 (SP-504 R2)
-            txt = (_("B 行程「{race}」{date}：出發前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，行程是這週的重點課"
-                     "（Pfitzinger、Friel，教練級）", **kw) if trip else
-                   _("B 賽事「{race}」{date}：賽前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，比賽是這週的重點課"
-                     "（Pfitzinger、Friel，教練級）", **kw))
-            notes.append({"level": "info", "src": "race",
-                          "text": txt + ("（" + "、".join(dict.fromkeys(said)) + "）" if said else "")})
+            # SP-988: what the week changed is the msgid's {rules} (M_list), not a bracket glued on after it
+            if said:
+                txt = M_(B_TRIP_NOTE_SAID if trip else B_RACE_NOTE_SAID, rules=M_list(dict.fromkeys(said)), **kw)
+            else:
+                txt = M_(B_TRIP_NOTE if trip else B_RACE_NOTE, **kw)
+            notes.append({"level": "info", "src": "race", "text": txt})
     # 2. after a B race: easy runs only; 馬拉松級 and up also the A race's first-week rules
     for w in b_windows(events, monday):
         said = False

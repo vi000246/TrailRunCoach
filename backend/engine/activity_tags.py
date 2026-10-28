@@ -748,14 +748,16 @@ def effort_from_rpe(rpe: Optional[float], rest_share: Optional[float] = None,
     if eff == "max" and rest is not None and rest > _rest_max():
         eff = "hard_with_rests"
     from backend.engine import coros_rpe as CR
-    from backend.i18n import _
+    from backend.i18n import S_, _
     if (rec or {}).get("source") == CR.SOURCE and (rec or {}).get("coros_feel") in CR.FEEL_LABEL:
         why = _("COROS 跑後自評 {label}（換算成 RPE {rpe}，推估）→ {effort}",
                 label=CR.FEEL_LABEL[rec["coros_feel"]], rpe=f"{rpe:g}", effort=EFFORTS[eff])
     else:
-        why = f"手錶記錄的 RPE {rpe:g}（運動後自評）→ {EFFORTS[eff]}"
+        # SP-991: msgids kept in the source language (S_; the back-test stores them as msgid + params)
+        why = S_("手錶記錄的 RPE {rpe}（運動後自評）→ {effort}", rpe=f"{rpe:g}", effort=S_(EFFORTS[eff]))
     if base and base.get("effort") and base["effort"] != eff:
-        why += f"；心率規則會判為「{EFFORTS.get(base['effort'], '?')}」"
+        hr_eff = S_(EFFORTS[base["effort"]]) if base["effort"] in EFFORTS else "?"
+        why = S_("{why}；心率規則會判為「{effort}」", why=why, effort=hr_eff)
     return {**(base or {}), "effort": eff, "reason": why, "basis": "rpe", "rpe": rpe,
             "hr_effort": (base or {}).get("effort")}
 
@@ -928,42 +930,53 @@ def effort_hr(s: dict, lthr: Optional[float], aet: Optional[float],
     out = {"effort": None, "reason": "", "hr_frac": frac, "above_aet": ab, "rest_share": rest,
            "stopped_share": s.get("stopped_share"),
            "hr_avg": hr, "lthr": lthr, "aet": aet, "moving_s": mv, "elapsed_s": el, "basis": "hr"}
+    # SP-991: the reasons are msgids kept in the source language (S_: the same Chinese as before, stored with
+    # the activity's auto tags; the back-test saves them as msgid + params and shows them in the reader's)
+    from backend.i18n import S_
     if frac is None or (ab is None and max_frac is None):
-        out.update(effort="moderate", reason="沒有心率或門檻：無法判定，當一般", basis=None)
+        out.update(effort="moderate", reason=S_("沒有心率或門檻：無法判定，當一般"), basis=None)
         return out
-    rest_txt = f"長休息 {rest:.0%}" if rest is not None else "長休息 ?"
+    rest_txt = S_("長休息 {rest:.0%}", rest=rest) if rest is not None else S_("長休息 ?")
     if max_frac is not None:
-        hard, need = frac >= max_frac, f"≥ x*(T) − 0.03 = {max_frac:.0%}，推估"
+        hard, need = frac >= max_frac, S_("≥ x*(T) − 0.03 = {f:.0%}，推估", f=max_frac)
     else:
         hard, need = frac >= k["max_hr_frac"] and ab >= k["above_aet"], f"≥ {k['max_hr_frac']:.0%}"
-    ab_txt = f"、AeT 以上 {ab:.0%}" if ab is not None else ""
     if hard:
         if rest is not None and rest > _rest_max():
             out.update(effort="hard_with_rests",
-                       reason=f"移動心率 {frac:.0%} LTHR{ab_txt}，但{rest_txt}（> {_rest_max():.0%}）")
+                       reason=S_("移動心率 {frac:.0%} LTHR，但{rest}（> {cap:.0%}）", frac=frac, rest=rest_txt,
+                                 cap=_rest_max()) if ab is None else
+                       S_("移動心率 {frac:.0%} LTHR、AeT 以上 {ab:.0%}，但{rest}（> {cap:.0%}）", frac=frac, ab=ab,
+                          rest=rest_txt, cap=_rest_max()))
         elif max_frac is not None:
-            out.update(effort="max", reason=f"移動心率 {frac:.0%} LTHR（{need}）、{rest_txt}")
+            out.update(effort="max", reason=S_("移動心率 {frac:.0%} LTHR（{need}）、{rest}", frac=frac, need=need,
+                                               rest=rest_txt))
         else:
-            out.update(effort="max", reason=f"移動心率 {frac:.0%} LTHR（{need}）、"
-                                            f"AeT 以上 {ab:.0%}（≥ {k['above_aet']:.0%}）、{rest_txt}")
+            out.update(effort="max", reason=S_("移動心率 {frac:.0%} LTHR（{need}）、AeT 以上 {ab:.0%}（≥ {above:.0%}）、"
+                                               "{rest}", frac=frac, need=need, ab=ab, above=k["above_aet"],
+                                               rest=rest_txt))
         return out
     if ab is None:
-        out.update(effort="moderate", reason=f"移動心率 {frac:.0%} LTHR（全力需 {need}）、{rest_txt}")
+        out.update(effort="moderate", reason=S_("移動心率 {frac:.0%} LTHR（全力需 {need}）、{rest}", frac=frac, need=need,
+                                                rest=rest_txt))
         return out
     if _easy(hr, s.get("low_share"), aet):
-        out.update(effort="easy", reason=f"{s['low_share']:.0%} 時間低於 AeT，平均 {hr:.0f} bpm")
+        out.update(effort="easy", reason=S_("{low:.0%} 時間低於 AeT，平均 {hr:.0f} bpm", low=s["low_share"], hr=hr))
         return out
-    out.update(effort="moderate", reason=f"移動心率 {frac:.0%} LTHR、AeT 以上 {ab:.0%}、{rest_txt}")
+    out.update(effort="moderate", reason=S_("移動心率 {frac:.0%} LTHR、AeT 以上 {ab:.0%}、{rest}", frac=frac, ab=ab,
+                                            rest=rest_txt))
     return out
 
 
 def effort_road(road: dict, s: dict, aet: Optional[float]) -> dict:
-    """Road effort: maximal.road_maximal decides max; else easy / moderate by HR."""
+    """Road effort: maximal.road_maximal decides max; else easy / moderate by HR (reasons: S_, SP-991)."""
+    from backend.i18n import S_
     if road.get("ok"):
-        return {"effort": "max", "reason": road.get("reason") or "自配速全力", "basis": "road_maximal"}
+        return {"effort": "max", "reason": road.get("reason") or S_("自配速全力"), "basis": "road_maximal"}
     if _easy(s.get("hr_avg"), s.get("low_share"), aet):
-        return {"effort": "easy", "reason": f"{s['low_share']:.0%} 時間低於 AeT", "basis": "hr"}
-    return {"effort": "moderate", "reason": "未達路跑全力條件：" + (road.get("reason") or ""), "basis": "road_maximal"}
+        return {"effort": "easy", "reason": S_("{low:.0%} 時間低於 AeT", low=s["low_share"]), "basis": "hr"}
+    return {"effort": "moderate", "reason": S_("未達路跑全力條件：{reason}", reason=road.get("reason") or ""),
+            "basis": "road_maximal"}
 
 
 def merge(auto: dict, user: Optional[dict]) -> dict:

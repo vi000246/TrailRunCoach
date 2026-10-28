@@ -5,17 +5,18 @@ title: Settings
 summary: Every tab and field of the settings page and what to put in it: basic info, how many tips, heart rate and thresholds, data & sync, estimated parameters, data fixes, account.
 icon: settings
 ---
-More → "Settings" has four tabs: **Personal**, **Physiology**, **Data & sync** and **Advanced** (with sign-in there is also "Cairn"). Most fields have an automatic value: when in doubt leave it automatic, and only type a value in when you know better than the app. The demo has no settings page. (Some sections are still in Chinese on the English screens; the labels below are translated.)
+More → "Settings" has five tabs: **Personal**, **Preferences**, **Physiology**, **Data & sync** and **Advanced** (with sign-in there is also "Cairn"). Most fields have an automatic value: when in doubt leave it automatic, and only type a value in when you know better than the app. The demo has no settings page. (Some sections are still in Chinese on the English screens; the labels below are translated.)
 
 ## Personal {#personal}
 
-"Personal" is about you: basic info, your main discipline and the map. Only **sex, age and weight** are required; the rest can stay blank or automatic.
+"Personal" is about you: basic info and your main discipline. Only **sex, age and weight** are required; the rest can stay blank or automatic.
 
 ![Settings › Personal › Basic info](../img/start-weight.en.webp "Changing the weight fills in today's date; the line below says which weight the numbers use now.")
 
 1. "Basic info": sex, height, age, power source, weight and the date measured; press "Save".
 2. "Main discipline": auto, trail, road, marathon — leaving it on auto is best.
-3. "Map": the default base map and overlays of an activity's route map.
+
+The appearance (colours) and the default map are in the "Preferences" tab.
 
 :::deep
 ### What each field is for
@@ -63,6 +64,24 @@ It applies to the Overview, the schedule, the season plan's race check, the race
 
 ### The Cairn introduction
 After "No thanks" on the "Plan this trip in Cairn" card of a multi-day trip, the last line here, "The Cairn introduction: turned off", brings it back with "Show it again" (see [Cairn](race.md#cairn)).
+:::
+
+## Preferences {#prefs}
+
+"Preferences" is how the site shows things — nothing about you, and nothing here changes a calculation:
+
+1. "Appearance": the colours — Trig cream, Trig deep green, Classic (follow system), Classic dark. A choice applies at once; there is nothing to save.
+2. "Maps": the base map and overlays an activity's route map starts with; press "Save map settings".
+
+:::deep
+### Where the appearance is kept
+The colours are kept in this browser: choose again on another computer or phone. Not chosen yet: Trig cream when your phone or computer is light, Classic dark when it is dark.
+
+### The default map and switching for now
+At the top right of a map you can switch the base map or overlays for now, and this browser remembers it; after you change the default here, maps go back to the new default. The Rudy map and contour servers sometimes don't respond, so if a map doesn't load, pick another base map.
+
+### Old links
+Links that went to the appearance or map block under "Personal" (ending in `#appearance` or `#map`) now open that block in "Preferences".
 :::
 
 ## Physiology {#body}

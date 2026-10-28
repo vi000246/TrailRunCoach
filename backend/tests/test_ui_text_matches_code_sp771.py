@@ -6,7 +6,7 @@
 3. 進階設定 › 自動估算的參數: a sync refits at most every calibrate.CALIB_EVERY_DAYS days.
 4. 傷病紀錄 ?: 復發 only within injuries.RECUR_DAYS days of the last 好了.
 5. 手冊 入門: 下載失敗的活動 sits in the 資料同步 tab's 進階設定 fold, not the 進階設定 tab.
-6. 設定 tab notes: what the 個人資料 / 資料同步 tabs hold (settings.html TABS).
+6. 設定 tab notes: what the 個人資料 / 偏好設定 / 資料同步 tabs hold (settings.html TABS).
 """
 from __future__ import annotations
 
@@ -81,7 +81,12 @@ def test_tab_notes_list_the_tabs_sections():
         assert head in zh["tabs.data_note"], key
     for word in ("匯入", "備份", "課表訂閱"):
         assert word in zh["tabs.data_note"]
-    for word in ("提示多寡", "跑步經驗", "帳號", "地圖"):
+    for word in ("提示多寡", "跑步經驗", "帳號"):
         assert word in zh["tabs.personal_note"]
-    for word in ("tips", "account", "maps"):
+    for word in ("tips", "account"):
         assert word in en["tabs.personal_note"]
+    # SP-1011: 外觀 and 地圖 moved to 偏好設定; each note names what its tab holds, and only that
+    for word in ("外觀", "地圖"):
+        assert word in zh["tabs.prefs_note"] and word not in zh["tabs.personal_note"]
+    for word in ("appearance", "maps"):
+        assert word in en["tabs.prefs_note"] and word not in en["tabs.personal_note"]

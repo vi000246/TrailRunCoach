@@ -1,6 +1,6 @@
 # Module Spec: plan-auto (自動調整課表)
 
-> **Last Updated**: 2026-10-13
+> **Last Updated**: 2026-10-29
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -367,7 +367,10 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   the transition that fails on its own is see-through (neither counts nor breaks the 4 weeks; one
   with ≥ 3 runs counts as usual). No low-intensity-share condition. Until it opens the base phase
   has no interval (easy running + strides); a projected week opens once the streak would reach 4
-  weeks. Zone 3 and Zone 5 are **independent gates** (SP-39): the Zone 5 gate is below.
+  weeks. Zone 3 and Zone 5 are **independent gates** (SP-39): the Zone 5 gate is below. The gate
+  returns `why` beside `reason` — the reason without its 「3 區還沒解鎖：」 head
+  (`backend/engine/quality_gate.py:1774-1777`); its `text` and the week's `z3_note` quote `why` (SP-810; the
+  gate's texts in the reader's language: workout-review.spec.md › Progression hooks).
 - **A 賽後重新打底** (SP-116; `base_check.a_race_rebase`, `backend/engine/base_check.py:546`): after
   an A race (priority A only, never B / C, the latest one within `REBASE_SCAN_DAYS` = 400 days),
   `from` = the first day after its 恢復期 / 轉換期 / 回量期 (`POST_RACE_KINDS`); none when no 基礎期
@@ -532,7 +535,9 @@ the shared list `athlete.race_results`, SP-290: the questionnaire's, the 設定 
 the activities confirmed with 「用這場」; SP-276's own single `athlete.race_result` is migrated into
 the list once at start-up and retired, owner 2026-10-06), else 75–80 % of a tested CP
 (`aet_test.cp_tested`: the CP row in effect is not marked `cp_manual` — 設定 marks a CP typed by
-hand; a test result or a legacy row saved before the marker counts; Palladino 1C), else no target and the talk test (owner 2026-10-06); never an HR cap on the main block, the warm-up keeps the easy-run cap;
+hand; a test result or a legacy row saved before the marker counts; without a row, SP-468's CP test in
+the fit's 90 days or — SP-967, owner 2026-10-28 — a CP valid as the power state reads it
+(`power_state.cp_check`: the PD fit anchored by all-out efforts, SP-963); Palladino 1C), else no target and the talk test (owner 2026-10-06); never an HR cap on the main block, the warm-up keeps the easy-run cap;
 the builders read the numbers back from the stored target, `xu_main_target`), the placement (xu90 on the weekend; the others by `aet_test_days`) and the
 analysis (`analyze_workout`: warm-up cut, window and judging rule by the title's protocol).
 The analysis uses VI ≤ 1.04 (drift v2) instead of the old 30-s CV. Heat is a band on the
@@ -946,7 +951,10 @@ run on the app's event loop in that tenant. `force` (the page's 立即重算) is
   HR; hook `_no_power_basis` for SP-951's pace); ② keeps the CP test's power bouts; the UA / Evoke AeT
   test runs by a fixed pace in ② / ③ (SP-949: `aet_test.start_target`, overview.spec.md › AeT drift
   test; fallback 「功率不生效：AeT 測試改用固定配速」, no HR cap note). ② adds the note 「CP 已 N 天沒測，先用心率／配速；做一次 CP 測試就切回功率，跑一次強度課或比賽也行」 (the last clause since SP-963, its wording SP-963 R2) and
-  the same words on the CP test suggestion. ③: no CP test (the 測試 indicator leaves the CP out,
+  the same words on the CP test suggestion. SP-965 (owner 2026-10-28): the 測試 card and the CP test
+  suggestion read the same validity (`power_state.cp_check`): kept valid by the efforts no CP test is
+  suggested; `CP_REMIND_DAYS` 7 before they lapse 「CP 快到期，再跑一次強度課或做 CP 測試」 (overview.spec.md
+  › i_testing). ③: no CP test (the 測試 indicator leaves the CP out,
   `cp_due` false, zone events drop `cp`), so the AeT test is no longer held back by one; no test is
   suggested in its place. The automatic run re-plans and re-sends the sessions on the watch when
   the state changes (`plan.auto.state.power_state`, change-log row `trigger = power_state`):
@@ -1126,3 +1134,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-27 | feature | SP-964 | 目標依據 per session type (設定 › 訓練依據 › 進階設定): `plan.prefs.type_basis` for road easy / long (心率／功率), flat Zone 3 / Zone 5 (心率／配速／功率), hill repeats (心率／功率) and the MP segment (心率／配速／功率); order own → type → `target_basis` → 自動 (`target_policy.type_key` / `flat_zone` / `type_basis`, `how` = type); SP-950 / SP-951 fallbacks unchanged. Text builders pass the session to `flat_pace(s=)`; MP by `target_policy.mp_policy` in the structure (`workout_steps.mp_target(s, th)`), the push (`plan_store.push_dict` `mp_basis`, `coros_workouts`) and the card. `PATCH /prefs` merges `type_basis` and re-plans; `PUT /prefs` without it keeps it; unchoosable stored values dropped (`plan_prefs.clean_type_basis`). Tests: `backend/tests/test_type_basis_sp964.py` |
 | 2026-10-27 | feature | SP-963 (from SP-950) | 「CP 有效」 also when the Stryd PD fit is anchored by recent all-out efforts, not only a formal CP test or race: `power_state.efforts_on` (a short 180–300 s and a long 720–1800 s mean-max of a Stryd run ≥ 95 % of the PD model in effect, both in the 42 days up to the day; 推估, backtested on the owner's data: 77 of 210 days ① in 2026-04-01…10-27). One definition: `state` / `current` (today; the API, the calculator), `fresh_on(..., ds=)` / `day_power` (a past day: activity analysis, SP-954), `base_check.cp_stale(..., efforts_until)` and `easy_power_tests`. The dict gains `efforts`, `basis`, `valid_until`, `left` (`stale_on` = valid_until + 1); ① reason names what anchors the CP and until when; ② and `CP_STALE_ALL` add 「（或最近跑一次強度課／比賽）」; the 訓練依據 card's chip reads `basis` / `left`. Tests: `backend/tests/test_cp_efforts_sp963.py` (+ the ② text in `test_power_state_sp950.py`) |
 | 2026-10-27 | feature | SP-963 R2 | Plain words, fewer of them (owner: 「撐著」 read oddly, too long): ① reason 「CP 195 W 有效到 11/11（9/30 跑出 5 分鐘 227 W、12 分鐘 221 W）」 (two runs older first), new `basis_text` (「9/30 跑出 …」 / 「10/17 做了 CP 測試」 / 「10/20 跑了比賽」); ② and `CP_STALE_ALL` 「…做一次 CP 測試就切回功率，跑一次強度課或比賽也行」 (no brackets). 設定 › 訓練依據: ① 「CP 195 W · 還有效 N 天」 over a 42-day validity bar (a dot per effort / test day, today's mark, green = days left; `basis_text` and 「有效到 M/D」 under it) in place of the reason line; ② the CP alone on the first line. Rule unchanged. Tests: text assertions in `test_cp_efforts_sp963.py`, `test_power_state_sp950.py` |
+| 2026-10-29 | code-sync（SP-965, SP-967, SP-810） | N/A | Recorded the batch's body changes: the 徐國峰 90-minute test's 75–80 % CP counts a CP valid as the power state reads it (SP-967), the 測試 card and the CP test suggestion read `power_state.cp_check` (SP-965); the Zone 3 gate's `why` (the reason without its head) quoted by its text and `z3_note` (SP-810) |

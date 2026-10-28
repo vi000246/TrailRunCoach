@@ -126,6 +126,7 @@
 
 | Date | Source | Ticket | Summary |
 |------|--------|--------|---------|
+| 2026-10-28 | maintenance | SP-985 | `spend.PRICE` 改照官方價目頁（2026-10-28）：Sonnet 5.5 由推估的 3／15 改成 2／10，補 Haiku 5.5（0.10／0.50）、Opus 5.5（4／20）。測試：`backend/tests/test_ai_spend_sp882.py` |
 | 2026-10-28 | feature | SP-883 | 使用者要求開放：會員的「問 AI」預設開（沒 key 也看得到），`/api/v1/session` 的 `ai` 對會員多 `own: true`；沒 key 的會員對話框改成提醒＋連到設定頁 key 欄位（亮框），不能送出，存好 key 同一個對話框就能問。測試：`backend/tests/e2e/test_askai_own_key_sp883_e2e.py`、`test_ai_own_key_sp883.py` |
 | 2026-10-28 | feature | SP-883 | 新增：會員用自己的 key（`TRC_AI_MEMBER_KEYS` 開著時，所有登入會員）：key 加密存在自己的 `ai.json`、次數記在自己的 `ai_usage.json`、絕不拿站主的環境變數 key；log 遮罩加上請求者自己的 key；`data_registry` 把 `ai.json` 列為 SECRET；呼叫鎖依人分開；`purpose=ask_own_key`；`POST /api/v1/ai/settings/test`（GET /v1/models，不計費，每天 10 次）；餘額不足 `AI_NO_CREDIT`；設定頁「測試」與會員版文字。測試：`backend/tests/test_ai_own_key_sp883.py` |
 | 2026-10-20 | feature | SP-785 | 新增：`backend/ai`（config 金鑰與開關、context 彙總與清理、qa prompt／呼叫／解析／快取／每日上限、medical）、`/api/v1/ai/*`、`TRC_ANTHROPIC_API_KEY`（或 `_FILE`）或設定頁加密存放、log 遮罩、`/api/v1/session` 的 `ai`。測試：`backend/tests/test_ai_qa_sp785.py` |

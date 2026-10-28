@@ -1,5 +1,5 @@
 """SP-976 in a real browser on the demo athlete: the nav's 「更多」 menu (static/shell.js) on a phone (390 px, 320 px),
-a narrow screen (800 px) and a desktop (1400 px), in the four 外觀 (Trig 米白 / 深綠 / 原本 / 原本暗色) and both
+a narrow screen (800 px) and a desktop (1400 px), in the four 外觀 (Trig 米白 / 深綠 / 經典 / 經典深色) and both
 languages — every row has its icon at full size, all icons in one column and all names in another, no text runs
 out of the menu, the menu stays on screen (on a phone: right above the tab bar, over 更多), and while it is open
 nothing floats over it (the 「建議」 box, the 「問 AI」 button); closed, the bar is back under them.

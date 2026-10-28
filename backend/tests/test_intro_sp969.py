@@ -275,7 +275,7 @@ def test_the_try_buttons_are_big_carry_the_result_and_open_a_dialog():
         a = re.search(r'<a class="trybtn" data-try data-try-big href="/share/example-trail-50k">.*?</a>', part, re.S)
         assert a and "data-try-sub" in a.group(0) and "data-try-h" in a.group(0)
     # the race section ends with it (「計算機段落底下再一顆」)
-    assert race.rindex("data-try-big") > race.index('id="bt"')
+    assert race.rindex("data-try-big") > race.index('id="wf"')
     script = _script()
     # the result is the example's own (the example API's summary), not typed into the page
     assert "setTry(k, d)" in script and "s.km" in script and "s.time_s" in script and "s.legs" in script
@@ -292,7 +292,9 @@ def test_the_try_buttons_are_big_carry_the_result_and_open_a_dialog():
 def test_the_waterfall_only_lays_out_the_servers_numbers():
     html = _page()
     race = html[html.index('id="race"'):html.index('id="read"')]
-    assert race.index('id="wf-assumed"') < race.index('id="wf"') < race.index('id="bt"') < race.index('intro.race.origin')
+    assert race.index('id="wf-assumed"') < race.index('id="wf"')
+    # the back-test line and the Palladino origin line are off the page (user, 2026-10-28)
+    assert 'id="bt"' not in race and "intro.race.origin" not in race
     # Q2-3: the old list, the small calculator and the profile are gone from the race section
     for gone in ('id="calc"', 'id="profile"', 'intro.race.li.', 'type="range"'):
         assert gone not in race, gone
@@ -317,10 +319,6 @@ def test_every_new_word_is_in_both_languages():
     for loc, cat in cats.items():
         missing = sorted(k for k in keys if k not in cat)
         assert not missing, (loc, missing)
-        for p in ("{n}", "{full}", "{formula}", "{races}", "{trail}"):
-            assert p in cat["bt.line"], (loc, p)
-    # the back-test is one runner's: the page says so
-    assert "作者自己的資料" in cats["zh-TW"]["bt.line"] and "author's own data" in cats["en"]["bt.line"]
 
 
 # ---------------------------------------------------------------------------- the example in a frame

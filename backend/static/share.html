@@ -116,6 +116,11 @@ function hms(s) { if (!ok(s)) return "–"; s = Math.round(s); return `${Math.fl
 function dur(s) { if (!ok(s)) return "–"; s = Math.round(s); return s < 3600 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : hms(s); }
 function pace(s) { if (!ok(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} /km`; }
 const rng = (v, fmt = n0, unit = "") => !v ? "–" : (fmt(v[0]) === fmt(v[1]) ? fmt(v[0]) : `${fmt(v[0])}–${fmt(v[1])}`) + (unit ? ` <span class="u">${unit}</span>` : "");
+// SP-987: "about 6 g/kg (a normal high-carb day)" / 「約 6 g/kg（正常高碳水）」 -> [the amount, the bracket's words]
+function splitAmount(s) {
+  const m = /^(.*?)\s*[（(]([^（()）]+)[）)]\s*$/.exec(String(s ?? ""));
+  return m && m[1] ? [m[1], m[2]] : [String(s ?? ""), ""];
+}
 const tile = (k, v, s, main) => `<div class="tile ${main ? "main" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
 const CLS = { steep_down: "--c-sd", down: "--c-d", flat: "--c-f", up: "--c-u", steep_up: "--c-su" };
 // [name, icon]; the page's text (SP-460: share.stop.* / share.type.*)
@@ -232,9 +237,14 @@ function fuelHtml(S) {
   h += tile(esc(JT("fuel.water")), hike ? rng((w.total_ml || []).map((x) => x / 1000), (x) => x.toFixed(1), "L") : w.thirst ? esc(JT("fuel.thirst")) : rng(w.per_h, n0, "ml/h"),
     esc(JT("fuel.no_gain")));
   h += tile(esc(JT("fuel.sodium")), na.per_h && na.per_h[1] > 0 ? rng(na.per_h, n0, "mg/h") : esc(JT("fuel.no_sodium")), na.total_mg && na.total_mg[1] > 0 ? JT("fuel.total", { x: rng(na.total_mg, n0, "mg") }) : "");
-  // when / amount / note: SP-287 (older shares have only the label)
-  if (!hike && ld.label) h += tile(esc(JT("fuel.pre")), ld.g_day ? rng(ld.g_day, n0, "g") : esc(ld.amount || ld.label.replace(/^前一天\s*/, "")),
-    (ld.g_day ? esc(ld.label) : ld.when ? esc(ld.when) : esc(JT("fuel.day_before"))) + (ld.note ? `<br>${esc(ld.note)}` : ""));
+  // when / amount / note: SP-287 (older shares have only the label). SP-987: the value box keeps the short
+  // amount ("about 6 g/kg"); its bracket ("a normal high-carb day") goes to the small line under it — on a
+  // phone the whole sentence in the big type broke into three lines
+  if (!hike && ld.label) {
+    const [amt, why] = splitAmount(ld.amount || ld.label.replace(/^前一天\s*/, ""));
+    h += tile(esc(JT("fuel.pre")), ld.g_day ? rng(ld.g_day, n0, "g") : esc(amt),
+      (ld.g_day ? esc(ld.label) : [ld.when || JT("fuel.day_before"), why].filter(Boolean).map(esc).join(" · ")) + (ld.note ? `<br>${esc(ld.note)}` : ""));
+  }
   if (hike && ok(F.food_kg_mean)) h += tile(esc(JT("fuel.food")), `${F.food_kg_mean.toFixed(2)} <span class="u">${esc(JT("fuel.kg_day"))}</span>`, esc(JT("fuel.estimate")));
   h += `</div>`;
   const ev = F.schedule || [];

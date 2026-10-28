@@ -982,8 +982,28 @@ class Status:
         from backend.engine.planning import threshold_row
         # SP-950 ③ (no power meter, engine/power_state.py): no CP to keep fresh — the CP is left out and no
         # test stands in for it (owner 2026-10-27: LTHR / threshold pace from the estimates and manual entry)
-        meter = self.power_state()["meter"]
+        ps = self.power_state()
+        meter = ps["meter"]
+        # SP-965 (owner 2026-10-28: 「CP 有效的定義要全 app 統一」): the CP side reads power_state.cp_check — the
+        # same 「CP 有效」 as the power state (a CP test or a race in 42 days, or the all-out efforts of SP-963);
+        # kept valid by the efforts it is no test to do until CP_REMIND_DAYS before they lapse
+        from backend.engine import power_state as PST
+        cv = PST.cp_check(ps, self.today, cp)
+        cp = dt.date.fromisoformat(cv["date"]) if cv["date"] else None
+        soon = False
         for label, d in (("CP", cp), ("LTHR", lt), ("AeT", ae)) if meter else (("LTHR", lt), ("AeT", ae)):
+            if label == "CP" and cv["by"] == "efforts":
+                what = PST.basis_text(ps)
+                if cv["remind"]:
+                    soon = True
+                    worst = WATCH if worst == GOOD else worst
+                    parts.append((_("CP 今天到期（{what}）", what=what) if cv["left"] <= 0 else
+                                  _("CP 再 {n} 天到期（{what}）", n=cv["left"], what=what)) if what else
+                                 _("CP 再 {n} 天到期", n=cv["left"]))
+                else:
+                    parts.append(_("CP 有效到 {until}（{what}）", until=PST._md(cv["until"]), what=what) if what
+                                 else _("CP 有效到 {until}", until=PST._md(cv["until"])))
+                continue
             if label == "AeT":
                 # B3 (unsourced-rules.md): no fixed expiry — the AeT test is due for a reason
                 # (quality_gate.aet_test_reason, below), not by age
@@ -1006,18 +1026,20 @@ class Status:
                 worst = BAD
             else:
                 age = (self.today - d).days
-                parts.append(_("{name} {n} 天前", name=label, n=age))
+                parts.append(_("CP {n} 天前（比賽）", n=age) if label == "CP" and cv["by"] == "race"
+                             else _("{name} {n} 天前", name=label, n=age))
                 if age > TEST_DAYS_BAD:
                     worst = BAD
                 elif age > TEST_DAYS_WATCH and worst != BAD:
                     worst = WATCH
-        txt = "OK" if worst == GOOD else _("要測")
+        txt = "OK" if worst == GOOD else _("快到期") if soon else _("要測")
         why = SEP.join(parts)
         days_to = self.goals["days_to_next_a"]
         act = ""
         # which test week_plan should schedule: the CP test measures CP only; the
         # AeT test (engine/aet_test.py) has its own cadence; ③: never a CP test
-        cp_due = meter and (cp is None or (self.today - cp).days > TEST_DAYS_WATCH)
+        # (SP-965: power_state.cp_check — no CP, older than 42 days, or the efforts about to lapse)
+        cp_due = cv["due"]
         # a break of ~8 weeks or more: redo the CP baseline after the re-entry block
         # (WKO5 seminar notes: about two months off → new baseline; detraining.md §4.7)
         try:
@@ -1032,7 +1054,17 @@ class Status:
             why += SEP + _("停跑 {n} 天：恢復期結束後重測 CP（教練研討會）", n=brk["days"])
         from backend.engine import cp_protocols as CPP
         proto = self._cp_protocol()
-        if worst != GOOD:
+        soon = soon and cp_due and not (brk and brk.get("cp_retest"))
+        if soon:
+            # SP-965: kept valid by all-out efforts that lapse within CP_REMIND_DAYS — a hard session renews it
+            act = _("再跑一次強度課（3–5 分鐘和 12–30 分鐘各一段全力）或比賽就能延長") if proto == "race" else \
+                _("再跑一次強度課（3–5 分鐘和 12–30 分鐘各一段全力）就能延長，或排一次 CP 測試（{label}，{hint}）",
+                  label=_(CPP.TABLE[proto]["label"]), hint=_(CPP.TABLE[proto]["hint"].split("；")[0]))
+            if days_to is not None and 10 <= days_to <= 21:
+                act += _("——賽前 {n} 天正好是測試的時機（賽前 10–21 天）", n=days_to)
+            elif days_to is not None and days_to < 10:
+                act = _("賽前 10 天內不要測，賽後再測")
+        elif worst != GOOD:
             act = (_("{note}（課表偏好：用比賽）", note=_(CPP.NOTE_RACE)) if proto == "race" else
                    _("排一次 CP 測試（{label}，{hint}）", label=_(CPP.TABLE[proto]["label"]),
                      hint=_(CPP.TABLE[proto]["hint"].split("；")[0]))) + \
@@ -1042,7 +1074,8 @@ class Status:
             elif days_to is not None and days_to < 10:
                 act = _("賽前 10 天內不要測，賽後再測")
                 worst = WATCH
-        v = _("門檻是新的") if worst == GOOD else _("門檻過期或沒測，區間和訓練負荷（Training load）都會跟著不準")
+        v = _("門檻是新的") if worst == GOOD else _("CP 快到期，再跑一次強度課或做 CP 測試") if soon else \
+            _("門檻過期或沒測，區間和訓練負荷（Training load）都會跟著不準")
         extra = {}
         if ct:
             extra["cp_test"] = ct

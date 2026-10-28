@@ -31,7 +31,7 @@ from backend.engine.hr_profile import EASY_CAP_TIP, below, easy_cap_label
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day, day_to_date
 from backend.engine.wko5expr.evaluator import WS, Evaluator
 from backend.engine.planning import TAPER_DAYS as _TAPER_DAYS
-from backend.i18n import M_, N_, _
+from backend.i18n import M_, M_list, N_, _
 
 # ---------------------------------------------------------------------------
 # categories (colour only — totals always include everything)
@@ -2119,13 +2119,15 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     cap_txt = easy_cap_label(None, aet, aet_meas)
     # SP-274: the 90-minute test's intensity — the E pace of a confirmed race (engine/e_pace.py),
     # else 75–80 % of a tested CP (a plan CP row not typed by hand, or — SP-468 — WKO5's mFTP with a
-    # CP test inside its 90-day window: aet_test.cp_tested; a PD fit without a test still does not
-    # count, owner 2026-10-06), else the talk test
+    # CP test inside its 90-day window, or — SP-967, owner 2026-10-28 — a valid CP as the power state
+    # reads it (power_state.cp_check: the PD fit anchored by recent all-out efforts counts):
+    # aet_test.cp_tested), else the talk test
     from backend.engine import e_pace as EP
     from backend.engine.aet_test import cp_tested
     try:
         ct_day = ((getattr(by.get("testing"), "extra", None) or {}).get("cp_test") or {}).get("date")
-        cp_meas = bool(tt.get("cp")) and cp_tested(ds.plan, today, ct_day)
+        cp_meas = bool(tt.get("cp")) and cp_tested(ds.plan, today, ct_day,
+                                                   cp_valid=PST.cp_check(pst, today)["valid"])
     except Exception:                       # noqa: BLE001 — a dataset without a plan (tests)
         cp_meas = False
     e_pc = EP.current(today)
@@ -2198,7 +2200,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         dec = {**dec, "allow": False, "spec": None, "advance": False}
     # the CP test measures CP only; SP-950 ③ (no power meter): never (the testing indicator suggests the
     # 30-min LTHR test instead) — and with no CP test the AeT test below is never held back by one
-    cp_due = tx.get("cp_due", lvl("testing") in ("bad", "watch")) and pst["meter"]
+    # SP-965: the testing card's cp_due is power_state.cp_check's (kept valid by all-out efforts: not due
+    # until a week before they lapse); without the card, the same check on this week's power state
+    cp_due = tx.get("cp_due", PST.cp_check(pst, today)["due"] and lvl("testing") in ("bad", "watch")) and pst["meter"]
     test_due = cp_due and lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10) \
         and not (in_reentry and not RE.quality_ok(rp, monday)) and kind not in ("transition", "rebuild", "recovery")   # 轉換期 / 回量期: no hard session (SP-73, SP-98)
     # 課表偏好 CP 測試方式 (engine/cp_protocols.py) — read even when the other
@@ -2875,8 +2879,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         test_suggestions.append({
             "kind": "cp", "protocol": test_s.get("protocol"), "title": test_s["title"], "minutes": test_s["minutes"],
             "reason": _("{why}：區間、訓練負荷（Training load）、賽事計算機都靠 CP", why=getattr(ti, "verdict", "") or _("門檻過期或沒測過"))
-            # SP-950 ②: the CP's age and that this test brings power back (owner 2026-10-27)
-            + (" · " + pst["reason"] if pst["state"] == PST.STALE else ""),
+            # SP-950 ②: the CP's age and that this test brings power back (owner 2026-10-27); SP-965 ①
+            # kept valid by all-out efforts about to lapse: until when and by which runs
+            + (" · " + pst["reason"] if pst["state"] == PST.STALE or PST.cp_check(pst, today)["remind"] else ""),
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
     aet_start: dict = {}
@@ -3831,13 +3836,13 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
             # before the taper: only a sore race's long run (SP-668), an easy run with its own note
             if out < tc["long_days"]:
                 as_easy(s, 60, _("平路或緩坡輕鬆跑"))
-                pre_said.append(_("賽事下坡多，賽前 {n} 天內不跑長跑", n=tc["long_days"]))
+                pre_said.append(M_("賽事下坡多，賽前 {n} 天內不跑長跑", n=tc["long_days"]))
             continue
         touched = True
         if is_long(s):
             if out < tc["long_days"]:
                 as_easy(s, 60)
-                said.append(_("賽前 {n} 天內不跑長跑", n=tc["long_days"]))
+                said.append(M_("賽前 {n} 天內不跑長跑", n=tc["long_days"]))
             elif (g(s, "minutes") or 0) > TAPER_LONG_MAX_MIN or tc.get("sore"):
                 m = int(g(s, "minutes") or 0)
                 nm = min(m, TAPER_LONG_MAX_MIN)
@@ -3847,10 +3852,10 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
                     climb_m=None, distance_km=None)
                 if tc.get("sore"):
                     put(s, terrain="road")
-                said.append(_("最後一次長跑 ≤ {max} 分", max=TAPER_LONG_MAX_MIN))
+                said.append(M_("最後一次長跑 ≤ {max} 分", max=TAPER_LONG_MAX_MIN))
         elif k == "quality" and q_before and dt.date.fromisoformat(g(s, "day")) <= sunday:
             as_easy(s, 60)
-            said.append(_("這週 {day} 已有強度課，減量期的日子不再排第二堂",
+            said.append(M_("這週 {day} 已有強度課，減量期的日子不再排第二堂",
                           day=f"{int(q_before[5:7])}/{int(q_before[8:10])}"))
         elif k == "quality":
             if out >= TAPER_FULL_Q_DAYS:
@@ -3875,21 +3880,29 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
                     as_q(s, TAPER_CUT[terr])
                 else:
                     as_easy(s, 40)
-                    said.append(_("賽前 {n} 天內不排強度課", n=TAPER_SHORT_Q_DAYS[0]))
+                    said.append(M_("賽前 {n} 天內不排強度課", n=TAPER_SHORT_Q_DAYS[0]))
         elif sid == "climb":
             # the 長爬坡反覆 runs down at race grade: no hard downhill in the taper
             as_easy(s, g(s, "minutes") or 60, _("平路或緩坡輕鬆跑"))
-            said.append(_("不排長爬坡反覆"))
+            said.append(M_("不排長爬坡反覆"))
+    # SP-988: the notes are M_() texts whose list of changes (M_list) is a parameter, not a bracket glued on
+    # after the msgid — so an English page shows them in English (the plan inputs are made in zh-TW)
     if notes is not None and pre_said and not touched:
         notes.append({"level": "info", "src": "taper",
-                      "text": _("A 賽事「{race}」{rule}：這週的長跑改成輕鬆跑（最後一次長跑在賽前 {n} 天以前）",
-                                race=tc["race"], rule="、".join(dict.fromkeys(pre_said)), n=tc["long_days"])})
+                      "text": M_("A 賽事「{race}」{rule}：這週的長跑改成輕鬆跑（最後一次長跑在賽前 {n} 天以前）",
+                                 race=tc["race"], rule=M_list(dict.fromkeys(pre_said)), n=tc["long_days"])})
     if notes is not None and touched:
         said = pre_said + said
+        kw = dict(race=tc["race"], days=tc["days"], full=TAPER_FULL_Q_DAYS, long=tc["long_days"], max=TAPER_LONG_MAX_MIN)
         notes.append({"level": "info", "src": "taper",
-                      "text": _("減量期（A 賽事「{race}」前 {days} 天）：跑步次數照舊、每次變短；最後一次完整強度課在賽前 "
-                                "{full} 天以前，之後同一種課縮短，賽前 3–5 天一次量減半的短強度；最後一次長跑賽前 ≥ {long} 天、"
-                                "≤ {max} 分", race=tc["race"], days=tc["days"], full=TAPER_FULL_Q_DAYS,
-                                long=tc["long_days"], max=TAPER_LONG_MAX_MIN)
-                      + ("（" + "、".join(dict.fromkeys(said)) + "）" if said else "")})
+                      "text": M_(TAPER_NOTE_SAID, rules=M_list(dict.fromkeys(said)), **kw) if said else M_(TAPER_NOTE, **kw)})
     return ss
+
+
+N_("{a}{sep}{b}")        # i18n.M_list's msgid, marked here: backend/i18n is not scanned (scripts/i18n_extract)
+TAPER_NOTE = N_("減量期（A 賽事「{race}」前 {days} 天）：跑步次數照舊、每次變短；最後一次完整強度課在賽前 "
+                "{full} 天以前，之後同一種課縮短，賽前 3–5 天一次量減半的短強度；最後一次長跑賽前 ≥ {long} 天、"
+                "≤ {max} 分")
+TAPER_NOTE_SAID = N_("減量期（A 賽事「{race}」前 {days} 天）：跑步次數照舊、每次變短；最後一次完整強度課在賽前 "
+                     "{full} 天以前，之後同一種課縮短，賽前 3–5 天一次量減半的短強度；最後一次長跑賽前 ≥ {long} 天、"
+                     "≤ {max} 分（{rules}）")

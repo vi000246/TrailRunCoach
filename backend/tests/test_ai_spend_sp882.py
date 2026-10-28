@@ -41,7 +41,7 @@ def test_a_model_call_leaves_its_tokens_and_usd_for_grafana(owner, monkeypatch, 
     assert m, p.read_text("utf-8")
     assert (m["model"], m["purpose"], m["status"], m["i"], m["o"], m["err"]) == \
         ("claude-sonnet-5-5", "ask", "success", "900", "120", "")
-    assert float(m["cost"]) == round((900 * 3 + 120 * 15) / 1e6, 6)     # 0.0045 USD
+    assert float(m["cost"]) == round((900 * 2 + 120 * 10) / 1e6, 6)     # 0.003 USD (SP-985)
     raw = p.read_text("utf-8")
     assert FAKE_KEY not in raw and "訓練狀態" not in raw and "72%" not in raw   # no key, question, answer
     # a cached answer is not a call: no second line
@@ -84,12 +84,19 @@ def test_a_write_that_fails_never_touches_the_answer(owner, monkeypatch, tmp_pat
 def test_the_line_is_the_shared_schema(monkeypatch, tmp_path):
     ln = S.line("claude-sonnet-5-5", "success", 1_000_000, 1_000_000, 812.7, at_ns=1_792_900_000_000_000_000)
     assert ln == ('api_call,provider=anthropic,model=claude-sonnet-5-5,project=trailruncoach,purpose=ask,'
-                  'status=success input_tokens=1000000i,output_tokens=1000000i,cost_usd=18.000000,'
+                  'status=success input_tokens=1000000i,output_tokens=1000000i,cost_usd=12.000000,'
                   'latency_ms=812i,error_message="" 1792900000000000000')
     # a model not in the price table: cost 0 but still a float literal (InfluxDB keeps one field type)
     odd = S.line("some model,x=1", "weird", 5, 5, 1, error='bad "quote"\nnext')
     assert "model=some_model_x_1," in odd and "status=error " in odd and "cost_usd=0.000000," in odd
     assert 'error_message="bad \\"quote\\" next"' in odd
+
+
+def test_the_5_5_models_cost_the_official_price():
+    """SP-985: the official price page (2026-10-28), USD per million tokens in / out."""
+    assert S.cost_usd("claude-sonnet-5-5", 1_000_000, 1_000_000) == 12.0     # 2 + 10
+    assert S.cost_usd("claude-haiku-5-5", 1_000_000, 1_000_000) == 0.6       # 0.10 + 0.50
+    assert S.cost_usd("claude-opus-5-5", 1_000_000, 1_000_000) == 24.0       # 4 + 20
 
 
 def test_the_file_is_cut_over_past_its_size(monkeypatch, tmp_path):

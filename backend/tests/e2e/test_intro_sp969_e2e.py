@@ -50,8 +50,7 @@ def test_the_try_button_carries_the_examples_result_and_the_waterfall_adds_up_to
     assert page.locator('[data-why="sources"]').text_content() == str(w["sources"])
     assert page.locator('[data-why="calibrated"]').text_content() == str(w["calibrated"])
     assert page.locator('[data-why="zones"]').text_content() == str(w["zone_systems"])
-    bt = page.locator("#bt").text_content()
-    assert "7.7%" in bt and "51.1%" in bt and "作者自己的資料" in bt
+    assert page.locator("#bt").count() == 0          # the back-test line is off the page (user, 2026-10-28)
 
 
 @pytest.mark.parametrize("loc,slogan", [("zh-TW", "以基石備戰，隨疊石回家"),

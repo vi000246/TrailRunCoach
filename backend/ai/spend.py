@@ -41,11 +41,15 @@ PURPOSE = "ask"
 FILE_NAME = "api_calls.lp"
 MAX_BYTES = 2_000_000
 
-# USD / million tokens (input, output). claude-sonnet-5-5 at the Sonnet line's 3 / 15 (推估: every
-# Sonnet so far; not checked against a price page); the rest as the grafana-api-usage skill's table
-# (2026Q1), so the shared dashboard adds up the same. Check it when TRC_AI_MODEL changes.
+# USD / million tokens (input, output). The 5.5 models from the official price page
+# (https://platform.claude.com/docs/en/about-claude/pricing, read 2026-10-28, SP-985): Sonnet 5.5
+# 2 / 10, Haiku 5.5 0.10 / 0.50 (prompts up to 100k tokens; the app's are far below that), Opus 5.5
+# 4 / 20. The rest as the grafana-api-usage skill's table (2026Q1), so the shared dashboard adds up
+# the same. Check it when TRC_AI_MODEL changes.
 PRICE = {
-    "claude-sonnet-5-5": (3.0, 15.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+    "claude-haiku-5-5": (0.10, 0.50),
+    "claude-opus-5-5": (4.0, 20.0),
     "claude-sonnet-4-6": (3.0, 15.0),
     "claude-sonnet-4-5": (3.0, 15.0),
     "claude-haiku-4-5": (1.0, 5.0),

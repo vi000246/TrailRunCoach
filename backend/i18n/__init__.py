@@ -184,9 +184,26 @@ def translate(msgid: str, loc: Optional[str] = None, **params: Any) -> str:
     return _format(text, params)
 
 
+_keep: contextvars.ContextVar[bool] = contextvars.ContextVar("trc_i18n_keep", default=False)
+
+
 def _(msgid: str, /, **params: Any) -> str:
-    """gettext-style: the request locale's text for the Chinese `msgid`."""
+    """gettext-style: the request locale's text for the Chinese `msgid`. Inside keep_msgids(): an M_()
+    text (the same text, its msgid and parameters kept)."""
+    if _keep.get():
+        return M_(msgid, **params)
     return translate(msgid, None, **params)
+
+
+@contextmanager
+def keep_msgids() -> Iterator[None]:
+    """Every _() text made in this block remembers its msgid and parameters (M_()): a result that is stored
+    and shown later in the reader's language (SP-991: the racepower back-test saves them as msgid + params)."""
+    t = _keep.set(True)
+    try:
+        yield
+    finally:
+        _keep.reset(t)
 
 
 class Msg(str):
@@ -210,6 +227,27 @@ def M_(msgid: str, /, **params: Any) -> Msg:
     「為什麼」, SP-542): the same text, plus what relocalize() needs to show it in another language.
     A parameter that is itself an M_() text follows the language too."""
     return _msg(translate(msgid, None, **params), msgid, params)
+
+
+def S_(msgid: str, /, **params: Any) -> Msg:
+    """M_() in the source language (zh-TW) whatever the request's: a text that may be stored (an activity's
+    automatic effort reason, SP-991) keeps the Chinese as before, and its msgid to be shown in another."""
+    return _msg(translate(msgid, DEFAULT_LOCALE, **params), msgid, params)
+
+
+def M_list(items) -> Any:
+    """M_() texts as one 「、」 list that follows the language too ("A, B" in English; SP-988: the
+    taper / B race week notes list what they changed): a chain of M_(LIST_JOIN) whose separator is the
+    catalog's 「、」 (", " in English); "" for none, the one text for one. The join msgid has no Chinese of
+    its own on purpose: a catalog msgid like 「{a}、{b}」 would be a pattern for reverse.from_source and read
+    every 「、」 in a frozen text as a list (「補水、吃」 → "water, eat ")."""
+    out: Any = None
+    for it in items:
+        out = it if out is None else M_(LIST_JOIN, a=out, sep=M_("、"), b=it)
+    return "" if out is None else out
+
+
+LIST_JOIN = "{a}{sep}{b}"                  # M_list's join (the same in every language; the 「、」 is `sep`)
 
 
 def relocalize(s: Any, loc: Optional[str] = None) -> Any:
@@ -250,5 +288,5 @@ class UserError(Exception):
                 "params": {k: v for k, v in self.params.items() if isinstance(v, (str, int, float, bool)) or v is None}}
 
 
-__all__ = ["_", "N_", "M_", "Msg", "relocalize", "DEFAULT_LOCALE", "SUPPORTED", "UserError", "current_locale", "instance_default",
+__all__ = ["_", "N_", "M_", "M_list", "S_", "keep_msgids", "Msg", "relocalize", "DEFAULT_LOCALE", "SUPPORTED", "UserError", "current_locale", "instance_default",
            "normalize", "set_locale", "reset_locale", "use_locale", "translate", "catalog"]

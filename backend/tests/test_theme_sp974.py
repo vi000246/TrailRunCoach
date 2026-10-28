@@ -1,7 +1,7 @@
 """
 外觀 (SP-974; docs/spec/ui-theme.spec.md): the Trig palettes (static/theme.css) and the script that
 picks one (static/theme.js), written inline first in every page's <head> by backend/i18n/pages.py;
-the 設定 › 個人資料 › 外觀 menu; the default (Trig 米白 on a light system, 原本 dark on a dark one);
+the 設定 › 偏好設定 › 外觀 menu (個人資料 until SP-1011); the default (Trig 米白 on a light system, 原本 dark on a dark one);
 the chart colours of views/*.json mapped to the Trig palette's same hue. theme.js runs under node.
 """
 import json
@@ -213,10 +213,10 @@ def test_the_settings_menu_has_the_four_choices():
     sec = src[src.index('<section id="appearance">'):]
     sec = sec[:sec.index("</section>")]
     assert re.findall(r'<option value="([\w-]+)"', sec) == NAMES
-    assert 'personal: ["general", "appearance", "map", "account"]' in src      # 個人資料, above 地圖
+    assert 'prefs: ["appearance", "map"]' in src      # 偏好設定 (SP-1011; was 個人資料), above 地圖
     assert "TrcTheme.set(sel.value)" in src
-    for loc, names in (("zh-TW", ["Trig 米白", "Trig 深綠", "原本（跟隨系統）", "原本暗色"]),
-                       ("en", ["Trig cream", "Trig deep green", "Original (follow system)", "Original dark"])):
+    for loc, names in (("zh-TW", ["Trig 米白", "Trig 深綠", "經典（跟隨系統）", "經典深色"]),
+                       ("en", ["Trig cream", "Trig deep green", "Classic (follow system)", "Classic dark"])):
         html = P.render("settings", loc, False)
         sec = html[html.index('<section id="appearance">'):]
         assert re.findall(r'<option value="[\w-]+"[^>]*>([^<]+)</option>', sec[:sec.index("</section>")]) == names

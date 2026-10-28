@@ -1,4 +1,4 @@
-"""設定頁分頁 (SP-213): 個人資料 / 訓練依據 (SP-955; was 生理數據) / 資料同步 / 進階設定 on static/settings.html.
+"""設定頁分頁 (SP-213): 個人資料 / 偏好設定 (SP-1011) / 訓練依據 (SP-955; was 生理數據) / 資料同步 / 進階設定 on static/settings.html.
 Reads the repo's page and catalogs only."""
 import json
 import re
@@ -29,7 +29,7 @@ def test_four_tabs_each_section_on_one():
     """…and 疊石 Cairn (SP-666) and 教練 (SP-789), shown in sign-in mode only (test_cairn_tab_sp666.py,
     test_coaching_sp789.py)."""
     tabs = _tabs()
-    assert list(tabs) == ["personal", "body", "data", "advanced", "cairn", "coach"]
+    assert list(tabs) == ["personal", "prefs", "body", "data", "advanced", "cairn", "coach"]
     assert tabs["cairn"] == ["cairn"]
     assert tabs["coach"] == ["coach"]
     placed = [i for ids in tabs.values() for i in ids]
@@ -39,6 +39,9 @@ def test_four_tabs_each_section_on_one():
     # what the ticket groups: personal info / physiology (heart rate …) / advanced
     # SP-955: 主要訓練項目 moved to 訓練依據 (body), which is one section with the two columns' cards
     assert tabs["personal"][0] == "general" and "sport" not in tabs["personal"]
+    # SP-1011: 外觀 and 地圖 are site preferences, not about you: their own tab right after 個人資料
+    assert tabs["personal"] == ["general", "account"]
+    assert tabs["prefs"] == ["appearance", "map"]
     assert tabs["body"] == ["basis"]
     assert {"equip", "thresholds", "overrides", "now", "physio"} == BASIS_IDS
     for i in ("sport", "hr", "hr-cmp", "pv-tiles", "b-aetp", "b-cpp", "b-basis", "b-climb", "hr-model", "pz-model"):
@@ -102,3 +105,25 @@ def test_the_controls_of_the_other_branches_land_on_their_tab():
     tab = sched[sched.index('id="pf-p-strength"'):]
     tab = tab[:tab.index('<div class="pf-tp"')]
     assert 'id="pf-st"' in tab and 'id="pf-sm"' in tab and 'id="pf-mv"' in tab and 'id="pf-ng"' in tab
+
+
+def test_preferences_tab_holds_appearance_and_map_and_old_links_follow():
+    """SP-1011: 偏好設定 (Preferences) right after 個人資料 holds 外觀 and 地圖; 個人資料 no longer does.
+    The old deep links (#appearance, #map, or an id inside them such as #ap-theme / #m-base) pick the
+    tab through the section that holds them (hashTab → tabOf), so they open 偏好設定 at that block."""
+    nav = PAGE[PAGE.index('<nav class="tabs"'):PAGE.index("</nav>")]
+    order = re.findall(r'data-tab="(\w+)"', nav)
+    assert order[:2] == ["personal", "prefs"]
+    assert '<button type="button" role="tab" id="tab-prefs" data-tab="prefs" data-i18n="settings.tabs.prefs">偏好設定</button>' in nav
+    tab = {i: k for k, ids in _tabs().items() for i in ids}
+    assert tab["appearance"] == tab["map"] == "prefs" and tab["account"] == "personal"
+    for el in ("ap-theme", "ap-default", "m-base", "m-save"):               # ids inside the two blocks
+        assert tab[_section_of(el)] == "prefs", el
+    for el in ("p-age", "profnow"):
+        assert tab[_section_of(el)] == "personal", el
+    for loc, name in (("zh-TW", "偏好設定"), ("en", "Preferences")):
+        cat = json.loads((STATIC / "i18n" / loc / "settings.json").read_text("utf-8"))
+        assert cat["tabs.prefs"] == name
+    # the hash → tab lookup the deep links go through
+    assert 'const sec = el && el.closest("main > section");' in PAGE
+    assert "return sec ? { tab: tabOf(sec), el } :" in PAGE

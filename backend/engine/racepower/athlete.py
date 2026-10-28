@@ -98,7 +98,7 @@ def watch_unused(ds, runs) -> list[dict]:
     from backend.engine import power_source as PS
     if getattr(ds, "accept_watch_power", True):
         return []
-    return [{**act_ref(w), "power_source": PS.WATCH, "label_power": PS.UNUSED_LABEL}
+    return [{**act_ref(w), "power_source": PS.WATCH, "label_power": M_(PS.UNUSED_LABEL)}
             for w in runs if power_source(ds, w) == PS.WATCH]
 
 
@@ -1224,7 +1224,10 @@ def _power_label(prof: dict) -> str:
     the runner never picked one (the data decides then, engine/power_source.py)."""
     from backend.engine import athlete_profile as AP
     s = AP.profile_power_source(prof)
-    return AP.power_labels()[s] if s else _("未設定")
+    # SP-990: M_() — derive() is cached for every language (the 你的數據 card shows it in the request's)
+    if not s:
+        return M_("未設定")
+    return "Stryd" if s == "stryd" else M_(AP.POWER_LABEL[s])
 
 
 def body_profile(ds, today: dt.date) -> dict:
@@ -1587,7 +1590,7 @@ def power_summary(ds, runs) -> dict:
     accept = bool(getattr(ds, "accept_watch_power", True))
     srcs = [power_source(ds, w) for w in runs]
     return {"accept_watch_power": accept, "setting": PS.SETTING_KEY, "counts": PS.counts(s for s in srcs if s),
-            "unused": watch_unused(ds, runs)[-40:], "unused_label": PS.UNUSED_LABEL,
+            "unused": watch_unused(ds, runs)[-40:], "unused_label": M_(PS.UNUSED_LABEL),       # SP-990
             "note": M_("只用 Stryd 功率（有 Form Power／Air Power／LSS 欄位）；手錶推估功率不進功率模型") if not accept
             else M_("手錶推估功率也採用")}
 

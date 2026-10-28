@@ -164,6 +164,7 @@ def baseline_rows(due: list[dict], monday: str, session_of, days_for) -> list[di
     `session_of(kind)`: the test session 「排入」 stores ({title, minutes, …, replaces_long}; None =
     nothing to schedule, no row); `days_for(kind, replaces_long)`: the day options. The numbers in
     the help (± 3 %, 4 %, 3–4 tests) are 推估: plan-backtest-feasibility.md §5.2."""
+    from backend.engine import stored_text as ST
     from backend.engine.baseline_test import REPEAT_DAYS
     lo, hi = REPEAT_DAYS[0] // 7, REPEAT_DAYS[1] // 7
     out = []
@@ -171,7 +172,8 @@ def baseline_rows(due: list[dict], monday: str, session_of, days_for) -> list[di
         kind, s = d["kind"], session_of(d["kind"])
         if not s:
             continue
-        name = _("{title}（{minutes} 分）", title=s.get("title") or "", minutes=s.get("minutes") or 0)
+        # (SP-810: the test's stored zh-TW title in the request's language)
+        name = _("{title}（{minutes} 分）", title=ST.shown(s.get("title") or ""), minutes=s.get("minutes") or 0)
         if d["reason"] == "repeat":
             title = _("該重測了：{name}", name=name)
             reason = _("上次是 {weeks} 週前（{day}）。每 {lo}–{hi} 週用同一種方式測一次，才比得出有沒有進步。",
@@ -209,6 +211,8 @@ def zone_rows(zone: dict, covered_kinds: set, scheduled: callable, days_for) -> 
     `covered_kinds`: test kinds this week's test suggestions already offer
     (not offered twice); `scheduled(kind, since)`: a test of that kind is in
     the plan since that day; `days_for(kind, earliest)`: the day options."""
+    from backend.engine import stored_text as ST
+    from backend.engine import threshold_confidence as TC
     from backend.engine import zone_events as ZE
     out = []
     for sg in zone.get("suggestions") or []:
@@ -223,15 +227,21 @@ def zone_rows(zone: dict, covered_kinds: set, scheduled: callable, days_for) -> 
                   if t not in ZONE_TESTS]
         if not tests and not manual:
             continue
-        help_ = _("；").join(sg.get("conditions") or [])
+        # SP-810: the suggestion's own texts come from the inputs (built in zh-TW): shown in the request's
+        # language before they are put together with this row's own words (engine/stored_text)
+        help_ = _("；").join(ST.shown(c) for c in sg.get("conditions") or [])
         if manual:
             help_ += _("。{tests}請按「安排課表」自己挑一天（這裡不排）", tests=_("、").join(_(m) for m in manual))
         # the tests not scheduled here (30-min TT, max-HR test): a 「安排課表」 deep link to the
         # 課表 page's new-session dialog with the template preselected (SP-39 / SP-64)
         links = sg.get("links") or [_manual_link(t, sg.get("earliest")) for t in sg.get("tests") or []
                                     if t not in ZONE_TESTS]
-        out.append({"id": f"zone:{sg['id']}", "type": "zone_test", "title": sg["title"], "reason": sg.get("text") or "",
-                    "help": _("{text}。觸發規則為推估。", text=(help_ + "。" + (sg.get("caveat") or "")).strip("。")),
+        title = sg["title"]
+        if str(sg.get("id") or "").startswith("thr_check:") and set(sg.get("tests") or []) <= set(TC.TEST_TITLE):
+            title = TC.test_title(sg["tests"])          # (SP-810: built again in the request's language)
+        out.append({"id": f"zone:{sg['id']}", "type": "zone_test", "title": title, "reason": sg.get("text") or "",
+                    "help": _("{text}。觸發規則為推估。",
+                              text=_("。").join(x for x in (help_, ST.shown(sg.get("caveat") or "")) if x).strip("。")),
                     "src": sg.get("source"), "pick": "test_day" if tests else None, "tests": tests,
                     "links": [x for x in links if x], "wait_cool": bool(sg.get("wait_cool")),
                     "detected": sg.get("detected"), "earliest": sg.get("earliest")})

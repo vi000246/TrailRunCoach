@@ -1,6 +1,6 @@
 # Module Spec: racepower
 
-> **Last Updated**: 2026-10-27
+> **Last Updated**: 2026-10-29
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -199,6 +199,13 @@ decisions on the workbook's ambiguities (D1–D10) are in
 - **Body profile** (`body_profile`, `backend/engine/racepower/athlete.py:1009`): height / sex / age
   from the settings-page profile (sex, birth year), then the WKO5 athlete file, else labelled
   推估 defaults; used for the W′ prior and the 百岳 REE.
+- **你的數據 in the reader's language** (SP-990): `derive()` is cached for every language, so the card's
+  words are `M_()` texts that `GET /inputs` shows in the request's (`_py`, SP-838): where the sex came from
+  (`cp_protocols.sex_or_default`: 設定頁 / 對照資料夾 / 預設（男，推估）, `backend/engine/cp_protocols.py:64`), the
+  power source word (`_power_label`: 未設定 or the 一般設定 word, `backend/engine/racepower/athlete.py:1222`) and the
+  unused watch power (`power_source.UNUSED_LABEL`, an `N_()` msgid, `backend/engine/power_source.py:36`;
+  `power_summary`'s `unused_label` and each unused run's `label_power` are `M_()` of it,
+  `backend/engine/racepower/athlete.py:101`, `backend/engine/racepower/athlete.py:1593`). Chinese unchanged.
 - **AeT** via `thresholds.estimate` + `zones.training_targets`; **priors** = standard-distance
   road runs; auto prior = the fastest of the year; **events** = upcoming season-plan events with
   their matched peak.
@@ -1110,6 +1117,25 @@ terrain rows have a median |err| ≤ the threshold and a downhill bias ≤ +5 %.
 needs ≥ 5 race-like / test efforts with median f 0.97–1.03. Script:
 `python -m backend.scripts.racepower_backtest`; result `racepower_backtest.json` (version 2).
 
+**Stored texts** (SP-838, SP-991): `backtest()` / `capacity_backtest()` compute in zh-TW whoever asks, inside
+`i18n.keep_msgids()` — every `_()` text made there is an `M_()` text that keeps its msgid and parameters
+(`backend/engine/racepower/backtest.py:1061`, `backend/engine/racepower/backtest.py:1405`;
+`backend/i18n/__init__.py:199`). `save()` writes `text_version: 2` (`TEXT_VERSION`) and a `texts` table
+{zh-TW text: {`$msg`, `$p`}} — nested parameters the same way — for each such text; the result's texts stay the
+Chinese strings they always were, and a merged file (`store_capacity`) keeps its rows
+(`backend/engine/racepower/backtest.py:1644-1645`, `_table` `backend/engine/racepower/backtest.py:1674`,
+`backend/engine/racepower/backtest.py:1714-1719`). `load()` gives a text with a row back as an `i18n.Msg` (the same
+Chinese to every reader; `_with_msgids`, `backend/engine/racepower/backtest.py:1693`,
+`backend/engine/racepower/backtest.py:1722-1731`) and `shown()` renders it in the reader's language from its
+msgid, falling back to reading the Chinese back when that leaves Chinese; the table itself is not shown
+(`backend/engine/racepower/backtest.py:1763`). A text without a row, and every text of an older file (no
+`text_version`), is read back from the Chinese as before (SP-838). For this the automatic effort reasons are
+`i18n.S_()` texts — the same Chinese, msgid kept, whatever the request's language — (`effort_from_rpe`,
+`effort_hr`, `effort_road`: `backend/engine/activity_tags.py:737`, `backend/engine/activity_tags.py:915`,
+`backend/engine/activity_tags.py:971`) and the 預設背負 rule joins its kinds with `M_list`
+(`pack_defaults.rule_text`, `backend/engine/racepower/pack_defaults.py:125`). The 每一場 table's failed row shows
+its category word, not the key (`backend/static/racepower.html:3132`).
+
 **Long trail races** (report only; both blocks sit in the trail HR back-test, `trail_hr`,
 `backend/engine/racepower/backtest.py:743`):
 - SP-240: races with ≥ 8 h moving (`LONG_RACE_H`, `backend/engine/racepower/backtest.py:685`) are
@@ -1359,7 +1385,7 @@ Personal transition speed (SP-228, `runwalk.fit_shift`, set on `GaitRE.runwalk` 
 
 SP-229 gate (back-test only): `GaitRE.re_at` / `gait_at` pick the walking curve where the running curve's speed at the segment power is below the (shifted) PTS; `RunModel.re_at` lets `course_time` use it. The terrain back-test reports it beside the majority gait (`models.speed_gait`, `speed_gait`: trail segment and climb |error|, segments whose gait changed, `no_worse`) and the 準確度 tab shows the line. The planner keeps the majority gait until a back-test on the athlete's data shows `no_worse`.
 
-SP-229 time model (gated): `GaitRE.speed_gait` (default False, `backend/engine/racepower/grade_model.py:229`) is set by the API from the stored back-test (`backtest.speed_gait_flag`, `backend/engine/racepower/backtest.py:1435`; `with_speed_gait`, `backend/api/racepower.py:374`; with the race-class model in use, its own gate `speed_gait_cls` and the pooled one must both pass). The gate (`speed_gait_summary`, `backtest.py:237`; `reason` ok / few / tie / worse) keeps it only with ≥ 20 changed climbs over ≥ 3 trail activities (`SG_MIN_CHANGED`, `SG_MIN_ACTIVITIES`, 推估), the changed climbs' median |error| strictly below the majority gait's, and the trail segments and climbs not worse — a tie (nothing changed) never passes. When on, trail GPX plans only (`planner.py:482`; road keeps the majority gait — the gate judged trail) pass `re_at` to `RunModel`: on climbs ≥ 3 % the speed is max(v_run, min(v_walk, S)) (`_speed_pick`, `grade_model.py:301`) — the walking curve only where its bin has walked windows and it is faster per watt, held at the switch speed S until running reaches it, so the speed (and the finish time) never gets worse as power / effort / target rise; flats and descents keep the majority gait. Each segment's `gait_curve` is the curve the time used (`planner.py:668`); the label stays the speed shown's (SP-226, after the v1 / HR scaling and the fade, so it can say more 走 late in a faded race while the curve follows the power); on a climb the note 「走（依這段的預估速度，用走的比跑省力）」 appears only with the label 走, never above S (`planner.py:680`); flats / descents keep 「走（你在這個坡度多半走）」. `trusted` reads the curve used (`trusted_at`). Off: the plan equals main's pre-SP-229 output (frozen fixture `backend/tests/fixtures/sp229_flag_off_plans.json`). `summary.runwalk.speed_gait` says which model ran; `speed_gait_summary` also reports `changed_segments`, `changed_activities` and the minimums, shown on the 準確度 line. Demo athlete (walks by a fixed > 19 % rule): see Change History — the gate does not keep it, so the demo keeps the majority gait; the owner's NAS back-test decides for real data.
+SP-229 time model (gated): `GaitRE.speed_gait` (default False, `backend/engine/racepower/grade_model.py:229`) is set by the API from the stored back-test (`backtest.speed_gait_flag`, `backend/engine/racepower/backtest.py:1848`; `with_speed_gait`, `backend/api/racepower.py:374`; with the race-class model in use, its own gate `speed_gait_cls` and the pooled one must both pass). The gate (`speed_gait_summary`, `backend/engine/racepower/backtest.py:255`; `reason` ok / few / tie / worse) keeps it only with ≥ 20 changed climbs over ≥ 3 trail activities (`SG_MIN_CHANGED`, `SG_MIN_ACTIVITIES`, 推估), the changed climbs' median |error| strictly below the majority gait's, and the trail segments and climbs not worse — a tie (nothing changed) never passes. When on, trail GPX plans only (`backend/engine/racepower/planner.py:865`; road keeps the majority gait — the gate judged trail) pass `re_at` to `RunModel`: on climbs ≥ 3 % the speed is max(v_run, min(v_walk, S)) (`_speed_pick`, `backend/engine/racepower/grade_model.py:301`) — the walking curve only where its bin has walked windows and it is faster per watt, held at the switch speed S until running reaches it, so the speed (and the finish time) never gets worse as power / effort / target rise; flats and descents keep the majority gait. Each segment's `gait_curve` is the curve the time used (`backend/engine/racepower/planner.py:1094`); the label stays the speed shown's (SP-226, after the v1 / HR scaling and the fade, so it can say more 走 late in a faded race while the curve follows the power); on a climb the note 「走（依這段的預估速度，用走的比跑省力）」 appears only with the label 走, never above S (`backend/engine/racepower/planner.py:1083`); flats / descents keep 「走（你在這個坡度多半走）」. `trusted` reads the curve used (`trusted_at`). Off: the plan equals main's pre-SP-229 output (frozen fixture `backend/tests/fixtures/sp229_flag_off_plans.json`). `summary.runwalk.speed_gait` says which model ran; `speed_gait_summary` also reports `changed_segments`, `changed_activities` and the minimums, shown on the 準確度 line. Demo athlete (walks by a fixed > 19 % rule): see Change History — the gate does not keep it, so the demo keeps the majority gait; the owner's NAS back-test decides for real data.
 
 ### Share links (`backend/engine/racepower/share.py:75`)
 
@@ -1368,6 +1394,10 @@ card, stations) under `secrets.token_urlsafe(16)` in the tenant's private `racep
 (≤ 200). Weight and what reveals it (W/kg, load grams, breakfast / caffeine) only with 「包含體重」;
 height / age / sex, REE, model inputs, sources, warnings and anything injury / pain related never go
 in. Optional expiry 7 / 30 / 90 days. `share.html` renders the snapshot without recomputing.
+The 補給 card's 「賽前」 tile keeps the short amount in the value box (「約 6 g/kg」) and puts the bracket's
+words after the day in the small line under it (「前一天 · 正常高碳水」; SP-987, `splitAmount`,
+`backend/static/share.html:120`, `backend/static/share.html:243-247`) — done in the page, so older shares read the
+same way; the 10–12 g/kg tile (`g_day`) has no bracket and is unchanged.
 
 **分段目標 component** (SP-784, `backend/static/seg_profile.js`, `window.SegProfile`): the target line
 (pace / power / HR toggle) over the elevation profile, its legend, the hover text and the compact
@@ -1842,3 +1872,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-27 | feature | SP-953 (SP-950 Q2-2 (a)) | The calculator follows the plan's one power rule (power_state): in ② CP stale / ③ no power meter, trail = the trail HR pace model directly (split by grade-adjusted pace), else / road = the race-results estimate (`nopower.py`); no power, % CP, W/kg, CP / RE inputs, power goal, power segment targets or watch-export power; the page says which model and why; `/estimate` texts per state; race_refs / 賽事可行性 take the same route, the wrong 「沒有越野心率配速模型」 replaced by the real reason, 百岳 W/kg only in ① (was the cleared legacy `power_meter`) |
 | 2026-10-27 | feature | SP-969 | `summary.breakdown` (trail HR model in auto mode): the moving time factor by factor — flat, climb, 地形難度, durability, race-day heat, altitude (+ 位置記憶 / night when they moved it), each the calculation run again with one more factor, adding up to `time_s` (`planner.trail_breakdown`, `breakdown_after`); frozen for the 介紹頁 trail example by `scripts/intro_example.py --breakdown-only` |
 | 2026-10-28 | feature | SP-727 | The course ground reads the trail dictionary on this server (`engine/trail_dict_store.py`: `$TRC_TRAIL_DICT_URL`, the bundle indexed locally, refreshed daily) instead of Overpass (`TRC_OVERPASS_URL` gone); profile v2 carries the speed classes (`kinds`). The trail HR model fits per-class multipliers on top of the slope cost (`surface_kind`, `trailhr.fit_kind_mult`); the plan's split uses them only when the back-test's leave-one-run-out (`trail_hr.surface_kind`) is better (`backtest.kind_flag`) |
+| 2026-10-29 | code-sync（SP-990, SP-991, SP-987） | N/A | 你的數據's sex source, power-source word and unused watch power are `M_()` texts (SP-990); the stored back-test keeps its texts' msgid + params (`text_version` 2, `texts` table, `keep_msgids`, `S_()` effort reasons, `M_list` 預設背負), older files read as before (SP-991); the share page's 賽前 tile splits the amount from its bracket (SP-987); re-anchored the SP-229 references |

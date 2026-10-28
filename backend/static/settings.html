@@ -194,7 +194,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .toast { position: fixed; right: 16px; bottom: 16px; background: var(--text); color: var(--bg);
   padding: 8px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; }
 .toast.on { opacity: .92; }
-/* 分頁 (SP-213): 個人資料 / 生理數據 / 資料同步 / 進階設定. The sections stay where they are
+/* 分頁 (SP-213): 個人資料 / 偏好設定 (SP-1011) / 生理數據 / 資料同步 / 進階設定. The sections stay where they are
    (deep links #sync, #thresholds … keep working); the selected tab shows its own (TABS below). */
 .tabs { order: -2; display: flex; gap: 4px; overflow-x: auto; background: var(--panel); border: 1px solid var(--line);
   border-radius: 8px; padding: 4px; scrollbar-width: none; }
@@ -393,6 +393,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
   </script>
   <nav class="tabs" role="tablist" aria-label="設定分類" data-i18n-attr="aria-label:settings.tabs.aria">
     <button type="button" role="tab" id="tab-personal" data-tab="personal" data-i18n="settings.tabs.personal">個人資料</button>
+    <button type="button" role="tab" id="tab-prefs" data-tab="prefs" data-i18n="settings.tabs.prefs">偏好設定</button>
     <button type="button" role="tab" id="tab-body" data-tab="body" data-i18n="settings.tabs.body">生理數據</button>
     <button type="button" role="tab" id="tab-data" data-tab="data" data-i18n="settings.tabs.data">資料同步</button>
     <button type="button" role="tab" id="tab-advanced" data-tab="advanced" data-i18n="settings.tabs.advanced">進階設定</button>
@@ -1043,7 +1044,7 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
     <p class="meta" data-i18n="settings.cal.reach">網址用你現在開這一頁的位址。Google 日曆要從網際網路抓得到它（例如經過 Cloudflare Tunnel）；只在本機 localhost 跑的話 Google 抓不到，iPhone 也要連得到才行。</p>
   </section>
 
-  <!-- SP-974: 外觀 — this browser's choice, the `theme` cookie (static/theme.js, written into every
+  <!-- SP-974: 外觀 (偏好設定 tab since SP-1011) — this browser's choice, the `theme` cookie (static/theme.js, written into every
        page's <head>); applied at once, nothing to save -->
   <section id="appearance">
     <h2 data-i18n="settings.look.title">外觀</h2>
@@ -1052,8 +1053,8 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
       <label><span data-i18n="settings.look.label">配色</span> <select id="ap-theme">
         <option value="trig-cream" data-i18n="shell.theme.trig-cream">Trig 米白</option>
         <option value="trig-badge" data-i18n="shell.theme.trig-badge">Trig 深綠</option>
-        <option value="classic" data-i18n="shell.theme.classic">原本（跟隨系統）</option>
-        <option value="classic-dark" data-i18n="shell.theme.classic-dark">原本暗色</option>
+        <option value="classic" data-i18n="shell.theme.classic">經典（跟隨系統）</option>
+        <option value="classic-dark" data-i18n="shell.theme.classic-dark">經典深色</option>
       </select></label>
       <span class="meta" id="ap-msg" role="status" aria-live="polite"></span>
     </div>
@@ -2502,7 +2503,7 @@ $("m-save").onclick = async () => {
 };
 
 // 外觀 (SP-974; theme.js): this browser's `theme` cookie, applied at once. Not chosen yet, the menu shows
-// what is in effect — Trig 米白, or 原本暗色 on a dark system — and the line under it says so
+// what is in effect — Trig 米白, or 經典深色 on a dark system — and the line under it says so
 (function appearance() {
   const sel = $("ap-theme");
   if (!sel || !window.TrcTheme) return;
@@ -3697,12 +3698,14 @@ $("acct-analysis-btn").onclick = async () => {
 // ---- 分頁 (SP-213) ------------------------------------------------------------------------
 // which tab each section is on; a section not listed goes to 進階設定. A URL hash picks the
 // tab: #body … or a section / element id (#sync, #thresholds, #badfiles: its tab, scrolled to).
+// SP-1011: 外觀 and 地圖 moved from 個人資料 to 偏好設定; #appearance / #map (and ids inside them) follow.
 // 疊石 Cairn (SP-666): sign-in mode only — its button stays hidden otherwise (cairnTab), and a
 // hidden tab is never shown (個人資料 instead)
 // SP-955: 生理數據 became 訓練依據 (its key stays "body": links, the coach view); one section, #basis, holds
 // 裝備／主要訓練項目, 門檻與測試, 手動指定, 現在用什麼練 and 我的區間 (their ids still pick the tab)
 const TABS = {
-  personal: ["general", "appearance", "map", "account"],
+  personal: ["general", "account"],
+  prefs: ["appearance", "map"],        // 偏好設定 (SP-1011): how the site looks and opens, not about you
   body: ["basis"],
   data: ["sync", "weightsync", "backup", "archive", "device", "calendar"],
   advanced: ["mode", "calib", "fixes", "debugapi", "askai", "upstream"],
@@ -3728,7 +3731,7 @@ function showTab(tab, focus) {
     const on = b.dataset.tab === tab;
     b.setAttribute("aria-selected", on ? "true" : "false"); b.tabIndex = on ? 0 : -1;
     if (on && focus) b.focus();
-    // a phone's tab bar scrolls sideways (5 tabs in English): the selected one in view, the page not moved
+    // a phone's tab bar scrolls sideways (6+ tabs since SP-1011): the selected one in view, the page not moved
     const bar = b.parentElement;
     if (on && (b.offsetLeft < bar.scrollLeft || b.offsetLeft + b.offsetWidth > bar.scrollLeft + bar.clientWidth))
       bar.scrollLeft = Math.max(0, b.offsetLeft - bar.offsetLeft - 8);

@@ -3129,7 +3129,7 @@ async function renderBacktest() {
   }
   h += groupFactorHtml((R.hike_capacity || {}).group_factor, st4, hd4);       // SP-867
   h += `<details><summary>${esc(TR("bt.rows", { n: R.rows.length }))}</summary><div class="tablewrap"><table><thead><tr><th>${esc(TR("bt.th.date"))}</th><th>${esc(TR("bt.h.cat"))}</th><th>${esc(TR("bt.h.cls"))}</th><th>${esc(TR("bt.th.activity"))}</th><th class="n">${esc(TR("bt.gf.actual"))}</th><th class="n">${esc(TR("bt.h.ter_err"))}</th><th class="n">${esc(TR("bt.h.cap_err"))}</th><th class="n">${esc(TR("bt.h.effort_col"))}</th></tr></thead><tbody>` +
-    R.rows.map((x) => x.error ? `<tr><td>${esc(x.date)}</td><td>${esc(x.category)}</td><td></td><td>${esc(x.label)}</td><td colspan="4" class="meta">${esc(x.error)}</td></tr>` :
+    R.rows.map((x) => x.error ? `<tr><td>${esc(x.date)}</td><td>${esc(TR(`bt.row.${x.category}`))}</td><td></td><td>${esc(x.label)}</td><td colspan="4" class="meta">${esc(x.error)}</td></tr>` :
       `<tr><td>${esc(x.date)}</td><td>${esc(TR(`bt.row.${x.category}`))}${x.priority_a ? " A" : ""}${x.walk_heavy ? esc(TR("bt.row.walk")) : ""}</td>
       <td title="${esc(x.intensity_reason || "")}">${esc(CZ[x.intensity] || "–")}</td><td>${esc(x.label)}</td><td class="n">${hm(x.t_act)}</td>
       <td class="n">${spct(x.err_v2)}</td><td class="n">${spct(x.err_c)}</td><td class="n">${x.f ? pct(x.f) : ""}</td></tr>`).join("") + `</tbody></table></div></details>`;

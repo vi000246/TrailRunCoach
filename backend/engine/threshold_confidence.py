@@ -76,7 +76,7 @@ from typing import Optional
 
 import numpy as np
 
-from backend.i18n import N_, _, current_locale
+from backend.i18n import DEFAULT_LOCALE, M_, N_, _, current_locale
 
 # ---- named constants -------------------------------------------------------
 # 3 consistency: Davis's 90 % range / Nuuttila 2025 (PMC12354492) — strong outside the
@@ -591,6 +591,16 @@ def diagnose(lthr_sigs: list[dict], pair_sigs: list[dict], hrmax_sigs: list[dict
 TEST_TITLE = {"hrmax": N_("最大心率測試"), "tt30": N_("LTHR 測試（30 分鐘獨跑）")}
 
 
+def test_title(tests: list) -> str:
+    """「建議：做最大心率測試」 in the request's language (the suggestion box builds it again at read time:
+    the inputs keep the zh-TW one, SP-810)."""
+    names = re.sub(r"(?<=[^\x00-\x7f])(?=[A-Za-z])|(?<=[A-Za-z)])(?=[^\x00-\x7f（）])", " ",
+                   _("和").join(_(TEST_TITLE[t]) for t in tests))
+    # the space before a Latin name is Chinese typography; English has its own after the colon
+    pad = " " if names[:1].isascii() and current_locale() == DEFAULT_LOCALE else ""
+    return _("建議：做{tests}", tests=pad + names)
+
+
 def test_conditions(test: str, hot: Optional[bool], kind: Optional[str], days_to_a: Optional[int],
                     today: dt.date) -> dict:
     """{"notes": [str], "earliest": iso | None, "wait_cool": bool}: < 25 °C for the LTHR test
@@ -660,16 +670,17 @@ def assess(lthr: dict, mhr: dict, rhr: dict, today: dt.date, runs: list[dict], e
         reasons = [s["text"] for s in lsig + hsig if s["level"] != "hint"][:4]
         conds = {t: test_conditions(t, hot, kind, days_to_a, today) for t in tests}
         earliest = max((c["earliest"] for c in conds.values() if c["earliest"]), default=None)
-        names = re.sub(r"(?<=[^\x00-\x7f])(?=[A-Za-z])|(?<=[A-Za-z)])(?=[^\x00-\x7f（）])", " ",
-                       _("和").join(_(TEST_TITLE[t]) for t in tests))
-        title = _("建議：做{tests}", tests=(" " if names[:1].isascii() else "") + names)
+        title = test_title(tests)
         # SP-493: the one LTHR reminder (the box, 稍後提醒) says first which zones the 課表 uses and what a test
         # changes (the box shows the first lines of a row's reason)
         note = [zone_note(eff, hr_model == "auto")] if "tt30" in tests else []
         sugs.append({"id": "thr_check:" + "+".join(tests), "kind": "test_suggestion", "tests": tests,
                      "title": title, "text": _("；").join(note + ([dg["text"]] if dg["text"] else []) + reasons),
                      "earliest": earliest, "detected": today.isoformat(),
-                     "conditions": [_(TEST_TITLE[t]) + _("：") + _("；").join(conds[t]["notes"]) for t in tests],
+                     # M_() (SP-810): the inputs keep it in zh-TW; the suggestion box shows it in the request's
+                     # language (engine/stored_text: the test's name re-rendered, the notes read back one by one)
+                     "conditions": [M_("{test}：{how}", test=M_(TEST_TITLE[t]), how=_("；").join(conds[t]["notes"]))
+                                    for t in tests],
                      "wait_cool": any(c["wait_cool"] for c in conds.values()),
                      "caveat": _(SRC_HRMAX) if "hrmax" in tests else _(SRC_FRIEL), "estimate": True,
                      "source": _(SRC_FRIEL), "evidence": {"diagnosis": dg["outlier"]},

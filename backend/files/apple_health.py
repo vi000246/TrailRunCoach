@@ -23,7 +23,8 @@ altitude, speed; no heart rate, no sport). What a workout needs is spread over b
     power and the step cadence.
   * SP-961: <Record type="HKQuantityTypeIdentifierRunningSpeed" unit="m/s" …/> (the watch's measured
     running speed), at the middle of its span, kept the same way: an indoor workout's FIT (no route)
-    carries it on its points; no per-point distance is made from it (the session keeps the workout's).
+    carries it on its points, and each point's distance from it, scaled to the workout's total (Q1
+    (b): per-km splits, the same total as the 「健身」app). Without speed: no per-point distance.
 
 So export.xml is read once, streamed (scan_export: expat on pieces of the ZIP entry, never the
 whole file in memory, never a tree): the workouts are kept (small), every heart-rate sample goes to
@@ -609,13 +610,36 @@ def _sorted(rows, width: int) -> np.ndarray:
     return a[np.argsort(a[:, 0], kind="stable")] if len(a) else a
 
 
+def _indoor_distance(tt: np.ndarray, ms: np.ndarray, total: Optional[float]) -> np.ndarray:
+    """SP-961 Q1 (b): an indoor workout's distance at each time tt (sorted), from its measured speed
+    ms (m/s, NaN where no sample is near: 0 there — a pause, no signal), by the trapezoid rule over
+    the whole seconds a FIT keeps (the first point of each second; the others NaN, columns() drops
+    them), then scaled so the last is the workout's total: per-km splits, and the total the
+    「健身」app shows. Without that total the integral as it is. All NaN when there is no speed (or
+    it sums to nothing): no distance is made up then (SP-833)."""
+    out = np.full(len(tt), math.nan)
+    if not len(tt) or not np.isfinite(ms).any():
+        return out
+    sec = np.floor(tt)
+    first = np.concatenate([[True], np.diff(sec) > 0])
+    t, v = sec[first], np.nan_to_num(ms[first], nan=0.0)
+    d = np.concatenate([[0.0], np.cumsum((v[1:] + v[:-1]) / 2.0 * np.diff(t))])
+    if not d[-1] > 0:
+        return out
+    if total is not None and math.isfinite(total) and total > 0:
+        d = d * (float(total) / d[-1])
+    out[first] = d
+    return out
+
+
 def to_fit(workout: dict, gpx: Optional[bytes]) -> bytes:
     """One workout (scan_export's) and its route GPX (or None) as a FIT: the route's points with
     the nearest heart-rate and power samples and the cadence of the step span holding them (SP-912)
     — of a ride, the nearest cadence sample (SP-960); without a route, the times of those samples
-    alone with the nearest measured speed (SP-961) — no per-point distance (none is made up, not even
-    from the speed) and the workout's distance on the session. The session spans the workout's start
-    and end. TrackError when there is nothing to write."""
+    alone with the nearest measured speed (SP-961) and, when there is some, each point's distance
+    from it, scaled to the workout's distance (_indoor_distance); with no speed no per-point
+    distance (none is made up) and the workout's distance on the session. The session spans the
+    workout's start and end. TrackError when there is nothing to write."""
     start, end = float(workout["start"]), float(workout["end"])
     hr = _sorted(workout.get("hr"), 2)
     power = _sorted(workout.get("power"), 2)
@@ -643,8 +667,9 @@ def to_fit(workout: dict, gpx: Optional[bytes]) -> bytes:
         tt = np.unique(np.concatenate([hr[:, 0], power[:, 0], cad[:, 0], rpm[:, 0], speed[:, 0]]))
         tt = tt[(tt >= start) & (tt <= end)]
         beat, watts, steps, ms = _nearest(hr, tt), _nearest(power, tt), cadence(tt), _nearest(speed, tt)
-        pts = [(float(a), math.nan, math.nan, math.nan, math.nan, float(b), float(c), float(v), float(w))
-               for a, b, c, v, w in zip(tt, beat, steps, ms, watts)]
+        far = _indoor_distance(tt, ms, workout.get("distance_m"))
+        pts = [(float(a), math.nan, math.nan, math.nan, float(d), float(b), float(c), float(v), float(w))
+               for a, d, b, c, v, w in zip(tt, far, beat, steps, ms, watts)]
         if len(pts) < 2:
             pts += [(start,) + (math.nan,) * 8, (end,) + (math.nan,) * 8]
     cols, sport = TF.columns(pts, sport_of(workout.get("type")))

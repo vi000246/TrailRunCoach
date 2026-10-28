@@ -28,10 +28,12 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
+from backend.i18n import N_
+
 STRYD, WATCH, NONE = "stryd", "watch", "none"
 SOURCES = (STRYD, WATCH, NONE)
 LABELS = {STRYD: "Stryd", WATCH: "手錶推估功率", NONE: "沒有功率"}
-UNUSED_LABEL = "手錶推估功率（未採用）"
+UNUSED_LABEL = N_("手錶推估功率（未採用）")     # SP-990: a msgid (the calculator shows it through M_())
 SETTING_KEY = "power.accept_watch_power"
 
 # the developer fields only a Stryd pod produces (fit_to_channels AT_CHANNEL_MAP)

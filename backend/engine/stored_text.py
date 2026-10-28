@@ -379,7 +379,7 @@ def _by_pieces(s: str, loc: str, cap: bool = True) -> Optional[str]:
             if hit[0].strip():
                 joined = False
         if out and out[-1] and hit[0] and not out[-1][-1].isspace() and not hit[0][0].isspace() \
-                and out[-1][-1] not in "(“[–/" and hit[0][0] not in ")”],.;:%′":
+                and out[-1][-1] not in "(“[–/" and hit[0][0] not in ")”],.;:%′/":
             out.append(" ")
         out.append(hit[0])
         i = hit[1]

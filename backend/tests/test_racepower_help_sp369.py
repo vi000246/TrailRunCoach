@@ -84,7 +84,8 @@ def _after(src, anchor, n=700):
 def test_help_next_to_the_control(anchor, key):
     src = PAGE.read_text("utf-8")
     near = _after(src, anchor, 1200)
-    assert re.search(r'<span class="help[^"]*" tabindex="0">\?<span class="tip" data-i18n="racepower\.' + re.escape(key), near)
+    # SP-842: the help may carry its manual link (data-manual) before tabindex
+    assert re.search(r'<span class="help[^"]*"(?: data-manual="[^"]+")? tabindex="0">\?<span class="tip" data-i18n="racepower\.' + re.escape(key), near)
     zh = json.loads((STATIC / "i18n" / "zh-TW" / "racepower.json").read_text("utf-8"))
     en = json.loads((STATIC / "i18n" / "en" / "racepower.json").read_text("utf-8"))
     assert zh.get(key) and en.get(key)

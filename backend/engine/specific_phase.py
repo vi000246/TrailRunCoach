@@ -368,12 +368,12 @@ def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict],
     info = {"active": False, "race": race, "why": [], "src": SRC_ROAD if road else SRC, "monday": monday.isoformat(),
             "longest28": longest28, "sport": "road" if road else "trail"}
     if not race:
-        info["why"].append("沒有下一場有距離的 A 賽事")
+        info["why"].append(_("沒有下一場有距離的 A 賽事"))
         return info
     w = weeks_out(_d(race["start"]), monday)
     info["weeks_out"] = w
     if kind != "specific" or w < WEEKS[0]:
-        info["why"].append("只在專項期（賽前第 10–3 週）")
+        info["why"].append(_("只在專項期（賽前第 10–3 週）"))
         return info
     info.update(active=True, frac=frac(w, info["sport"]), sim_week=w in sim_week_numbers(info["sport"]))
     if mode == "recovery_week":
@@ -383,16 +383,17 @@ def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict],
     if race.get("summit") and not road and mode not in ("recovery_week", "reentry"):
         info["me_week"] = True                      # SP-114: ME instead of the uphill VO2max set (apply_me)
     if road:
-        info["climb_why"] = "主要訓練項目是路跑：不排長爬坡、下坡"
+        info["climb_why"] = _("主要訓練項目是路跑：不排長爬坡、下坡")
         return info
     f = race.get("features") or {}
     cl = f.get("climb") or {}
     if mode in ("recovery_week", "reentry"):
-        info["climb_why"] = "恢復週／停訓後恢復期：不排長爬坡"
+        info["climb_why"] = _("恢復週／停訓後恢復期：不排長爬坡")
     elif LG.tsb_below(tsb, ctl, TSB_MIN):
-        info["climb_why"] = f"週初負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, ctl)} < −20%：這週不排長爬坡"
+        info["climb_why"] = _("週初負荷平衡（Load balance）{tsb}＝{pct} < −20%：這週不排長爬坡", tsb=f"{tsb:+.0f}",
+                              pct=LG.tsb_pct_text(tsb, ctl))
     elif (cl.get("dz") or 0) < CLIMB_MIN_GAIN:
-        info["climb_why"] = "賽事沒有 GPX，或最長的爬坡不到 150 m"
+        info["climb_why"] = _("賽事沒有 GPX，或最長的爬坡不到 150 m")
     else:
         info["climb"] = True
     return info
@@ -874,10 +875,11 @@ def apply_climb(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = 
         cands.append((d.weekday() >= 5, d, s, n, m))
     if not cands:
         if notes is not None:
-            notes.append({"level": "info", "src": "climb", "text": "這週沒有可以放長爬坡反覆的輕鬆日（長天、強度課的前後一天不放）"})
+            notes.append({"level": "info", "src": "climb",
+                          "text": _("這週沒有可以放長爬坡反覆的輕鬆日（長天、強度課的前後一天不放）")})
         return ss
     cands.sort(key=lambda c: (c[0], c[1]))
-    _, d, s, n, m = cands[0]
+    _wk, d, s, n, m = cands[0]
     delta = m - int(s.get("minutes") or 0)
     for x in sorted((x for x in ss if x is not s and x.get("kind") == "easy" and not x.get("done")
                      and x.get("id") != "steep"), key=lambda x: -(x.get("minutes") or 0)):
@@ -1013,11 +1015,17 @@ def sim_day_options(sg: dict, first: dt.date, blocked=frozenset(), allowed: Opti
                 continue
             if d.weekday() < 5 and weekday_cap is not None and sg["minutes"][0] > weekday_cap:
                 continue
+            # (SP-810: the note in the request's language — the options are built per request)
             out.append({"day": iso, "label": f"{d.month}/{d.day}（{B2B.wd(d)}）",
-                        "note": "週末" if d.weekday() >= 5 else "平日"})
+                        "note": _("週末") if d.weekday() >= 5 else _("平日"), "weekend": d.weekday() >= 5})
     if not sg.get("multi"):
-        out.sort(key=lambda o: (o["note"] != "週末", o["day"]))
+        out.sort(key=lambda o: (not o.get("weekend"), o["day"]))
+        for o in out:
+            o.pop("weekend", None)
     return out
+
+
+SIM_PICK = N_("選一天按「排入」才會進課表；不排也不影響其他課")
 
 
 def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: Optional[float] = None,
@@ -1043,11 +1051,13 @@ def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: O
         km = road_km(race, d1)
         return {"id": f"race_sim:{race['id']}", "type": "race_sim", "event_id": race["id"], "event": race["name"],
                 "weeks": [w.isoformat() for w in weeks], "minutes": [d1], "multi": False, "until": start.isoformat(),
-                "title": f"建議做一次賽事模擬：{race['name']}，{d1} 分（約 {km:.0f} km）",
+                "title": _("建議做一次賽事模擬：{name}，{m} 分（約 {km:.0f} km）", name=race["name"], m=d1, km=km),
                 "reason": _("{when}：穿比賽的鞋和衣服、照比賽吃、照比賽計畫配速跑一次長跑", when=when),
-                "help": ("Koop、Pfitzinger：賽前把比賽日的裝備、早餐、補給和配速演練一次，問題在比賽前就發現；"
-                         f"路跑不跑全程，長度是專項期最長的那一次，一樣守「每次最多 +10%」。補給：{fuel_text(race)}。"
-                         "選一天按「排入」才會進課表；不排也不影響其他課。時間點與長度為推估。"),
+                # SP-810: msgids joined by 「。」 (the inputs are built in zh-TW; the box shows each part in the
+                # request's language, engine/stored_text)
+                "help": "。".join((_("Koop、Pfitzinger：賽前把比賽日的裝備、早餐、補給和配速演練一次，問題在比賽前就發現；"
+                                     "路跑不跑全程，長度是專項期最長的那一次，一樣守「每次最多 +10%」"),
+                                   _("補給：{fuel}", fuel=fuel_text(race)), _(SIM_PICK), _("時間點與長度為推估"))) + "。",
                 "src": SRC_SIM, "sessions": sim_sessions(race, [d1], aet, rate, "road", aet_measured)}
     long_day = day_min > TRAIL_LONG_MAX_MIN
     d1 = min(d1, _r5(TRAIL_LONG_MAX_MIN))       # SP-106: the simulation stops at the long-day cap too
@@ -1057,13 +1067,16 @@ def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: O
     r = route(race, d1)
     return {"id": f"race_sim:{race['id']}", "type": "race_sim", "event_id": race["id"], "event": race["name"],
             "weeks": [w.isoformat() for w in weeks], "minutes": mins, "multi": multi, "until": start.isoformat(),
-            "title": (f"建議做一次賽事模擬：{race['name']}，{'連續兩天，' if multi else ''}{d1} 分"
-                      f"（定數約 {r['cc']:.0f}＝單日目標的 {r['f'] * 100:.0f}%）"),
+            "title": (_("建議做一次賽事模擬：{name}，連續兩天，{m} 分（定數約 {cc:.0f}＝單日目標的 {f:.0f}%）", name=race["name"],
+                        m=d1, cc=r["cc"], f=r["f"] * 100) if multi else
+                      _("建議做一次賽事模擬：{name}，{m} 分（定數約 {cc:.0f}＝單日目標的 {f:.0f}%）", name=race["name"],
+                        m=d1, cc=r["cc"], f=r["f"] * 100)),
             "reason": _("{when}：用比賽的裝備、補給、配速，在像比賽的地形跑一次", when=when),
-            "help": ("Koop、Uphill Athlete：賽前在像比賽的地形演練裝備、補給和配速，問題在比賽前就發現。"
-                     f"這天換掉那週的長天；長度一樣守「每次最多 +10%」。補給：{fuel_text(race)}。"
-                     + ("多日行程做連續兩天，第 2 天約第 1 天的 2/3（CTS 30:20）。" if multi else "")
-                     + (_("比賽單日超過 {h:g} 小時：模擬只到長天上限，更長的部分交給 B2B。",
-                          h=TRAIL_LONG_MAX_MIN / 60) if long_day else "")
-                     + "選一天按「排入」才會進課表；不排也不影響其他課。時間點與目標比例為推估。"),
+            "help": "。".join(
+                [_("Koop、Uphill Athlete：賽前在像比賽的地形演練裝備、補給和配速，問題在比賽前就發現"),
+                 _("這天換掉那週的長天；長度一樣守「每次最多 +10%」"), _("補給：{fuel}", fuel=fuel_text(race))]
+                + ([_("多日行程做連續兩天，第 2 天約第 1 天的 2/3（CTS 30:20）")] if multi else [])
+                + ([_("比賽單日超過 {h:g} 小時：模擬只到長天上限，更長的部分交給 B2B", h=TRAIL_LONG_MAX_MIN / 60)]
+                   if long_day else [])
+                + [_(SIM_PICK), _("時間點與目標比例為推估")]) + "。",
             "src": SRC_SIM, "sessions": sim_sessions(race, mins, aet, rate, aet_measured=aet_measured)}

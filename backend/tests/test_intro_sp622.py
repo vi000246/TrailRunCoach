@@ -86,7 +86,7 @@ def test_the_page_in_both_languages_in_the_decided_order(c):
         assert r.status_code == 200 and f'lang="{loc}"' in r.text
         cat = json.loads((STATIC / "i18n" / loc / "intro.json").read_text("utf-8"))
         for k in ("hero.h1", "tags.trail", "tags.baiyue", "tags.road", "race.h", "plan.h", "read.h", "faq.h",
-                  "cta.price", "race.origin"):
+                  "cta.price"):
             assert cat[k].replace("\"", "&quot;") in r.text or cat[k] in r.text, (loc, k)
         # SP-637 R1: 課表 is the lead — the schedule section comes before the race calculator
         order = [r.text.index(x) for x in ('id="hero-h"', 'id="plan"', 'id="race"', 'id="read"', 'id="start"',
@@ -98,12 +98,13 @@ def test_the_page_in_both_languages_in_the_decided_order(c):
     assert "type=\"email\"" not in zh and re.findall(r"<input[^>]*>", zh) == []
 
 
-def test_the_calculator_is_credited_to_palladino():
-    for loc, words in (("zh-TW", ("移植自 Steve Palladino 的 SuperPower Calculator", "不是我們發明的")),
-                       ("en", ("ported from Steve Palladino's SuperPower Calculator", "not our invention"))):
-        origin = json.loads((STATIC / "i18n" / loc / "intro.json").read_text("utf-8"))["race.origin"]
-        for w in words:
-            assert w in origin, (loc, w)
+def test_the_calculator_is_credited_to_palladino_on_the_about_page():
+    # the intro's origin line is off the page (user, 2026-10-28); the credit stays on 關於 (SP-622 kept)
+    for loc in LOCALES:
+        cat = json.loads((STATIC / "i18n" / loc / "intro.json").read_text("utf-8"))
+        assert "race.origin" not in cat and "bt.line" not in cat, loc
+    about = json.loads((STATIC / "i18n" / "zh-TW" / "about.json").read_text("utf-8"))["m.racecalc.desc"]
+    assert "Steve Palladino" in about and "SuperPower Calculator" in about
 
 
 def test_faq_has_4_to_6_questions_each_to_an_existing_manual_section(c):

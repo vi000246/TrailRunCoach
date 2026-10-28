@@ -596,7 +596,6 @@ html.modal-open { overflow: hidden; }
         <div class="wf" id="wf" role="list" aria-label="完賽時間的組成" data-i18n-attr="aria-label:intro.wf.aria"></div>
         <p class="calc-note" data-i18n="intro.wf.note">陡坡改走、下坡怎麼跑不會改變整場時間：計算機用你自己的坡度成本，決定每一段分到多少時間。</p>
       </div>
-      <p class="bt" id="bt"></p>
       <div class="two cmp">
         <div class="them">
           <h3 data-i18n="intro.cmp.them.h">常見的腳程計算機</h3>
@@ -610,7 +609,6 @@ html.modal-open { overflow: hidden; }
         </div>
       </div>
       <!-- SP-969 Q2-3: the old list, the small calculator and the profile are gone; the credit stays -->
-      <p class="origin" data-i18n="intro.race.origin">完賽預估、環境修正與 CP 的公式移植自 Steve Palladino 的 SuperPower Calculator（跑步功率社群公開流通的試算表），不是我們發明的；越野與百岳的坡度、背包換算另外依照公開文獻。</p>
       <div class="try-end">
         <a class="trybtn" data-try data-try-big href="/share/example-trail-50k"><span class="play" aria-hidden="true"></span><b data-try-h data-i18n="intro.try.trail">看一場 50K 越野賽的完整試算</b><small data-try-sub></small></a>
       </div>
@@ -851,14 +849,7 @@ html.modal-open { overflow: hidden; }
   const BT = WHY.backtest || null;
   if (BT) {
     setTxt('[data-why-ex="estimate"]', L.t("intro.why.estimate.ex", { a: num(BT.durability_without_pct, 1), b: num(BT.durability_with_pct, 1), n: num(BT.trail_races) }));
-    // the back-test line under the waterfall (Q1: C's one line); every number from the server
-    const bt = $("bt");
-    bt.textContent = "";
-    const parts = L.t("intro.bt.line", { n: "\u0001", full: "\u0002", formula: "\u0003", races: "\u0004", trail: "\u0005" }).split(/([\u0001-\u0005])/);
-    const V = { "\u0001": num(BT.walk_n), "\u0002": num(BT.walk_full_pct, 1) + "%", "\u0003": num(BT.walk_formula_pct, 1) + "%",
-      "\u0004": num(BT.trail_races), "\u0005": num(BT.trail_pct, 1) + "%" };
-    for (const p of parts) { if (V[p]) { const b = document.createElement("b"); b.textContent = V[p]; bt.appendChild(b); } else if (p) bt.appendChild(document.createTextNode(p)); }
-  } else $("bt").hidden = true;
+  }  // SP-969 back-test line and the Palladino origin line taken off the page (user, 2026-10-28)
 
   // fade in on scroll (style: html.anim .reveal); nothing moves with 「減少動態效果」
   if (!reduce && "IntersectionObserver" in window) {

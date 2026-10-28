@@ -1,21 +1,21 @@
-# Module Spec: ui-theme (外觀：Trig 配色與原本配色)
+# Module Spec: ui-theme (外觀：Trig 配色與經典配色)
 
-> **Last Updated**: 2026-10-28
+> **Last Updated**: 2026-10-29
 > **Status**: Active（SP-974）
 > **Domain Layer**: Supporting
 > **Source**: SP-974（配色 mock A／B、Q1 的回答）；logo `backend/static/icons/trig-logo.svg`（SP-971）
 
 ## Overview
 
-全站配色有四種，使用者在 設定 › 個人資料 › **外觀** 的下拉選：
+全站配色有四種，使用者在 設定 › 偏好設定 › **外觀** 的下拉選（SP-1011：偏好設定分頁在個人資料後面，放外觀和地圖；以前在個人資料。舊連結 `#appearance` 照 hash → 區塊 → 分頁打開新分頁，`TABS`，`backend/static/settings.html:3706-3708`）：
 
 | 值（cookie `theme`） | 畫面 | `<html>` 屬性 |
 |---|---|---|
 | `trig-cream` | Trig 米白（mock B：米白底、山的青綠當主色、金色標比賽） | `data-palette="trig-cream" data-theme="light"` |
 | `trig-badge` | Trig 深綠（mock A：徽章深青綠當主色和整條導覽列、金色當目前頁／今天／比賽） | `data-palette="trig-badge" data-theme="light"` |
-| `classic` | 原本（跟隨系統）：各頁自己的淺色／暗色，跟 SP-974 之前一模一樣 | 沒有屬性 |
-| `classic-dark` | 原本暗色：各頁自己的暗色，一律暗 | `data-theme="dark"` |
-| （沒選過） | 系統淺色 → Trig 米白；系統深色 → 原本（暗色）；系統切換時跟著變 | 同上兩列 |
+| `classic` | 經典（跟隨系統）：各頁自己的淺色／暗色，跟 SP-974 之前一模一樣 | 沒有屬性 |
+| `classic-dark` | 經典深色：各頁自己的暗色，一律暗 | `data-theme="dark"` |
+| （沒選過） | 系統淺色 → Trig 米白；系統深色 → 經典深色；系統切換時跟著變 | 同上兩列 |
 
 Trig 只有淺色版；選了 Trig 就一律亮（`data-theme="light"` 把每頁的暗色規則關掉）。
 
@@ -26,7 +26,7 @@ Trig 只有淺色版；選了 Trig 就一律亮（`data-theme="light"` 把每頁
 | `backend/static/theme.css` | Trig 兩套的 token（`:root[data-palette="…"]`）、深綠的導覽列與訪客頁 `header.top`、金色重點（`.chip.race`、深綠的 `.cell.today .dnum`） |
 | `backend/static/theme.js` | 讀 cookie、決定預設、設 `<html>` 屬性、`window.TrcTheme`（見下） |
 | `backend/i18n/pages.py` `theme_head()` | 兩個檔去掉註解後 inline 寫進每一頁 `<head>` 的最前面（`render()`，在 i18n 之前、頁面自己的 `<style>` 之前），所以第一次繪製就是對的顏色、不會先閃一下原本的色；inline 是因為訪客的 `/share/*` 拿不到 `/api/v1/static`。render 快取的 stamp 含這兩個檔的 mtime |
-| `backend/static/settings.html` `#appearance` | 外觀下拉（個人資料分頁、地圖上面），改了立刻套用，不用按儲存；沒選過時下拉顯示正在用的那個（系統深色時顯示「原本暗色」），底下一行說明預設規則 |
+| `backend/static/settings.html` `#appearance` | 外觀下拉（偏好設定分頁、地圖上面；SP-1011 以前在個人資料），改了立刻套用，不用按儲存；沒選過時下拉顯示正在用的那個（系統深色時顯示「經典深色」），底下一行說明預設規則 |
 | `backend/static/i18n/*/shell.json` `theme.*` | 四個選項的名稱（含品牌字，只能放 shell，見 test_brand_sp971） |
 | `backend/static/i18n/*/settings.json` `look.*` | 外觀區塊的文字 |
 
@@ -34,7 +34,7 @@ Trig 只有淺色版；選了 Trig 就一律亮（`data-theme="light"` 把每頁
 
 ## Token
 
-「原本」= 每一頁自己 `:root` 裡的色票（兩個家族：舊的 `--accent #2563eb`／暗底 `#0f1216`，新的 `--accent #2a78d6`／暗底 `#111110`），`theme.css` 不碰；所以「原本」跟 SP-974 之前完全一樣。Trig 兩套用 `:root[data-palette=…]`（specificity 0,2,0），蓋過頁面的 `:root`（0,1,0），跟順序無關；兩個家族的名稱都設：
+「經典」（`classic`／`classic-dark`，SP-974 之前的原本配色）= 每一頁自己 `:root` 裡的色票（兩個家族：舊的 `--accent #2563eb`／暗底 `#0f1216`，新的 `--accent #2a78d6`／暗底 `#111110`），`theme.css` 不碰；所以「經典」跟 SP-974 之前完全一樣。Trig 兩套用 `:root[data-palette=…]`（specificity 0,2,0），蓋過頁面的 `:root`（0,1,0），跟順序無關；兩個家族的名稱都設：
 
 | token | Trig 米白 | Trig 深綠 | 用途 |
 |---|---|---|---|
@@ -110,3 +110,5 @@ Trig 只有淺色版；選了 Trig 就一律亮（`data-theme="light"` 把每頁
 | 日期 | 單 | 內容 |
 |---|---|---|
 | 2026-10-28 | SP-974 | 新增：theme.css／theme.js、inline 注入、設定頁外觀、圖表色同色相對應；模式切換改成 mock D |
+| 2026-10-28 | 下拉的「原本（跟隨系統）／原本暗色」改名「經典（跟隨系統）／經典深色」（英文 Classic），值（classic／classic-dark）不變 | 使用者：「原本暗色」名稱怪 |
+| 2026-10-29 | code-sync（SP-1011, SP-974） | 外觀在設定的「偏好設定」分頁（SP-1011，`#appearance` 舊連結開新分頁）；沒選過的系統深色與「原本」色票的名稱跟著下拉改叫「經典」／「經典深色」。測試：`backend/tests/e2e/test_settings_prefs_tab_sp1011_e2e.py`、`backend/tests/test_theme_sp974.py` |

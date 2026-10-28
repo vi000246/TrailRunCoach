@@ -495,7 +495,7 @@ def pair_options(monday: dt.date, first: dt.date, minutes: list, blocked=frozens
             continue
         wknd = d1.weekday() == 5
         keeps = long_day in (d1.isoformat(), d2.isoformat())
-        note = "週末" if wknd else ("週五＋週六：可能要請一天假" if d1.weekday() == 4 else "平日")
+        note = _("週末") if wknd else (_("週五＋週六：可能要請一天假") if d1.weekday() == 4 else _("平日"))
         out.append(((not wknd, not keeps, d1.isoformat()),
                     {"day": d1.isoformat(), "end": d2.isoformat(),
                      "label": f"{md(d1)}（{wd(d1)}）＋{md(d2)}（{wd(d2)}）", "note": note}))

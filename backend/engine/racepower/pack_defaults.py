@@ -26,7 +26,7 @@ import statistics
 from pathlib import Path
 from typing import Optional
 
-from backend.i18n import N_, _
+from backend.i18n import M_list, N_, _
 
 MIN_TRIPS = 3                     # 推估 (SP-740): recorded trips of a kind before their median is used
 MANUAL = {"single": "pack_default_single_kg", "multi": "pack_default_multi_kg"}
@@ -134,7 +134,7 @@ def rule_text(meta=None) -> str:
             parts.append(_("{kind} {kg:g} kg（你記過的 {n} 趟，中位數）", kind=_(KIND_ZH[k]), kg=r["kg"], n=r["n"]))
         else:
             parts.append(_("{kind} {kg:g} kg（進階設定）", kind=_(KIND_ZH[k]), kg=r["kg"]))
-    return _("、").join(parts)
+    return M_list(parts)                  # SP-991: follows the language when the parts are M_() texts
 
 
 def forget() -> None:

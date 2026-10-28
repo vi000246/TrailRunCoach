@@ -70,7 +70,7 @@ from backend.engine.racepower import pacing as PC
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
-from backend.i18n import DEFAULT_LOCALE, _, N_, catalog, current_locale, translate, use_locale
+from backend.i18n import DEFAULT_LOCALE, Msg, _, N_, catalog, current_locale, keep_msgids, translate, use_locale
 
 # trail 8 % pass / 6 % target (2026-10-02, docs/research/unsourced-rules.md §0.9: population
 # models reach 8–10 % MAPE, a 7-race median has a ±2–3 pp bootstrap interval, so 6 % cannot
@@ -1060,8 +1060,9 @@ def _hike_days(arr: dict, start: dt.datetime) -> list[tuple[int, dict]]:
 
 def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[list] = None) -> dict:
     """The stored back-test: computed in the source language whoever asks (save() keeps it as it is;
-    load() shows it in the reader's, SP-838). See _backtest."""
-    with use_locale(DEFAULT_LOCALE):
+    load() shows it in the reader's, SP-838). Its texts keep their msgid and parameters (keep_msgids: save()
+    stores them so, SP-991). See _backtest."""
+    with use_locale(DEFAULT_LOCALE), keep_msgids():
         return _backtest(ds, today, progress, tags)
 
 
@@ -1403,8 +1404,9 @@ def _cap_summary(rows: list[dict], kind: str) -> dict:
 
 def capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: bool = True,
                       boot_reps: int = 200) -> dict:
-    """_capacity_backtest in the source language (store_capacity keeps it; load() shows it, SP-838)."""
-    with use_locale(DEFAULT_LOCALE):
+    """_capacity_backtest in the source language (store_capacity keeps it; load() shows it, SP-838), its texts
+    with their msgid and parameters (SP-991)."""
+    with use_locale(DEFAULT_LOCALE), keep_msgids():
         return _capacity_backtest(ds, today, progress, days, boot_reps)
 
 
@@ -1632,18 +1634,101 @@ def store_capacity(res: dict, path=None) -> dict:
 # store
 # ---------------------------------------------------------------------------
 
+# SP-991: the stored texts' format. 2 = the result's texts stay the zh-TW strings they always were (every
+# reader of the file sees the same Chinese), plus a table TEXTS_KEY {zh-TW text: {"$msg": msgid, "$p": params}}
+# for each text made with its msgid (an M_() one: every _() inside backtest() / capacity_backtest(),
+# keep_msgids; a parameter that is such a text nested the same way). load() gives such a text back as an
+# i18n.Msg (a str, the same Chinese) and shown() renders it in the reader's language from its msgid. A text put
+# together outside a msgid has no row and is shown by reading the Chinese back (SP-838), as is every text of
+# an older file (no text_version).
+TEXT_VERSION = 2
+TEXTS_KEY = "texts"
+_MSG, _PAR = "$msg", "$p"
+
+
+def _param(v: Any) -> Any:
+    """A Msg's parameter ready for JSON (a text made with its msgid: {"$msg", "$p", "$t"})."""
+    if isinstance(v, Msg):
+        return {_MSG: v.msgid, _PAR: {k: _param(x) for k, x in (v.params or {}).items()}, "$t": str(v)}
+    if isinstance(v, (str, bool, int, float)) or v is None:
+        return v
+    if isinstance(v, np.generic):
+        return v.item()
+    if isinstance(v, (list, tuple)):
+        return [_param(x) for x in v]
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _unparam(v: Any) -> Any:
+    from backend.i18n import _msg
+    if isinstance(v, dict) and _MSG in v:
+        return _msg(str(v.get("$t", "")), str(v[_MSG]), {k: _unparam(x) for k, x in (v.get(_PAR) or {}).items()})
+    if isinstance(v, list):
+        return [_unparam(x) for x in v]
+    return v
+
+
+def _table(result: Any) -> dict:
+    """{zh-TW text: {"$msg", "$p"}} of every M_() text in `result` (not under _KEEP_KEYS)."""
+    out: dict = {}
+
+    def walk(x, k=None):
+        if isinstance(x, Msg):
+            if k not in _KEEP_KEYS and str(x) not in out:
+                out[str(x)] = {_MSG: x.msgid, _PAR: {kk: _param(v) for kk, v in (x.params or {}).items()}}
+        elif isinstance(x, dict):
+            for kk, v in x.items():
+                if kk != TEXTS_KEY:
+                    walk(v, kk)
+        elif isinstance(x, (list, tuple)):
+            for v in x:
+                walk(v, k)
+    walk(result)
+    return out
+
+
+def _with_msgids(result: dict) -> dict:
+    """The way back: each text with a row in the table → an i18n.Msg (its Chinese, its msgid and params)."""
+    from backend.i18n import _msg
+    tab = result.get(TEXTS_KEY) or {}
+    if not isinstance(tab, dict) or not tab:
+        return result
+
+    def walk(x, k=None):
+        if isinstance(x, str):
+            row = tab.get(x) if k not in _KEEP_KEYS else None
+            if isinstance(row, dict) and _MSG in row:
+                return _msg(x, str(row[_MSG]), {kk: _unparam(v) for kk, v in (row.get(_PAR) or {}).items()})
+            return x
+        if isinstance(x, dict):
+            return {kk: (v if kk == TEXTS_KEY else walk(v, kk)) for kk, v in x.items()}
+        if isinstance(x, list):
+            return [walk(v, k) for v in x]
+        return x
+    return walk(result)
+
+
 def save(result: dict, path=None) -> None:
     p = path or _store()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(result, ensure_ascii=False, default=float), "utf-8")
+    tab = {**(result.get(TEXTS_KEY) or {}), **_table(result)}      # a merged file (store_capacity) keeps its rows
+    # no text with a msgid: the file as before (no text_version / table — it reads as an older one, the same)
+    out = {**result, "text_version": TEXT_VERSION, TEXTS_KEY: tab} if tab else result
+    p.write_text(json.dumps(out, ensure_ascii=False, default=float), "utf-8")
 
 
 def load(path=None, raw: bool = False) -> Optional[dict]:
-    """The stored result; shown in the request's language (shown()) unless `raw` (the store's own reads)."""
+    """The stored result; shown in the request's language (shown()) unless `raw` (the store's own reads).
+    Either way its texts are the stored strings; one stored with its msgid (TEXT_VERSION 2) is an i18n.Msg."""
     try:
         r = json.loads((path or _store()).read_text("utf-8"))
     except (OSError, ValueError):
         return None
+    if isinstance(r, dict) and r.get("text_version") == TEXT_VERSION:
+        r = _with_msgids(r)
     return r if raw else shown(r)
 
 
@@ -1679,16 +1764,24 @@ def _shown_text(s: str, loc: str) -> str:
 def shown(result: Any, loc: Optional[str] = None) -> Any:
     """A stored result (source text) with its texts in `loc` (default: the request's): each msgid as
     written or filled in (engine/stored_text.shown), an activity label, reasons joined by 「；」; the
-    athlete's own names as they are. zh-TW: the result itself."""
+    athlete's own names as they are; a text stored with its msgid (SP-991) rendered from it. zh-TW: the
+    result itself."""
     loc = loc or current_locale()
     if loc == DEFAULT_LOCALE or result is None:
         return result
+    from backend.engine import stored_text as STX
 
     def walk(x, k=None):
+        if isinstance(x, Msg) and k not in _KEEP_KEYS:
+            out = STX.shown(x, loc)
+            if CJK.search(out):                 # a parameter that is a text put together: the SP-838 reading
+                alt = _shown_text(str(x), loc)
+                out = alt if not CJK.search(alt) else out
+            return out
         if isinstance(x, str):
             return x if k in _KEEP_KEYS or not CJK.search(x) else _shown_text(x, loc)
         if isinstance(x, dict):
-            return {kk: walk(v, kk) for kk, v in x.items()}
+            return {kk: walk(v, kk) for kk, v in x.items() if kk != TEXTS_KEY}     # the msgid table: not shown
         if isinstance(x, list):
             return [walk(v, k) for v in x]
         return x

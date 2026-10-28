@@ -1246,6 +1246,7 @@ def suggestion_days(sg: dict, stored: list[dict], today: str, prefs, blocked: di
     day with no hard session (long / quality / test) the day before, that day or the day
     after — except 徐國峰's 90-min test, which is the weekend LSD and takes the long
     run's own day. The AeT test keeps to Mon–Fri with 課表偏好 aet_test_days = weekday."""
+    from backend.i18n import _                    # (SP-810: a day's note in the request's language)
     hard = {s["day"]: s for s in stored if s["state"] == "active" and s.get("day") and s["kind"] in ("long", "quality", "test")}
     longs = {d for d, s in hard.items() if s["kind"] == "long"}
     out = []
@@ -1263,7 +1264,7 @@ def suggestion_days(sg: dict, stored: list[dict], today: str, prefs, blocked: di
             near = [x for x in near if hard[x]["kind"] != "long" or x == iso]
             if any(hard[x]["kind"] in ("quality", "test") for x in near):
                 continue
-            out.append({"day": iso, "note": "取代這天的長跑" if iso in longs else "週末平路 90 分"})
+            out.append({"day": iso, "note": _("取代這天的長跑") if iso in longs else _("週末平路 90 分")})
             continue
         if sg["kind"] == "aet" and getattr(prefs, "aet_test_days", "weekday") == "weekday" and d.weekday() >= 5:
             continue
@@ -1510,6 +1511,8 @@ def _busy_days(stored: list[dict], week: str) -> set:
 
 async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
     """Every suggestion computed now (dismissed ones included)."""
+    from backend.engine import stored_text as ST
+    from backend.i18n import _
     from backend.engine import aet_test as AT
     from backend.engine import b2b as B2B
     from backend.engine import plan_prefs as PP
@@ -1568,7 +1571,9 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
                                 "target": src.get("target"), "detail": src.get("detail"), "source": src.get("source"),
                                 "tss": src.get("tss"),
                                 "protocol": src.get("protocol_stored") if t["key"] == "aet" else src["protocol"]}
-                t["label"] = f"{t['label']}：{src['title']}（{src['minutes']} 分）"
+                # (SP-810: in the request's language — the label is a msgid, the template's title stored zh-TW)
+                t["label"] = _("{label}：{title}（{m} 分）", label=_(t["label"]), title=ST.shown(src["title"]),
+                               m=src["minutes"])
             t["replaces_long"] = t["key"] == "aet" and aet_p == "xu90"
     rows += await run_in_threadpool(_injury_suggestions, inp, today, set(bl), stored)
     rows += await run_in_threadpool(_altitude_suggestions, today)
@@ -1731,8 +1736,21 @@ async def suggestions(db: AsyncSession = Depends(get_db)):
     shown = {r["id"] for r in vis}
     # SP-507 R1: the tests 稍後提醒 holds, whole — the 課表's 排入測試 ▸ still offers them (schedule.html sugCount)
     held = [r for r in SG.visible(rows, kept, snoozes=False) if r["id"] not in shown and r["type"] in SG.TEST_TYPES]
-    return {"today": _today(inp), "suggestions": vis, "count": len(vis), "declined": SG.declined(rows, vis, kept),
-            "snoozed": SG.snoozed(rows, vis, kept), "snoozed_tests": held}
+    return _shown_box({"today": _today(inp), "suggestions": vis, "count": len(vis),
+                       "declined": SG.declined(rows, vis, kept), "snoozed": SG.snoozed(rows, vis, kept),
+                       "snoozed_tests": held})
+
+
+def _shown_box(out: dict) -> dict:
+    """SP-810: the suggestion box in the request's language. Its rows come from the inputs, which are built
+    in zh-TW (one cache for every language: the race simulation, the zone tests' titles, reasons and
+    conditions), so the texts — 「help」 too — are shown at read time (engine/stored_text), as _shown does
+    for the plan. zh-TW: as it is."""
+    from backend.engine import stored_text as ST
+    from backend.i18n import DEFAULT_LOCALE, current_locale
+    if current_locale() == DEFAULT_LOCALE:
+        return out
+    return ST.shown_tree(out, keys=ST.TEXT_KEYS | {"help"})
 
 
 @router.post("/suggestions/dismiss")

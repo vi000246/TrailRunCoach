@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-24
+> **Last Updated**: 2026-10-29
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -869,6 +869,14 @@ tickets is in plan-auto.spec.md):
   `backend/engine/post_race.py:238`); before, it kept the old session's text (a 98–101 % CP target on
   an easy run whose structure and watch steps had the easy band). Without an easy text the target is
   empty, as the injury passes do.
+- **The 減量期 and B race / trip week notes list their changes as a parameter** (SP-988): what the rules
+  changed this week is the note's `{rules}` / `{rule}`, an `i18n.M_list` of `M_()` items (「、」 in Chinese,
+  "A, B" in English; `backend/i18n/__init__.py:238`), not 「（…）」 glued on after the msgid — so an English
+  page shows the note in English though the plan inputs are made in zh-TW. 減量期: `TAPER_NOTE` / `TAPER_NOTE_SAID`
+  (`backend/engine/overview.py:3903`, `backend/engine/overview.py:3906`) and the sore race's pre-taper note
+  (`backend/engine/overview.py:3893`); B race / trip: `B_TRIP_NOTE` / `B_RACE_NOTE` and their `*_SAID`
+  (`backend/engine/post_race.py:315-322`, `bc_apply` `backend/engine/post_race.py:379`). The Chinese is the same
+  to the character.
 - **A 減量期 quality session takes its template's target** (SP-408 (a), the owner 2026-10-13): the
   session `taper_rules` makes `TAPER_FULL` / `TAPER_CUT` / `TAPER_SHORT` (`as_q`,
   `backend/engine/overview.py:3026`) gets `taper_q_target` (`backend/engine/overview.py:2963`): the
@@ -2405,7 +2413,15 @@ which one. The response keeps the `coros` field names.
   `POST /api/v1/plan/thresholds/apply-cp`. `extra.cp_test` carries the date, protocol, method,
   `cp`, `cp_now`, `pd`.
   `extra.cp_due` (CP missing / > 42 days, `backend/engine/status.py:902`) decides the CP-test
-  suggestion in `week_plan` (the CP test measures CP only). The latest AeT drift test
+  suggestion in `week_plan` (the CP test measures CP only). SP-965 (owner 2026-10-28: 「CP 有效的定義要全
+  app 統一」): the CP side reads `power_state.cp_check` over the power state — the same 「CP 有效」 as
+  功率狀態 (a CP test or a race in 42 days, or SP-963's all-out efforts). Kept valid by the efforts the
+  card is OK and says 「CP 有效到 11/11（9/30 跑出 5 分鐘 227 W、12 分鐘 221 W）」, `cp_due` false;
+  `CP_REMIND_DAYS` (7, 推估) before they lapse it is watch 「快到期」 (「CP 再 N 天到期（…）」, verdict 「CP 快到期，再跑一次
+  強度課或做 CP 測試」, action 「再跑一次強度課（3–5 分鐘和 12–30 分鐘各一段全力）就能延長，或排一次 CP 測試（…）」)
+  and `cp_due` true — the week plan's CP test suggestion adds the power state's reason. A race now
+  dates the CP too (「CP N 天前（比賽）」). A CP test / race keeps the 42 / 90-day cadence; no ceiling on how
+  long the efforts may stand in for a formal test (Q2 (a)). The latest AeT drift test
   (`aet_test.latest_aet_test`) → `extra.aet_test` (`backend/engine/status.py:962`): band "at" and
   not applied → watch 「{date} 的 AeT 測試：飄移 4.2%，AeT = 146 bpm（目前 142）」, action 「套用這次的
   AeT（146 bpm）」, and the 總覽 測試 card's button (`aetApply`, `backend/static/overview.html:494`)
@@ -2540,6 +2556,19 @@ The same router also serves the suggestion box (`/suggestions`, `/suggestions/ac
 editor's step and variant endpoints (`/steps/*`, `/steps-preview`, `/variants`,
 `/sessions/{uid}/coros-preview`); they are not specified here (see plan-auto.spec.md for the
 interval library and suggestions).
+
+`GET /suggestions` answers in the request's language (SP-810). Its rows come from the plan inputs, built in
+zh-TW, so outside zh-TW the whole answer is shown at read time through `stored_text.shown_tree` with
+`TEXT_KEYS` plus `help` (`_shown_box`, `backend/api/plan_sessions.py:1744`;
+`backend/engine/stored_text.py:555`), as the plan's own texts are; zh-TW is returned as it is. So that the texts
+read back, the generators write msgids: the race simulation's `help` is msgids joined by 「。」 (`SIM_PICK`,
+`backend/engine/specific_phase.py:1028`; `sim_suggestion`, `backend/engine/specific_phase.py:1031`), the
+max-HR / LTHR test's `conditions` are `M_("{test}：{how}")` (`backend/engine/threshold_confidence.py:682`) and
+`zone_rows` builds that suggestion's title again in the request's language (`threshold_confidence.test_title`,
+`backend/engine/threshold_confidence.py:594`; `backend/engine/suggestions.py:241`) and shows the inputs'
+conditions, caveat and a baseline test's title through `stored_text.shown`. The day options' notes
+(`suggestion_days`, `specific_phase.sim_day_options`, `b2b.pair_options`: 週末／平日／週五＋週六…) and a test row's
+「{label}：{title}（{m} 分）」 label (`backend/api/plan_sessions.py:1575`) are made per request.
 
 `Status` is memoised per (tenant, dataset, day, `plan.json` mtime, the 課表偏好 stamp, stored
 test sessions, the 課表心率區間 stamp), LRU per tenant (`backend/api/overview.py:78`); the
@@ -2718,6 +2747,9 @@ Data registry: `debug_tokens` SECRET (`token_hash`), `debug_audit` and `debug_au
   page's language never changing the workout, a language switch pushing nothing again, `POST /sync/locale`.
 - English: `backend/tests/test_en_editor_sp906.py` (SP-906) — /steps/derive and /steps/check with no Chinese
   in English but the watch's step names, `summary_src`, a 目標 saved from an English page stored in zh-TW.
+- English: `backend/tests/test_en_week_notes_sp988.py` (SP-988) — the 減量期 / B race / B trip notes with and
+  without their changes in English, the Chinese the same, `M_list`; `backend/tests/test_en_gate_sp810.py`
+  (SP-810) — the 間歇門檻 card, the race simulation and the max-HR test suggestion read back in English.
 
 ## Domain Model
 
@@ -3012,3 +3044,6 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-27 | maintenance | SP-958 | Two dead cite-lint anchors fixed, wording unchanged: the 5 bpm alert threshold's anchor gets its directory (backend/engine/coros_compare.py); the old multi-day trip's 「rows optional」 hint now points into backend/static/races.html (the event editor moved there from plan.html in SP-691) |
 | 2026-10-27 | feature | SP-968 | 課表統計's `GET /plan/compliance`: the whole request inside `datasource.settings_memo()` (as SP-752's 課表輸入) — each setting read once per request instead of per activity / session (the range's activity classification asked for the HR account, zone model and data source each time, a new sqlite connection per read). Demo athlete (52 weeks), cache warm, 15 requests each: 4 weeks 85 → 40 ms (306 → 46 reads), 371 days 702 → 255 ms (~2,550 → 46 reads); responses byte-identical. Measured with `backend/scripts/perf_sp968.py`. Test: `backend/tests/test_compliance_dashboard.py::test_api_compliance_reads_each_setting_once_per_request_sp968` |
 | 2026-10-28 | feature | SP-908 | The watch's text in the account's language (owner 2026-10-27, Q1 (b) / Q2 (a)): `athlete.locale` (settings) is the interface language the account last used — `shell.js` reports it when it changes in a browser (`POST /api/v1/sync/locale`; not on public pages, the demo or while viewing a student). `coros_workouts` builds every workout in zh-TW (`_built`: whatever the request's language — a step name that was an `_()` text no longer follows the page) for its fingerprint, and sends the name, overview and step names in `watch_locale()` (`for_watch`, through `engine/stored_text.shown`; the user's own words stay; an English name is cut at a word, never the date). zh-TW accounts get the same payload as before; switching the language re-pushes nothing (the fingerprint is the zh-TW one), a session changed for another reason goes in the new language. The step names the push writes (`coros_workouts`, `workout_steps`, `technical`, the built-in templates in `workout_templates`) are msgids with English (`en.json`, draft). Not changed: the editor's watch preview and step-name field (SP-906). Tests: `backend/tests/test_coros_watch_locale_sp908.py` |
+| 2026-10-28 | feature | SP-965 | 測試 card and the week plan's CP test read one 「CP 有效」 (owner 2026-10-28: 「CP 有效的定義要全 app 統一」): `power_state.cp_check(ps, today, last_cp_test)` — valid / basis / until / left, `remind` (kept valid by SP-963's all-out efforts with ≤ `CP_REMIND_DAYS` 7 left), the date the CP's age counts from (the efforts' older one, else the later of the CP test and the race) and `due`. `status.i_testing`: kept valid by the efforts → OK 「CP 有效到 M/D（…）」, no CP test; a week before they lapse → watch 「快到期」, 「再跑一次強度課或做 CP 測試」, `cp_due`; a race dates the CP. `week_plan`'s CP test suggestion adds the power state's reason then. A CP test keeps its 42 / 90-day cadence; no ceiling on the efforts (Q2 (a)). Tests: `backend/tests/test_cp_valid_sp965.py` |
+| 2026-10-28 | feature | SP-967 | The 徐國峰 90-minute AeT test's 「75–80 % 實測 CP」 counts a CP valid as the power state reads it (owner 2026-10-28, Q1 (b)): `aet_test.cp_tested(..., cp_valid=power_state.cp_check(...)["valid"])` — with no plan CP row the Stryd PD fit anchored by all-out efforts in 42 days (SP-963) counts like a CP test in its 90-day window; a CP typed by hand still never does; without a valid CP the order is unchanged. Tests: `backend/tests/test_xu90_cp_valid_sp967.py` |
+| 2026-10-29 | code-sync（SP-810, SP-988） | N/A | `GET /suggestions` shown in the request's language through `stored_text.shown_tree` (`_shown_box`; the race simulation's help as msgids, the max-HR / LTHR test's conditions `M_()` and its title rebuilt, day notes per request); the 減量期 and B race / trip week notes take their changes as an `M_list` parameter (`TAPER_NOTE(_SAID)`, `B_*_NOTE(_SAID)`) |

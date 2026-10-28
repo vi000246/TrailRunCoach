@@ -1,12 +1,12 @@
 /* 外觀 (SP-974; docs/spec/ui-theme.spec.md). Written inline at the top of every page's <head>
    (backend/i18n/pages.py, with theme.css), so the colours are right before the first paint.
 
-   The choice (設定 › 個人資料 › 外觀) is this browser's, in the `theme` cookie (1 year), like the
+   The choice (設定 › 偏好設定 › 外觀; 個人資料 until SP-1011) is this browser's, in the `theme` cookie (1 year), like the
    language (`lang`):
      trig-cream    Trig 米白         <html data-palette="trig-cream" data-theme="light">
      trig-badge    Trig 深綠         <html data-palette="trig-badge" data-theme="light">
-     classic       原本（跟隨系統）   no attribute: each page's own light / dark rules
-     classic-dark  原本暗色         <html data-theme="dark">
+     classic       經典（跟隨系統）   no attribute: each page's own light / dark rules
+     classic-dark  經典深色         <html data-theme="dark">
    Not chosen: Trig 米白 on a light system, 原本 (dark) on a dark one — and it follows the system when
    that changes.
 

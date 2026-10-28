@@ -63,12 +63,13 @@ def athlete_sex(ds) -> Optional[str]:
 
 def sex_or_default(ds) -> tuple[str, str]:
     """(sex, where it came from) for the models that need one: 設定頁 / WKO5,
-    else the men's value labelled 「預設（男，推估）」 (未填性別)."""
+    else the men's value labelled 「預設（男，推估）」 (未填性別). The where is an M_() text (SP-990: the
+    calculator's 你的數據 card, a cached answer shown in the request's language)."""
     prof = getattr(getattr(ds, "plan", None), "profile", None) or {}
     s = athlete_sex(ds)
     if s is None:
-        return "male", "預設（男，推估）"
-    return s, "設定頁" if prof.get("sex") == s else "對照資料夾"
+        return "male", M_("預設（男，推估）")
+    return s, M_("設定頁") if prof.get("sex") == s else M_("對照資料夾")
 
 
 def wprime_prior(sex: Optional[str]) -> tuple[float, float, str]:

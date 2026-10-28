@@ -1,6 +1,6 @@
 # Spec Roadmap
 
-> Auto-updated index. Last updated: 2026-10-28
+> Auto-updated index. Last updated: 2026-10-29
 >
 > **AI Agents**: Read this file first to decide which specs to load. Load only what's relevant to your task to avoid context bloat.
 
@@ -21,7 +21,7 @@
 | ai-qa | [ai-qa.spec.md](./ai-qa.spec.md) | Supporting | AI 問答：全站一顆「問 AI」、自動帶入正在看的卡、預設問題；只送彙總（狀態規則、週量、卡片文字，清掉軌跡與座標）；回答標 App 規則／AI 推論與出處；只給擁有者、key 加密、每日上限與快取 | — |
 | offline-pwa | [offline-pwa.spec.md](./offline-pwa.spec.md) | Supporting | 離線唯讀快取與加到主畫面：service worker 依 P0／P1／P2 分層存目前登入者的課表與摘要（20 MB 預算、被清掉依序補回、超過從 P2 丟），離線標資料時間、停用修改；登出或換人清掉；manifest 與圖示 | — |
 | coaching | [coaching.spec.md](./coaching.spec.md) | Supporting | 教練與學員：邀請連結／教練代碼、學員接受才生效、隨時撤回、學員上限；教練看板（學員租戶裡預先算的彙總、改課表後立即重算、排序篩選）；代看（讀寫預設全擋＋白名單、教練的方案與次數）；學員開關允許的代改與修改紀錄；學員申請提示 | — |
-| ui-theme | [ui-theme.spec.md](./ui-theme.spec.md) | Supporting | 外觀：Trig 米白／Trig 深綠（logo 配色）與原本（跟隨系統／暗色）四選一，存這台瀏覽器的 cookie；theme.css／theme.js inline 進每頁 head（不閃色）；兩套 token 表；圖表色對應到 Trig 同色相 | — |
+| ui-theme | [ui-theme.spec.md](./ui-theme.spec.md) | Supporting | 外觀（設定 › 偏好設定）：Trig 米白／Trig 深綠（logo 配色）與經典（跟隨系統）／經典深色四選一，存這台瀏覽器的 cookie；theme.css／theme.js inline 進每頁 head（不閃色）；兩套 token 表；圖表色對應到 Trig 同色相 | — |
 
 ## Loading Guide
 

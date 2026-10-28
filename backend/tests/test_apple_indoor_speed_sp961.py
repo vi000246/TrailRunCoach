@@ -1,8 +1,9 @@
 """
 SP-961: an indoor Apple Health run (no route) carries the speed the watch measured
 (HKQuantityTypeIdentifierRunningSpeed) on its points, so its pace shows — files/apple_health.py.
-Measured, not made up (SP-833's rule): no per-point distance from it, the session keeps the
-workout's total. All synthetic (SP-833's export.xml builder plus speed Records): no real export.
+Q1 (b): each point's distance is the speed integrated, scaled to the workout's total, so the
+per-km splits show and the total stays the 「健身」app's. With no speed nothing is made up (SP-833).
+All synthetic (SP-833's export.xml builder plus speed Records): no real export.
 """
 from __future__ import annotations
 
@@ -70,12 +71,49 @@ def test_the_indoor_fit_shows_the_measured_pace_and_keeps_the_workouts_distance(
     w = UP._parse(fit, "a.fit")
     assert abs(w.speed_ms[100] - 3.0) < 0.01 and abs(w.speed_ms[700] - 3.5) < 0.01
     assert w.heart_rate_bpm[100] == 150
-    # no per-point distance is made from the speed: the total stays Apple's (2.9 km), not 3.0×450 + 3.5×450
-    assert abs(w.total_distance_m - 2900) < 1 and not np.nanmax(w.distance_m) > 0
+    # the total stays Apple's (2.9 km), not the integral (3.0×450 + 3.5×450 ≈ 2.92 km)
+    assert abs(w.total_distance_m - 2900) < 1
     ch = fit_to_channels(fit)                                     # what the activity page reads: the pace
     sp = [v for v in ch.channels["speed"] if v is not None]
     assert sp and abs(sp[50] - 10.8) < 0.05 and abs(sp[-10] - 12.6) < 0.05
-    assert "elapseddistance" not in ch.channels
+    # the distance channel (km; WKO5's model starts it at the first sample after the start, 5 s in:
+    # ~15 m less) — the splits run to about Apple's total
+    assert abs(ch.channels["elapseddistance"][-1] - (2.9 - 0.015)) < 0.002
+
+
+def test_each_point_has_its_distance_from_the_speed_scaled_to_the_workouts(tmp_path):
+    _run, indoor = AH.scan_export(_reader(_xml())[0], tmp_path / "s")["workouts"]
+    w = UP._parse(AH.to_fit(indoor, None), "a.fit")
+    t, d = np.asarray(w.time_s, dtype=float), np.asarray(w.distance_m, dtype=float)
+    assert d[0] == 0 and np.all(np.diff(d) >= 0) and abs(d[-1] - 2900) < 0.02
+    # the distance follows the measured speed: 3.0 m/s, then 3.5 m/s — the same factor on both halves
+    first = (np.interp(400, t, d) - np.interp(100, t, d)) / 300
+    second = (np.interp(800, t, d) - np.interp(500, t, d)) / 300
+    assert abs(second / first - 3.5 / 3.0) < 0.001
+    scale = 2900 / (3.0 * 450 + 3.5 * 450)                          # ≈ 0.99: the integral was ~2.92 km
+    assert abs(first - 3.0 * scale) < 0.02 and abs(second - 3.5 * scale) < 0.02
+    # the measured speed itself is not scaled
+    assert abs(w.speed_ms[100] - 3.0) < 0.01
+    # the first kilometre: about 1000 / (3.0 × scale) s in
+    assert abs(np.interp(1000, d, t) - t[0] - 1000 / (3.0 * scale)) < 3
+
+
+def test_a_gap_in_the_speed_adds_no_distance_and_no_total_keeps_the_integral():
+    t0 = INDOOR.timestamp()
+    speed = [[t0 + i, 3.0] for i in range(0, 300, 5)] + [[t0 + i, 3.0] for i in range(600, 900, 5)]
+    hr = [[t0 + i, 140] for i in range(0, 900, 5)]
+    run_ = {"type": "HKWorkoutActivityTypeRunning", "start": t0, "end": t0 + 900, "distance_m": 1800.0,
+            "hr": hr, "power": [], "cad": [], "rpm": [], "speed": speed}
+    w = UP._parse(AH.to_fit(run_, None), "a.fit")
+    t, d = np.asarray(w.time_s, dtype=float), np.asarray(w.distance_m, dtype=float)
+    # 300 s → 600 s no speed sample (past 30 s of one): no distance there, the rest scaled to 1800 m
+    assert np.interp(560, t, d) - np.interp(340, t, d) == 0 and abs(d[-1] - 1800) < 0.02
+    assert abs(w.total_distance_m - 1800) < 1
+    # no workout total (None): the integral as it is — a point takes a sample up to 30 s away (to
+    # 325 s, from 570 s), half a step on each edge: 3.0 × (325 + 2.5 + 2.5 + 325)
+    w = UP._parse(AH.to_fit({**run_, "distance_m": None}, None), "a.fit")
+    assert abs(w.total_distance_m - 1965) < 0.05
+    assert abs(np.nanmax(np.asarray(w.distance_m, dtype=float)) - 1965) < 0.05
 
 
 def test_a_run_with_a_route_keeps_the_routes_speed(tmp_path):

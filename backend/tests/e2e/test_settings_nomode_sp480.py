@@ -69,7 +69,7 @@ def _all_visible_text(page) -> str:
     """Every tab's visible text and visible tooltips (title / aria-label) of the settings page,
     plus the nav (shell.js: the page purposes sit in the 更多 menu / the tooltips)."""
     out = []
-    for tab in ("personal", "body", "data", "advanced"):
+    for tab in ("personal", "prefs", "body", "data", "advanced"):
         page.locator(f'.tabs [data-tab="{tab}"]').click()
         out.append(page.evaluate("""() => {
           const vis = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
