@@ -18,7 +18,11 @@ The report, per day (Asia/Taipei, the app's day):
      account paused that day, how long until it recovered;
   5. 會員數 (SP-388 完成條件 4) — the members against the sign-up cap (accounts/login.max_users: the
      admin page's members.max_users, else WKO5COACH_MAX_USERS, else 100), flagged from MEMBERS_WARN_SHARE
-     (80 %): the owner's cue to raise the cap or move the server before sign-up starts refusing people.
+     (80 %): the owner's cue to raise the cap or move the server before sign-up starts refusing people;
+  6. 本月訂閱收入 (SP-803) — the month of that day so far and where it ends if nothing changes, estimated
+     from the subscription rows (backend/billing/revenue.py: list prices, no Polar call) against the
+     免辦稅籍 line NT$50,000, flagged from 80 %: the owner's cue to ask an accountant whether to register.
+     When accounts.db can't be read it says so (never NT$0).
 
     python -m backend.scripts.ops_report                      # yesterday, as text (markdown)
     python -m backend.scripts.ops_report --date 2026-10-18 --json
@@ -158,7 +162,7 @@ def member_signal(count: Optional[int], cap: Optional[int]) -> Optional[dict]:
 # ---------------------------------------------------------------------------- the report
 
 def report(day: dt.date, js: list[dict], evs: list[dict], plan_of: dict[str, str],
-           members: Optional[dict] = None) -> dict:
+           members: Optional[dict] = None, revenue: Optional[dict] = None) -> dict:
     d = day.isoformat()
     month = d[:7]
     cpu_day: dict = defaultdict(float)
@@ -199,7 +203,7 @@ def report(day: dt.date, js: list[dict], evs: list[dict], plan_of: dict[str, str
         sources[src] = {"counts": {k: v for k, v in counts.items() if v}, "paused": recov}
     return {"day": d, "cpu_total_s": round(sum(cpu_day.values()), 1), "tenants": per_tenant,
             "free_over_budget": free, "free_budget_s": FREE_CPU_S_PER_MONTH, "backtest": backtest,
-            "sources": sources, "members": members}
+            "sources": sources, "members": members, "revenue": revenue}
 
 
 def _guess(tenant: str) -> str:
@@ -241,7 +245,26 @@ def text(r: dict) -> str:
         elif m["near"]:
             line += "，**接近封頂**：考慮調高上限（管理 › 全站設定 › 會員封頂）或升級主機"
         lines.append(line)
+    rv = r.get("revenue")
+    if rv:
+        from backend.billing import revenue as RV
+        lines += ["", f"### 本月訂閱收入（估計；免辦稅籍門檻 NT${rv['line']:,} 的 {RV.WARN_SHARE:.0%} 起提醒）", ""]
+        lines += revenue_lines(rv)
     return "\n".join(lines) + "\n"
+
+
+def revenue_lines(rv: dict) -> list[str]:
+    """The report's 本月訂閱收入 lines: unknown when the records couldn't be read (never NT$0)."""
+    if not rv.get("ok"):
+        return [f"{rv['month']}：**讀不到訂閱紀錄**（accounts.db），這個月的收入不知道（不是 NT$0）"]
+    line = (f"{rv['month']} 已收 NT${rv['charged']:,}（{rv['paid']} 筆）；照現在的訂閱，月底 NT${rv['projected']:,}"
+            f"（門檻的 {rv['share']:.0%}，之後還有 {rv['renewing']} 筆續訂）")
+    if rv["over"]:
+        line += "，**已超過門檻**：請盡快問會計師要不要登記營業"
+    elif rv["near"]:
+        line += "，**接近門檻**：先問會計師要不要登記營業"
+    return [line, "", "以清單價格估計（app 不記每筆實收金額），只算這個 app 的訂閱；"
+                      "同一個 Polar 帳號的 inReachLiveTrack 收入不在裡面。"]
 
 
 def main(argv: list[str]) -> int:
@@ -277,12 +300,25 @@ def main(argv: list[str]) -> int:
     js, evs, plan_of = jobs(perf_files(folder)), events(ev_path), plans(db, last)
     count = member_count(db)
     members = member_signal(count, cap() if count is not None else None)
-    out = [report(last - dt.timedelta(days=i), js, evs, plan_of, members) for i in range(max(1, a.days) - 1, -1, -1)]
+    out = [report(d, js, evs, plan_of, members, revenue_at(db, d) if count is not None else None)
+           for d in (last - dt.timedelta(days=i) for i in range(max(1, a.days) - 1, -1, -1))]
     if a.json:
         print(json.dumps(out if len(out) > 1 else out[0], ensure_ascii=False, indent=1))
     else:
         print("\n".join(text(r) for r in out))
     return 0
+
+
+def day_end(day: dt.date, now: Optional[dt.datetime] = None) -> dt.datetime:
+    """The last second of `day` (Asia/Taipei), or now while it is still today: the revenue's as-of time."""
+    end = dt.datetime.combine(day + dt.timedelta(days=1), dt.time(0), TZ) - dt.timedelta(seconds=1)
+    return min(end, now or dt.datetime.now(TZ))
+
+
+def revenue_at(db: Optional[Path], day: dt.date) -> dict:
+    """The month of `day` up to its end, from accounts.db (backend/billing/revenue.py, read-only)."""
+    from backend.billing import revenue as RV
+    return RV.signal(db, day_end(day))
 
 
 def cap() -> Optional[int]:

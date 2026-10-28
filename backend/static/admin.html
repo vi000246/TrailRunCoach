@@ -480,6 +480,20 @@ table.xpf .tag { display: inline-block; padding: 0 7px; border-radius: 999px; ba
     return `<p class="opsm"><b>${esc(t("ops.members_count", { n: m.count, max: m.cap, pct: Math.round(m.share * 100) }))}</b>
       <span class="${cls}">${esc(what)}</span></p>`;
   };
+  // SP-803: this month's subscription income (estimated from the subscription rows, list prices) against
+  // the 免辦稅籍 line; near from 80 % of where the month ends → ask the accountant. Unknown is said, never NT$0
+  const twd = (n) => "NT$" + Number(n).toLocaleString("en-US");
+  const revenueLine = (d) => {
+    const r = d.revenue;
+    if (!d.accounts || !r) return `<p class="sub">${esc(t("ops.members_off"))}</p>`;
+    if (!r.ok) return `<p class="opsm"><span class="dis">${esc(t("ops.revenue_unknown", { month: r.month }))}</span></p>`;
+    const cls = r.over ? "dis" : r.near ? "paused" : "";
+    const what = r.over ? t("ops.revenue_over") : r.near ? t("ops.revenue_near", { pct: Math.round(d.revenue_warn_share * 100) })
+      : t("ops.revenue_ok");
+    return `<p class="opsm"><b>${esc(t("ops.revenue_charged", { month: r.month, amount: twd(r.charged), n: r.paid }))}</b>
+      <span>${esc(t("ops.revenue_projected", { amount: twd(r.projected), line: twd(r.line), pct: Math.round(r.share * 100), n: r.renewing }))}</span>
+      <span class="${cls}">${esc(what)}</span></p><p class="sub">${esc(t("ops.revenue_note"))}</p>`;
+  };
   const showOps = async () => {
     loading();
     let d;
@@ -488,6 +502,7 @@ table.xpf .tag { display: inline-block; padding: 0 7px; border-radius: 999px; ba
       ? `<ul class="opslist">${d.reports.map((r) => `<li><a href="/api/v1/admin/ops/${esc(r.day)}.md" data-day="${esc(r.day)}">${esc(r.day)}</a></li>`).join("")}</ul>`
       : `<p class="empty">${esc(t("ops.none", { at: d.run_at }))}</p>`;
     panel.innerHTML = `<section class="sec"><h2>${t("ops.members_h")}</h2>${memberLine(d)}</section>
+      <section class="sec" id="revenue"><h2>${t("ops.revenue_h")}</h2>${revenueLine(d)}</section>
       <section class="sec"><h2>${t("ops.reports_h")}</h2><p class="sub">${esc(t("ops.lead", { at: d.run_at, days: d.keep_days }))}</p>
       ${list}<pre class="opsview" id="opsview" hidden></pre><p class="msg" id="omsg"></p></section>
       <section class="sec" id="xpf"><h2>${t("xpf.h")}</h2><p class="sub">${esc(t("xpf.lead"))}</p><div id="xpf-body"></div></section>`;

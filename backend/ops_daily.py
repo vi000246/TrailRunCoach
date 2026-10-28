@@ -8,6 +8,11 @@ report's day) for the day before, as a file the admin page shows — nothing is 
                                          {"members", "cap", "share", "near", "full", "at"} — read by
                                          Telegraf on the NAS (deploy/ops-monitoring/) for the Grafana
                                          alert 「會員數到封頂 80 %」; the app itself sends nothing
+  <data folder>/logs/ops/revenue.json    本月訂閱收入 (SP-803, backend/billing/revenue.py), rewritten with it:
+                                         {"ok": 1, "charged", "upcoming", "projected", "line", "share",
+                                         "near", "over", "at"} in TWD — for the Grafana alert 「月收入接近
+                                         NT$50,000」; {"ok": 0, "at"} when accounts.db can't be read (no
+                                         amount at all rather than a 0 the alert would read as fine)
 
 Retention: the reports of the last KEEP_DAYS (31) days, like perf.log (applog.PERF_KEEP_DAYS); only
 files named like a report are ever deleted.
@@ -35,6 +40,7 @@ KEEP_DAYS = 31                             # 留 31 天，跟 perf.log 一樣 (a
 METRICS_EVERY_S = 3600                     # the member signal for Telegraf: hourly is plenty (推估)
 NAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
 METRICS = "metrics.json"
+REVENUE = "revenue.json"
 
 _last_metrics = {"at": 0.0}
 
@@ -66,6 +72,17 @@ def members() -> Optional[dict]:
     return R.member_signal(store.count_users(), login.max_users())
 
 
+def revenue(at: Optional[dt.datetime] = None) -> Optional[dict]:
+    """本月訂閱收入 as of `at` (default now) against the 免辦稅籍 line (billing/revenue.signal: ok False
+    when accounts.db can't be read); None in owner mode (no accounts, nobody pays)."""
+    from backend import accounts
+    from backend.accounts import store
+    from backend.billing import revenue as RV
+    if not accounts.enabled():
+        return None
+    return RV.signal(store.path(), at)
+
+
 def build(day: dt.date) -> str:
     """The report of `day` as the script writes it (markdown), from the server's own logs."""
     from backend import accounts, applog
@@ -74,7 +91,7 @@ def build(day: dt.date) -> str:
     pf = applog.perf_file()
     js = R.jobs(R.perf_files(pf.parent)) if pf is not None else []
     db = accounts.accounts_db_path() if accounts.enabled() else None
-    r = R.report(day, js, R.events(EV.path()), R.plans(db, day), members())
+    r = R.report(day, js, R.events(EV.path()), R.plans(db, day), members(), revenue(R.day_end(day)))
     return R.text(r)
 
 
@@ -157,6 +174,26 @@ def write_metrics(where: Optional[Path] = None, now: Optional[float] = None) -> 
     return path
 
 
+def write_revenue(where: Optional[Path] = None, now: Optional[float] = None) -> Optional[Path]:
+    """revenue.json for Telegraf: this month's subscription income now (SP-803); nothing in owner mode
+    or with the log off. Can't read accounts.db: {"ok": 0, "at"} and no amount (never a 0)."""
+    where = where if where is not None else folder()
+    rv = revenue()
+    if where is None or rv is None:
+        return None
+    where.mkdir(parents=True, exist_ok=True)
+    at = int(now if now is not None else time.time())
+    body = {"ok": 0, "at": at}
+    if rv.get("ok"):
+        body = {"ok": 1, "charged": rv["charged"], "upcoming": rv["upcoming"], "projected": rv["projected"],
+                "line": rv["line"], "share": rv["share"], "near": int(rv["near"]), "over": int(rv["over"]), "at": at}
+    path = where / REVENUE
+    tmp = where / ("." + REVENUE + ".tmp")
+    tmp.write_text(json.dumps(body), "utf-8")
+    os.replace(tmp, path)
+    return path
+
+
 def due(now: Optional[dt.datetime] = None, where: Optional[Path] = None) -> Optional[dt.date]:
     """Yesterday when its report is due (past RUN_AT, not written yet); None otherwise."""
     now = now or _now()
@@ -175,10 +212,11 @@ def run_due(now: Optional[dt.datetime] = None, where: Optional[Path] = None) -> 
     t = time.time()
     if t - _last_metrics["at"] >= METRICS_EVERY_S:
         _last_metrics["at"] = t
-        try:
-            write_metrics(where)
-        except Exception as e:                       # noqa: BLE001 — the report still goes
-            log.warning("ops metrics not written: %s", type(e).__name__)
+        for what, fn in (("metrics", write_metrics), ("revenue", write_revenue)):
+            try:
+                fn(where)
+            except Exception as e:                   # noqa: BLE001 — the report still goes
+                log.warning("ops %s not written: %s", what, type(e).__name__)
     day = due(now, where)
     if day is None:
         return None

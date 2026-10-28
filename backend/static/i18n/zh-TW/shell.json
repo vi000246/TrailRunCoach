@@ -161,6 +161,7 @@
   "askai.err.daily_limit": "今天的次數用完了，明天再問。",
   "askai.err.busy": "模型忙線中，稍後再試。",
   "askai.err.upstream": "模型沒有回應，稍後再試。",
+  "askai.err.no_credit": "API key 的 Anthropic 帳號餘額不足，儲值後再問。",
   "askai.err.empty": "請先輸入問題。",
   "askai.err.owner_only": "只有站主可以用 AI 問答。",
   "askai.err.network": "連不上伺服器，稍後再試。",

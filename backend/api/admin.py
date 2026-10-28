@@ -13,7 +13,8 @@
   POST /api/v1/admin/waitlist/{id}/admit   let one person in: the account and its tenant folder now
   GET  /api/v1/admin/audit                 the change log, newest first          (either admin scope)
   GET  /api/v1/admin/ops                   the daily ops reports there (ops_daily.py, SP-388) and the
-                                           member signal now (count / cap / near) (either admin scope)
+                                           member signal now (count / cap / near), this month's subscription
+                                           income against NT$50,000 (SP-803) (either admin scope)
   GET  /api/v1/admin/ops/{YYYY-MM-DD}.md   one report, its markdown as text/plain (either admin scope)
   GET  /api/v1/admin/xp-funnel             the 疊石 Cairn card's monthly funnel and 30-day retention
                                            (scripts/xp_funnel.py, computed now; SP-877) (either admin scope)
@@ -387,15 +388,19 @@ def get_audit(limit: int = 200):
 
 @router.get(API + "/ops", dependencies=[ANY])
 def get_ops():
-    """The daily reports kept (newest first), when the next one is written, and the member signal now.
-    Tenant ids and CPU seconds only — no one's training data, no e-mail."""
+    """The daily reports kept (newest first), when the next one is written, the member signal now and
+    this month's subscription income against the 免辦稅籍 line (SP-803: totals only, estimated from the
+    subscription rows — no one's e-mail, id or payment). Tenant ids and CPU seconds only — no one's
+    training data."""
     from backend import ops_daily as OD
     from backend.accounts import login as LG
+    from backend.billing import revenue as RV
     from backend.scripts import ops_report as R
     where = OD.folder()
     return {"on": where is not None, "reports": OD.reports(where), "run_at": OD.RUN_AT.strftime("%H:%M"),
             "keep_days": OD.KEEP_DAYS, "accounts": _accounts_on(), "members": OD.members(),
-            "max_users": LG.max_users(), "warn_share": R.MEMBERS_WARN_SHARE}
+            "max_users": LG.max_users(), "warn_share": R.MEMBERS_WARN_SHARE,
+            "revenue": OD.revenue(), "revenue_warn_share": RV.WARN_SHARE}
 
 
 @router.get(API + "/ops/{day}.md", dependencies=[ANY])

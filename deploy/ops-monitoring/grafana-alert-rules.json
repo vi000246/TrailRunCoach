@@ -245,6 +245,87 @@
         "__dashboardUid__": "trailruncoach-ops",
         "__panelId__": "6"
       }
+    },
+    {
+      "uid": "trc-revenue-near-tax-line",
+      "title": "TrailRunCoach：本月訂閱收入接近 NT$50,000（免辦稅籍門檻）",
+      "ruleGroup": "trailruncoach-ops",
+      "folderUID": "<FOLDER_UID>",
+      "orgID": 1,
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 10800,
+            "to": 0
+          },
+          "datasourceUid": "<INFLUX_DS_UID>",
+          "model": {
+            "refId": "A",
+            "query": "from(bucket: \"<INFLUX_BUCKET>\")\n  |> range(start: -3h)\n  |> filter(fn: (r) => r._measurement == \"trc_revenue\" and r._field == \"share\")\n  |> group()\n  |> last()",
+            "intervalMs": 60000,
+            "maxDataPoints": 43200
+          }
+        },
+        {
+          "refId": "B",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "B",
+            "type": "reduce",
+            "expression": "A",
+            "reducer": "last",
+            "settings": {
+              "mode": "dropNN"
+            }
+          }
+        },
+        {
+          "refId": "C",
+          "queryType": "",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "B",
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    0.799
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "0s",
+      "isPaused": false,
+      "labels": {
+        "project": "trailruncoach",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "本月訂閱收入（估計）到了免辦稅籍門檻 NT$50,000 的 80 % 以上：先問會計師要不要登記營業",
+        "description": "照現在的訂閱，這個月會到門檻的 {{ humanizePercentage $values.B.Value }}（SP-321：每月銷售未達 NT$50,000 免辦稅籍，接近前先問會計師要不要登記營業）。數字是 app 用牌價估的，只算這個 app、不含 inReachLiveTrack；細節在管理 › 營運報表 › 本月訂閱收入。",
+        "__dashboardUid__": "trailruncoach-ops",
+        "__panelId__": "8"
+      }
     }
   ]
 }

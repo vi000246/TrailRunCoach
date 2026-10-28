@@ -11,7 +11,8 @@ The same loop also runs the daily automatic backup (api/backup.auto_tick), the w
 check of the last 60 days (sync/check.weekly_tick, SP-362 A4), the daily cleanup of deleted
 FIT objects (sync/purge.cleanup_tick, SP-308), the monthly archive of the FITs past the
 retention (engine/fit_archive.tick, SP-317: the 1st, 03:00–05:00 local, tenants staggered),
-the nightly apply of the received body weights (api/weight.tick, SP-472: 03:00–06:00 local, not
+the daily look for a new trail dictionary (engine/trail_dict_store.tick, SP-727), the nightly apply of
+the received body weights (api/weight.tick, SP-472: 03:00–06:00 local, not
 while a sync or an automatic plan run of the tenant is going), the background sync's looks for
 new activities (sync/background.tick_all, SP-499), the coach dashboard's summaries of coached
 students (coach_board.tick, SP-790: a missing one soon, then nightly), the daily ops report (ops_daily.tick, SP-388:
@@ -259,6 +260,15 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
                 raise
             except Exception as e:
                 log.warning("research pool tick failed: %s", type(e).__name__)
+            # the trail dictionary (engine/trail_dict_store.py, SP-727): a look at the published latest
+            # version once a day (hourly while there is none), its index built at `cold` in the job queue
+            try:
+                from backend.engine import trail_dict_store
+                trail_dict_store.tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.warning("trail dictionary tick failed: %s", type(e).__name__)
             # multi-user mode: the whole server's daily backup — accounts.db and every user's
             # tenant (accounts/server_backup.py, SP-387 第 7 條)
             try:

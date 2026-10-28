@@ -1133,19 +1133,182 @@ def slope_cost(fit: Optional[dict], g: float) -> float:
     return float(sum(w * x for w, x in zip(slope_weights(g), c)))
 
 
-def slope_times(segs: list[dict], ts, fit: Optional[dict], divisor: Optional[float] = None) -> Optional[list[float]]:
+def slope_times(segs: list[dict], ts, fit: Optional[dict], divisor: Optional[float] = None,
+                kinds: Optional[dict] = None) -> Optional[list[float]]:
     """SP-723: segment times `ts` re-split by effort km × cost(grade) × the segment's environment
     factor relative to the race (segment "M_rel" = M̄ ÷ Mᵢ, set by the planner: altitude / heat keep
-    slowing their own segments); the sum is unchanged. None when not applied."""
+    slowing their own segments); the sum is unchanged. None when not applied.
+    SP-727: with `kinds` (fit_kind_mult, applied) also × the surface multiplier of the segment's speed
+    classes (segment "kinds" = {class: share}, kind_mult)."""
     if not fit or not fit.get("applied") or not ts or len(ts) != len(segs):
         return None
     div = divisor or effort_divisor()
     total = float(sum(ts))
     if total <= 0:
         return None
+    use_k = bool(kinds and kinds.get("applied"))
     e = [s["dist_m"] / 1000.0 + (s.get("gain_m") or 0.0) / div for s in segs]
-    raw = [ei * slope_cost(fit, s["grade"]) * float(s.get("M_rel") or 1.0) for s, ei in zip(segs, e)]
+    raw = [ei * slope_cost(fit, s["grade"]) * float(s.get("M_rel") or 1.0)
+           * (kind_mult(kinds, s.get("kinds"), s["grade"]) if use_k else 1.0) for s, ei in zip(segs, e)]
     sr = sum(raw)
     if sr <= 0:
         return None
     return [x * total / sr for x in raw]
+
+
+# ---- SP-727: the segment split by the surface under it (the trail dictionary's speed classes) ---------
+# SP-701 (this athlete's 58 trail runs, within-activity, same grade): trail descents run 20–30 % slower
+# than road descents, flats and climbs about the same; stone steps on the flat ×1.68 (8 runs); forest
+# roads ≈ roads; sac_scale T1 / T2 / T3 hardly differ (T3 in 3 runs). So on top of the slope cost each
+# speed class (trail_dict_store.KINDS) has its own multiplier in three grade bands (down / flat / up,
+# linear between the centres, flat outside), fitted from the athlete's own runs: inside a run, the
+# moving time in that class ÷ what the slope cost alone gives it (the run's time spread by effort km ×
+# cost), per band; shrunk to 1 (= the slope cost alone) with K_MIN minutes. Only the split changes
+# (the whole-race time is the HR model's); behind the back-test (backtest.kind_flag, leave-one-run-out).
+KIND = {
+    "kinds": ("road", "forest_road", "steps", "trail", "trail_t3"),
+    "centers": (-0.10, 0.0, 0.10),
+    "k_min": 60.0,                                # 推估: pseudo-minutes of "no difference" per class × band
+    "min_runs": 3,                                # fewer runs with surface evidence → not applied
+}
+KIND_SOURCE = ("分段時間的路面：同一筆活動裡，每種路面（道路、林道、石階、步道、T3 以上的步道）的實際時間 ÷ 只用坡度成本分到的時間，"
+               "分下坡、平、上坡三段，從你自己的越野跑擬合、資料少時往 1 收縮；路面來自步道字典（OSM）。推估")
+
+
+def kind_weights(g: float) -> list[float]:
+    """Grade g on the three band centres (linear between neighbours, flat outside)."""
+    c = KIND["centers"]
+    g = min(max(float(g), c[0]), c[-1])
+    w = [0.0] * len(c)
+    for i in range(len(c) - 1):
+        if c[i] <= g <= c[i + 1]:
+            f = (g - c[i]) / (c[i + 1] - c[i])
+            w[i], w[i + 1] = 1.0 - f, f
+            return w
+    w[-1] = 1.0
+    return w
+
+
+def kind_row(segs: list[dict], times: list[float], shares: list[dict]) -> Optional[dict]:
+    """One run's surface evidence, kept raw (the slope cost and the effort divisor are applied when
+    fitting): {"segs": [[dist_m, gain_m, grade, moving s, {class: share}]], "cover": the share of the
+    distance with a speed class}. None without time or without any class."""
+    if not segs or len(segs) != len(times) or len(segs) != len(shares):
+        return None
+    rows, d_all, d_k = [], 0.0, 0.0
+    for s, t, sh in zip(segs, times, shares):
+        d = float(s["dist_m"])
+        d_all += d
+        d_k += d * sum((sh or {}).values())
+        rows.append([round(d, 1), round(float(s.get("gain_m") or 0.0), 1), round(float(s["grade"]), 4),
+                     round(float(t), 1), {k: round(v, 3) for k, v in (sh or {}).items() if v > 0}])
+    if sum(r[3] for r in rows) <= 0 or d_k <= 0:
+        return None
+    return {"segs": rows, "cover": d_k / d_all if d_all > 0 else 0.0}
+
+
+def _kind_terms(row: dict, slope_fit: Optional[dict], divisor: float):
+    """Per segment (time, slope-cost time, grade, shares) of one kind_row: the run's moving time spread
+    by effort km × cost(grade)."""
+    segs = row["segs"]
+    raw = [(d / 1000.0 + gain / divisor) * slope_cost(slope_fit, g) for d, gain, g, _t, _s in segs]
+    T, R = float(sum(x[3] for x in segs)), float(sum(raw))
+    if T <= 0 or R <= 0:
+        return []
+    return [(x[3], r * T / R, x[2], x[4]) for x, r in zip(segs, raw)]
+
+
+def fit_kind_mult(rows, slope_fit: Optional[dict], divisor: Optional[float] = None) -> dict:
+    """{mult: {class: [3]}, own: {class: [3 | None]}, minutes: {class: [3]}, n_runs, applied, source,
+    label} from kind_row()s, on top of `slope_fit` (fit_slope_cost). Fewer than min_runs runs → not
+    applied (every multiplier 1)."""
+    rs = [r for r in rows or [] if r and r.get("segs")]
+    div = divisor or effort_divisor()
+    nb = len(KIND["centers"])
+    ks = KIND["kinds"]
+    num = {k: [0.0] * nb for k in ks}
+    den = {k: [0.0] * nb for k in ks}
+    for r in rs:
+        for t, pred, g, sh in _kind_terms(r, slope_fit, div):
+            w = kind_weights(g)
+            for k, s in (sh or {}).items():
+                if k not in num:
+                    continue
+                for b in range(nb):
+                    num[k][b] += s * w[b] * t
+                    den[k][b] += s * w[b] * pred
+    own = {k: [num[k][b] / den[k][b] if den[k][b] > 0 else None for b in range(nb)] for k in ks}
+    mins = {k: [den[k][b] / 60.0 for b in range(nb)] for k in ks}
+    kk = KIND["k_min"]
+    mult = {k: [(mins[k][b] * own[k][b] + kk) / (mins[k][b] + kk) if own[k][b] is not None else 1.0
+                for b in range(nb)] for k in ks}
+    applied = len(rs) >= KIND["min_runs"]
+    if not applied:
+        mult = {k: [1.0] * nb for k in ks}
+    return {"mult": mult, "own": own, "minutes": mins, "n_runs": len(rs), "applied": applied,
+            "source": KIND_SOURCE, "label": "推估"}
+
+
+def kind_mult(fit: Optional[dict], shares: Optional[dict], g: float) -> float:
+    """The surface multiplier of a segment: Σ share × the class's multiplier at grade g, the part
+    without a class × 1."""
+    if not fit or not fit.get("applied") or not shares:
+        return 1.0
+    w = kind_weights(g)
+    m = fit.get("mult") or {}
+    tot = sum(shares.values())
+    out = max(0.0, 1.0 - tot)
+    for k, s in shares.items():
+        mk = m.get(k)
+        out += s * (sum(wi * x for wi, x in zip(w, mk)) if mk else 1.0)
+    return out
+
+
+def kind_backtest(rows: dict, min_cover: float = 0.5, divisor: Optional[float] = None) -> dict:
+    """SP-727 leave-one-run-out on the runs with surface evidence (`rows` = {idx: kind_row}): each run's
+    own moving time split over its own segments by the slope cost alone and by slope cost × surface,
+    both fitted WITHOUT that run; the cumulative error at the segment ends ÷ the run's time (as SP-723),
+    on the runs ≥ min_cover covered. The whole-run time is the same by construction (only the split
+    changes): `total_same` checks it."""
+    from statistics import median
+    div = divisor or effort_divisor()
+    items = [(i, r) for i, r in (rows or {}).items() if r and r.get("segs")]
+    out_rows = []
+    total_same = True
+    for i, r in items:
+        if r.get("cover", 0.0) < min_cover or len(r["segs"]) < 2:
+            continue
+        others = [x for j, x in items if j != i]
+        sfit = fit_slope_cost([slope_row([{"dist_m": d, "gain_m": gn, "grade": g} for d, gn, g, _t, _s in x["segs"]],
+                                         [t for _d, _gn, _g, t, _s in x["segs"]], div) for x in others])
+        kfit = fit_kind_mult(others, sfit, div)
+        segs = [{"dist_m": d, "gain_m": gn, "grade": g, "kinds": s} for d, gn, g, _t, s in r["segs"]]
+        act = [t for _d, _gn, _g, t, _s in r["segs"]]
+        A = float(sum(act))
+        if A <= 0:
+            continue
+        flat = [A / len(segs)] * len(segs)
+        plain = slope_times(segs, flat, sfit, div) or flat
+        withk = slope_times(segs, flat, sfit, div, kinds=kfit) or plain
+        total_same = total_same and abs(sum(withk) - sum(plain)) < 1e-6 * A
+
+        def cum_err(pred):
+            cp = ca = 0.0
+            e = []
+            for x, y in zip(pred, act):
+                cp += x
+                ca += y
+                e.append(abs(cp - ca) / A)
+            return float(np.mean(e))
+        out_rows.append({"idx": i, "cover": r["cover"], "cum_plain": cum_err(plain), "cum_kind": cum_err(withk),
+                         "applied": bool(kfit.get("applied"))})
+
+    def med(k):
+        v = [x[k] for x in out_rows]
+        return float(median(v)) if v else None
+    mp, mk = med("cum_plain"), med("cum_kind")
+    return {"n": len(out_rows), "min_cover": min_cover, "cum_plain": mp, "cum_kind": mk,
+            "n_better": sum(1 for x in out_rows if x["cum_kind"] < x["cum_plain"]),
+            "total_same": total_same,
+            "better": bool(out_rows and mp is not None and mk is not None and mk < mp and total_same),
+            "rows": out_rows}

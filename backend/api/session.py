@@ -87,8 +87,9 @@ def session_info(had_cookie: bool = False) -> dict:
             body["membership"]["cooldowns"] = cooldown.active()
         except Exception:                  # noqa: BLE001 — the API still answers 429
             body["membership"]["cooldowns"] = {}
-    # AI 問答 (SP-785 / SP-786): the shell's 「問 AI」 button — the owner only, while it is switched on;
-    # `key`: a key is set (without one the dialog says where to set it)
+    # AI 問答 (SP-785 / SP-786): the shell's 「問 AI」 button — the owner, or a member with their own key
+    # while the server allows it (SP-883, TRC_AI_MEMBER_KEYS) — while it is switched on; never to a
+    # coach viewing a student; `key`: a key is set (without one the dialog says where to set it)
     try:
         from backend.ai import config as AIC
         if AIC.allowed() and not body.get("viewing"):

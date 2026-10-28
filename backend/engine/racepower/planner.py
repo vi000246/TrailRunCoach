@@ -227,17 +227,49 @@ def _fade(res: dict, shape: Optional[dict]) -> dict:
     return {**res, "rows": rows, "faded": True, "p_alloc": p_alloc}
 
 
-def _slope_split(res: dict, segs: list, fit: Optional[dict], mbar: float) -> dict:
+def _slope_split(res: dict, segs: list, fit: Optional[dict], mbar: float,
+                 surface: Optional[tuple] = None) -> dict:
     """SP-723: the whole-race time re-split by effort km × the athlete's own slope cost (downhill
     included; trailhr.slope_times), each segment's environment factor M kept relative to the race;
-    speeds follow the times, powers stay the allocation's. Unchanged without a fit."""
+    speeds follow the times, powers stay the allocation's. Unchanged without a fit.
+    SP-727: `surface` = (the course's speed-class runs, the model's surface multipliers) — _kind_surface —
+    also multiplies each segment by its surface (trailhr.kind_mult)."""
+    from backend.engine.racepower import surface as SF
     from backend.engine.racepower import trailhr as TH
-    rel = [dict(s, M_rel=(mbar / s["M"]) if s.get("M") else 1.0) for s in segs]
-    ts = TH.slope_times(rel, [r["t"] for r in res["rows"]], fit)
+    kinds, kfit = surface if surface else (None, None)
+    rel = [dict(s, M_rel=(mbar / s["M"]) if s.get("M") else 1.0,
+                kinds=SF.kind_shares(kinds, s["start_km"], s["end_km"]) if kinds else None) for s in segs]
+    ts = TH.slope_times(rel, [r["t"] for r in res["rows"]], fit, kinds=kfit if kinds else None)
     if ts is None:
         return res
     rows = [{**r, "t": t, "v": r["v"] * r["t"] / t if t > 0 else r["v"]} for r, t in zip(res["rows"], ts)]
-    return {**res, "rows": rows, "slope_split": True}
+    return {**res, "rows": rows, "slope_split": True,
+            "kind_split": bool(kinds and kfit and kfit.get("applied"))}
+
+
+def _kind_surface(opts: dict, hr: Optional[dict]) -> Optional[tuple]:
+    """SP-727: (the course's speed-class runs, the model's surface multipliers) when the back-test has
+    switched the surface split on (opts["kind_apply"], backtest.kind_flag) and both are there; None
+    otherwise (the split is the slope cost alone, as before)."""
+    kinds, kfit = opts.get("kinds"), (hr or {}).get("surface_kind")
+    if not opts.get("kind_apply") or not kinds or not kfit or not kfit.get("applied"):
+        return None
+    return kinds, kfit
+
+
+def kind_text(kfit: dict) -> str:
+    """The RC8 line of the surface split (SP-727): each class's multiplier on the descents / flats /
+    climbs, and how many runs it is fitted on."""
+    names = {"road": _("道路"), "forest_road": _("林道"), "steps": _("石階"), "trail": _("步道"),
+             "trail_t3": _("T3 以上步道")}
+    parts = []
+    for k, label in names.items():
+        m = (kfit.get("mult") or {}).get(k)
+        if m and any(abs(x - 1.0) >= 0.005 for x in m):
+            parts.append(_("{k} 下 ×{a:.2f}／平 ×{b:.2f}／上 ×{c:.2f}", k=label, a=m[0], b=m[1], c=m[2]))
+    return _("分段時間也看路面（推估，步道字典）：{parts}（相對只用坡度成本；{n} 次有路面資料的越野跑，資料少時往 1 收縮）。"
+             "整場時間不變，只改各段怎麼分", parts="、".join(parts) or _("各種路面都跟坡度成本一樣"),
+             n=kfit.get("n_runs") or 0)
 
 
 def _place_memory(res: dict, mem: Optional[dict], terrain_mult: float) -> dict:
@@ -615,6 +647,8 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
             "fade": model.get("fade"),
             # SP-723: the athlete's own slope cost for the segment split (None: an older stored model)
             "slope_cost": model.get("slope_cost"),
+            # SP-727: the surface multipliers on top of it (None: an older stored model / no dictionary)
+            "surface_kind": model.get("surface_kind"),
             "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": "推估"}
 
 
@@ -911,7 +945,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             if hr_est is not None:
                 # SP-723: the HR model's total split by the athlete's own slope cost (downhill included)
                 if gpx:
-                    res = _slope_split(res, segs, hr_est.get("slope_cost"), mbar)
+                    res = _slope_split(res, segs, hr_est.get("slope_cost"), mbar, _kind_surface(opts, hr_est))
                     # SP-726: the segments you ran before at your pace there (the total follows)
                     res = _place_memory(res, opts.get("memory"), (hr_est.get("terrain") or {}).get("mult") or 1.0)
                 # SP-222: the HR model's total spread by the athlete's own fade, not evenly
@@ -1146,6 +1180,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                                   "上 ×{d:.2f}、陡上 ×{e:.2f}（相對努力距離的平均時間；{n} 次自己步調的越野跑，資料少時往預設收縮）。"
                                   "整場時間不變，只改各段怎麼分：下坡段變長、陡上段變短",
                                   a=c[0], b=c[1], c=c[2], d=c[3], e=c[4], n=sc.get("n_runs") or 0)))
+            if res.get("kind_split"):
+                warnings.append(H.tag("RC8", kind_text(hr_est["surface_kind"])))    # SP-727
             if res.get("memory"):
                 warnings.append(H.tag("RC8", memory_text(res["memory"])))         # SP-726
     nm_now = (hr_est or {}).get("nonmoving")
@@ -1156,6 +1192,10 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                             kind=opts.get("stop_kind") or "race") or nm_now
     summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp,
                # SP-723: whether the segment times carry the athlete's own slope cost
+               # SP-727: whether the segment times also carry the surface (trail dictionary)
+               "kind_split": ({"applied": True, "mult": (hr_est.get("surface_kind") or {}).get("mult"),
+                               "n_runs": (hr_est.get("surface_kind") or {}).get("n_runs"), "badge": "推估"}
+                              if hr_est is not None and res.get("kind_split") else None),
                "slope_split": ({"applied": True, "cost": (hr_est.get("slope_cost") or {}).get("cost"),
                                 "n_runs": (hr_est.get("slope_cost") or {}).get("n_runs"), "badge": "推估"}
                                if hr_est is not None and res.get("slope_split") else None),

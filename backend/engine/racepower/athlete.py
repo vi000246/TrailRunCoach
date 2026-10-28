@@ -2444,6 +2444,59 @@ def slope_rows(ds, runs, tags: Optional[list] = None, solo=None) -> list[dict]:
     return out
 
 
+KIND_KEY = "racepower_surface_kind_v1"
+
+
+def _kind_row(ds, w, index) -> Optional[dict]:
+    """SP-727: trailhr.kind_row of one run — its own GPS track cut into course segments (as _slope_row),
+    the actual moving time in each, and each segment's speed classes from the trail dictionary
+    (surface.lookup on the track every 20 m)."""
+    from backend.engine.racepower import backtest as BT
+    from backend.engine.racepower import course as CO
+    from backend.engine.racepower import surface as SF
+    from backend.engine.racepower import trailhr as TH
+    a = activity_arrays(ds, w)
+    if a is None:
+        return None
+    tk = BT.track_of(a)
+    if tk is None:
+        return None
+    track, idx = tk
+    try:
+        segs = CO.build_course(track)["segments"]
+        xs, la, lo = SF.resample_track(track)
+    except Exception:                       # noqa: BLE001 — a track the course builder can't cut
+        return None
+    if len(segs) < 2:
+        return None
+    prof = SF.lookup(xs, la, lo, index)
+    d = BT._dt(a["t"])
+    moving = (np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH) & (d > 0)
+    act = BT.actual_segments(a, idx, track, segs, moving)
+    shares = [SF.kind_shares(prof["kinds"], s["start_km"], s["end_km"]) for s in segs]
+    return TH.kind_row(segs, [x["t"] for x in act], shares)
+
+
+def kind_rows(ds, runs, tags: Optional[list] = None, solo=None, by_idx: bool = False):
+    """SP-727: the surface evidence of the own-paced runs among `runs` (disk-memoised per run, keyed on
+    the dictionary's rules version: a monthly rebuild of the same rules does not re-read every run —
+    SP-706's decision); [] (or {}) without a trail dictionary on this server."""
+    from backend.engine import trail_dict_store as DS
+    index = DS.current()
+    out: dict = {}
+    if index is None:
+        return out if by_idx else []
+    extra = {"rules": index.rules_version, "format": DS.FORMAT}
+    for w in runs:
+        if not own_paced(w, tags, solo):
+            continue
+        r = ds.cached_series(KIND_KEY, w, lambda w=w: _kind_row(ds, w, index), extra=extra)
+        if r:
+            out[w.idx] = r
+    ds.flush_series()
+    return out if by_idx else list(out.values())
+
+
 NONMOVING_KEY = "racepower_nonmoving_v1"
 
 
@@ -2648,6 +2701,11 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
         m["slope_cost"] = TH.fit_slope_cost(slope_rows(ds, runs, tags, solo))
     except Exception:                       # noqa: BLE001 — never fails the model: the default curve
         m["slope_cost"] = TH.fit_slope_cost([])
+    # SP-727: the surface under the segments (trail dictionary speed classes) on top of the slope cost
+    try:
+        m["surface_kind"] = TH.fit_kind_mult(kind_rows(ds, runs, tags, solo), m["slope_cost"])
+    except Exception:                       # noqa: BLE001 — never fails the model: no surface multipliers
+        m["surface_kind"] = TH.fit_kind_mult([], m["slope_cost"])
     if race_idx is None:
         caps = capacity_samples(ds, [w for w in ds.workouts if outdoor(w) and w.day < tday], tags=tags)
         race_idx = {i for i, c in caps.items() if c["tags"]["activity_type"] == "race" or c.get("ok")}

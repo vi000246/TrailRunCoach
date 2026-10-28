@@ -288,6 +288,11 @@ class LiveContext:
     def climb_marks(self, course: dict) -> Optional[dict]:
         return _climb_marks(course)
 
+    def kind_apply(self) -> bool:
+        """SP-727: may the surface (trail dictionary) change the segment split? (backtest.kind_flag)"""
+        from backend.engine.racepower import backtest as BT
+        return BT.kind_flag()
+
     def body(self) -> Optional[dict]:
         return _body(inputs())
 
@@ -1430,7 +1435,8 @@ def get_surface(cid: str):
 
 @router.post("/surface/{cid}")
 def course_surface(cid: str, body: Optional[SurfaceIn] = None):
-    """The stored surface, or look it up on the Overpass server ($TRC_OVERPASS_URL) and store it.
+    """The stored surface, or look it up in the trail dictionary on this server (SP-727,
+    engine/trail_dict_store.py; $TRC_TRAIL_DICT_URL) and store it.
     A failed lookup is an answer too (status unknown: the page says 路面未知), never an error:
     the calculator works without it."""
     from backend.engine import course_surface as CS

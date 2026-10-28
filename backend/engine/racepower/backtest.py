@@ -94,7 +94,8 @@ WALK_HEAVY = 0.5               # 推估: ≥ half the moving time walked (< 130 
 CLEAR_DIFF = 0.03              # 推估: "clearly differs" = class medians ≥ 3 points apart
 STORE = None      # fixed file (tests); None = <tenant shared>/racepower_backtest.json
 # SP-544: track -> the surface of the activity's own course (surface.effective), or None. Set by a
-# run that looks the tracks up (Overpass); None = the technicality-on-dirt comparison is skipped
+# run that looks the tracks up (surface.ground_of_track: the trail dictionary, SP-727); None = the
+# technicality-on-dirt comparison is skipped
 GROUND_OF: Optional[Callable] = None
 
 
@@ -1275,6 +1276,15 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
             if th_full else None
     except Exception as e:                  # noqa: BLE001 — a diagnostic: never fails the back-test
         trail_hr["memory"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+    # SP-727: the surface multipliers on the split (trail dictionary), leave-one-run-out; None without
+    # a dictionary on this server
+    try:
+        from backend.engine.racepower import trailhr as TH
+        krows = A.kind_rows(ds, [w for w in all_runs if A.outdoor(w) and A.is_trail(w)], tags, A.solo_hikes(),
+                            by_idx=True)
+        trail_hr["surface_kind"] = TH.kind_backtest(krows) if krows else None
+    except Exception as e:                  # noqa: BLE001 — a diagnostic: never fails the back-test
+        trail_hr["surface_kind"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     pc = pass_check([r.get("err_th_race") for r in rows if r.get("category") == "trail" and r.get("th")
                      and r.get("activity_type") == "race"], THRESHOLDS["trail"])
     t_med = trail_hr["races"]["race_level"]["median_abs"]
@@ -1650,6 +1660,18 @@ def memory_flag(path=None) -> bool:
     else the plan only says which segments you know and keeps their times."""
     m = (((load(path) or {}).get("trail_hr") or {}).get("memory") or {})
     return bool(m.get("better")) and int(m.get("n") or 0) >= MEMORY_MIN_N
+
+
+KIND_MIN_N = 5                 # SP-727 (推估): runs with surface evidence before the back-test can switch it on
+
+
+def kind_flag(path=None) -> bool:
+    """SP-727: True when the stored back-test found the surface multipliers (trailhr.kind_backtest,
+    leave-one-run-out) better on ≥ KIND_MIN_N runs: the median cumulative error at the segment ends
+    smaller, the whole-run time the same. Nothing stored / no dictionary → False: the split stays the
+    slope cost alone (SP-723)."""
+    k = (((load(path) or {}).get("trail_hr") or {}).get("surface_kind") or {})
+    return bool(k.get("better")) and int(k.get("n") or 0) >= KIND_MIN_N
 
 
 def group_factor_flag(path=None) -> bool:

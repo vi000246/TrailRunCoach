@@ -2691,8 +2691,6 @@
   "正式站的課表匯出缺了內容": "Production's plan export is incomplete",
   "比例要是數字": "The split must be numbers",
   "三個比例要加起來是 100 %": "The three must add up to 100 %",
-  "這台沒有設定 OSM 路面查詢（{env}）": "No OSM ground lookup is set on this server ({env})",
-  "路面查詢忙碌中，稍後再試": "The ground lookup is busy; try again later",
   "查不到 OSM 路面（{err}）": "Could not look up the OSM ground ({err})",
   "路線 id 格式不對": "Bad course id",
   "這條路線還沒有路面資料": "This course has no ground data yet",
@@ -4607,5 +4605,15 @@
   "輕鬆下山": "Easy descent",
   "技術路段，跑走混合，練腳步": "Technical ground, run-walk, footwork practice",
   "接近比賽路況的技術路段": "Technical ground like the race's",
-  "坡度 {g}%、{speed}，用走的": "{g}% grade at {speed}, walking"
+  "坡度 {g}%、{speed}，用走的": "{g}% grade at {speed}, walking",
+  "這台還沒有步道字典（{env}）": "This server has no trail dictionary yet ({env})",
+  "步道字典準備中，稍後再試": "The trail dictionary is being prepared; try again later",
+  "道路": "road",
+  "林道": "forest road",
+  "石階": "stone steps",
+  "步道": "trail",
+  "T3 以上步道": "T3+ trail",
+  "{k} 下 ×{a:.2f}／平 ×{b:.2f}／上 ×{c:.2f}": "{k} down ×{a:.2f} / flat ×{b:.2f} / up ×{c:.2f}",
+  "各種路面都跟坡度成本一樣": "every surface the same as the slope cost",
+  "分段時間也看路面（推估，步道字典）：{parts}（相對只用坡度成本；{n} 次有路面資料的越野跑，資料少時往 1 收縮）。整場時間不變，只改各段怎麼分": "The segment times also follow the surface (estimate, trail dictionary): {parts} (relative to the slope cost alone; {n} trail runs with surface data, shrunk to 1 when there is little data). The whole-race time stays the same; only the split changes"
 }

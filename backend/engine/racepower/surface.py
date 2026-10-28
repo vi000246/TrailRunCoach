@@ -4,60 +4,49 @@ dirt trail, how much is man-made, how much the map cannot tell.
 
 The user's definition of 土徑 (2026-10-14): unstable ground — earth, roots, rock — counts;
 anything laid by people does not (asphalt, concrete, laid stones, boardwalks, stone steps,
-gravel forest roads). OSM's `surface` is missing on most Taiwanese paths (28–40 % tagged on
-the SP-531 samples), so every stretch is one of three groups:
+gravel forest roads). Every stretch is one of three groups:
 
   dirt    確定土徑   an explicit dirt / ground / rock … surface, sac_scale ≥ mountain_hiking,
-                     or a very bad smoothness
+                     a very bad smoothness, or (rules v2, SP-735) an untagged path out of town
   made    確定人工   a laid surface, highway=steps, a gravel / forest road, a road
-  unsure  不確定     a path / footway without a surface (SP-531 Q4: not guessed), or no way
-                     within 50 m of the track
+  unsure  不確定     a path / footway without a surface in town, or no way within 50 m of the track
 
-How (Cairn's surface analysis, inReachLiveTrack v2/server/src/lib/overpass.ts, copied — its
-API is not called): the track's points, sampled down to ≤ 100, are the corridor of one
-`way[highway](around:60, …)` Overpass query per 25 points (one chunk at a time: the NAS is a
-service host, not a compute host); each track point (every 20 m) takes the class of the
-nearest way within 50 m; equal neighbours are run-length merged into km segments (a run
-shorter than 60 m joins the one before it: junction noise). The classes are Cairn's five
-(classify) with the SP-531 changes; the three groups are GROUP. Test cases shared with Cairn:
-backend/tests/fixtures/osm_surface_cases.json.
+Where the ways come from (SP-727): the trail dictionary on this server (engine/trail_dict_store.py,
+the SP-709 dictionary rebuilt monthly from the OSM Taiwan extract), not an Overpass server any more.
+The classes are the dictionary's own (engine/trailclass.py, the one copy both sites read); each way
+also carries its speed class (trail_dict_store.speed_kind: road / forest_road / steps / trail /
+trail_t3), which the calculator's segment split reads (SP-727, trailhr.kind_mult).
 
-The Overpass server: $TRC_OVERPASS_URL (the self-hosted Taiwan extract on the NAS, LAN only;
-unset → no lookup, the page says 路面未知). All-or-nothing: a failed chunk fails the lookup
-(a partly looked-up course would show the missing part as 不確定, a wrong answer).
+How: the track every 20 m (on the course's own ruler); each point takes the class of the nearest
+way within 50 m (Cairn's matchAndSegment, as before); equal neighbours are run-length merged into km
+segments (a run shorter than 60 m joins the one before it: junction noise) — once for the surface
+class (`segs`, what the page shows and the user marks) and once for the speed class (`kinds`).
+`classify` is the old per-tag rule (Cairn's classifySurface + SP-531), kept for the cases shared
+with Cairn (backend/tests/fixtures/osm_surface_cases.json) and a way without a stored class.
+
+No dictionary on this server ($TRC_TRAIL_DICT_URL unset, or the first index still being built) →
+no lookup, the page says 路面未知 and the calculator works without it.
 
 Data © OpenStreetMap contributors, ODbL (ATTRIBUTION, shown next to the numbers).
 """
 from __future__ import annotations
 
 import datetime as dt
-import json
 import math
 import os
-import threading
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-from typing import Callable, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 
 from backend.i18n import _
 
-URL_ENV = "TRC_OVERPASS_URL"
 ATTRIBUTION = "© OpenStreetMap contributors"
-VERSION = 1
+VERSION = 2                     # 2: from the trail dictionary, with the speed classes (SP-727)
 AROUND_RADIUS_M = 60.0          # the corridor (Cairn)
 MATCH_THRESHOLD_M = 50.0        # a point farther than this from every way is unknown (Cairn)
-MAX_QUERY_POINTS = 100          # corridor vertices for the whole course (Cairn)
-CHUNK_MAX_POINTS = 25           # per Overpass request, overlapping by one (Cairn)
-QUERY_TIMEOUT_S = 10            # [timeout:] in the query (Cairn)
-CHUNK_TIMEOUT_S = 13.0          # one request (Cairn)
-TOTAL_BUDGET_S = 40.0           # the whole lookup (Cairn)
 STEP_M = 20.0                   # a label every 20 m along the track
 MIN_RUN_M = 60.0                # a shorter run joins the one before it (推估: junction noise)
-USER_AGENT = "TrailRunCoach (course surface, SP-543)"
+NO_KIND = "none"                # a stretch without a speed class (no way near, or an `other` way)
 
 CLASSES = ("dirt", "gravel", "paved", "steps", "unknown")
 GROUPS = ("dirt", "made", "unsure")
@@ -78,12 +67,10 @@ SAC_DIRT = frozenset({"mountain_hiking", "demanding_mountain_hiking", "alpine_hi
                       "demanding_alpine_hiking", "difficult_alpine_hiking"})
 SMOOTH_DIRT = frozenset({"very_bad", "horrible", "very_horrible", "impassable"})
 
-_one_at_a_time = threading.Semaphore(1)       # one lookup against the NAS at a time
-WAIT_S = 60.0
-
 
 class SurfaceError(Exception):
-    """The lookup failed: `code` off (no server set) / failed (the server) / busy / course."""
+    """The lookup failed: `code` off (no dictionary on this server) / building (its first index is
+    being built) / course (no track)."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -120,86 +107,10 @@ def group_of(cls: str) -> str:
     return GROUP.get(cls, "unsure")
 
 
-# ---------------------------------------------------------------------------- the query
-
-def sample_path(pts: Sequence[tuple[float, float]], max_n: int = MAX_QUERY_POINTS) -> list[tuple[float, float]]:
-    """Even sub-sample to ≤ max_n (+ the last point), as Cairn's samplePath."""
-    if not pts:
-        return []
-    step = max(1, math.ceil(len(pts) / max_n))
-    out = list(pts[::step])
-    if out[-1] != pts[-1]:
-        out.append(pts[-1])
-    return out
-
-
-def chunk_points(pts: list, max_n: int = CHUNK_MAX_POINTS) -> list[list]:
-    """Chunks of ≤ max_n points; neighbours share one point so the corridor has no gap."""
-    if len(pts) <= max_n:
-        return [pts]
-    out, a = [], 0
-    while a + 1 < len(pts):
-        out.append(pts[a:min(a + max_n, len(pts))])
-        a += max_n - 1
-    return out
-
-
-def build_query(pts: Sequence[tuple[float, float]], radius_m: float = AROUND_RADIUS_M) -> str:
-    coords = ",".join(f"{la:.5f},{lo:.5f}" for la, lo in pts)
-    return f"[out:json][timeout:{QUERY_TIMEOUT_S}];way[highway](around:{radius_m:.0f},{coords});out geom;"
-
-
-def server_url() -> Optional[str]:
-    u = (os.environ.get(URL_ENV) or "").strip()
-    return u or None
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):    # noqa: D401 — never follow
-        return None
-
-
-def post_query(url: str, query: str, timeout: float) -> list[dict]:
-    """One Overpass request (POST data=…, no redirects: a login page is not an answer) → its
-    elements. SurfaceError("failed") on anything else than a JSON answer."""
-    body = urllib.parse.urlencode({"data": query}).encode("ascii")
-    req = urllib.request.Request(url, data=body, method="POST",
-                                 headers={"User-Agent": USER_AGENT,
-                                          "Content-Type": "application/x-www-form-urlencoded"})
-    opener = urllib.request.build_opener(_NoRedirect)
-    try:
-        with opener.open(req, timeout=timeout) as r:
-            raw = r.read()
-    except urllib.error.HTTPError as e:
-        raise SurfaceError("failed", f"HTTP {e.code}")
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        raise SurfaceError("failed", type(e).__name__)
-    try:
-        doc = json.loads(raw)
-    except ValueError:
-        raise SurfaceError("failed", "not JSON")
-    if not isinstance(doc, dict) or not isinstance(doc.get("elements"), list):
-        raise SurfaceError("failed", "no elements")
-    return doc["elements"]
-
-
-def fetch_ways(pts: Sequence[tuple[float, float]], url: str,
-               post: Optional[Callable[[str, str, float], list]] = None) -> list[dict]:
-    """The ways around the course (deduplicated by id), one chunk after the other within
-    TOTAL_BUDGET_S. All-or-nothing: SurfaceError when any chunk fails."""
-    if not url.lower().startswith(("http://", "https://")):
-        raise SurfaceError("off", "bad url")
-    post = post or post_query
-    deadline = time.monotonic() + TOTAL_BUDGET_S
-    ways: dict[int, dict] = {}
-    for chunk in chunk_points(sample_path(pts)):
-        left = deadline - time.monotonic()
-        if left < 3.0:
-            raise SurfaceError("failed", "time budget")
-        for el in post(url, build_query(chunk), min(CHUNK_TIMEOUT_S, left)):
-            if isinstance(el, dict) and el.get("type", "way") == "way" and el.get("geometry"):
-                ways.setdefault(el.get("id"), el)
-    return list(ways.values())
+def way_class(w: dict) -> str:
+    """A way's surface class: the dictionary's (rules v2), else from its tags."""
+    c = w.get("class")
+    return c if c in CLASSES else classify(w.get("tags") or {})
 
 
 # ---------------------------------------------------------------------------- matching
@@ -209,25 +120,25 @@ def _xy(lat, lon, lat0: float):
     return np.asarray(lon, float) * k * math.cos(math.radians(lat0)), np.asarray(lat, float) * k
 
 
-def label_points(lat: Sequence[float], lon: Sequence[float], ways: list[dict],
-                 threshold_m: float = MATCH_THRESHOLD_M) -> list[str]:
-    """Each point → the class of its nearest way within threshold_m, else unknown (Cairn's
-    matchAndSegment labels; local flat metres, a grid of the way pieces instead of bboxes)."""
+def nearest_ways(lat: Sequence[float], lon: Sequence[float], ways: list[dict],
+                 threshold_m: float = MATCH_THRESHOLD_M) -> list[int]:
+    """Each point → the index (in `ways`) of its nearest way within threshold_m, else −1 (Cairn's
+    matchAndSegment; local flat metres, a grid of the way pieces instead of bboxes)."""
     n = len(lat)
     if n == 0:
         return []
     lat0 = float(np.mean(lat))
-    ax, ay, bx, by, cl = [], [], [], [], []
-    for w in ways:
+    ax, ay, bx, by, wi = [], [], [], [], []
+    for k, w in enumerate(ways):
         g = w.get("geometry") or []
         if len(g) < 2:
             continue
-        c = CLASSES.index(classify(w.get("tags") or {}))
         x, y = _xy([p["lat"] for p in g], [p["lon"] for p in g], lat0)
-        ax.extend(x[:-1]); ay.extend(y[:-1]); bx.extend(x[1:]); by.extend(y[1:]); cl.extend([c] * (len(g) - 1))
+        ax.extend(x[:-1]); ay.extend(y[:-1]); bx.extend(x[1:]); by.extend(y[1:]); wi.extend([k] * (len(g) - 1))
     if not ax:
-        return ["unknown"] * n
-    AX, AY, BX, BY, CL = (np.asarray(v, float) for v in (ax, ay, bx, by, cl))
+        return [-1] * n
+    AX, AY, BX, BY = (np.asarray(v, float) for v in (ax, ay, bx, by))
+    WI = np.asarray(wi, int)
     cell = max(100.0, threshold_m * 2)
     grid: dict[tuple[int, int], list[int]] = {}
     x0 = np.floor((np.minimum(AX, BX) - threshold_m) / cell).astype(int)
@@ -243,7 +154,7 @@ def label_points(lat: Sequence[float], lon: Sequence[float], ways: list[dict],
     for px, py in zip(PX, PY):
         cand = grid.get((int(math.floor(px / cell)), int(math.floor(py / cell))))
         if not cand:
-            out.append("unknown")
+            out.append(-1)
             continue
         idx = np.asarray(cand)
         dx, dy = BX[idx] - AX[idx], BY[idx] - AY[idx]
@@ -252,8 +163,19 @@ def label_points(lat: Sequence[float], lon: Sequence[float], ways: list[dict],
         t = np.clip(t, 0.0, 1.0)
         d = np.hypot(px - (AX[idx] + t * dx), py - (AY[idx] + t * dy))
         j = int(np.argmin(d))
-        out.append(CLASSES[int(CL[idx[j]])] if d[j] <= threshold_m else "unknown")
+        out.append(int(WI[idx[j]]) if d[j] <= threshold_m else -1)
     return out
+
+
+def label_points(lat: Sequence[float], lon: Sequence[float], ways: list[dict],
+                 threshold_m: float = MATCH_THRESHOLD_M) -> list[str]:
+    """Each point → the surface class of its nearest way within threshold_m, else unknown."""
+    return [way_class(ways[k]) if k >= 0 else "unknown" for k in nearest_ways(lat, lon, ways, threshold_m)]
+
+
+def kind_labels(near: Sequence[int], ways: list[dict]) -> list[str]:
+    """Each point's speed class (trail_dict_store.KINDS) from nearest_ways, NO_KIND without one."""
+    return [(ways[k].get("kind") or NO_KIND) if k >= 0 else NO_KIND for k in near]
 
 
 def run_segments(d_m: Sequence[float], labels: Sequence[str], min_run_m: float = MIN_RUN_M) -> list[dict]:
@@ -307,23 +229,63 @@ def resample_track(track) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return xs, np.interp(xs, d, lat), np.interp(xs, d, lon)
 
 
-def analyse(track, url: Optional[str] = None,
-            post: Optional[Callable[[str, str, float], list]] = None) -> dict:
-    """The course's surface profile: {"v", "segs": [{"a", "b", "c"}], "km", "ways", "at"}.
-    SurfaceError when there is no server, it fails or another lookup holds it for WAIT_S."""
-    url = url or server_url()
-    if not url:
-        raise SurfaceError("off", "no server")
+def dictionary():
+    """The trail dictionary's index on this server (trail_dict_store.current); SurfaceError off /
+    building without one."""
+    from backend.engine import trail_dict_store as DS
+    idx = DS.current()
+    if idx is None:
+        if DS.base_url() and DS.building():
+            raise SurfaceError("building", "building")
+        raise SurfaceError("off", "no dictionary")
+    return idx
+
+
+def lookup(xs, la, lo, index=None) -> dict:
+    """Points every STEP_M (xs m, lat, lon) → {"segs", "kinds", "km", "ways"} from the dictionary."""
+    idx = index if index is not None else dictionary()
+    ways = idx.ways_near(la, lo, AROUND_RADIUS_M)
+    near = nearest_ways(la, lo, ways)
+    labels = [way_class(ways[k]) if k >= 0 else "unknown" for k in near]
+    xl = list(map(float, xs))
+    return {"segs": run_segments(xl, labels), "kinds": run_segments(xl, kind_labels(near, ways)),
+            "km": round(float(xs[-1]) / 1000.0, 3), "ways": len(ways),
+            "dict": idx.version, "rules": idx.rules_version}
+
+
+def analyse(track, index=None) -> dict:
+    """The course's surface profile: {"v", "src": "dict", "dict" (version), "rules" (rules version),
+    "segs": [{"a", "b", "c"}], "kinds": [{"a", "b", "c" (speed class)}], "km", "ways", "at"}.
+    SurfaceError when there is no dictionary on this server."""
     xs, la, lo = resample_track(track)
-    if not _one_at_a_time.acquire(timeout=WAIT_S):
-        raise SurfaceError("busy", "busy")
+    out = lookup(xs, la, lo, index)
+    return {"v": VERSION, "src": "dict", **out,
+            "at": dt.datetime.now().replace(microsecond=0).isoformat(sep=" ")}
+
+
+def kind_shares(kinds: Optional[list], a_km: float, b_km: float) -> dict:
+    """{speed class: share} of the stretch a_km–b_km from a profile's `kinds` (NO_KIND and the part
+    past the profile left out: those keep the multiplier 1)."""
+    span = b_km - a_km
+    out: dict = {}
+    if span <= 0:
+        return out
+    for s in kinds or []:
+        if s["c"] == NO_KIND:
+            continue
+        o = min(b_km, s["b"]) - max(a_km, s["a"])
+        if o > 0:
+            out[s["c"]] = out.get(s["c"], 0.0) + o / span
+    return out
+
+
+def ground_of_track(track, index=None) -> Optional[dict]:
+    """SP-544's back-test hook (backtest.GROUND_OF): an activity's own surface from the dictionary
+    (surface.effective, no marks), None without a dictionary."""
     try:
-        ways = fetch_ways(list(zip(la.tolist(), lo.tolist())), url, post)
-    finally:
-        _one_at_a_time.release()
-    labels = label_points(la, lo, ways)
-    return {"v": VERSION, "segs": run_segments(xs.tolist(), labels), "km": round(float(xs[-1]) / 1000.0, 3),
-            "ways": len(ways), "at": dt.datetime.now().replace(microsecond=0).isoformat(sep=" ")}
+        return effective(analyse(track, index))
+    except SurfaceError:
+        return None
 
 
 # ---------------------------------------------------------------------------- what is shown / used
@@ -403,9 +365,10 @@ def shares(eff: dict, a_km: float, b_km: float) -> dict:
 
 def unknown_message(code: str, detail: str = "") -> str:
     if code == "off":
-        return _("這台沒有設定 OSM 路面查詢（{env}）", env=URL_ENV)
-    if code == "busy":
-        return _("路面查詢忙碌中，稍後再試")
+        from backend.engine import trail_dict_store as DS
+        return _("這台還沒有步道字典（{env}）", env=DS.URL_ENV)
+    if code == "building":
+        return _("步道字典準備中，稍後再試")
     if code == "course":
         return _("路線已過期（伺服器重啟過），請重新上傳 GPX")
     return _("查不到 OSM 路面（{err}）", err=detail or "?")

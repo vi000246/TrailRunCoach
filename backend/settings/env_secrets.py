@@ -51,14 +51,14 @@ def secret_env(name: str) -> Optional[str]:
 
 
 def _extra() -> set:
-    """Secrets kept elsewhere that must be blanked too: the AI key pasted on the settings page
-    (sealed in the owner's ai.json, SP-785)."""
+    """Secrets kept elsewhere that must be blanked too: the AI keys pasted on the settings page
+    (sealed in the owner's ai.json, SP-785, and in the requesting member's own, SP-883)."""
     try:
-        from backend.ai.config import redact_value
-        v = redact_value()
+        from backend.ai.config import redact_values
+        vs = redact_values()
     except Exception:                     # noqa: BLE001 — redaction never breaks a log line
         return set()
-    return {v} if v and len(v) >= MIN_REDACT_LEN else set()
+    return {v for v in vs if v and len(v) >= MIN_REDACT_LEN}
 
 
 def values() -> list[str]:

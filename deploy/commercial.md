@@ -72,7 +72,7 @@
 | `TP_CLIENT_ID`、`TP_CLIENT_SECRET` | TP 的桌面軟體 client（只限擁有者） | — |
 | `CWA_API_KEY` | 中央氣象署授權碼（只有擁有者能看、能設；站台用它下載的預報全站共用） | SP-552 |
 | `TRC_UPSTREAM_TOKEN`、`TRC_PROXY_PASSWORD` | 本機副本從正式站同步用的 token 與代理密碼（只設在本機，不設在正式站；SP-373 起 `TRC_DEBUG_PIN` 不再讀） | SP-373 |
-| `TRC_ANTHROPIC_API_KEY` | AI 問答呼叫 Claude 的 API key（只限擁有者；沒設也可以在設定 › 進階設定 › AI 問答貼上，加密存在擁有者資料夾的 `ai.json`）。非密鑰的設定：`TRC_AI_MODEL`（預設 `claude-sonnet-5-5`）、`TRC_AI_DAILY_LIMIT`（預設 30）。見 `docs/spec/ai-qa.spec.md` | SP-785 |
+| `TRC_ANTHROPIC_API_KEY` | AI 問答呼叫 Claude 的 API key（只限擁有者；沒設也可以在設定 › 進階設定 › AI 問答貼上，加密存在擁有者資料夾的 `ai.json`）。非密鑰的設定：`TRC_AI_MODEL`（預設 `claude-sonnet-5-5`）、`TRC_AI_DAILY_LIMIT`（預設 30，每人各自算）、`TRC_AI_MEMBER_KEYS`（預設關；設 `1` 讓所有登入會員用**自己的** key，費用記在他們的 Anthropic 帳號——打開前先等 SP-881 查完資料來源條款，SP-883）。見 `docs/spec/ai-qa.spec.md` | SP-785、SP-883 |
 
 - **log 裡不印**：每一行 log（app.log、perf.log、`docker logs`）都經過 `applog.redact()`；除了原本的樣式規則（key=value、Bearer、長字串、email），現在也會把上表中**目前有設定的值**整段換成 `***`，不管它長什麼樣（`backend/tests/test_env_secrets_sp387.py`）。
 - **不進任何租戶資料夾**：多使用者模式下 server key 只吃 env（`ServerKeyRequired`，SP-384）；擁有者的 `~/.trailruncoach/secret.key` 要搬進 env，步驟在 `docs/deploy/accounts.md` §2。

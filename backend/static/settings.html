@@ -1250,14 +1250,19 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
     </div>
   </section>
 
-  <!-- AI 問答 (SP-785 / SP-786, backend/ai; logic: static/ai_settings.js): the owner only — shown when
-       GET /api/v1/ai/settings answers (403 for anyone else) -->
+  <!-- AI 問答 (SP-785 / SP-786, backend/ai; logic: static/ai_settings.js): the owner, or a member with
+       their own key while the server allows it (SP-883) — shown when GET /api/v1/ai/settings answers
+       (403 for anyone else) -->
   <section id="askai" hidden>
-    <h2><span data-i18n="settings.askai.title">AI 問答</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.askai.help" title="用「問 AI」問你正在看的卡、圖、課或計算結果。回答只用 app 自己的數字和規則，每一段標出是 App 規則還是 AI 推論。送給模型的只有彙總（狀態卡的規則判斷、近 8 週訓練量、那張卡的文字），不送 GPS 軌跡。目前只給站主用，用站主自己的 API key；呼叫模型會產生費用，每天有次數上限，同樣的問題會用存下來的回答。">?</button></h2>
+    <h2><span data-i18n="settings.askai.title">AI 問答</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.askai.help" title="用「問 AI」問你正在看的卡、圖、課或計算結果。回答只用 app 自己的數字和規則，每一段標出是 App 規則還是 AI 推論。送給模型的只有彙總（狀態卡的規則判斷、近 8 週訓練量、那張卡的文字），不送 GPS 軌跡。這裡是站主自己的 API key（會員只能用他們自己的，要伺服器開 TRC_AI_MEMBER_KEYS）；呼叫模型會產生費用，每天有次數上限，同樣的問題會用存下來的回答。">?</button></h2>
     <div class="row"><label><input type="checkbox" id="ai-on"> <span data-i18n="settings.askai.enable">開啟 AI 問答（每頁右下角的「問 AI」）</span></label></div>
     <div class="row"><span data-i18n="settings.askai.key">API key（Anthropic）</span>
       <span class="meta" id="ai-key-state"></span>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.askai.key_help" title="存起來會加密，畫面只顯示最後 4 碼，log 不會印出。伺服器設了 TRC_ANTHROPIC_API_KEY（或 _FILE）時用它。">?</button></div>
+      <button type="button" class="q" id="ai-key-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.askai.key_help" title="存起來會加密，畫面只顯示最後 4 碼，log 不會印出。伺服器設了 TRC_ANTHROPIC_API_KEY（或 _FILE）時用它。">?</button>
+</div>
+    <div class="row" id="ai-test-row" hidden><button type="button" id="ai-key-test" data-i18n="settings.askai.key_test">測試</button>
+      <span class="meta" id="ai-key-test-msg" role="status"></span></div>
+    <p class="meta" id="ai-member-note" hidden data-i18n="settings.askai.member_note">用你自己的 Anthropic API key（到 console.anthropic.com 建立）：每次問的費用記在你的 Anthropic 帳號，本站不收費。</p>
     <div class="row" id="ai-key-row"><input type="password" id="ai-key" autocomplete="off" spellcheck="false" style="flex:1;min-width:220px" placeholder="貼上 API key" data-i18n-attr="placeholder:settings.askai.key_placeholder">
       <button class="primary" id="ai-key-save" data-i18n="settings.askai.key_save">儲存</button>
       <button id="ai-key-clear" data-i18n="settings.askai.key_clear">清除</button></div>

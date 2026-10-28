@@ -386,6 +386,51 @@ html.modal-open { overflow: hidden; }
 @media (max-width: 560px) { .cy-tip { min-height: 3.2em; } }   /* a longer line wraps: nothing jumps on a tap */
 .cy-tip b { font-weight: 700; }
 .cy-note { margin: 0; color: var(--muted); font-size: 12px; }
+/* SP-825: 給教練 — a small 教練看板 (coach_board.html) with fictional students, one card beside the text like the
+   other features. The marks are the board's: red / yellow alert chips, a completion bar; Trig's own ok / warn /
+   err when a palette is on (theme.css), the board's for 原本 */
+:root { --cb-ok: #1f7a3d; --cb-warn: #8a5300; --cb-err: #b3261e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --cb-ok: #5cc37f; --cb-warn: #f0b75a; --cb-err: #f28b82; } }
+:root[data-theme="dark"] { --cb-ok: #5cc37f; --cb-warn: #f0b75a; --cb-err: #f28b82; }
+:root[data-palette] { --cb-ok: var(--ok); --cb-warn: var(--warn); --cb-err: var(--err); }
+.cbx { margin: 0; width: 100%; min-width: 0; padding: 16px 18px 14px; border-radius: 16px; background: var(--panel);
+  border: 1px solid var(--line); box-shadow: var(--shadow); display: grid; gap: 8px; }
+.cbx-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; }
+.cbx-top b { font-size: 15px; }
+.cbx-sub { color: var(--muted); font-size: 12.5px; }
+.cbx .cbx-list { margin: 0; padding: 0; list-style: none; display: grid; }
+.cbx .cbx-row { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, .95fr) minmax(0, .8fr) minmax(0, 1.25fr);
+  gap: 4px 12px; align-items: start; margin: 0; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13.5px; line-height: 1.4; }
+.cbx .cbx-row.head { padding: 0 0 4px; border-top: 0; color: var(--muted); font-size: 12px; font-weight: 600; }
+.cbx-row > * { min-width: 0; }
+.cbx-name { display: block; font-weight: 700; font-size: 14.5px; }
+.cbx-race, .cbx-small { display: block; color: var(--muted); font-size: 12.5px; }
+.cbx-pri { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 5px; border-radius: 5px; margin-right: 3px;
+  background: var(--soft); color: var(--accent); }
+.cbx-num { font-variant-numeric: tabular-nums; }
+.cbx-nw { white-space: nowrap; }
+.cbx-vol .cbx-small { display: block; }
+.cbx-bar { display: block; height: 6px; max-width: 90px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 6px 0 2px; }
+.cbx-bar i { display: block; height: 100%; border-radius: 999px; background: var(--cb-ok); }
+.cbx-bar.low i { background: var(--cb-warn); }
+.cbx-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.cbx-chip { display: inline-block; font-size: 12px; line-height: 1.35; padding: 2px 8px; border-radius: 999px; }
+.cbx-chip.bad { font-weight: 600; color: var(--cb-err); background: color-mix(in srgb, var(--cb-err) 13%, var(--panel)); }
+.cbx-chip.watch { color: var(--cb-warn); background: color-mix(in srgb, var(--cb-warn) 14%, var(--panel)); }
+.cbx-none { color: var(--muted); font-size: 12.5px; }
+.cbx-note { margin: 0; color: var(--muted); font-size: 12px; }
+.cbx-k { display: none; color: var(--muted); font-size: 11.5px; font-weight: 600; }
+@media (max-width: 560px) {
+  .cbx { padding: 14px 14px 12px; }
+  .cbx .cbx-row.head { display: none; }
+  .cbx .cbx-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 10px; }
+  .cbx .cbx-row.head + .cbx-row { border-top: 0; }
+  .cbx-row .cbx-chips { justify-content: flex-end; }
+  .cbx-row .cbx-vol, .cbx-row .cbx-plan { grid-row: 2; }
+  .cbx-k { display: block; }
+  .cbx .cbx-row.wide-only { display: none; }   /* three students are enough on a phone: closer to one screen */
+}
+.coach-note { margin: -6px 0 14px; color: var(--muted); font-size: 13px; }
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -585,6 +630,54 @@ html.modal-open { overflow: hidden; }
       </div>
       <figure class="shot phone reveal">
         <div class="frame"><img data-shot="intro-status" alt="訓練總覽：長期訓練負荷、負荷平衡、本週的量與訓練負荷圖" data-i18n-attr="alt:intro.read.shot_alt" loading="lazy"></div>
+      </figure>
+    </section>
+
+    <!-- SP-825: 給教練 — the 教練看板 (SP-790), 代看 (SP-791) and the coach's changes (SP-792) in one feature; the
+         card is a small board with fictional students (static: no API, no real account) -->
+    <section id="coach" class="feature" aria-labelledby="coach-h">
+      <div class="text">
+        <p class="kicker" data-i18n="intro.coach.kicker">給教練</p>
+        <h2 id="coach-h" data-i18n="intro.coach.h">帶學員：一頁看完每個人</h2>
+        <p class="sec-lead" data-i18n="intro.coach.lead">學員按「接受」後就出現在你的教練看板：每人一行，量、負荷、下一場賽事和課表完成度，學員同步完就更新。</p>
+        <ul>
+          <li data-i18n="intro.coach.li.alerts">有狀況的排最前：太久沒同步、沒在練、課表跟不上都會亮燈</li>
+          <li data-i18n="intro.coach.li.view">點學員的名字，看他的圖表、課表和賽事</li>
+          <li data-i18n="intro.coach.li.edit">學員允許的話，直接幫他改課表與門檻，每次修改都有紀錄</li>
+          <li data-i18n="intro.coach.li.consent">給你看什麼由學員決定，隨時可以解除</li>
+        </ul>
+        <p class="coach-note" data-i18n="intro.coach.note">教練身分目前由管理員開通。</p>
+      </div>
+      <figure class="cbx reveal" aria-labelledby="cbx-h">
+        <div class="cbx-top"><b id="cbx-h" data-i18n="intro.coach.card.h">示範教練看板</b><span class="cbx-sub" data-i18n="intro.coach.card.sub">虛構學員，畫面是示範資料</span></div>
+        <ul class="cbx-list">
+          <li class="cbx-row head" aria-hidden="true"><span data-i18n="intro.coach.col.who">學員・下一場賽事</span><span data-i18n="intro.coach.col.d7">近 7 天</span><span data-i18n="intro.coach.col.plan">課表完成度</span><span data-i18n="intro.coach.col.alerts">警示</span></li>
+          <li class="cbx-row">
+            <span class="cbx-who"><span class="cbx-name" data-i18n="intro.coach.s1.name">陳山羊</span><span class="cbx-race"><span class="cbx-pri">A</span><span data-i18n="intro.coach.s1.race">示範山徑越野 50K</span> · <span class="cbx-nw" data-i18n="intro.coach.s1.in">還有 26 天</span></span></span>
+            <span class="cbx-vol"><span class="cbx-k" data-i18n="intro.coach.col.d7">近 7 天</span><span class="cbx-num cbx-nw">7 h 40</span><span class="cbx-small cbx-nw" data-i18n="intro.coach.s1.climb">爬升 2,350 m</span></span>
+            <span class="cbx-plan"><span class="cbx-k" data-i18n="intro.coach.col.plan">課表完成度</span><span class="cbx-num">92%</span><span class="cbx-bar"><i style="width:92%"></i></span></span>
+            <span class="cbx-chips"><span class="cbx-chip bad" data-i18n="intro.coach.al.form">負荷平衡</span><span class="cbx-chip watch" data-i18n="intro.coach.al.descent">下坡負荷</span></span>
+          </li>
+          <li class="cbx-row">
+            <span class="cbx-who"><span class="cbx-name" data-i18n="intro.coach.s2.name">林小跑</span><span class="cbx-race"><span class="cbx-pri">B</span><span data-i18n="intro.coach.s2.race">示範越野 17K</span> · <span class="cbx-nw" data-i18n="intro.coach.s2.in">還有 12 天</span></span></span>
+            <span class="cbx-vol"><span class="cbx-k" data-i18n="intro.coach.col.d7">近 7 天</span><span class="cbx-none" data-i18n="intro.coach.s2.d7">沒有活動</span></span>
+            <span class="cbx-plan"><span class="cbx-k" data-i18n="intro.coach.col.plan">課表完成度</span><span class="cbx-num">55%</span><span class="cbx-bar low"><i style="width:55%"></i></span></span>
+            <span class="cbx-chips"><span class="cbx-chip watch" data-i18n="intro.coach.al.nosync">9 天沒有同步</span><span class="cbx-chip watch" data-i18n="intro.coach.al.quiet">近 7 天沒有活動</span></span>
+          </li>
+          <li class="cbx-row">
+            <span class="cbx-who"><span class="cbx-name" data-i18n="intro.coach.s3.name">王大衛</span><span class="cbx-race"><span class="cbx-pri">A</span><span data-i18n="intro.coach.s3.race">示範百岳 3 日縱走</span> · <span class="cbx-nw" data-i18n="intro.coach.s3.in">還有 40 天</span></span></span>
+            <span class="cbx-vol"><span class="cbx-k" data-i18n="intro.coach.col.d7">近 7 天</span><span class="cbx-num cbx-nw">5 h 05</span><span class="cbx-small cbx-nw" data-i18n="intro.coach.s3.climb">爬升 1,420 m</span></span>
+            <span class="cbx-plan"><span class="cbx-k" data-i18n="intro.coach.col.plan">課表完成度</span><span class="cbx-num">83%</span><span class="cbx-bar"><i style="width:83%"></i></span></span>
+            <span class="cbx-chips"><span class="cbx-none" data-i18n="intro.coach.al.none">沒有警示</span></span>
+          </li>
+          <li class="cbx-row wide-only">
+            <span class="cbx-who"><span class="cbx-name" data-i18n="intro.coach.s4.name">張雲</span><span class="cbx-race" data-i18n="intro.coach.s4.race">沒有排賽事</span></span>
+            <span class="cbx-vol"><span class="cbx-k" data-i18n="intro.coach.col.d7">近 7 天</span><span class="cbx-num cbx-nw">3 h 20</span><span class="cbx-small cbx-nw" data-i18n="intro.coach.s4.climb">爬升 380 m</span></span>
+            <span class="cbx-plan"><span class="cbx-k" data-i18n="intro.coach.col.plan">課表完成度</span><span class="cbx-num">100%</span><span class="cbx-bar"><i style="width:100%"></i></span></span>
+            <span class="cbx-chips"><span class="cbx-none" data-i18n="intro.coach.al.none">沒有警示</span></span>
+          </li>
+        </ul>
+        <p class="cbx-note" data-i18n="intro.coach.card.note">紅燈的學員排最前；點名字就能看那位學員的資料。</p>
       </figure>
     </section>
 

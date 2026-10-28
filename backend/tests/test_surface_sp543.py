@@ -2,17 +2,17 @@
 SP-543: the race calculator's 土徑比 from OpenStreetMap (engine/racepower/surface.py), stored per
 course file (engine/course_surface.py), its API (api/racepower.py /surface/{course_id}).
 
-No real network: a fake Overpass server on 127.0.0.1 (the HTTP path) or a fake post function.
+SP-727: the ways come from the trail dictionary on this server (engine/trail_dict_store.py), no
+Overpass any more: the tests build a small index of the same ways (no network).
 """
 import json
-import threading
-import urllib.parse
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
 
 from backend.engine import course_surface as CS
+from backend.engine import trail_dict_store as DS
+from backend.engine import trailclass as TC
 from backend.engine.racepower import gpx as GPX
 from backend.engine.racepower import surface as SF
 
@@ -106,60 +106,42 @@ def test_percentages_add_up_to_100_and_the_users_marks_count():
     assert SF.clean_overrides({"0": "made", "7": "dirt", "x": "dirt", "1": "lava"}, 3) == {"0": "made"}
 
 
-# ---- the Overpass lookup over HTTP (a fake server on 127.0.0.1) -------------------------------
+# ---- the lookup in the trail dictionary (SP-727; was Overpass over HTTP) ------------------------
 
-class _Fake(BaseHTTPRequestHandler):
-    seen: list = []
-    fail_at = None
-
-    def do_POST(self):            # noqa: N802
-        body = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode()
-        q = urllib.parse.parse_qs(body)["data"][0]
-        _Fake.seen.append(q)
-        if _Fake.fail_at is not None and len(_Fake.seen) >= _Fake.fail_at:
-            self.send_response(504)
-            self.end_headers()
-            return
-        out = json.dumps({"elements": WAYS}).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(out)
-
-    def log_message(self, *a):
-        pass
+def _record(w: dict) -> dict:
+    """WAYS as the dictionary carries them: its classes (rules v2, in town: the untagged footway stays
+    unknown as before) and the delta-coded coordinates."""
+    cls = TC.classify(w["tags"], town=True)
+    c, px, py = [], 0, 0
+    for g in w["geometry"]:
+        x, y = round(g["lon"] * DS.COORD_SCALE), round(g["lat"] * DS.COORD_SCALE)
+        c += (x - px, y - py)
+        px, py = x, y
+    return {"id": w["id"], "line": cls["line"], "surface": cls["surface"], "risk": cls["risk"],
+            "tags": TC.kept_tags(w["tags"]), "c": c}
 
 
 @pytest.fixture
-def fake_server():
-    _Fake.seen, _Fake.fail_at = [], None
-    srv = HTTPServer(("127.0.0.1", 0), _Fake)
-    t = threading.Thread(target=srv.serve_forever, daemon=True)
-    t.start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}/api/interpreter"
-    srv.shutdown()
+def dictionary(tmp_path, monkeypatch):
+    """The server's trail dictionary holding WAYS (its index built as a refresh would)."""
+    root = tmp_path / "trail-dict"
+    root.mkdir()
+    n = DS.build_index([_record(w) for w in WAYS], root / "v1.sqlite", {"version": "v1", "rules_version": 2})
+    (root / DS.CURRENT).write_text(json.dumps({"version": "v1", "rules_version": 2, "format": DS.FORMAT, "ways": n}))
+    monkeypatch.setattr(DS, "_default_root", lambda: root)
+    return root
 
 
-def test_lookup_over_http_is_chunked_and_splits_the_course(fake_server):
-    prof = SF.analyse(_track(), url=fake_server)
-    assert len(_Fake.seen) == 4                     # 501 points → 85 sampled → 4 chunks of ≤ 25 (overlapping by 1)
-    assert all(q.startswith("[out:json][timeout:10];way[highway](around:60,") and q.endswith("out geom;")
-               for q in _Fake.seen)
+def test_lookup_in_the_dictionary_splits_the_course(dictionary):
+    prof = SF.analyse(_track())
     e = SF.effective(prof)
     assert [s["c"] for s in prof["segs"]] == ["dirt", "unknown", "paved", "unknown"]
     assert close(e["pct"], {"dirt": 40, "made": 20, "unsure": 40})
     assert prof["km"] == pytest.approx(10.0, abs=0.05) and prof["ways"] == 4
+    assert prof["src"] == "dict" and prof["dict"] == "v1"
 
 
-def test_one_failed_chunk_fails_the_whole_lookup(fake_server):
-    _Fake.fail_at = 3
-    with pytest.raises(SF.SurfaceError) as ei:
-        SF.analyse(_track(), url=fake_server)
-    assert ei.value.code == "failed" and "504" in str(ei.value)
-    assert len(_Fake.seen) == 3                     # stops at the failure
-
-
-def test_no_server_set_means_no_lookup():
+def test_no_dictionary_means_no_lookup():
     with pytest.raises(SF.SurfaceError) as ei:
         SF.analyse(_track())
     assert ei.value.code == "off"
@@ -185,14 +167,14 @@ def _upload(api) -> str:
     return r.json()["course_id"]
 
 
-def test_api_looks_up_once_stores_and_keeps_the_users_marks(api, monkeypatch):
+def test_api_looks_up_once_stores_and_keeps_the_users_marks(api, dictionary, monkeypatch):
     calls = []
+    real = SF.lookup
 
-    def fake_post(url, query, timeout):
-        calls.append(url)
-        return WAYS
-    monkeypatch.setattr(SF, "post_query", fake_post)
-    monkeypatch.setenv(SF.URL_ENV, "http://overpass.test/api/interpreter")
+    def counted(*a, **k):
+        calls.append(1)
+        return real(*a, **k)
+    monkeypatch.setattr(SF, "lookup", counted)
     cid = _upload(api)
     assert api.get(f"/api/v1/racepower/surface/{cid}").json()["status"] == "none"
     v = api.post(f"/api/v1/racepower/surface/{cid}", json={}).json()
@@ -221,17 +203,15 @@ def test_api_looks_up_once_stores_and_keeps_the_users_marks(api, monkeypatch):
     assert api.post(f"/api/v1/racepower/surface/{cid}", json={"refresh": True}).json()["pct"]["dirt"] in (39, 40, 41)
 
 
-def test_api_without_a_server_or_with_a_failure_says_unknown_and_stores_nothing(api, monkeypatch):
+def test_api_without_a_dictionary_or_while_building_says_unknown_and_stores_nothing(api, monkeypatch):
     cid = _upload(api)
     v = api.post(f"/api/v1/racepower/surface/{cid}", json={}).json()
-    assert v["status"] == "unknown" and v["reason"] == "off" and "TRC_OVERPASS_URL" in v["message"]
-
-    def down(url, query, timeout):
-        raise SF.SurfaceError("failed", "URLError")
-    monkeypatch.setattr(SF, "post_query", down)
-    monkeypatch.setenv(SF.URL_ENV, "http://overpass.test/api/interpreter")
+    assert v["status"] == "unknown" and v["reason"] == "off" and "TRC_TRAIL_DICT_URL" in v["message"]
+    # the first index still being built (SP-727)
+    monkeypatch.setenv(DS.URL_ENV, "https://dict.test/")
+    monkeypatch.setattr(DS, "building", lambda: True)
     v = api.post(f"/api/v1/racepower/surface/{cid}", json={}).json()
-    assert v["status"] == "unknown" and v["reason"] == "failed" and CS.get(cid) is None
+    assert v["status"] == "unknown" and v["reason"] == "building" and CS.get(cid) is None
     assert api.put(f"/api/v1/racepower/surface/{cid}", json={"overrides": {"0": "dirt"}}).status_code == 404
     assert api.post("/api/v1/racepower/surface/nothex", json={}).status_code == 400
     # a course id the server no longer has (and no event): unknown, not an error

@@ -67,14 +67,20 @@ def _no_live_mail(monkeypatch):
 @pytest.fixture(autouse=True)
 def _no_live_ai(monkeypatch):
     """Never a real (paid) model call (SP-785): no Anthropic key from the developer's shell, and the
-    HTTPS POST to the Messages API refuses unless the test installs its own fake (test_ai_qa_sp785.py)."""
+    HTTPS POST to the Messages API — and the key test's GET (SP-883) — refuse unless the test
+    installs its own fake (test_ai_qa_sp785.py, test_ai_own_key_sp883.py)."""
     from backend.ai import config as ai_config, qa as ai_qa
 
     def refuse(url, headers, body, timeout):
         raise ConnectionError(f"no live network in tests: {url}")
-    for name in (ai_config.ENV_KEY, ai_config.ENV_KEY + "_FILE", ai_config.ENV_MODEL, ai_config.ENV_LIMIT):
+
+    def refuse_get(url, headers, timeout):
+        raise ConnectionError(f"no live network in tests: {url}")
+    for name in (ai_config.ENV_KEY, ai_config.ENV_KEY + "_FILE", ai_config.ENV_MODEL, ai_config.ENV_LIMIT,
+                 ai_config.ENV_MEMBERS):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(ai_qa, "_post", refuse)
+    monkeypatch.setattr(ai_qa, "_get", refuse_get)
     ai_qa.clear_cache()
     yield
     ai_qa.clear_cache()
@@ -167,10 +173,13 @@ def _no_real_event_gpx(monkeypatch, tmp_path_factory):
     # nor the race calculator's saved inputs (engine/race_calc_store.py)
     from backend.engine import race_calc_store
     monkeypatch.setattr(race_calc_store, "_default_db", lambda: None)
-    # nor a course's stored surface, and no OSM lookup leaves the machine (SP-543: tests pass a fake server)
+    # nor a course's stored surface, nor the server's trail dictionary, and nothing is downloaded
+    # (SP-543 / SP-727: tests build their own small index)
     from backend.engine import course_surface
     monkeypatch.setattr(course_surface, "_default_db", lambda: None)
-    monkeypatch.delenv("TRC_OVERPASS_URL", raising=False)
+    from backend.engine import trail_dict_store
+    monkeypatch.setattr(trail_dict_store, "_default_root", lambda: None)
+    monkeypatch.delenv("TRC_TRAIL_DICT_URL", raising=False)
 
 
 @pytest.fixture(autouse=True)

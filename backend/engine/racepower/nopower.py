@@ -215,7 +215,7 @@ def plan(ctx, body, course: dict, opts: dict, ps: Optional[dict]) -> dict:
         res = _gap_rows(segs, t_whole)
         if hr is not None and mode == "auto":
             if gpx:
-                res = PL._slope_split(res, segs, hr.get("slope_cost"), mbar)
+                res = PL._slope_split(res, segs, hr.get("slope_cost"), mbar, PL._kind_surface(opts, hr))
                 res = PL._place_memory(res, opts.get("memory"), (hr.get("terrain") or {}).get("mult") or 1.0)
             res = PL._fade(res, hr.get("fade"))
         return {"res": res, "mbar": mbar, "t_whole": t_whole}
@@ -317,6 +317,8 @@ def plan(ctx, body, course: dict, opts: dict, ps: Optional[dict]) -> dict:
                                   a=c[0], b=c[1], c=c[2], d=c[3], e=c[4], n=sc.get("n_runs") or 0)))
         elif gpx:
             warnings.append(H.tag("RC8", _(SPLIT_GAP)))
+        if res.get("kind_split"):
+            warnings.append(H.tag("RC8", PL.kind_text(hr_est["surface_kind"])))    # SP-727
         if res.get("memory"):
             warnings.append(H.tag("RC8", PL.memory_text(res["memory"])))
     elif est is not None:
@@ -351,6 +353,10 @@ def plan(ctx, body, course: dict, opts: dict, ps: Optional[dict]) -> dict:
         from backend.engine.racepower import nonmoving as NM
         nm_now = NM.predict((th or {}).get("nonmoving"), T, stops, kind=stop_kind) or nm_now
     summary = {"time_s": T, "power": None, "power_train": None, "pct_cp": None, "w_per_kg": None,
+               # SP-727: whether the segment times also carry the surface (trail dictionary)
+               "kind_split": ({"applied": True, "mult": (hr_est.get("surface_kind") or {}).get("mult"),
+                               "n_runs": (hr_est.get("surface_kind") or {}).get("n_runs"), "badge": "推估"}
+                              if hr_est is not None and res.get("kind_split") else None),
                "slope_split": ({"applied": True, "cost": (hr_est.get("slope_cost") or {}).get("cost"),
                                 "n_runs": (hr_est.get("slope_cost") or {}).get("n_runs"), "badge": "推估"}
                                if hr_est is not None and res.get("slope_split") else None),

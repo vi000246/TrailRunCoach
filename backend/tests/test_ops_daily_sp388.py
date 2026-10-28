@@ -226,7 +226,8 @@ def test_the_monitoring_files_match_the_thresholds_and_the_metrics_file():
     assert group["interval"] == 3600
     by = {r["uid"]: r for r in group["rules"]}
     thr = {u: r["data"][2]["model"]["conditions"][0]["evaluator"]["params"][0] for u, r in by.items()}
-    assert thr == {"trc-cpu-week": 2, "trc-mem-week": 2.5, "trc-members-near-cap": 0.799}
+    assert thr == {"trc-cpu-week": 2, "trc-mem-week": 2.5, "trc-members-near-cap": 0.799,
+                   "trc-revenue-near-tax-line": 0.799}                   # SP-803's, same group
     for u in ("trc-cpu-week", "trc-mem-week"):
         q = by[u]["data"][0]["model"]["query"]
         assert "subDuration(d: 7d" in q and "r.days >= 7" in q and "every: 5m, fn: mean" in q
@@ -235,10 +236,10 @@ def test_the_monitoring_files_match_the_thresholds_and_the_metrics_file():
     # NAS's Grafana has no such contact point yet (applied 2026-10-20); Grafana 11 wants the panel link in pairs
     assert all("notification_settings" not in r and r["labels"]["project"] == "trailruncoach" for r in group["rules"])
     assert {r["uid"]: r["annotations"]["__panelId__"] for r in group["rules"]} == \
-        {"trc-cpu-week": "4", "trc-mem-week": "5", "trc-members-near-cap": "6"}
+        {"trc-cpu-week": "4", "trc-mem-week": "5", "trc-members-near-cap": "6", "trc-revenue-near-tax-line": "8"}
     assert all(r["annotations"]["__dashboardUid__"] == "trailruncoach-ops" for r in group["rules"])
     dash = json.loads((d / "grafana-dashboard.json").read_text("utf-8"))
-    assert dash["uid"] == "trailruncoach-ops" and len(dash["panels"]) == 7
+    assert dash["uid"] == "trailruncoach-ops" and len(dash["panels"]) == 9         # + SP-803's two
     # the field the alert reads is one metrics.json has
     assert R.member_signal(1, 2).keys() >= {"share"}
     readme = (d / "README.md").read_text("utf-8")

@@ -167,6 +167,7 @@
   "askai.err.daily_limit": "Today's questions are used up; ask again tomorrow.",
   "askai.err.busy": "The model is busy; try again in a moment.",
   "askai.err.upstream": "The model did not answer; try again in a moment.",
+  "askai.err.no_credit": "The API key's Anthropic account is out of credit; top it up and ask again.",
   "askai.err.empty": "Type a question first.",
   "askai.err.owner_only": "Only the site's own account can use AI Q&A.",
   "askai.err.network": "Can't reach the server; try again in a moment.",

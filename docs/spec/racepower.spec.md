@@ -582,15 +582,38 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
   share link carries no coordinates.
 - **Ground — 土徑比** (SP-543, `backend/engine/racepower/surface.py`, stored per course file by
   `backend/engine/course_surface.py`, API `GET/POST/PUT /surface/{course_id}`): the OSM ways within
-  60 m of the course (Overpass at `$TRC_OVERPASS_URL`, ≤ 100 corridor points in chunks of 25, one
-  request at a time, 40 s budget, all-or-nothing), each track point every 20 m takes the class of
-  the nearest way within 50 m (Cairn's rules + SP-531: an untagged path / footway is unknown,
-  sac_scale ≥ mountain_hiking / a very bad smoothness is dirt, laid surfaces are paved; shared
-  cases `backend/tests/fixtures/osm_surface_cases.json`), runs < 60 m join their neighbour. Three
-  groups: 確定土徑 (dirt) / 確定人工 (gravel, paved, steps) / 不確定 (unknown). The page shows the
-  split under 路線 with © OpenStreetMap contributors; the unsure stretches are dashed on the course
-  map and a click marks them; the split can also be typed in. A failed lookup is 路面未知 and never
-  blocks the calculation; it is not stored (the next visit tries again).
+  60 m of the course from the **trail dictionary on this server** (SP-727,
+  `backend/engine/trail_dict_store.py`: the SP-709 dictionary published at `$TRC_TRAIL_DICT_URL`,
+  its bundle downloaded once per version — sha256 checked against the manifest — and indexed locally
+  in `<server root>/trail-dict/<version>.sqlite`, 0.01° cells; the scheduler looks at `latest.json`
+  once a day, hourly while there is no index, and builds the index at `cold` in the job queue; a
+  failed refresh keeps the index in use). No Overpass server any more. Each track point every 20 m
+  takes the class of the nearest way within 50 m — the dictionary's own classes
+  (`backend/engine/trailclass.py`, rules v2: an untagged path out of town is dirt, in town unknown;
+  sac_scale ≥ mountain_hiking / a very bad smoothness is dirt, laid surfaces are paved) — runs
+  < 60 m join their neighbour. Three groups: 確定土徑 (dirt) / 確定人工 (gravel, paved, steps) /
+  不確定 (unknown). The profile (v2) also carries `kinds`, the same runs by speed class
+  (`trail_dict_store.speed_kind`: road / forest_road / steps / trail / trail_t3, `none` without a
+  way), and the dictionary version and rules version it came from. The page shows the split under
+  路線 with © OpenStreetMap contributors; the unsure stretches are dashed on the course map and a
+  click marks them; the split can also be typed in. No dictionary (unset, or the first index being
+  built) is 路面未知 and never blocks the calculation; it is not stored (the next visit tries again).
+  Profiles stored from Overpass before SP-727 (v1) stay as they are until 重查.
+- **Surface in the segment split** (SP-727, behind the back-test: `backtest.kind_flag`): on top of
+  the slope cost (SP-723) each speed class has a multiplier in three grade bands (down / flat / up,
+  centres −10 / 0 / +10 %, linear between, flat outside), `trailhr.fit_kind_mult`: inside each of the
+  athlete's own-paced trail runs, the moving time on that class ÷ what the slope cost alone gives it,
+  shrunk to 1 with 60 pseudo-minutes (推估); fewer than 3 runs with surface evidence → not applied.
+  The evidence per run (`athlete.kind_rows`: the run's own track looked up in the dictionary, its
+  course segments, actual moving time, class shares) is disk-memoised keyed on the rules version (a
+  monthly rebuild does not re-read every run). `slope_times(…, kinds=)` multiplies each segment by
+  `kind_mult(shares, grade)` and keeps the whole-race time. The back-test (`trailhr.kind_backtest`,
+  stored as `trail_hr.surface_kind`): leave-one-run-out on the runs ≥ 50 % covered, slope cost
+  alone vs slope cost × surface (both fitted without the run), the cumulative error at the segment
+  ends ÷ the run's time; `kind_flag` = better (smaller median) on ≥ 5 runs (推估) and the whole-run
+  time identical. When on, the calculator reads the course's `kinds` (looking the course up in the
+  dictionary when it has no v2 profile yet), the RC8 line lists the multipliers and
+  `summary.kind_split` is set.
 - **Technicality on the dirt only** (SP-544, off unless `TRC_TECH_DIRT_ONLY=1`): with the course's
   stored surface, each trail segment at g ≤ +2 % keeps the technicality factor only on its dirt +
   unsure share (`surface.apply_tech_dirt`: `re_mult = (1 + share·(f − 1)) / f`, applied by
@@ -1818,3 +1841,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-25 | bugfix | SP-944 | 環境 card in English: the To chip's line (白天 06–18 平均, 取得於, CWA 地點／最近, 逐時 N 筆／沒有逐時資料), 環境係數 M／海拔影響／熱影響, the 進階 From / To boxes (titles, 海拔／溫度／濕度 labels, 氣壓／海拔係數／露點／熱負荷／無), 「嘗試：」, 未取得 and the CWA key box's 儲存／已設定／已清除 through `racepower.env.*` (zh-TW word for word as before); the CWA 登山 step's `tried` reasons through `_()`; the From label (`training_conditions.label`: fallback, median-altitude and Open-Meteo archive wording) is an `M_()` text that `GET /inputs` relocalizes (the inputs cache is shared by every language), and the daily `racepower_training_env.json` keeps `activities` instead of the text. Place names stay as written; `backend/tests/test_racepower_env_en_sp944.py`, `backend/tests/e2e/test_racepower_env_en_sp944_e2e.py` |
 | 2026-10-27 | feature | SP-953 (SP-950 Q2-2 (a)) | The calculator follows the plan's one power rule (power_state): in ② CP stale / ③ no power meter, trail = the trail HR pace model directly (split by grade-adjusted pace), else / road = the race-results estimate (`nopower.py`); no power, % CP, W/kg, CP / RE inputs, power goal, power segment targets or watch-export power; the page says which model and why; `/estimate` texts per state; race_refs / 賽事可行性 take the same route, the wrong 「沒有越野心率配速模型」 replaced by the real reason, 百岳 W/kg only in ① (was the cleared legacy `power_meter`) |
 | 2026-10-27 | feature | SP-969 | `summary.breakdown` (trail HR model in auto mode): the moving time factor by factor — flat, climb, 地形難度, durability, race-day heat, altitude (+ 位置記憶 / night when they moved it), each the calculation run again with one more factor, adding up to `time_s` (`planner.trail_breakdown`, `breakdown_after`); frozen for the 介紹頁 trail example by `scripts/intro_example.py --breakdown-only` |
+| 2026-10-28 | feature | SP-727 | The course ground reads the trail dictionary on this server (`engine/trail_dict_store.py`: `$TRC_TRAIL_DICT_URL`, the bundle indexed locally, refreshed daily) instead of Overpass (`TRC_OVERPASS_URL` gone); profile v2 carries the speed classes (`kinds`). The trail HR model fits per-class multipliers on top of the slope cost (`surface_kind`, `trailhr.fit_kind_mult`); the plan's split uses them only when the back-test's leave-one-run-out (`trail_hr.surface_kind`) is better (`backtest.kind_flag`) |

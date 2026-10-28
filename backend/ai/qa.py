@@ -17,7 +17,12 @@
   tests replace `_post`; nothing in the tests reaches the network. The log gets the status, the
   time and the token counts — never the key, the question or the answer.
 * Each call (not a cached answer) also leaves its tokens and USD for the shared Grafana「API 使用量」
-  (spend.record, SP-882) — a file Telegraf reads; it never fails the call.
+  (spend.record, SP-882) — a file Telegraf reads; it never fails the call. A member's call on their
+  own key (SP-883) is purpose `ask_own_key`: the dashboard tells the site's spend from theirs.
+* A member's key (SP-883): the same ask, their own key, their own count; calls are one at a time
+  per person (not one for the whole site). 「測試」 on the settings page is check_key: GET API_MODELS
+  (lists the models; no tokens, nothing billed), at most config.KEY_TESTS_PER_DAY a day. A key the
+  API refuses for its credit balance answers AI_NO_CREDIT.
 """
 from __future__ import annotations
 
@@ -39,16 +44,30 @@ from backend.ai.medical import is_medical
 log = logging.getLogger("backend.ai")
 
 API_URL = "https://api.anthropic.com/v1/messages"
+API_MODELS = "https://api.anthropic.com/v1/models?limit=1"     # the key test (SP-883): nothing billed
 API_VERSION = "2023-06-01"
 TIMEOUT_S = 60.0
 MAX_TOKENS = 1200
 CACHE_TTL_S = 6 * 3600
 CACHE_MAX = 128
 MAX_PARTS = 12
+TEST_TIMEOUT_S = 15.0
+PURPOSE_OWN_KEY = "ask_own_key"           # spend.record: a member's call on their own key (SP-883)
 
 _cache: OrderedDict = OrderedDict()       # key -> (at, answer)
 _cache_lock = threading.Lock()
-_call_lock = threading.Lock()             # one model call at a time (the count stays exact)
+_call_locks: dict = {}                    # tenant id -> lock: one model call at a time per person (the count stays exact)
+_call_locks_lock = threading.Lock()
+
+
+def _call_lock() -> threading.Lock:
+    from backend import tenancy
+    tid = tenancy.current().id
+    with _call_locks_lock:
+        lk = _call_locks.get(tid)
+        if lk is None:
+            lk = _call_locks[tid] = threading.Lock()
+        return lk
 
 LANG = {"en": "English", "zh-TW": "Traditional Chinese (Taiwan)"}
 
@@ -84,6 +103,41 @@ def _post(url: str, headers: dict, body: bytes, timeout: float) -> tuple:
         return e.code, e.read(4096) if e.fp else b""
 
 
+def _get(url: str, headers: dict, timeout: float) -> tuple:
+    """(status, response body) of one HTTPS GET — the key test (tests replace this)."""
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:          # noqa: S310 — a fixed https URL
+            return r.status, r.read(100_000)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(4096) if e.fp else b""
+
+
+def _headers(key: str) -> dict:
+    return {"x-api-key": key, "anthropic-version": API_VERSION, "content-type": "application/json",
+            "user-agent": "TrailRunCoach-ai"}
+
+
+def _no_credit(status: int, raw: bytes) -> bool:
+    """The API's 「credit balance is too low」 (a 400): a member's key with no money on it."""
+    return status in (400, 402) and b"credit balance" in (raw or b"").lower()
+
+
+def _refused(status: int, raw: bytes, ms: int, what: str) -> None:
+    """Raise the AIError of a non-2xx answer (logged by status only — never the body or the key)."""
+    if status in (401, 403):
+        log.warning("AI %s refused (%s, %d ms): the key is not accepted", what, status, ms)
+        raise AIError("AI_KEY_INVALID", 502)
+    if _no_credit(status, raw):
+        log.warning("AI %s refused (%s, %d ms): no credit on the key", what, status, ms)
+        raise AIError("AI_NO_CREDIT", 402)
+    if status in (429, 529):
+        log.warning("AI %s busy (%s, %d ms)", what, status, ms)
+        raise AIError("AI_BUSY", 503)
+    log.warning("AI %s failed (%s, %d ms)", what, status, ms)
+    raise AIError("AI_UPSTREAM", 502)
+
+
 def _messages(question: str, ctx: dict, history: list) -> list:
     msgs = []
     for h in history:
@@ -97,8 +151,7 @@ def _messages(question: str, ctx: dict, history: list) -> list:
 def call_model(key: str, model: str, system: str, messages: list, purpose: str = "ask") -> str:
     body = json.dumps({"model": model, "max_tokens": MAX_TOKENS, "system": system,
                        "messages": messages}).encode()
-    headers = {"x-api-key": key, "anthropic-version": API_VERSION, "content-type": "application/json",
-               "user-agent": "TrailRunCoach-ai"}
+    headers = _headers(key)
     t0 = time.monotonic()
     done = {"status": "error", "in": 0, "out": 0, "error": "AI_UPSTREAM"}
     try:
@@ -108,15 +161,8 @@ def call_model(key: str, model: str, system: str, messages: list, purpose: str =
             log.warning("AI call failed: %s", type(e).__name__)
             raise AIError("AI_UPSTREAM", 502)
         ms = int((time.monotonic() - t0) * 1000)
-        if status in (401, 403):
-            log.warning("AI call refused (%s, %d ms): the key is not accepted", status, ms)
-            raise AIError("AI_KEY_INVALID", 502)
-        if status in (429, 529):
-            log.warning("AI call busy (%s, %d ms)", status, ms)
-            raise AIError("AI_BUSY", 503)
         if not 200 <= status < 300:
-            log.warning("AI call failed (%s, %d ms)", status, ms)
-            raise AIError("AI_UPSTREAM", 502)
+            _refused(status, raw, ms, "call")
         try:
             d = json.loads(raw)
             text = "".join(b.get("text") or "" for b in d.get("content") or [] if b.get("type") == "text")
@@ -239,13 +285,38 @@ def ask(question: Any, focus: Any = None, history: Any = None, locale: str = "zh
     hit = _cached(ck)
     if hit is not None:
         return {**hit, "cached": True, "used_today": C.used_today(), "daily_limit": C.daily_limit()}
-    with _call_lock:
+    with _call_lock():
         if C.used_today() >= C.daily_limit():
             raise AIError("AI_DAILY_LIMIT", 429)
         text = call_model(key, model, SYSTEM.replace("{lang}", LANG.get(locale, LANG["zh-TW"])),
-                          _messages(q, ctx, hist))
+                          _messages(q, ctx, hist), purpose=PURPOSE_OWN_KEY if C.is_member() else "ask")
         used = C.count_one()
     ans = parse_answer(text, refs)
     ans = {**ans, "medical": ans["medical"] or medical_q, "model": model, "sent": X.sent_view(ctx)}
     _store(ck, ans)
     return {**ans, "cached": False, "used_today": used, "daily_limit": C.daily_limit()}
+
+
+def check_key() -> dict:
+    """「測試」 on the settings page (SP-883): is the key in use accepted? GET API_MODELS — lists the
+    models, no tokens, nothing billed, not counted against the daily questions. At most
+    config.KEY_TESTS_PER_DAY a day per person (else AI_TEST_LIMIT 429, no call). {ok: true} or AIError
+    (AI_NO_KEY, AI_KEY_INVALID, AI_NO_CREDIT, AI_BUSY, AI_UPSTREAM). Logs the status and time only."""
+    if not C.allowed():
+        raise AIError("AI_OWNER_ONLY", 403)
+    key = C.api_key()
+    if not key:
+        raise AIError("AI_NO_KEY", 409)
+    if not C.count_key_test():
+        raise AIError("AI_TEST_LIMIT", 429)
+    t0 = time.monotonic()
+    try:
+        status, raw = _get(API_MODELS, _headers(key), TEST_TIMEOUT_S)
+    except Exception as e:                   # noqa: BLE001 — a network error: logged by type only
+        log.warning("AI key test failed: %s", type(e).__name__)
+        raise AIError("AI_UPSTREAM", 502)
+    ms = int((time.monotonic() - t0) * 1000)
+    if not 200 <= status < 300:
+        _refused(status, raw, ms, "key test")
+    log.info("AI key test ok (%d ms)", ms)
+    return {"ok": True}

@@ -10299,14 +10299,6 @@
     "draft": true,
     "src": "backend/engine/racepower/surface.py:352"
   },
-  "這台沒有設定 OSM 路面查詢（{env}）": {
-    "draft": true,
-    "src": "backend/engine/racepower/surface.py:406"
-  },
-  "路面查詢忙碌中，稍後再試": {
-    "draft": true,
-    "src": "backend/engine/racepower/surface.py:408"
-  },
   "查不到 OSM 路面（{err}）": {
     "draft": true,
     "src": "backend/engine/racepower/surface.py:411"
@@ -16926,5 +16918,45 @@
   "坡度 {g}%、{speed}，用走的": {
     "draft": true,
     "src": "backend/engine/stored_text.py:66"
+  },
+  "這台還沒有步道字典（{env}）": {
+    "draft": true,
+    "src": "backend/engine/racepower/surface.py"
+  },
+  "步道字典準備中，稍後再試": {
+    "draft": true,
+    "src": "backend/engine/racepower/surface.py"
+  },
+  "道路": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "林道": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "石階": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "步道": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "T3 以上步道": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "{k} 下 ×{a:.2f}／平 ×{b:.2f}／上 ×{c:.2f}": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "各種路面都跟坡度成本一樣": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
+  },
+  "分段時間也看路面（推估，步道字典）：{parts}（相對只用坡度成本；{n} 次有路面資料的越野跑，資料少時往 1 收縮）。整場時間不變，只改各段怎麼分": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py"
   }
 }

@@ -620,24 +620,65 @@ CLIM_TO_PASSES = 3                # SP-257: re-solves with the on-course To (the
 CLIM_TO_TOL_C = 0.05              # … until the To read from the new ETAs moves less than this
 
 
-def course_ground(ctx: Context, body: PlanIn) -> Optional[dict]:
-    """SP-544: the course's stored surface (engine/course_surface.py, SP-543) with the user's marks,
-    when TRC_TECH_DIRT_ONLY is on; None otherwise (the technicality on the whole course, as before)."""
-    from backend.engine import course_surface as CS
-    from backend.engine.racepower import surface as SF
-    if not SF.tech_dirt_only() or not body.course:
-        return None
-    cid = body.course.course_id
-    if not cid and body.course.event_id:
+def _course_cid(ctx: Context, body: PlanIn) -> Optional[str]:
+    cid = body.course.course_id if body.course else None
+    if not cid and body.course and body.course.event_id:
         got = ctx.event_track(body.course.event_id)
         cid = got[0] if got else None
+    return cid
+
+
+def _surface_row(cid: Optional[str]) -> Optional[dict]:
+    from backend.engine import course_surface as CS
     try:
         row = CS.get(cid) if cid else None
     except CS.CourseSurfaceError:
         return None
-    if not row or not row.get("profile"):
+    return row if row and row.get("profile") else None
+
+
+def course_ground(ctx: Context, body: PlanIn) -> Optional[dict]:
+    """SP-544: the course's stored surface (engine/course_surface.py, SP-543) with the user's marks,
+    when TRC_TECH_DIRT_ONLY is on; None otherwise (the technicality on the whole course, as before)."""
+    from backend.engine.racepower import surface as SF
+    if not SF.tech_dirt_only() or not body.course:
+        return None
+    row = _surface_row(_course_cid(ctx, body))
+    if row is None:
         return None
     return SF.effective(row["profile"], row.get("overrides"), row.get("manual"))
+
+
+def course_kinds(ctx: Context, body: PlanIn, course: dict) -> Optional[list]:
+    """SP-727: the course's speed-class runs ([{"a", "b", "c"}], the stored surface profile's `kinds`)
+    when the back-test lets the surface change the split (ctx.kind_apply, backtest.kind_flag); None
+    otherwise. A course never looked up (or looked up before the trail dictionary) is looked up in the
+    dictionary here and stored, as the page's 路面 would (a local index: no network)."""
+    from backend.engine import course_surface as CS
+    from backend.engine.racepower import surface as SF
+    ka = getattr(ctx, "kind_apply", None)
+    if ka is None or not body.course or not ka():
+        return None
+    cid = _course_cid(ctx, body)
+    row = _surface_row(cid)
+    if row is not None and row["profile"].get("kinds") is not None:
+        return row["profile"]["kinds"]
+    track = ctx.course_track(cid) if cid else None
+    if track is None and cid and body.course.event_id:
+        got = ctx.event_track(body.course.event_id)
+        track = got[1] if got and got[0] == cid else None
+    if track is None:
+        return None
+    try:
+        prof = SF.analyse(track)
+    except SF.SurfaceError:
+        return None
+    if cid and row is None:                     # never over a stored profile (its marks stay)
+        try:
+            CS.save(cid, profile=prof)
+        except CS.CourseSurfaceError:
+            pass
+    return prof.get("kinds")
 
 
 def stop_kind(ctx: Context, body: PlanIn) -> str:
@@ -686,6 +727,9 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
             opts["heat_status"] = {**ctx.heat_status(body.date), "hrc_test": ctx.hrc_test()}
         if body.type == "trail":
             opts["stop_kind"] = stop_kind(ctx, body)
+            if course.get("source") == "gpx":
+                opts["kinds"] = course_kinds(ctx, body, course)        # SP-727 (None: the slope cost alone)
+                opts["kind_apply"] = opts["kinds"] is not None
             pm = getattr(ctx, "place_memory", None)
             if pm is not None and course.get("source") == "gpx":
                 try:
@@ -703,6 +747,8 @@ def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
     opts["hourly"] = [x.model_dump() for x in body.hourly or []]
     if body.type == "trail" and course.get("source") == "gpx":
         opts["ground"] = course_ground(ctx, body)
+        opts["kinds"] = course_kinds(ctx, body, course)            # SP-727 (None: the slope cost alone)
+        opts["kind_apply"] = opts["kinds"] is not None
     if body.heat_acclimatisation:
         opts["heat_status"] = {**ctx.heat_status(body.date), "hrc_test": ctx.hrc_test()}
     if body.type == "baiyue" and body.heat_ref_alt_m is None and (body.env_to is None or body.env_to.temp_c is None):

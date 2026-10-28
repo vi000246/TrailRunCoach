@@ -1,6 +1,6 @@
 # Module Spec: ai-qa (AI 問答：問 AI、給 AI 的摘要、規則引用)
 
-> **Last Updated**: 2026-10-21
+> **Last Updated**: 2026-10-28
 > **Status**: Active（後端 SP-785、前端 SP-786；拍板在 SP-306 Q1／Q2 方案 X）
 > **Domain Layer**: Supporting
 > **Source**: SP-306 `## 結論`（入口方案 X、先只給擁有者、只送彙總、舊 `ai_api_key` 一起處理）
@@ -22,19 +22,23 @@
 
 ## 誰能用
 
-- **只有站主**（SP-306 Q1-1 C）：`config.allowed()` ＝ `tenancy.is_owner()` 且有 `ai.owner_key`（`tenancy.OWNER_ONLY_CAPS`）且不是示範模式。其他人每個 `/api/v1/ai/*` 回 403 `AI_OWNER_ONLY`；示範模式不掛這個 router（`main.py` `owner_only`）；教練代看學員時是學員的 tenant，一樣 403，`/api/v1/session` 也不給 `ai`。
-- 之後商業版「使用者自己的 key」（Q1-1 A）還沒做。
+- **站主**（SP-306 Q1-1 C）：`tenancy.is_owner()` 且有 `ai.owner_key`（`tenancy.OWNER_ONLY_CAPS`）且不是示範模式；用站主的 key。
+- **登入的會員，用自己的 key**（SP-883；SP-306 Q1-1 A）：伺服器環境變數 `TRC_AI_MEMBER_KEYS`（`1`／`true`／`yes`／`on`）開著時，`USER` tenant 而且有 `ai` cap（`USER_CAPS` 都有）就可以用——免費、訂閱都可以（SP-883 Q1-1 A）。開關**預設關**（SP-883 Q1-2 A：等 SP-881 查完 COROS／Garmin 條款能不能把資料送給模型）；關著時會員跟以前一樣全部 403、看不到「問 AI」。
+- `config.allowed()` ＝ 上面兩種之一（`config.is_member()` 是第二種）。其他人每個 `/api/v1/ai/*` 回 403 `AI_OWNER_ONLY`；示範模式不掛這個 router（`main.py` `owner_only`）；教練代看學員時中介層 `accounts/viewing.check` 不放行 `/api/v1/ai/*`（不在 `READ_OPEN`／`CALC`／`WRITE_OPEN`），`/api/v1/session` 也不給 `ai`。
 
 ## 金鑰
 
 讀取順序：
 
-1. 環境變數 `TRC_ANTHROPIC_API_KEY`，或 `TRC_ANTHROPIC_API_KEY_FILE` 指的檔案（Docker secret）。列在 `settings/env_secrets.NAMES`，所以 `applog.redact` 會遮掉。
-2. 設定頁貼上的 key：`secrets.seal()`（伺服器的 Fernet 金鑰）加密後存在 `<owner home>/ai.json` 的 `api_key`（權限 600）。任何 API 都不回傳，只回 `masked`（`…` ＋ 最後 4 碼）；`env_secrets._extra()` 把它的值也加進 log 遮罩；`secrets.ciphertext_exists()` 看得到它（不會在它還在時產生新的伺服器金鑰）。
+1. **只限站主**：環境變數 `TRC_ANTHROPIC_API_KEY`，或 `TRC_ANTHROPIC_API_KEY_FILE` 指的檔案（Docker secret）。列在 `settings/env_secrets.NAMES`，所以 `applog.redact` 會遮掉。會員**永遠拿不到**這把（那是站主的錢）。
+2. 設定頁貼上的 key：`secrets.seal()`（伺服器的 Fernet 金鑰）加密後存在**自己資料夾**的 `ai.json` 的 `api_key`（權限 600）——站主是 `<owner home>/ai.json`，會員是 `users/<id>/ai.json`。任何 API 都不回傳，只回 `masked`（`…` ＋ 最後 4 碼）；`env_secrets._extra()` → `config.redact_values()` 把站主的 key 與**這個請求解密過的會員 key** 加進 log 遮罩——會員的 key 在 `_saved_key()` 解密的那一刻記進 request 範圍的 contextvar，請求結束就沒了；寫 log 時**不讀任何租戶或會員資料夾**（公開頁的請求不碰租戶，`test_intro_sp637`）；`secrets.ciphertext_exists()` 看得到站主的（會員的 key 只存在多人模式，那時伺服器金鑰一定來自環境變數，不會自己產生新的）。
+3. `data_registry`：`ai.json` 是 SECRET（不進「下載我的資料」、不進備份），`ai_usage.json` 是 DERIVED。刪帳號時整個使用者資料夾刪掉，key 跟著刪。
 
 舊的 `athlete_settings.ai_api_key`（SP-48）不讀：`init_db` 會把值清掉並刪欄（`db/database.RETIRED_COLUMNS`）。
 
-其他設定：`TRC_AI_MODEL`（預設 `claude-sonnet-5-5`，只收英數與 `-._:`）、`TRC_AI_DAILY_LIMIT`（預設 30，1～1000）。開關在 `ai.json` 的 `enabled`（預設開）。
+其他設定：`TRC_AI_MODEL`（預設 `claude-sonnet-5-5`，只收英數與 `-._:`）、`TRC_AI_DAILY_LIMIT`（預設 30，1～1000；站主與每位會員各自算）、`TRC_AI_MEMBER_KEYS`（預設關，見「誰能用」）。開關在各自 `ai.json` 的 `enabled`：站主預設開；會員在存第一把 key 前預設關（不會每頁多一顆按了只說「去設 key」的「問 AI」），存 key 時自動打開。
+
+**測試 key**（SP-883）：設定頁「測試」→ `POST /api/v1/ai/settings/test` → `qa.check_key()`：用現在這把 key `GET https://api.anthropic.com/v1/models?limit=1`——列模型，不吃 token、不計費、不算每日問題次數。每人每天最多 `config.KEY_TESTS_PER_DAY`（10）次，超過回 429 `AI_TEST_LIMIT` 且不打外部（不讓站變成驗證別人 key 的工具）。只看得出 key 有沒有被接受，看不出帳號有沒有餘額；餘額不足要到真的問時才知道（Messages API 回 400「credit balance is too low」→ `AI_NO_CREDIT` 402，不算次數）。
 
 ## 送出什麼（只有彙總）
 
@@ -84,18 +88,19 @@
 ## 成本：快取與每日上限
 
 - 快取：同一個人、同一個模型與語言、同一個問題、同一份內容（含對話前文）6 小時內直接回記憶體裡的答案，不算次數；換 key 會清快取。
-- 每次真的呼叫模型算一次（`<owner home>/ai_usage.json`，依伺服器日期）；到上限回 429 `AI_DAILY_LIMIT`。失敗的呼叫不算。一次只呼叫一個。
+- 每次真的呼叫模型算一次，記在**問的人自己的**資料夾（`ai_usage.json`，依伺服器日期；同一個檔也記當天「測試」幾次）；到上限回 429 `AI_DAILY_LIMIT`。失敗的呼叫不算。每個人同時只呼叫一個（鎖依 tenant 分開，會員之間不互等）。
+- 會員用自己的 key：費用記在他自己的 Anthropic 帳號，站方 0 元。
 - log 只記狀態碼、毫秒、token 數，不記 key、問題、回答。
-- 費用進 NAS 共用的「💸 API 使用量」Grafana（SP-882，`backend/ai/spend.py`）：每次真的呼叫模型（快取的答案不算），在 `<資料夾>/logs/ops/api_calls.lp` 加一行 InfluxDB line protocol——`api_call,provider=anthropic,model=…,project=trailruncoach,purpose=ask,status=success|error input_tokens=…i,output_tokens=…i,cost_usd=…,latency_ms=…i,error_message="<錯誤碼>"`。USD 用 `spend.PRICE` 當場算（不在表上的模型記 0）。App 不拿 InfluxDB token、不對外寫：`deploy/ops-monitoring` 的 Telegraf `inputs.tail` 讀這個檔，寫進 bucket `feeder`（SP-388 的慣例）。檔案超過 2 MB 換成 `.1`。寫不進去（log 檔關掉、磁碟滿）只記一次 warning，不影響回答。
+- 費用進 NAS 共用的「💸 API 使用量」Grafana（SP-882，`backend/ai/spend.py`）：每次真的呼叫模型（快取的答案不算），在 `<資料夾>/logs/ops/api_calls.lp` 加一行 InfluxDB line protocol——`api_call,provider=anthropic,model=…,project=trailruncoach,purpose=ask,status=success|error input_tokens=…i,output_tokens=…i,cost_usd=…,latency_ms=…i,error_message="<錯誤碼>"`。USD 用 `spend.PRICE` 當場算（不在表上的模型記 0）。App 不拿 InfluxDB token、不對外寫：`deploy/ops-monitoring` 的 Telegraf `inputs.tail` 讀這個檔，寫進 bucket `feeder`（SP-388 的慣例）。檔案超過 2 MB 換成 `.1`。寫不進去（log 檔關掉、磁碟滿）只記一次 warning，不影響回答。會員用自己的 key 的呼叫 `purpose=ask_own_key`（SP-883），Grafana 分得出站主花的與會員自付的；「測試」不計費，不記。
 
 ## 前端（SP-786，方案 X）
 
-- 全站一顆「問 AI」：桌機右下、手機在底部導覽列上方右側；建議框在時疊在它上面。`TRC_SESSION.ai.on`（站主且開著）才載入 `askai.js`。
+- 全站一顆「問 AI」：桌機右下、手機在底部導覽列上方右側；建議框在時疊在它上面。`TRC_SESSION.ai.on`（可以用的人且開著）才載入 `askai.js`。
 - 打開時帶入「最後點過或展開過的卡」，沒有就用畫面中央那張；頂端「正在問：<標題>（<頁名>）」，✕ 改問整頁。換了對象就清掉對話。
 - 預設問題依 kind：整頁 4 個、卡／圖／課／計算機／說明各 3 個（`shell.json` `askai.preset.<kind>.<n>`）；也可以自己打字（Enter 送出）。
 - 每個 `?` 說明框（`ManualLink.decorate`）和提示的「詳細」清單（`ul.hint-detail`）最下面一行「還不懂？問 AI」，帶入那張卡、kind = hint、摘要 ＝ 說明文字＋卡片文字。
 - 沒設 key 時對話框上方說明去哪設；錯誤碼對到 `askai.err.*`。
-- 設定 › 進階設定 › AI 問答：開關、key 狀態（環境變數／已設定 …末四碼／未設定）、貼上／清除、模型與今天次數。
+- 設定 › 進階設定 › AI 問答：開關、key 狀態（環境變數／已設定 …末四碼／未設定）、「測試」（有 key 時才出現，結果寫在旁邊）、貼上／清除、模型與今天次數。會員（`who: member`）多一行「用你自己的 Anthropic API key……費用記在你的 Anthropic 帳號」，兩個 `?` 換成會員版的說明（不提伺服器環境變數）。
 
 ## API
 
@@ -103,14 +108,16 @@
 |---|---|---|
 | POST | `/api/v1/ai/ask` | `{question, focus?, history?}` |
 | POST | `/api/v1/ai/context` | `{focus?}` → `{context, refs}` |
-| GET | `/api/v1/ai/settings` | `{enabled, key {source, masked}, model, daily_limit, used_today}` |
+| GET | `/api/v1/ai/settings` | `{enabled, key {source, masked}, model, daily_limit, used_today, who}`（`who`：`owner`／`member`） |
 | PUT | `/api/v1/ai/settings` | `{enabled?, api_key?}`（`""` 清除） |
+| POST | `/api/v1/ai/settings/test` | `{ok: true}`：現在這把 key 被接受（SP-883，不計費） |
 
-錯誤 `{detail: {code}}`：`AI_OWNER_ONLY` 403、`AI_OFF`／`AI_NO_KEY` 409、`AI_EMPTY`／`BAD_KEY` 400、`AI_DAILY_LIMIT` 429、`AI_BUSY` 503、`AI_KEY_INVALID`／`AI_UPSTREAM` 502。
+錯誤 `{detail: {code}}`：`AI_OWNER_ONLY` 403、`AI_OFF`／`AI_NO_KEY` 409、`AI_EMPTY`／`BAD_KEY` 400、`AI_NO_CREDIT` 402、`AI_DAILY_LIMIT`／`AI_TEST_LIMIT` 429、`AI_BUSY` 503、`AI_KEY_INVALID`／`AI_UPSTREAM` 502。
 
 ## Known limits
 
-- 資料來源條款：Strava 明文禁止把資料送進 AI（`docs/research/data-hubs.md` §3.1）；COROS 條款還沒查。目前只有站主用自己的資料；開放給其他人前要先查、必要時排除來源。
+- 資料來源條款：Strava 明文禁止把資料送進 AI（`docs/research/data-hubs.md` §3.1）；COROS 條款還沒查。會員用自己 key 的程式已備好（SP-883），但 `TRC_AI_MEMBER_KEYS` 預設關；打開前要先等 SP-881 的結論、必要時排除來源。
+- 模型與每日上限是伺服器的，會員不能自己選模型（他付錢也一樣）。
 - 「正在看哪一塊」是 DOM 猜的（最近的 `.card`／`section`／`.panel`…）；猜錯時頂端看得到、可以改成整頁。結構化的數字目前只有賽事計算機的結果與分段、課表課卡（SP-884）；其他卡送看得到的文字。
 - 快取在記憶體，重啟就沒了；次數依伺服器日期。
 
@@ -118,6 +125,7 @@
 
 | Date | Source | Ticket | Summary |
 |------|--------|--------|---------|
+| 2026-10-28 | feature | SP-883 | 新增：會員用自己的 key（`TRC_AI_MEMBER_KEYS` 開著時，所有登入會員）：key 加密存在自己的 `ai.json`、次數記在自己的 `ai_usage.json`、絕不拿站主的環境變數 key；log 遮罩加上請求者自己的 key；`data_registry` 把 `ai.json` 列為 SECRET；呼叫鎖依人分開；`purpose=ask_own_key`；`POST /api/v1/ai/settings/test`（GET /v1/models，不計費，每天 10 次）；餘額不足 `AI_NO_CREDIT`；設定頁「測試」與會員版文字。測試：`backend/tests/test_ai_own_key_sp883.py` |
 | 2026-10-20 | feature | SP-785 | 新增：`backend/ai`（config 金鑰與開關、context 彙總與清理、qa prompt／呼叫／解析／快取／每日上限、medical）、`/api/v1/ai/*`、`TRC_ANTHROPIC_API_KEY`（或 `_FILE`）或設定頁加密存放、log 遮罩、`/api/v1/session` 的 `ai`。測試：`backend/tests/test_ai_qa_sp785.py` |
 | 2026-10-21 | maintenance | SP-885 | 英文介面巡一次：「正在問」對課表課卡寫課名與日期（`data-ai-title`，不再是卡片整串 aria-label）、對計算機結果／分段卡用頁面語言的標題（結果區本身的標題還沒翻）。測試：`backend/tests/e2e/test_askai_en_sp885_e2e.py` |
 | 2026-10-21 | feature | SP-884 | 新增：`askai.js` 讀卡前發 `askai:describe`，賽事計算機（`#results`／`#profile-sec`）與課表課卡在那時填 `data-ai-facts`／`data-ai-rules`（整場數字＋分段、課的數字＋結構、提示與完成度判斷）；最後點過的卡被重畫時用 `data-uid`／`id` 找回。測試：`backend/tests/e2e/test_askai_facts_sp884_e2e.py` |

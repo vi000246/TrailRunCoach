@@ -121,7 +121,7 @@ are decided by place:
   16-26 km/km2, farmland villages 10-27, the mountain paths 0-4, the 柴山 / 四獸山 park interiors 0-8.
 - Only the dictionary's own ways are read (no `landuse`, no elevation model), so a rules change
   rebuilds from the previous version's bundle (`build.py --from`, below) without downloading the extract.
-- The classes are stored per way; readers (the NAS app once SP-710 reads the dictionary, the
+- The classes are stored per way; readers (the NAS app, `backend/engine/trail_dict_store.py` since SP-727; the
   inReachLiveTrack Worker) take them as they are and see the rules in `rules_version` (manifest and `latest.json`). The build prints, and the
   manifest keeps (`stats.place_rule`), how many untagged paths went to dirt and how many stayed unknown:
   the dirt ones are the ways rules v1 left unknown.

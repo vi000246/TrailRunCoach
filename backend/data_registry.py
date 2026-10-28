@@ -362,6 +362,10 @@ FILES: tuple = (
          "site in the server root (SP-552, weather.site_dir()); a tenant folder's older copy is read once and "
          "copied there", scope=INSTANCE, invalidated_by="CLIM_VERSION"),
     File("weather.json", SECRET, SHARED, "the CWA API key (racepower/weather.py save_key)"),
+    File("ai.json", SECRET, ROOT, "the AI 問答 API key pasted on the settings page, sealed, and its switch "
+         "(backend/ai/config.py): the owner's (SP-785) or a member's own (SP-883) — never exported or backed up"),
+    File("ai_usage.json", DERIVED, ROOT, "today's AI 問答 count and key tests (backend/ai/config.py)",
+         invalidated_by="the next day"),
     # -- the server's own files: only in $WKO5COACH_HOME ---------------------
     File("secret.key", SECRET, ROOT, "the key that seals sync_state's secrets (settings/secrets.py)",
          scope=INSTANCE),
