@@ -1094,5 +1094,10 @@
   "basis.adv_sub": "A kind set to heart rate / pace / power overrides the targets basis above; \"Automatic\" follows it.",
   "basis.adv_help": "The targets basis above is the default; a kind of session set here to heart rate, pace or power overrides it for that kind only (the plan, the watch push and the result card on the right all follow it). \"Automatic\" follows the targets basis above; the brackets say what it gives now. Pace is offered only for flat intervals, tempo and the marathon-pace segment (pace means nothing on a hill). Without a power meter there is no power; with a stale CP a chosen power goes to pace or heart rate until one CP test brings it back. Pace without a threshold pace goes to heart rate + RPE. Trail long days, long climbs, steep power hiking, downhill practice and the tests follow their own rules and can't be changed.",
   "basis.adv_auto": "Automatic (now: {b})",
-  "basis.adv_pace": "Pace"
+  "basis.adv_pace": "Pace",
+  "look.title": "Appearance",
+  "look.intro": "Colours. Kept in this browser: choose again on another computer or phone. Changes no numbers.",
+  "look.label": "Colours",
+  "look.default": "Not chosen yet: {light} when your phone or computer is light, {dark} when it is dark.",
+  "look.saved": "Applied; this browser remembers it."
 }

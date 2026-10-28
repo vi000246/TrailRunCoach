@@ -49,6 +49,26 @@ INLINE_I18N_PAGES = frozenset({"share", "pace"})     # pace: the 腳程試算 (S
 # `<!--inline:<file>-->` marker instead of loaded by address — the share page draws its 分段目標 with
 # the calculator's component (SP-784)
 INLINE_SCRIPTS = {"share": ("seg_profile.js",)}
+# 外觀 (SP-974, docs/spec/ui-theme.spec.md): the Trig palettes and the script that picks one, inline
+# first in every page's <head> — before the page's own <style>, so the colours never flash; inline
+# because a visitor's /share/* gets no /api/v1/static
+THEME_CSS_FILE = STATIC / "theme.css"
+THEME_JS_FILE = STATIC / "theme.js"
+
+
+def _uncomment(src: str) -> str:
+    """theme.css / theme.js without their comments (every page carries them; the files keep no `//` or
+    `/*` inside a string — test_theme_sp974 checks)."""
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    src = re.sub(r"(?m)(^|\s)//[^\n]*$", "", src)
+    return re.sub(r"\n\s*\n+", "\n", src).strip()
+
+
+def theme_head() -> str:
+    """The <style> and <script> of the 外觀 setting (theme.css, theme.js) as written into a page."""
+    css = re.sub(r"</(style)", r"<\\/\1", _uncomment(THEME_CSS_FILE.read_text("utf-8")), flags=re.I)
+    js = re.sub(r"</(script)", r"<\\/\1", _uncomment(THEME_JS_FILE.read_text("utf-8")), flags=re.I)
+    return f'<style id="trc-theme">{css}</style><script id="trc-theme-js">{js}</script>'
 
 
 def _script_tag(path: Path) -> str:
@@ -164,7 +184,7 @@ def render(name: str, loc: Optional[str] = None, debug: Optional[bool] = None) -
     debug = i18n.debug_missing() if debug is None else debug
     path = STATIC / f"{name}.html"
     nss = namespaces_for(name)
-    stamp = [path.stat().st_mtime_ns]
+    stamp = [path.stat().st_mtime_ns, THEME_CSS_FILE.stat().st_mtime_ns, THEME_JS_FILE.stat().st_mtime_ns]
     inline = name in INLINE_I18N_PAGES
     if inline:
         stamp.append(I18N_JS_FILE.stat().st_mtime_ns)
@@ -193,7 +213,7 @@ def render(name: str, loc: Optional[str] = None, debug: Optional[bool] = None) -
         loader = f"<script>{js}</script>"
     else:
         loader = f'<script src="{I18N_JS}"></script>'
-    inject = f'<script>window.__I18N__ = {boot};</script>{loader}'
+    inject = theme_head() + f'<script>window.__I18N__ = {boot};</script>{loader}'
     m = _HEAD.search(out)
     out = out[:m.end()] + inject + out[m.end():] if m else inject + out
     with _LOCK:

@@ -1024,6 +1024,23 @@ html.viewing #plan-sum, html.viewing #equip, html.viewing .tabs [role="tab"]:not
     <p class="meta" data-i18n="settings.cal.reach">網址用你現在開這一頁的位址。Google 日曆要從網際網路抓得到它（例如經過 Cloudflare Tunnel）；只在本機 localhost 跑的話 Google 抓不到，iPhone 也要連得到才行。</p>
   </section>
 
+  <!-- SP-974: 外觀 — this browser's choice, the `theme` cookie (static/theme.js, written into every
+       page's <head>); applied at once, nothing to save -->
+  <section id="appearance">
+    <h2 data-i18n="settings.look.title">外觀</h2>
+    <p class="meta" data-i18n="settings.look.intro">配色。存在這台瀏覽器，換電腦或手機要各自選；不影響任何計算。</p>
+    <div class="row">
+      <label><span data-i18n="settings.look.label">配色</span> <select id="ap-theme">
+        <option value="trig-cream" data-i18n="shell.theme.trig-cream">Trig 米白</option>
+        <option value="trig-badge" data-i18n="shell.theme.trig-badge">Trig 深綠</option>
+        <option value="classic" data-i18n="shell.theme.classic">原本（跟隨系統）</option>
+        <option value="classic-dark" data-i18n="shell.theme.classic-dark">原本暗色</option>
+      </select></label>
+      <span class="meta" id="ap-msg" role="status" aria-live="polite"></span>
+    </div>
+    <p class="meta" id="ap-default"></p>
+  </section>
+
   <section id="map">
     <h2>地圖</h2>
     <p class="meta">單次活動的路線地圖一開始用的底圖和疊圖。在地圖右上角可以臨時切換，這台瀏覽器會記住；這裡的預設改了之後，會回到新的預設。</p>
@@ -2437,6 +2454,28 @@ $("m-save").onclick = async () => {
   catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
 };
 
+// 外觀 (SP-974; theme.js): this browser's `theme` cookie, applied at once. Not chosen yet, the menu shows
+// what is in effect — Trig 米白, or 原本暗色 on a dark system — and the line under it says so
+(function appearance() {
+  const sel = $("ap-theme");
+  if (!sel || !window.TrcTheme) return;
+  const name = (v) => I18N.t("shell.theme." + v);
+  const show = () => {
+    const saved = TrcTheme.saved(), cur = TrcTheme.current();
+    sel.value = saved || (cur === "classic" ? "classic-dark" : cur);
+    const d = $("ap-default");
+    d.textContent = I18N.t("settings.look.default", { light: name("trig-cream"), dark: name("classic-dark") });
+    d.hidden = !!saved;
+  };
+  sel.addEventListener("change", () => {
+    TrcTheme.set(sel.value);
+    show();
+    $("ap-msg").textContent = I18N.t("settings.look.saved");
+  });
+  window.addEventListener("trc-theme", show);
+  show();
+})();
+
 // 主要訓練項目 (engine/primary_sport.py): the setting, the sport in effect and the suggestion. SP-955: in 訓練依據 ›
 // 你給的 beside 裝備 — the same setting as 課表偏好's (both write athlete.primary_sport); the result card follows it
 async function loadSport() {
@@ -3619,7 +3658,7 @@ $("acct-analysis-btn").onclick = async () => {
 // SP-955: 生理數據 became 訓練依據 (its key stays "body": links, the coach view); one section, #basis, holds
 // 裝備／主要訓練項目, 門檻與測試, 手動指定, 現在用什麼練 and 我的區間 (their ids still pick the tab)
 const TABS = {
-  personal: ["general", "map", "account"],
+  personal: ["general", "appearance", "map", "account"],
   body: ["basis"],
   data: ["sync", "weightsync", "backup", "archive", "device", "calendar"],
   advanced: ["mode", "calib", "fixes", "debugapi", "askai", "upstream"],

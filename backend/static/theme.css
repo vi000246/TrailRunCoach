@@ -1,0 +1,67 @@
+/* 外觀 (SP-974; docs/spec/ui-theme.spec.md): the Trig palettes, from the badge's colours
+   (icons/trig-logo.svg: deep teal #1f4a52, teal #3c7c74, cream #f3efe4, gold #f2c46d).
+   Written into every page's <head> by backend/i18n/pages.py (inline: a visitor's /share/* gets no
+   /api/v1/static), with theme.js, which sets <html data-palette="…" data-theme="light"> before the
+   page's own <style>. 「原本」 is each page's own :root (two families, light and dark) and is not
+   touched here: with no data-palette nothing below applies.
+   The selectors are :root[data-palette=…] (0,2,0): above a page's :root (0,1,0) whatever the order;
+   data-theme="light" switches the pages' dark rules off (:root:not([data-theme="light"]) …).
+   Both families' token names are set (--soft / --accent-soft, --ok / --good, --err / --bad, …).
+   Every pair is WCAG AA: text 4.5, charts and marks 3 (the SP-974 palettes check). */
+
+/* B · Trig 米白 (the default on a light system): the switchback's cream ground, the mountain's
+   teal one step darker as the accent, gold for races */
+:root[data-palette="trig-cream"] {
+  color-scheme: light;
+  --bg: #f3efe4; --panel: #fcfbf7; --text: #1f2a28; --muted: #5a5a50; --faint: #8b897d; --line: #e2dccb;
+  --accent: #2f6b64; --soft: #e2ece6; --accent-soft: #e2ece6; --tip-bg: #e2ece6; --code: #e2ece6; --on-accent: #ffffff;
+  --ok: #28712d; --good: #28712d; --warn: #9c5208; --watch: #9c5208; --err: #b3361f; --bad: #b3361f;
+  --info: #5a5a50; --a: #2f6b64; --ink: #1f2a28;
+  --s1: #2f6b64; --s2: #d0632a; --s3: #3b6fb6; --s4: #b88a00; --s5: #c45c86; --s6: #6d8f2a; --s7: #7a55a8;
+  --c-run: #2f6b64; --c-fill: rgba(47,107,100,.10); --c-line: #1f2a28; --k-long: #3b6fb6; --k-race: #2f6b64;
+  --cp-line: #2f6b64; --iv-wp: #2f6b64; --ac-brush: rgba(47,107,100,.10); --ac-ink: #1f2a28; --ac-ink2: #5a5a50;
+  --gold: #f2c46d; --gold-ink: #8a6410; --theme-color: #2f6b64;
+}
+
+/* A · Trig 深綠: the badge's deep teal as the accent and as the whole nav bar, gold on it */
+:root[data-palette="trig-badge"] {
+  color-scheme: light;
+  --bg: #eef2f1; --panel: #ffffff; --text: #132629; --muted: #4a5b5e; --faint: #7d8b8d; --line: #d8e0df;
+  --accent: #1f4a52; --soft: #e1ecea; --accent-soft: #e1ecea; --tip-bg: #e1ecea; --code: #e1ecea; --on-accent: #ffffff;
+  --ok: #1d7a3c; --good: #1d7a3c; --warn: #a35a00; --watch: #a35a00; --err: #b42318; --bad: #b42318;
+  --info: #4a5b5e; --a: #1f4a52; --ink: #132629;
+  --s1: #1f4a52; --s2: #d9622b; --s3: #2a78d6; --s4: #c08c00; --s5: #cf5a8a; --s6: #4f8a2b; --s7: #6a4fb3;
+  --c-run: #1f4a52; --c-fill: rgba(31,74,82,.10); --c-line: #132629; --k-long: #2a78d6; --k-race: #1f4a52;
+  --cp-line: #1f4a52; --iv-wp: #1f4a52; --ac-brush: rgba(31,74,82,.10); --ac-ink: #132629; --ac-ink2: #4a5b5e;
+  --gold: #f2c46d; --gold-ink: #8a6410; --theme-color: #1f4a52;
+  --nav-bg: #1f4a52; --nav-text: #f3efe4; --nav-muted: #b9cfcc;
+}
+
+/* gold marks the race (both) and today (深綠) — only where a page draws one */
+:root[data-palette^="trig-"] .chip.race:not(.b) { background: var(--gold); color: #132629; }
+:root[data-palette="trig-badge"] .cell.today .dnum { background: var(--gold); color: #132629; }
+
+/* 深綠's nav bar (the app's .appnav; the visitor pages' header.top): deep teal, cream text, gold for
+   the current page. The 「更多」 menu opens on the panel colour and keeps the page's text colours. */
+:root[data-palette="trig-badge"] .appnav { background: var(--nav-bg); border-bottom-color: var(--nav-bg); border-top-color: var(--nav-bg); --an-acc: var(--gold); }
+:root[data-palette="trig-badge"] .appnav .an-brand { color: var(--nav-text); border-right-color: rgba(243,239,228,.18); }
+:root[data-palette="trig-badge"] .appnav > .an-item,
+:root[data-palette="trig-badge"] .appnav > .an-more > summary.an-item { color: var(--nav-muted); }
+:root[data-palette="trig-badge"] .appnav > .an-item .an-name,
+:root[data-palette="trig-badge"] .appnav > .an-more > summary .an-name { color: var(--nav-text); }
+:root[data-palette="trig-badge"] .appnav > .an-item .an-purpose { color: var(--nav-muted); }
+:root[data-palette="trig-badge"] .appnav > .an-item:hover,
+:root[data-palette="trig-badge"] .appnav > .an-more > summary.an-item:hover { background: rgba(255,255,255,.06); }
+:root[data-palette="trig-badge"] .appnav > .an-item[aria-current="page"],
+:root[data-palette="trig-badge"] .appnav > .an-more > summary.an-item[aria-current="page"] { background: rgba(255,255,255,.08); color: var(--gold); }
+:root[data-palette="trig-badge"] .appnav > .an-item[aria-current="page"] .an-name,
+:root[data-palette="trig-badge"] .appnav > .an-more > summary[aria-current="page"] .an-name { color: var(--gold); }
+:root[data-palette="trig-badge"] .appnav .an-menu { --an-acc: var(--accent); }
+:root[data-palette="trig-badge"] .appnav .an-lang { color: var(--nav-text); border-color: rgba(243,239,228,.45); }
+:root[data-palette="trig-badge"] .appnav .an-lang:hover { color: var(--gold); border-color: var(--gold); }
+:root[data-palette="trig-badge"] header.top { background: var(--nav-bg); color: var(--nav-text); border-bottom-color: var(--nav-bg); }
+:root[data-palette="trig-badge"] header.top a,
+:root[data-palette="trig-badge"] header.top .brand { color: var(--nav-text); }
+:root[data-palette="trig-badge"] header.top .link { color: var(--nav-muted); }
+:root[data-palette="trig-badge"] header.top .lang { color: var(--nav-text); border-color: rgba(243,239,228,.45); background: transparent; }
+:root[data-palette="trig-badge"] header.top .signin { background: var(--gold); border-color: var(--gold); color: #132629; }

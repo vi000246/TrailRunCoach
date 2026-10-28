@@ -1,6 +1,10 @@
 {
   "brand": "Trig",
   "brand.title": "Home",
+  "theme.trig-cream": "Trig cream",
+  "theme.trig-badge": "Trig deep green",
+  "theme.classic": "Original (follow system)",
+  "theme.classic-dark": "Original dark",
   "nav.label": "Main menu",
   "nav.item_title": "{name}: {purpose}",
   "page.home.name": "Overview",

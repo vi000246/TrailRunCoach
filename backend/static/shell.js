@@ -880,7 +880,8 @@
     const HEAD = [["link", { rel: "manifest", href: "/manifest.webmanifest" }],
       ["link", { rel: "apple-touch-icon", href: "/api/v1/static/icons/apple-touch-icon.png" }],
       ["link", { rel: "icon", type: "image/svg+xml", href: "/api/v1/static/icons/icon.svg" }],
-      ["meta", { name: "theme-color", content: "#2563eb" }],
+      // the browser bar follows 外觀 (theme.js, SP-974): the original blue, or the Trig palette's accent
+      ["meta", { name: "theme-color", content: window.TrcTheme ? TrcTheme.themeColor() : "#2563eb" }],
       ["meta", { name: "mobile-web-app-capable", content: "yes" }],
       ["meta", { name: "apple-mobile-web-app-capable", content: "yes" }],
       ["meta", { name: "apple-mobile-web-app-title", content: T("brand") }]];

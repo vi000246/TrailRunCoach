@@ -10,8 +10,9 @@
   const KEY = "charts.climbvam";
   const prefs = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; } };
   const save = (patch) => { try { localStorage.setItem(KEY, JSON.stringify({ ...prefs(), ...patch })); } catch {} };
+  const tc = (h) => (window.TrcTheme ? TrcTheme.color(h) : h);
   const colors = () => (window.pzDark && pzDark())
-    ? { dot: "#3987e5", med: "#d95926" } : { dot: "#2a78d6", med: "#eb6834" };   // palette slots 1, 2 (validated)
+    ? { dot: "#3987e5", med: "#d95926" } : { dot: tc("#2a78d6"), med: tc("#eb6834") };   // palette slots 1, 2 (validated); tc: Trig's same hue (SP-974)
   const KIND = { trail: "越野跑", hike: "登山健行" };
 
   window.cvQuery = function () {

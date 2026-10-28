@@ -50,24 +50,35 @@ svg.i { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
   font: inherit; font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
 .seg button .sub { font-weight: 400; font-size: 11.5px; }
 .seg button.on { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
-/* 趨勢 / 單次活動: the page's first choice, as two big mode cards so it reads as "pick one of
-   these two views" (owner's call): icon + title + one line; the current one filled dark orange */
-.modesw { display: inline-flex; gap: 6px; flex: none; padding: 4px; border-radius: 12px;
-  background: color-mix(in srgb, #b4530f 9%, var(--bg)); --mc: #b4530f; --mc2: #8f3f0a; }
-.modesw .mcard { display: flex; align-items: center; gap: 9px; border: 0; cursor: pointer; text-align: left;
-  font: inherit; padding: 6px 14px 6px 10px; border-radius: 9px; background: var(--panel); color: var(--text);
-  box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background .18s, color .18s, box-shadow .18s, transform .08s; }
-.modesw .mcard svg { width: 22px; height: 22px; flex: none; color: var(--mc); }
-.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; }
-.modesw .mcard small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
-.modesw .mcard:hover { box-shadow: 0 0 0 1.5px var(--mc), 0 2px 6px rgba(0,0,0,.12); }
-.modesw .mcard:active { transform: translateY(1px); }
-.modesw .mcard.on { background: linear-gradient(180deg, var(--mc), var(--mc2)); color: #fff;
-  box-shadow: 0 3px 8px rgba(143,63,10,.35); }
-.modesw .mcard.on svg, .modesw .mcard.on small { color: #fff; }
-.modesw .mcard.on small { opacity: .85; }
-.modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
-@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
+/* 模式切換 (SP-974 Q2, mock D「分段軌道＋圖示方塊」; the same block in charts / schedule / compliance /
+   templates .html): one track lightly tinted with the accent links the choices; the current one lifts out
+   in the panel colour, its icon square filled with the accent, its title in the accent. Theme tokens only
+   (外觀: Trig 米白 / 深綠, 原本 light / dark). A phone: the track spans the width, the choices share it. */
+.modesw { --m-acc: var(--accent); display: inline-flex; flex: none; flex-wrap: wrap; max-width: 100%; justify-self: start;
+  gap: 2px; padding: 3px; border-radius: 12px; background: color-mix(in srgb, var(--m-acc) 7%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--m-acc) 16%, var(--line)); }
+.modesw .mcard { display: flex; align-items: center; gap: 9px; border: 0; margin: 0; background: none; cursor: pointer;
+  text-align: left; text-decoration: none; font: inherit; color: var(--text); padding: 5px 14px 5px 5px; border-radius: 9px;
+  -webkit-tap-highlight-color: transparent; transition: background .15s, box-shadow .15s; }
+.modesw .mi { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 8px;
+  background: color-mix(in srgb, var(--m-acc) 11%, transparent); color: var(--m-acc); transition: background .15s, color .15s; }
+.modesw .mi svg { display: block; width: 18px; height: 18px; }
+.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; font-weight: 650; color: var(--muted); }
+.modesw .mcard small { display: block; font-size: 11px; line-height: 1.25; color: var(--muted); white-space: nowrap; }
+.modesw .mcard:hover:not(.on):not([aria-current="page"]) { background: color-mix(in srgb, var(--panel) 65%, transparent); }
+.modesw .mcard:hover:not(.on):not([aria-current="page"]) b { color: var(--text); }
+.modesw .mcard:hover:not(.on):not([aria-current="page"]) .mi { background: color-mix(in srgb, var(--m-acc) 20%, transparent); }
+.modesw .mcard:is(.on, [aria-current="page"]) { background: var(--panel);
+  box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 1px color-mix(in srgb, var(--m-acc) 22%, transparent); }
+.modesw .mcard:is(.on, [aria-current="page"]) .mi { background: var(--m-acc); color: var(--panel); }
+.modesw .mcard:is(.on, [aria-current="page"]) b { color: var(--m-acc); }
+.modesw .mcard:focus-visible { outline: 2px solid var(--m-acc); outline-offset: 2px; }
+@media (max-width: 620px) {
+  .modesw { display: flex; width: 100%; flex-wrap: nowrap; }
+  .modesw .mcard { flex: 1 1 0; justify-content: center; padding: 4px 8px 4px 4px; gap: 7px; }
+  .modesw .mi { width: 26px; height: 26px; } .modesw .mi svg { width: 16px; height: 16px; }
+  .modesw .mcard small { display: none; }
+}
 .crumb { display: flex; align-items: baseline; gap: 6px; min-width: 0; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
 .crumb b { color: var(--text); font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
 .crumb .sep { opacity: .45; }
@@ -450,10 +461,10 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
     <button class="iconbtn only-narrow" id="treebtn" aria-controls="side" aria-expanded="false"><svg class="i"><use href="#i-tree"/></svg><span data-i18n="viewer.toc">目錄</span></button>
     <div class="modesw" role="group" aria-label="選擇看法" data-i18n-attr="aria-label:viewer.mode_aria">
       <button id="m-season" class="mcard on" title="一段期間內多次活動的趨勢" data-i18n-attr="title:viewer.mode.season_tip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+        <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></span>
         <span><b data-i18n="viewer.mode.season">趨勢</b><small data-i18n="viewer.mode.season_sub">一段期間的變化</small></span></button>
       <button id="m-workout" class="mcard" title="一筆活動的逐秒圖表" data-i18n-attr="title:viewer.mode.workout_tip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v4"/><path d="M6 12l3-3 4 1 3 3 3-1"/></svg>
+        <span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v4"/><path d="M6 12l3-3 4 1 3 3 3-1"/></svg></span>
         <span><b data-i18n="viewer.mode.workout">單次活動</b><small data-i18n="viewer.mode.workout_sub">某一次的逐秒細節</small></span></button>
     </div>
     <div class="crumb" id="crumb"></div>
@@ -718,7 +729,7 @@ async function init() {
     j("/api/v1/sync/settings").catch(() => ({})), j(`${API}/primary-sport`).catch(() => ({})),
     j(`${API}/plan-range`).catch(() => null),
     window.Hints ? Hints.state() : null]);     // 提示多寡 (SP-487: chips, HR shading, 重複路段; failed → 標準)
-  S.views = views; S.sports = sports;
+  S.views = window.TrcTheme ? TrcTheme.recolor(views) : views; S.sports = sports;
   S.hint = hint; window.HINT_STATE = hint;
   S.planRange = pr;                    // SP-219: 到階段結束 / 到目標賽 (null: not offered)
   futurePresets();
@@ -1482,6 +1493,7 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
       + (c.kind === "climbvam" && window.cvQuery ? cvQuery(c) : "")    // climb_vam.js
       + (STALE_OK && opts.stale !== false ? "&stale=1" : ""));
     if (moot()) return false;
+    if (window.TrcTheme) TrcTheme.recolor(res);    // SP-974: views/*.json's colours → the Trig palette's (same hue)
     if (res.pending) {
       // SP-394: a first import's older activities still back-filling and this chart reads them
       // (CTL's warm-up, a long range): no line until they are in; asked again every 15 s

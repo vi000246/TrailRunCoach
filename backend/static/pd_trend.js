@@ -5,8 +5,9 @@
 // never colour alone. Each point is one PD fit of the 課表 (never refitted here); no body weight →
 // the VO2max line is left out and the card says why, with a link to the personal settings.
 (function () {
+  const tc = (h) => (window.TrcTheme ? TrcTheme.color(h) : h);
   const colors = () => (window.pzDark && pzDark())
-    ? { mftp: "#3987e5", vo2: "#d95926" } : { mftp: "#2a78d6", vo2: "#eb6834" };
+    ? { mftp: "#3987e5", vo2: "#d95926" } : { mftp: tc("#2a78d6"), vo2: tc("#eb6834") };   // tc: the Trig palette's same hue (SP-974)
 
   function style() {
     if (document.getElementById("pdt-style")) return;

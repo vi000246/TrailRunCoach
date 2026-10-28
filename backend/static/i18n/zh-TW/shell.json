@@ -1,6 +1,10 @@
 {
   "brand": "Trig 基石",
   "brand.title": "回首頁",
+  "theme.trig-cream": "Trig 米白",
+  "theme.trig-badge": "Trig 深綠",
+  "theme.classic": "原本（跟隨系統）",
+  "theme.classic-dark": "原本暗色",
   "nav.label": "主選單",
   "nav.item_title": "{name}：{purpose}",
   "page.home.name": "總覽",

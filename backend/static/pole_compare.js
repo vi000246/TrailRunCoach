@@ -9,8 +9,9 @@
   const KEY = "charts.polecompare";
   const prefs = () => { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; } };
   const save = (patch) => { try { localStorage.setItem(KEY, JSON.stringify({ ...prefs(), ...patch })); } catch {} };
+  const tc = (h) => (window.TrcTheme ? TrcTheme.color(h) : h);
   const colors = () => (window.pzDark && pzDark())
-    ? { with: "#3987e5", without: "#d95926" } : { with: "#2a78d6", without: "#eb6834" };
+    ? { with: "#3987e5", without: "#d95926" } : { with: tc("#2a78d6"), without: tc("#eb6834") };   // tc: the Trig palette's same hue (SP-974)
   const SYM = { with: "circle", without: "diamond" };
   const GROUPS = ["with", "without"];
 
