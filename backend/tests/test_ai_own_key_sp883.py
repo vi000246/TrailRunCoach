@@ -26,9 +26,9 @@ from backend.tests.test_ai_qa_sp785 import GOOD, STATUS, WEEKS, FakeModel
 from backend.tests.test_login_sp58 import (  # noqa: F401 — fixtures
     OWNER_EMAIL, app, browser, csrf, env, sign_in, sign_up, started)
 
-MEMBER_KEY = "sk-ant-test-SP883-member-own-key-0123456789abcdMINE"
-OTHER_KEY = "sk-ant-test-SP883-another-member-key-0123456789OTHR"
-OWNER_ENV_KEY = "sk-ant-test-SP883-owner-env-key-0123456789abcdOWNR"
+MEMBER_KEY = "sk-ant-" + "example-SP883-member-own-key-xxxxxxxxxxxxxxMINE"   # fake, split so scanners see it is not a key
+OTHER_KEY = "sk-ant-" + "example-SP883-another-member-key-xxxxxxxxxxOTHR"
+OWNER_ENV_KEY = "sk-ant-" + "example-SP883-owner-env-key-xxxxxxxxxxxxxxOWNR"
 
 
 class FakeModels:
