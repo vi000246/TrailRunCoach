@@ -75,7 +75,7 @@ def test_the_ai_explainer_calls_itself_trig():
     zh, en = qa.system_prompt("zh-TW"), qa.system_prompt("en")
     assert zh.startswith("You are the explainer inside Trig 基石,") and "say you are Trig 基石's explainer" in zh
     assert en.startswith("You are the explainer inside Trig,") and "say you are Trig's explainer" in en
-    assert "Answer in Traditional Chinese (Taiwan)" in zh and "Answer in English" in en
+    assert "Answer in Traditional Chinese as written in Taiwan" in zh and "Answer in English" in en
     assert qa.system_prompt("fr") == zh                      # an unknown locale: the default's
     for p in (zh, en):
         assert OLD not in p and "{brand}" not in p and "{lang}" not in p

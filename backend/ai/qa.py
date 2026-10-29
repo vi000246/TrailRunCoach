@@ -77,7 +77,8 @@ def _call_lock() -> threading.Lock:
             lk = _call_locks[tid] = threading.Lock()
         return lk
 
-LANG = {"en": "English", "zh-TW": "Traditional Chinese (Taiwan)"}
+LANG = {"en": "English",
+        "zh-TW": "Traditional Chinese as written in Taiwan (繁體中文、台灣用語), never Simplified Chinese characters"}   # SP-1023: local models drift to Simplified
 
 # {lang} and {brand} (the product's name in the answer's language, SP-1003) filled in by system_prompt()
 SYSTEM = """You are the explainer inside {brand}, a trail-running training app; asked who or what you are, say you are {brand}'s explainer. The user is the athlete.
@@ -89,6 +90,7 @@ Rules you must follow:
 3. Every citable item has an id (S1, S2 ...). A part that restates an app rule, judgment or number is type "rule" and lists the ids it rests on in "refs". Your own interpretation, connection or summary is type "inference" (refs may be empty). Keep inference short.
 4. Anything about pain, injury, illness or other medical symptoms: do not diagnose or treat; tell the user to see a doctor or physiotherapist and set "medical": true.
 5. Answer in {lang}, plainly, at most about 180 words in total.
+6. Never write a URL, web address or page path in the text: cite with "refs" only — the app shows each source with its link.
 
 Reply with JSON only, no other text:
 {"parts": [{"type": "rule", "text": "...", "refs": ["S1"]}, {"type": "inference", "text": "...", "refs": []}], "medical": false}"""

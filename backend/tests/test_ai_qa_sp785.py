@@ -128,7 +128,7 @@ def test_the_card_in_view_is_sent_with_its_rules_and_manual_sources(owner, monke
     assert a["parts"][0]["type"] == "rule"
     assert [(s["id"], s["kind"], s["url"]) for s in a["sources"]] == [("S4", "card", None), ("S5", "manual", "/manual/charts#form")]
     ctx = json.loads(m.calls[0]["body"]["messages"][-1]["content"].split("CONTEXT:\n", 1)[1].split("\n\nQUESTION", 1)[0])
-    assert ctx["in_view"]["sources"][1]["url"] is None            # only a manual section is a link
+    assert all("url" not in s for s in ctx["in_view"]["sources"])  # the links go to the dialog, not the model (SP-1023)
     assert a["sent"]["in_view"] == "負荷平衡（10/18）" and a["sent"]["kind"] == "chart"
 
 
@@ -325,3 +325,20 @@ def test_every_ai_route_has_the_owner_check():
     for r in A.router.routes:
         deps = [d.call for d in r.dependant.dependencies]
         assert A.owner_only in deps, r.path
+
+
+def test_the_prompt_asks_for_taiwan_traditional_chinese_and_no_paths():
+    """SP-1023: a local model wrote Simplified Chinese and a manual path into its answer."""
+    zh = Q.system_prompt("zh-TW")
+    assert "台灣" in zh and "never Simplified Chinese" in zh
+    assert "Never write a URL" in zh and "Never write a URL" in Q.system_prompt("en")
+    assert "Simplified" not in Q.system_prompt("en")
+
+
+@pytest.mark.parametrize("lang, want", [("en", "Answer in English"), ("zh-TW", "Answer in Traditional Chinese as written in Taiwan")])
+def test_the_answer_language_follows_the_interface_language(owner, monkeypatch, lang, want):
+    """SP-1023: the reply is in the language the user's interface is set to (?lang / cookie / account)."""
+    m = _model(monkeypatch, {"parts": [{"type": "inference", "text": "ok", "refs": []}]})
+    _key(owner)
+    owner.post(f"/api/v1/ai/ask?lang={lang}", json={"question": "How am I doing?"})
+    assert want in m.calls[0]["body"]["system"]

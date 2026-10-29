@@ -189,7 +189,7 @@ def number_refs(server: dict, focus: Optional[dict]) -> tuple[dict, list]:
         for r in focus.get("rules") or []:
             r["id"] = ref("card", r.get("text") or "", r.get("source") or "")
         for s in focus.get("sources") or []:
-            s["id"] = ref("manual", s.get("title") or "", "", s.get("url"))
+            s["id"] = ref("manual", s.get("title") or "", "", s.pop("url", None))   # the link stays in the refs: the model never sees a path (SP-1023)
     return {"app": server, "in_view": focus}, refs
 
 
