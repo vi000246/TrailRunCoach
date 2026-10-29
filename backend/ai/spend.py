@@ -22,6 +22,10 @@ nothing is recorded for it.
 
 cost_usd is worked out here, from PRICE (USD per million tokens). A model not in the table is
 recorded with cost 0 — add it.
+
+SP-997: the provider tag is the source that was called — anthropic, google (Gemini) or local (the
+owner's own model, e.g. Qwen on the Mac: no price, cost 0; its lines show how much the local model
+took off the paid ones). Gemini's prices are not in PRICE yet (cost 0 until they are added).
 """
 from __future__ import annotations
 
@@ -78,13 +82,15 @@ def _field_str(v: str) -> str:
 
 
 def line(model: str, status: str, input_tokens: int, output_tokens: int, latency_ms: float,
-         error: str = "", purpose: str = PURPOSE, at_ns: Optional[int] = None) -> str:
+         error: str = "", purpose: str = PURPOSE, at_ns: Optional[int] = None,
+         provider: str = PROVIDER) -> str:
     """One InfluxDB line-protocol line (the shared schema; cost_usd always a float literal)."""
     i, o = int(max(0, input_tokens or 0)), int(max(0, output_tokens or 0))
     tags = ",".join(f"{k}={_tag(v)}" for k, v in (
-        ("provider", PROVIDER), ("model", model), ("project", PROJECT), ("purpose", purpose),
+        ("provider", provider), ("model", model), ("project", PROJECT), ("purpose", purpose),
         ("status", "success" if status == "success" else "error")))
-    fields = (f"input_tokens={i}i,output_tokens={o}i,cost_usd={cost_usd(model, i, o):.6f},"
+    usd = 0.0 if provider == "local" else cost_usd(model, i, o)
+    fields = (f"input_tokens={i}i,output_tokens={o}i,cost_usd={usd:.6f},"
               f"latency_ms={int(max(0, latency_ms or 0))}i,error_message=\"{_field_str(error)}\"")
     return f"{MEASUREMENT},{tags} {fields} {at_ns if at_ns is not None else time.time_ns()}"
 
@@ -97,13 +103,15 @@ def path() -> Optional[Path]:
 
 
 def record(model: str, status: str, input_tokens: int = 0, output_tokens: int = 0,
-           latency_ms: float = 0, error: str = "", purpose: str = PURPOSE) -> None:
-    """Append one call's line for Telegraf. Never raises: the answer does not depend on it."""
+           latency_ms: float = 0, error: str = "", purpose: str = PURPOSE, provider: str = PROVIDER) -> None:
+    """Append one call's line for Telegraf. Never raises: the answer does not depend on it.
+    `provider` (SP-997): anthropic | google | local — a local model's call costs 0 (not in PRICE)."""
     try:
         p = path()
         if p is None:
             return
-        text = line(model, status, input_tokens, output_tokens, latency_ms, error, purpose) + "\n"
+        text = line(model, status, input_tokens, output_tokens, latency_ms, error, purpose,
+                    provider=provider) + "\n"
         with _lock:
             p.parent.mkdir(parents=True, exist_ok=True)
             try:

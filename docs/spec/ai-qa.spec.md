@@ -1,6 +1,6 @@
 # Module Spec: ai-qa (AI 問答：問 AI、給 AI 的摘要、規則引用)
 
-> **Last Updated**: 2026-10-28
+> **Last Updated**: 2026-10-29
 > **Status**: Active（後端 SP-785、前端 SP-786；拍板在 SP-306 Q1／Q2 方案 X）
 > **Domain Layer**: Supporting
 > **Source**: SP-306 `## 結論`（入口方案 X、先只給擁有者、只送彙總、舊 `ai_api_key` 一起處理）
@@ -14,6 +14,7 @@
 | 設定、金鑰、次數 | `backend/ai/config.py` |
 | 送出的內容（彙總、清理） | `backend/ai/context.py` |
 | prompt、呼叫、解析、快取 | `backend/ai/qa.py` |
+| 來源（本機模型／Anthropic／Gemini）、照順序換下一個 | `backend/ai/providers.py`（SP-997） |
 | 醫療字詞 | `backend/ai/medical.py` |
 | 費用記錄（給 Grafana） | `backend/ai/spend.py` |
 | API | `backend/api/ai.py`（`/api/v1/ai/*`） |
@@ -39,6 +40,33 @@
 其他設定：`TRC_AI_MODEL`（預設 `claude-sonnet-5-5`，只收英數與 `-._:`）、`TRC_AI_DAILY_LIMIT`（預設 30，1～1000；站主與每位會員各自算）、`TRC_AI_MEMBER_KEYS`（預設關，見「誰能用」）。開關在各自 `ai.json` 的 `enabled`：站主與會員都預設開——會員還沒存 key 也看得到「問 AI」，對話框先請他填 key（使用者 2026-10-28：「填完 API key 就能用，還沒填就在對話框裡提醒」）。
 
 **測試 key**（SP-883）：設定頁「測試」→ `POST /api/v1/ai/settings/test` → `qa.check_key()`：用現在這把 key `GET https://api.anthropic.com/v1/models?limit=1`——列模型，不吃 token、不計費、不算每日問題次數。每人每天最多 `config.KEY_TESTS_PER_DAY`（10）次，超過回 429 `AI_TEST_LIMIT` 且不打外部（不讓站變成驗證別人 key 的工具）。只看得出 key 有沒有被接受，看不出帳號有沒有餘額；餘額不足要到真的問時才知道（Messages API 回 400「credit balance is too low」→ `AI_NO_CREDIT` 402，不算次數）。
+
+## 來源與順序（SP-997）
+
+站主可以設三種來源，問的時候照順序試，前一個失敗就換下一個（`backend/ai/providers.py`）：
+
+| 來源 | 怎麼呼叫 | 設定 |
+|---|---|---|
+| `local` 本機模型（例：站主 Mac 上 Ollama 的 `qwen2.5:32b`） | OpenAI 相容 `POST <base>/v1/chat/completions`（system 放第一則訊息、`stream: false`）；Qwen 的 `<think>…</think>` 先拿掉 | `ai.json` 的 `local {url, model}`；`url` 收 `http(s)://主機:埠`，自動補成 `…/v1`；不收帳號密碼、query。端點要 key 時可以給，加密存 `local_key`、送 `Authorization: Bearer`（Ollama 不用） |
+| `anthropic` | Messages API（同 SP-785） | 同上「金鑰」 |
+| `gemini` | Gemini 自己的 REST：`POST https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent`，key 放 `x-goog-api-key` 標頭（不放網址）；`systemInstruction`、`responseMimeType: application/json`、`maxOutputTokens` 4096（Gemini 的「思考」也算在裡面）；`thought` 的段落不算回答 | 環境變數 `TRC_GEMINI_API_KEY`（或 `_FILE`），沒有就設定頁貼上、加密存 `gemini_key`；模型 `TRC_GEMINI_MODEL`（預設 `gemini-2.5-flash`） |
+
+- **順序**：`ai.json` 的 `order`，預設 `local → anthropic → gemini`（使用者 2026-10-28：本機模型優先）。只列有設好的來源；只有 Anthropic key 時跟以前完全一樣。
+- **換下一個的條件**：這個來源的任何失敗——連不上（Mac 睡眠、關機）`AI_UNREACHABLE`、逾時、key 被拒 `AI_KEY_INVALID`、餘額不足 `AI_NO_CREDIT`、沒有這個模型 `AI_NO_MODEL`、忙 `AI_BUSY`、回的不是 API 的 JSON、回空的（後面還有來源時）。全部失敗就回最後一個的錯誤。
+- **本機模型的逾時**：連線 3 秒（`LOCAL_CONNECT_S`，`qa._post` 先試著連，連不上就換下一個）、讀 180 秒（筆電上的模型寫得比 API 慢）。
+- **次數**：本機模型的回答**不算**每日次數；到上限後只剩本機模型會回答（付費的來源跳過），本機也失敗就回本機的錯誤（例如 `AI_UNREACHABLE`）；沒有本機模型時照舊 429 `AI_DAILY_LIMIT`。
+- **回答多兩欄**：`provider`（哪個來源回答的）、`tried`（之前失敗的 `[{kind, model, code}]`）；`model` 是實際回答的模型。
+- **費用線**：每次呼叫（含失敗的）照舊一行，`provider` 是 `anthropic`／`google`／`local`；本機模型 `cost_usd` 一律 0；Gemini 的價格還沒進 `spend.PRICE`（記 0）。
+- **誰能設**：本機模型與順序只有站主（SP-997 Q1-1：本地模型只有管理員能用）；會員送 `local`／`order` 回 403 `AI_OWNER_ONLY`（整個請求什麼都不寫）。會員可以填**自己的** Gemini key（Q2-2，跟 SP-883 的 Claude key 同一套：存在自己的 `ai.json` 的 `gemini_key`、加密、解密時記進這個請求的 log 遮罩、只回末四碼、拿不到站主的 `TRC_GEMINI_API_KEY`）；會員的順序固定是自己填了的 key：Claude，再 Gemini，`purpose=ask_own_key`。
+- **本機模型的上下文**：程式端不送 `num_ctx`（Ollama 的 OpenAI 相容端點不收每次的 `num_ctx`），靠 Mac 上 Ollama 的設定（使用者 Q2-3：開到 16K，`OLLAMA_CONTEXT_LENGTH=16384`）。
+- **測試**：`POST /api/v1/ai/settings/test {kind}`，都是不吃 token 的 GET：Anthropic 列模型、Gemini 讀 `models/<model>`、本機 `GET <base>/models` 而且清單裡要有設定的模型（沒有回 `AI_NO_MODEL`）。
+
+本機模型和 Claude 的差別（問答流程只用 system prompt＋對話＋回一段 JSON，沒用工具呼叫、prompt cache、串流，所以介面上沒有缺的）：
+
+- **上下文長度**：一題送出去的內容（規則、待辦、8 週訓練量、正在看的卡，卡片最多 12 KB）加 system prompt 大約幾千 token，中文多時上萬。Ollama 的預設上下文很短（幾千 token），超過時從前面默默截掉——system prompt 先不見，回答就不照規則。Mac 上要把上下文開大（例如 `OLLAMA_CONTEXT_LENGTH=16384`，或 Modelfile 的 `num_ctx`）；OpenAI 相容端點不能每次帶 `num_ctx`。
+- **只回 JSON**：靠 prompt 要求；模型沒照做時 `parse_answer` 整段當 AI 推論，引用不到的「規則」降成推論，所以不會冒出假的 App 規則，只是標示變少。
+- **速度**：32B 在 Mac 上一題可能要幾十秒；對話框會等（讀 180 秒）。
+- **傳輸**：區網／Tailscale 上是 http；Tailscale 本身加密，區網 IP 直連是明文（只有彙總，沒有軌跡）。
 
 ## 送出什麼（只有彙總）
 
@@ -101,7 +129,8 @@
 - 每個 `?` 說明框（`ManualLink.decorate`）和提示的「詳細」清單（`ul.hint-detail`）最下面一行「還不懂？問 AI」，帶入那張卡、kind = hint、摘要 ＝ 說明文字＋卡片文字。
 - 沒設 key 時對話框上方說明去哪設；錯誤碼對到 `askai.err.*`。
 - **會員還沒存 key**（`TRC_SESSION.ai` 是 `{on: true, key: false, own: true}`，SP-883）：對話框不列預設問題，改成一段提醒（「先設定你自己的 API key 才能問」：用自己的 Anthropic key、費用記在自己的帳號）＋「到設定填 API key →」連到 `/api/v1/app/settings#ai-key-row`（設定頁把那一列加亮框 `link-asked`、捲到中間、游標放進欄位）；輸入框與送出都停用，`AskAI.ask()` 也不送。打開對話框時再問一次 `GET /api/v1/ai/settings`（別的分頁存好了就直接解鎖）；設定頁存好 key 會發 `askai:key` 事件，同一頁開著的對話框當場解鎖。站主沒 key 時照舊（上方一行說明，可以送、回 `AI_NO_KEY`）。
-- 設定 › 進階設定 › AI 問答：開關、key 狀態（環境變數／已設定 …末四碼／未設定）、「測試」（有 key 時才出現，結果寫在旁邊）、貼上／清除、模型與今天次數。會員（`who: member`）多一行「用你自己的 Anthropic API key……費用記在你的 Anthropic 帳號」，兩個 `?` 換成會員版的說明（不提伺服器環境變數）。
+- 設定 › 進階設定 › AI 問答（SP-997 版面 mock A）：開關，然後**每個來源一張卡**，照試的順序排（`GET` 的 `sources`）：左邊序號、名稱與 `?`、副標（本機：模型 · 網址；Claude／Gemini：模型 · 環境變數／已設定 …末四碼／未設定）、右邊 ↑↓（只有站主、兩個以上來源時；按了就 `PUT {order}`）。有設定的卡：「測試」（`POST /settings/test {kind}`，結果寫在卡裡，✓ 綠／紅）、「換 key」或「編輯」、「清除」；沒設定的卡是虛線、序號變灰、欄位直接打開（本機：網址、模型名稱、選填 key；Claude／Gemini：貼上 key）。環境變數的 key 沒有換／清除。最下面「今天用了 n／30 次」，有本機模型時加「（本機模型不算）」。站主多一行順序說明；會員（`who: member`）只有自己的 Claude、Gemini 兩張卡、沒有 ↑↓，多一行「用你自己的 API key：Claude 或 Gemini……費用記在你自己的帳號」，`?` 換成會員版。Claude 卡沿用 SP-785／883 的 id（`#ai-key-row`、`#ai-key`、`#ai-key-state`、`#ai-key-test`…）。舊的伺服器回應沒有 `sources` 時只顯示 Claude 卡。
+- 回答之前有來源失敗時（`tried` 不是空的），回答上方一行「本機模型連不上，改用 Claude 回答」（`[data-askai-via]`；原因照錯誤碼：連不上、key 無效、餘額不足、沒有這個模型、忙線中、沒有回應）。全部失敗而最後一個是本機模型時，錯誤是 `AI_UNREACHABLE`／`AI_NO_MODEL` 自己的說明。會員沒 key 的提醒改成「Claude 或 Gemini」；`/api/v1/session` 的 `ai.key` 是「有任何一個來源設好」。
 
 ## API
 
@@ -109,11 +138,11 @@
 |---|---|---|
 | POST | `/api/v1/ai/ask` | `{question, focus?, history?}` |
 | POST | `/api/v1/ai/context` | `{focus?}` → `{context, refs}` |
-| GET | `/api/v1/ai/settings` | `{enabled, key {source, masked}, model, daily_limit, used_today, who}`（`who`：`owner`／`member`） |
-| PUT | `/api/v1/ai/settings` | `{enabled?, api_key?}`（`""` 清除） |
-| POST | `/api/v1/ai/settings/test` | `{ok: true}`：現在這把 key 被接受（SP-883，不計費） |
+| GET | `/api/v1/ai/settings` | `{enabled, key {source, masked}, model, daily_limit, used_today, who, sources}`（`who`：`owner`／`member`；`sources` 照試的順序，每個 `{kind, ready, …}`，SP-997） |
+| PUT | `/api/v1/ai/settings` | `{enabled?, api_key?, gemini_key?, local? {url, model, api_key?} \| null, order?}`（`""`／`null` 清除；後三個只限站主，SP-997） |
+| POST | `/api/v1/ai/settings/test` | `{kind?}` → `{ok: true}`：那個來源可以用（SP-883、SP-997；沒給 `kind` 是 Anthropic key；不計費） |
 
-錯誤 `{detail: {code}}`：`AI_OWNER_ONLY` 403、`AI_OFF`／`AI_NO_KEY` 409、`AI_EMPTY`／`BAD_KEY` 400、`AI_NO_CREDIT` 402、`AI_DAILY_LIMIT`／`AI_TEST_LIMIT` 429、`AI_BUSY` 503、`AI_KEY_INVALID`／`AI_UPSTREAM` 502。
+錯誤 `{detail: {code}}`：`AI_OWNER_ONLY` 403、`AI_OFF`／`AI_NO_KEY` 409、`AI_EMPTY`／`BAD_KEY`／`BAD_LOCAL`／`BAD_ORDER`／`BAD_REQUEST` 400、`AI_NO_CREDIT` 402、`AI_DAILY_LIMIT`／`AI_TEST_LIMIT` 429、`AI_BUSY` 503、`AI_KEY_INVALID`／`AI_NO_MODEL`／`AI_UNREACHABLE`／`AI_UPSTREAM` 502。
 
 ## Known limits
 
@@ -126,6 +155,8 @@
 
 | Date | Source | Ticket | Summary |
 |------|--------|--------|---------|
+| 2026-10-29 | feature | SP-997 | 設定頁照 mock A：每個來源一張卡（序號、狀態、測試、換 key／編輯、清除、站主的 ↑↓）；會員可以填自己的 Gemini key（Q2-2，會員的順序是 Claude → Gemini，本機模型與順序仍只限站主）；問 AI 回答上方「本機模型連不上，改用 Claude 回答」；`session.ai.key` 看任何來源。測試：`backend/tests/test_ai_providers_sp997.py`、`backend/tests/e2e/test_askai_sources_sp997_e2e.py` |
+| 2026-10-29 | feature | SP-997 | 後端：來源清單與順序（`backend/ai/providers.py`）——站主的本機模型（OpenAI 相容端點＋模型＋可選 key）、Anthropic key、Gemini key（REST `generateContent`，`TRC_GEMINI_API_KEY` 或加密存），預設本機優先，失敗換下一個；本機回答不算次數；`provider`／`tried`；費用線的 provider；每個來源的「測試」。測試：`backend/tests/test_ai_providers_sp997.py` |
 | 2026-10-28 | maintenance | SP-985 | `spend.PRICE` 改照官方價目頁（2026-10-28）：Sonnet 5.5 由推估的 3／15 改成 2／10，補 Haiku 5.5（0.10／0.50）、Opus 5.5（4／20）。測試：`backend/tests/test_ai_spend_sp882.py` |
 | 2026-10-28 | feature | SP-883 | 使用者要求開放：會員的「問 AI」預設開（沒 key 也看得到），`/api/v1/session` 的 `ai` 對會員多 `own: true`；沒 key 的會員對話框改成提醒＋連到設定頁 key 欄位（亮框），不能送出，存好 key 同一個對話框就能問。測試：`backend/tests/e2e/test_askai_own_key_sp883_e2e.py`、`test_ai_own_key_sp883.py` |
 | 2026-10-28 | feature | SP-883 | 新增：會員用自己的 key（`TRC_AI_MEMBER_KEYS` 開著時，所有登入會員）：key 加密存在自己的 `ai.json`、次數記在自己的 `ai_usage.json`、絕不拿站主的環境變數 key；log 遮罩加上請求者自己的 key；`data_registry` 把 `ai.json` 列為 SECRET；呼叫鎖依人分開；`purpose=ask_own_key`；`POST /api/v1/ai/settings/test`（GET /v1/models，不計費，每天 10 次）；餘額不足 `AI_NO_CREDIT`；設定頁「測試」與會員版文字。測試：`backend/tests/test_ai_own_key_sp883.py` |

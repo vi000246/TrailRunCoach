@@ -77,7 +77,8 @@ def _no_live_ai(monkeypatch):
     def refuse_get(url, headers, timeout):
         raise ConnectionError(f"no live network in tests: {url}")
     for name in (ai_config.ENV_KEY, ai_config.ENV_KEY + "_FILE", ai_config.ENV_MODEL, ai_config.ENV_LIMIT,
-                 ai_config.ENV_MEMBERS):
+                 ai_config.ENV_MEMBERS, ai_config.ENV_GEMINI_KEY, ai_config.ENV_GEMINI_KEY + "_FILE",
+                 ai_config.ENV_GEMINI_MODEL):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(ai_qa, "_post", refuse)
     monkeypatch.setattr(ai_qa, "_get", refuse_get)

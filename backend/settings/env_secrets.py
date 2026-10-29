@@ -32,6 +32,7 @@ NAMES = (
     "TRC_CAIRN_OUT_SECRET",           # this app's calls to Cairn (SP-329 Q1-1: one secret per direction)
     "RESEND_API_KEY",                 # the e-mail sign-in's mails (SP-610, accounts/mailer.py)
     "TRC_ANTHROPIC_API_KEY",          # the owner's AI 問答 key (SP-785, backend/ai/config.py)
+    "TRC_GEMINI_API_KEY",             # the owner's Gemini key for AI 問答 (SP-997, backend/ai/config.py)
 )
 MIN_REDACT_LEN = 6        # shorter values would blank ordinary words
 

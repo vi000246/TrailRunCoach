@@ -23,35 +23,43 @@
   per person (not one for the whole site). 「測試」 on the settings page is check_key: GET API_MODELS
   (lists the models; no tokens, nothing billed), at most config.KEY_TESTS_PER_DAY a day. A key the
   API refuses for its credit balance answers AI_NO_CREDIT.
+* More than one source (SP-997, providers.py): the owner's local model (OpenAI-compatible, e.g. Qwen
+  on the Mac), the Anthropic key, a Gemini key — tried in config.order(); a source that fails hands
+  over to the next. The answer says which one answered (`provider`, `model`) and which failed before
+  (`tried`). A local model costs nothing: its answers are not counted against the daily limit, and
+  past the limit the local model still answers (the paid sources are left out).
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
+import socket
 import threading
 import time
 import urllib.error
 import urllib.request
 from collections import OrderedDict
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from backend.ai import config as C
 from backend.ai import context as X
-from backend.ai import spend
+from backend.ai import providers as P
 from backend.ai.medical import is_medical
+from backend.ai.providers import AIError  # noqa: F401 — qa.AIError, as before SP-997
 
 log = logging.getLogger("backend.ai")
 
-API_URL = "https://api.anthropic.com/v1/messages"
-API_MODELS = "https://api.anthropic.com/v1/models?limit=1"     # the key test (SP-883): nothing billed
-API_VERSION = "2023-06-01"
-TIMEOUT_S = 60.0
-MAX_TOKENS = 1200
+API_URL = P.ANTHROPIC_URL
+API_MODELS = P.ANTHROPIC_MODELS           # the key test (SP-883): nothing billed
+API_VERSION = P.ANTHROPIC_VERSION
+TIMEOUT_S = P.TIMEOUT_S
+MAX_TOKENS = P.MAX_TOKENS
 CACHE_TTL_S = 6 * 3600
 CACHE_MAX = 128
 MAX_PARTS = 12
-TEST_TIMEOUT_S = 15.0
+TEST_TIMEOUT_S = P.TEST_TIMEOUT_S
 PURPOSE_OWN_KEY = "ask_own_key"           # spend.record: a member's call on their own key (SP-883)
 
 _cache: OrderedDict = OrderedDict()       # key -> (at, answer)
@@ -93,57 +101,46 @@ def system_prompt(locale: str) -> str:
     return SYSTEM.replace("{lang}", LANG[loc]).replace("{brand}", brand(loc))
 
 
-class AIError(Exception):
-    def __init__(self, code: str, status: int):
-        super().__init__(code)
-        self.code, self.status = code, status
-
-
 # ------------------------------------------------------------------------------------- the call
 
-def _post(url: str, headers: dict, body: bytes, timeout: float) -> tuple:
-    """(status, response body) of one HTTPS POST (tests replace this)."""
+def _timeouts(timeout) -> tuple:
+    """(connect, read): a pair as is (a local model, SP-997), else the one number for both."""
+    return tuple(timeout) if isinstance(timeout, (tuple, list)) else (timeout, timeout)
+
+
+def _reach(url: str, connect_s: float) -> None:
+    """Fail within connect_s when the host can't be reached (the owner's Mac asleep or off), before
+    the long read timeout a local model's answer needs (urllib has one timeout for both)."""
+    p = urlsplit(url)
+    port = p.port or (443 if p.scheme == "https" else 80)
+    socket.create_connection((p.hostname, port), timeout=connect_s).close()
+
+
+def _post(url: str, headers: dict, body: bytes, timeout) -> tuple:
+    """(status, response body) of one HTTP(S) POST (tests replace this). `timeout`: seconds, or a
+    (connect, read) pair."""
+    connect_s, read_s = _timeouts(timeout)
+    if connect_s < read_s:
+        _reach(url, connect_s)
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:          # noqa: S310 — a fixed https URL
+        with urllib.request.urlopen(req, timeout=read_s) as r:           # noqa: S310 — the API's, or the owner's own endpoint
             return r.status, r.read(1_000_000)
     except urllib.error.HTTPError as e:
         return e.code, e.read(4096) if e.fp else b""
 
 
-def _get(url: str, headers: dict, timeout: float) -> tuple:
-    """(status, response body) of one HTTPS GET — the key test (tests replace this)."""
+def _get(url: str, headers: dict, timeout) -> tuple:
+    """(status, response body) of one HTTP(S) GET — the key test (tests replace this)."""
+    connect_s, read_s = _timeouts(timeout)
+    if connect_s < read_s:
+        _reach(url, connect_s)
     req = urllib.request.Request(url, headers=headers, method="GET")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:          # noqa: S310 — a fixed https URL
+        with urllib.request.urlopen(req, timeout=read_s) as r:           # noqa: S310 — the API's, or the owner's own endpoint
             return r.status, r.read(100_000)
     except urllib.error.HTTPError as e:
         return e.code, e.read(4096) if e.fp else b""
-
-
-def _headers(key: str) -> dict:
-    return {"x-api-key": key, "anthropic-version": API_VERSION, "content-type": "application/json",
-            "user-agent": "TrailRunCoach-ai"}
-
-
-def _no_credit(status: int, raw: bytes) -> bool:
-    """The API's 「credit balance is too low」 (a 400): a member's key with no money on it."""
-    return status in (400, 402) and b"credit balance" in (raw or b"").lower()
-
-
-def _refused(status: int, raw: bytes, ms: int, what: str) -> None:
-    """Raise the AIError of a non-2xx answer (logged by status only — never the body or the key)."""
-    if status in (401, 403):
-        log.warning("AI %s refused (%s, %d ms): the key is not accepted", what, status, ms)
-        raise AIError("AI_KEY_INVALID", 502)
-    if _no_credit(status, raw):
-        log.warning("AI %s refused (%s, %d ms): no credit on the key", what, status, ms)
-        raise AIError("AI_NO_CREDIT", 402)
-    if status in (429, 529):
-        log.warning("AI %s busy (%s, %d ms)", what, status, ms)
-        raise AIError("AI_BUSY", 503)
-    log.warning("AI %s failed (%s, %d ms)", what, status, ms)
-    raise AIError("AI_UPSTREAM", 502)
 
 
 def _messages(question: str, ctx: dict, history: list) -> list:
@@ -157,44 +154,10 @@ def _messages(question: str, ctx: dict, history: list) -> list:
 
 
 def call_model(key: str, model: str, system: str, messages: list, purpose: str = "ask") -> str:
-    body = json.dumps({"model": model, "max_tokens": MAX_TOKENS, "system": system,
-                       "messages": messages}).encode()
-    headers = _headers(key)
-    t0 = time.monotonic()
-    done = {"status": "error", "in": 0, "out": 0, "error": "AI_UPSTREAM"}
-    try:
-        try:
-            status, raw = _post(API_URL, headers, body, TIMEOUT_S)
-        except Exception as e:               # noqa: BLE001 — a network error: logged by type only
-            log.warning("AI call failed: %s", type(e).__name__)
-            raise AIError("AI_UPSTREAM", 502)
-        ms = int((time.monotonic() - t0) * 1000)
-        if not 200 <= status < 300:
-            _refused(status, raw, ms, "call")
-        try:
-            d = json.loads(raw)
-            text = "".join(b.get("text") or "" for b in d.get("content") or [] if b.get("type") == "text")
-            u = d.get("usage") or {}
-        except (ValueError, AttributeError, TypeError):
-            log.warning("AI call: an answer that is not JSON (%d ms)", ms)
-            raise AIError("AI_UPSTREAM", 502)
-        log.info("AI call ok (%d ms, %s in / %s out tokens)", ms, u.get("input_tokens"), u.get("output_tokens"))
-        done.update(status="success", error="", **{"in": _int(u.get("input_tokens")),
-                                                   "out": _int(u.get("output_tokens"))})
-        return text
-    except AIError as e:
-        done["error"] = e.code
-        raise
-    finally:                                 # SP-882: every call's tokens and cost for the Grafana usage
-        spend.record(model, done["status"], done["in"], done["out"],
-                     (time.monotonic() - t0) * 1000, done["error"], purpose)
-
-
-def _int(v) -> int:
-    try:
-        return max(0, int(v or 0))
-    except (TypeError, ValueError):
-        return 0
+    """One Anthropic call (SP-785's single source): the text. Each call's tokens and cost go to the
+    Grafana usage (SP-882) — providers.run does both, for any source."""
+    text, _src, _tried = P.run([P.Source("anthropic", model, key, purpose=purpose)], system, messages, _post)
+    return text
 
 
 # ------------------------------------------------------------------------------------ the answer
@@ -282,49 +245,44 @@ def ask(question: Any, focus: Any = None, history: Any = None, locale: str = "zh
     q = X.clean_text(question, X.MAX["question"])
     if not q:
         raise AIError("AI_EMPTY", 400)
-    key = C.api_key()
-    if not key:
+    chain = C.sources()
+    if not chain:
         raise AIError("AI_NO_KEY", 409)
-    model = C.model()
     hist = X.clean_history(history)
     ctx, refs = build_context(focus)
-    ck = _cache_key(model, locale, q, ctx, hist)
+    ck = _cache_key("|".join(s.label for s in chain), locale, q, ctx, hist)
     medical_q = is_medical(q)
     hit = _cached(ck)
     if hit is not None:
         return {**hit, "cached": True, "used_today": C.used_today(), "daily_limit": C.daily_limit()}
     with _call_lock():
-        if C.used_today() >= C.daily_limit():
-            raise AIError("AI_DAILY_LIMIT", 429)
-        text = call_model(key, model, system_prompt(locale),
-                          _messages(q, ctx, hist), purpose=PURPOSE_OWN_KEY if C.is_member() else "ask")
-        used = C.count_one()
+        if C.used_today() >= C.daily_limit():          # past the limit only the free (local) source is left
+            chain = [s for s in chain if s.kind == "local"]
+            if not chain:
+                raise AIError("AI_DAILY_LIMIT", 429)
+        text, src, tried = P.run(chain, system_prompt(locale), _messages(q, ctx, hist), _post)
+        used = C.used_today() if src.kind == "local" else C.count_one()
     ans = parse_answer(text, refs)
-    ans = {**ans, "medical": ans["medical"] or medical_q, "model": model, "sent": X.sent_view(ctx)}
+    ans = {**ans, "medical": ans["medical"] or medical_q, "model": src.model, "provider": src.kind,
+           "tried": tried, "sent": X.sent_view(ctx)}
     _store(ck, ans)
     return {**ans, "cached": False, "used_today": used, "daily_limit": C.daily_limit()}
 
 
-def check_key() -> dict:
-    """「測試」 on the settings page (SP-883): is the key in use accepted? GET API_MODELS — lists the
-    models, no tokens, nothing billed, not counted against the daily questions. At most
-    config.KEY_TESTS_PER_DAY a day per person (else AI_TEST_LIMIT 429, no call). {ok: true} or AIError
-    (AI_NO_KEY, AI_KEY_INVALID, AI_NO_CREDIT, AI_BUSY, AI_UPSTREAM). Logs the status and time only."""
+def check_key(kind: Optional[str] = None) -> dict:
+    """「測試」 on the settings page (SP-883): is that source usable? (`kind`: local | anthropic |
+    gemini, SP-997; default the Anthropic key, as before.) No tokens, nothing billed, not counted
+    against the daily questions (providers.check). At most config.KEY_TESTS_PER_DAY a day per person
+    (else AI_TEST_LIMIT 429, no call). {ok: true} or AIError (AI_NO_KEY, AI_KEY_INVALID, AI_NO_CREDIT,
+    AI_NO_MODEL, AI_UNREACHABLE, AI_BUSY, AI_UPSTREAM). Logs the status and time only."""
     if not C.allowed():
         raise AIError("AI_OWNER_ONLY", 403)
-    key = C.api_key()
-    if not key:
+    kind = kind or "anthropic"
+    if kind not in P.KINDS:
+        raise AIError("BAD_REQUEST", 400)
+    src = next((s for s in C.sources() if s.kind == kind), None)
+    if src is None:
         raise AIError("AI_NO_KEY", 409)
     if not C.count_key_test():
         raise AIError("AI_TEST_LIMIT", 429)
-    t0 = time.monotonic()
-    try:
-        status, raw = _get(API_MODELS, _headers(key), TEST_TIMEOUT_S)
-    except Exception as e:                   # noqa: BLE001 — a network error: logged by type only
-        log.warning("AI key test failed: %s", type(e).__name__)
-        raise AIError("AI_UPSTREAM", 502)
-    ms = int((time.monotonic() - t0) * 1000)
-    if not 200 <= status < 300:
-        _refused(status, raw, ms, "key test")
-    log.info("AI key test ok (%d ms)", ms)
-    return {"ok": True}
+    return P.check(src, _get)

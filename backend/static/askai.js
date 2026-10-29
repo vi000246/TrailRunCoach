@@ -171,6 +171,7 @@
   .askai-src a { color: var(--accent, #2563eb); }
   .askai-med { border: 1px solid var(--bad, #c0392b); color: var(--bad, #c0392b); border-radius: 8px; padding: 5px 8px; font-size: 12.5px; }
   .askai-meta { font-size: 11.5px; color: var(--muted, #667); }
+  .askai-via { font-size: 12px; color: var(--muted, #667); border: 1px dashed var(--line, #d5dbe2); border-radius: 6px; padding: 3px 8px; }
   .askai-err { color: var(--bad, #c0392b); font-size: 12.5px; }
   .askai-err a, .askai-nokey a { color: var(--accent, #2563eb); }
   .askai-nokey { margin: 8px 12px 0; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line, #e1e5ea); font-size: 12.5px; }
@@ -248,10 +249,24 @@
       return `${esc(s.id)} ${s.url ? `<a href="${esc(s.url)}">${name}</a>` : name}`;
     }).join(" · ")}</div>` : "";
     const med = a.medical ? `<div class="askai-med" role="note">${esc(T("medical"))}</div>` : "";
+    const via = viaLine(a);
     const sent = a.sent || {};
     const meta = `<div class="askai-meta">${esc(T("sent", { rules: sent.rules || 0, weeks: sent.weeks || 0 }))}${sent.in_view ? esc(T("sent_card", { title: sent.in_view })) : ""}`
       + ` · ${esc(T("used", { n: a.used_today ?? 0, limit: a.daily_limit ?? 0 }))}${a.cached ? " · " + esc(T("cached")) : ""}</div>`;
-    return `<div class="askai-a">${med}${parts}${src}${meta}</div>`;
+    return `<div class="askai-a">${via}${med}${parts}${src}${meta}</div>`;
+  }
+  /** SP-997: the sources that failed before this answer (`tried`), e.g. 「本機模型連不上，改用 Claude 回答」. */
+  function viaLine(a) {
+    const tried = Array.isArray(a.tried) ? a.tried : [];
+    if (!tried.length || !a.provider) return "";
+    const name = (k) => T(`src.${k}`);
+    const why = (c) => {
+      const k = `why.${String(c || "AI_UPSTREAM").replace(/^AI_/, "").toLowerCase()}`;
+      const v = T(k);
+      return v && v !== "shell.askai." + k ? v : T("why.upstream");
+    };
+    const failed = tried.map((x) => T("via_one", { src: name(x.kind), why: why(x.code) })).join(T("via_sep"));
+    return `<div class="askai-via" role="note" data-askai-via>${esc(T("via", { failed, used: name(a.provider) }))}</div>`;
   }
   function errText(code) {
     const k = `err.${String(code || "AI_UPSTREAM").replace(/^AI_/, "").toLowerCase()}`;
@@ -309,7 +324,9 @@
     try {
       const r = await fetch("/api/v1/ai/settings", { credentials: "same-origin" });
       const s = r.ok ? await r.json() : null;
-      if (s && s.key) setKey(s.key.source !== "none");
+      // SP-997: any source set up (a Gemini key alone, the owner's local model) is enough
+      if (s && Array.isArray(s.sources) && s.sources.length) setKey(s.sources.some((x) => x.ready));
+      else if (s && s.key) setKey(s.key.source !== "none");
     } catch (e) { /* stays as the session said */ }
   }
   window.addEventListener("askai:key", (e) => setKey(e.detail && e.detail.has));

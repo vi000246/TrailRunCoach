@@ -90,11 +90,12 @@ def session_info(had_cookie: bool = False) -> dict:
     # AI 問答 (SP-785 / SP-786): the shell's 「問 AI」 button — the owner, or a member with their own key
     # while the server allows it (SP-883, TRC_AI_MEMBER_KEYS) — while it is switched on; never to a
     # coach viewing a student; `key`: a key is set (without one the dialog says where to set it);
-    # `own`: a member on their own key (SP-883) — without one the dialog asks for it and sends nothing
+    # `own`: a member on their own key (SP-883) — without one the dialog asks for it and sends nothing.
+    # SP-997: any source set up counts (the local model, a Claude or a Gemini key)
     try:
         from backend.ai import config as AIC
         if AIC.allowed() and not body.get("viewing"):
-            body["ai"] = {"on": AIC.enabled(), "key": AIC.key_source() != "none"}
+            body["ai"] = {"on": AIC.enabled(), "key": bool(AIC.sources())}
             if AIC.is_member():
                 body["ai"]["own"] = True
     except Exception:                      # noqa: BLE001 — no button rather than no page
