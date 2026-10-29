@@ -63,3 +63,28 @@ def test_set_patches_only_the_named_paths():
     rows = [{"x": 1}]
     S.set_path(rows, "0.x", 2)
     assert rows == [{"x": 2}]
+
+
+# ---- SP-999: a shot list taken in sign-in mode (the signed-out 介紹頁 at "/") ---------------------------------
+
+def test_a_shot_list_names_its_servers_mode():
+    assert S.check_spec({"ticket": "SP-999", "mode": "signin",
+                         "shots": [{"name": "介紹頁", "path": "/", "ready": ".hero"}]})
+    assert S.check_spec({**_spec(), "mode": "owner"})
+    with pytest.raises(S.SpecError, match="mode"):
+        S.check_spec({**_spec(), "mode": "signed_out"})
+
+
+def test_the_signin_server_gets_fake_google_settings_and_its_own_accounts_folder(tmp_path, monkeypatch):
+    from backend.tests.e2e import _server
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "a-real-looking-id")       # never carried over from the shell
+    monkeypatch.setenv("WKO5COACH_ACCOUNTS", "1")
+    owner = _server.server_env(tmp_path / "base")
+    assert "GOOGLE_CLIENT_ID" not in owner and "WKO5COACH_ACCOUNTS" not in owner
+    assert owner["WKO5COACH_HOME"] == str(tmp_path / "base")
+    env = _server.server_env(tmp_path / "base", ("http://127.0.0.1:5000", tmp_path / "signin"))
+    assert env["WKO5COACH_ACCOUNTS"] == "1" and env["WKO5COACH_PUBLIC_URL"] == "http://127.0.0.1:5000"
+    assert env["GOOGLE_CLIENT_ID"] == _server.SIGNIN_CLIENT_ID and env["GOOGLE_CLIENT_SECRET"]
+    assert env["WKO5COACH_OWNER_EMAIL"].endswith(".invalid")                # no one's address
+    assert env["WKO5COACH_SERVER_ROOT"] == str(tmp_path / "signin")
+    assert env["WKO5COACH_HOME"] == str(tmp_path / "base") and env["WKO5COACH_COOKIE_SECURE"] == "0"

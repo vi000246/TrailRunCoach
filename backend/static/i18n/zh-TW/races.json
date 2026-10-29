@@ -151,7 +151,7 @@
   "cairn.consent": "同意：{text}",
   "cairn.done_created": "已在 Cairn 建立行程",
   "cairn.done_updated": "已更新 Cairn 上的行程",
-  "cairn.what_origin": "會推：賽事計算機存的配速曲線、每晚的過夜點。",
+  "cairn.what_origin": "會推：賽事計算機存的配速曲線、每晚的過夜點（你在 Cairn 已經在同一處標了過夜的那一晚不另外送）。",
   "cairn.origin": "這場的 GPX 是從 Cairn 的「{name}」匯入的：推送會更新那一條行程，不會另外新建；路線檔、行程名稱，以及你在 Cairn 加的點和填的時刻都不會動。",
   "cairn.done_origin": "已更新 Cairn 上原本那條行程",
   "cairn.new_go": "在 Cairn 另建一條",

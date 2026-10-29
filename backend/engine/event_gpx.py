@@ -199,12 +199,19 @@ def clean_source(src: Optional[dict]) -> Optional[dict]:
         out["group"] = True
     # SP-535: the nights marked in Cairn (km on our track), so the day-split preview can offer them back
     # as candidates after the day ends were changed
+    # SP-1016: and which of Cairn's own nights each one is (`overnight`: its night n — a visit on day n and
+    # n + 1 —, null when not one): pushing back, TRC leaves that night to Cairn's point. A night kept before
+    # SP-1016 has no `overnight` key at all (accounts/cairn_push.cairn_nights reads its `night` then)
     nights = []
     for x in src.get("nights") or []:
         try:
-            nights.append({"night": int(x["night"]), "km": round(float(x["km"]), 3), "name": str(x.get("name") or "")[:60]})
+            n = {"night": int(x["night"]), "km": round(float(x["km"]), 3), "name": str(x.get("name") or "")[:60]}
         except (KeyError, TypeError, ValueError):
             continue
+        if "overnight" in x:
+            o = x["overnight"]
+            n["overnight"] = o if isinstance(o, int) and not isinstance(o, bool) and 1 <= o <= 60 else None
+        nights.append(n)
     if nights:
         out["nights"] = nights[:20]
     # SP-577: the timetable read with it and the answer to 「這是團的時刻表」 (read only, never sent back)

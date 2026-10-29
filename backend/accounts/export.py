@@ -39,7 +39,7 @@ from typing import Iterator, Optional
 from backend import data_registry as R
 
 FORMAT = "export-1"
-APP = "TrailRunCoach"
+APP = "TrailRunCoach"          # manifest.json's "app": the format's name, not the product's (kept, SP-1001)
 
 
 @dataclass
@@ -125,7 +125,8 @@ def _subscription(uid: int):
 
 def _readme() -> bytes:
     from backend.i18n import _
-    text = _("這是你在 TrailRunCoach 的資料（{app}，格式 {fmt}）。\n\n"
+    from backend.i18n.pages import current_brand
+    text = _("這是你在 {brand}的資料（格式 {fmt}）。\n\n"
              "account.json：你的帳號（e-mail、名稱、建立時間、方案與訂閱）、同意條款與撤回同意的紀錄、"
              "用 email 登入的確認時間、教練關係，以及註冊來源（signup_source：從疊石 Cairn 的連結來註冊是 cairn、"
              "從賽事分享頁來是 share，其他是空的）和疊石 Cairn 互推小卡每天的次數（cross_product_events："
@@ -134,7 +135,7 @@ def _readme() -> bytes:
              "files/：你的檔案，照伺服器上的位置存放：賽季計畫、校正、圖表檢視、上傳的 GPX（.gz 是 gzip 壓縮），"
              "fit/ 底下是同步或匯入的 FIT 原始檔（gzip 壓縮，解壓後就是 .fit）。\n\n"
              "沒有放進來的：COROS／Garmin／TrainingPeaks 的登入憑證與記住的密碼、課表訂閱網址的金鑰"
-             "（機密），以及可以重新計算的快取（衍生資料）。", app=APP, fmt=FORMAT)
+             "（機密），以及可以重新計算的快取（衍生資料）。", brand=current_brand(), fmt=FORMAT)
     return text.encode("utf-8")
 
 

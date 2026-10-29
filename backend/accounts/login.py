@@ -133,9 +133,9 @@ PUBLIC_PATHS = PUBLIC_PATHS | {"/register", "/forgot-password", "/reset-password
 # 介紹頁 (SP-622, main._home): "/" signed out is the product's introduction (signed in: the overview, as
 # before) — exactly "/", nothing under it
 PUBLIC_PATHS = PUBLIC_PATHS | {"/"}
-# its examples and small calculator (SP-637, api/intro.py): the built-in fictional runner only, limited per
-# client and cached — exactly /api/v1/intro/estimate and /api/v1/intro/example/<trail|baiyue|road>
-PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/estimate"} | {f"/api/v1/intro/example/{k}" for k in ("trail", "baiyue", "road")}
+# its examples (SP-637, api/intro.py): the built-in fictional runner only — exactly
+# /api/v1/intro/example/<trail|baiyue|road> (SP-998: the small calculator's /api/v1/intro/estimate is gone)
+PUBLIC_PATHS = PUBLIC_PATHS | {f"/api/v1/intro/example/{k}" for k in ("trail", "baiyue", "road")}
 # SP-637 R1: the 課表 demo — the built-in template library and the fictional runner's frozen calendar
 PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/templates", "/api/v1/intro/plan"}
 # SP-969: the trail example's finish time factor by factor (frozen numbers, the waterfall) — exactly this path

@@ -14,9 +14,8 @@ on top of the page's own request; the 介紹頁 names them.
 
     python -m backend.scripts.intro_example --breakdown-only        # the waterfall for the example as it is
 
-SP-637: the same run also freezes the fictional runner the 介紹頁's small calculator computes for
-(backend/demo/intro_runner.json, api/intro.estimate): the part of the demo athlete's /inputs that the
-road / trail / 百岳 prediction reads — never anyone else's.
+SP-998: it no longer freezes the small calculator's runner (backend/demo/intro_runner.json): the calculator
+left the 介紹頁 (SP-969 Q2-3) and its API went with it.
 
     python -m backend.scripts.intro_example                          # builds the full demo athlete (~2 min) and serves it
     python -m backend.scripts.intro_example --kind road              # just one of trail | baiyue | road
@@ -39,7 +38,6 @@ from pathlib import Path
 from typing import Optional
 
 DEMO = Path(__file__).resolve().parents[1] / "demo"
-RUNNER = DEMO / "intro_runner.json"
 # kind -> (the demo event, the snapshot's title, the shortest course a full build has)
 KINDS = {
     "trail": ("demo-50k", "示範山徑越野 50K（虛構跑者）", 40.0),
@@ -57,8 +55,6 @@ ASSUMED = {
               "stops": [{"km": 12.0, "type": "aid", "minutes": 3.0}, {"km": 25.0, "type": "big", "minutes": 8.0},
                         {"km": 38.0, "type": "aid", "minutes": 3.0}]},
 }
-# the /inputs keys calc.predict reads (road / trail / 百岳): the fictional runner, nothing else
-RUNNER_KEYS = ("weight", "training_conditions", "cp", "tte", "re", "auto_prior", "riegel", "hiking", "aet")
 
 
 def bring_forward(plan_json: Path, today: dt.date) -> None:
@@ -118,15 +114,6 @@ def capture(url: str, event: str = "demo-50k") -> tuple[dict, dict]:
     if "res" not in got:
         raise SystemExit("the race calculator computed nothing for " + event)
     return got["req"], got["res"]
-
-
-def runner(url: str) -> dict:
-    """The demo athlete's /inputs, only the keys the prediction reads (RUNNER_KEYS)."""
-    import urllib.request
-    with urllib.request.urlopen(f"{url.rstrip('/')}/api/v1/racepower/inputs", timeout=300) as r:
-        d = json.loads(r.read().decode("utf-8"))
-    return {"_about": "SP-637: the 介紹頁's fictional runner (backend/scripts/intro_example.py: the demo athlete)",
-            **{k: d.get(k) for k in RUNNER_KEYS}}
 
 
 PLAN = DEMO / "intro_plan.json"
@@ -289,7 +276,6 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="python -m backend.scripts.intro_example", description=__doc__.split("\n\n")[0])
     ap.add_argument("--url", help="a running demo server built in full (run bring_forward on its plan.json first)")
     ap.add_argument("--kind", choices=[*KINDS, "all"], default="all", help="which example (default: all three)")
-    ap.add_argument("--no-runner", action="store_true", help="leave backend/demo/intro_runner.json as it is")
     ap.add_argument("--no-plan", action="store_true", help="leave backend/demo/intro_plan.json as it is")
     ap.add_argument("--race-day", help="with --url: the 50K's date (YYYY-MM-DD) for the 課表 calendar")
     ap.add_argument("--breakdown-only", action="store_true",
@@ -338,9 +324,6 @@ def main(argv: list[str]) -> int:
                 BREAKDOWN.write_text(json.dumps(bd, ensure_ascii=False, indent=1) + "\n", "utf-8")
                 print(f"→ {BREAKDOWN.relative_to(BREAKDOWN.parents[2])}: "
                       + ", ".join(f"{x['key']} {x['t_s']:.0f} s" for x in bd["layers"]))
-        if not a.no_runner:
-            RUNNER.write_text(json.dumps(runner(url), ensure_ascii=False, indent=1) + "\n", "utf-8")
-            print(f"→ {RUNNER.relative_to(RUNNER.parents[2])}")
         if not a.no_plan:
             if race_day is None:
                 raise SystemExit("the 課表 calendar needs --race-day with --url (or --no-plan)")

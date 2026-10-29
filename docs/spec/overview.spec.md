@@ -588,7 +588,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   only in 設定 → 心率 (`hr-profile`): the table has no max-HR column, hides rows that hold only
   `mhr` / `rhr` but sends them back unchanged, and 移除 on a row that also holds them clears only its
   LTHR / AeT / CP; a 心率 save reloads the table so a stale copy never overwrites it. The 賽事周期
-  page (`backend/static/plan.html:190`) shows a read-only line — what is in effect, the latest test
+  page (`backend/static/plan.html:156`) shows a read-only line — what is in effect, the latest test
   date and count — with 「到設定修改」 (`/api/v1/app/settings#thresholds`); the status action for a
   default LTHR points to 設定 too (`backend/engine/status.py:1071`). No data-model change.
 - **門檻變更紀錄** (2026-10-13, SP-467; SP-449 Q2 ③ B): a collapsed 「門檻變更紀錄：哪個門檻在哪天變了」 under
@@ -965,7 +965,7 @@ tickets is in plan-auto.spec.md):
   on the server with none sent: it is saved without them, still hinted (`backend/engine/planning.py:783`);
   the 賽事周期 form then leaves the rows optional until one is filled and says so (`plan.ev.dayplan_old`,
   `backend/static/races.html:702`). Such a trip's 總距離／總爬升 are editable and saved as sent while its
-  rows are blank (decision 2026-10-13: they are the only numbers it has; `backend/static/plan.html:456`);
+  rows are blank (decision 2026-10-13: they are the only numbers it has; `backend/static/races.html:721`);
   a new multi-day trip, a trip with its per-day numbers, and an old trip once a row is filled keep them
   read-only — the sums of the days, which `upsert_event` also enforces.
 - **Multi-day 百岳's 賽事評估** (SP-114, SP-545): no 來得及／來不及 verdict — the card says how hard the
@@ -3047,3 +3047,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-28 | feature | SP-965 | 測試 card and the week plan's CP test read one 「CP 有效」 (owner 2026-10-28: 「CP 有效的定義要全 app 統一」): `power_state.cp_check(ps, today, last_cp_test)` — valid / basis / until / left, `remind` (kept valid by SP-963's all-out efforts with ≤ `CP_REMIND_DAYS` 7 left), the date the CP's age counts from (the efforts' older one, else the later of the CP test and the race) and `due`. `status.i_testing`: kept valid by the efforts → OK 「CP 有效到 M/D（…）」, no CP test; a week before they lapse → watch 「快到期」, 「再跑一次強度課或做 CP 測試」, `cp_due`; a race dates the CP. `week_plan`'s CP test suggestion adds the power state's reason then. A CP test keeps its 42 / 90-day cadence; no ceiling on the efforts (Q2 (a)). Tests: `backend/tests/test_cp_valid_sp965.py` |
 | 2026-10-28 | feature | SP-967 | The 徐國峰 90-minute AeT test's 「75–80 % 實測 CP」 counts a CP valid as the power state reads it (owner 2026-10-28, Q1 (b)): `aet_test.cp_tested(..., cp_valid=power_state.cp_check(...)["valid"])` — with no plan CP row the Stryd PD fit anchored by all-out efforts in 42 days (SP-963) counts like a CP test in its 90-day window; a CP typed by hand still never does; without a valid CP the order is unchanged. Tests: `backend/tests/test_xu90_cp_valid_sp967.py` |
 | 2026-10-29 | code-sync（SP-810, SP-988） | N/A | `GET /suggestions` shown in the request's language through `stored_text.shown_tree` (`_shown_box`; the race simulation's help as msgids, the max-HR / LTHR test's conditions `M_()` and its title rebuilt, day notes per request); the 減量期 and B race / trip week notes take their changes as an `M_list` parameter (`TAPER_NOTE(_SAID)`, `B_*_NOTE(_SAID)`) |
+| 2026-10-29 | maintenance | SP-1007 | Two anchors left behind by moves, wording unchanged: the old multi-day trip's editable 總距離／總爬升 now point at the editor's read-only call in backend/static/races.html (the event editor moved there from plan.html in SP-691); the 賽事周期 page's read-only threshold line points at its section in backend/static/plan.html (the line number had drifted) |

@@ -299,6 +299,6 @@ def test_the_log_mask_reads_no_tenant_and_still_blanks_a_member_s_key(site, monk
     def no_tenant():
         pytest.fail("the log mask read a tenant")
     monkeypatch.setattr(tenancy, "current", no_tenant, raising=False)
-    assert contextvars.Context().run(lambda: applog.redact("GET /api/v1/intro/estimate status=200")) \
-        == "GET /api/v1/intro/estimate status=200"
+    assert contextvars.Context().run(lambda: applog.redact("GET /api/v1/intro/plan status=200")) \
+        == "GET /api/v1/intro/plan status=200"
     assert contextvars.Context().run(C.redact_values) == set()

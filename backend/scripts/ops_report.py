@@ -22,7 +22,12 @@ The report, per day (Asia/Taipei, the app's day):
   6. 本月訂閱收入 (SP-803) — the month of that day so far and where it ends if nothing changes, estimated
      from the subscription rows (backend/billing/revenue.py: list prices, no Polar call) against the
      免辦稅籍 line NT$50,000, flagged from 80 %: the owner's cue to ask an accountant whether to register.
-     When accounts.db can't be read it says so (never NT$0).
+     When accounts.db can't be read it says so (never NT$0);
+  7. 夜間重算 (SP-1009) — the whole-Dataset jobs (`cls=full`, one at a time) running in the night
+     NIGHT_FROM–NIGHT_TO of that day, as 同步暖機 / 教練彙總 / 部署暖機 (and 其他): how many, wall-clock
+     and CPU seconds, when the last one ended and the longest wait; flagged when the last one ended after
+     NIGHT_WARN_AT (07:00): the owner's cue that the night queue now runs into the morning (SP-828: the
+     coach board's night summary grows with the students — time to let it skip the Dataset, SP-1008).
 
     python -m backend.scripts.ops_report                      # yesterday, as text (markdown)
     python -m backend.scripts.ops_report --date 2026-10-18 --json
@@ -52,6 +57,10 @@ WARN_SHARE = 0.8                                   # 「接近」: 80 % of the b
 BLOCK_EVENTS = ("http_429", "http_403", "account_paused", "breaker_tripped", "server_cooldown", "disabled")
 RECOVERED = ("account_resumed", "account_recovered")
 MEMBERS_WARN_SHARE = 0.8                           # 會員數到封頂的 80 % (SP-388 完成條件 4)
+NIGHT_FROM = dt.time(1, 0)                         # 夜間重算的窗口 (SP-1009): the free tier's night sync starts
+NIGHT_TO = dt.time(9, 0)                           # at 01:00 (sync.night_start), the coach board's at 04:00
+NIGHT_WARN_AT = dt.time(7, 0)                      # 最晚結束超過 07:00 標警示 (SP-1009)
+NIGHT_KINDS = (("sync", "同步暖機"), ("coach", "教練彙總"), ("deploy", "部署暖機"), ("other", "其他"))
 
 _LINE = re.compile(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})[^\t]*\tjob\t([\d.]+)\t(.*)$")
 _FIELD = re.compile(r" (\w+)=(\S+)")
@@ -67,8 +76,9 @@ def perf_files(folder: Path) -> list[Path]:
 
 
 def jobs(files: Iterable[Path]) -> list[dict]:
-    """The `job` lines: {day, label, seconds, tenant, cls, cpu, wait, status}. The perf.log time is the
-    server's local time — the NAS container runs on Asia/Taipei like the app's day."""
+    """The `job` lines: {day, end, label, seconds, tenant, cls, cpu, wait, status}. The perf.log time is
+    the server's local time — the NAS container runs on Asia/Taipei like the app's day — and the time
+    the job ended (jobs._account writes the line when it is done): `end` is its HH:MM:SS."""
     out = []
     for f in files:
         try:
@@ -87,7 +97,7 @@ def jobs(files: Iterable[Path]) -> list[dict]:
                 wait = float(fields.get("wait", 0) or 0)
             except ValueError:
                 continue
-            out.append({"day": m.group(1), "label": label, "seconds": float(m.group(3)),
+            out.append({"day": m.group(1), "end": m.group(2), "label": label, "seconds": float(m.group(3)),
                         "tenant": fields.get("tenant") or "?", "cls": fields.get("cls") or "?",
                         "cpu": cpu, "wait": wait, "status": fields.get("status")})
     return out
@@ -203,7 +213,55 @@ def report(day: dt.date, js: list[dict], evs: list[dict], plan_of: dict[str, str
         sources[src] = {"counts": {k: v for k, v in counts.items() if v}, "paused": recov}
     return {"day": d, "cpu_total_s": round(sum(cpu_day.values()), 1), "tenants": per_tenant,
             "free_over_budget": free, "free_budget_s": FREE_CPU_S_PER_MONTH, "backtest": backtest,
-            "sources": sources, "members": members, "revenue": revenue}
+            "sources": sources, "members": members, "revenue": revenue, "night": night(day, js)}
+
+
+def night_kind(label: str) -> str:
+    """Which night work a `full` job is, from its label: the warm-up after a sync and its full parts
+    (`dataset warm-up (sync-…)`, `warm-up calibration (sync-…)`), the coach board's summary
+    (`coach summary (…)`), the warm-up after a deploy / restart (`… (startup)`, `… (deploy)`); anything
+    else (the automatic classification, the monthly archive, a back-fill, a request's own work) `other`."""
+    if label.startswith("coach summary"):
+        return "coach"
+    why = label[label.rfind("(") + 1:-1] if label.endswith(")") and "(" in label else ""
+    if why.startswith("sync"):
+        return "sync"
+    if why in ("startup", "deploy"):
+        return "deploy"
+    return "other"
+
+
+def night(day: dt.date, js: list[dict]) -> dict:
+    """The night of `day` (NIGHT_FROM–NIGHT_TO, local time): the `full` jobs running in it (started
+    before NIGHT_TO and ended at NIGHT_FROM or later — one that started at 00:55 or ended at 09:20
+    still counts), per night_kind and all together: {jobs, wall_s, cpu_s, last_end, wait_max_s}; `late`
+    when the last one ended after NIGHT_WARN_AT. Lines without their end time are left out."""
+    lo = dt.datetime.combine(day, NIGHT_FROM)
+    hi = dt.datetime.combine(day, NIGHT_TO)
+    rows: dict = {k: [] for k, _ in NIGHT_KINDS}
+    for j in js:
+        if j.get("cls") != "full" or not j.get("end"):
+            continue
+        try:
+            end = dt.datetime.fromisoformat(f"{j['day']} {j['end']}")
+        except ValueError:
+            continue
+        if end - dt.timedelta(seconds=j["seconds"]) < hi and end >= lo:
+            rows[night_kind(j["label"])].append((j, end))
+
+    def sums(group: list) -> dict:
+        if not group:
+            return {"jobs": 0, "wall_s": 0.0, "cpu_s": 0.0, "last_end": None, "wait_max_s": None}
+        last = max(e for _, e in group)
+        return {"jobs": len(group), "wall_s": round(sum(j["seconds"] for j, _ in group), 1),
+                "cpu_s": round(sum(j["cpu"] for j, _ in group), 1), "last_end": last.strftime("%H:%M:%S"),
+                "wait_max_s": round(max(j["wait"] for j, _ in group), 1)}
+
+    everything = [x for k, _ in NIGHT_KINDS for x in rows[k]]
+    last = max((e for _, e in everything), default=None)
+    return {"from": NIGHT_FROM.strftime("%H:%M"), "to": NIGHT_TO.strftime("%H:%M"),
+            "warn_at": NIGHT_WARN_AT.strftime("%H:%M"), "kinds": {k: sums(rows[k]) for k, _ in NIGHT_KINDS},
+            "total": sums(everything), "late": last is not None and last > dt.datetime.combine(day, NIGHT_WARN_AT)}
 
 
 def _guess(tenant: str) -> str:
@@ -245,12 +303,37 @@ def text(r: dict) -> str:
         elif m["near"]:
             line += "，**接近封頂**：考慮調高上限（管理 › 全站設定 › 會員封頂）或升級主機"
         lines.append(line)
+    if r.get("night"):
+        lines += [""] + night_lines(r["night"])
     rv = r.get("revenue")
     if rv:
         from backend.billing import revenue as RV
         lines += ["", f"### 本月訂閱收入（估計；免辦稅籍門檻 NT${rv['line']:,} 的 {RV.WARN_SHARE:.0%} 起提醒）", ""]
         lines += revenue_lines(rv)
     return "\n".join(lines) + "\n"
+
+
+def night_lines(n: dict) -> list[str]:
+    """The report's 夜間重算 section: the whole-Dataset jobs of the night per kind (其他 only when there
+    are some) and together; the last end flagged after warn_at (07:00)."""
+    out = [f"### 夜間重算（{n['from']}～{n['to']}，整份 Dataset 的工作，一次只跑一個）", ""]
+    t = n["total"]
+    if not t["jobs"]:
+        return out + ["這晚沒有整份 Dataset 的工作"]
+    out += ["| 類別 | 件數 | 牆鐘秒 | CPU 秒 | 最晚結束 | 最長等待（秒） |", "|---|---:|---:|---:|---|---:|"]
+    for k, label in NIGHT_KINDS:
+        s = n["kinds"][k]
+        if k == "other" and not s["jobs"]:
+            continue
+        wait = f"{s['wait_max_s']:.0f}" if s["wait_max_s"] is not None else "—"
+        out.append(f"| {label} | {s['jobs']} | {s['wall_s']:.0f} | {s['cpu_s']:.0f} | {s['last_end'] or '—'} | {wait} |")
+    out += [f"| 合計 | {t['jobs']} | {t['wall_s']:.0f} | {t['cpu_s']:.0f} | {t['last_end']} | {t['wait_max_s']:.0f} |", ""]
+    if n["late"]:
+        out.append(f"**夜間佇列拖過 {n['warn_at']}**：最晚 {t['last_end']} 才做完，早上使用者的同步要排在它後面；"
+                   "學員多了就是教練看板夜間彙總該改成不建 Dataset 的時候")
+    else:
+        out.append(f"最晚 {t['last_end']} 做完（{n['warn_at']} 前）")
+    return out
 
 
 def revenue_lines(rv: dict) -> list[str]:

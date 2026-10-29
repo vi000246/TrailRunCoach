@@ -14,7 +14,8 @@ with; no Cairn user token exists or is kept):
                POSTed: the first push PUTs the trip it came from — pace and night points only, not
                its GPX or name — and that id is kept like any other. Cairn's 404 there (not this
                person's trip, or deleted) creates nothing by itself: CAIRN_ORIGIN_GONE, and the
-               person may ask for a new trip ({new: true})
+               person may ask for a new trip ({new: true}). SP-1016: a night the trip already has its
+               own overnight point for (day n and n + 1, within NAME_NEAR_KM) is not sent there
 
 The body (payload): {name, gpx (the stored file as text, byte for byte), pace_config: {model:
 {kind: "curve", curve}} (pace_config, below), points}. The curve is SP-653's cairn-curve v1 of the
@@ -85,6 +86,23 @@ def get(eid: str) -> Optional[dict]:
     except sqlite3.Error:                   # no table yet
         return None
     return {"trip_id": r[0], "gpx_sha256": r[1], "at": r[2]} if r else None
+
+
+def events_of_trip(trip_id: str) -> list[str]:
+    """SP-1018: the current tenant's events pushed to the Cairn trip `trip_id` (any still in the plan or
+    not: the caller checks)."""
+    p = _db()
+    if p is None or not p.exists() or not isinstance(trip_id, str) or not _ID.match(trip_id):
+        return []
+    try:
+        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        try:
+            rows = con.execute(f"SELECT event_id FROM {TABLE} WHERE trip_id=?", (trip_id,)).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:                   # no table yet: nothing pushed
+        return []
+    return [r[0] for r in rows]
 
 
 def history() -> list[dict]:
@@ -232,11 +250,53 @@ def payload(eid: str) -> dict:
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != str(curve.get("gpx_sha256", "")).lower():
         raise UserError(N_("賽事的 GPX 換過了：用新的 GPX 重算一次再推"), code="GPX_CHANGED", status=409)
     row = EG.get(eid) or {}
-    trc_km = float(row.get("km") or 0)
-    scale = (float(curve["total_m"]) / 1000.0 / trc_km) if trc_km > 0 else 1.0
+    scale = _scale(row, curve)
     return {"name": (ev.name or row.get("filename") or eid)[:200], "gpx": text,
             "pace_config": pace_config(curve),
             "points": night_points(curve, _names(eid, scale))}
+
+
+def _scale(row: dict, curve: dict) -> float:
+    """Our km → Cairn's km (the curve's total over the stored GPX's)."""
+    trc_km = float(row.get("km") or 0)
+    return (float(curve["total_m"]) / 1000.0 / trc_km) if trc_km > 0 else 1.0
+
+
+def cairn_nights(eid: str, scale: float) -> list[tuple[int, float]]:
+    """SP-1016: (night n, km on Cairn's measure) of the overnight points the trip the race's GPX was
+    imported from already has — kept with the import (event_gpx source `nights`, their `overnight`: a
+    point with a visit on day n and on day n + 1). A night kept before SP-1016 has no `overnight` key: its
+    place among the nights (`night`) stands for it. `overnight: null` (not a night by its visits): none."""
+    from backend.engine import event_gpx as EG
+    try:
+        src = (EG.get(eid) or {}).get("source") or {}
+    except Exception:                       # noqa: BLE001 — no row / no table: nothing imported
+        return []
+    out = []
+    for x in src.get("nights") or []:
+        n = x.get("overnight") if "overnight" in x else x.get("night")
+        if isinstance(n, int) and not isinstance(n, bool) and isinstance(x.get("km"), (int, float)):
+            out.append((n, float(x["km"]) * scale))
+    return out
+
+
+def without_cairns_nights(points: list[dict], held: list[tuple[int, float]]) -> list[dict]:
+    """SP-1016 (使用者 2026-10-29): pushing back onto the person's own trip, TRC's night n is not sent when
+    Cairn's own point for night n (`held`, cairn_nights) is at the same place — within NAME_NEAR_KM, the
+    radius a night takes its name by. Cairn makes a point of every ref TRC sends (its id hashes the gpx id
+    and the ref), so a night of ours there would be a second one; Cairn's own point is never touched (it
+    is not ours). A night Cairn has elsewhere (the two plans differ) is sent: both stay, as planned. And
+    since Cairn's PUT drops TRC's points not sent again, a duplicate pushed before goes with this push."""
+    if not held:
+        return points
+    out = []
+    for p in points:
+        m = re.fullmatch(r"night-(\d+)", str(p.get("ref") or ""))
+        km = float(p.get("distance_m") or 0) / 1000.0
+        if m and any(n == int(m.group(1)) and abs(k - km) <= NAME_NEAR_KM for n, k in held):
+            continue
+        out.append(p)
+    return out
 
 
 def origin(eid: str) -> Optional[dict]:
@@ -345,6 +405,11 @@ def push(user, eid: str, consent: bool = False, new: bool = False) -> dict:
         kind, tid = target(eid, new)
         if kind == "origin":                # the person's own trip: its file and name stay theirs
             body = {k: v for k, v in body.items() if k not in ("gpx", "name")}
+            # SP-1016: and the nights it already has a point for stay its own (not a second one of ours)
+            from backend.engine import event_gpx as EG
+            curve = _curve_of(body)
+            body["points"] = without_cairns_nights(body["points"],
+                                                   cairn_nights(eid, _scale(EG.get(eid) or {}, curve)))
         headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
         params = {"sub": user.google_sub}
         try:

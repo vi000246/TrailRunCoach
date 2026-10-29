@@ -71,7 +71,8 @@ def _call_lock() -> threading.Lock:
 
 LANG = {"en": "English", "zh-TW": "Traditional Chinese (Taiwan)"}
 
-SYSTEM = """You are the explainer inside TrailRunCoach, a trail-running training app. The user is the athlete.
+# {lang} and {brand} (the product's name in the answer's language, SP-1003) filled in by system_prompt()
+SYSTEM = """You are the explainer inside {brand}, a trail-running training app; asked who or what you are, say you are {brand}'s explainer. The user is the athlete.
 You answer questions about their training status, what is lacking, a chart, a planned session or a race-calculator result.
 
 Rules you must follow:
@@ -83,6 +84,13 @@ Rules you must follow:
 
 Reply with JSON only, no other text:
 {"parts": [{"type": "rule", "text": "...", "refs": ["S1"]}, {"type": "inference", "text": "...", "refs": []}], "medical": false}"""
+
+
+def system_prompt(locale: str) -> str:
+    """SYSTEM for one answer: its language, and the product's name as the user sees it (pages.brand)."""
+    from backend.i18n.pages import brand
+    loc = locale if locale in LANG else "zh-TW"
+    return SYSTEM.replace("{lang}", LANG[loc]).replace("{brand}", brand(loc))
 
 
 class AIError(Exception):
@@ -288,7 +296,7 @@ def ask(question: Any, focus: Any = None, history: Any = None, locale: str = "zh
     with _call_lock():
         if C.used_today() >= C.daily_limit():
             raise AIError("AI_DAILY_LIMIT", 429)
-        text = call_model(key, model, SYSTEM.replace("{lang}", LANG.get(locale, LANG["zh-TW"])),
+        text = call_model(key, model, system_prompt(locale),
                           _messages(q, ctx, hist), purpose=PURPOSE_OWN_KEY if C.is_member() else "ask")
         used = C.count_one()
     ans = parse_answer(text, refs)

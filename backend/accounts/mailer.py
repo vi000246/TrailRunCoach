@@ -36,7 +36,8 @@ log = logging.getLogger("backend.mail")
 
 ENV_KEY = "RESEND_API_KEY"
 ENV_FROM = "TRC_MAIL_FROM"
-DEFAULT_FROM = "TrailRunCoach <no-reply@yichlin.com>"
+# the sender's name: the product's (SP-1001) — "Trig" in every language, a mail has one sender
+DEFAULT_FROM = "Trig <no-reply@yichlin.com>"
 API_URL = "https://api.resend.com/emails"
 TIMEOUT_S = 10.0
 

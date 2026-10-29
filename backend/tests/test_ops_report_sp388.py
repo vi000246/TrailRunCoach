@@ -82,7 +82,7 @@ def test_the_job_lines_are_the_ones_the_queue_writes(tmp_path, monkeypatch):
     jobs._account(job)
     (tmp_path / "perf.log").write_text("\n".join(lines) + "\n", "utf-8")
     js = R.jobs(R.perf_files(tmp_path))
-    assert js == [{"day": "2026-10-18", "label": "race backtest", "seconds": 1.5, "tenant": "u7", "cls": "backtest",
+    assert js == [{"day": "2026-10-18", "end": "03:10:00", "label": "race backtest", "seconds": 1.5, "tenant": "u7", "cls": "backtest",
                    "cpu": 1.25, "wait": 2.5, "status": "done"}]
 
 

@@ -77,8 +77,10 @@ def summary(x) -> Optional[dict]:
 
 
 def _detail(data) -> dict:
-    """A trip's answer: {trip: summary, gpx: str, gpx_sha256, points: [{name, km, day, lat, lng}]}
-    — the overnight points only (kind overnight), by distance."""
+    """A trip's answer: {trip: summary, gpx: str, gpx_sha256, points: [{name, km, day, overnight, lat,
+    lng}]} — the overnight points only (kind overnight), by distance. `overnight`: the night n the point
+    is Cairn's own stop for — a visit on day n and one on day n + 1 (SP-1016: pushing back, TRC's night n
+    there is left to it); None when its visits don't say so."""
     if not isinstance(data, dict) or not isinstance(data.get("gpx"), str):
         raise _unreadable()
     trip = summary(data.get("trip"))
@@ -92,8 +94,10 @@ def _detail(data) -> dict:
                 if isinstance(v, dict) and isinstance(v.get("day"), int) and not isinstance(v.get("day"), bool)]
         lon = p.get("lon", p.get("lng"))
         m = _num(p.get("distance_m"))
+        night = next((d for d in sorted(set(days)) if d >= 1 and d + 1 in days), None)
         nights.append({"name": str(p.get("name") or "")[:60], "km": m / 1000.0 if m is not None else None,
-                       "day": min(days) if days else None, "lat": _num(p.get("lat")), "lng": _num(lon)})
+                       "day": min(days) if days else None, "overnight": night,
+                       "lat": _num(p.get("lat")), "lng": _num(lon)})
     nights.sort(key=lambda n: (n["km"] is None, n["km"] or 0.0, n["day"] or 0))
     sha = data.get("gpx_sha256")
     return {"trip": trip, "gpx": data["gpx"],
@@ -205,7 +209,7 @@ def import_trip(user, trip_id: str) -> dict:
         raise UserError(N_("Cairn 的 GPX 讀不出來：{e}"), code="CAIRN_BAD_GPX", status=422, e=str(e))
     t = d["trip"]
     name = (t["name"] or track.name or "Cairn")[:120]
-    raw = [{"day": n["day"] if n["day"] is not None else i, "km_cairn": n["km"],
+    raw = [{"day": n["day"] if n["day"] is not None else i, "km_cairn": n["km"], "overnight": n["overnight"],
             "poi": {"name": n["name"], "lat": n["lat"], "lng": n["lng"]}} for i, n in enumerate(d["nights"], start=1)]
     nights = CA.place_nights(raw, track)
     src = {"kind": "cairn", "gpx_id": t["id"], "url": CA.route_url(t["id"]), "name": name, "via": VIA,

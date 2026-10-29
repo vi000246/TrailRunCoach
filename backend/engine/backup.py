@@ -72,11 +72,12 @@ from pathlib import Path, PurePosixPath
 from typing import Iterable, Optional
 
 from backend.i18n import N_, _
+from backend.i18n.pages import current_brand
 from backend import data_registry as R
 
 log = logging.getLogger(__name__)
 
-APP = "TrailRunCoach"
+APP = "TrailRunCoach"            # manifest.json's "app": the format's name, not the product's (kept, SP-1003)
 # 2 (SP-355): files/ + this machine's local data left out. An older app refuses it (「請先更新
 # App」) instead of restoring it over its own login; format 1 still restores here.
 FORMAT = 2
@@ -95,7 +96,9 @@ FILE_WHERES = (R.ROOT, R.BASE, R.SHARED)
 KEEP_DAILY, KEEP_WEEKLY, KEEP_PRERESTORE = 7, 4, 5
 AUTO_EVERY = timedelta(hours=24)
 RETRY_AFTER_FAIL = timedelta(hours=1)
-SUGGESTED_SUBDIR = "TrailRunCoach Backups"
+SUGGESTED_SUBDIR = "Trig Backups"
+# the folder suggested before SP-1003: a cloud folder that has it already keeps it (its backups stay listed)
+OLD_SUBDIR = "TrailRunCoach Backups"
 WORK_SUBDIR = "backups"              # next to the DB (registry backups/**, SECRET: stays on the server)
 # what a restore accepts (L1): per files/ entry, all files/ together, how many; per FIT original
 MAX_FILE_BYTES, MAX_TOTAL_BYTES, MAX_FILES = 50 << 20, 1 << 30, 10_000
@@ -550,7 +553,7 @@ def check_folder(path: str) -> Path:
         raise BackupError(_("請選擇備份資料夾"))
     p = Path(os.path.expandvars(os.path.expanduser(path.strip())))
     if not p.is_absolute():
-        raise BackupError(_("請輸入完整路徑（例如 {eg}）", eg="C:\\Users\\you\\OneDrive\\TrailRunCoach Backups"))
+        raise BackupError(_("請輸入完整路徑（例如 {eg}）", eg="C:\\Users\\you\\OneDrive\\" + SUGGESTED_SUBDIR))
     if p.exists() and not p.is_dir():
         raise BackupError(_("這個路徑是檔案，不是資料夾"))
     if not p.parent.exists():
@@ -585,7 +588,7 @@ def _dropbox_paths(env: dict) -> list[Path]:
 def detect_cloud_folders(env: Optional[dict] = None, home: Optional[Path] = None,
                          platform: Optional[str] = None, drives: Iterable[str] = ("G", "H", "I")) -> list[dict]:
     """Cloud-sync folders that exist on this machine, as one-click choices:
-    [{id, label, root, path}] where path = root / SUGGESTED_SUBDIR. Only looks
+    [{id, label, root, path}] where path = root / SUGGESTED_SUBDIR (OLD_SUBDIR when it is there). Only looks
     at folders; never logs in or writes anything."""
     env = dict(os.environ) if env is None else env
     home = Path.home() if home is None else Path(home)
@@ -636,7 +639,8 @@ def detect_cloud_folders(env: Optional[dict] = None, home: Optional[Path] = None
         if key in seen:
             continue
         seen.add(key)
-        out.append({"id": cid, "label": label, "root": str(root), "path": str(root / SUGGESTED_SUBDIR)})
+        sub = OLD_SUBDIR if (root / OLD_SUBDIR).is_dir() else SUGGESTED_SUBDIR
+        out.append({"id": cid, "label": label, "root": str(root), "path": str(root / sub)})
     return out
 
 
@@ -750,7 +754,7 @@ def open_backup(path: Path, work: Path) -> dict:
             except (ValueError, UnicodeDecodeError):
                 raise BackupError(_("manifest 讀不懂，檔案可能損毀"))
             if not isinstance(manifest, dict) or manifest.get("app") != APP:
-                raise BackupError(_("這不是 TrailRunCoach 的備份"))
+                raise BackupError(_("這不是 {brand}的備份", brand=current_brand()))
             if not isinstance(manifest.get("format"), int) or manifest["format"] > FORMAT:
                 raise BackupError(_("這個備份是較新版本的 App 建立的，請先更新 App"))
             db = work / "restore.db"

@@ -11,6 +11,14 @@ TrailRunCoach × 疊石 Cairn (research SP-571, docs/research/sp571-cross-promot
                                        「用 TrailRunCoach 算這條」 opens the calculator with ?cairn=<link>) —
                                        the trip's name, start date and days to fill 賽事管理's 新增賽事 with,
                                        or the race that already holds this route ({event_id})
+  GET  /cairn/route/<gpxId>            SP-1018 (Cairn SP-554's 「在 Trig 看賽事天氣 ↗」, on a route the
+                                       owner has synced with TRC): the signed-in person's race for that
+                                       Cairn route — pushed there (cairn_push.trip_id) or imported from
+                                       it (event_gpx source gpx_id) — opens on its weather: 303 to the
+                                       calculator ?event=<id>#env. None: a page 「這條路線沒有對應的賽事」
+                                       (200, both languages). Signed out: the sign-in comes back to it
+                                       (tenancy_mw: a page goes to /login?next=). Only the person's own
+                                       tenant is read; the id picks nobody else's race.
 
 The card is an introduction, not a tip that changes what to do (SP-571 §3.2): hidden for 提示多寡
 「精簡」 (SP-482), once 「不用了」 was pressed, and for an account linked with Cairn (SP-329: there only
@@ -31,6 +39,7 @@ from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 
 router = APIRouter(prefix="/api/v1/app/xp", tags=["xp"])
+page_router = APIRouter(tags=["xp"])     # SP-1018: the address Cairn links to, outside /api (TRC_BASE_URL/cairn/…)
 
 OFF_KEY = "ui.xp_cairn_off"
 LEVEL_KEY = "ui.hint_level"
@@ -150,3 +159,65 @@ def _has_records() -> Optional[bool]:
         return any(True for _ in EX.foot_days(_dataset(), today_local()))      # a run or a hike recorded
     except Exception:                      # noqa: BLE001 — no data folder yet, a core-less build
         return None
+
+
+# ---------------------------------------------------------------------------- SP-1018: Cairn → a race's weather
+
+CALC_PAGE = "/api/v1/racepower/page"
+
+
+def race_for_route(gpx_id: str) -> Optional[str]:
+    """The current tenant's race for the Cairn route `gpx_id` — pushed to that trip (cairn_push) or its GPX
+    imported from it (event_gpx source, SP-537 / SP-538) — still in the season plan; the next to come when
+    several (else the latest past one). None when none (or not a Cairn id at all)."""
+    from backend.accounts import cairn_push as CP
+    from backend.engine import event_gpx as EG
+    from backend.engine import planning as P
+    from backend.engine.localtime import today_local
+    if not isinstance(gpx_id, str) or not CP._ID.match(gpx_id):
+        return None
+    events = {e.id: e for e in P.Plan.load().events}
+    ids = set(CP.events_of_trip(gpx_id))
+    try:
+        rows = EG.all_rows()
+    except Exception:                      # noqa: BLE001 — no table yet: nothing imported
+        rows = {}
+    for eid, row in rows.items():
+        src = (row or {}).get("source") or {}
+        if src.get("kind") == "cairn" and src.get("gpx_id") == gpx_id:
+            ids.add(eid)
+    found = [events[i] for i in ids if i in events]
+    if not found:
+        return None
+    today = str(today_local())[:10]
+    coming = sorted((e for e in found if str(e.date)[:10] >= today), key=lambda e: (str(e.date)[:10], e.id))
+    if coming:
+        return coming[0].id
+    return max(found, key=lambda e: (str(e.date)[:10], e.id)).id
+
+
+@page_router.get("/cairn/route/{gpx_id}", include_in_schema=False)
+def cairn_route_page(gpx_id: str):
+    """Cairn's 「在 Trig 看賽事天氣 ↗」 (its SP-554): the race's weather (the calculator's 環境, #env), or a
+    page saying no race here holds this route — never a bare 404."""
+    from urllib.parse import urlencode
+
+    from fastapi.responses import RedirectResponse
+    eid = race_for_route(gpx_id)
+    if eid:
+        return RedirectResponse(f"{CALC_PAGE}?{urlencode({'event': eid})}#env", status_code=303,
+                                headers={"Cache-Control": "no-store"})
+    return _no_race_page(gpx_id)
+
+
+def _no_race_page(gpx_id: str):
+    import json
+
+    from backend.accounts import cairn_push as CP
+    from backend.accounts import login as LG
+    from backend.engine import cairn as CA
+    from backend.i18n.pages import render_page
+    ok = isinstance(gpx_id, str) and bool(CP._ID.match(gpx_id))
+    data = {"id": gpx_id if ok else "", "cairn": CA.route_url(gpx_id) if ok else "", "signin": bool(LG.required())}
+    js = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+    return render_page("cairn_route", fill={"route": js}, headers={"Cache-Control": "no-store"})

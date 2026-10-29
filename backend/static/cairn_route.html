@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title data-i18n="cairn_route.title">這條路線沒有對應的賽事</title>
+<style>
+/* SP-1018: /cairn/route/<gpxId> (api/xp.py) when the signed-in person has no race for that Cairn route —
+   疊石 Cairn's 「在 Trig 看賽事天氣 ↗」 lands here instead of a bare 404. The route id and Cairn's link come
+   per request in #route (JSON); everything else is the catalog (static/i18n/<locale>/cairn_route.json). */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --on-accent: #ffffff;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --on-accent: #ffffff;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --on-accent: #ffffff;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.65 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+main { max-width: 600px; margin: 0 auto; padding: 28px 16px 64px; }
+.cr-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+  padding: 22px 22px 20px; }
+.cr-eyebrow { margin: 0 0 4px; font-size: 13px; color: var(--muted); letter-spacing: .02em; }
+h1 { margin: 0 0 10px; font-size: 22px; line-height: 1.35; }
+.cr-lead { margin: 0 0 16px; color: var(--muted); }
+h2 { margin: 0 0 6px; font-size: 15.5px; }
+ol { margin: 0 0 16px; padding-left: 1.4em; }
+li { margin: 3px 0; }
+.cr-note { margin: 0 0 16px; padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 14px; }
+.cr-actions { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 4px 0 14px; }
+.cr-btn { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 16px; border-radius: 10px;
+  font-weight: 600; text-decoration: none; border: 1px solid var(--accent); color: var(--accent); background: transparent; }
+.cr-btn.primary { background: var(--accent); color: var(--on-accent); }
+.cr-btn:hover { filter: brightness(1.06); }
+.cr-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cr-meta { margin: 0; font-size: 12.5px; color: var(--faint); overflow-wrap: anywhere; }
+code { font: 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (max-width: 480px) {
+  main { padding-top: 18px; }
+  .cr-card { padding: 18px 16px 16px; }
+  h1 { font-size: 20px; }
+  .cr-actions .cr-btn { flex: 1 1 100%; justify-content: center; }
+}
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js"></script>
+<main>
+  <section class="cr-card" aria-labelledby="cr-h">
+    <p class="cr-eyebrow" data-i18n="cairn_route.eyebrow">從疊石 Cairn 來</p>
+    <h1 id="cr-h" data-i18n="cairn_route.heading">這條路線沒有對應的賽事</h1>
+    <p class="cr-lead" data-i18n="cairn_route.lead">你從疊石 Cairn 天氣面板的連結來到這裡，但你的賽事裡沒有一場用到這條路線：沒有一場推到這條 Cairn 行程，也沒有一場的 GPX 是從它匯入的。</p>
+    <h2 data-i18n="cairn_route.how_h">要看這條路線比賽日的天氣</h2>
+    <ol>
+      <li data-i18n="cairn_route.how_1">打開賽事管理，新增一場賽事（或編輯原本那場）。</li>
+      <li data-i18n="cairn_route.how_2">在「從 Cairn 匯入 GPX」選這條行程，或貼上它的分享連結。</li>
+      <li data-i18n="cairn_route.how_3">之後從 Cairn 點同一個連結，就會直接打開那場賽事的天氣。</li>
+    </ol>
+    <p class="cr-note" id="cr-account" hidden data-i18n="cairn_route.account">賽事在另一個帳號裡？登出後改用那個帳號登入，再從 Cairn 點一次。</p>
+    <div class="cr-actions">
+      <a class="cr-btn primary" href="/api/v1/app/races/page" data-i18n="cairn_route.races">到賽事管理</a>
+      <a class="cr-btn" id="cr-cairn" hidden target="_blank" rel="noopener noreferrer" data-i18n="cairn_route.open_cairn">在 Cairn 打開這條路線 ↗</a>
+    </div>
+    <p class="cr-meta" id="cr-id" hidden></p>
+  </section>
+</main>
+<script type="application/json" id="route"><!--fill:route--></script>
+<script>
+(() => {
+  const T = (k, p) => (window.I18N ? I18N.t("cairn_route." + k, p) : k);
+  let r = {};
+  try { r = JSON.parse(document.getElementById("route").textContent) || {}; } catch { r = {}; }
+  if (r.signin) document.getElementById("cr-account").hidden = false;
+  if (r.cairn) { const a = document.getElementById("cr-cairn"); a.href = r.cairn; a.hidden = false; }
+  if (r.id) {
+    const m = document.getElementById("cr-id");
+    m.textContent = T("route_id", { id: r.id });
+    m.hidden = false;
+  }
+})();
+</script>
+</body>
+</html>

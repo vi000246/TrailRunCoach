@@ -1,9 +1,8 @@
 """SP-637: the 介紹頁 made interactive.
 
-- the small calculator's public API (GET /api/v1/intro/estimate): signed out, only the built-in fictional
-  runner (no runner parameter is read), the distance / climb in a fixed range per kind, rounded to a grid
-  and cached (one computation per grid point), one per-IP limit (the real client behind a trusted proxy),
-  the answer just the finish time and a few totals — no model parameter, no intermediate value;
+- SP-998: the small calculator's public API (GET /api/v1/intro/estimate) is gone — the calculator left the
+  page with SP-969 Q2-3, so nothing called it; its tests (the grid, the cache, the per-IP limit, the frozen
+  runner) went with it and one test pins that the path is no longer served nor public;
 - the examples (越野／百岳／路跑) the page switches between: three repo files, fixed ids, a fictional runner,
   no tenant; served trimmed (GET /api/v1/intro/example/<kind>): profile, legs (pace, heart rate, fuel),
   never a source note;
@@ -32,7 +31,7 @@ STATIC = ROOT / "backend" / "static"
 SHOTS = ROOT / "backend" / "scripts" / "intro_shots.json"
 LOCALES = ("zh-TW", "en")
 KINDS = ("trail", "baiyue", "road")
-EST = "/api/v1/intro/estimate"
+EST = "/api/v1/intro/estimate"          # SP-998: gone
 
 
 @pytest.fixture(autouse=True)
@@ -43,175 +42,19 @@ def _fresh():
     I.reset()
 
 
-# ---------------------------------------------------------------------------- the estimate API
+# ---------------------------------------------------------------------------- the estimate API (SP-998: gone)
 
-def test_estimate_signed_out_gives_a_finish_time_and_nothing_else(c):
-    r = c.get(EST, params={"kind": "trail", "km": 50, "gain": 2800})
-    assert r.status_code == 200, r.text
-    d = r.json()
-    assert set(d) == {"kind", "km", "gain_m", "time_s", "pace_s_per_km", "fictional"}
-    assert d["kind"] == "trail" and d["km"] == 50 and d["gain_m"] == 2800 and d["fictional"] is True
-    assert 3 * 3600 < d["time_s"] < 12 * 3600 and d["time_s"] % 60 == 0
-    assert d["pace_s_per_km"] == pytest.approx(d["time_s"] / 50, abs=1)
-    assert "public" in r.headers.get("cache-control", "")
-
-
-@pytest.mark.parametrize("kind,km,gain", [("road", 21, 50), ("baiyue", 38, 3800), ("trail", 20, 900)])
-def test_each_kind_answers(c, kind, km, gain):
-    d = c.get(EST, params={"kind": kind, "km": km, "gain": gain}).json()
-    assert d["kind"] == kind and d["time_s"] > 0
-
-
-def test_the_answer_names_no_model_parameter(c):
+def test_the_small_calculator_api_is_gone(c):
+    # SP-969 Q2-3 took the small calculator off the page; SP-998 took its public route, its limits, its cache
+    # and the frozen runner (backend/demo/intro_runner.json) off the server
+    from backend.accounts import login as LG
     from backend.api import intro as I
-    runner = json.loads(I.RUNNER_FILE.read_text("utf-8"))
-    for kind, km, gain in (("trail", 50, 2800), ("road", 21, 50), ("baiyue", 38, 3800)):
-        text = c.get(EST, params={"kind": kind, "km": km, "gain": gain}).text.lower()
-        for w in ("cp", "w_prime", "tte", "riegel", "re", "eph", "power", "watt", "weight", "used", "zones",
-                  "warnings", "scenarios", "task", "effort", "aet", "env", "pack"):
-            assert f'"{w}' not in text, (kind, w)
-    assert runner["cp"] and runner["re"]                # the runner has them; the answer never shows them
-
-
-# SP-969 Q2-3 (the user, 2026-10-28): the small calculator and the profile left the page, so "the calculator next
-# to the profile reads the example's finish time" has nothing to compare any more — that test went with them (the
-# trail example is now run at assumed race settings, SP-969 Q2: 95 % effort, 技術路段多, fatigue; the total-only
-# estimate of the same km / climb cannot read the same)
-
-
-def test_more_climb_takes_longer_and_more_distance_too(c):
-    t = lambda km, g: c.get(EST, params={"kind": "trail", "km": km, "gain": g}).json()["time_s"]  # noqa: E731
-    assert t(50, 3000) > t(50, 1000) and t(60, 2000) > t(40, 2000)
-
-
-def test_no_runner_parameter_is_read(c):
-    base = c.get(EST, params={"kind": "trail", "km": 50, "gain": 2800}).json()
-    from backend.api import intro as I
-    I.reset()
-    other = c.get(EST, params={"kind": "trail", "km": 50, "gain": 2800, "cp": 400, "weight": 40, "re": 1.5,
-                               "k": 0, "tte": 9000, "eph": 9, "pack": 1, "athlete": "1", "user": "2"}).json()
-    assert other == base
-
-
-@pytest.mark.parametrize("params", [
-    {"kind": "trail", "km": 0, "gain": 0}, {"kind": "trail", "km": 300, "gain": 2000},
-    {"kind": "trail", "km": 50, "gain": 20000}, {"kind": "trail", "km": 50, "gain": -100},
-    {"kind": "road", "km": 100, "gain": 50}, {"kind": "road", "km": 21, "gain": 3000},
-    {"kind": "baiyue", "km": 500, "gain": 3000}, {"kind": "ultra", "km": 50, "gain": 100},
-    {"kind": "trail", "km": "nan", "gain": 100}, {"kind": "trail", "km": "inf", "gain": 100},
-    {"kind": "trail", "gain": 100}, {"kind": "trail", "km": "x", "gain": 100},
-])
-def test_inputs_out_of_range_are_refused(c, params):
-    assert c.get(EST, params=params).status_code == 422
-
-
-def test_limits_are_sane():
-    from backend.api import intro as I
-    assert set(I.LIMITS) == set(KINDS)
-    for kind, L in I.LIMITS.items():
-        assert 0 < L["km"][0] < L["km"][1] <= 120 and 0 <= L["gain"][0] < L["gain"][1] <= 8000, kind
-        assert L["km_step"] >= 0.5 and L["gain_step"] >= 10, kind
-    assert I.LIMITS["road"]["km"][1] >= 42 and I.LIMITS["road"]["gain"][1] <= 1000
-
-
-def test_inputs_are_rounded_to_a_grid_and_each_point_is_computed_once(c, monkeypatch):
-    from backend.api import intro as I
-    from backend.engine.racepower import calc as CALC
-    I.ratio("trail")                                    # the example's own (once per kind)
-    calls = []
-    real = CALC.predict
-    monkeypatch.setattr(CALC, "predict", lambda ctx, body: calls.append((body.distance_km, body.gain_m)) or real(ctx, body))
-    a = c.get(EST, params={"kind": "trail", "km": 50.3, "gain": 2790}).json()
-    b = c.get(EST, params={"kind": "trail", "km": 49.8, "gain": 2810}).json()
-    again = c.get(EST, params={"kind": "trail", "km": 50, "gain": 2800}).json()
-    assert a == b == again and a["km"] == 50 and a["gain_m"] == 2800
-    assert calls == [(50.0, 2800.0)]
-    assert I.cache_size() == 1
-
-
-def test_the_runner_is_the_frozen_fictional_one(c, monkeypatch):
-    # never a tenant's: the context reads backend/demo/intro_runner.json only
-    from backend import tenancy
-    from backend.api import racepower as RP
-    monkeypatch.setattr(RP, "inputs", lambda *a, **k: pytest.fail("read the live athlete"))
-    monkeypatch.setattr(tenancy, "current", lambda: pytest.fail("read a tenant"), raising=False)
-    assert c.get(EST, params={"kind": "road", "km": 21, "gain": 50}).status_code == 200
-
-
-def test_per_ip_limit(c, monkeypatch):
-    from backend.api import intro as I
-    from backend.security import ratelimit as RL
-    t = [1000.0]
-    monkeypatch.setattr(RL, "clock", lambda: t[0])
-    codes = [c.get(EST, params={"kind": "road", "km": 21, "gain": 50}).status_code for _ in range(I.BURST + 3)]
-    assert codes[:I.BURST] == [200] * I.BURST and codes[-1] == 429
-    r = c.get(EST, params={"kind": "road", "km": 21, "gain": 50})
-    assert r.status_code == 429 and int(r.headers["retry-after"]) > 0
-    t[0] += 60                                           # refills
-    assert c.get(EST, params={"kind": "road", "km": 21, "gain": 50}).status_code == 200
-
-
-def _scope(peer: str, **headers) -> dict:
-    return {"type": "http", "client": (peer, 1234),
-            "headers": [(k.replace("_", "-").encode(), v.encode()) for k, v in headers.items()]}
-
-
-def test_the_limit_counts_the_real_client_behind_a_trusted_proxy(monkeypatch):
-    from backend.api import intro as I
-    monkeypatch.setenv("WKO5COACH_TRUSTED_PROXIES", "172.18.0.0/16")
-    # behind our proxy (cloudflared on the Docker bridge): the visitor's address
-    assert I.client_key(_scope("172.18.0.5", cf_connecting_ip="203.0.113.7")) == "203.0.113.7"
-    assert I.client_key(_scope("172.18.0.5", x_forwarded_for="198.51.100.1, 203.0.113.9")) == "203.0.113.9"
-    # anyone else's header is ignored: a stranger can't pick a fresh key per request
-    assert I.client_key(_scope("198.51.100.20", cf_connecting_ip="203.0.113.7")) == "198.51.100.20"
-    # an IPv6 client by its /64
-    assert I.client_key(_scope("2001:db8:1:2::5")) == I.client_key(_scope("2001:db8:1:2::99"))
-
-
-def test_distinct_clients_have_their_own_budget(monkeypatch):
-    from backend.api import intro as I
-    monkeypatch.setenv("WKO5COACH_TRUSTED_PROXIES", "172.18.0.0/16")
-    a = _scope("172.18.0.5", cf_connecting_ip="203.0.113.7")
-    b = _scope("172.18.0.5", cf_connecting_ip="203.0.113.8")
-    assert all(I.allow(a) for _ in range(I.BURST)) and not I.allow(a)
-    assert I.allow(b)
-
-
-def test_cache_misses_have_a_site_wide_ceiling(c, monkeypatch):
-    from backend.api import intro as I
-    monkeypatch.setattr(I, "MISS", type(I.MISS)(rate=2, per=60, burst=2))
-    monkeypatch.setattr(I, "client_key", lambda scope: f"ip-{len(I._CACHE)}")    # a new client each time
-    codes = [c.get(EST, params={"kind": "trail", "km": km, "gain": 1000}).status_code for km in (20, 21, 22)]
-    assert codes == [200, 200, 503]
-    assert c.get(EST, params={"kind": "trail", "km": 20, "gain": 1000}).status_code == 200      # cached: no compute
-
-
-def test_fails_gracefully_without_the_core_or_the_runner(c, monkeypatch):
-    # the public mirror (SP-500): a stub core raises CoreNotIncluded — a 503, never a 500, nothing cached
-    from backend.api import intro as I
-    from backend.engine.core_stub import CoreNotIncluded
-    from backend.engine.racepower import calc as CALC
-
-    def boom(*a, **k):
-        raise CoreNotIncluded("racepower")
-    monkeypatch.setattr(CALC, "predict", boom)
-    r = c.get(EST, params={"kind": "trail", "km": 30, "gain": 1500})
-    assert r.status_code == 503 and I.cache_size() == 0
-    monkeypatch.undo()
-    monkeypatch.setattr(I, "RUNNER_FILE", I.RUNNER_FILE.with_name("missing.json"))
-    I.reset()
-    assert c.get(EST, params={"kind": "trail", "km": 30, "gain": 1500}).status_code == 503
-
-
-def test_one_computation_is_quick():
-    import time
-
-    from backend.api import intro as I
-    I.reset()
-    t0 = time.perf_counter()
-    for kind, km, gain in (("trail", 50, 2800), ("road", 21, 50), ("baiyue", 38, 3800)):
-        I.estimate(kind, km, gain)
-    assert (time.perf_counter() - t0) / 3 < 0.5          # well under a second here; ×8.5 on the NAS
+    assert not LG.is_public(EST) and EST not in I.PUBLIC_PATHS
+    assert EST not in {getattr(r, "path", None) for r in c.app.routes}
+    assert c.get(EST, params={"kind": "trail", "km": 50, "gain": 2800}).status_code == 401
+    assert not (ROOT / "backend" / "demo" / "intro_runner.json").exists()
+    for gone in ("estimate", "LIMITS", "RUNNER_FILE", "PER_CLIENT", "MISS"):
+        assert not hasattr(I, gone), gone
 
 
 # ---------------------------------------------------------------------------- public paths
@@ -219,12 +62,12 @@ def test_one_computation_is_quick():
 def test_exactly_the_intro_api_paths_are_public(c):
     from backend.accounts import login as LG
     from backend.api import intro as I
-    for p in ("/api/v1/intro/estimate", "/api/v1/intro/example/trail", "/api/v1/intro/example/baiyue",
+    for p in ("/api/v1/intro/example/trail", "/api/v1/intro/example/baiyue",
               "/api/v1/intro/example/road", "/api/v1/intro/templates", "/api/v1/intro/plan"):   # R1: the 課表 demo
         assert LG.is_public(p), p
     assert {p for p in LG.PUBLIC_PATHS if p.startswith("/api/v1/intro")} == set(I.PUBLIC_PATHS)
     for p in ("/api/v1/intro", "/api/v1/intro/", "/api/v1/intro/example", "/api/v1/intro/example/x",
-              "/api/v1/intro/estimatex", "/api/v1/intro/plan/x", "/api/v1/intro/templatesx",
+              "/api/v1/intro/estimate", "/api/v1/intro/estimatex", "/api/v1/intro/plan/x", "/api/v1/intro/templatesx",
               "/api/v1/overview/plan/calendar", "/api/v1/overview/plan/steps/templates",
               "/api/v1/racepower/predict", "/api/v1/racepower/inputs"):
         assert not LG.is_public(p), p
@@ -261,8 +104,9 @@ def test_example_api_is_trimmed_and_has_no_source_note(c):
         r = c.get(f"/api/v1/intro/example/{kind}")
         assert r.status_code == 200, kind
         d = r.json()
-        # SP-1013: + stops (km and a type code), which the try card rings on the profile
-        assert set(d) == {"kind", "summary", "profile", "legs", "days", "stops", "calc"}, kind
+        # SP-1013: + stops (km and a type code), which the try card rings on the profile; SP-998: the small
+        # calculator's "calc" block (its range and first answer) went with it — the page never read it after SP-969
+        assert set(d) == {"kind", "summary", "profile", "legs", "days", "stops"}, kind
         assert all(set(x) == {"km", "type"} for x in d["stops"]), kind
         assert d["kind"] == kind and len(d["profile"]) <= 300 and d["legs"], kind
         assert {x["mode"] for x in d["legs"]} <= {"run", "walk", "mix"}, kind
@@ -272,9 +116,6 @@ def test_example_api_is_trimmed_and_has_no_source_note(c):
         text = r.text
         assert "Stryd" not in text and "src" not in text and "power" not in text, kind
         assert re.search(r"[一-鿿]", text) is None, kind     # numbers only: the page words them
-        L = d["calc"]
-        assert L["km"][0] <= d["calc"]["default"]["km"] <= L["km"][1], kind
-        assert d["calc"]["result"]["time_s"] > 0
     assert c.get("/api/v1/intro/example/ultra").status_code == 401        # not one of the public paths
 
 
@@ -300,10 +141,11 @@ def test_no_stryd_on_the_page_and_the_faq_asks_about_a_power_meter():
 
 
 def test_the_page_script_computes_no_finish_time():
-    # SP-500: the core stays on the server — the page asks /api/v1/intro/estimate and only formats the answer
+    # SP-500: the core stays on the server — the page only formats what the intro API answers
     html = _page()
     script = "".join(re.findall(r"<script>(.*?)</script>", html, re.S))
-    # (SP-969 Q2-3: the small calculator — the page's /estimate call — left the page; the API stays)
+    # (SP-969 Q2-3: the small calculator — the page's /estimate call — left the page; SP-998: and its API)
+    assert 'API + "estimate' not in script and "intro/estimate" not in script
     assert 'API = "/api/v1/intro/"' in script and '"example/"' in script
     for w in ("Math.pow", "Math.exp", "Math.log", "**", "riegel", "Riegel", "tobler", "eph", "cp *", "cp*"):
         assert w not in script, w

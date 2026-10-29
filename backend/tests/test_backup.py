@@ -148,7 +148,7 @@ def test_restore_rejects_bad_files(tmp_path):
     with zipfile.ZipFile(other, "w") as z:
         z.writestr(B.MANIFEST, json.dumps({"app": "SomethingElse", "format": 1}))
         z.writestr(B.DB_ENTRY, b"")
-    with pytest.raises(B.BackupError, match="TrailRunCoach"):
+    with pytest.raises(B.BackupError, match="這不是 Trig 基石的備份"):
         B.restore(other, live, local_dir=local)
     # a tampered DB fails the checksum
     good = B.create_backup(make_db(tmp_path / "src.db"), tmp_path / "out")["path"]

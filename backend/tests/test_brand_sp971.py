@@ -34,9 +34,9 @@ def test_the_name_is_one_key():
         for p in (STATIC / "i18n" / loc).glob("*.json"):
             if p.stem != "shell":
                 assert "Trig" not in p.read_text("utf-8"), p
-        # the old name stays only where the legal texts are (SP-971 acceptance 4: renamed with them, later)
+        # the old name is gone from the catalogs (the legal page and the trademark notice: SP-1002)
         kept = {k for k, v in cat.items() if "TrailRunCoach" in json.dumps(v, ensure_ascii=False)}
-        assert kept == {"about.trademarks.others", "legal.home"}, (loc, kept)
+        assert kept == set(), (loc, kept)
     zh = P.page_catalog(("about", "login"), "zh-TW")
     assert zh["about.h1"] == "關於 Trig 基石" and zh["login.cairn.full"].startswith("Trig 基石目前")
 

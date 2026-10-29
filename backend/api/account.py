@@ -76,7 +76,7 @@ from starlette.concurrency import run_in_threadpool
 from backend.accounts import google, login as LG, store, terms
 from backend.accounts import deletion as DEL, export as EX
 from backend.i18n import N_, UserError, _
-from backend.i18n.pages import render_page
+from backend.i18n.pages import current_brand, render_page
 from backend.security import ratelimit as RL
 from backend.tenancy_mw import cookie
 
@@ -458,7 +458,7 @@ def _doc_meta(d: terms.Doc) -> str:
 
 def _legal(title: str, main: str):
     fill = {
-        "title": _E(f"{title} · TrailRunCoach", quote=False),
+        "title": _E(f"{title} · {current_brand()}", quote=False),
         # a draft is not for search engines; the lawyer's version is
         "robots": '<meta name="robots" content="noindex">' if terms.DRAFT else "",
         "draft": "1" if terms.DRAFT else "0",          # <body data-draft>: the banner (CSS, no script)

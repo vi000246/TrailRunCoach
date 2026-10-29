@@ -6819,7 +6819,7 @@
     "draft": false,
     "src": "backend/engine/debug_view.py:301"
   },
-  "課表（TrailRunCoach）": {
+  "課表（{brand}）": {
     "draft": true,
     "src": "backend/engine/calendar_feed.py:196"
   },
@@ -7687,7 +7687,7 @@
     "draft": true,
     "src": "backend/engine/technical.py:211"
   },
-  "這是你在 TrailRunCoach 的資料（{app}，格式 {fmt}）。\n\naccount.json：你的帳號（e-mail、名稱、建立時間、方案與訂閱）、同意條款與撤回同意的紀錄、用 email 登入的確認時間、教練關係，以及註冊來源（signup_source：從疊石 Cairn 的連結來註冊是 cairn、從賽事分享頁來是 share，其他是空的）和疊石 Cairn 互推小卡每天的次數（cross_product_events：xp-card-shown 小卡出現、xp-card-click 按打開、xp-card-dismiss 按不用了、xp-linked 連結了帳號）。\ntables/：你輸入或匯入的資料，一個資料表一個 JSON 檔（設定、課表、標註、傷病紀錄、活動清單等）。\nfiles/：你的檔案，照伺服器上的位置存放：賽季計畫、校正、圖表檢視、上傳的 GPX（.gz 是 gzip 壓縮），fit/ 底下是同步或匯入的 FIT 原始檔（gzip 壓縮，解壓後就是 .fit）。\n\n沒有放進來的：COROS／Garmin／TrainingPeaks 的登入憑證與記住的密碼、課表訂閱網址的金鑰（機密），以及可以重新計算的快取（衍生資料）。": {
+  "這是你在 {brand}的資料（格式 {fmt}）。\n\naccount.json：你的帳號（e-mail、名稱、建立時間、方案與訂閱）、同意條款與撤回同意的紀錄、用 email 登入的確認時間、教練關係，以及註冊來源（signup_source：從疊石 Cairn 的連結來註冊是 cairn、從賽事分享頁來是 share，其他是空的）和疊石 Cairn 互推小卡每天的次數（cross_product_events：xp-card-shown 小卡出現、xp-card-click 按打開、xp-card-dismiss 按不用了、xp-linked 連結了帳號）。\ntables/：你輸入或匯入的資料，一個資料表一個 JSON 檔（設定、課表、標註、傷病紀錄、活動清單等）。\nfiles/：你的檔案，照伺服器上的位置存放：賽季計畫、校正、圖表檢視、上傳的 GPX（.gz 是 gzip 壓縮），fit/ 底下是同步或匯入的 FIT 原始檔（gzip 壓縮，解壓後就是 .fit）。\n\n沒有放進來的：COROS／Garmin／TrainingPeaks 的登入憑證與記住的密碼、課表訂閱網址的金鑰（機密），以及可以重新計算的快取（衍生資料）。": {
     "draft": true,
     "src": "backend/accounts/export.py:103"
   },
@@ -11955,11 +11955,11 @@
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "確認你的 email · TrailRunCoach": {
+  "確認你的 email · {brand}": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "請在 24 小時內打開下面的連結，輸入剛才設定的密碼，完成 TrailRunCoach 的註冊：": {
+  "請在 24 小時內打開下面的連結，輸入剛才設定的密碼，完成 {brand}的註冊：": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
@@ -11967,11 +11967,11 @@
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "有人（可能是你）想用這個 email 註冊 TrailRunCoach，但這個 email 已經用 Google 帳號註冊過了。請在登入頁按「用 Google 帳號登入」：": {
+  "有人（可能是你）想用這個 email 註冊 {brand}，但這個 email 已經用 Google 帳號註冊過了。請在登入頁按「用 Google 帳號登入」：": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "有人（可能是你）想用這個 email 註冊 TrailRunCoach，但這個 email 已經有帳號了。": {
+  "有人（可能是你）想用這個 email 註冊 {brand}，但這個 email 已經有帳號了。": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
@@ -11983,7 +11983,7 @@
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "你已經有 TrailRunCoach 帳號": {
+  "你已經有 {brand}帳號": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
@@ -11991,11 +11991,11 @@
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "重設 TrailRunCoach 密碼": {
+  "重設 {brand}密碼": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "請在 1 小時內打開下面的連結設定新密碼：": {
+  "請在 1 小時內打開下面的連結，設定 {brand}的新密碼：": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
@@ -12003,19 +12003,19 @@
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "TrailRunCoach 登入方式": {
+  "{brand}登入方式": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "有人（可能是你）想重設這個 email 的 TrailRunCoach 密碼，但這個帳號是用 Google 帳號登入的，沒有密碼。請在登入頁按「用 Google 帳號登入」：": {
+  "有人（可能是你）想重設這個 email 的 {brand}密碼，但這個帳號是用 Google 帳號登入的，沒有密碼。請在登入頁按「用 Google 帳號登入」：": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "你的 TrailRunCoach 密碼已經改了": {
+  "你的 {brand}密碼已經改了": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },
-  "你的 TrailRunCoach 帳號剛在設定頁改了密碼。其他已登入的裝置都已登出，改密碼的這台維持登入。": {
+  "你的 {brand}帳號剛在設定頁改了密碼。其他已登入的裝置都已登出，改密碼的這台維持登入。": {
     "draft": true,
     "src": "backend/accounts/email_login.py"
   },

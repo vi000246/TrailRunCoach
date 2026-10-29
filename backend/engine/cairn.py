@@ -164,11 +164,17 @@ def night_visits(pois: list) -> list[dict]:
     for x in out:
         if x["km_cairn"] is not None:
             x["km_cairn"] /= 1000.0
+        # SP-1016: the point is Cairn's own stop for night N when it has a visit on day N and on day N + 1
+        # (the internal API's rule, accounts/cairn_trips._detail) — then the push back leaves night N to it
+        seen = {_int(v.get("day")) for v in x["poi"].get("visits") or [] if isinstance(v, dict)}
+        x["overnight"] = x["day"] if x["day"] >= 1 and {x["day"], x["day"] + 1} <= seen else None
     return out
 
 
 def place_nights(nights: list[dict], track) -> list[dict]:
-    """The nights on our track: [{night, day, km, name}], km along OUR distance, strictly increasing."""
+    """The nights on our track: [{night, day, km, name[, overnight]}], km along OUR distance, strictly
+    increasing. `overnight` (Cairn's night n the point is the stop for, or None) is passed on when given:
+    kept with the import, it tells the push back which of TRC's nights Cairn already has (SP-1016)."""
     import numpy as np
 
     from backend.engine.racepower import course as CO
@@ -193,7 +199,7 @@ def place_nights(nights: list[dict], track) -> list[dict]:
         if km is None or not (0.05 < km < total - 0.05) or km <= prev + 0.05:
             continue
         out.append({"night": len(out) + 1, "day": x["day"], "km": round(km, 2),
-                    "name": str(p.get("name") or "")[:60]})
+                    "name": str(p.get("name") or "")[:60], **({"overnight": x["overnight"]} if "overnight" in x else {})})
         prev = km
     return out
 

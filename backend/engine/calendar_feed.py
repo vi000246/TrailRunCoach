@@ -33,6 +33,7 @@ from typing import Iterable, Optional
 from urllib.parse import urlencode, urlsplit
 
 from backend.i18n import _
+from backend.i18n.pages import current_brand
 
 WINDOW_PAST = 14                  # days of history (done ✓ / missed ✗)
 WINDOW_FUTURE = 56                # 8 weeks ahead
@@ -40,7 +41,7 @@ STATES = ("active", "done", "missed")
 SKIP_KINDS = ("notice",)
 REFRESH = "PT1H"                  # REFRESH-INTERVAL / X-PUBLISHED-TTL hint (clients may ignore it)
 SEQ_EPOCH = dt.datetime(2026, 1, 1)
-PRODID = "-//TrailRunCoach//Plan calendar//EN"
+PRODID = "-//Trig//Plan calendar//EN"   # SP-1003 (the events' UID host stays: a new one would duplicate them)
 SCHEDULE_PATH = "/api/v1/overview/plan/schedule/page"
 FEED_PREFIX = "/share/calendar/"
 TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{20,64}")
@@ -193,7 +194,7 @@ def build(sessions: Iterable[tuple[dict, Optional[dt.datetime]]], today: dt.date
     now = now or dt.datetime.now(dt.timezone.utc)
     stamp = _utc(now)
     out = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:{PRODID}", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
-           "X-WR-CALNAME:" + escape(_("課表（TrailRunCoach）")),
+           "X-WR-CALNAME:" + escape(_("課表（{brand}）", brand=current_brand())),
            f"REFRESH-INTERVAL;VALUE=DURATION:{REFRESH}", f"X-PUBLISHED-TTL:{REFRESH}"]
     rows = sorted(((s, u) for s, u in sessions if in_window(s, today)), key=lambda x: (x[0]["day"], x[0]["uid"]))
     for s, updated in rows:

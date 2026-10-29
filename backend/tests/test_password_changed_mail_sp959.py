@@ -22,7 +22,7 @@ def test_a_change_mails_one_notice_without_the_password(c, app, outbox):
     signed_up(c, outbox)
     assert change(c, PW, NEW).status_code == 200
     (m,) = notices(outbox)
-    assert m.to == ADDRESS and m.subject == "你的 TrailRunCoach 密碼已經改了"
+    assert m.to == ADDRESS and m.subject == "你的 Trig 基石密碼已經改了"
     assert m.text.startswith("山羊 你好：")
     assert "剛在設定頁改了密碼" in m.text and "如果不是你改的" in m.text
     assert "https://testserver/forgot-password" in m.text
@@ -57,7 +57,7 @@ def test_the_notice_is_in_the_page_language(c, app, outbox):
     c.cookies.set("lang", "en")
     assert change(c, PW, NEW).status_code == 200
     (m,) = notices(outbox)
-    assert m.subject == "Your TrailRunCoach password was changed"
+    assert m.subject == "Your Trig password was changed"
     assert m.text.startswith("Hi 山羊,") and "was just changed in Settings" in m.text
     assert "If it was not you" in m.text and "https://testserver/forgot-password" in m.text
 

@@ -80,7 +80,7 @@
   "software.license": "Licence",
   "trademarks.h": "Trademarks",
   "trademarks.registered": "TrainingPeaks®, TSS®, Training Stress Score®, NP®, Normalized Power®, IF® and Intensity Factor® are registered trademarks of TrainingPeaks, LLC.",
-  "trademarks.others": "COROS, Garmin, Stryd, Strava, Google and other names are trademarks of their respective owners. TrailRunCoach is not affiliated with, authorised or endorsed by any of these companies.",
+  "trademarks.others": "COROS, Garmin, Stryd, Strava, Google and other names are trademarks of their respective owners. {brand} is not affiliated with, authorised or endorsed by any of these companies.",
   "trademarks.own": "Training load, Intensity, Weighted power and Chronic load / Acute load / Load balance in this service are our own metrics; the names above are mentioned only to identify a data source, a compatible file format, or to let you compare numbers.",
   "cairn.h": "Cairn",
   "cairn.what": "Cairn is our other service, for planning hiking trips: where each day ends and where you sleep on a timeline, the 3D terrain and the trail surface, your live position shared with the family who stay behind once you set off, and group sign-ups. {brand} covers the training before you go and how long the trip will take, how to pace it and how much to eat, so the two complement each other. Cairn makes a free account the first time you sign in with Google.",

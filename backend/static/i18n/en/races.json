@@ -151,7 +151,7 @@
   "cairn.consent": "I agree: {text}",
   "cairn.done_created": "Trip created in Cairn",
   "cairn.done_updated": "Trip updated in Cairn",
-  "cairn.what_origin": "What goes: the race calculator's saved pace curve and the overnight points.",
+  "cairn.what_origin": "What goes: the race calculator's saved pace curve and the overnight points (a night you already marked at the same place in Cairn is not sent again).",
   "cairn.origin": "This race's GPX was imported from the Cairn trip \"{name}\": pushing updates that trip instead of making a new one; its route file, its name, and the points and times you added in Cairn stay as they are.",
   "cairn.done_origin": "The original trip updated in Cairn",
   "cairn.new_go": "Make a new trip in Cairn",

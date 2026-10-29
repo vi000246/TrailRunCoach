@@ -423,6 +423,14 @@ from its ids only (`cairn_url`: `https://map.yichlin.com/?gpx=<id>[&share=<token
 share link) → `cairn: {url}`, shown under the 環境 card (`#cairn-link`); none → nothing shown.
 TrailRunCoach stores no Cairn id of its own (SP-537 would).
 
+The other way (SP-1018, Cairn SP-554's 「在 Trig 看賽事天氣 ↗」): `GET /cairn/route/<gpxId>` (`api/xp.py`
+`page_router`, a page route in the person's own session) finds the season plan's race pushed to that Cairn trip
+(`cairn_push.trip_id`) or whose GPX was imported from it (`event_gpx` source `gpx_id`) and answers 303 to
+`/api/v1/racepower/page?event=<id>#env`; the 環境 card is `<section id="env">` (`scroll-margin-top` under the
+sticky nav), and the page's start-up, once the race is drawn, switches to the 計算 tab and scrolls to it.
+No race: the page `static/cairn_route.html` 「這條路線沒有對應的賽事」 (200, both languages).
+docs/plans/cairn-link.md §4.8; tests `backend/tests/test_cairn_route_sp1018.py`.
+
 Night climatology in the single To (SP-257, docs/research/night-and-sleep.md §3 G5 / §4.2 單 4):
 the climatology's `values` are its daytime 06:00–17:59 mean, so a race run at night had a single To
 that was too warm. The page sends `to_provider` (the /weather provider, while the athlete has not
@@ -1873,3 +1881,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-27 | feature | SP-969 | `summary.breakdown` (trail HR model in auto mode): the moving time factor by factor — flat, climb, 地形難度, durability, race-day heat, altitude (+ 位置記憶 / night when they moved it), each the calculation run again with one more factor, adding up to `time_s` (`planner.trail_breakdown`, `breakdown_after`); frozen for the 介紹頁 trail example by `scripts/intro_example.py --breakdown-only` |
 | 2026-10-28 | feature | SP-727 | The course ground reads the trail dictionary on this server (`engine/trail_dict_store.py`: `$TRC_TRAIL_DICT_URL`, the bundle indexed locally, refreshed daily) instead of Overpass (`TRC_OVERPASS_URL` gone); profile v2 carries the speed classes (`kinds`). The trail HR model fits per-class multipliers on top of the slope cost (`surface_kind`, `trailhr.fit_kind_mult`); the plan's split uses them only when the back-test's leave-one-run-out (`trail_hr.surface_kind`) is better (`backtest.kind_flag`) |
 | 2026-10-29 | code-sync（SP-990, SP-991, SP-987） | N/A | 你的數據's sex source, power-source word and unused watch power are `M_()` texts (SP-990); the stored back-test keeps its texts' msgid + params (`text_version` 2, `texts` table, `keep_msgids`, `S_()` effort reasons, `M_list` 預設背負), older files read as before (SP-991); the share page's 賽前 tile splits the amount from its bracket (SP-987); re-anchored the SP-229 references |
+| 2026-10-29 | feature | SP-1018 | `GET /cairn/route/<gpxId>` (Cairn SP-554): the race pushed to / imported from that Cairn route opens on its weather (`racepower/page?event=<id>#env`, the 環境 card `#env`); none → the page 「這條路線沒有對應的賽事」 (both languages); signed out → sign in and back; the person's own tenant only |

@@ -52,6 +52,7 @@ from urllib.parse import urlencode
 
 from backend.accounts import login as LG, mailer, passwords, store
 from backend.i18n import _
+from backend.i18n.pages import current_brand
 from backend.security import ratelimit as RL
 
 log = logging.getLogger("backend.signin")
@@ -132,37 +133,38 @@ def _mail(to: str, kind: str, subject: str, text: str) -> None:
 
 def _mail_verify(email: str, name: Optional[str], token: str, next_url: str) -> None:
     link = _url("/verify-email", {"next": next_url} if next_url != "/" else None, token)
-    _mail(email, "verify", _("確認你的 email · TrailRunCoach"),
+    _mail(email, "verify", _("確認你的 email · {brand}", brand=current_brand()),
           _hello(name) + "\n\n"
-          + _("請在 24 小時內打開下面的連結，輸入剛才設定的密碼，完成 TrailRunCoach 的註冊：") + "\n\n"
+          + _("請在 24 小時內打開下面的連結，輸入剛才設定的密碼，完成 {brand}的註冊：", brand=current_brand()) + "\n\n"
           + link + "\n\n"
           + _("如果不是你註冊的，請忽略這封信：沒有那組密碼，這個連結不能用。"))
 
 
 def _mail_exists(email: str, google_account: bool) -> None:
     if google_account:
-        body = _("有人（可能是你）想用這個 email 註冊 TrailRunCoach，但這個 email 已經用 Google 帳號註冊過了。"
-                 "請在登入頁按「用 Google 帳號登入」：") + "\n\n" + _url("/login")
+        body = _("有人（可能是你）想用這個 email 註冊 {brand}，但這個 email 已經用 Google 帳號註冊過了。"
+                 "請在登入頁按「用 Google 帳號登入」：", brand=current_brand()) + "\n\n" + _url("/login")
     else:
-        body = (_("有人（可能是你）想用這個 email 註冊 TrailRunCoach，但這個 email 已經有帳號了。") + "\n\n"
+        body = (_("有人（可能是你）想用這個 email 註冊 {brand}，但這個 email 已經有帳號了。", brand=current_brand()) + "\n\n"
                 + _("直接登入：{url}", url=_url("/login")) + "\n"
                 + _("忘記密碼：{url}", url=_url("/forgot-password")))
-    _mail(email, "exists", _("你已經有 TrailRunCoach 帳號"),
+    _mail(email, "exists", _("你已經有 {brand}帳號", brand=current_brand()),
           _hello(None) + "\n\n" + body + "\n\n" + _("如果不是你，請忽略這封信，你的帳號沒有任何變更。"))
 
 
 def _mail_reset(email: str, token: str) -> None:
-    _mail(email, "reset", _("重設 TrailRunCoach 密碼"),
+    _mail(email, "reset", _("重設 {brand}密碼", brand=current_brand()),
           _hello(None) + "\n\n"
-          + _("請在 1 小時內打開下面的連結設定新密碼：") + "\n\n" + _url("/reset-password", None, token) + "\n\n"
+          + _("請在 1 小時內打開下面的連結，設定 {brand}的新密碼：", brand=current_brand()) + "\n\n"
+          + _url("/reset-password", None, token) + "\n\n"
           + _("設定新密碼後，所有已登入的裝置都會被登出。如果你沒有要求重設密碼，請忽略這封信，密碼不會改變。"))
 
 
 def _mail_google_only(email: str) -> None:
-    _mail(email, "google", _("TrailRunCoach 登入方式"),
+    _mail(email, "google", _("{brand}登入方式", brand=current_brand()),
           _hello(None) + "\n\n"
-          + _("有人（可能是你）想重設這個 email 的 TrailRunCoach 密碼，但這個帳號是用 Google 帳號登入的，沒有密碼。"
-              "請在登入頁按「用 Google 帳號登入」：") + "\n\n" + _url("/login") + "\n\n"
+          + _("有人（可能是你）想重設這個 email 的 {brand}密碼，但這個帳號是用 Google 帳號登入的，沒有密碼。"
+              "請在登入頁按「用 Google 帳號登入」：", brand=current_brand()) + "\n\n" + _url("/login") + "\n\n"
           + _("如果不是你，請忽略這封信，你的帳號沒有任何變更。"))
 
 
@@ -171,9 +173,9 @@ def _mail_password_changed(email: str, name: Optional[str]) -> None:
     page. Not held back by MAIL_ADDRESS_LIMIT — otherwise three reset requests to the address would
     let a change go by unannounced; the change itself needs the current password and is limited."""
     mailer.send(mailer.Mail(
-        to=email, kind="changed", subject=_("你的 TrailRunCoach 密碼已經改了"),
+        to=email, kind="changed", subject=_("你的 {brand}密碼已經改了", brand=current_brand()),
         text=_hello(name) + "\n\n"
-        + _("你的 TrailRunCoach 帳號剛在設定頁改了密碼。其他已登入的裝置都已登出，改密碼的這台維持登入。") + "\n\n"
+        + _("你的 {brand}帳號剛在設定頁改了密碼。其他已登入的裝置都已登出，改密碼的這台維持登入。", brand=current_brand()) + "\n\n"
         + _("如果是你改的，不用做任何事。") + "\n\n"
         + _("如果不是你改的，請馬上用「忘記密碼」重設密碼（重設後所有已登入的裝置都會登出）：") + "\n\n"
         + _url("/forgot-password")))

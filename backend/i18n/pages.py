@@ -130,6 +130,12 @@ def brand(loc: str) -> str:
     return t or _read_ns(i18n.DEFAULT_LOCALE, "shell").get(BRAND_KEY) or "Trig"
 
 
+def current_brand() -> str:
+    """brand() in the context's locale: the texts the server writes with _() — mails (SP-1001), the
+    calendar's name, a backup's error (SP-1003) — pass it as {brand}."""
+    return brand(i18n.current_locale())
+
+
 def _with_brand(v, name: str):
     if isinstance(v, str):
         return v.replace(BRAND_MARK, name) if BRAND_MARK in v else v

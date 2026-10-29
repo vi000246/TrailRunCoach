@@ -217,7 +217,7 @@ def gpx(course: Course, name: str, every: int = 4) -> str:
         i = len(course.ele) - 1
         pts.append(f'<trkpt lat="{course.lat[i]:.6f}" lon="{course.lon[i]:.6f}"><ele>{course.ele[i]:.1f}</ele></trkpt>')
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<gpx version="1.1" creator="TrailRunCoach demo (synthetic course)" '
+            '<gpx version="1.1" creator="Trig demo (synthetic course)" '
             'xmlns="http://www.topografix.com/GPX/1/1">\n'
             f"<metadata><name>{name}</name><desc>虛構的示範賽道，非真實路線</desc></metadata>\n"
             f"<trk><name>{name}</name><trkseg>\n" + "\n".join(pts) + "\n</trkseg></trk>\n</gpx>\n")

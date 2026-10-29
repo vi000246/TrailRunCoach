@@ -143,9 +143,9 @@ def test_the_mail_is_in_the_page_language(outbox, started):
     with use_locale("zh-TW"):
         EL._mail_reset("b@example.com", "tok2")
     en, zh = outbox
-    assert en.subject == "Confirm your email · TrailRunCoach" and en.text.startswith("Hi Ann,")
+    assert en.subject == "Confirm your email · Trig" and en.text.startswith("Hi Ann,")
     assert "within 24 hours" in en.text and en.text.count("https://testserver/verify-email#tok") == 1
-    assert zh.subject == "重設 TrailRunCoach 密碼" and "https://testserver/reset-password#tok2" in zh.text
+    assert zh.subject == "重設 Trig 基石密碼" and "https://testserver/reset-password#tok2" in zh.text
 
 
 # ---------------------------------------------------------------------------- sign up, confirm, terms

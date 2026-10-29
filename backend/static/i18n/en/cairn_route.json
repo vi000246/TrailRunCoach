@@ -1,0 +1,14 @@
+{
+  "title": "No race for this route",
+  "eyebrow": "From Cairn",
+  "heading": "No race for this route",
+  "lead": "You followed the race-weather link in Cairn, but none of your races uses this route: none was pushed to this Cairn trip, and none has its GPX imported from it.",
+  "how_h": "To see this route's race-day weather",
+  "how_1": "Open the race manager and add a race (or edit the one you have).",
+  "how_2": "Under \"Import a GPX from Cairn\", pick this trip or paste its share link.",
+  "how_3": "From then on the same link in Cairn opens that race's weather directly.",
+  "account": "Is the race in another account? Sign out, sign in with that one and follow the link from Cairn again.",
+  "races": "Go to the race manager",
+  "open_cairn": "Open this route in Cairn ↗",
+  "route_id": "Cairn route id: {id}"
+}

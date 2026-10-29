@@ -4,6 +4,13 @@ real uvicorn on a free localhost port in OWNER mode with WKO5COACH_HOME = that
 base (the demo build's own child process runs the same way), so every page —
 also the settings page and the sync buttons the demo instance hides — is there.
 
+SP-999: Server(..., signin=True) serves the same base in SIGN-IN mode instead —
+what the public site runs: a fake Google client (never contacted: nobody signs
+in), the owner named by a placeholder e-mail, accounts.db in a folder of its own
+next to the log. Signed out, "/" is then the 介紹頁 as a stranger sees it, with
+everything the server fills in (window.TRC_TRY, TRC_WHY, TRC_CAIRN); the app's
+pages ask for sign-in.
+
 No Playwright import here: the server part runs (and is checked) without it.
 Synthetic only: never ~/WKO5 or ~/.wko5coach (the build refuses them, the
 server's env points away from both), no COROS / TP account is configured.
@@ -11,6 +18,7 @@ server's env points away from both), no COROS / TP account is configured.
     python -m backend.tests.e2e._server            # build, serve, GET every page once, stop
     python -m backend.tests.e2e._server --serve    # build and keep serving (look at the e2e data by hand)
     python -m backend.tests.e2e._server --serve --base-phase   # the same, the A race moved: today is 基礎期
+    python -m backend.tests.e2e._server --serve --signin       # sign-in mode: "/" is the signed-out 介紹頁
 """
 from __future__ import annotations
 
@@ -82,12 +90,31 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def server_env(base: Path) -> dict:
+# SP-999: the sign-in settings of Server(signin=True) — fake, never used to reach Google (nobody signs in)
+SIGNIN_CLIENT_ID = "e2e-fake-client.apps.googleusercontent.com"
+SIGNIN_CLIENT_SECRET = "e2e-fake-secret"
+SIGNIN_OWNER_EMAIL = "owner@example.invalid"
+# what the server's environment must not carry over into a sign-in server (login.SIGNIN_ENV and friends)
+_SIGNIN_KEYS = ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_ID_FILE", "GOOGLE_CLIENT_SECRET_FILE",
+                "WKO5COACH_OWNER_GOOGLE_SUB", "WKO5COACH_OWNER_EMAIL", "WKO5COACH_PUBLIC_URL",
+                "WKO5COACH_TRUSTED_PROXIES", "WKO5COACH_ACCOUNTS", "WKO5COACH_SERVER_ROOT")
+
+
+def server_env(base: Path, signin: tuple[str, Path] | None = None) -> dict:
+    """The server's environment: owner mode on `base`; with signin = (its own URL, a folder for
+    accounts.db), sign-in mode on the same base (the base is the owner's tenant, user 1)."""
     from cryptography.fernet import Fernet
     from backend.demo import build as B
     env = B.child_env(base)           # owner mode on `base`, no WKO5 folder, no scheduler / warm-up
     env.update({"WKO5COACH_COOKIE_SECURE": "0", "TRC_DEFAULT_LOCALE": "zh-TW",
                 "WKO5COACH_SECRET_KEY": Fernet.generate_key().decode()})   # never a secret.key file
+    for k in _SIGNIN_KEYS:
+        env.pop(k, None)
+    if signin:
+        url, root = signin
+        env.update({"WKO5COACH_ACCOUNTS": "1", "GOOGLE_CLIENT_ID": SIGNIN_CLIENT_ID,
+                    "GOOGLE_CLIENT_SECRET": SIGNIN_CLIENT_SECRET, "WKO5COACH_PUBLIC_URL": url,
+                    "WKO5COACH_OWNER_EMAIL": SIGNIN_OWNER_EMAIL, "WKO5COACH_SERVER_ROOT": str(root)})
     return env
 
 
@@ -111,18 +138,25 @@ def wait_up(url: str, proc: subprocess.Popen, timeout: float = 90.0) -> None:
 
 class Server:
     """uvicorn backend.main:app in a child process on 127.0.0.1:<free port>; its
-    output goes to `log` (attach it to a failure report)."""
+    output goes to `log` (attach it to a failure report). signin=True: sign-in mode
+    (SP-999), accounts.db in <log's folder>/signin-<port>."""
 
-    def __init__(self, base: Path, log: Path, python: str = sys.executable):
+    def __init__(self, base: Path, log: Path, python: str = sys.executable, signin: bool = False):
         self.base = base
         self.log = log
         self.port = free_port()
         self.url = f"http://127.0.0.1:{self.port}"
+        self.signin = signin
+        root = None
+        if signin:
+            root = log.parent / f"signin-{self.port}"
+            root.mkdir(parents=True, exist_ok=True)
         self._log = open(log, "wb")
         self.proc = subprocess.Popen(
             [python, "-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1",
              "--port", str(self.port), "--log-level", "warning"],
-            cwd=str(REPO), env=server_env(base), stdout=self._log, stderr=subprocess.STDOUT)
+            cwd=str(REPO), env=server_env(base, (self.url, root) if signin else None),
+            stdout=self._log, stderr=subprocess.STDOUT)
         try:
             wait_up(self.url + "/api/v1/session", self.proc)
         except Exception:
@@ -158,13 +192,14 @@ def main(argv: list[str]) -> None:
         base = build_base(home / "demo-root")
         if "--base-phase" in argv:          # SP-483: today an ordinary 基礎期 week (base_phase)
             print(f"A race moved to {base_phase(base)}: this week is 基礎期", flush=True)
-        srv = Server(base, home / "uvicorn.log")
+        signin = "--signin" in argv         # SP-999: sign-in mode, "/" the signed-out 介紹頁
+        srv = Server(base, home / "uvicorn.log", signin=signin)
         try:
             if "--serve" in argv:
-                print(f"serving {srv.url} (Ctrl+C to stop)", flush=True)
+                print(f"serving {srv.url}{' (sign-in mode)' if signin else ''} (Ctrl+C to stop)", flush=True)
                 srv.proc.wait()
                 return
-            for name, path in PAGES.items():
+            for name, path in ({"intro": "/"} if signin else PAGES).items():   # signed out: only "/" is a page
                 with urllib.request.urlopen(srv.url + path, timeout=60) as r:
                     print(r.status, name, path, flush=True)
         except KeyboardInterrupt:

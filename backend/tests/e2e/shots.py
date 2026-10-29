@@ -41,6 +41,17 @@ The shot list:
 dotted paths into the answer's JSON ("0.done", "items.2.label"); the real answer
 is fetched first, so the rest of it stays real.
 
+SP-999: `"mode": "signin"` at the top of a shot list (default "owner") takes it
+on a server in sign-in mode (_server.Server(signin=True)), signed out — "/" is
+then the 介紹頁 a stranger sees, with what the server fills in (TRC_TRY, TRC_WHY,
+TRC_CAIRN), not the owner's overview. Pages without the app's nav need "ready":
+
+    {"ticket": "SP-999", "mode": "signin",
+     "shots": [{"name": "介紹頁", "path": "/", "ready": ".hero"}]}
+
+Without --url each mode the lists ask for gets its own server; with --url the
+server must be in that mode (`_server --serve --signin`), else the list is refused.
+
 Output: the images (WebP, about half the PNG; --format png for the raw ones)
 and `<ticket>-shots.json` (per shot: file, page, viewport, caption and the page
 errors seen — a shot taken with errors is still saved, but says so).
@@ -70,6 +81,9 @@ SHOT_KEYS = {"name", "page", "path", "ready", "viewport", "caption", "init", "mo
              "hide", "scheme"}
 MOCK_KEYS = {"url", "json", "status", "set"}
 STEP_KEYS = {"click", "wait", "fill", "hover", "press", "scroll", "eval", "sleep", "goto"}
+# SP-999: the server a shot list is taken on — the owner's app (default) or sign-in mode, signed out;
+# /api/v1/session's "mode" on each (a server given with --url is checked against it)
+MODES = {"owner": "owner", "signin": "signed_out"}
 TICKET_RE = re.compile(r"^[A-Z]{2,4}-\d+$")
 _BAD_CHARS = re.compile(r'[\\/:*?"<>|\s]+')       # not in a Windows file name; spaces become "-"
 
@@ -94,6 +108,8 @@ def check_spec(spec: dict, where: str = "spec") -> dict:
     ticket = spec.get("ticket", "")
     if not TICKET_RE.match(str(ticket)):
         raise SpecError(f"{where}: ticket must look like SP-123, got {ticket!r}")
+    if spec.get("mode", "owner") not in MODES:
+        raise SpecError(f"{where}: mode must be one of {list(MODES)}")
     shots = spec.get("shots")
     if not isinstance(shots, list) or not shots:
         raise SpecError(f"{where}: shots must be a non-empty list")
@@ -293,32 +309,57 @@ def main(argv: list[str]) -> int:
         return 2
     a.out.mkdir(parents=True, exist_ok=True)
 
+    if a.url:                                              # SP-999: the given server must be in the lists' mode
+        for spec in specs:
+            want, got = MODES[spec.get("mode", "owner")], server_mode(a.url)
+            if got != want:
+                print(f"✗ {spec['ticket']}: mode {spec.get('mode', 'owner')!r} needs a server whose "
+                      f"/api/v1/session says {want!r}, {a.url} says {got!r}", file=sys.stderr)
+                return 2
+
     from playwright.sync_api import sync_playwright
-    home = srv = None
-    url = a.url
+    home = base = None
+    servers: dict = {}                                     # mode -> _server.Server (without --url)
     try:
-        if not url:                                        # same isolation as _server.main
+        if not a.url:                                      # same isolation as _server.main
             os.environ["WKO5COACH_TEST_REAL_HOME"] = str(Path.home())
             from backend.tests import _guard                 # Playwright's browsers live under the real home
             _guard._keep_playwright_browsers()
             home = Path(tempfile.mkdtemp(prefix="trc-shots-home-"))
             os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)
-            srv = _server.Server(_server.build_base(home / "demo-root"), home / "uvicorn.log")
-            url = srv.url
+            base = _server.build_base(home / "demo-root")
+
+        def url_for(mode: str) -> str:
+            if a.url:
+                return a.url.rstrip("/")
+            if mode not in servers:
+                servers[mode] = _server.Server(base, home / f"uvicorn-{mode}.log", signin=mode == "signin")
+            return servers[mode].url
         failed = 0
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=not a.headed)
             try:
                 for spec in specs:
-                    failed += sum(1 for r in take(browser, url.rstrip("/"), spec, a.out, a.format) if not r["ok"])
+                    url = url_for(spec.get("mode", "owner"))
+                    failed += sum(1 for r in take(browser, url, spec, a.out, a.format) if not r["ok"])
             finally:
                 browser.close()
         return 1 if failed else 0
     finally:
-        if srv:
+        for srv in servers.values():
             srv.stop()
         if home:
             shutil.rmtree(home, ignore_errors=True)
+
+
+def server_mode(url: str):
+    """/api/v1/session's "mode" on a running server (None when it can't be read)."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/api/v1/session", timeout=30) as r:
+            return json.loads(r.read().decode("utf-8")).get("mode")
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 if __name__ == "__main__":

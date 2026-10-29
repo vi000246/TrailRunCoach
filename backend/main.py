@@ -221,7 +221,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
                                   calendar_api.router, calendar_api.feed_router,
                                   debug_api.router, debug_api.admin_router, weight_api.router,
                                   intervals_api.router, change_sync_api.router, billing_api.router,
-                                  xp_api.router, ai_api.router)}
+                                  xp_api.router, xp_api.page_router, ai_api.router)}
     routers = [
         workouts.router,
         sync.router, auth.router,        # owner only (sync, connect)
@@ -288,6 +288,8 @@ def build_app(demo: bool | None = None) -> FastAPI:
         # TrailRunCoach × 疊石 Cairn (SP-763 / 764 / 765): the Cairn card, its counts, a Cairn link brought
         # here; never in the demo (no account to remember 「不用了」 on)
         xp_api.router,
+        # /cairn/route/<gpxId> (SP-1018): Cairn's 「在 Trig 看賽事天氣」 → that race's weather; never in the demo
+        xp_api.page_router,
         # AI 問答 (SP-785 / SP-786, backend/ai): the owner's key, the owner only; never in the demo
         ai_api.router,
     ]

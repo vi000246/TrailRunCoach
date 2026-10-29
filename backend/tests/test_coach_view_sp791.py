@@ -42,7 +42,7 @@ READS_OPEN = """
 /api/v1/app/views/x/dashboards/x/charts/x /api/v1/app/workouts /api/v1/app/workouts/x/activity
 /api/v1/app/workouts/x/kind /api/v1/app/workouts/x/review /api/v1/app/workouts/x/samples
 /api/v1/app/workouts/x/segments /api/v1/app/workouts/x/zone-sets
-/api/v1/intro/breakdown /api/v1/intro/cycle /api/v1/intro/estimate /api/v1/intro/example/x /api/v1/intro/plan /api/v1/intro/templates
+/api/v1/intro/breakdown /api/v1/intro/cycle /api/v1/intro/example/x /api/v1/intro/plan /api/v1/intro/templates
 /api/v1/overview/b2b /api/v1/overview/feasibility /api/v1/overview/page /api/v1/overview/plan/auto /api/v1/overview/plan/basis
 /api/v1/overview/plan/blackouts /api/v1/overview/plan/calendar /api/v1/overview/plan/compliance
 /api/v1/overview/plan/compliance/page /api/v1/overview/plan/equivalence /api/v1/overview/plan/fresh

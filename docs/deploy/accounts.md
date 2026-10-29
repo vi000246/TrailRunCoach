@@ -197,7 +197,7 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' -H 'Accept: text/html' 
 | 名字 | 用途 |
 |---|---|
 | `RESEND_API_KEY` | Resend 的 API key（密鑰；也可以 `RESEND_API_KEY_FILE`）。**沒設時信不會寄出**：整封信（含連結）印在 stderr（`docker logs`），開頭標「DEV MODE — NOT SENT」，啟動時也記一行 warning。開發時這樣就能走完流程；正式站上線前一定要設 |
-| `TRC_MAIL_FROM` | 寄件人，預設 `TrailRunCoach <no-reply@yichlin.com>`。網域要先在 Resend 驗證過（照 Resend 給的 SPF／DKIM DNS 紀錄加到網域） |
+| `TRC_MAIL_FROM` | 寄件人，預設 `Trig <no-reply@yichlin.com>`（SP-1001；設了這個變數就以它為準，品牌改名要一起改）。網域要先在 Resend 驗證過（照 Resend 給的 SPF／DKIM DNS 紀錄加到網域） |
 
 上線前：開 Resend 帳號 → 在 Resend 加網域（例如 `yichlin.com`）→ 把它給的 DNS 紀錄（SPF 的 TXT、DKIM 的 TXT／CNAME，建議加 DMARC）
 加到 Cloudflare DNS → Resend 顯示 verified → 建一把只有寄信權限的 API key → NAS 的環境設 `RESEND_API_KEY`（寄件網域不是 `yichlin.com`
