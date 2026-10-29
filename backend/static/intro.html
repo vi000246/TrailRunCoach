@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-i18n="intro.title">Trig 基石 · 越野跑與百岳的備賽工具</title>
+<title data-i18n="intro.title">Trig 基石 · 備賽，交給基石｜越野跑與百岳的課表、完賽試算</title>
 <meta name="description" data-i18n-attr="content:intro.description" content="報了一場越野賽？依目標賽事排好每一週的課表，再用你的跑步資料預估完賽時間、每一段的配速和補給。給越野跑、百岳、路跑。">
 <style>
 /* 介紹頁 (SP-622, api/intro.py): "/" signed out. The app's colours (login.html, demo.html), light and
@@ -66,6 +66,10 @@ a { color: var(--accent); }
 .kinds button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .kinds.small button { min-height: 32px; font-size: 13px; }
 .hero h1 { margin: 12px 0 10px; font-size: clamp(26px, 4.4vw, 40px); line-height: 1.25; letter-spacing: .01em; }
+/* SP-1058: the slogan over the h1 — fixed, not one of the tags' words; "" in a language: not shown */
+.hero .slogan { margin: 16px 0 0; font-size: 14px; }
+.hero .slogan:not(:empty) + h1 { margin-top: 2px; }
+.hero .slogan:empty { display: none; }
 .hero .lead { margin: 0 0 20px; color: var(--muted); font-size: 17px; max-width: 40em; }
 .cta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .price { margin: 10px 0 0; color: var(--muted); font-size: 13.5px; }
@@ -348,6 +352,7 @@ html.modal-open { overflow: hidden; }
 .cairn-x { text-align: center; padding: 28px 0 36px; }
 .cairn-x h2 { font-size: clamp(19px, 2.4vw, 22px); }
 .cairn-x .muted { margin: 0 auto 10px; max-width: 48em; font-size: 14.5px; }
+.cairn-x .story { margin: 0 auto 8px; font-size: 15.5px; }
 /* SP-975: 賽事周期 — the example season as the app's planner cuts it (api/intro.cycle), one card beside the
    text like the other features. Phase colours: the 賽事周期 page's for 原本, one step per Trig palette
    (colour-blind separable; the two greys are told apart by their place and the legend) */
@@ -465,6 +470,9 @@ html.modal-open { overflow: hidden; }
         <div class="kinds" role="group" aria-label="適合誰" data-i18n-attr="aria-label:intro.tags.label">
           <button type="button" data-kind="trail" aria-pressed="true" data-i18n="intro.tags.trail">越野跑</button><button type="button" data-kind="baiyue" aria-pressed="false" data-i18n="intro.tags.baiyue">百岳／多日縱走</button><button type="button" data-kind="road" aria-pressed="false" data-i18n="intro.tags.road">路跑</button>
         </div>
+        <!-- SP-1058: the slogan, fixed — it doesn't follow the tags like the h1 and the lead. zh only: en's text
+             is "" and the empty line is not shown -->
+        <p class="kicker slogan" data-i18n="intro.hero.kicker">備賽，交給基石</p>
         <h1 id="hero-h" data-kind-text="h1" data-i18n="intro.hero.h1">報了一場越野賽？課表幫你一週一週排到比賽日。</h1>
         <p class="lead" data-kind-text="lead" data-i18n="intro.hero.lead">給越野跑、百岳、路跑的備賽工具：依目標賽事排好課表、每一堂課照你的狀況調，比賽前再算好每一段怎麼跑。</p>
         <div class="cta">
@@ -748,8 +756,9 @@ html.modal-open { overflow: hidden; }
          cross-promotion's own (api/xp.cairn_url, window.TRC_CAIRN from the server); without it, no link -->
     <section id="cairn" class="cairn-x" aria-labelledby="cairn-h">
       <p class="kicker" data-i18n="intro.cairn.kicker">另一個專案</p>
-      <h2 id="cairn-h">以基石備戰，隨疊石回家</h2>
-      <p class="muted" data-i18n="intro.cairn.what">疊石 Cairn 管上山那幾天：路線與每天的行程、揪團，出發後把即時位置分享給山下的家人。</p>
+      <h2 id="cairn-h">備賽交給基石，報備交給疊石</h2>
+      <p class="story" id="cairn-story">練夠了沒，你問基石；去哪座山，媽媽問疊石。</p>
+      <p class="muted" data-i18n="intro.cairn.what">疊石 Cairn 管上山那幾天：路線與每天的行程、揪團；出發前把一條連結傳給家人，他就看得到你的路線與每天預計走到哪。接上 Garmin inReach 之後，還看得到即時軌跡。</p>
       <a class="more" id="cairn-link" target="_blank" rel="noopener" hidden data-i18n="intro.cairn.link">看看疊石 Cairn →</a>
     </section>
   </div>
@@ -838,6 +847,10 @@ html.modal-open { overflow: hidden; }
     const b = L.t("shell.brand");
     const name = b && b !== "shell.brand" ? (loc === "en" ? b : b.split(" ").pop()) : null;
     if (name) $("cairn-h").textContent = L.t("intro.cairn.h", { name });
+    // SP-1058: the line under the slogan, zh only — en's text is "": no line
+    const st = $("cairn-story");
+    if (!L.t("intro.cairn.story")) st.hidden = true;
+    else if (name) st.textContent = L.t("intro.cairn.story", { name });
   }
   const CA = window.TRC_CAIRN;
   if (CA && /^https:\/\//.test(CA.url || "")) { const a = $("cairn-link"); a.href = CA.url; a.hidden = false; }

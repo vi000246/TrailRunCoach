@@ -53,18 +53,41 @@ def test_the_try_button_carries_the_examples_result_and_the_waterfall_adds_up_to
     assert page.locator("#bt").count() == 0          # the back-test line is off the page (user, 2026-10-28)
 
 
-@pytest.mark.parametrize("loc,slogan", [("zh-TW", "以基石備戰，隨疊石回家"),
-                                         ("en", "Trig gets you ready. Cairn gets everyone home.")])
-def test_the_cairn_block_shows_its_link_only_when_the_server_gives_one(app, loc, slogan):
+@pytest.mark.parametrize("loc,slogan,story", [
+    ("zh-TW", "備賽交給基石，報備交給疊石", "練夠了沒，你問基石；去哪座山，媽媽問疊石。"),
+    ("en", "Trig gets you ready. Cairn gets everyone home.", None)])
+def test_the_cairn_block_shows_its_link_only_when_the_server_gives_one(app, loc, slogan, story):
     page, _w = app
     _open(page, loc=loc)
     assert page.locator("#cairn-h").text_content() == slogan
+    st = page.locator("#cairn-story")                  # SP-1058: zh only, no blank line in en
+    if story:
+        assert st.is_visible() and st.text_content() == story
+    else:
+        assert st.is_hidden()
     assert page.locator("#cairn-link").is_hidden()                       # the static file: no window.TRC_CAIRN
     page.add_init_script("window.TRC_CAIRN = {url: 'https://map.yichlin.com/?from=trc'};")
     _open(page, loc=loc)
     link = page.locator("#cairn-link")
     assert link.is_visible() and link.get_attribute("href") == "https://map.yichlin.com/?from=trc"
     assert link.get_attribute("target") == "_blank"
+
+
+def test_the_slogan_over_the_hero_stays_when_the_tags_switch_and_is_not_in_english(app):
+    # SP-1058: 「備賽，交給基石」 over the h1, the same for 越野跑／百岳／路跑 (the h1 changes); en: no line
+    page, _w = app
+    _open(page)
+    assert page.title() == "Trig 基石 · 備賽，交給基石｜越野跑與百岳的課表、完賽試算"
+    slogan = page.locator(".hero .slogan")
+    h1s = []
+    for kind in ("baiyue", "road", "trail"):
+        page.locator(f'.hero .kinds [data-kind="{kind}"]').click()
+        assert slogan.is_visible() and slogan.text_content() == "備賽，交給基石"
+        h1s.append(page.locator("#hero-h").text_content())
+    assert len(set(h1s)) == 3
+    _open(page, loc="en")
+    assert page.locator(".hero .slogan").is_hidden()
+    assert page.title() == "Trig · race prep for trail running and Taiwan's 100 Peaks (Baiyue)"
 
 
 def _opened(page):

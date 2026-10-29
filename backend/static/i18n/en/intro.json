@@ -12,6 +12,7 @@
   "tags.trail": "Trail running",
   "tags.baiyue": "Baiyue / multi-day trips",
   "tags.road": "Road running",
+  "hero.kicker": "",
   "hero.h1": "Signed up for a trail race? Your schedule, laid out week by week to race day.",
   "hero.lead": "Race prep for trail running, Taiwan's 100 Peaks (Baiyue) and road running: a schedule built around your target race and adjusted to how you are doing, and before the race, how to run every leg.",
   "cta.start": "Start with Google (free)",
@@ -372,7 +373,8 @@
   "cmp.us.li2": "Weather from the forecast for when you reach that leg, not the start",
   "cairn.kicker": "Our other project",
   "cairn.h": "{name} gets you ready. Cairn gets everyone home.",
-  "cairn.what": "Cairn looks after the days on the mountain: the route and each day's plan, group trips, and once you set off, your live location shared with family down below.",
+  "cairn.story": "",
+  "cairn.what": "Cairn looks after the days on the mountain: the route and each day's plan, and group trips. Before you set off, send your family one link and they can see your route and where you plan to be each day; connect a Garmin inReach and they can follow your live track too.",
   "cairn.link": "See Cairn →",
   "wf.assumed": "The example's assumed settings (for a real race you pick them in the calculator): effort {effort}%, {level}, long-race fatigue {delta}% per hour, {n} aid stations with {min} min of stops in all."
 }

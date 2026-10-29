@@ -193,13 +193,16 @@ def test_apply_catalog_replaces_marked_text_and_attributes_only():
 
 
 def test_page_catalog_falls_back_to_zh_tw(tmp_path, monkeypatch):
-    for loc, data in {"zh-TW": {"a": "甲", "b": "乙 {n}"}, "en": {"a": "A", "b": None}}.items():
+    for loc, data in {"zh-TW": {"a": "甲", "b": "乙 {n}", "c": "丙"}, "en": {"a": "A", "b": None, "c": ""}}.items():
         (tmp_path / loc).mkdir()
         (tmp_path / loc / "t.json").write_text(json.dumps(data, ensure_ascii=False), "utf-8")
     monkeypatch.setattr(P, "CATALOG_DIR", tmp_path)
-    assert P.page_catalog(["t"], "en") == {"t.a": "A", "t.b": "乙 {n}"}
+    # SP-1058: "" is en's own text (a line not shown in en), not a fallback
+    assert P.page_catalog(["t"], "en") == {"t.a": "A", "t.b": "乙 {n}", "t.c": ""}
     assert P.page_catalog(["t"], "en", debug=True)["t.b"] == "⟦乙 {n}⟧"
-    assert P.page_catalog(["t"], "zh-TW") == {"t.a": "甲", "t.b": "乙 {n}"}
+    assert P.page_catalog(["t"], "en", debug=True)["t.c"] == ""
+    assert P.page_catalog(["t"], "zh-TW") == {"t.a": "甲", "t.b": "乙 {n}", "t.c": "丙"}
+    assert P.apply_catalog('<p data-i18n="t.c">丙</p>', P.page_catalog(["t"], "en")) == '<p data-i18n="t.c"></p>'
 
 
 def _boot(html: str) -> dict:

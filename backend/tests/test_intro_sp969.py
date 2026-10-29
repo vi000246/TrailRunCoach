@@ -340,10 +340,11 @@ def test_the_cairn_block_is_last_before_the_footer_and_links_like_the_cross_prom
     cats = {loc: json.loads((STATIC / "i18n" / loc / "intro.json").read_text("utf-8")) for loc in LOCALES}
     # the slogan names the product from its one key (SP-971): {name} = 「基石」 in zh (the Chinese part of
     # 「Trig 基石」), 「Trig」 in en — the e2e test reads the rendered words
-    assert cats["zh-TW"]["cairn.h"] == "以{name}備戰，隨疊石回家"
+    # SP-1058: the zh slogan is the pair with Cairn's own (SP-1057), word for word; en keeps its slogan
+    assert cats["zh-TW"]["cairn.h"] == "備賽交給{name}，報備交給疊石"
     assert cats["en"]["cairn.h"] == "{name} gets you ready. Cairn gets everyone home."
     assert '$("cairn-h").textContent = L.t("intro.cairn.h", { name })' in _script()
-    assert "以基石備戰，隨疊石回家" in html                     # the words before the script (no JS)
+    assert "備賽交給基石，報備交給疊石" in html                     # the words before the script (no JS)
     for cat in cats.values():
         assert cat["cairn.what"] and cat["cairn.link"] and cat["cairn.kicker"]
     from backend.api import xp as XP
@@ -354,6 +355,47 @@ def test_the_cairn_block_is_last_before_the_footer_and_links_like_the_cross_prom
     from backend.api import intro as I
     monkeypatch.setattr(XP, "cairn_url", lambda: "http://not-https.example")
     assert I.cairn_url() is None                       # no https address: the block shows no link
+
+
+def test_the_cairn_block_has_its_line_in_zh_and_a_live_track_only_with_an_inreach():
+    # SP-1058 (2026-10-29): a line under the slogan, zh only; and Cairn's text says
+    # only what everyone who signs up gets — the live track needs a Garmin inReach connected
+    cats = {loc: json.loads((STATIC / "i18n" / loc / "intro.json").read_text("utf-8")) for loc in LOCALES}
+    html = _page()
+    sec = html[html.index('id="cairn"'):html.index("</section>", html.index('id="cairn"'))]
+    assert cats["zh-TW"]["cairn.story"] == "練夠了沒，你問{name}；去哪座山，媽媽問疊石。"
+    assert cats["en"]["cairn.story"] == ""
+    assert '<p class="story" id="cairn-story">練夠了沒，你問基石；去哪座山，媽媽問疊石。</p>' in sec
+    assert sec.index('id="cairn-h"') < sec.index('id="cairn-story"') < sec.index('data-i18n="intro.cairn.what"')
+    assert 'if (!L.t("intro.cairn.story")) st.hidden = true;' in _script()          # en's "": no line
+    assert 'st.textContent = L.t("intro.cairn.story", { name })' in _script()
+    what = re.search(r'data-i18n="intro\.cairn\.what">([^<]*)<', sec).group(1)
+    assert what == cats["zh-TW"]["cairn.what"]
+    for t in (what, cats["zh-TW"]["cairn.what"], cats["en"]["cairn.what"]):
+        assert "即時位置" not in t and "live location" not in t.lower(), t
+        for clause in re.split(r"[。；.;]", t):
+            if "即時" in clause or "live" in clause.lower():
+                assert "inReach" in clause, clause
+
+
+def test_trig_says_its_own_slogan_in_the_title_and_over_the_hero_in_zh_only():
+    # SP-1058 (使用者追加 2026-10-29): 「備賽，交給基石」 — in the zh title and as a fixed line over the h1 (not one of
+    # the tags' words, which follow 越野跑／百岳／路跑); en's title and hero stay, its line is "" and not shown
+    from backend.i18n import pages as P
+    cats = {loc: json.loads((STATIC / "i18n" / loc / "intro.json").read_text("utf-8")) for loc in LOCALES}
+    assert cats["zh-TW"]["title"] == "{brand} · 備賽，交給基石｜越野跑與百岳的課表、完賽試算"
+    assert cats["en"]["title"] == "{brand} · race prep for trail running and Taiwan's 100 Peaks (Baiyue)"
+    assert cats["zh-TW"]["hero.kicker"] == "備賽，交給基石" and cats["en"]["hero.kicker"] == ""
+    hero = _page().split('<section class="hero"', 1)[1].split("</section>", 1)[0]
+    line = '<p class="kicker slogan" data-i18n="intro.hero.kicker">備賽，交給基石</p>'
+    assert hero.index('class="kinds"') < hero.index(line) < hero.index('<h1 id="hero-h"')
+    assert "data-kind-text" not in line
+    assert ".hero .slogan:empty { display: none; }" in _page()
+    zh, en = P.render("intro", "zh-TW", False), P.render("intro", "en", False)
+    assert "<title data-i18n=\"intro.title\">Trig 基石 · 備賽，交給基石｜越野跑與百岳的課表、完賽試算</title>" in zh
+    assert line in zh
+    assert "<title data-i18n=\"intro.title\">Trig · race prep for trail running and Taiwan's 100 Peaks" in en
+    assert '<p class="kicker slogan" data-i18n="intro.hero.kicker"></p>' in en and "備賽，交給基石" not in en
 
 
 def test_in_the_dialog_the_share_pages_sign_up_opens_as_the_whole_page():

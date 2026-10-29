@@ -13,7 +13,8 @@ The pages used to be `FileResponse(STATIC / "x.html")`. render_page:
 
 Frontend catalogs: backend/static/i18n/<locale>/<ns>.json, flat
 {"key": "text"}; the full key is "<ns>.<key>". zh-TW is the original text;
-a key missing (or null) in another locale falls back to zh-TW's. With
+a key missing (or null) in another locale falls back to zh-TW's; "" is that
+locale's own text — a line the page doesn't show in it (SP-1058). With
 ?i18n_debug=1 the fallbacks are shown as ⟦…⟧.
 
 Rendered pages are cached per (page, locale, debug) and the files' mtimes.
@@ -112,7 +113,7 @@ def page_catalog(namespaces: Iterable[str], loc: str, debug: bool = False) -> di
         tr = _read_ns(loc, ns) if loc != i18n.DEFAULT_LOCALE else {}
         for k, v in base.items():
             t = tr.get(k)
-            out[k] = t if t else (f"⟦{v}⟧" if debug and loc != i18n.DEFAULT_LOCALE else v)
+            out[k] = t if t is not None else (f"⟦{v}⟧" if debug and loc != i18n.DEFAULT_LOCALE else v)
         for k, v in tr.items():            # keys only the translation has (shouldn't happen; harmless)
             out.setdefault(k, v)
     name = brand(loc)
