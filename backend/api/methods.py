@@ -1,8 +1,9 @@
 """
 方法 (SP-973): one card per calculation model — what it works out, where the app uses it, the formula, the
 sources, whether it is calibrated with the athlete's own records and what in it is an estimate. Public (no
-sign-in), Chinese and English; the 介紹頁's 「為什麼不一樣」 cards and every waterfall layer link to a card
-(/methods#<id> opens it), and so does the 介紹頁's 賽事周期 (SP-975, /methods#cycle).
+sign-in), Chinese and English; the way in is 關於's 「計算方法與出處」 (SP-1067). The 介紹頁 does not send
+its reader here: its 「為什麼不一樣」 cards, waterfall layers and 賽事周期 open the card's words in a dialog
+(popup(), SP-1067); their hrefs (/methods#<id>) stay for a modified click and a page without its script.
 
   GET /methods                   the page, in the request's language (?lang=, the lang cookie,
                                  Accept-Language)
@@ -12,8 +13,9 @@ What the page says lives in two places, like 關於 (api/about.py):
     two sentences, SP-973: the owner found the pages too wordy) / plain / where / calib / est (only when
     MODELS says est) / f<n>.k + f<n>.v (the formula lines) / nosrc (only a model without literature);
   * the facts that do not change with the language: MODELS (group, sources, calibration, estimate, the
-    waterfall layer it explains). Sources are about.SOURCES ids — one list for 關於, 方法 and the 介紹頁's
-    count (SP-973 Q1-2 (a)).
+    waterfall layer it explains). Sources are about.SOURCES ids — one list for 方法 and the 介紹頁's count
+    (SP-973 Q1-2 (a)). The page's last section lists all of it (#all-sources), with the authors' credit and
+    the SuperPower Calculator port's (all.lead / all.credit; SP-1067: 關於 listed them before).
 
 Every number on the cards is the repo's own (engine code, docs/spec/racepower.spec.md, docs/research);
 the card says 推估 where the code does. Layout (the owner's pick, SP-973 Q1 = B): a filterable wall of
@@ -61,7 +63,9 @@ MODELS: tuple[Model, ...] = (
     Model("zones", "plan", ("friel_zones", "palladino_zones", "daniels", "uphill"), "part", True, rules=True),
     Model("load", "plan", ("allen_coggan", "banister"), "no", False),
     Model("ramp", "plan", ("friel_ramp",), "no", True, rules=True),
-    # 讀訓練 — about.METHODS cp / pd / aet / hrmax, engine/aet_test.py, engine/heat_calib.py, heat.py
+    # SP-1072: engine/rpe_load.py (LEVELS, DEFAULT_IF, the per-level fit), workout_steps.RPE_FRAC
+    Model("rpe", "plan", ("borg", "foster", "allen_coggan"), "yes", True),
+    # 讀訓練 — engine/aet_test.py, engine/heat_calib.py, heat.py
     Model("cp", "read", ("monod", "puchowicz"), "yes", False),
     Model("aet", "read", ("uphill",), "part", True, rules=True),
     Model("heat-hr", "read", ("superpower", "racinais"), "yes", True),
@@ -86,6 +90,8 @@ LAYER_CARD = {m.layer: m.id for m in MODELS if m.layer}
 CYCLE_CARD = "cycle"
 # hashes that set a filter instead of opening a card (the 介紹頁's 「自動校正」 card links #calibrated)
 FILTERS = ("all",) + GROUPS + ("calibrated", "estimates")
+# SP-1067: the page's last section, every source (about.SOURCES; 關於 no longer lists them)
+ALL_SOURCES = "all-sources"
 
 
 # ---------------------------------------------------------------------------- the page
@@ -131,7 +137,11 @@ def _source(cat: dict, sid: str) -> str:
     return f"<li>{_E(s.cite, quote=False)}{link}</li>"
 
 
-def _detail(cat: dict, m: Model) -> str:
+def _body(cat: dict, m: Model, layer: bool = True) -> str:
+    """A card's detail under its heading: the chips, the plain words, where / calibration / 推估, the formula and
+    the sources — the page's pane and the 介紹頁's dialog (popup()) both show it; `layer` False (the dialog, the
+    owner 2026-10-30: the reader is on the 介紹頁 already): without the chip naming its 首頁 waterfall layer /
+    賽事周期."""
     meta = (f'<dt>{_E(_t(cat, "lbl.where"))}</dt><dd>{_E(_t(cat, f"m.{m.id}.where"))}</dd>'
             f'<dt>{_E(_t(cat, "lbl.calib"))}</dt><dd>{_E(_t(cat, f"m.{m.id}.calib"))}</dd>'
             + (f'<dt>{_E(_t(cat, "lbl.est"))}</dt><dd>{_E(_t(cat, f"m.{m.id}.est"))}</dd>' if m.est else ""))
@@ -147,12 +157,16 @@ def _detail(cat: dict, m: Model) -> str:
     else:
         src = (f'<div class="md-src"><h3>{_E(_t(cat, "lbl.nosrc"))}</h3>'
                f'<p>{_E(_t(cat, f"m.{m.id}.nosrc"))}</p></div>')
+    return (f'{_chips(cat, m, layer)}<p class="md-plain">{_E(_t(cat, f"m.{m.id}.plain"))}</p>'
+            f'<dl class="md-meta">{meta}</dl>{fx}{src}')
+
+
+def _detail(cat: dict, m: Model) -> str:
     return (f'<section class="md-d" id="{m.id}" data-g="{m.group}" aria-labelledby="{m.id}-h" tabindex="-1">'
             f'<p class="md-k">{_E(_t(cat, f"g.{m.group}"))}</p>'
             f'<div class="md-dh"><h2 id="{m.id}-h">{_E(_t(cat, f"m.{m.id}.name"))}</h2>'
             f'<button type="button" class="md-x" aria-label="{_E(_t(cat, "close"))}">×</button></div>'
-            f'{_chips(cat, m, True)}<p class="md-plain">{_E(_t(cat, f"m.{m.id}.plain"))}</p>'
-            f'<dl class="md-meta">{meta}</dl>{fx}{src}</section>')
+            f'{_body(cat, m)}</section>')
 
 
 def _fill(loc: str) -> dict:
@@ -166,16 +180,36 @@ def _fill(loc: str) -> dict:
                          for f in FILTERS) + "</div>")
     main = (
         f'<header class="md-hero"><h1>{_E(_t(cat, "h1"))}</h1><p>{_E(_t(cat, "lead"))}</p>'
-        f'<p class="md-count"><a href="/about#methods">'
-        f'{_E(_t(cat, "count", n=len(AB.SOURCES), m=len(AB.METHODS)))} →</a></p></header>'
+        f'<p class="md-count"><a href="#{ALL_SOURCES}">'
+        f'{_E(_t(cat, "count", n=len(AB.SOURCES), m=len(MODELS)))} →</a></p></header>'
         + filters
         + '<div class="md-split"><div class="md-wall" id="md-wall">'
         + "".join(_card(cat, m) for m in MODELS)
         + f'<p class="md-empty" hidden>{_E(_t(cat, "empty"))}</p></div>'
         + f'<div class="md-pane" id="md-pane"><p class="md-hint">{_E(_t(cat, "hint"))}</p>'
         + "".join(_detail(cat, m) for m in MODELS)
-        + f'<p class="md-about"><a href="/about#methods">{_E(_t(cat, "about.all"))} →</a></p></div></div>')
+        + f'<p class="md-about"><a href="/about#data">{_E(_t(cat, "about.all"))} →</a></p></div></div>'
+        # SP-1067: every source, the authors' credit and the SuperPower port's — 關於 no longer lists them
+        + f'<section class="md-all" id="{ALL_SOURCES}" aria-labelledby="{ALL_SOURCES}-h">'
+          f'<h2 id="{ALL_SOURCES}-h">{_E(_t(cat, "all.h"))}</h2><p>{_E(_t(cat, "all.lead"))}</p>'
+          f'<p>{_E(_t(cat, "all.credit"))}</p><ol>{"".join(_source(cat, s) for s in AB.SOURCES)}</ol></section>')
     return {"title": _E(f'{_t(cat, "title")} · {brand(loc)}', quote=False), "main": main}
+
+
+def popup(loc: str) -> dict:
+    """SP-1067: what the 介紹頁's dialog shows instead of sending the reader here (api/intro, GET
+    /api/v1/intro/methods): the groups' names; per card its group, name, short face, calibration (CALIB, the
+    chips, how) and the detail (_body: no ids, the dialog lives in the 介紹頁's document); the whole source
+    list (about.SOURCES) and the SuperPower port's credit for 「看全部出處」."""
+    cat = page_catalog((NS,), loc)
+    return {
+        "groups": {g: _t(cat, f"g.{g}") for g in GROUPS},
+        "models": [{"id": m.id, "group": m.group, "name": _t(cat, f"m.{m.id}.name"),
+                    "short": _t(cat, f"m.{m.id}.short"), "calib": m.calib, "chips": _chips(cat, m, False),
+                    "calib_text": _t(cat, f"m.{m.id}.calib"), "html": _body(cat, m, layer=False)} for m in MODELS],
+        "sources": "".join(_source(cat, s) for s in AB.SOURCES),
+        "credit": _t(cat, "all.credit"),
+    }
 
 
 @router.get(URL)

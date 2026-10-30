@@ -28,7 +28,7 @@ SP-969, what sets the calculator apart:
         plan: planner.trail_breakdown — each layer the calculator run again with one factor more); numbers
         only, the page words them and draws the waterfall. 404 when the file is missing or no longer adds
         up to the example.
-  「為什麼不一樣」's numbers (why()): counted from the repo (the 關於 page's literature and methods, the
+  「為什麼不一樣」's numbers (why()): counted from the repo (the literature and the 方法 page's models, the
         calibrated items) or, for documents, constants with their source; handed to the page with it
         (window.TRC_WHY).
 
@@ -40,6 +40,13 @@ SP-975, the 賽事周期:
         page adds them to the visitor's today). 404 without the file or with a broken one. The section's
         words (the rule numbers, the sources' names) are intro.json's, checked against engine/planning by
         test_intro_sp975.
+
+SP-1067, the 方法 dialog (the page keeps its reader: a link to a method or the sources opens a dialog here
+instead of the 方法 / 關於 page):
+
+  GET /api/v1/intro/methods   every 方法 card's words in the request's language (?lang=): api/methods.popup —
+        the groups, each card's name, face, calibration and detail, the whole source list and the SuperPower
+        Calculator port's credit.
 """
 from __future__ import annotations
 
@@ -59,7 +66,8 @@ from backend.i18n.pages import PageResponse, render_page
 PAGE = "intro"
 PREFIX = "/api/v1/intro"
 KINDS = ("trail", "baiyue", "road")
-PUBLIC_PATHS = frozenset({PREFIX + "/templates", PREFIX + "/plan", PREFIX + "/breakdown", PREFIX + "/cycle"}
+PUBLIC_PATHS = frozenset({PREFIX + "/templates", PREFIX + "/plan", PREFIX + "/breakdown", PREFIX + "/cycle",
+                          PREFIX + "/methods"}
                          | {f"{PREFIX}/example/{k}" for k in KINDS})
 
 PROFILE_POINTS = 240
@@ -131,12 +139,14 @@ def _calibrated() -> Optional[int]:
 
 
 def why() -> dict:
-    """「為什麼不一樣」's numbers: the 關於 page's literature and methods (about.SOURCES / METHODS), the
-    calibrated items, the zone systems and their references, the back-test (computed once a process)."""
+    """「為什麼不一樣」's numbers: the literature (about.SOURCES) and the 方法 page's models (methods.MODELS;
+    SP-1067: 關於's own list of methods is gone), the calibrated items, the zone systems and their references,
+    the back-test (computed once a process)."""
     global _why
     if _why is None:
         from backend.api import about as AB
-        _why = {"sources": len(AB.SOURCES), "methods": len(AB.METHODS), "calibrated": _calibrated(),
+        from backend.api import methods as M
+        _why = {"sources": len(AB.SOURCES), "methods": len(M.MODELS), "calibrated": _calibrated(),
                 "zone_systems": ZONE_SYSTEMS, "zone_refs": ZONE_REFS, "backtest": dict(BACKTEST)}
     return copy.deepcopy(_why)
 
@@ -467,6 +477,13 @@ def get_cycle():
     if d is None:
         raise HTTPException(404, "no example season")
     return JSONResponse(d, headers=CACHE_HEADERS)
+
+
+@router.get("/methods")
+def get_methods():
+    from backend import i18n
+    from backend.api import methods as M
+    return JSONResponse(M.popup(i18n.current_locale()), headers=CACHE_HEADERS)
 
 
 @router.get("/example/{kind}")

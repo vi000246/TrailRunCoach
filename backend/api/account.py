@@ -456,30 +456,32 @@ def _doc_meta(d: terms.Doc) -> str:
                 effective=m["effective"], updated=m["updated"]), quote=False)
 
 
-def _legal(title: str, main: str):
+def _legal(title: str, main: str, embed: bool = False):
     fill = {
         "title": _E(f"{title} · {current_brand()}", quote=False),
         # a draft is not for search engines; the lawyer's version is
         "robots": '<meta name="robots" content="noindex">' if terms.DRAFT else "",
         "draft": "1" if terms.DRAFT else "0",          # <body data-draft>: the banner (CSS, no script)
         "main": main,
+        # ?embed=1: the 介紹頁's page dialog — the document alone, no top bar or language switch
+        "embed": ' data-embed="1"' if embed else "",
     }
     # private: the page inlines the session (a signed-in user's name), like every other page
     return render_page("legal", headers={"Cache-Control": "private, no-store"}, fill=fill)
 
 
 @router.get("/legal")
-def legal_index():
+def legal_index(embed: bool = False):
     _on()
     items = "".join(
         f'<li><a href="{terms.URL_PREFIX}{d.id}">{_E(_(d.title), quote=False)}</a>'
         f'<span class="meta">{_doc_meta(d)}</span></li>' for d in terms.DOCUMENTS)
     h = _("法律文件")
-    return _legal(h, f'<h1>{_E(h, quote=False)}</h1><ul class="doc-list">{items}</ul>')
+    return _legal(h, f'<h1>{_E(h, quote=False)}</h1><ul class="doc-list">{items}</ul>', embed)
 
 
 @router.get("/legal/{doc_id}")
-def legal_doc(doc_id: str):
+def legal_doc(doc_id: str, embed: bool = False):
     _on()
     d = terms.by_id(doc_id)
     if d is None:
@@ -487,4 +489,4 @@ def legal_doc(doc_id: str):
     title = _E(_(d.title), quote=False)
     main = (f'<h1>{title}</h1><p class="meta">{_doc_meta(d)}</p>'
             f'<article class="doc" lang="zh-Hant">{terms.to_html(terms.body(d))}</article>')
-    return _legal(_(d.title), main)
+    return _legal(_(d.title), main, embed)

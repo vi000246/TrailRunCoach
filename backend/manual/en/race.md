@@ -221,7 +221,7 @@ A positive difference = slower than predicted. A finished A race shows its race 
 
 ## Cairn {#cairn}
 
-**Cairn** is our other service, for planning hiking trips, and it complements Trig: Trig covers the training before you go and "how long will this take, how do I pace it, how much do I eat"; Cairn covers the trip itself — where each day ends and where you sleep on a timeline, the 3D terrain and the trail surface, your live position shared with the family who stay behind once you set off, and group sign-ups. Cairn makes a free account the first time you sign in with Google.
+**Cairn** is our other service, for planning hiking trips, and it complements Trig: Trig covers the training before you go and "how long will this take, how do I pace it, how much do I eat"; Cairn covers the trip itself — where each day ends and where you sleep on a timeline, the 3D terrain and the trail surface, and group sign-ups. Before you set off, send the family who stay behind one link and they can see your route and where you plan to be each day; connect a Garmin inReach and they can follow your live track too. Cairn makes a free account the first time you sign in with Google.
 
 1. Bring a Cairn trip in: Race manager → "+ Add a race" or edit one → "Import a GPX from Cairn" and paste the trip's share link from Cairn. The route and each day's end (the overnight stops marked in Cairn) become the race's GPX, and its distance, climb and days follow; the date stays.
 2. Arriving from Cairn with a route (a share link in the address): after you sign in, "Add a race" opens filled in; check the date and press "Save", the route is imported and the Race calculator opens on that race.

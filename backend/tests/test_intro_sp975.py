@@ -132,9 +132,11 @@ def test_the_points_say_the_planners_numbers():
     assert "強化" not in _cat("zh-TW")["plan.lead"] and "強化期" not in P.PHASES.values()
 
 
-def test_the_named_sources_are_on_the_about_page():
+def test_the_named_sources_are_on_the_methods_page():
+    """…as the cycle and recovery cards' sources (關於 listed them before, SP-1067)."""
     from backend.api import about as A
-    cites = " ".join(A.SOURCES[s].cite for m, srcs in A.METHODS if m in ("phases", "postrace") for s in srcs)
+    from backend.api import methods as M
+    cites = " ".join(A.SOURCES[s].cite for m in ("cycle", "recovery") for s in M.BY_ID[m].sources)
     # the names the section says (江晏慶: cited as Chiang YC — the English page has no Chinese)
     as_cited = {"江晏慶": "Chiang YC", "Yen-Ching Chiang": "Chiang YC"}
     names = r"Uphill Athlete|Pfitzinger|Canova|Daniels|江晏慶|Yen-Ching Chiang|Bosquet|Wang|Johnston|Torrence|Millet"

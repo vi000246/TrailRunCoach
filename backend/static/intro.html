@@ -117,6 +117,7 @@ h2 { margin: 0 0 8px; font-size: clamp(22px, 3vw, 28px); line-height: 1.3; }
   background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; }
 .two { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 820px) { .two { grid-template-columns: 1fr; } }
+.two > :only-child { grid-column: 1 / -1; }
 .two ul { margin: 0 0 10px; padding-left: 1.2em; }
 .two p { margin: 0 0 10px; }
 .muted { color: var(--muted); }
@@ -301,6 +302,64 @@ html.anim .reveal.in { opacity: 1; transform: none; }
   border-top: 1px solid var(--line); font-size: 13px; }
 html.modal-open { overflow: hidden; }
 @media (max-width: 560px) { .modal { padding: 8px; } .dlg-h { padding-left: 14px; } .dlg-f { padding: 8px 14px; } }
+/* a whole page (the example, the manual, 關於, 方案與價格, the legal documents) would be cramped in a box: it covers
+   the screen, the × where a page's own corner would be; a method's words (.m-dlg) stay a dialog */
+.modal.full { padding: 0; background: var(--bg); }
+.modal.full .dlg { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
+.modal.full .dlg-h { padding: max(8px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) 8px max(18px, env(safe-area-inset-left, 0px)); }
+.modal.full .dlg-f { padding-bottom: max(10px, env(safe-area-inset-bottom, 0px)); }
+.modal.full .dlg-x { width: 44px; height: 44px; font-size: 26px; }
+/* SP-1067: a method's words in a dialog (api/intro GET .../methods, the 方法 page's card) — the page keeps its reader */
+.m-dlg { width: min(760px, 100%); height: auto; max-height: min(880px, 100%); display: flex; flex-direction: column; }
+.m-dlg > .dlg-h, .m-dlg > .dlg-f { flex: none; }
+.m-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 14px 18px 18px; outline: none;
+  font-size: 14.5px; }
+.m-body > :first-child { margin-top: 0; }
+.m-lead { margin: 0 0 12px; color: var(--muted); }
+.m-msg { margin: 8px 0; color: var(--muted); }
+.m-g { margin: 18px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--muted); }
+.m-acc { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.m-acc + .m-acc { margin-top: 6px; }
+.m-acc > summary { cursor: pointer; padding: 9px 12px; display: grid; gap: 2px; list-style: none; font-weight: 400; }
+.m-acc > summary::-webkit-details-marker { display: none; }
+.m-acc > summary b { font-weight: 700; }
+.m-acc > summary b::after { content: " ＋"; color: var(--accent); font-weight: 600; }
+.m-acc[open] > summary b::after { content: " −"; }
+.m-acc > summary span { font-size: 13.5px; color: var(--muted); }
+.m-acc > .m-in { padding: 2px 12px 12px; }
+.m-cal { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.m-cal li { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 3px; }
+.m-cal li:first-child { border-top: 0; padding-top: 0; }
+.m-body .md-src a { white-space: nowrap; }
+/* the card's own detail (api/methods._body: the same classes as static/methods.html) */
+.m-body .md-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 10px; }
+.m-body .m-cal .md-chips { margin: 0; }
+.m-body .md-chip { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.7;
+  white-space: nowrap; border: 1px solid transparent; }
+.m-body .md-chip.cal-yes { color: var(--ok, #1d7a3c); background: color-mix(in srgb, var(--ok, #1d7a3c) 12%, transparent); }
+.m-body .md-chip.cal-part { color: var(--ok, #1d7a3c); border: 1px dashed color-mix(in srgb, var(--ok, #1d7a3c) 55%, transparent); }
+.m-body .md-chip.cal-no { color: var(--muted); border-color: var(--line); }
+.m-body .md-chip.est { color: var(--warn, #a35a00); background: color-mix(in srgb, var(--warn, #a35a00) 12%, transparent); }
+.m-body .md-chip.layer { color: var(--accent); background: var(--soft); }
+.m-body .md-plain { margin: 0 0 10px; }
+.m-body .md-meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 12px; font-size: 14px; }
+.m-body .md-meta dt { color: var(--muted); font-weight: 600; }
+.m-body .md-meta dd { margin: 0; min-width: 0; }
+.m-body .md-fx { margin: 0 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.m-body .md-fx summary { cursor: pointer; padding: 7px 12px; font-weight: 650; font-size: 14px; color: var(--accent); }
+.m-body .md-fx dl { display: grid; grid-template-columns: minmax(0, 8.5em) minmax(0, 1fr); gap: 6px 12px; margin: 0; padding: 2px 12px 12px; font-size: 14px; }
+.m-body .md-fx dt { color: var(--muted); }
+.m-body .md-fx dd { margin: 0; min-width: 0; font-variant-numeric: tabular-nums; }
+.m-body .md-fx:not(.rules) dd { font-family: "Cambria Math", "STIX Two Math", Cambria, system-ui, "Noto Sans TC", sans-serif; font-size: 14.5px; }
+.m-body .md-src h3 { margin: 0 0 4px; font-size: 13px; color: var(--muted); letter-spacing: .04em; }
+.m-body .md-src ol { margin: 0; padding-left: 1.3em; font-size: 13px; color: var(--muted); display: grid; gap: 3px; }
+.m-body .md-src p { margin: 0; font-size: 13.5px; color: var(--muted); }
+.m-acc > summary:focus-visible, .m-body summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 560px) {
+  .m-body { padding: 12px 14px 16px; }
+  .m-body .md-fx dl { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .m-body .md-fx dd { margin-bottom: 6px; }
+}
 /* SP-969: 為什麼不一樣 — four numbers the repo counts */
 .why { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 6px; }
 @media (max-width: 980px) { .why { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -455,10 +514,10 @@ html.modal-open { overflow: hidden; }
 <header class="top">
   <nav class="wrap" aria-label="主要連結" data-i18n-attr="aria-label:intro.nav.label">
     <a class="brand" href="/"><img src="/api/v1/static/icons/trig-logo-small.svg" alt="" width="28" height="28"><span data-i18n="shell.brand">Trig 基石</span></a>
-    <a class="link wide" href="/manual" data-i18n="intro.nav.manual">操作手冊</a>
-    <a class="link wide" href="/about" data-i18n="intro.nav.about">關於</a>
+    <a class="link wide" href="/manual" data-man data-i18n="intro.nav.manual">操作手冊</a>
+    <a class="link wide" href="/about" data-man data-i18n="intro.nav.about">關於</a>
     <!-- SP-846: 方案與價格 — kept on a phone too (not .wide) -->
-    <a class="link" href="/pricing" data-i18n="intro.nav.pricing">方案與價格</a>
+    <a class="link" href="/pricing" data-man data-i18n="intro.nav.pricing">方案與價格</a>
     <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:intro.lang.title" data-i18n="intro.lang.other">English</button>
     <a class="btn small primary signin" id="nav-login" href="/login" data-i18n="intro.nav.login">登入</a>
   </nav>
@@ -480,7 +539,7 @@ html.modal-open { overflow: hidden; }
           <!-- SP-969: the example with its result; a click opens it in the dialog below (a new tab still works) -->
           <a class="trybtn" data-try data-try-big href="/share/example-trail-50k"><span class="tag" data-try-tag data-i18n="intro.try.tag">示範賽事・免註冊</span><span class="row"><span class="play" aria-hidden="true"></span><span class="txt"><b data-try-h data-i18n="intro.try.trail">看一場 50K 越野賽的完整試算</b><small data-try-sub></small></span></span><svg class="try-prof" data-try-prof viewBox="0 0 440 70" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false"></svg></a>
         </div>
-        <p class="price"><span data-i18n="intro.cta.price">免費方案可以一直用，名額有限、額滿收候補；訂閱即將開放（每月 NT$99 或每年 NT$890）。</span> <a href="/pricing" data-i18n="intro.cta.pricing">看方案與價格 →</a></p>
+        <p class="price"><span data-i18n="intro.cta.price">免費方案可以一直用，名額有限、額滿收候補；訂閱即將開放（每月 NT$99 或每年 NT$890）。</span> <a href="/pricing" data-man data-i18n="intro.cta.pricing">看方案與價格 →</a></p>
       </div>
       <!-- SP-637 R1: the 課表 calendar — the fictional runner's weeks before the 50K (/api/v1/intro/plan);
            tap a day for its sessions and their structure -->
@@ -498,7 +557,8 @@ html.modal-open { overflow: hidden; }
       </div>
     </section>
 
-    <!-- SP-969: 為什麼不一樣 — the numbers come with the page from the server (api/intro.why: counted in the repo) -->
+    <!-- SP-969: 為什麼不一樣 — the numbers come with the page from the server (api/intro.why: counted in the repo);
+         SP-1067: each card's line opens its 方法 words in a dialog (data-m), the href only for a modified click -->
     <section id="why" aria-labelledby="why-h">
       <p class="kicker" data-i18n="intro.why.kicker">為什麼不一樣</p>
       <h2 id="why-h" data-i18n="intro.why.h">算法全部攤開，每個數字都查得到出處</h2>
@@ -507,22 +567,22 @@ html.modal-open { overflow: hidden; }
         <div class="card reveal">
           <div class="num" data-why="sources">–</div><div class="numl" data-why-l="sources"></div>
           <p data-i18n="intro.why.sources.p">坡度用 Minetti 的能量成本、背包用 Pandolf、CP 用 Monod、距離換算用 Riegel、熱用國際共識。</p>
-          <p class="ex"><a href="/methods" data-i18n="intro.why.sources.ex">每個模型的公式與出處，方法與名稱屬於原作者 →</a></p>
+          <p class="ex"><a href="/methods" data-m="@all" data-i18n="intro.why.sources.ex">每個模型的公式與出處，方法與名稱屬於原作者 →</a></p>
         </div>
         <div class="card reveal">
           <div class="num" data-why="zones">–</div><div class="numl" data-why-l="zones"></div>
           <p data-i18n="intro.why.zones.p">Daniels、Friel、Seiler、80/20、Lydiard、Canova、Pfitzinger、Uphill Athlete、Koop…課表的強度跟這些教練說的是同一件事。</p>
-          <p class="ex"><a class="to-m" href="/methods#zones" data-why-ex="zones"></a></p>
+          <p class="ex"><a class="to-m" href="/methods#zones" data-m="zones" data-why-ex="zones"></a></p>
         </div>
         <div class="card reveal">
           <div class="num" data-why="calibrated">–</div><div class="numl" data-why-l="calibrated"></div>
           <p data-i18n="intro.why.calibrated.p">熱對心率的影響、爬升換成多少平路、什麼算全力、心率飄移怎麼切、輕鬆跑的強度…都用你跑過的資料擬合。</p>
-          <p class="ex"><a class="to-m" href="/methods#calibrated" data-i18n="intro.why.calibrated.ex">資料不夠時先用文獻值，累積越多越像你。</a></p>
+          <p class="ex"><a class="to-m" href="/methods#calibrated" data-m="@calibrated" data-i18n="intro.why.calibrated.ex">資料不夠時先用文獻值，累積越多越像你。</a></p>
         </div>
         <div class="card reveal">
           <div class="num" data-i18n="intro.why.estimate.num">推估</div><div class="numl" data-i18n="intro.why.estimate.l">不確定的就照實標出來</div>
           <p data-i18n="intro.why.estimate.p">沒有直接出處的數字一律標「推估」，回測沒變準的也照實寫。</p>
-          <p class="ex"><a class="to-m" href="/methods#durability" data-why-ex="estimate"></a></p>
+          <p class="ex"><a class="to-m" href="/methods#durability" data-m="durability" data-why-ex="estimate"></a></p>
         </div>
       </div>
     </section>
@@ -559,7 +619,7 @@ html.modal-open { overflow: hidden; }
           <li data-i18n="intro.plan.li.ready">賽事評估：來不來得及練、現在練得夠不夠</li>
           <li data-i18n="intro.plan.li.calendar">訂閱到 Google 日曆或 iPhone 行事曆</li>
         </ul>
-        <a class="more" href="/manual/schedule" data-i18n="intro.plan.more">手冊：課表怎麼用 →</a>
+        <a class="more" href="/manual/schedule" data-man data-i18n="intro.plan.more">手冊：課表怎麼用 →</a>
       </div>
       <!-- SP-637 R1: 新增一堂課 → 選範本 → 看結構 (the built-in library, /api/v1/intro/templates) -->
       <div class="tpl reveal" id="tpl" aria-labelledby="tpl-h">
@@ -591,7 +651,7 @@ html.modal-open { overflow: hidden; }
           <li data-i18n="intro.cyc.li.b">B 賽事只在賽前 5 天小減量，不打亂周期</li>
           <li data-i18n="intro.cyc.li.basis">每段多長都對照過教練系統與研究：Uphill Athlete、Pfitzinger、Daniels，以及兩份減量統合分析</li>
         </ul>
-        <a class="more" href="/methods#cycle" data-i18n="intro.cyc.more">方法與出處 →</a>
+        <a class="more" href="/methods#cycle" data-m="cycle" data-i18n="intro.cyc.more">方法與出處 →</a>
       </div>
       <figure class="cy reveal" aria-labelledby="cy-h">
         <div class="cy-top"><b id="cy-h" data-i18n="intro.cyc.card.h">示範賽季：示範山徑越野 50K</b><span class="cy-sub" data-i18n="intro.cyc.card.sub">虛構跑者，用 app 的排程規則算出來</span></div>
@@ -644,7 +704,7 @@ html.modal-open { overflow: hidden; }
           <li data-i18n="intro.read.li.climb">爬升速度、登山杖有沒有用、百岳成就、同一段爬坡的進步</li>
           <li data-i18n="intro.read.li.zones">心率區間（有功率計時還有功率區間）跟著你的測試和資料校正</li>
         </ul>
-        <a class="more" href="/manual/glossary" data-i18n="intro.read.more">手冊：名詞表 →</a>
+        <a class="more" href="/manual/glossary" data-man data-i18n="intro.read.more">手冊：名詞表 →</a>
       </div>
       <figure class="shot phone reveal">
         <div class="frame"><img data-shot="intro-status" alt="訓練總覽：長期訓練負荷、負荷平衡、本週的量與訓練負荷圖" data-i18n-attr="alt:intro.read.shot_alt" loading="lazy"></div>
@@ -706,17 +766,10 @@ html.modal-open { overflow: hidden; }
         <li class="card reveal"><h3 data-i18n="intro.start.2.h">匯入跑步資料</h3><p data-i18n="intro.start.2.p">匯入任何手錶的 FIT 檔，或連 intervals.icu；COROS、Garmin 帳號登入屬於進階功能（非官方介面，風險自負）。</p></li>
         <li class="card reveal"><h3 data-i18n="intro.start.3.h">加一場目標賽事</h3><p data-i18n="intro.start.3.p">課表就照賽事排好，計算機也能直接算那一場。</p></li>
       </ol>
-      <a class="more" href="/manual/start" data-i18n="intro.start.more">手冊：入門 →</a>
+      <a class="more" href="/manual/start" data-man data-i18n="intro.start.more">手冊：入門 →</a>
     </section>
 
-    <section class="two" aria-label="出處與資料">
-      <div id="sources">
-        <h2 data-i18n="intro.sources.h">有出處，不是黑盒子</h2>
-        <p class="muted" data-i18n="intro.sources.lead">每個計算方法都列出公開文獻，方法與名稱屬於原作者。用到的有：</p>
-        <p data-i18n="intro.sources.list">Banister 的訓練反應模型、Tobler 的健行速度、背負重量的代謝公式、Riegel 的距離換算、Palladino 的跑步功率、Joe Friel 的心率區間、Uphill Athlete 的有氧閾值測試、Jack Daniels 的停訓回復，以及熱適應的國際共識。</p>
-        <p class="muted" data-i18n="intro.sources.estimate">沒有直接出處的數字一律標「推估」，之後用你自己的資料校正。</p>
-        <a class="more" href="/about#methods" data-i18n="intro.sources.more">看全部出處 →</a>
-      </div>
+    <section class="two" aria-label="你的資料">
       <div id="privacy">
         <h2 data-i18n="intro.privacy.h">你的資料</h2>
         <ul>
@@ -725,22 +778,22 @@ html.modal-open { overflow: hidden; }
           <li data-i18n="intro.privacy.li.analysis">去識別化的跨使用者分析可以關掉</li>
           <li data-i18n="intro.privacy.li.offline">可以加到手機主畫面，山上沒訊號也看得到課表</li>
         </ul>
-        <a class="more" href="/legal/privacy" data-i18n="intro.privacy.more">隱私權政策 →</a>
+        <a class="more" href="/legal/privacy" data-man data-i18n="intro.privacy.more">隱私權政策 →</a>
       </div>
     </section>
 
     <section id="faq" aria-labelledby="faq-h">
       <h2 id="faq-h" data-i18n="intro.faq.h">常見問題</h2>
       <details><summary data-i18n="intro.faq.watch.q">要什麼手錶？沒有 COROS 或 Garmin 可以用嗎？</summary>
-        <div><p data-i18n="intro.faq.watch.a">可以。任何手錶匯出的 FIT 檔都能匯入，也能連 intervals.icu。</p><a class="more" href="/manual/start#connect" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+        <div><p data-i18n="intro.faq.watch.a">可以。任何手錶匯出的 FIT 檔都能匯入，也能連 intervals.icu。</p><a class="more" href="/manual/start#connect" data-man data-i18n="intro.faq.more">看手冊 →</a></div></details>
       <details><summary data-i18n="intro.faq.power.q">沒有功率計可以用嗎？</summary>
-        <div><p data-i18n="intro.faq.power.a">可以。功率計選「沒有」時全部改用心率和配速：輕鬆跑、長跑看心率，平路間歇和節奏跑看配速，計算機用心率模型；功率的圖表、選項和 CP 測試都不出現。有功率計但 CP 超過 42 天沒測時課表也先用心率／配速，做一次 CP 測試就切回功率。</p><a class="more" href="/manual/faq#no-power" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+        <div><p data-i18n="intro.faq.power.a">可以。功率計選「沒有」時全部改用心率和配速：輕鬆跑、長跑看心率，平路間歇和節奏跑看配速，計算機用心率模型；功率的圖表、選項和 CP 測試都不出現。有功率計但 CP 超過 42 天沒測時課表也先用心率／配速，做一次 CP 測試就切回功率。</p><a class="more" href="/manual/faq#no-power" data-man data-i18n="intro.faq.more">看手冊 →</a></div></details>
       <details><summary data-i18n="intro.faq.numbers.q">數字為什麼跟手錶不一樣？</summary>
-        <div><p data-i18n="intro.faq.numbers.a">兩邊的算法和用的閾值不同，這是正常的；設定裡有 app 和手錶數值的對照。</p><a class="more" href="/manual/faq#watch-numbers" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+        <div><p data-i18n="intro.faq.numbers.a">兩邊的算法和用的閾值不同，這是正常的；設定裡有 app 和手錶數值的對照。</p><a class="more" href="/manual/faq#watch-numbers" data-man data-i18n="intro.faq.more">看手冊 →</a></div></details>
       <details><summary data-i18n="intro.faq.estimate.q">「推估」是什麼意思？</summary>
-        <div><p data-i18n="intro.faq.estimate.a">沒有公開文獻直接出處的數字或規則，依你的資料或常見做法估出來，之後用你的資料校正。</p><a class="more" href="/manual/faq#estimate" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+        <div><p data-i18n="intro.faq.estimate.a">沒有公開文獻直接出處的數字或規則，依你的資料或常見做法估出來，之後用你的資料校正。</p><a class="more" href="/manual/faq#estimate" data-man data-i18n="intro.faq.more">看手冊 →</a></div></details>
       <details><summary data-i18n="intro.faq.data.q">可以帶走我的資料嗎？</summary>
-        <div><p data-i18n="intro.faq.data.a">可以。設定裡能下載全部資料（含原始 FIT 檔），也能刪除帳號。</p><a class="more" href="/manual/faq#import-export" data-i18n="intro.faq.more">看手冊 →</a></div></details>
+        <div><p data-i18n="intro.faq.data.a">可以。設定裡能下載全部資料（含原始 FIT 檔），也能刪除帳號。</p><a class="more" href="/manual/faq#import-export" data-man data-i18n="intro.faq.more">看手冊 →</a></div></details>
     </section>
 
     <section class="end" aria-labelledby="end-h">
@@ -749,7 +802,7 @@ html.modal-open { overflow: hidden; }
         <a class="btn primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
         <a class="btn" data-try href="/share/example-trail-50k" data-i18n="intro.cta.example">先看一場比賽的試算 →</a>
       </div>
-      <p class="price"><span data-i18n="intro.cta.price">免費方案可以一直用，名額有限、額滿收候補；訂閱即將開放（每月 NT$99 或每年 NT$890）。</span> <a href="/pricing" data-i18n="intro.cta.pricing">看方案與價格 →</a></p>
+      <p class="price"><span data-i18n="intro.cta.price">免費方案可以一直用，名額有限、額滿收候補；訂閱即將開放（每月 NT$99 或每年 NT$890）。</span> <a href="/pricing" data-man data-i18n="intro.cta.pricing">看方案與價格 →</a></p>
     </section>
 
     <!-- SP-969 (2026-10-27 追加): the sister project 疊石 Cairn, low-key, last before the footer. The link is the
@@ -765,18 +818,18 @@ html.modal-open { overflow: hidden; }
 </main>
 <footer>
   <div class="wrap">
-    <a href="/manual" data-i18n="intro.footer.manual">操作手冊</a>
-    <a href="/about" data-i18n="intro.footer.about">關於（版本、出處、商標聲明）</a>
-    <a href="/legal/terms" data-i18n="intro.footer.terms">服務條款</a>
-    <a href="/legal/privacy" data-i18n="intro.footer.privacy">隱私權政策</a>
-    <a href="/legal/health" data-i18n="intro.footer.health">健康風險聲明</a>
-    <a href="/legal/third_party" data-i18n="intro.footer.third_party">第三方串接免責</a>
+    <a href="/manual" data-man data-i18n="intro.footer.manual">操作手冊</a>
+    <a href="/about" data-man data-i18n="intro.footer.about">關於（版本、出處、商標聲明）</a>
+    <a href="/legal/terms" data-man data-i18n="intro.footer.terms">服務條款</a>
+    <a href="/legal/privacy" data-man data-i18n="intro.footer.privacy">隱私權政策</a>
+    <a href="/legal/health" data-man data-i18n="intro.footer.health">健康風險聲明</a>
+    <a href="/legal/third_party" data-man data-i18n="intro.footer.third_party">第三方串接免責</a>
     <button type="button" class="lang" data-lang-switch title="切換語言" data-i18n-attr="title:intro.lang.title" data-i18n="intro.lang.other">English</button>
   </div>
 </footer>
 <!-- SP-969: the example in a dialog — its own share page (/share/<id>) in a same-origin frame; × , the
      background or Esc close it and the focus goes back to the button that opened it -->
-<div class="modal" id="ex-modal" hidden>
+<div class="modal full" id="ex-modal" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="ex-title">
     <div class="dlg-h">
       <h2 id="ex-title" data-i18n="intro.kind.trail.profile">示範山徑越野 50K（虛構賽事）</h2>
@@ -787,6 +840,37 @@ html.modal-open { overflow: hidden; }
     <div class="dlg-f">
       <span class="muted" data-i18n="intro.calc.note">一位虛構跑者的試算。登入後，用你自己的跑步資料算。</span>
       <a class="btn small primary" href="/login" data-i18n="intro.dlg.own">用自己的資料算</a>
+    </div>
+  </div>
+</div>
+<!-- SP-1073: a manual chapter in a dialog (the chapter embedded: /manual/<id>?embed=1#<section>) instead of the manual;
+     × , the background or Esc close it and the focus goes back to the link that opened it. Every other page the
+     介紹頁 links to (操作手冊、關於、方案與價格、法律文件) opens here too, embedded the same way: the reader stays -->
+<div class="modal full" id="man-modal" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="man-title">
+    <div class="dlg-h">
+      <h2 id="man-title" data-i18n="intro.nav.manual">操作手冊</h2>
+      <button type="button" class="dlg-x" id="man-close" aria-label="關閉" title="關閉" data-i18n-attr="aria-label:intro.dlg.close;title:intro.dlg.close">×</button>
+    </div>
+    <iframe id="man-frame" title="操作手冊" data-i18n-attr="title:intro.nav.manual"></iframe>
+    <div class="dlg-f">
+      <span class="muted" id="man-foot" data-i18n="intro.man.foot">登入後，照著手冊用你自己的資料試。</span>
+      <a class="btn small primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
+    </div>
+  </div>
+</div>
+<!-- SP-1067: a method's words, or every source, in a dialog (api/intro GET .../methods) instead of the 方法 /
+     關於 page; × , the background or Esc close it and the focus goes back to the link that opened it -->
+<div class="modal" id="m-modal" hidden>
+  <div class="dlg m-dlg" role="dialog" aria-modal="true" aria-labelledby="m-title">
+    <div class="dlg-h">
+      <h2 id="m-title"></h2>
+      <button type="button" class="dlg-x" id="m-close" aria-label="關閉" title="關閉" data-i18n-attr="aria-label:intro.dlg.close;title:intro.dlg.close">×</button>
+    </div>
+    <div class="m-body" id="m-body" tabindex="-1"></div>
+    <div class="dlg-f">
+      <span class="muted" data-i18n="intro.mp.foot">登入後，同一套方法用你自己的紀錄算。</span>
+      <a class="btn small primary" href="/login" data-i18n="intro.cta.start">用 Google 帳號開始（免費）</a>
     </div>
   </div>
 </div>
@@ -1177,7 +1261,7 @@ html.modal-open { overflow: hidden; }
       const r = document.createElement("div"); r.className = "wf-row" + (cls === "total" ? " sum" : ""); r.setAttribute("role", "listitem");
       const l = document.createElement("div"); l.className = "lab";
       const h = document.createElement(cls === "total" ? "b" : METHOD_CARD[key] ? "a" : "span"); h.textContent = lab; l.appendChild(h);
-      if (METHOD_CARD[key]) h.href = "/methods#" + METHOD_CARD[key];
+      if (METHOD_CARD[key]) { h.href = "/methods#" + METHOD_CARD[key]; h.dataset.m = METHOD_CARD[key]; }   // SP-1067: a dialog
       const s = document.createElement("small"); s.textContent = sub; l.appendChild(s);
       const tk = document.createElement("div"); tk.className = "track"; tk.setAttribute("aria-hidden", "true");
       const bar = document.createElement("div"); bar.className = "bar " + cls;
@@ -1207,42 +1291,186 @@ html.modal-open { overflow: hidden; }
   fetch(API + "breakdown").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then(drawWaterfall)
     .catch(() => { $("wf-card").hidden = true; });
 
-  // ---- SP-969: the example in a dialog (a same-origin frame of its share page). Plain links stay: a click
-  // with a modifier, or the public demo (another site), opens the link as before.
-  const modal = $("ex-modal"), frame = $("ex-frame");
+  // ---- the page's dialogs (SP-969, SP-1067, SP-1073): while one is open the rest of the page is inert; × , the
+  // background or Esc (inside a framed page too: its document is ours, the same origin) close it and the focus
+  // goes back to the link that opened it. A click with a modifier follows the link as before.
   const outside = [document.querySelector("header.top"), document.querySelector("main"), document.querySelector("footer")];
-  let opener = null;
+  const plain = (e) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+  function dialog(modal, x, frame) {
+    let opener = null;
+    const open = (from) => {
+      opener = from;
+      modal.hidden = false;
+      document.documentElement.classList.add("modal-open");
+      for (const el of outside) if (el) el.inert = true;
+      x.focus();
+    };
+    const close = () => {
+      if (modal.hidden) return;
+      modal.hidden = true;
+      document.documentElement.classList.remove("modal-open");
+      for (const el of outside) if (el) el.inert = false;
+      if (opener) opener.focus();
+    };
+    const onKey = (e) => { if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); close(); } };
+    x.addEventListener("click", close);
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    document.addEventListener("keydown", onKey);
+    if (frame) frame.addEventListener("load", () => { try { frame.contentWindow.document.addEventListener("keydown", onKey); } catch { /* not ours */ } });
+    return { open, close, get from() { return opener; } };
+  }
+
+  // ---- SP-969: the example in a dialog (a same-origin frame of its share page). The public demo (another site)
+  // opens as a plain link.
+  const frame = $("ex-frame"), ex = dialog($("ex-modal"), $("ex-close"), frame);
   function openEx(a) {
-    opener = a;
     const url = a.getAttribute("href");
     const src = url + (url.indexOf("?") < 0 ? "?" : "&") + "lang=" + encodeURIComponent(loc);
     if (frame.getAttribute("src") !== src) frame.src = src;
     $("ex-new").href = url;
     $("ex-title").textContent = L.t(`intro.kind.${kind}.profile`);
-    modal.hidden = false;
-    document.documentElement.classList.add("modal-open");
-    for (const el of outside) if (el) el.inert = true;
-    $("ex-close").focus();
-  }
-  function closeEx() {
-    if (modal.hidden) return;
-    modal.hidden = true;
-    document.documentElement.classList.remove("modal-open");
-    for (const el of outside) if (el) el.inert = false;
-    if (opener) opener.focus();
+    ex.open(a);
   }
   document.addEventListener("click", (e) => {
     const a = e.target.closest && e.target.closest("a[data-try]");
-    if (!a || demoTry || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (!a || demoTry || !plain(e)) return;
     e.preventDefault();
     openEx(a);
   });
-  $("ex-close").addEventListener("click", closeEx);
-  modal.addEventListener("click", (e) => { if (e.target === modal) closeEx(); });
-  const onKey = (e) => { if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); closeEx(); } };
-  document.addEventListener("keydown", onKey);
-  // Esc inside the frame (the share page has the focus): its document is ours, the same origin
-  frame.addEventListener("load", () => { try { frame.contentWindow.document.addEventListener("keydown", onKey); } catch { /* not ours */ } });
+
+  // ---- SP-1067: a method's words in a dialog instead of the 方法 / 關於 page — the page keeps its reader. The words
+  // come once, in the page's language (GET .../methods: the 方法 cards, every source and the SuperPower port's
+  // credit), fetched when a link is first pointed at. A link's data-m: a card's id, @all (every card by group) or
+  // @calibrated (the cards calibrated with the athlete's records).
+  const mModal = $("m-modal"), mBody = $("m-body"), mTitle = $("m-title"), md = dialog(mModal, $("m-close"));
+  const M_TITLE = { "@all": "intro.mp.all.h", "@calibrated": "intro.mp.cal.h" };
+  let mWords = null;
+  function mLoad() {
+    if (!mWords) mWords = fetch(API + "methods?lang=" + encodeURIComponent(loc))
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .catch((e) => { mWords = null; throw e; });
+    return mWords;
+  }
+  const mEl = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  const mHtml = (tag, cls, html) => { const e = mEl(tag, cls); e.innerHTML = html; return e; };   // the server's own words
+  function mFill(key, d) {
+    const ms = d.models || [];
+    const parts = [];
+    if (key === "@calibrated") {
+      const ul = mEl("ul", "m-cal");
+      for (const m of ms.filter((x) => x.calib !== "no")) {
+        const li = mEl("li");
+        li.append(mEl("b", null, m.name), mHtml("div", null, m.chips), mEl("span", null, m.calib_text));
+        ul.appendChild(li);
+      }
+      parts.push(mEl("p", "m-lead", L.t("intro.mp.cal.lead")), ul);
+    } else if (key === "@all") {
+      parts.push(mEl("p", "m-lead", L.t("intro.mp.all.lead")));
+      for (const [g, name] of Object.entries(d.groups || {})) {
+        parts.push(mEl("p", "m-g", name));
+        for (const m of ms.filter((x) => x.group === g)) {
+          const acc = mEl("details", "m-acc"), sum = mEl("summary");
+          sum.append(mEl("b", null, m.name), mEl("span", null, m.short));
+          acc.append(sum, mHtml("div", "m-in", m.html));
+          parts.push(acc);
+        }
+      }
+    } else {
+      const m = ms.find((x) => x.id === key);
+      if (!m) return false;
+      mTitle.textContent = m.name;
+      parts.push(mEl("p", "m-g", (d.groups || {})[m.group] || ""), mHtml("div", null, m.html));
+    }
+    mBody.replaceChildren(...parts);
+    mBody.scrollTop = 0;
+    return true;
+  }
+  const mMsg = (k) => mBody.replaceChildren(mEl("p", "m-msg", L.t(k)));
+  function openM(a) {
+    const key = a.dataset.m;
+    mTitle.textContent = M_TITLE[key] ? L.t(M_TITLE[key]) : "";
+    mMsg("intro.mp.loading");
+    md.open(a);
+    const still = () => md.from === a && !mModal.hidden;      // not closed, nor another link opened meanwhile
+    mLoad().then((d) => { if (still() && !mFill(key, d)) mMsg("intro.mp.error"); })
+      .catch(() => { if (still()) mMsg("intro.mp.error"); });
+  }
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest && e.target.closest("a[data-m]");
+    if (!a || !plain(e)) return;
+    e.preventDefault();
+    openM(a);
+  });
+  const mWarm = (e) => { if (e.target.closest && e.target.closest("a[data-m]")) mLoad().catch(() => {}); };
+  document.addEventListener("pointerover", mWarm, { passive: true });
+  document.addEventListener("focusin", mWarm);
+
+  // ---- SP-1073: a manual chapter in a dialog instead of the manual — the chapter itself, embedded (?embed=1:
+  // no app bar, contents or pager, api/manual.py), at the section the link names (data-man: the links to the
+  // manual's text, not the bar's and footer's 操作手冊). The title is the chapter's own, once it has loaded.
+  // Every other page the 介紹頁 links to opens here the same way (data-man too: 操作手冊、關於、方案與價格、法律文件,
+  // each with its own ?embed=1 — no top bar or footer); only the sign-in leaves the page.
+  const manFrame = $("man-frame"), manTitle = $("man-title"), man = dialog($("man-modal"), $("man-close"), manFrame);
+  const FRAMED = /^\/(?:manual(?:\/[a-z0-9-]+)?|about|pricing|legal(?:\/[a-z0-9_-]+)?)\/?$/;
+  const framed = (u) => u.origin === location.origin && FRAMED.test(u.pathname);
+  function embedded(u) {
+    u.searchParams.set("embed", "1");
+    u.searchParams.set("lang", loc);
+    return u.pathname + u.search + u.hash;
+  }
+  function openMan(a, from) {
+    const u = new URL(a.getAttribute("href"), location.href);
+    $("man-foot").hidden = !u.pathname.startsWith("/manual");
+    const src = embedded(u);
+    let at = null;
+    try { at = manFrame.contentWindow.location; } catch { /* not loaded */ }
+    if (manFrame.getAttribute("src") === src && at && at.pathname === u.pathname) {
+      try { manFrame.contentWindow.ManualPage.arrive(); } catch { /* not there yet */ }      // back to the section
+    } else {
+      if (!at || at.pathname !== u.pathname) manTitle.textContent = a.textContent.replace(/\s*→\s*$/, "");
+      manFrame.src = src;
+    }
+    man.open(from || a);
+  }
+  // a link inside the framed page: another of these pages stays in the frame, the sign-in (and the app, for one
+  // already signed in) leaves for real, anything else opens in a new tab — the 介紹頁 stays where it was
+  const LEAVE = /^\/(?:login|plans)?$/;
+  function frameClick(e) {
+    const a = e.target.closest && e.target.closest("a[href]");
+    if (!a || e.defaultPrevented || !plain(e)) return;
+    const doc = manFrame.contentDocument;
+    const u = new URL(a.getAttribute("href"), doc.location.href);
+    if (u.origin === location.origin && u.pathname === doc.location.pathname && u.hash) return;   // a section of this one
+    if (a.target === "_blank" && !framed(u)) return;                     // already a new tab (the sources, the data)
+    e.preventDefault();
+    if (framed(u)) manFrame.src = embedded(u);
+    else if (u.origin === location.origin && LEAVE.test(u.pathname)) location.assign(u.href);
+    else window.open(u.href, "_blank", "noopener");
+  }
+  manFrame.addEventListener("load", () => {
+    try {
+      const doc = manFrame.contentWindow.document;
+      const h = doc.querySelector(".m-head h1, main h1, h1");
+      if (h) manTitle.textContent = h.textContent;
+      doc.addEventListener("click", frameClick, true);
+    } catch { /* not ours */ }
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest) return;
+    // a page link inside a method's words (關於's data sources) opens over it, the dialog closed first
+    const inM = e.target.closest("#m-body a[href]");
+    const a = e.target.closest("a[data-man]") || (inM && framed(new URL(inM.getAttribute("href"), location.href)) ? inM : null);
+    if (!a || !plain(e)) return;
+    e.preventDefault();
+    const from = a === inM ? md.from : a;
+    if (a === inM) md.close();
+    openMan(a, from);
+  });
 
   // SP-1013: the card's bottom is the example's own elevation profile (the example API's [km, z] points), its
   // stops ringed where they are (stops: the race's aid stations; a 百岳 trek's nights, where a leg's day changes).

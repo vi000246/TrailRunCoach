@@ -13,6 +13,7 @@
 Synthetic data only."""
 from __future__ import annotations
 
+import html
 import json
 import re
 from pathlib import Path
@@ -87,11 +88,11 @@ def test_every_card_cites_the_one_source_list_or_says_it_has_none():
     assert M.CYCLE_CARD in M.BY_ID
 
 
-def test_the_new_sources_are_methods_of_the_about_page_too():
-    """Q1-2 (a): what the 方法 page cites is on 關於, so the 介紹頁's count is one list."""
+def test_the_sources_are_one_list():
+    """Q1-2 (a): what the 方法 page cites is on the one list (about.SOURCES), so the 介紹頁's count is that list;
+    the page lists all of it at the end (SP-1067: 關於 no longer does)."""
     cited = {s for m in M.MODELS for s in m.sources}
-    on_about = {s for _m, srcs in AB.METHODS for s in srcs}
-    assert cited <= on_about
+    assert cited <= set(AB.SOURCES)
     for sid in ("fornasiero", "kerherve", "clark", "bossi", "markovic", "itra", "peronnet", "wehrlin", "bassett"):
         assert sid in AB.SOURCES and AB.SOURCES[sid].url.startswith("https://"), sid
 
@@ -151,6 +152,13 @@ def test_the_cards_say_what_the_code_does():
     src = (Path(__file__).resolve().parents[1] / "engine" / "racepower" / "grade_model.py").read_text("utf-8")
     for poly in ("155.4i⁵ − 30.4i⁴ − 43.3i³ + 46.3i² + 19.5i + 3.6", "280.5i⁵ − 58.7i⁴ − 76.8i³ + 51.9i² + 19.6i + 2.5"):
         assert poly in src and poly in t("grade")
+    # 自覺強度 (SP-1072): the levels, the default intensities and loads per hour, the fit, as rpe_load.py has them
+    from backend.engine import rpe_load as RL
+    assert "、".join(f"{RL.LABEL[k]} {RL.CR10[k]}" for k in RL.IDS) in t("rpe")
+    assert "／".join(f"{RL.DEFAULT_IF[k]:.2f}" for k in RL.IDS) in t("rpe")
+    assert "／".join(str(round(RL.DEFAULT_TSS_H[k])) for k in RL.IDS) in t("rpe")
+    assert f"至少 {RL.MIN_N} 筆" in t("rpe") and f"n ＋ {RL.SHRINK_K}" in t("rpe")
+    assert f"±{round(RL.DEFAULT_ERR * 100)} %" in t("rpe")
 
 
 # ---------------------------------------------------------------------------- the page
@@ -178,18 +186,23 @@ def test_the_page_has_every_card_and_its_detail(loc, owner):
     # the filters: the groups, calibrated, estimates
     for f in M.FILTERS:
         assert f'data-f="{f}"' in main, f
-    # the one list: the same count as 關於 and the 介紹頁's card
+    # the one list: the same count as the 介紹頁's card, every source in the page's last section (SP-1067)
     from backend.api import intro as I
     w = I.why()
-    assert w["sources"] == len(AB.SOURCES) and w["methods"] == len(AB.METHODS)
-    count = cat["count"].format(n=len(AB.SOURCES), m=len(AB.METHODS))
-    assert count in main and 'href="/about#methods"' in main
+    assert w["sources"] == len(AB.SOURCES) and w["methods"] == len(M.MODELS)
+    count = cat["count"].format(n=len(AB.SOURCES), m=len(M.MODELS))
+    assert count in main and f'href="#{M.ALL_SOURCES}"' in main and 'href="/about#data"' in main
+    last = main.split(f'<section class="md-all" id="{M.ALL_SOURCES}"', 1)[1]
+    assert last.count("<li>") == len(AB.SOURCES)
+    for s in AB.SOURCES.values():
+        assert s.cite.replace("&", "&amp;") in last, s.cite
+    assert html.escape(cat["all.lead"]) in last and html.escape(cat["all.credit"]) in last
     # no internal notes; external links open in a new tab without handing the page over
     text = re.sub(r"<[^>]+>", " ", main)
     assert not DENY.findall(text), DENY.findall(text)
     hrefs = re.findall(r'href="([^"]+)"', main)
     for h in hrefs:
-        assert h.startswith("https://") or re.fullmatch(r"#[a-z-]+", h) or h == "/about#methods", h
+        assert h.startswith("https://") or re.fullmatch(r"#[a-z-]+", h) or h == "/about#data", h
     ext = [h for h in hrefs if h.startswith("https://")]
     assert main.count('target="_blank"') == main.count('rel="noopener"') == len(ext)
     if loc == "en":
@@ -229,7 +242,7 @@ def test_the_intro_links_land_on_a_card_or_a_filter():
     targets = re.findall(r'href="/methods(?:#([a-z-]+))?"', html)
     assert targets
     for t in targets:
-        assert t == "" or t in M.BY_ID or t in M.FILTERS, t
+        assert t == "" or t in M.BY_ID or t in M.FILTERS or t == M.ALL_SOURCES, t      # SP-1067: 「看全部出處」
     why = html[html.index('id="why"'):html.index("</section>", html.index('id="why"'))]
     for href in ('href="/methods"', 'href="/methods#zones"', 'href="/methods#calibrated"', 'href="/methods#durability"'):
         assert href in why, href                                       # the four cards
@@ -242,13 +255,14 @@ def test_the_intro_links_land_on_a_card_or_a_filter():
     assert 'h.href = "/methods#" + METHOD_CARD[key]' in html
 
 
-def test_the_about_page_says_the_codes_default_zones():
+def test_the_zones_card_says_the_codes_default_zones():
+    """The zones card (關於's own zones line went with its list of methods, SP-1067)."""
     from backend.engine import hr_profile as HP
     # production's default (conftest pins "lthr" for the other tests, so read the module's own line)
     src = (Path(__file__).resolve().parents[1] / "engine" / "hr_profile.py").read_text("utf-8")
     assert re.search(r"^DEFAULT_SETTING = AUTO\b", src, re.M) and HP.AUTO == "auto"
     assert HP.DEFAULT_RATIOS["lthr"] == (0.80, 0.90, 0.95, 1.02, 1.06)
-    zh, en = _cat("zh-TW", "about")["m.hrzones.desc"], _cat("en", "about")["m.hrzones.desc"]
+    zh, en = (" ".join(v for k, v in _cat(loc).items() if k.startswith("m.zones.")) for loc in LOCALES)
     assert "COROS" in zh and "6 區" in zh and "自動" in zh and "Friel" in zh
-    assert "COROS" in en and "six zones" in en and "automatic" in en
+    assert "COROS" in en and "six zones" in en and "automatic" in en.lower()
     assert "< 80／80–90／90–95／95–102／102–106／> 106" in _cat("zh-TW")["m.zones.f3.v"]

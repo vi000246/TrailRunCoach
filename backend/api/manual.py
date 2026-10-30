@@ -8,7 +8,10 @@ so every image has it; docs/ is not in the image.
 
   GET /manual                    the contents: every chapter and its sections, the search box
   GET /manual/<chapter>          one chapter (#<section> jumps to a section; #<section>--deep opens its
-                                 「深入」 part)
+                                 「深入」 part); ?embed=1 (SP-1067's follow-up SP-1073: the 介紹頁's dialog
+                                 frames it) — the chapter alone: no app bar (shell.js), contents, search
+                                 or pager; manual.js keeps the links to other chapters embedded and opens
+                                 the rest in a new tab
   GET /manual/index.json         the chunks the search reads (and, later, SP-306's AI chat): one per
                                  section part — {url, chapter, title, part: simple | deep, text}
   GET /manual/terms.json        the glossary's words as the screens write them, each with its section
@@ -480,7 +483,11 @@ def _section_html(s: Section, cat: dict, sub: str = "") -> str:
             f"{s.simple_html}</div>{deep}</section>")
 
 
-def _fill(loc: str, chs: list[Chapter], cur: Optional[Chapter]) -> dict:
+# the app bar (shell.js); an embedded chapter (?embed=1) goes without it
+SHELL = '<script src="/api/v1/static/shell.js" data-page="manual"></script>'
+
+
+def _fill(loc: str, chs: list[Chapter], cur: Optional[Chapter], embed: bool = False) -> dict:
     cat = page_catalog(("manual",), loc)
     name = _t(cat, "title")
     if cur is None:
@@ -508,10 +515,11 @@ def _fill(loc: str, chs: list[Chapter], cur: Optional[Chapter]) -> dict:
                 + "".join(_section_html(s, cat, cur.deep_sub) for s in cur.sections) + pager)
         title = f"{cur.title} · {name}"
     return {"title": _E(f"{title} · {brand(loc)}", quote=False), "toc": _toc(chs, cur), "main": main,
-            "chapter": _E(cur.id if cur else "")}
+            "chapter": _E(cur.id if cur else ""), "shell": "" if embed else SHELL,
+            "embed": ' data-embed="1"' if embed else ""}
 
 
-def _page(cur_id: Optional[str]):
+def _page(cur_id: Optional[str], embed: bool = False):
     loc = i18n.current_locale()
     chs = chapters(loc)
     cur = None
@@ -521,12 +529,13 @@ def _page(cur_id: Optional[str]):
             raise HTTPException(404, "not found")
     # no-cache, not no-store: the offline copy (offline_core.js MANUAL) keeps it; the page inlines the
     # session (a signed-in user's name), so never a shared cache
-    return render_page("manual", headers={"Cache-Control": "private, no-cache"}, fill=_fill(loc, chs, cur))
+    return render_page("manual", headers={"Cache-Control": "private, no-cache"},
+                       fill=_fill(loc, chs, cur, embed=embed))
 
 
 @router.get("/manual")
-def manual_index():
-    return _page(None)
+def manual_index(embed: bool = False):
+    return _page(None, embed)
 
 
 @router.get("/manual/index.json")
@@ -563,10 +572,10 @@ def manual_image(name: str):
 
 
 @router.get("/manual/{cid}")
-def manual_chapter(cid: str):
+def manual_chapter(cid: str, embed: bool = False):
     if not _ID.match(cid):
         raise HTTPException(404, "not found")
-    return _page(cid)
+    return _page(cid, embed)
 
 
 def dump(locale: str) -> str:

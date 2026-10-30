@@ -24,9 +24,11 @@ def _section(loc: str):
 
 
 @pytest.mark.parametrize("loc,words", [
-    ("zh-TW", ("時間軸", "3D 地形", "即時位置", "揪團", "自動免費註冊", "從 Cairn 匯入 GPX", "分享連結", "推到 Cairn",
-               "不會自動連結", "解除連結", "候補名單", "不用了", "精簡")),
-    ("en", ("timeline", "3D terrain", "live position", "group sign-ups", "free account", "Import a GPX from Cairn",
+    # SP-1062: the family gets a link to the route before you set off; the live track only with a Garmin inReach
+    ("zh-TW", ("時間軸", "3D 地形", "一條連結", "接上 Garmin inReach 之後還看得到即時軌跡", "揪團", "自動免費註冊",
+               "從 Cairn 匯入 GPX", "分享連結", "推到 Cairn", "不會自動連結", "解除連結", "候補名單", "不用了", "精簡")),
+    ("en", ("timeline", "3D terrain", "one link", "connect a Garmin inReach and they can follow your live track",
+            "group sign-ups", "free account", "Import a GPX from Cairn",
             "share link", "Push to Cairn", "never linked on their own", "unlink", "waiting list", "No thanks", "Lean")),
 ])
 def test_the_manual_has_a_cairn_section_with_what_it_does(loc, words):
@@ -51,7 +53,7 @@ def test_the_about_page_introduces_cairn_in_both_languages(owner):  # noqa: F811
         t = r.text
         assert f'<section class="ab-sec" id="cairn"><h2>{h}</h2>' in t
         assert '<a href="#cairn">' in t                                    # in the page's contents
-        assert t.index('id="version"') < t.index('id="cairn"') < t.index('id="methods"')
+        assert t.index('id="version"') < t.index('id="cairn"') < t.index('id="data"')   # SP-1067: no 計算方法 section
         for k in ("cairn.what", "cairn.routes", "cairn.link"):
             assert cat[k] and not NO_ADDRESS.search(cat[k]), (loc, k)
         words = " ".join(cat[k] for k in ("cairn.what", "cairn.routes", "cairn.link"))

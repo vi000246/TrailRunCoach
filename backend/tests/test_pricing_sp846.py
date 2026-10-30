@@ -68,7 +68,7 @@ def test_the_intro_page_links_to_it_in_the_bar_and_by_the_price(c):
         page = c.get(f"/?lang={loc}", headers=HTML).text
         top = page[page.index('<header class="top">'):page.index("</header>")]
         assert 'href="/pricing"' in top and 'class="link wide" href="/pricing"' not in top    # on a phone too
-        assert page.count(f'<a href="/pricing" data-i18n="intro.cta.pricing">{_cat(loc, "intro")["cta.pricing"]}</a>') == 2
+        assert page.count(f'<a href="/pricing" data-man data-i18n="intro.cta.pricing">{_cat(loc, "intro")["cta.pricing"]}</a>') == 2
         price = _cat(loc, "intro")["cta.price"]
         assert f"NT${B.PRICES[B.MONTH]}" in price and f"NT${B.PRICES[B.YEAR]}" in price, loc
         # no payments yet: the intro says subscriptions are coming, not that they can be bought (owner 2026-10-23)

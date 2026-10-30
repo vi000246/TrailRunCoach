@@ -73,10 +73,11 @@ def plans_page():
 
 
 @router.get(PT.URL)
-def pricing_page():
-    """方案與價格 (SP-846): public (login.PUBLIC_PATHS), linked from the 介紹頁; the same table as /plans."""
+def pricing_page(embed: bool = False):
+    """方案與價格 (SP-846): public (login.PUBLIC_PATHS), linked from the 介紹頁; the same table as /plans.
+    ?embed=1: the 介紹頁's page dialog frames it without its top bar and footer."""
     _on()
-    return PT.pricing_page()
+    return PT.pricing_page(embed)
 
 
 @router.get("/api/v1/billing")

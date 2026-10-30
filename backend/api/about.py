@@ -1,21 +1,24 @@
 """
-關於 (SP-495): the version, where the calculations come from, the third-party data and software with
-their licences, and the trademark notice. Public (no sign-in), Chinese and English, also in the demo.
+關於 (SP-495): the version, the third-party data and software with their licences, and the trademark
+notice. Public (no sign-in), Chinese and English, also in the demo. Where the calculations come from is
+the 方法 page (api/methods.py): the contents' 「計算方法與出處」 goes there (SP-1067: the section that listed
+the methods here is gone, the owner's call 2026-10-30).
 
   GET /about                     the page, in the request's language (?lang=, the lang cookie,
                                  Accept-Language)
 
 What the page says lives in two places:
-  * the words: static/i18n/<locale>/about.json (headings, each method's name and description, each
-    data source's description, the trademark notice);
-  * the facts that do not change with the language: METHODS (which sources each method cites),
-    SOURCES (the citation and, where there is one, a public link), DATA (each data source's links),
-    SOFTWARE (name, licence, home page). Citations stay in their original (English) form.
+  * the words: static/i18n/<locale>/about.json (headings, each data source's description, the trademark
+    notice);
+  * the facts that do not change with the language: DATA (each data source's links), SOFTWARE (name,
+    licence, home page) — and SOURCES, the one list of the literature (the citation and, where there is
+    one, a public link; citations in their original English form), which the 方法 page and the 介紹頁
+    show and count.
 
-Only methods the program really uses, each with public literature or a public method; the page
-never names the products whose screens it replaces (SP-498) and says the methods belong to their
-authors. Links are external addresses only, except in sign-in mode: the last section then lists the
-terms of service, the privacy policy and the other documents agreed to at sign-up (/legal, SP-847). Version: backend.__version__ and the commit of the
+Only methods the program really uses, each with public literature or a public method; no page names
+the products whose screens it replaces (SP-498). Links are external addresses only, except the 方法 page
+(/methods) and, in sign-in mode, the last section listing the terms of service, the privacy policy and
+the other documents agreed to at sign-up (/legal, SP-847). Version: backend.__version__ and the commit of the
 image (engine/debug_view.git_sha: TRC_GIT_SHA, else `git rev-parse`).
 """
 from __future__ import annotations
@@ -104,7 +107,7 @@ SOURCES: dict[str, Source] = {
                            "PLoS One 2011.", "https://pmc.ncbi.nlm.nih.gov/articles/PMC3043077/"),
     "bontemps": Source("Bontemps B, et al. Downhill running: what are the effects and how can we adapt? A narrative "
                        "review. Sports Medicine 2020.", "https://pmc.ncbi.nlm.nih.gov/articles/PMC7674385/"),
-    # SP-973 (Q1-2 (a)): what the 方法 page (api/methods.py) cites, on the one list 關於, 方法 and the 介紹頁's
+    # SP-973 (Q1-2 (a)): what the 方法 page (api/methods.py) cites, on the one list 方法 and the 介紹頁's
     # count share. Citations as the research docs give them: docs/research/unsourced-rules.md (Clark,
     # Fornasiero), long-race-durability-shape.md [L1] [P2], public-datasets.md (Kerhervé 2015),
     # effort-distance-formulas.md §1 (UTMB), paywalled-sources.md (Péronnet, Bassett), baiyue-from-running.md
@@ -136,34 +139,6 @@ SOURCES: dict[str, Source] = {
                       "1967–1996: modeling with empirical data. Medicine & Science in Sports & Exercise "
                       "1999;31:1665–1676.", "https://doi.org/10.1097/00005768-199911000-00025"),
 }
-
-# (id, the sources it cites): the words are about.json "m.<id>.name" / "m.<id>.desc"
-METHODS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("weighted", ("allen_coggan",)),
-    ("load", ("banister", "allen_coggan")),
-    ("ramp", ("friel_ramp",)),
-    ("cp", ("monod",)),
-    ("pd", ("monod", "puchowicz")),
-    ("grade", ("minetti",)),
-    ("hike", ("tobler",)),
-    ("pack", ("pandolf",)),
-    ("riegel", ("riegel",)),
-    ("racecalc", ("superpower",)),
-    ("pzones", ("palladino_zones",)),
-    ("hrzones", ("friel_zones",)),
-    ("hrmax", ("tanaka",)),
-    ("rpe", ("borg", "foster")),
-    ("aet", ("uphill",)),
-    ("reentry", ("daniels",)),
-    ("heat", ("racinais",)),
-    ("phases", ("ua_ultra", "pfitzinger", "canova", "daniels", "jiang", "bosquet", "wang_taper")),
-    ("postrace", ("johnston_rec", "torrence", "millet_ultra", "bontemps")),
-    # SP-973: the trail race model's parts the 方法 page explains (the 介紹頁's waterfall layers)
-    ("trailhr", ("fornasiero", "kerherve")),
-    ("effort", ("itra",)),
-    ("durability", ("clark", "bossi", "markovic")),
-    ("altitude", ("peronnet", "wehrlin", "bassett")),
-)
 
 # (id, [(link text, address)]): the words are about.json "d.<id>.name" / "d.<id>.desc"
 OGDL = ("OGDL-Taiwan-1.0", "https://data.gov.tw/license")     # link text: about.json "ogdl"
@@ -221,9 +196,12 @@ def _a(text: str, url: str) -> str:
     return f'<a href="{_E(url)}" target="_blank" rel="noopener">{_E(text, quote=False)}</a>'
 
 
-def _cite(sid: str) -> str:
-    s = SOURCES[sid]
-    return f'<li class="ab-cite">{_E(s.cite, quote=False)}' + (f" {_a(s.url, s.url)}" if s.url else "") + "</li>"
+# SP-1067: the contents' 「計算方法與出處」 is the 方法 page itself (api/methods.URL), not a section here
+TOC_URL = {"methods": "/methods"}
+
+
+# the app bar (shell.js); ?embed=1 (the 介紹頁's page dialog) goes without it
+SHELL = '<script src="/api/v1/static/shell.js" data-page="about"></script>'
 
 
 def _section(sid: str, title: str, body: str) -> str:
@@ -238,16 +216,12 @@ def _legal() -> str:
                    for d in terms.DOCUMENTS)
 
 
-def _fill(loc: str, legal: bool = False) -> dict:
+def _fill(loc: str, legal: bool = False, embed: bool = False) -> dict:
     cat = page_catalog((NS,), loc)
     v = version()
     ver = (f'<dl class="ab-ver"><dt>{_E(_t(cat, "version.app"))}</dt><dd><code>{_E(v["version"])}</code></dd>'
            f'<dt>{_E(_t(cat, "version.build"))}</dt><dd><code>{_E(v["build"])}</code></dd></dl>'
            f'<p class="ab-note">{_E(_t(cat, "version.note"))}</p>')
-    methods = "".join(
-        f'<li class="ab-item" id="m-{mid}"><h3>{_E(_t(cat, f"m.{mid}.name"))}</h3>'
-        f'<p>{_E(_t(cat, f"m.{mid}.desc"))}</p><ul class="ab-cites">{"".join(_cite(s) for s in srcs)}</ul></li>'
-        for mid, srcs in METHODS)
     data = "".join(
         f'<li class="ab-item" id="d-{did}"><h3>{_E(_t(cat, f"d.{did}.name"))}</h3>'
         f'<p>{_E(_t(cat, f"d.{did}.desc"))}</p><p class="ab-links">'
@@ -257,8 +231,8 @@ def _fill(loc: str, legal: bool = False) -> dict:
     main = (
         f'<header class="ab-hero"><h1>{_E(_t(cat, "h1"))}</h1><p>{_E(_t(cat, "lead"))}</p>'
         f'<nav class="ab-toc" aria-label="{_E(_t(cat, "toc"))}">'
-        + "".join(f'<a href="#{k}">{_E(_t(cat, f"{k}.h"))}</a>' for k in ("version", "cairn", "methods", "data",
-                                                                           "software", "trademarks")
+        + "".join(f'<a href="{TOC_URL.get(k, "#" + k)}">{_E(_t(cat, f"{k}.h"))}</a>'
+                  for k in ("version", "cairn", "methods", "data", "software", "trademarks")
                   + (("legal",) if legal else ()))
         + "</nav></header>"
         + _section("version", _t(cat, "version.h"), ver)
@@ -266,8 +240,6 @@ def _fill(loc: str, legal: bool = False) -> dict:
         # only: the manual's 疊石 Cairn section has the steps)
         + _section("cairn", _t(cat, "cairn.h"),
                    "".join(f"<p>{_E(_t(cat, k))}</p>" for k in ("cairn.what", "cairn.routes", "cairn.link")))
-        + _section("methods", _t(cat, "methods.h"),
-                   f'<p class="ab-lead">{_E(_t(cat, "methods.lead"))}</p><ol class="ab-list">{methods}</ol>')
         + _section("data", _t(cat, "data.h"),
                    f'<p class="ab-lead">{_E(_t(cat, "data.lead"))}</p><ul class="ab-list">{data}</ul>')
         + _section("software", _t(cat, "software.h"),
@@ -280,12 +252,13 @@ def _fill(loc: str, legal: bool = False) -> dict:
         + (_section("legal", _t(cat, "legal.h"),
                     f'<p class="ab-lead">{_E(_t(cat, "legal.lead"))}</p><ul class="ab-legal">{_legal()}</ul>')
            if legal else ""))
-    return {"title": _E(f'{_t(cat, "title")} · {brand(loc)}', quote=False), "main": main}
+    return {"title": _E(f'{_t(cat, "title")} · {brand(loc)}', quote=False), "main": main,
+            "shell": "" if embed else SHELL, "embed": ' data-embed="1"' if embed else ""}
 
 
 @router.get(URL)
-def about_page():
+def about_page(embed: bool = False):
     # the page inlines the session (a signed-in user's name): private, like every other page
     from backend.accounts import login as LG
     return render_page("about", headers={"Cache-Control": "private, no-cache"},
-                       fill=_fill(i18n.current_locale(), legal=LG.required()))
+                       fill=_fill(i18n.current_locale(), legal=LG.required(), embed=embed))

@@ -90,6 +90,14 @@ a { color: var(--accent); }
 .md-src ol { margin: 0; padding-left: 1.3em; font-size: 13px; color: var(--muted); display: grid; gap: 3px; }
 .md-src li, .md-src p { overflow-wrap: anywhere; }
 .md-src p { margin: 0; font-size: 13.5px; color: var(--muted); }
+/* SP-1067: every source, after the cards (關於 no longer lists them) */
+.md-all { margin: 28px 0 0; padding: 18px 22px 20px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line);
+  box-shadow: var(--shadow); }
+.md-all h2 { margin: 0 0 8px; font-size: 19px; line-height: 1.4; }
+.md-all p { margin: 0 0 10px; color: var(--muted); max-width: 60em; }
+.md-all ol { margin: 4px 0 0; padding-left: 1.5em; display: grid; gap: 4px; font-size: 13.5px; color: var(--muted); }
+.md-all li { overflow-wrap: anywhere; }
+.md-all li a { white-space: nowrap; }
 a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* with the script: only the open card's detail shows (without it every detail is listed in the pane) */
 .md-js .md-d { display: none; }
@@ -112,6 +120,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px soli
 @media (max-width: 699px) {
   .md-main { padding: 14px 12px 40px; }
   .md-hero h1 { font-size: 22px; }
+  .md-all { padding: 14px 14px 16px; border-radius: 12px; }
   .md-fx dl { grid-template-columns: minmax(0, 1fr); gap: 0 0; }
   .md-fx dd { margin-bottom: 6px; }
 }

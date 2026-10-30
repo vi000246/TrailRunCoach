@@ -211,10 +211,11 @@ def test_the_freeze_refuses_a_breakdown_that_does_not_add_up():
 def test_why_counts_the_repo_not_a_typed_number():
     from backend.api import about as AB
     from backend.api import intro as I
+    from backend.api import methods as M
     from backend.engine import calibrate as CAL
     I.reset()
     w = I.why()
-    assert w["sources"] == len(AB.SOURCES) and w["methods"] == len(AB.METHODS)
+    assert w["sources"] == len(AB.SOURCES) and w["methods"] == len(M.MODELS)      # SP-1067: the 方法 page's
     assert w["calibrated"] == sum(1 for it in CAL._registry().values() if not it.manual_only) > 0
     # documents: constants with their source (docs/research/coach-schools-zones-periodization.md:9, :361-753)
     doc = (ROOT / "docs" / "research" / "coach-schools-zones-periodization.md").read_text("utf-8")

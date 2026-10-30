@@ -150,7 +150,7 @@ def ctas(cat: dict, who: dict, open_: bool) -> dict:
     return out
 
 
-def pricing_page():
+def pricing_page(embed: bool = False):
     loc = i18n.current_locale()
     cat = page_catalog(namespaces_for(PAGE), loc)
     limits = MS.plan_limits()
@@ -163,6 +163,7 @@ def pricing_page():
             "month_note": _E(_fmt(cat, "pricing.price.month_note", year=p["year"], save=p["save"])),
             "save_pct": _E(_fmt(cat, "pricing.seg.save", pct=p["pct"]))}
     fill.update(ctas(cat, viewer(), B.open_for_sale()))
+    fill["embed"] = ' data-embed="1"' if embed else ""     # the 介紹頁's page dialog: no top bar or footer
     resp = render_page(PAGE, fill=fill)
     return PageResponse(fill_limits(resp.body.decode("utf-8"), cat, limits), resp.path,
                         headers={"Cache-Control": "private, no-cache"})

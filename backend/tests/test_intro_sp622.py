@@ -4,7 +4,7 @@
   as before; the owner's app without sign-in and the demo instance keep their "/";
 - /login links to it (「這是什麼？」); every other private path stays behind sign-in;
 - the page in both languages, its sections in the decided order (hero with the three tags → the race
-  calculator → schedule and season → every run → sources → privacy → FAQ → footer), the calculator's
+  calculator → schedule and season → every run → privacy → FAQ → footer), the calculator's
   origin written as it is (ported from Palladino's SuperPower Calculator), one line on the price, no
   e-mail field;
 - 「先試試看」: the public demo when TRC_DEMO_URL is set, else the built-in example share (a fictional
@@ -90,7 +90,7 @@ def test_the_page_in_both_languages_in_the_decided_order(c):
             assert cat[k].replace("\"", "&quot;") in r.text or cat[k] in r.text, (loc, k)
         # SP-637 R1: 課表 is the lead — the schedule section comes before the race calculator
         order = [r.text.index(x) for x in ('id="hero-h"', 'id="plan"', 'id="race"', 'id="read"', 'id="start"',
-                                           'id="sources"', 'id="privacy"', 'id="faq"', "<footer>")]
+                                           'id="privacy"', 'id="faq"', "<footer>")]
         assert order == sorted(order), loc
     zh = c.get("/?lang=zh-TW", headers=HTML).text
     # no e-mail field: the waitlist is the sign-in's (SP-637: the only inputs were the small calculator's sliders;
@@ -98,13 +98,16 @@ def test_the_page_in_both_languages_in_the_decided_order(c):
     assert "type=\"email\"" not in zh and re.findall(r"<input[^>]*>", zh) == []
 
 
-def test_the_calculator_is_credited_to_palladino_on_the_about_page():
-    # the intro's origin line is off the page (user, 2026-10-28); the credit stays on 關於 (SP-622 kept)
+def test_the_calculator_is_credited_to_palladino_on_the_methods_page(c):
+    # the intro's origin line is off the page (user, 2026-10-28); the credit stays (SP-622 kept) — on the 方法
+    # page with every source since 關於's list of methods went (SP-1067), and in the 介紹頁's 「看全部出處」
     for loc in LOCALES:
         cat = json.loads((STATIC / "i18n" / loc / "intro.json").read_text("utf-8"))
         assert "race.origin" not in cat and "bt.line" not in cat, loc
-    about = json.loads((STATIC / "i18n" / "zh-TW" / "about.json").read_text("utf-8"))["m.racecalc.desc"]
-    assert "Steve Palladino" in about and "SuperPower Calculator" in about
+        credit = json.loads((STATIC / "i18n" / loc / "methods.json").read_text("utf-8"))["all.credit"]
+        assert "Steve Palladino" in credit and "SuperPower Calculator" in credit
+        assert credit.replace("'", "&#x27;") in c.get(f"/methods?lang={loc}", headers=HTML).text
+        assert c.get(f"/api/v1/intro/methods?lang={loc}").json()["credit"] == credit
 
 
 def test_faq_has_4_to_6_questions_each_to_an_existing_manual_section(c):

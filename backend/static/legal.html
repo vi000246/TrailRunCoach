@@ -62,10 +62,11 @@ footer { display: flex; justify-content: flex-end; margin-top: 14px; }
   border: 1px solid var(--line); background: none; color: var(--muted); }
 .lang:hover { color: var(--accent); border-color: var(--accent); }
 a:focus-visible, .lang:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body[data-embed] .top, body[data-embed] footer { display: none; }   /* the 介紹頁's page dialog */
 [hidden] { display: none !important; }
 </style>
 </head>
-<body data-draft="<!--fill:draft-->">
+<body data-draft="<!--fill:draft-->"<!--fill:embed-->>
 <main>
   <div class="top">
     <a class="brand" href="/"><img src="/api/v1/static/icons/trig-logo-small.svg" alt="" width="30" height="30"><span data-i18n="shell.brand">Trig 基石</span></a>

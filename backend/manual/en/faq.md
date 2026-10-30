@@ -216,7 +216,7 @@ More: the [Glossary](glossary.md) (every term's “In depth” gives its sources
 
 :::deep
 ### The small tags
-Auto-estimated numbers may carry: “Personal n=…” (from that many of your own data points), “Manual” (yours), “Default (literature)” (a sourced default), “Default (estimate)” (a default without a source). All the methods' sources are on the About page under the methods and sources.
+Auto-estimated numbers may carry: “Personal n=…” (from that many of your own data points), “Manual” (yours), “Default (literature)” (a sourced default), “Default (estimate)” (a default without a source). All the methods' sources are on the [Methods page](/methods) (the About page's “Methods and sources” takes you there too).
 :::
 
 ## Too many tips? {#too-many-hints}

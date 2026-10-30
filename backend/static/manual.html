@@ -58,6 +58,9 @@ code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background
 /* the contents page: one column, the search in the header */
 .m-wrap[data-chapter=""] { grid-template-columns: minmax(0, 1fr); max-width: 980px; }
 .m-wrap[data-chapter=""] .m-side { display: none; }
+/* an embedded chapter (?embed=1, the 介紹頁's dialog, SP-1073): the text alone */
+.m-wrap[data-embed] { grid-template-columns: minmax(0, 1fr); max-width: 900px; padding: 14px 14px 28px; }
+.m-wrap[data-embed] .m-side, .m-wrap[data-embed] .m-pager, .m-wrap[data-embed] .m-crumb { display: none; }
 /* ---- the side: search + contents ---- */
 .m-side { position: sticky; top: calc(var(--shell-top, 0px) + 16px); display: grid; gap: 14px; z-index: 5; }
 /* only the contents scroll (the search's list of hits must not be cut by it) */
@@ -215,8 +218,8 @@ figcaption p { margin: 0; }
 </style>
 </head>
 <body>
-<script src="/api/v1/static/shell.js" data-page="manual"></script>
-<div class="m-wrap" data-chapter="<!--fill:chapter-->">
+<!--fill:shell-->
+<div class="m-wrap" data-chapter="<!--fill:chapter-->"<!--fill:embed-->>
   <aside class="m-side">
     <div class="m-search" id="m-search-side">
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>

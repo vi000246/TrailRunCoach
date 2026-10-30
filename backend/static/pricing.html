@@ -125,10 +125,11 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: cente
 footer a { color: var(--muted); }
 footer a:hover { color: var(--accent); }
 footer .lang { margin-left: auto; }
+body[data-embed] header.top, body[data-embed] > footer { display: none; }   /* the 介紹頁's page dialog */
 [hidden] { display: none !important; }
 </style>
 </head>
-<body>
+<body<!--fill:embed-->>
 <header class="top">
   <nav class="wrap" aria-label="主要連結" data-i18n-attr="aria-label:pricing.nav.label">
     <a class="brand" href="/"><img src="/api/v1/static/icons/trig-logo-small.svg" alt="" width="28" height="28"><span data-i18n="shell.brand">Trig 基石</span></a>

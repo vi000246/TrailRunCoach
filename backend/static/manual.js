@@ -25,6 +25,24 @@
   const wrap = document.querySelector(".m-wrap");
   const CHAPTER = wrap ? wrap.dataset.chapter : "";
 
+  // ---- embedded (?embed=1: the 介紹頁's dialog frames the chapter, SP-1073) — another chapter stays embedded,
+  // anything else opens in a new tab: the reader never leaves the page that framed this one
+  if (wrap && wrap.dataset.embed) {
+    const lang = new URLSearchParams(location.search).get("lang");
+    for (const a of document.querySelectorAll(".m-main a[href]")) {
+      const u = new URL(a.getAttribute("href"), location.href);
+      if (u.origin === location.origin && u.pathname === location.pathname) continue;     // a section of this one
+      if (u.origin === location.origin && /^\/manual\/[a-z0-9-]+$/.test(u.pathname)) {
+        u.searchParams.set("embed", "1");
+        if (lang) u.searchParams.set("lang", lang);
+        a.href = u.pathname + u.search + u.hash;
+      } else {
+        a.target = "_blank";
+        a.rel = "noopener";
+      }
+    }
+  }
+
   // ---- icons: the contents' chapter links and the cards -------------------------------------------
   for (const a of document.querySelectorAll("[data-icon]")) {
     const svg = ICONS[a.dataset.icon] || ICONS.book;

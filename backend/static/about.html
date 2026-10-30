@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><!--fill:title--></title>
 <style>
-/* About (SP-495): version, methods and sources, data and software licences, trademarks. Public; the
-   contents come from api/about.py (static/i18n/<locale>/about.json), this page only frames them. */
+/* About (SP-495): version, data and software licences, trademarks (the methods and sources: the 方法 page,
+   SP-1067). Public; the contents come from api/about.py (static/i18n/<locale>/about.json), this page only
+   frames them. */
 :root {
   color-scheme: light;
   --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
@@ -49,15 +50,11 @@ code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background
 .ab-ver { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
 .ab-ver dt { color: var(--muted); }
 .ab-ver dd { margin: 0; }
-.ab-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; counter-reset: ab; }
-ol.ab-list > .ab-item { counter-increment: ab; }
+.ab-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
 .ab-item { border-top: 1px solid var(--line); padding-top: 12px; }
 .ab-item:first-child { border-top: 0; padding-top: 0; }
 .ab-item h3 { margin: 0 0 4px; font-size: 15.5px; line-height: 1.45; }
-ol.ab-list > .ab-item h3::before { content: counter(ab) ". "; color: var(--faint); font-weight: 600; }
 .ab-item p { margin: 0 0 6px; overflow-wrap: anywhere; }
-.ab-cites { margin: 0; padding-left: 1.2em; font-size: 13px; color: var(--muted); line-height: 1.6; }
-.ab-cites li { margin: 2px 0; overflow-wrap: anywhere; }
 .ab-links { font-size: 13px; color: var(--muted); }
 .ab-sw { width: 100%; border-collapse: collapse; font-size: 14px; }
 .ab-sw th, .ab-sw td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
@@ -74,8 +71,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media print { .ab-toc { display: none; } .ab-sec { box-shadow: none; } }
 </style>
 </head>
-<body>
-<script src="/api/v1/static/shell.js" data-page="about"></script>
+<body<!--fill:embed-->>
+<!--fill:shell-->
 <main class="ab-main" id="ab-main"><!--fill:main--></main>
 </body>
 </html>

@@ -142,6 +142,8 @@ PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/templates", "/api/v1/intro/plan"}
 PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/breakdown"}
 # SP-975: the fictional runner's season as the phase planner cuts it (frozen days from today) — exactly this path
 PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/cycle"}
+# SP-1067: the 方法 cards' words for the 介紹頁's dialog (the same words as /methods) — exactly this path
+PUBLIC_PATHS = PUBLIC_PATHS | {"/api/v1/intro/methods"}
 # 方案與價格 (SP-846, api/billing.py): the prices and the plan table, linked from the 介紹頁 — exactly /pricing
 # (the plans page /plans and its checkout stay behind sign-in)
 PUBLIC_PATHS = PUBLIC_PATHS | {"/pricing"}

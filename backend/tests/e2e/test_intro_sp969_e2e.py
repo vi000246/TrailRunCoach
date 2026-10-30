@@ -1,5 +1,5 @@
 """SP-969: the 介紹頁 in a real browser — the try buttons carry the example's result and open it in a dialog
-(its share page in a same-origin frame; × , the background and Esc — also inside the frame — close it, the
+(its share page in a same-origin frame, covering the screen; × and Esc — also inside the frame — close it, the
 focus goes back to the button, 「在新分頁開啟」 links the page itself); the waterfall lays out the server's
 breakdown and its total is the example's finish time; 「為什麼不一樣」 shows the server's counts; no sideways
 scroll at phone width. Opened by its file name like the other intro e2e tests (the e2e server's "/" is not
@@ -122,11 +122,14 @@ def test_the_dialog_opens_the_example_and_closes_three_ways(app):
     _opened(page)
     page.locator("#ex-close").click()
     _closed_back_on(page, end)
-    # the background
     page.locator(hero).focus()
     page.locator(hero).click()
     _opened(page)
-    page.mouse.click(5, 5)
+    # it covers the screen (a whole page: no background left to click)
+    box = page.locator("#ex-modal .dlg").bounding_box()
+    vp = page.viewport_size
+    assert box["x"] == 0 and box["y"] == 0 and box["width"] == vp["width"] and box["height"] == vp["height"]
+    page.locator("#ex-close").click()
     _closed_back_on(page, hero)
     # Esc with the focus inside the frame (the share page)
     page.locator(hero).click()
@@ -155,7 +158,7 @@ def test_phone_width_has_no_sideways_scroll_with_the_waterfall_or_the_dialog(e2e
         assert page.evaluate("() => document.documentElement.scrollWidth") <= 390
         page.locator(".hero a[data-try-big]").tap()
         _opened(page)
-        box = page.locator(".dlg").bounding_box()
+        box = page.locator("#ex-modal .dlg").bounding_box()            # SP-1067: the 方法 dialog is a .dlg too
         assert box["x"] >= 0 and box["x"] + box["width"] <= 390
         page.locator("#ex-close").tap()
         page.wait_for_function("() => document.getElementById('ex-modal').hidden")
