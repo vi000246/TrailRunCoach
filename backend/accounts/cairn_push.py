@@ -18,8 +18,9 @@ with; no Cairn user token exists or is kept):
                own overnight point for (day n and n + 1, within NAME_NEAR_KM) is not sent there
 
 The body (payload): {name, gpx (the stored file as text, byte for byte), pace_config: {model:
-{kind: "curve", curve}} (pace_config, below), points}. The curve is SP-653's cairn-curve v1 of the
-saved calculation (cairn_curve.for_saved), sent as it is; the points are the
+{kind: "curve", curve, trc}} (pace_config, below), points}. The curve is SP-653's cairn-curve v1 of the
+saved calculation (cairn_curve.for_saved), sent as it is; `trc` says which calculation it is (Cairn
+SP-1077: its 「Trig 有新版」 finds it by uid, then event id, without guessing); the points are the
 nights of that calculation (its day ends, curve.day_splits_km), each with a visit on the day it
 ends and the next. Never an `eta` (Cairn's convention 43: times are Cairn's own estimate) — and
 Cairn refuses one (400).
@@ -169,12 +170,18 @@ def forget(eid: str) -> None:
 
 # ---------------------------------------------------------------------------- what is sent
 
-def pace_config(curve: dict) -> dict:
+def pace_config(curve: dict, eid: str, saved: Optional[dict]) -> dict:
     """The trip's pace_config carrying the curve — the one place its shape is decided (Cairn
-    SP-656 / SP-657 store {model: {kind: "curve", curve}}; the curve goes as SP-653 builds it,
+    SP-656 / SP-657 store {model: {kind: "curve", curve, trc}}; the curve goes as SP-653 builds it,
     start_times with nulls, rest_hint as an object and fallback_check included: Cairn takes it
-    through)."""
-    return {"model": {"kind": "curve", "curve": curve}}
+    through). `saved`: race_calc_store's row of event `eid`, for `trc` — which calculation this is
+    (Cairn SP-1077, its TrcCurveRefSchema): the row's stable uid (None on a row from before SP-310:
+    Cairn falls back to the event id), the curve's computed_at, the row's saved_at. Ids and times
+    only."""
+    row = saved or {}
+    return {"model": {"kind": "curve", "curve": curve,
+                      "trc": {"event_id": eid, "uid": row.get("uid"),
+                              "computed_at": curve.get("computed_at"), "saved_at": row.get("saved_at")}}}
 
 
 def night_points(curve: dict, names=()) -> list[dict]:
@@ -236,7 +243,7 @@ def _curve_of(body: dict) -> dict:
 
 def payload(eid: str) -> dict:
     """The body of the push for the current tenant's event `eid` (UserError when it can't go)."""
-    from backend.engine import event_gpx as EG
+    from backend.engine import event_gpx as EG, race_calc_store as RC
     ev = _event(eid)
     curve = _curve(eid)
     data = EG.read_bytes(eid)
@@ -252,7 +259,7 @@ def payload(eid: str) -> dict:
     row = EG.get(eid) or {}
     scale = _scale(row, curve)
     return {"name": (ev.name or row.get("filename") or eid)[:200], "gpx": text,
-            "pace_config": pace_config(curve),
+            "pace_config": pace_config(curve, eid, RC.get(eid)),
             "points": night_points(curve, _names(eid, scale))}
 
 

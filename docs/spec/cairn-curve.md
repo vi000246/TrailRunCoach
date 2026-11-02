@@ -18,7 +18,7 @@ SP-653（研究：`docs/analysis/sp570-cairn-itinerary-times.md`）。TrailRunCo
 |---|---|
 | `GET /api/v1/racepower/saved/{event_id}/cairn-curve` | 賽事存過的計算＋賽事存的 GPX。`?download=1` 加 `Content-Disposition`。錯誤：`404 NO_RESULT`；`409 NO_GPX`／`GPX_CHANGED`／`GPX_MISMATCH`／`NO_TRACK`／`NO_SEGMENTS`；`400 BAD_ID`。`detail = {code, message}` |
 | 公開分享快照 `GET /share/{id}/data` 的 `cairn_curve` | 建立分享時勾「附上給疊石 Cairn 的時間曲線」（`include_cairn_curve: true`）才有，**預設沒有** |
-| 推到 Cairn（SP-655，`backend/accounts/cairn_push.py`） | 賽事頁按「推到 Cairn」，曲線放進 Cairn 行程的 `pace_config = {model: {kind: "curve", curve}}`。曲線原樣送（Cairn passthrough），見 `docs/plans/cairn-link.md` 第 4.3 節 |
+| 推到 Cairn（SP-655，`backend/accounts/cairn_push.py`） | 賽事頁按「推到 Cairn」，曲線放進 Cairn 行程的 `pace_config = {model: {kind: "curve", curve, trc}}`。曲線原樣送（Cairn passthrough），`trc` 是來源（哪一筆計算，SP-1077），見 `docs/plans/cairn-link.md` 第 4.3 節 |
 | 程式介面（SP-654 的 link API 用） | `cairn_curve.for_saved(event_id) -> dict`，失敗丟 `cairn_curve.CurveError`（`.code`、`.status`）。要在該使用者的 tenant 裡呼叫 |
 
 曲線只能用**賽季計畫賽事存的 GPX** 算（要原始檔才有 hash）。計算用的 GPX 跟賽事目前存的不是同一份（sha1 對不上）→ `GPX_CHANGED`，重算再拿。

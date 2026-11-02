@@ -113,8 +113,11 @@ class FakeCairn:
             return "not a gpx document"
         pc = body.get("pace_config")
         if pc is not None:
-            if set(pc) != {"model"} or set(pc["model"]) != {"kind", "curve"} or pc["model"]["kind"] != "curve":
+            if set(pc) != {"model"} or set(pc["model"]) != {"kind", "curve", "trc"} or pc["model"]["kind"] != "curve":
                 return "pace_config shape"
+            bad = trc_ref_problem(pc["model"]["trc"])
+            if bad:
+                return f"trc: {bad}"
             bad = cairn_curve_problem(pc["model"]["curve"])
             if bad:
                 return f"curve: {bad}"
@@ -125,6 +128,20 @@ class FakeCairn:
                 if set(v) - {"day", "distance_m"}:
                     return "visits: unknown keys (eta?)"
         return ""
+
+
+def trc_ref_problem(ref) -> str:
+    """Cairn's TrcCurveRefSchema (SP-658, v2/shared/src/cairn-curve.ts): ids and times, nothing else."""
+    if not isinstance(ref, dict) or set(ref) - {"event_id", "uid", "computed_at", "saved_at"}:
+        return "keys"
+    if not (isinstance(ref.get("event_id"), str) and 1 <= len(ref["event_id"].strip()) <= 200):
+        return "event_id"
+    if not (ref.get("uid") is None or (isinstance(ref["uid"], str) and len(ref["uid"]) <= 200)):
+        return "uid"
+    for k in ("computed_at", "saved_at"):
+        if not (ref.get(k) is None or (isinstance(ref[k], str) and len(ref[k]) <= 40)):
+            return k
+    return ""
 
 
 def cairn_curve_problem(cv) -> str:
@@ -233,9 +250,46 @@ def test_pace_config_carries_the_curve_as_it_is():
     from backend.accounts import cairn_push as CP
     from backend.engine.racepower import cairn_curve as CC
     full = CC.build(_baiyue_result(), GPX, start_times=["05:00", None], computed_at=None)
-    pc = CP.pace_config(full)
-    assert pc == {"model": {"kind": "curve", "curve": full}}
+    pc = CP.pace_config(full, "ev1", {"uid": "u1", "saved_at": "2026-10-16 08:00:00", "result": {"secret": 1}})
+    assert pc == {"model": {"kind": "curve", "curve": full,
+                            "trc": {"event_id": "ev1", "uid": "u1", "computed_at": None,
+                                    "saved_at": "2026-10-16 08:00:00"}}}
     assert pc["model"]["curve"] is full and "fallback_check" in full and isinstance(full["rest_hint"], dict)
+
+
+def test_the_source_says_which_calculation_and_survives_a_recalculation(stores, monkeypatch, tmp_path):
+    """SP-1077: Cairn finds the calculation by uid, then event id. The same race saved again keeps its
+    uid; another race has its own."""
+    from backend.accounts import cairn_push as CP
+    from backend.engine import event_gpx as EG, planning, race_calc_store as RC
+    from backend.engine.planning import Event, Plan
+    monkeypatch.setattr(RC, "_default_db", lambda: tmp_path / "app.db")
+    monkeypatch.setattr(EG, "_default_db", lambda: tmp_path / "app.db")
+    monkeypatch.setattr(EG, "ROOT", tmp_path / "gpx")
+    monkeypatch.setattr(planning, "PLAN_PATH", tmp_path / "plan.json")
+    Plan(events=[Event(id="ev1", name="甲", date="2027-03-01", kind="baiyue", days=2),
+                 Event(id="ev2", name="乙", date="2027-04-01", kind="baiyue", days=2)]).save()
+    for eid in ("ev1", "ev2"):
+        EG.save(eid, GPX, "route.gpx")
+        RC.save(eid, {"form": {"start": "05:00"}}, _baiyue_result())
+    first = CP.payload("ev1")["pace_config"]["model"]
+    other = CP.payload("ev2")["pace_config"]["model"]
+    assert first["trc"]["event_id"] == "ev1" and other["trc"]["event_id"] == "ev2"
+    assert first["trc"]["uid"] and first["trc"]["uid"] != other["trc"]["uid"]
+    assert first["trc"]["computed_at"] == first["curve"]["computed_at"]
+    assert first["trc"]["saved_at"] == RC.get("ev1")["saved_at"]
+    assert trc_ref_problem(first["trc"]) == ""
+    RC.save("ev1", {"form": {"start": "04:00"}}, _baiyue_result())
+    again = CP.payload("ev1")["pace_config"]["model"]["trc"]
+    assert again["uid"] == first["trc"]["uid"] and again["event_id"] == "ev1"
+
+
+def test_a_calculation_from_before_stable_ids_still_goes(stores):
+    """A row from before SP-310 has no uid: it goes as null (Cairn falls back to the event id)."""
+    from backend.accounts import cairn_push as CP
+    ref = CP.pace_config({"computed_at": "2026-10-16T08:00:00"}, "ev1", {"uid": None, "saved_at": None})["model"]["trc"]
+    assert ref == {"event_id": "ev1", "uid": None, "computed_at": "2026-10-16T08:00:00", "saved_at": None}
+    assert trc_ref_problem(ref) == ""
 
 
 def test_the_payload_route_nights_and_curve(stores, monkeypatch, tmp_path):
@@ -255,7 +309,11 @@ def test_the_payload_route_nights_and_curve(stores, monkeypatch, tmp_path):
     assert body["name"] == "合歡北西峰 兩天"
     assert body["gpx"] == GPX.decode("utf-8")
     curve = body["pace_config"]["model"]["curve"]
-    assert body["pace_config"] == {"model": {"kind": "curve", "curve": curve}}
+    row = RC.get("ev1")
+    assert body["pace_config"] == {"model": {"kind": "curve", "curve": curve,
+                                             "trc": {"event_id": "ev1", "uid": row["uid"],
+                                                     "computed_at": curve["computed_at"],
+                                                     "saved_at": row["saved_at"]}}}
     from backend.engine.racepower import cairn_curve as CC
     assert curve == CC.for_saved("ev1")                                  # sent as SP-653 builds it
     # the curve is for exactly the file sent (Cairn hashes the text it gets)
@@ -270,7 +328,7 @@ def test_the_payload_route_nights_and_curve(stores, monkeypatch, tmp_path):
 
 def test_the_body_is_what_cairn_takes(stores, monkeypatch, tmp_path):
     """The agreed request (SP-657 merged with SP-656): body {name, gpx, pace_config, points},
-    pace_config = {"model": {"kind": "curve", "curve": <cairn-curve v1 as it is>}}; visits strict
+    pace_config = {"model": {"kind": "curve", "curve": <cairn-curve v1 as it is>, "trc": <its source>}}; visits strict
     (day, distance_m only — never eta). Checked with the rules of Cairn's schemas."""
     from backend.accounts import cairn_push as CP
     from backend.engine import event_gpx as EG, planning, race_calc_store as RC
@@ -283,7 +341,7 @@ def test_the_body_is_what_cairn_takes(stores, monkeypatch, tmp_path):
     EG.save("ev1", GPX, "route.gpx")
     RC.save("ev1", {"form": {"start": "05:00"}}, _baiyue_result())
     body = CP.payload("ev1")
-    assert list(body["pace_config"]) == ["model"] and list(body["pace_config"]["model"]) == ["kind", "curve"]
+    assert list(body["pace_config"]) == ["model"] and list(body["pace_config"]["model"]) == ["kind", "curve", "trc"]
     assert body["pace_config"]["model"]["kind"] == "curve"
     cv = body["pace_config"]["model"]["curve"]
     assert {"fallback_check", "rest_hint", "start_times"} <= set(cv)          # untouched, passthrough
