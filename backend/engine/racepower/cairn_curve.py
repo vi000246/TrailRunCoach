@@ -415,6 +415,24 @@ def for_saved(eid: str) -> dict:
                  computed_at=at.replace(" ", "T") if isinstance(at, str) else None)
 
 
+def for_estimate(result: dict, gpx: bytes, computed_at: Optional[str] = None) -> dict:
+    """SP-1103: the curve of an account estimate (pace_estimate.curve_result) on the GPX file Cairn just
+    sent. The estimate was computed on this very file, so its km are scaled onto Cairn's before build():
+    build's LENGTH_TOL is for a stored result that may belong to another file; here the two distance
+    measures differing a little is no mismatch. No start time (none was asked for)."""
+    pts = gpx_points(gpx)
+    if len(pts) < 2:
+        raise CurveError("NO_TRACK", _("GPX 裡沒有軌跡點（trkpt）：Cairn 只讀軌跡點"))
+    total_m = cum_distance(pts)[-1]
+    segs = (result or {}).get("segments") or []
+    own_km = float(segs[-1]["end_km"]) if segs else 0.0
+    if total_m <= 0 or own_km <= 0:
+        raise CurveError("NO_SEGMENTS", _("算不出 Cairn 的腳程：路線沒有距離或沒有移動時間"))
+    f = total_m / 1000.0 / own_km
+    scaled = [{**s, "start_km": float(s["start_km"]) * f, "end_km": float(s["end_km"]) * f} for s in segs]
+    return build({**result, "segments": scaled}, gpx, start_times=[None], computed_at=computed_at)
+
+
 def for_plan(plan: dict, event_id: Optional[str], start_time: Optional[str], computed_at: Optional[str] = None) -> dict:
     """The cairn-curve of a fresh /plan result (the share snapshot's opt-in curve)."""
     data = _event_gpx(event_id, plan.get("course_id"))

@@ -1563,7 +1563,9 @@ for 疊石 Cairn's 揪團報名 (SP-734) and the public 試算頁. Nothing of ei
   (signed in: the account estimate, one calculator use per route a day); `POST /api/v1/link/cairn/pace`
   (Cairn, `link:participant_ability`: the organiser's linked token + the 報名者's `consent` in the request,
   quota `participants` — free 10 a month, a distinct track counted once, 管理頁 `quota.free.participants`;
-  docs/plans/cairn-link.md §4.5). Tests: `backend/tests/test_pace_estimate_sp805.py`.
+  docs/plans/cairn-link.md §4.5); `POST /api/v1/link/cairn/pace/me` (Cairn SP-1103, `link:pace` switched on
+  by the person: the account estimate plus `curve`, cairn-curve v1 from `curve_result`, §4.9).
+  Tests: `backend/tests/test_pace_estimate_sp805.py`.
 
 ## Testing
 
@@ -1882,3 +1884,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-28 | feature | SP-727 | The course ground reads the trail dictionary on this server (`engine/trail_dict_store.py`: `$TRC_TRAIL_DICT_URL`, the bundle indexed locally, refreshed daily) instead of Overpass (`TRC_OVERPASS_URL` gone); profile v2 carries the speed classes (`kinds`). The trail HR model fits per-class multipliers on top of the slope cost (`surface_kind`, `trailhr.fit_kind_mult`); the plan's split uses them only when the back-test's leave-one-run-out (`trail_hr.surface_kind`) is better (`backtest.kind_flag`) |
 | 2026-10-29 | code-sync（SP-990, SP-991, SP-987） | N/A | 你的數據's sex source, power-source word and unused watch power are `M_()` texts (SP-990); the stored back-test keeps its texts' msgid + params (`text_version` 2, `texts` table, `keep_msgids`, `S_()` effort reasons, `M_list` 預設背負), older files read as before (SP-991); the share page's 賽前 tile splits the amount from its bracket (SP-987); re-anchored the SP-229 references |
 | 2026-10-29 | feature | SP-1018 | `GET /cairn/route/<gpxId>` (Cairn SP-554): the race pushed to / imported from that Cairn route opens on its weather (`racepower/page?event=<id>#env`, the 環境 card `#env`); none → the page 「這條路線沒有對應的賽事」 (both languages); signed out → sign in and back; the person's own tenant only |
+| 2026-11-04 | feature | SP-1103 (Cairn SP-1103, SP-891) | `POST /api/v1/link/cairn/pace/me` (`link:pace`): Cairn asks for the person's own account estimate on a route with the GPX only in memory; the answer carries a cairn-curve v1 (`pace_estimate.curve_result`, `cairn_curve.for_estimate`, about 1 km a point, model `estimate/account`). 賽事管理 takes `?trip=&name=&date=`: 新增賽事 filled in with that Cairn trip picked, no share link |

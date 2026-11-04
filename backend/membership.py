@@ -97,6 +97,7 @@ SCOPES: dict[str, str] = {
     "link:account": "疊石 Cairn 讀帳號與方案狀態",
     "link:gpx_sync": "疊石 Cairn 同步 GPX",
     "link:calc": "疊石 Cairn 讀存過的計算與配速曲線",
+    "link:pace": "疊石 Cairn 用這個人的登山紀錄估路線腳程（要本人另外打勾，SP-891、Cairn SP-1103）",
     "link:weather": "疊石 Cairn 讀路線天氣（SP-556）",
     "link:participant_ability": "疊石 Cairn 讀報名者能力值（要報名者本人另外同意）",
 }
@@ -105,7 +106,7 @@ SYNC_SOURCE_SCOPE = {"coros": "sync:coros_credential", "garmin": "sync:garmin_tr
                      "tp": "sync:tp_web"}      # runner's sources
 # never a test account's (SP-611): no real platform, nothing synced
 TEST_DENIED = frozenset(SOURCE_SCOPES) | {"sync:auto_nightly", "sync:auto_realtime"}
-LINK_SCOPES = ("link:account", "link:gpx_sync", "link:calc", "link:weather", "link:participant_ability")
+LINK_SCOPES = ("link:account", "link:gpx_sync", "link:calc", "link:pace", "link:weather", "link:participant_ability")
 
 _FREE = frozenset({"plan:view", "plan:edit", "safety", "import:fit", "export:data", "charts:90d",
                    "calc:use", "plan:auto", "sync:auto_nightly",

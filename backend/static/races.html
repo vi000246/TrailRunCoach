@@ -813,7 +813,14 @@ async function openEditor(row, fromAct) {
   ctReset();
   xpCard();
   $("ed").showModal();
-  ctLoad().then(() => { ctRender(); xpCard(); });      // SP-538: the person's Cairn trips, not waited for
+  ctLoad().then(() => {                                // SP-538: the person's Cairn trips, not waited for
+    ctRender(); xpCard();
+    // Cairn SP-1103: 「也在 Trig 新增賽事」(?trip=) picks that trip, imported when the race is saved
+    if (fromAct?.trip && S.ct?.trips?.some((t) => t.id === fromAct.trip)) {
+      $("ct-pick").value = fromAct.trip;
+      $("ct-pick").dispatchEvent(new Event("change"));
+    }
+  });
   if (ev) { $("cp-body").textContent = T("loading"); $("cp-go").disabled = true; await cairnStatus(); cpRender(); }
 }
 async function saveEvent() {
@@ -1229,6 +1236,18 @@ window.addEventListener("resize", () => [...S.charts, ...S.cmpCharts].forEach((c
       : `<span class="err">${esc(T("cairn.from_fail", { msg: err?.message || "" }))}</span>`;
     await openEditor(null, { name: r?.name || "", date: r?.start_date || "", kind: "baiyue", days: r?.days || 1,
                              cairn: cairnIn, first: r?.has_records === false, cairnMsg: msg });
+    return;
+  }
+  // Cairn SP-1103: 「也在 Trig 新增賽事」 — no share link: the person's own trip by id (linked, or the editor
+  // says so), the name and the day filled in, saved here by the user; a race already holding it just opens
+  const tripIn = q.get("trip");
+  if (tripIn) {
+    history.replaceState(null, "", location.pathname);       // a reload doesn't bring it again
+    await load();
+    let held = null;
+    try { held = ((await j(CTRIPS)).trips || []).find((t) => t.id === tripIn)?.event_id; } catch { /* not linked: the editor's card says so */ }
+    if (held && S.rows.some((r) => r.id === "e:" + held)) { await openRace("e:" + held); return; }
+    await openEditor(null, { name: q.get("name") || "", date: q.get("date") || "", kind: "baiyue", trip: tripIn });
     return;
   }
   await load();

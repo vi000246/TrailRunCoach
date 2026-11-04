@@ -448,3 +448,111 @@ def test_the_quota_reads_in_the_plans_and_settings_pages():
         admin = json.loads((root / loc / "admin.json").read_text("utf-8"))
         assert plans.get("use.participants") and settings.get("plan_sum.participants")
         assert admin.get("item.quota.free.participants") and admin.get("item.quota.free.participants.help")
+
+
+# ---------------------------------------------------------------------------- Cairn: the person's own account (SP-1103)
+
+ME_URL = "/api/v1/link/cairn/pace/me"
+
+
+def _me_post(srv, tok, route=ROUTE, **fields):
+    return srv.post(ME_URL, files={"route": ("route.gpx", route, "application/gpx+xml")}, data=fields,
+                    headers={"Authorization": f"Bearer {tok}"})
+
+
+def _allow_pace(cl, allowed=True):
+    return cl.post("/api/v1/account/links/cairn/scopes", json={"scope": "link:pace", "allowed": allowed},
+                   headers={"X-TRC-CSRF": csrf(cl)})
+
+
+def test_cairn_asks_for_the_persons_own_pace_only_once_they_allowed_it(c, app, cairn, monkeypatch):
+    _fake_account(monkeypatch)
+    sign_up(c, "g-a", "alice@example.com")
+    assert _link(c).status_code == 200
+    with _server(app) as srv:
+        tok = _token(srv, "g-a").json()["token"]
+        r = _me_post(srv, tok)
+        assert r.status_code == 403
+        d = r.json()["detail"]
+        assert d["code"] == "CONSENT_REQUIRED" and d["scope"] == "link:pace"
+        assert "allow=link%3Apace" in d["link_url"]
+        assert _allow_pace(c).status_code == 200
+        assert _me_post(srv, tok).status_code == 200          # no new token, no subscription
+        assert _allow_pace(c, False).status_code == 200
+        assert _me_post(srv, tok).status_code == 403
+        assert srv.post(ME_URL, files={"route": ("route.gpx", ROUTE, "application/gpx+xml")}).status_code == 401
+
+
+def test_an_old_token_without_the_scope_is_refused_until_it_is_exchanged_again(c, app, cairn, monkeypatch):
+    from backend.accounts import store
+    _fake_account(monkeypatch)
+    sign_up(c, "g-a", "alice@example.com")
+    _link(c)
+    _allow_pace(c)
+    old = store.create_service_token(_uid("g-a"), "cairn", ["link:account", "link:calc"])
+    with _server(app) as srv:
+        r = _me_post(srv, old)
+        assert r.status_code == 403 and r.json()["detail"] == {"code": "SCOPE_REQUIRED", "scope": "link:pace"}
+        assert _me_post(srv, _token(srv, "g-a").json()["token"]).status_code == 200
+
+
+def test_the_answer_carries_a_curve_cairn_can_use_and_the_route_is_not_kept(c, app, cairn, monkeypatch, tmp_path):
+    import hashlib
+    from backend.accounts import store
+    _fake_account(monkeypatch)
+    sign_up(c, "g-a", "alice@example.com")
+    _link(c)
+    _allow_pace(c)
+    with _server(app) as srv:
+        tok = _token(srv, "g-a").json()["token"]
+        r = _me_post(srv, tok, route_days="2")
+        assert r.status_code == 200, r.text
+        assert "no-store" in r.headers["cache-control"]
+        body = r.json()
+        assert body["basis"]["kind"] == "account"
+        cv = body["curve"]
+        assert cv["v"] == 1 and cv["gpx_sha256"] == hashlib.sha256(ROUTE).hexdigest()
+        assert cv["start_times"] == [None] and cv["model"] == "estimate/account" and cv["computed_at"]
+        pts = cv["points"]
+        assert pts[0] == [0, 0] and pts[-1][0] == cv["total_m"]
+        assert all(b[0] > a[0] and b[1] >= a[1] for a, b in zip(pts, pts[1:]))
+        assert 2 <= len(pts) <= 2000
+        assert abs(pts[-1][1] - body["moving_s"]) < 1.0       # the curve and the number next to it are one
+        assert cv["day_splits_km"] == [] and len(cv["rest_hint"]["days"]) == 2
+        assert cv["fallback"]["kind"] == "munter-split"
+        assert _me_post(srv, tok, route_days="2").status_code == 200   # the same route the same day: one use
+    month = MS_month()
+    assert store.usage_get(_uid("g-a"), "calc", month) == 1
+    assert _kept(tmp_path) == []
+
+
+def test_no_hikes_says_so_and_counts_nothing(c, app, cairn, monkeypatch):
+    from backend.accounts import store
+    _fake_account(monkeypatch, n=0)
+    sign_up(c, "g-a", "alice@example.com")
+    _link(c)
+    _allow_pace(c)
+    with _server(app) as srv:
+        r = _me_post(srv, _token(srv, "g-a").json()["token"])
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "NO_DATA"
+    assert store.usage_get(_uid("g-a"), "calc", MS_month()) == 0
+
+
+def test_the_estimate_curve_sits_on_cairns_distance_even_when_the_two_measures_differ():
+    from backend.engine.racepower import cairn_curve as CC
+    ab = PE.track_ability(make_gpx(), "t.gpx")
+    rt = PE.route_of(ROUTE, "r.gpx", 1)
+    est = PE.estimate(ab, rt, 4.0)
+    res = PE.curve_result(ab, rt, est)
+    # the estimate's own km 3 % off Cairn's: build() alone would refuse it as another file
+    off = {**res, "segments": [{**s, "start_km": s["start_km"] * 1.03, "end_km": s["end_km"] * 1.03} for s in res["segments"]]}
+    cv = CC.for_estimate(off, ROUTE, computed_at="2026-11-04T00:00:00")
+    assert cv["points"][-1][0] == cv["total_m"] and abs(cv["points"][-1][1] - est["moving_s"]) < 1.0
+    with pytest.raises(CC.CurveError):
+        CC.for_estimate(res, b"<gpx></gpx>")
+
+
+def MS_month():
+    import datetime as dt
+    from backend import membership as MS
+    return MS._period_key("month", dt.datetime.now(dt.timezone.utc))

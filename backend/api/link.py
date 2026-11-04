@@ -249,6 +249,30 @@ async def link_cairn_pace(request: Request):
     return JSONResponse(out, headers=NO_STORE)
 
 
+@router.post("/api/v1/link/cairn/pace/me")
+async def link_cairn_pace_me(request: Request):
+    """SP-1103 (and SP-891's route): the linked person's own account on a route from Cairn, without a race
+    saved here — multipart `route` (GPX), `route_pack_kg`, `route_days`, `trip_kind` → the same answer as
+    POST /api/v1/pace/me (account_ability + estimate; basis.kind = account) plus `curve`, the cairn-curve
+    v1 along the route (model "estimate/account"). link:pace, switched on by the person (links.FEATURES;
+    403 CONSENT_REQUIRED from the login gate), no plan needed; one use of the calculator's count for that
+    route that day, like /pace/me (SP-713). The route is only in memory for this request: no file, no
+    cache, no log; only its digest counts the use."""
+    import datetime as dt
+    import hashlib
+    from backend import membership as MS
+    from backend.api import pace as PA
+    _on()
+    await run_in_threadpool(_service_user, request, "link:pace")
+    up = await PA.read_upload(request, PACE_MAX_FILE + 64 * 1024, PACE_MAX_FILE, file_keys=("route",))
+    route, _name = up.file("route")
+    now = dt.datetime.now(dt.timezone.utc)
+    item = f"{MS._period_key('day', now)}/gpx:{hashlib.sha1(route).hexdigest()}"   # = calc_route of that GPX
+    out = await run_in_threadpool(PA.estimate_from_account, up, True)    # a route that cannot be used counts nothing
+    await run_in_threadpool(MS.consume, "calc", item, now)
+    return JSONResponse(PA._sanitize(out), headers=NO_STORE)
+
+
 # ---------------------------------------------------------------------------- 推到 Cairn (SP-655)
 
 @router.get("/api/v1/account/links/cairn/pushes")

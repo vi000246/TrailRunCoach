@@ -106,7 +106,7 @@ NO_SESSION = {("POST", "/api/v1/billing/webhook"), ("POST", "/api/v1/intervals/w
               ("POST", "/api/v1/link/x/token"), ("GET", "/api/v1/link/account"), ("GET", "/api/v1/link/cairn/curves"),
               ("GET", "/share/x"), ("GET", "/share/x/data"), ("GET", "/share/calendar/x.ics"),
               # SP-805: Cairn's 揪團腳程估算 (its service token) and the public 腳程試算 under /share/
-              ("POST", "/api/v1/link/cairn/pace"), ("GET", "/share/pace"), ("POST", "/share/pace/estimate")}
+              ("POST", "/api/v1/link/cairn/pace"), ("POST", "/api/v1/link/cairn/pace/me"), ("GET", "/share/pace"), ("POST", "/share/pace/estimate")}
 
 # the ticket's own list, spelled out (each one is also in the walk): closed even to read
 BLOCKED_READS = """

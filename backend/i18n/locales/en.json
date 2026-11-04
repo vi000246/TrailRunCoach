@@ -5772,5 +5772,7 @@
   "未達路跑全力條件：{reason}": "not an all-out road run: {reason}",
   "手錶記錄的 RPE {rpe}（運動後自評）→ {effort}": "RPE {rpe} recorded by the watch (post-run self-rating) → {effort}",
   "{why}；心率規則會判為「{effort}」": "{why}; the heart-rate rule would say “{effort}”",
-  "{a}{sep}{b}": "{a}{sep}{b}"
+  "{a}{sep}{b}": "{a}{sep}{b}",
+  "用你的登山紀錄估你在一條路線上的腳程": "Estimate your pace on a route from your hiking records",
+  "Cairn 會送來一條路線的 GPX，這裡用你的登山紀錄（上坡、平路、下坡速度與停留習慣）算出腳程回給它。GPX 算完就丟，不留檔。不讀心率或其他健康資料。": "Cairn sends a route's GPX; your hiking records here (uphill, flat and downhill speed, stop habits) work out your pace on it and it goes back to Cairn. The GPX is dropped once computed, never kept. Heart rate and other health data are not read."
 }

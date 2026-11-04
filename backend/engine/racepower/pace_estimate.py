@@ -72,6 +72,7 @@ GENERAL = {"flat_kmh": 4.0, "up_m_per_km": 100.0, "down_m_per_km": 200.0}   # Mu
 SIMILAR_PCT = 3                  # |difference| below this reads 「差不多」 (the page; 推估)
 TRIP_KINDS = ("group", "solo")
 MAX_DAYS = 10
+CURVE_SEG_M = 1000.0             # SP-1103: the curve for Cairn, about one point a km
 
 BASIS_TRACK = N_("依一趟紀錄估計")
 BASIS_ACCOUNT = N_("依你帳號的登山紀錄估計")
@@ -366,6 +367,36 @@ def default_route_pack(days: int) -> float:
 def pct_of(ratio: float) -> int:
     """A time ratio → a whole percent (positive: slower)."""
     return int(round((ratio - 1.0) * 100.0))
+
+
+def curve_result(ab: Ability, route: Route, est: dict) -> dict:
+    """SP-1103: the estimate along the route, shaped like a /plan result for cairn_curve.for_estimate —
+    the 100 m pieces' times merged into about 1 km segments, on one day (the route's nights are Cairn's,
+    not known here), and the stops split evenly over the route's days as the hint Cairn only shows.
+    `est`: estimate(ab, route, …) of the same person on the same route, same pack; the same arithmetic,
+    so the curve's last point is est["moving_s"]."""
+    from backend.engine.racepower import env as ENV
+    from backend.engine.racepower import hike as HK
+    pf = HK.pack_factor(DEFAULT_WEIGHT_KG, REF_PACK_KG, float(est["route"]["pack_kg"]))
+    ref = {"altitude_m": ab.speed.ref_alt_m if ab.speed.ref_alt_m is not None else route.pieces[0]["z"]}
+    alt = ENV.segment_factors([p["z"] for p in route.pieces], ref, ref, "unacclimatised")
+    segs, at_m, dist, t = [], 0.0, 0.0, 0.0
+    for p, a in zip(route.pieces, alt):
+        v = ab.speed.v(p["g"]) * pf * max(0.3, a)
+        dist += p["dist_m"]
+        t += p["dist_m"] / v
+        if dist >= CURVE_SEG_M:
+            segs.append({"start_km": at_m / 1000.0, "end_km": (at_m + dist) / 1000.0, "t": t, "day": 1})
+            at_m, dist, t = at_m + dist, 0.0, 0.0
+    if dist > 0:
+        segs.append({"start_km": at_m / 1000.0, "end_km": (at_m + dist) / 1000.0, "t": t, "day": 1})
+    days = max(1, route.days)
+    lo, hi = est["stop"]["range_s"]
+    return {"type": "estimate", "segments": segs,
+            "summary": {"total_method": "account",
+                        "rest": {"kind": "hike", "days": [
+                            {"day": i + 1, "rest_s": est["stop"]["total_s"] / days,
+                             "p25_s": lo / days, "p75_s": hi / days} for i in range(days)]}}}
 
 
 def estimate(ab: Ability, route: Route, pack_kg: Optional[float] = None) -> dict:

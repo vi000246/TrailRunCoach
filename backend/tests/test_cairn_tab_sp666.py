@@ -44,7 +44,7 @@ def test_every_scope_says_whether_cairn_reads_or_writes_and_what(c, app, cairn):
     sign_up(c, "g-a", "alice@example.com")
     row = _cairn_row(c)
     feats = {f["scope"]: f for f in row["features"]}
-    assert set(feats) == {"link:calc", "link:gpx_sync"}
+    assert set(feats) == {"link:calc", "link:gpx_sync", "link:pace"}
     assert feats["link:calc"]["kind"] == "read" and feats["link:gpx_sync"]["kind"] == "write"
     for f in list(feats.values()) + row["scopes"]:
         assert f["detail"] and f["text"] and f["kind"] in ("read", "write"), f

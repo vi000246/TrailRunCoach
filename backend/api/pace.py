@@ -159,9 +159,11 @@ def estimate_from_track(up: Upload) -> dict:
         raise _error(e) from None
 
 
-def estimate_from_account(up: Upload) -> dict:
-    """The signed-in person's own estimate on the uploaded route (409 NO_DATA without a walking curve)."""
+def estimate_from_account(up: Upload, with_curve: bool = False) -> dict:
+    """The signed-in person's own estimate on the uploaded route (409 NO_DATA without a walking curve).
+    `with_curve` (SP-1103, Cairn's own route): also the cairn-curve v1 along the route, in `curve`."""
     from backend.api import racepower as RP
+    from backend.engine.racepower import cairn_curve as CC
     from backend.engine.racepower import pace_estimate as PE
     route, rname = up.file("route")
     route_pack = up.num("route_pack_kg", 0.0, PACK_MAX)
@@ -185,6 +187,12 @@ def estimate_from_account(up: Upload) -> dict:
         out = PE.estimate(ab, rt, route_pack)
     except PE.EstimateError as e:
         raise HTTPException(409 if e.code == "NO_DATA" else 400, {"code": e.code, "message": str(e)}) from None
+    if with_curve:
+        now = dt.datetime.now().replace(microsecond=0).isoformat()   # the curve's computed_at: wall clock
+        try:
+            out["curve"] = CC.for_estimate(PE.curve_result(ab, rt, out), route, computed_at=now)
+        except CC.CurveError as e:
+            raise HTTPException(e.status, {"code": e.code, "message": str(e)}) from None
     return out
 
 

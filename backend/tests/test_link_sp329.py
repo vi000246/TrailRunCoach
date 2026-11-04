@@ -117,7 +117,7 @@ def test_the_same_google_account_is_the_same_person_once_linked(c, app, cairn):
         got = r.json()
         assert got["token"].startswith("trc_") and got["token_type"] == "Bearer"
         # link:weather has no route yet: not in a token (SP-329 Q1-3: asked when it ships)
-        assert set(got["scopes"]) == {"link:account", "link:calc", "link:gpx_sync"}
+        assert set(got["scopes"]) == {"link:account", "link:calc", "link:gpx_sync", "link:pace"}
         assert "link:participant_ability" not in got["scopes"]          # never by a link: SP-326
         r = _read(srv, got["token"])
         assert r.status_code == 200, r.text

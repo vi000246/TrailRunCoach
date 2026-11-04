@@ -21566,5 +21566,13 @@
   "{a}{sep}{b}": {
     "draft": false,
     "src": "SP-988"
+  },
+  "用你的登山紀錄估你在一條路線上的腳程": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
+  },
+  "Cairn 會送來一條路線的 GPX，這裡用你的登山紀錄（上坡、平路、下坡速度與停留習慣）算出腳程回給它。GPX 算完就丟，不留檔。不讀心率或其他健康資料。": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
   }
 }

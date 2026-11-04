@@ -32,6 +32,10 @@ SP-805: POST /api/v1/link/cairn/pace (link:participant_ability, POST_ROUTES) est
 from the one track they uploaded to Cairn. That scope is in no token (CONSENT_PER_REQUEST): the
 organiser's linked token (link:account) and the 報名者's own consent in each request.
 
+SP-1103 (Cairn SP-1103, SP-891): POST /api/v1/link/cairn/pace/me (link:pace, FEATURES without a plan)
+estimates the linked person's own pace on a route from their account: the route's GPX is only in
+memory for that one request.
+
 No call to Cairn is made unless TRC_CAIRN_URL and the secret are set; tests use a fake (TRANSPORT).
 """
 from __future__ import annotations
@@ -69,7 +73,7 @@ CAIRN = Client(
     out_secret_env="TRC_CAIRN_OUT_SECRET",
     # link:participant_ability is never granted by a link: it reads someone else's ability and needs
     # that person's own consent (SP-326), a separate step of its own
-    scopes=("link:account", "link:calc", "link:gpx_sync", "link:weather"),
+    scopes=("link:account", "link:calc", "link:gpx_sync", "link:pace", "link:weather"),
 )
 CLIENTS: dict[str, Client] = {CAIRN.id: CAIRN}
 
@@ -83,6 +87,7 @@ ROUTES: dict[str, str] = {
 # cookie cannot be forged by another site), and the scope each needs
 POST_ROUTES: dict[str, str] = {
     "/api/v1/link/cairn/pace": "link:participant_ability",   # SP-805: 揪團報名的腳程估算 (api/pace.py)
+    "/api/v1/link/cairn/pace/me": "link:pace",               # SP-1103 / SP-891: the person's own account
 }
 # a scope no token ever carries (docs/plans/cairn-link.md §4: 連結不會給): the request needs the
 # organiser's token with the scope here (their link) and, in the request itself, the 報名者's own
@@ -100,10 +105,12 @@ PARTICIPANT_CONSENT = N_("報名者要勾選「用這份紀錄估腳程，算完
 # plan the feature needs on top (SP-570 Q1-5; the route answers 402 PLAN_REQUIRED without it).
 # link:gpx_sync (SP-655, cairn_push.py): the push of a race to Cairn — here the person pushes, from
 # the race page; the push dialog asks for the same consent when it is still off. link:weather joins
-# here when its route ships.
+# here when its route ships. link:pace (SP-891 Q1-Q2, SP-1103): it reads the person's hikes, which
+# link:calc tells them it never does, so it asks on its own; no plan (the calculator's count instead).
 FEATURES: dict[str, dict] = {
     "link:calc": {"plan": "subscriber"},
     "link:gpx_sync": {"plan": "subscriber"},
+    "link:pace": {},
 }
 # what the project may ask for but no route serves yet (SP-329 Q1-3, owner 2026-10-19: each feature
 # asks when it launches): not granted by linking, not offered as a switch, never in a token; it moves
@@ -116,17 +123,21 @@ SCOPE_TEXT = {
     "link:account": N_("讀你的帳號與方案狀態（免費或訂閱、到期日）"),
     "link:calc": N_("讀你存過的賽事計算與配速曲線"),
     "link:gpx_sync": N_("把你的賽事路線、過夜點與腳程推到 Cairn（建立或更新行程）"),
+    "link:pace": N_("用你的登山紀錄估你在一條路線上的腳程"),
     "link:weather": N_("讀你路線的天氣"),
 }
 # SP-666 (設定 › Cairn): which way each scope goes — Cairn reads from here, or this app writes to
 # Cairn — and in plain words what it lets Cairn do (the tab's line under each switch)
-SCOPE_KIND = {"link:account": "read", "link:calc": "read", "link:gpx_sync": "write", "link:weather": "read"}
+SCOPE_KIND = {"link:account": "read", "link:calc": "read", "link:gpx_sync": "write", "link:pace": "read",
+              "link:weather": "read"}
 SCOPE_DETAIL = {
     "link:account": N_("Cairn 會讀：你在這裡是免費還是訂閱、到期日。不讀信箱或其他個資。"),
     "link:calc": N_("Cairn 會讀：你對同一份 GPX 存過的賽事計算與配速曲線，用你的體能推估各點的時刻。"
                     "不讀活動、心率或其他健康資料。"),
     "link:gpx_sync": N_("會寫到 Cairn：你在賽事頁按「推到 Cairn」時，那場的路線、過夜點與腳程曲線，"
                         "建立或更新 Cairn 上的一條行程。不寫時刻，也不改你在 Cairn 自己建的行程。"),
+    "link:pace": N_("Cairn 會送來一條路線的 GPX，這裡用你的登山紀錄（上坡、平路、下坡速度與停留習慣）算出腳程回給它。"
+                    "GPX 算完就丟，不留檔。不讀心率或其他健康資料。"),
     "link:weather": N_("Cairn 會讀：你路線的天氣（功能還沒上線）。"),
 }
 # Cairn's pushes a day by its plan (its trc_sync_per_day: SP-657, v2/server/src/lib/limits.ts at

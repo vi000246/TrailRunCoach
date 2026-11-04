@@ -258,7 +258,7 @@ def test_the_settings_api_lists_and_switches_the_feature(c, app, cairn):
     sign_up(c, "g-a", "alice@example.com")
     row = c.get(LINKS_URL).json()["clients"][0]
     # link:gpx_sync joined in SP-655 (推到 Cairn)
-    assert [f["scope"] for f in row["features"]] == ["link:calc", "link:gpx_sync"]
+    assert [f["scope"] for f in row["features"]] == ["link:calc", "link:gpx_sync", "link:pace"]
     assert not any(f["allowed"] for f in row["features"])
     assert "link:calc" not in [s["scope"] for s in row["scopes"]]        # asked on its own, not by the link
     r = _allow(c)
