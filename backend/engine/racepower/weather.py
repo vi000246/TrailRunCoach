@@ -1712,21 +1712,23 @@ def local_rows(secs: list[dict], wind: Optional[list[dict]], hourly: Optional[li
 # 疊石 Cairn (SP-553, SP-531 Q2: links both ways, no integration)
 # ---------------------------------------------------------------------------
 
-CAIRN_ORIGIN = "https://map.yichlin.com"          # Cairn's only production host (inReachLiveTrack CLAUDE.md)
+CAIRN_ORIGIN = "https://cairn.tw"                # Cairn's production host since its SP-1369 (inReachLiveTrack CLAUDE.md)
 _CAIRN_RX = None
 
 
 def cairn_url(text: Optional[str]) -> Optional[str]:
     """The Cairn route link in a plan event's note: Cairn opens a route with `/?gpx=<id>` (its route
     pick, v2/app/src/lib/route-pick.ts) and a shared one with `&share=<token>` (entry-view.ts). Rebuilt
-    on CAIRN_ORIGIN from the two ids only — None without one (nothing is shown)."""
+    on CAIRN_ORIGIN from the two ids only — None without one (nothing is shown). A note written before
+    Cairn's SP-1369 says map.yichlin.com (its old official domain), and www.cairn.tw redirects to
+    cairn.tw: both are Cairn's too (= cairn.OTHER_HOSTS), and are rebuilt on CAIRN_ORIGIN as well."""
     global _CAIRN_RX
     if not text:
         return None
     import re
     from urllib.parse import parse_qs, urlparse
     if _CAIRN_RX is None:
-        _CAIRN_RX = re.compile(r"https?://map\.yichlin\.com/[^\s，。；、）)]*", re.I)
+        _CAIRN_RX = re.compile(r"https?://(?:cairn\.tw|www\.cairn\.tw|map\.yichlin\.com)/[^\s，。；、）)]*", re.I)
     for m in _CAIRN_RX.finditer(text):
         q = parse_qs(urlparse(m.group(0)).query)
         gid = (q.get("gpx") or [""])[0]

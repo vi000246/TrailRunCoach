@@ -2,8 +2,9 @@
 A multi-day trip imported from 疊石 Cairn by its share link (SP-537; research SP-522).
 
 One way only — Cairn → TrailRunCoach (Cairn's rule 43: one machine times a stretch of trail). The
-user pastes the link Cairn's 「分享」 gives (`https://map.yichlin.com/?gpx=<id>&share=<token>`, its
-lib/share.ts shareUrl); the server reads, with the token, what anyone holding that link may read:
+user pastes the link Cairn's 「分享」 gives (`https://cairn.tw/?gpx=<id>&share=<token>`, its
+lib/share.ts shareUrl — links made before Cairn's SP-1369 say map.yichlin.com, which is still read);
+the server reads, with the token, what anyone holding that link may read:
 
     GET <origin>/api/gpx/<id>?share=<token>          the route's GPX (application/gpx+xml)
     GET <origin>/api/gpx/<id>/meta?share=<token>     {ok, data: GpxMeta}: name, start_date (YYYY-MM-DD)…
@@ -34,8 +35,12 @@ from urllib.parse import parse_qs, urlparse
 
 from backend.i18n import _
 
-DEFAULT_ORIGIN = "https://map.yichlin.com"          # Cairn's only production host (= WX.CAIRN_ORIGIN)
+DEFAULT_ORIGIN = "https://cairn.tw"                 # Cairn's production host since its SP-1369 (= WX.CAIRN_ORIGIN)
 ORIGIN_ENV = "TRC_CAIRN_ORIGIN"                     # another Cairn (tests: a local fake server)
+# Cairn's other hosts, accepted in a pasted link (Cairn SP-1369): its old official domain — links made
+# before the switch are still in people's notes and chats, and its /api keeps answering — and www,
+# which redirects to cairn.tw. The link is still read from origin(): the same Cairn, the same token.
+OTHER_HOSTS = ("map.yichlin.com", "www.cairn.tw")
 TIMEOUT_S = 20.0
 UA = "TrailRunCoach Cairn import (SP-537)"
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -62,11 +67,12 @@ def route_url(gpx_id: str) -> str:
 
 def parse_link(text: Optional[str]) -> tuple[str, str]:
     """(gpx id, share token) of a Cairn share link (pasted alone or inside some text). Only Cairn's
-    host is accepted — the server never fetches a host the user typed."""
-    host = urlparse(origin()).netloc.lower()
+    hosts are accepted (origin() and OTHER_HOSTS) — the server never fetches a host the user typed:
+    whichever of them the link names, it is read from origin()."""
+    hosts = {urlparse(origin()).netloc.lower(), *OTHER_HOSTS}
     for m in _LINK.finditer(text or ""):
         u = urlparse(m.group(0))
-        if u.netloc.lower() != host:
+        if u.netloc.lower() not in hosts:
             continue
         q = parse_qs(u.query)
         gid = (q.get("gpx") or [""])[0]

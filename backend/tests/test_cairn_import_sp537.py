@@ -132,9 +132,14 @@ def store(tmp_path, monkeypatch):
 
 def test_only_a_cairn_share_link_is_read(monkeypatch):
     monkeypatch.delenv(CA.ORIGIN_ENV, raising=False)
+    assert CA.parse_link(f"https://cairn.tw/?gpx={GID}&share={TOKEN}") == (GID, TOKEN)
+    assert CA.parse_link(f"https://www.cairn.tw/?gpx={GID}&share={TOKEN}") == (GID, TOKEN)
+    # a link made before Cairn's SP-1369 names its old domain: still Cairn's
     assert CA.parse_link(f"https://map.yichlin.com/?gpx={GID}&share={TOKEN}") == (GID, TOKEN)
     assert CA.parse_link(f"行程 HTTPS://MAP.YICHLIN.COM/?share={TOKEN}&gpx={GID}，記得看") == (GID, TOKEN)
     for bad in (f"https://map.yichlin.com.evil.io/?gpx={GID}&share={TOKEN}",
+                f"https://cairn.tw.evil.io/?gpx={GID}&share={TOKEN}",
+                f"https://evilcairn.tw/?gpx={GID}&share={TOKEN}",
                 f"https://evil.io/?gpx={GID}&share={TOKEN}&x=map.yichlin.com", "", "map.yichlin.com",
                 f"https://map.yichlin.com/?gpx=<script>&share={TOKEN}"):
         with pytest.raises(CA.CairnError) as e:
@@ -143,7 +148,7 @@ def test_only_a_cairn_share_link_is_read(monkeypatch):
     with pytest.raises(CA.CairnError) as e:
         CA.parse_link(f"https://map.yichlin.com/?gpx={GID}")              # a link without its token
     assert "share=" in str(e.value)
-    assert CA.route_url(GID) == f"https://map.yichlin.com/?gpx={GID}"     # what is kept: no token
+    assert CA.route_url(GID) == f"https://cairn.tw/?gpx={GID}"            # what is kept: no token
 
 
 # ---- the nights ----------------------------------------------------------------------------------
@@ -224,7 +229,7 @@ def test_the_calculator_reads_the_imported_trip_with_its_day_ends(cairn, calc_cl
     assert j["event_days"] == 3 and j["cairn"]["name"] == "嘉明湖三天"
     assert j["cairn"]["splits_km"] == [pytest.approx(9.5, abs=0.05), pytest.approx(21.04, abs=0.05)]
     assert [(n["night"], n["name"]) for n in j["cairn"]["nights"]] == [(1, "向陽山屋"), (2, "嘉明湖避難山屋")]
-    assert j["cairn"]["url"] == f"https://map.yichlin.com/?gpx={GID}"
+    assert j["cairn"]["url"] == f"https://cairn.tw/?gpx={GID}"
     # Cairn was read with the token, on its three read routes only
     assert {p for p, _q in cairn.seen} == {f"/api/gpx/{GID}", f"/api/gpx/{GID}/meta", "/api/pois"}
     c = plan_client.post("/api/v1/racepower/course/event/jm", json={}).json()
@@ -294,7 +299,7 @@ def test_the_event_takes_the_gpx_the_day_ends_and_the_days(cairn, plan_client, s
     src = dict(row["source"])
     # SP-535: the nights are kept too, so the day-split preview can offer them back as candidates
     assert [round(x["km"], 1) for x in src.pop("nights")] == [round(k, 1) for k in j["days"]["splits_km"]]
-    assert src == {"kind": "cairn", "gpx_id": GID, "url": f"https://map.yichlin.com/?gpx={GID}",
+    assert src == {"kind": "cairn", "gpx_id": GID, "url": f"https://cairn.tw/?gpx={GID}",
                    "name": "嘉明湖三天"}
     # the token is nowhere on disk
     assert TOKEN not in (store / "app.db").read_bytes().decode("latin-1")
@@ -304,7 +309,7 @@ def test_the_event_takes_the_gpx_the_day_ends_and_the_days(cairn, plan_client, s
     monkeypatch.setattr(WX, "race_conditions", _fake_conditions([], "manual"))
     js = plan_client.get("/api/v1/racepower/weather", params={"date": "2027-03-02", "lat": 23.2, "lon": 120.6,
                                                               "link_event": "jm"}).json()
-    assert js["cairn"] == {"url": f"https://map.yichlin.com/?gpx={GID}", "from": "import"}
+    assert js["cairn"] == {"url": f"https://cairn.tw/?gpx={GID}", "from": "import"}
     # a plain upload afterwards replaces the GPX and forgets where the old one came from
     up = plan_client.post("/api/v1/plan/events/jm/gpx", files={"file": ("t.gpx", cairn.gpx)})
     assert up.status_code == 200 and EG.get("jm")["source"] is None

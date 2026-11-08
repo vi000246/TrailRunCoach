@@ -128,22 +128,29 @@ def test_no_points_for_a_far_off_date(client, monkeypatch):   # noqa: F811
 
 def test_the_cairn_link_comes_from_the_event_note(client, monkeypatch):   # noqa: F811
     from backend.api import racepower as RP
-    notes = {"e1": "行程在 https://map.yichlin.com/?gpx=r_7Kp2&share=AbCdEf123456 看", "e2": "沒有連結"}
+    notes = {"e1": "行程在 https://cairn.tw/?gpx=r_7Kp2&share=AbCdEf123456 看", "e2": "沒有連結"}
     monkeypatch.setattr(RP, "_event", lambda eid: type("E", (), {"id": eid, "note": notes[eid]})())
     monkeypatch.setattr(WX, "race_conditions", _fake_conditions([], "manual"))
     q = {"date": DAY, "lat": 24.0, "lon": 121.0}
     js = client.get("/api/v1/racepower/weather", params={**q, "link_event": "e1"}).json()
-    assert js["cairn"] == {"url": "https://map.yichlin.com/?gpx=r_7Kp2&share=AbCdEf123456", "from": "note"}
+    assert js["cairn"] == {"url": "https://cairn.tw/?gpx=r_7Kp2&share=AbCdEf123456", "from": "note"}
     assert client.get("/api/v1/racepower/weather", params={**q, "link_event": "e2"}).json()["cairn"] is None
 
 
 def test_cairn_links_are_rebuilt_from_their_ids_only():
-    assert WX.cairn_url("https://map.yichlin.com/?gpx=abc") == "https://map.yichlin.com/?gpx=abc"
-    assert WX.cairn_url("HTTPS://MAP.YICHLIN.COM/?share=Tok12345&gpx=x1&evil=1") == \
-        "https://map.yichlin.com/?gpx=x1&share=Tok12345"
+    assert WX.cairn_url("https://cairn.tw/?gpx=abc") == "https://cairn.tw/?gpx=abc"
+    assert WX.cairn_url("HTTPS://CAIRN.TW/?share=Tok12345&gpx=x1&evil=1") == \
+        "https://cairn.tw/?gpx=x1&share=Tok12345"
+    # Cairn's other hosts (cairn.OTHER_HOSTS): rebuilt on cairn.tw too — a note written before Cairn's
+    # SP-1369 names its old domain
+    assert WX.cairn_url("https://www.cairn.tw/?gpx=abc") == "https://cairn.tw/?gpx=abc"
+    assert WX.cairn_url("行程 https://map.yichlin.com/?gpx=x1&share=Tok12345 看") == \
+        "https://cairn.tw/?gpx=x1&share=Tok12345"
     assert WX.cairn_url("https://map.yichlin.com.evil.io/?gpx=abc") is None
-    assert WX.cairn_url("https://map.yichlin.com/?gpx=<script>") is None
-    assert WX.cairn_url(None) is None and WX.cairn_url("https://map.yichlin.com/") is None
+    assert WX.cairn_url("https://cairn.tw.evil.io/?gpx=abc") is None
+    assert WX.cairn_url("https://evilcairn.tw/?gpx=abc") is None
+    assert WX.cairn_url("https://cairn.tw/?gpx=<script>") is None
+    assert WX.cairn_url(None) is None and WX.cairn_url("https://cairn.tw/") is None
 
 
 # ---- the plan: each segment reads its own section ----------------------------------------------

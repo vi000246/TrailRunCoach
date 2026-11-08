@@ -419,8 +419,10 @@ still one To lapsed per segment (its planner has no hourly heat). The card lists
 
 疊石 Cairn link (SP-553, SP-531 Q2: links only): `GET /weather` reads the plan event's note
 (`event_id`, or `link_event` when the place came from the query) for a Cairn route link and rebuilds it
-from its ids only (`cairn_url`: `https://map.yichlin.com/?gpx=<id>[&share=<token>]`, Cairn's route pick and
-share link) → `cairn: {url}`, shown under the 環境 card (`#cairn-link`); none → nothing shown.
+from its ids only (`cairn_url`: `https://cairn.tw/?gpx=<id>[&share=<token>]`, Cairn's route pick and
+share link) → `cairn: {url}`, shown under the 環境 card (`#cairn-link`); none → nothing shown. A link on
+map.yichlin.com (Cairn's old official domain) or www.cairn.tw is Cairn's too and is rebuilt on cairn.tw
+(Cairn SP-1369).
 TrailRunCoach stores no Cairn id of its own (SP-537 would).
 
 The other way (SP-1018, Cairn SP-554's 「在 Trig 看賽事天氣 ↗」): `GET /cairn/route/<gpxId>` (`api/xp.py`
@@ -1885,3 +1887,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-29 | code-sync（SP-990, SP-991, SP-987） | N/A | 你的數據's sex source, power-source word and unused watch power are `M_()` texts (SP-990); the stored back-test keeps its texts' msgid + params (`text_version` 2, `texts` table, `keep_msgids`, `S_()` effort reasons, `M_list` 預設背負), older files read as before (SP-991); the share page's 賽前 tile splits the amount from its bracket (SP-987); re-anchored the SP-229 references |
 | 2026-10-29 | feature | SP-1018 | `GET /cairn/route/<gpxId>` (Cairn SP-554): the race pushed to / imported from that Cairn route opens on its weather (`racepower/page?event=<id>#env`, the 環境 card `#env`); none → the page 「這條路線沒有對應的賽事」 (both languages); signed out → sign in and back; the person's own tenant only |
 | 2026-11-04 | feature | SP-1103 (Cairn SP-1103, SP-891) | `POST /api/v1/link/cairn/pace/me` (`link:pace`): Cairn asks for the person's own account estimate on a route with the GPX only in memory; the answer carries a cairn-curve v1 (`pace_estimate.curve_result`, `cairn_curve.for_estimate`, about 1 km a point, model `estimate/account`). 賽事管理 takes `?trip=&name=&date=`: 新增賽事 filled in with that Cairn trip picked, no share link |
+| 2026-11-08 | maintenance | SP-1369 (Cairn SP-1369) | Cairn's official domain is now `cairn.tw`: `cairn.DEFAULT_ORIGIN` / `WX.CAIRN_ORIGIN` = `https://cairn.tw` (the links back to Cairn, `route_url`, `cairn_url`, the intro / xp front-page link). A pasted share link or a note link on `map.yichlin.com` (the old domain; its `/api` keeps answering) or `www.cairn.tw` is still Cairn's (`cairn.OTHER_HOSTS`) and is read from / rebuilt on `cairn.tw`. Stored `source.url`s keep the old domain (it redirects). `TRC_CAIRN_URL` (server calls) is unchanged here. |
