@@ -72,8 +72,7 @@ def summary(x) -> Optional[dict]:
             "source": x.get("source") if x.get("source") in ("trailruncoach", "cairn") else None,
             "days": days if isinstance(days, int) and not isinstance(days, bool) and days > 0 else None,
             "distance_m": _num(x.get("distance_m")), "gain_m": _num(x.get("gain_m")),
-            "updated_at": str(x["updated_at"])[:40] if x.get("updated_at") else None,
-            "group": bool(x.get("group"))}
+            "updated_at": str(x["updated_at"])[:40] if x.get("updated_at") else None}
 
 
 def _detail(data) -> dict:
@@ -213,7 +212,7 @@ def import_trip(user, trip_id: str) -> dict:
             "poi": {"name": n["name"], "lat": n["lat"], "lng": n["lng"]}} for i, n in enumerate(d["nights"], start=1)]
     nights = CA.place_nights(raw, track)
     src = {"kind": "cairn", "gpx_id": t["id"], "url": CA.route_url(t["id"]), "name": name, "via": VIA,
-           **({"version": t["version"]} if t["version"] else {}), **({"group": True} if t["group"] else {})}
+           **({"version": t["version"]} if t["version"] else {})}
     return {"schedule": None, "data": data,
             "filename": (re.sub(r"[\\/:*?\"<>|]+", "_", name) or "cairn")[:80] + ".gpx",
             "name": name, "gpx_id": t["id"], "start_date": None, "nights": nights,

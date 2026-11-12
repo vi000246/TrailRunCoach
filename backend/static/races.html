@@ -1179,16 +1179,13 @@ async function ctStale() {
 // SP-577 / 699: a Cairn trip with times — 「這是登山社／團排好的時間表」, ticked when the data says so (several
 // times typed in a day, or the route recruiting in Cairn; never for a route older than Cairn's 「who wrote
 // it」), the why in the ? only. The answer is kept with the race's GPX; 賽事計算機 shows 跟團對照 from it.
-// SP-986: the route marked 「這是跟團的時刻表」 in Cairn (its share meta's group_schedule) ticks it first —
-// a person said so, so the guesses against it (legacy 「not ticked by itself」, 「mostly Cairn's estimates」) are
-// not said then.
+// (SP-986 also read Cairn's own 「這是跟團的時刻表」 mark here; Cairn retired it — Cairn SP-582 R1, SP-1454.)
 function groupWhy(sc) {
   const g = sc.signals || {}, out = [];
-  if (g.marked) out.push(T("grp.sig_marked"));
   if (g.user_days?.length) out.push(T("grp.sig_user", { u: g.n_user, n: g.n }));
-  else if (!g.marked && g.n_estimate > g.n_user) out.push(T("grp.sig_estimate", { e: g.n_estimate, n: g.n }));
+  else if (g.n_estimate > g.n_user) out.push(T("grp.sig_estimate", { e: g.n_estimate, n: g.n }));
   if (g.recruit) out.push(T("grp.sig_recruit"));
-  if (g.legacy && !g.marked) out.push(T("grp.sig_legacy"));
+  if (g.legacy) out.push(T("grp.sig_legacy"));
   return out.join(T("grp.sep"));
 }
 function renderGroupAsk() {

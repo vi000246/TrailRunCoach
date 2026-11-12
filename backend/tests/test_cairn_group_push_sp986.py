@@ -1,13 +1,12 @@
-"""SP-986: pushing to a Cairn trip marked 「這是跟團的時刻表」 (Cairn SP-582).
+"""SP-986 was: pushing to a Cairn trip marked 「這是跟團的時刻表」 (Cairn SP-582) — Cairn answered the PUT
+409 "group schedule: …", TRC said it plainly (CAIRN_GROUP), and Cairn's trip list carried `group`.
 
-Cairn answers `PUT /api/internal/trc/trips/<id>` for such a trip with 409 "group schedule: this route
-is marked 「這是跟團的時刻表」 in Cairn — read only, not written back" (its ownership 404 first, before
-reading the body or counting the push). TRC never sends one on purpose (cairn_push.target); when it
-does — the person ticked it in Cairn after the import or after our push — it is said plainly
-(CAIRN_GROUP), not "Cairn can't be reached". Ticking it moves the trip's version: the race page says
-Cairn changed and 「重新同步」 brings the mark over (SP-538).
+Cairn retired the mark (Cairn SP-582 R1); TRC no longer reads it (Cairn SP-1454). The fake Cairn below can
+still answer like an old Cairn did — these pin that nothing in TRC treats it specially any more: no
+CAIRN_GROUP, no `source.group` written, the list's `group` not read. TRC's own 「這是團的時間表」 is in
+test_cairn_group_sp986.
 
-SP-538's fake Cairn with Cairn's 409 added (httpx MockTransport): nothing reaches the real Cairn."""
+SP-538's fake Cairn with the old 409 added (httpx MockTransport): nothing reaches the real Cairn."""
 from __future__ import annotations
 
 import httpx
@@ -78,61 +77,36 @@ def _writes(cairn):
     return [(x.method, x.url.path) for x in cairn.calls if x.method in ("PUT", "POST")]
 
 
-def test_a_trip_ticked_in_cairn_after_the_import_is_said_plainly_and_not_written(c, app, cairn, stores):
+def test_an_old_cairns_group_409_is_no_longer_special(c, app, cairn, stores):
+    """An old Cairn's 409 "group schedule: …": the generic hint, nothing written, the trip not made the group's."""
     from backend.engine import event_gpx as EG
     _imported(c, cairn)
     assert c.get(status_url("race-1")).json()["target"] == "origin"
-    cairn.tick()                                                            # not synced yet
-    r = _push(c)
-    assert r.status_code == 409, r.text
-    d = r.json()["detail"]
-    assert d["code"] == "CAIRN_GROUP" and d["code"] != "CAIRN_DOWN"
-    assert "這是跟團的時刻表" in d["message"] and "另外建一條" in d["message"]
-    assert cairn.trips[TID]["body"].get("pace_config") is None              # nothing written there
-    # now known as the group's: the next push makes a trip of our own, as for one known at the import
-    with _as("g-a"):
-        assert EG.get("race-1")["source"]["group"] is True
-    st = c.get(status_url("race-1")).json()
-    assert st["origin"]["group"] is True and st["target"] == "new"
-    r2 = _push(c)
-    assert r2.status_code == 200 and r2.json()["action"] == "created" and r2.json()["origin"] is False
-    assert _writes(cairn) == [("PUT", f"/api/internal/trc/trips/{TID}"), ("POST", "/api/internal/trc/trips")]
-
-
-def test_ticking_moves_the_version_and_resync_brings_the_mark(c, app, cairn, stores):
-    from backend.engine import event_gpx as EG
-    _imported(c, cairn)
     cairn.tick()
+    r = _push(c)
+    d = r.json()["detail"]
+    assert d["code"] != "CAIRN_GROUP" and d["code"] == "CAIRN_DOWN"
+    assert "取消勾選" not in d["message"] and "跟團" not in d["message"]
+    assert cairn.trips[TID]["body"].get("pace_config") is None              # nothing written there
+    with _as("g-a"):
+        assert "group" not in EG.get("race-1")["source"]
+    assert c.get(status_url("race-1")).json()["target"] == "origin"         # still the trip it came from
+
+
+def test_the_lists_group_is_not_read_and_resync_brings_no_mark(c, app, cairn, stores):
+    from backend.engine import event_gpx as EG
+    from backend.accounts import cairn_push as CP
+    _imported(c, cairn)
+    cairn.tick()                                                            # an old Cairn's list says `group`
     got = c.get(TRIPS_URL).json()
-    assert got["races"]["race-1"]["stale"] is True                          # 「Cairn 上這條改過了」
-    assert next(t for t in got["trips"] if t["id"] == TID)["group"] is True
+    assert got["races"]["race-1"]["stale"] is True                          # the version moved: still said
+    assert "group" not in next(t for t in got["trips"] if t["id"] == TID)
     assert _import(c).status_code == 200                                    # 「重新同步」
     with _as("g-a"):
         src = EG.get("race-1")["source"]
-    assert src["group"] is True and src["version"] == "4"
-    assert c.get(TRIPS_URL).json()["races"]["race-1"]["stale"] is False
-    st = c.get(status_url("race-1")).json()
-    assert st["target"] == "new"                                            # never pushed back
-    assert _push(c).json()["action"] == "created"
-    assert ("PUT", f"/api/internal/trc/trips/{TID}") not in _writes(cairn)
-
-
-def test_a_trip_we_made_and_the_person_ticked_stays_ours(c, app, cairn, stores):
-    _ready(c)
-    _event("g-a")                                                           # an uploaded GPX
-    r = _push(c)
-    assert r.status_code == 200 and r.json()["action"] == "created"
-    tid = r.json()["trip_id"]
-    cairn.marked.add(tid)                                                   # ticked in Cairn later
-    r2 = _push(c)
-    assert r2.status_code == 409
-    d = r2.json()["detail"]
-    assert d["code"] == "CAIRN_GROUP" and "取消勾選" in d["message"]
-    st = c.get(status_url("race-1")).json()
-    assert st["pushed"]["trip_id"] == tid and st["target"] == "kept"        # kept: no second trip by itself
-    cairn.marked.discard(tid)                                               # unticked there
-    r3 = _push(c)
-    assert r3.status_code == 200 and r3.json()["action"] == "updated" and r3.json()["trip_id"] == tid
+        assert "group" not in src and src["version"] == "4"
+        assert CP.origin("race-1")["group"] is False
+    assert c.get(status_url("race-1")).json()["target"] == "origin"
 
 
 def test_cairns_other_conflict_is_not_called_the_groups(c, app, cairn, stores):

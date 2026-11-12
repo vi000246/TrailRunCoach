@@ -1,10 +1,10 @@
 """
-SP-986: Cairn's 「這是跟團的時刻表」 (its SP-582, `gpx_files.group_schedule`) as a share link carries it.
+SP-986 was: Cairn's 「這是跟團的時刻表」 (its SP-582, `gpx_files.group_schedule`) carried by a share link
+ticked the import's 「這是團的時間表」 and kept the trip as the group's.
 
-`GET /api/gpx/<id>/meta?share=` answers `group_schedule: boolean` (snake_case). The owner ticking it is
-said by a person, so the import's 「這是團的時間表」 starts ticked whatever the other signals say — even
-on a route older than Cairn's 「who wrote each time」 (legacy) — and the trip is kept as the group's, so
-a push never writes it back (SP-575 Q1, SP-816's origin). false / missing says nothing either way.
+Cairn retired that mark (Cairn SP-582 R1): its share meta no longer has `group_schedule`, and TRC no longer
+reads it (Cairn SP-1454). These pin the retirement — a stray `group_schedule` from an old Cairn changes
+nothing — and that TRC's own signals and its own 「這是團的時間表」 answer are as before.
 
 The fake Cairn of test_cairn_import_sp537 (127.0.0.1): nothing here reaches the real Cairn.
 """
@@ -30,64 +30,58 @@ def _estimates():
             for x in GROUP]
 
 
-def test_the_mark_in_cairn_ticks_it_whatever_the_other_signals_say():
+def test_cairns_old_mark_changes_no_signal():
+    """`group_schedule` / `groupSchedule` from an old Cairn: no `marked`, and the suggestion is what the data says."""
     est = _estimates()
-    assert sig(est, uploaded_at="2026-09-01")["suggest"] is False
-    g = sig(est, uploaded_at="2026-09-01", group_schedule=True)
-    assert g["marked"] is True and g["suggest"] is True
-    # an older route: who wrote the times can't be told — but the owner said so
-    old = sig(GROUP, uploaded_at="2026-07-30 08:00:00", group_schedule=True)
-    assert old["legacy"] is True and old["marked"] is True and old["suggest"] is True
-    # SP-582 Q1 first wrote it groupSchedule: read as well
-    assert sig(est, groupSchedule=True)["marked"] is True
-
-
-def test_not_marked_or_an_older_cairn_says_nothing():
-    est = _estimates()
-    for meta in ({}, {"group_schedule": False}, {"group_schedule": 1}, {"group_schedule": "true"}):
+    for meta in ({"group_schedule": True}, {"groupSchedule": True}):
         g = sig(est, uploaded_at="2026-09-01", **meta)
-        assert g["marked"] is False and g["suggest"] is False, meta
-    # false does not untick what the times say
-    assert sig(GROUP, uploaded_at="2026-09-01", group_schedule=False)["suggest"] is True
+        assert "marked" not in g and g["suggest"] is False, meta
+        old = sig(GROUP, uploaded_at="2026-07-30 08:00:00", **meta)
+        assert old["legacy"] is True and old["suggest"] is False, meta   # legacy: not ticked by itself, as before SP-986
+    assert not hasattr(CA, "marked_group")
 
 
-def test_the_import_starts_ticked_and_keeps_the_trip_as_the_groups(cairn, plan_client, store):  # noqa: F811
+def test_the_data_signals_are_unchanged():
+    """TRC's own guess (SP-577): times typed in a day tick it on a new route; a legacy route is not ticked by itself."""
+    assert sig(GROUP, uploaded_at="2026-09-01")["suggest"] is True
+    assert sig(GROUP, uploaded_at="2026-07-30 08:00:00")["suggest"] is False
+    assert sig(_estimates(), uploaded_at="2026-09-01")["suggest"] is False
+
+
+def test_an_import_with_cairns_old_mark_is_not_kept_as_the_groups(cairn, plan_client, store):  # noqa: F811
     from backend.accounts import cairn_push as CP
     cairn.pois = _estimates()
-    cairn.meta = {**cairn.meta, "uploaded_at": "2026-07-01 08:00:00", "group_schedule": True}
+    cairn.meta = {**cairn.meta, "uploaded_at": "2026-09-01 08:00:00", "group_schedule": True}
     r = plan_client.post(URL, json={"url": cairn.link})
     assert r.status_code == 200 and TOKEN not in r.text
     sc = r.json()["cairn"]["schedule"]
-    assert sc["group"] is True and sc["signals"]["marked"] is True and sc["signals"]["legacy"] is True
+    assert sc["group"] is False and "marked" not in sc["signals"]
     src = EG.get("jm")["source"]
-    assert src["group"] is True and src["schedule"]["group"] is True and src["schedule"]["signals"]["marked"] is True
-    # SP-816: a push makes a trip of our own, never onto the group's (Cairn would answer 409)
-    assert CP.origin("jm")["group"] is True and CP.target("jm") == ("new", None)
-    # the person unticks the comparison here: the trip is still the group's in Cairn
-    assert plan_client.put("/api/v1/plan/events/jm/gpx/group", json={"group": False}).status_code == 200
-    assert EG.get("jm")["source"]["schedule"]["group"] is False and CP.origin("jm")["group"] is True
+    assert "group" not in src and "marked" not in src["schedule"]["signals"]
+    assert CP.origin("jm")["group"] is False
 
 
-def test_a_marked_trip_without_times_is_still_the_groups(cairn, plan_client, store):  # noqa: F811
+def test_trcs_own_answer_still_makes_it_the_groups(cairn, plan_client, store):  # noqa: F811
+    """The person ticks 「這是團的時間表」 here (SP-575 Q1): read only, a push makes a trip of our own — as before."""
     from backend.accounts import cairn_push as CP
-    cairn.meta = {**cairn.meta, "group_schedule": True}                     # SP-537's trip: nights, no times
-    j = plan_client.post(URL, json={"url": cairn.link}).json()
-    assert j["cairn"]["schedule"] is None and j["event_days"] == 3
-    assert EG.get("jm")["source"]["group"] is True and CP.origin("jm")["group"] is True
-
-
-def test_an_unmarked_trip_is_not_the_groups(cairn, plan_client, store):  # noqa: F811
-    from backend.accounts import cairn_push as CP
-    cairn.meta = {**cairn.meta, "group_schedule": False}
+    cairn.pois = _estimates()
     assert plan_client.post(URL, json={"url": cairn.link}).status_code == 200
-    assert "group" not in EG.get("jm")["source"] and CP.origin("jm")["group"] is False
+    assert plan_client.put("/api/v1/plan/events/jm/gpx/group", json={"group": True}).status_code == 200
+    assert EG.get("jm")["source"]["schedule"]["group"] is True
+    assert CP.origin("jm")["group"] is True and CP.target("jm") == ("new", None)
 
 
-def test_the_page_says_why_it_is_ticked():
+def test_a_trip_kept_as_the_groups_before_stays_the_groups(cairn, plan_client, store):  # noqa: F811
+    """A trip imported while Cairn still marked it has `source.group`: it stays read only (nothing writes it any more)."""
+    from backend.accounts import cairn_push as CP
+    assert plan_client.post(URL, json={"url": cairn.link}).status_code == 200
+    EG.set_source("jm", group=True)
+    assert CP.origin("jm")["group"] is True and CP.target("jm") == ("new", None)
+
+
+def test_the_page_no_longer_mentions_cairns_mark():
     html = (ROOT / "backend" / "static" / "races.html").read_text("utf-8")
-    assert 'if (g.marked) out.push(T("grp.sig_marked"))' in html
-    # the guesses against it are not said when the owner marked it
-    assert "if (g.legacy && !g.marked)" in html and "else if (!g.marked && g.n_estimate > g.n_user)" in html
-    zh = json.loads((ROOT / "backend" / "static" / "i18n" / "zh-TW" / "races.json").read_text("utf-8"))
-    en = json.loads((ROOT / "backend" / "static" / "i18n" / "en" / "races.json").read_text("utf-8"))
-    assert "這是跟團的時刻表" in zh["grp.sig_marked"] and en["grp.sig_marked"] and en["grp.sig_marked"] != zh["grp.sig_marked"]
+    assert "grp.sig_marked" not in html and "g.marked" not in html
+    for lang in ("zh-TW", "en"):
+        strings = json.loads((ROOT / "backend" / "static" / "i18n" / lang / "races.json").read_text("utf-8"))
+        assert "grp.sig_marked" not in strings, lang

@@ -10431,14 +10431,6 @@
     "draft": true,
     "src": "backend/accounts/cairn_push.py"
   },
-  "Cairn 上這條行程勾了「這是跟團的時刻表」，只能讀、這邊不會寫回去。再按一次會在你的 Cairn 另外建一條。": {
-    "draft": true,
-    "src": "backend/accounts/cairn_push.py"
-  },
-  "Cairn 上這條行程勾了「這是跟團的時刻表」，只能讀、這邊不會蓋掉它。要推的話先在 Cairn 取消勾選。": {
-    "draft": true,
-    "src": "backend/accounts/cairn_push.py"
-  },
   "從疊石 Cairn 匯入還沒開放": {
     "draft": true,
     "src": "backend/accounts/cairn_trips.py"

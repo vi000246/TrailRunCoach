@@ -153,7 +153,10 @@ def test_a_point_without_the_next_days_visit_is_not_a_night_of_cairns(c, app, ca
 def test_a_trip_of_our_own_gets_every_night(c, app, cairn, stores):
     """Not pushed back (the group's timetable → a new trip of our own): Cairn's points are not on that
     trip, so every night goes."""
-    _imported(c, cairn, group=True)
+    from backend.engine import event_gpx as EG
+    _imported(c, cairn)
+    with _as("g-a"):
+        EG.set_source("race-1", group=True)   # kept as the group's (Cairn no longer marks one, Cairn SP-1454)
     r = _push(c)
     assert r.status_code == 200 and r.json()["action"] == "created" and r.json()["origin"] is False
     assert [p["ref"] for p in _sent(cairn)] == ["night-1"]

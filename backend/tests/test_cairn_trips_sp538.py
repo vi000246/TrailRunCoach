@@ -138,7 +138,7 @@ def test_the_list_is_the_persons_own_trips_with_the_race_holding_each(c, app, ca
     assert [t["id"] for t in got["trips"]] == [TID]                          # g-b's never listed
     t = got["trips"][0]
     assert t == {"id": TID, "name": "合歡北西峰 我的版本", "version": "3", "source": "cairn", "days": 2,
-                 "distance_m": 12000.0, "gain_m": 1400.0, "updated_at": "2026-10-27T08:00:00Z", "group": False,
+                 "distance_m": 12000.0, "gain_m": 1400.0, "updated_at": "2026-10-27T08:00:00Z",
                  "event_id": None}
     req = cairn.calls[-1]
     assert req.headers["authorization"] == f"Bearer {SECRET}" and req.url.params["sub"] == "g-a"
@@ -318,11 +318,14 @@ def test_a_change_in_cairn_before_our_push_still_asks_to_sync(stores, monkeypatc
 def test_a_trip_with_a_groups_timetable_is_never_pushed_back(c, app, cairn, stores):
     from backend.engine import race_calc_store as RC
     _ready(c)
-    cairn.add(group=True)
+    from backend.engine import event_gpx as EG
+    cairn.add()
     _race(days=2)
     assert _import(c, trip_id=TID).status_code == 200
     with _as("g-a"):
         RC.save("race-1", {"form": {"start": "05:00"}}, _baiyue_result())
+        # kept as the group's — imported while Cairn still listed `group` (Cairn SP-1454 retired it)
+        EG.set_source("race-1", group=True)
     st = c.get(status_url("race-1")).json()
     assert st["origin"]["group"] is True and st["target"] == "new"
     r = _push(c)

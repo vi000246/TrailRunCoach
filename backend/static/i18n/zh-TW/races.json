@@ -164,7 +164,6 @@
   "grp.sub": "Cairn 行程裡寫了 {days} 天、{n} 個時間點。勾了之後，賽事計算機會一段一段比對團的速度和你的能力（跟團對照）。",
   "grp.tip": "只讀 Cairn 上的時間，不會改 Cairn。系統先幫你猜要不要勾：{why}",
   "grp.tip_none": "只讀 Cairn 上的時間，不會改 Cairn。",
-  "grp.sig_marked": "這條路線在 Cairn 勾了「這是跟團的時刻表」",
   "grp.sig_user": "{n} 個時間裡有 {u} 個是人自己填的，像是照團的行程表打的",
   "grp.sig_estimate": "{n} 個時間裡有 {e} 個是 Cairn 照腳程自動算的，不太像團排的時間",
   "grp.sig_recruit": "這條路線在 Cairn 上正在揪團",
