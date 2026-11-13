@@ -18,9 +18,9 @@ Two tiers, both on disk under ~/.wko5coach/routes/:
 Because every kept point IS a raw sample and the cumulative sums are taken
 over raw samples, an effort's metrics between two kept points are an exact
 slice of the raw data — the same numbers climbs.py's `_measure` gives for the
-same sample range (see docs/spec/route-progress.spec.md, Metrics).
+same sample range (see obsidian:650 Projects/越野跑教練/spec/route-progress.md, Metrics).
 
-Detection (docs/spec/route-progress.spec.md, Detection):
+Detection (obsidian:650 Projects/越野跑教練/spec/route-progress.md, Detection):
   candidates  = every climb and every descent (climbs.detect_climbs; descents
                 on the negated elevation) + every same-direction stretch >= 500 m
                 two activities share (route_match.common_runs)
@@ -1051,7 +1051,7 @@ def _direction(canon_xy: np.ndarray, pts: np.ndarray) -> str:
 
 def cluster_routes(tracks: dict[str, Track], prev_routes: Optional[list] = None,
                    progress: Progress = _noop, pair_cache: Optional[dict] = None) -> list[dict]:
-    """Routes over all tracks (docs/spec/route-progress.spec.md, Routes).
+    """Routes over all tracks (obsidian:650 Projects/越野跑教練/spec/route-progress.md, Routes).
 
     1. pairs: the length share of each track inside the other's 30 m buffer
        (`route_pairs`); two runs are the same route when both shares are

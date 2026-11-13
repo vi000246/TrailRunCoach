@@ -13,7 +13,7 @@
  * Every ? popup (ManualLink.decorate in shell.js) and every hint's 「詳細」 list (ul.hint-detail,
  * static/hints.js) gets a last row 「還不懂？問 AI」 that opens it on that card, with that text.
  *
- * The page's "AI summary" of a card (docs/spec/ai-qa.spec.md; the server cleans it again,
+ * The page's "AI summary" of a card (obsidian:650 Projects/越野跑教練/spec/ai-qa.md; the server cleans it again,
  * backend/ai/context.clean_focus): {kind, page, title, summary, facts, rules, sources}. By default it is
  * read from the DOM — the card's heading, its visible text, its ? links to the manual; a card may say
  * more with data-ai-card / data-ai-kind / data-ai-title, or with data-ai-facts / data-ai-rules (JSON) —

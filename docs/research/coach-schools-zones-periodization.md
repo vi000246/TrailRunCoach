@@ -310,7 +310,7 @@ Daniels 的通用順序是輕鬆 → R → I → T [82]；Pfitzinger 是 LT → 
 
 **乳酸區間無法精確換成心率**。挪威派以 mmol 控制強度，乳酸與心率的關係個人差大，Olympiatoppen 也明說要個人化 [45]；手持乳酸計之間的差異更大 [45]。表中挪威派的 %LTHR 欄是推估。
 
-**App 端分析的限制**。程式碼分析是唯讀、未執行；行號以撰寫當天為準。部分 spec 與 code 不一致（例如 `docs/spec/overview.spec.md` 的舊階梯描述），本報告以 code 為準。
+**App 端分析的限制**。程式碼分析是唯讀、未執行；行號以撰寫當天為準。部分 spec 與 code 不一致（例如 `obsidian:650 Projects/越野跑教練/spec/overview.md` 的舊階梯描述），本報告以 code 為準。
 
 ## Recommendations（建議）
 
@@ -350,7 +350,7 @@ Daniels 的通用順序是輕鬆 → R → I → T [82]；Pfitzinger 是 LT → 
 
 **R6｜專項期內部進階**：依目標賽把專項期分成前段（支持強度，例如越野的 TempoRun／路跑的 ±10% 比賽配速）與後段（專項強度，例如越野的 SteadyState 與長跑內含穩態、路跑的 ±5%）[113][196]。
 
-**R7｜統一 spec 與研究文件**：更新 `docs/spec/plan-auto.spec.md` 的「The ladder」「Two gates」，以及 `docs/research/workout-templates.md` §1 的分類；`docs/research/interval-prescription.md` 標頭的「尚未實作」改掉。
+**R7｜統一 spec 與研究文件**：更新 `obsidian:650 Projects/越野跑教練/spec/plan-auto.md` 的「The ladder」「Two gates」，以及 `docs/research/workout-templates.md` §1 的分類；`docs/research/interval-prescription.md` 標頭的「尚未實作」改掉。
 
 **R8｜錨點測試**：在涼爽天做一次 30 分 TT（LTHR＋CP 交叉檢查）與一次 UA AeT 測試，作為五區關卡的前提，也解決 HRR 模型的一致性問題（`docs/research/zones-and-thresholds.md` §3.3）。
 

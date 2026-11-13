@@ -180,4 +180,4 @@ FIT 資料來源（`charts.data_source = source`，本機設定是這個）的�
 - COROS 支援：April 2023 Update Common Questions https://support.coros.com/hc/en-us/articles/15705566771604 ；Setting Resting and Max Heart Rate Data https://support.coros.com/hc/en-us/articles/360040258391 （未驗證，403）
 - coroslab/COROS-MCP https://github.com/coroslab/COROS-MCP ；issue #9 https://github.com/coroslab/COROS-MCP/issues/9
 - CuberL/coros-mcp https://github.com/CuberL/coros-mcp ；cygnusb/coros-mcp https://github.com/cygnusb/coros-mcp
-- 既有文件：`docs/research/zones-and-thresholds.md` §1（COROS 帳號那列被忽略的原因）、`docs/spec/wko5-coros-sync.spec.md`（COROS 心率設定、TL 換算）、`docs/spec/overview.spec.md`（課表心率區間）。
+- 既有文件：`docs/research/zones-and-thresholds.md` §1（COROS 帳號那列被忽略的原因）、`obsidian:650 Projects/越野跑教練/spec/wko5-coros-sync.md`（COROS 心率設定、TL 換算）、`obsidian:650 Projects/越野跑教練/spec/overview.md`（課表心率區間）。

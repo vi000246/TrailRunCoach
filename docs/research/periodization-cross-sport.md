@@ -628,7 +628,7 @@
 | SP-101 | 調查：HRV、安靜心率、主觀狀態當自動調整的訊號 | P3 | [299][41][295][277] | `adapt.py`；要先確認 COROS 同步有哪些欄位 |
 | SP-102 | 設計：沒有 A 賽事時的維持模式 | P3 | [234][270][211][416][426][433] | `planning.py:377–378` |
 | SP-103 | 轉換期每週保留一次加速跑 | P3 | [410][411][409]（自行車選手，**推估**到跑步）；補查 [447]（教練級）、[439][443] | `overview.py:1312` |
-| SP-104 | 周期相關的「推估」常數補上這次找到的來源 | P3 | 見 §5 的「補來源」列 | `overview.py:331–334`、`planning.py:44–51`、`docs/research/estimated-constants-inventory.md`、`docs/spec/overview.spec.md:151` |
+| SP-104 | 周期相關的「推估」常數補上這次找到的來源 | P3 | 見 §5 的「補來源」列 | `overview.py:331–334`、`planning.py:44–51`、`docs/research/estimated-constants-inventory.md`、`obsidian:650 Projects/越野跑教練/spec/overview.md:151` |
 
 各單的做法建議：
 

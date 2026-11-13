@@ -59,7 +59,7 @@
 | `coros_plan_push` | 5 列 | 全部在 2026-10-04 |
 
 - **照 app 排的課練的樣本數是 1。** 沒有辦法做任何遵從度對成效的分析。
-- 課表列會被重新產生覆寫（還沒編輯過的自動課，見 `docs/spec/plan-auto.spec.md` 的 reconcile 規則 2），所以 `plan_sessions` 不是「當時排了什麼」的歷史紀錄。`plan_change_log` 有前後狀態，但只記有變動的課。
+- 課表列會被重新產生覆寫（還沒編輯過的自動課，見 `obsidian:650 Projects/越野跑教練/spec/plan-auto.md` 的 reconcile 規則 2），所以 `plan_sessions` 不是「當時排了什麼」的歷史紀錄。`plan_change_log` 有前後狀態，但只記有變動的課。
 
 ## 2. 「回測」可以指三件不同的事
 
@@ -189,4 +189,4 @@
 - Hopkins WG, Schabort EJ, Hawley JA. Reliability of power in physical performance tests. *Sports Med* 2001;31:211–234. DOI 10.2165/00007256-200131030-00005. PMID 11286357.
 - Muñoz I, Seiler S, Bautista J, España J, Larumbe E, Esteve-Lanao J. Does polarized training improve performance in recreational runners? *Int J Sports Physiol Perform* 2014;9:265–272. DOI 10.1123/ijspp.2012-0350. PMID 23752040.
 - Smyth B, Lawlor A. Longer disciplined tapers improve marathon performance for recreational runners. *Front Sports Act Living* 2021;3:735220. DOI 10.3389/fspor.2021.735220. PMID 34651125.
-- 既有文件：`validation-lovdal.md`、`validation-goldencheetah.md`、`public-datasets.md`、`ctl-ramp-calibration.md`、`heat-acclimation.md`、`racepower-v2.md`、`docs/spec/plan-auto.spec.md`。
+- 既有文件：`validation-lovdal.md`、`validation-goldencheetah.md`、`public-datasets.md`、`ctl-ramp-calibration.md`、`heat-acclimation.md`、`racepower-v2.md`、`obsidian:650 Projects/越野跑教練/spec/plan-auto.md`。

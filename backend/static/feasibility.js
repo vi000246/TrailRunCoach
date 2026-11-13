@@ -9,7 +9,7 @@
  *   const st = await Hints.state();       // 提示多寡 (static/hints.js); without it: 標準
  *   el.innerHTML = r.races.map((x) => Feas.html(x, st)).join("");
  *
- * 提示多寡 (SP-486 = docs/research/ui-hint-audit.md §7 T5, docs/spec/ui-hints.spec.md): the card keeps the
+ * 提示多寡 (SP-486 = docs/research/ui-hint-audit.md §7 T5, obsidian:650 Projects/越野跑教練/spec/ui-hints.md): the card keeps the
  * verdict and what changes a decision —
  *   the pills (PL7) and the cutoff / turnaround (PL14): every level; a multi-day 百岳's effort (SP-545:
  *     「預估：吃力」 and which item makes it so — the race calculator's effort words): every level

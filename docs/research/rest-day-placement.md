@@ -164,4 +164,4 @@
 - Uphill Athlete. Making the Most of Your Uphill Athlete Training Plan. https://uphillathlete.com/making-the-most-of-your-uphill-athlete-training-plan/ （2026-10-05 讀取）
 - Jason Koop 的範例週：https://www.trailrunnermag.com/people/profiles-people/jason-koop-ultrarunning-coach/ （未驗證，只看到搜尋摘要）
 - Foster C. Monitoring training in athletes with reference to overtraining syndrome. *Med Sci Sports Exerc* 1998;30:1164–1168.（未驗證；期刊和頁碼是我記得的，引用前請再確認）
-- 既有文件：`bompa-periodization-strength.md`、`unsourced-rules.md` §B2、`validation-lovdal.md`、`docs/spec/overview.spec.md`（課表偏好、休息日）、`docs/spec/plan-auto.spec.md`。
+- 既有文件：`bompa-periodization-strength.md`、`unsourced-rules.md` §B2、`validation-lovdal.md`、`obsidian:650 Projects/越野跑教練/spec/overview.md`（課表偏好、休息日）、`obsidian:650 Projects/越野跑教練/spec/plan-auto.md`。

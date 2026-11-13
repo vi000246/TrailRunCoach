@@ -1,4 +1,4 @@
-/* 提示多寡與每頁上限 (SP-482; docs/research/ui-hint-audit.md §4–§5, docs/spec/ui-hints.spec.md).
+/* 提示多寡與每頁上限 (SP-482; docs/research/ui-hint-audit.md §4–§5, obsidian:650 Projects/越野跑教練/spec/ui-hints.md).
  *
  * A hint is the object engine/hints.py makes — {id, cls, prio, smart, text, detail, show, ack, fp} — or an
  * old plain string (shown as before). Hints.filter() is §4.4's five steps:

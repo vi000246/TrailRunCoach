@@ -1,5 +1,5 @@
 """
-Any two activities compared (SP-625; docs/spec/route-progress.spec.md › Two activities).
+Any two activities compared (SP-625; obsidian:650 Projects/越野跑教練/spec/route-progress.md › Two activities).
 
     GET /api/v1/app/activity-compare/page              the page (?a=&b= workout indexes)
     GET /api/v1/app/activity-compare/activities        the picker's list (?race=1: the races only)

@@ -31,7 +31,7 @@
 | 地形模型（實際功率，mode B） | 路跑 3.7%、越野 10.3% |
 | 路跑能力樣本 | 只有 1–2 筆，無法驗證 |
 
-逐場結果見 `docs/spec/racepower.spec.md`，以及 `python -m backend.scripts.racepower_backtest --no-save --out <scratch>` 的輸出。
+逐場結果見 `obsidian:650 Projects/越野跑教練/spec/racepower.md`，以及 `python -m backend.scripts.racepower_backtest --no-save --out <scratch>` 的輸出。
 
 ### 已知的誤差來源
 - 早期很多天用的是 WKO5 預設 LTHR，不是真實閾值；有一場誤差 −27% 可能就是這個原因。
@@ -76,7 +76,7 @@ app 之後可能開放給其他人用，規劃在 `docs/plans/todo-multi-user-sh
 
 ## A. 賽事功率計算機（影響比賽預測）
 
-規格：`docs/spec/racepower.spec.md`；研究：`docs/research/racepower-v2.md`。
+規格：`obsidian:650 Projects/越野跑教練/spec/racepower.md`；研究：`docs/research/racepower-v2.md`。
 
 1. **努力度條的五級切點**：< 80 / 80–90 / 90–97 / 97–100 / > 100 % 可持續功率。另有 `race_min_f` 0.90（「吃力」的切點）。
 2. **能力樣本的判定**（`backend/engine/racepower/maximal.py`）：
@@ -120,7 +120,7 @@ app 之後可能開放給其他人用，規劃在 `docs/plans/todo-multi-user-sh
 
 ## C. 其他（影響較小）
 
-- CP 測試偵測：一圈功率 ≥ 1.3 × 其他圈的中位數；兩段測試的峰值心率差 ≥ 10 bpm（`docs/spec/racepower.spec.md` §CP）。
+- CP 測試偵測：一圈功率 ≥ 1.3 × 其他圈的中位數；兩段測試的峰值心率差 ≥ 10 bpm（`obsidian:650 Projects/越野跑教練/spec/racepower.md` §CP）。
 - 心率推能力（`hrcap.py`）的有效條件：≥ 8 次、心率跨度 ≥ 15 bpm、R² ≥ 0.5。在使用者資料上 R² 只有 0.01，請評估這個方法本身值不值得保留。
 - mFTP 各處不一致：WKO5 195、回測 191.5、研究 196.1。差在 FIT 功率曲線的取樣方式，這是工程問題，不是研究問題，可略過。
 

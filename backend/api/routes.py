@@ -1,6 +1,6 @@
 """
 Repeated segments and routes API (backend/engine/routes.py;
-docs/spec/route-progress.spec.md).
+obsidian:650 Projects/越野跑教練/spec/route-progress.md).
 
 Nothing here waits for a build: the first request starts one in the
 background and every endpoint answers from the last saved index, with the

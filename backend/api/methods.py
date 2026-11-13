@@ -17,7 +17,7 @@ What the page says lives in two places, like 關於 (api/about.py):
     (SP-973 Q1-2 (a)). The page's last section lists all of it (#all-sources), with the authors' credit and
     the SuperPower Calculator port's (all.lead / all.credit; SP-1067: 關於 listed them before).
 
-Every number on the cards is the repo's own (engine code, docs/spec/racepower.spec.md, docs/research);
+Every number on the cards is the repo's own (engine code, obsidian:650 Projects/越野跑教練/spec/racepower.md, docs/research);
 the card says 推估 where the code does. Layout (the owner's pick, SP-973 Q1 = B): a filterable wall of
 cards, the open card's detail beside it (on a phone: under the card) — static/methods.html.
 """
@@ -71,7 +71,7 @@ MODELS: tuple[Model, ...] = (
     Model("heat-hr", "read", ("superpower", "racinais"), "yes", True),
     Model("hrmax", "read", ("tanaka",), "no", True),
     # 賽事計算機 — racepower/trailhr.py, terrain_calib.py, terrain_difficulty.py, env.py, grade_model.py,
-    # hike.py, riegel.py; docs/spec/racepower.spec.md「Models」「Trail HR pace model」
+    # hike.py, riegel.py; obsidian:650 Projects/越野跑教練/spec/racepower.md「Models」「Trail HR pace model」
     Model("trail-hr", "race", ("fornasiero", "kerherve"), "yes", True, layer="flat"),
     Model("effort", "race", ("itra",), "yes", True, layer="climb"),
     Model("terrain", "race", (), "yes", True, layer="terrain"),

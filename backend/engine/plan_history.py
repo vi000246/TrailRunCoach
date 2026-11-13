@@ -3,7 +3,7 @@
 
 Why (docs/research/plan-backtest-feasibility.md §1.3, §5.1): whether training by the app's plan
 works can only be judged from records kept from now on, and two of them were missing —
-  * 介入的紀錄: plan_sessions is rewritten by every reconcile (docs/spec/plan-auto.spec.md, rule 2:
+  * 介入的紀錄: plan_sessions is rewritten by every reconcile (obsidian:650 Projects/越野跑教練/spec/plan-auto.md, rule 2:
     an unedited automatic session is regenerated), so it cannot say what was planned at the time;
   * 遵從度: the 課表統計 page computes planned vs done on the fly from those same rows, nothing is
     kept per week.

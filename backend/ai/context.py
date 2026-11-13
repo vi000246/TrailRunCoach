@@ -7,7 +7,7 @@ Two parts, both summaries:
   (engine/status.Indicator, no sparkline, no `extra`) — the to-do list, and the last WEEKS weeks'
   totals (hours, km, climb, load, sessions; engine/overview.summary without its activity list);
 * the page's "AI summary" of what is in view (`clean_focus`), the format the front end
-  (static/askai.js) fills — docs/spec/ai-qa.spec.md:
+  (static/askai.js) fills — obsidian:650 Projects/越野跑教練/spec/ai-qa.md:
 
       {"kind": "card" | "chart" | "session" | "calc" | "hint" | "page",
        "page": "overview",                  # the shell's page id

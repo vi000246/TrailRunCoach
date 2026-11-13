@@ -1498,7 +1498,7 @@ def get_saved(eid: str):
 
 @router.get("/saved/{eid}/cairn-curve")
 def saved_cairn_curve(eid: str, download: bool = False):
-    """SP-653: the 時間曲線 for 疊石 Cairn (cairn-curve v1, docs/spec/cairn-curve.md) of the event's saved
+    """SP-653: the 時間曲線 for 疊石 Cairn (cairn-curve v1, obsidian:650 Projects/越野跑教練/spec/cairn-curve.md) of the event's saved
     calculation on its stored GPX. 404 NO_RESULT; 409 NO_GPX / GPX_CHANGED / GPX_MISMATCH / NO_TRACK."""
     from fastapi.responses import JSONResponse
     from backend.engine.racepower import cairn_curve as CC

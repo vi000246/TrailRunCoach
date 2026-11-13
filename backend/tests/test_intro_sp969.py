@@ -220,7 +220,8 @@ def test_why_counts_the_repo_not_a_typed_number():
     # documents: constants with their source (docs/research/coach-schools-zones-periodization.md:9, :361-753)
     doc = (ROOT / "docs" / "research" / "coach-schools-zones-periodization.md").read_text("utf-8")
     assert f"{I.ZONE_SYSTEMS} 套區間系統" in doc and f"[{I.ZONE_REFS}] " in doc and f"[{I.ZONE_REFS + 1}] " not in doc
-    spec = (ROOT / "docs" / "spec" / "racepower.spec.md").read_text("utf-8")
+    from backend.tests._vault_spec import vault_spec
+    spec = vault_spec("racepower.md").read_text("utf-8")   # in the Obsidian vault since OB-441; no vault -> skip here
     bt = I.BACKTEST
     assert (f"| C prior order (A + B) | {bt['walk_n']} | full {bt['walk_full_pct']} % ≤ prior {bt['walk_prior_pct']} % "
             f"≤ Tobler {bt['walk_formula_pct']} %") in spec

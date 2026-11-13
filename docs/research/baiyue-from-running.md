@@ -2,7 +2,7 @@
 
 Date: 2026-09-30. 範圍：研究與設計，**不改程式碼**。
 
-- 現況見 `docs/spec/racepower.spec.md`、`docs/research/racepower-v2.md`（§2.5、§3C.2、§7）。
+- 現況見 `obsidian:650 Projects/越野跑教練/spec/racepower.md`、`docs/research/racepower-v2.md`（§2.5、§3C.2、§7）。
 - 本文件只寫「百岳時間要反映你自己的能力」這件事：
   - 新增或改變的模型；
   - 資料管線；
@@ -745,7 +745,7 @@ activities ──► grade_samples（加 k、t、run、hr）──► walk_windo
 | `backend/engine/racepower/backtest.py` | 新 `evaluate_walk_segments`、`evaluate_hike_hr_segments`、`hike_day_band`；`validated_flags` 加 `hike_capacity` | §7.1 |
 | `backend/api/racepower.py` | `PlanIn` 加 `trip_kind`、`hr_band`、`pack_kg_by_day`、`heat_status`；新 `GET/POST /hike-meta` | |
 | `backend/static/racepower.html` | `renderBaiyue`、輸入面板、登山紀錄表 | §6 |
-| `docs/spec/racepower.spec.md` | 百岳段落 | 實作後用 `/prp-spec` 同步 |
+| `obsidian:650 Projects/越野跑教練/spec/racepower.md` | 百岳段落 | 實作後用 `/prp-spec` 同步 |
 
 ### 8.1 熱項接口
 

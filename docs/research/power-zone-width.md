@@ -208,7 +208,7 @@ CP 220 的結果一樣（比例只看 CV）。推估（常態近似、平均剛�
 | `backend/engine/adapt.py` | 91 | `EASY_POWER_CAP` 0.80 不動 |
 | `backend/engine/plan_auto.py` | 251 | `rescale_watts` 照樣能改寫「130–160 W」，不用動 |
 | 測試 | `backend/tests/test_workout_steps.py`、`test_coros_workouts.py` | golden payload 的數字 |
-| 規格 | `docs/spec/workouts.spec.md`、`plan-auto.spec.md` | 目標表 |
+| 規格 | `obsidian:650 Projects/越野跑教練/spec/workouts.md`、`plan-auto.spec.md` | 目標表 |
 
 沒有資料庫遷移：相對目標存的是 % CP，已存的課在下一次 push 時用新的帶重算（`plan_auto` 的 fingerprint 會標「已過期」）。
 

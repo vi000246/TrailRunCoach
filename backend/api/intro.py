@@ -118,7 +118,7 @@ def cairn_url() -> Optional[str]:
 # 課表's intensities were aligned with; its bibliography (:361-753) runs [1]…[196]
 ZONE_SYSTEMS = 13
 ZONE_REFS = 196
-# docs/spec/racepower.spec.md:764 (test C, A + B: 50 trail walking segments + 16 百岳 segments, median |err|:
+# obsidian:650 Projects/越野跑教練/spec/racepower.md:764 (test C, A + B: 50 trail walking segments + 16 百岳 segments, median |err|:
 # the full model 7.7 %, the physiological prior 21.9 %, Tobler 51.1 %) and :1029 (the trail HR model on 7 races,
 # race level, median |err| 7.6 %); :1034 (durability: 7.6 % with it, 5.5 % without — kept, marked 推估).
 # All on one runner's data, the author's (the page says so).

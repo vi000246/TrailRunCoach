@@ -1,5 +1,5 @@
 """
-Historical weather for every segment / route effort (docs/spec/route-progress.spec.md,
+Historical weather for every segment / route effort (obsidian:650 Projects/越野跑教練/spec/route-progress.md,
 Weather): air temperature, humidity and dew point at the effort's time and
 place from the Open-Meteo historical archive, plus the Hadley heat sum.
 

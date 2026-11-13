@@ -318,4 +318,4 @@ COROS 的每日指標拿不拿得到：
 - COROS 支援：RPE and Training Notes. https://support.coros.com/hc/en-us/articles/6051073110292-RPE-and-Training-Notes （403，只看到搜尋摘要）
 - @pinta365/coros（社群函式庫，v0.0.1）. https://jsr.io/@pinta365/coros （2026-10-05 讀取）
 - cygnusb/coros-mcp README. https://github.com/cygnusb/coros-mcp （2026-10-05 讀取）
-- 既有文件：`periodization-cross-sport.md` §4.9、§6.1；`unsourced-rules.md`（自動調整的來源）；`competitor-charts.md` §1.6（COROS 的夜間 HRV）；`docs/spec/plan-auto.spec.md`。
+- 既有文件：`periodization-cross-sport.md` §4.9、§6.1；`unsourced-rules.md`（自動調整的來源）；`competitor-charts.md` §1.6（COROS 的夜間 HRV）；`obsidian:650 Projects/越野跑教練/spec/plan-auto.md`。

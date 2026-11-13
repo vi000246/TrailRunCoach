@@ -29,7 +29,7 @@
 | 長爬坡反覆（越野，有 GPX） | 沒有 | 每週一堂，取代一堂輕鬆跑；賽道最長那段坡的坡度，每趟 ≤ 20 分、上坡共 ≤ 60 分，心率在輕鬆跑上限 | `specific_phase.py:366–454` |
 | 賽事模擬 | 只在賽前第 4–3 週 | 是建議，使用者按了才排 | `specific_phase.py:43`、`specific_phase.py:547–588` |
 | B2B | 每個 3:1 周期最多一次 | 是建議 | `backend/engine/b2b.py`（`back-to-back-and-long-day.md` §3） |
-| 技術地形課（越野） | 沒有 | 每週一堂，RPE 6–7 或 4–5 | `backend/engine/technical.py`（`docs/spec/overview.spec.md` SP-74） |
+| 技術地形課（越野） | 沒有 | 每週一堂，RPE 6–7 或 4–5 | `backend/engine/technical.py`（`obsidian:650 Projects/越野跑教練/spec/overview.md` SP-74） |
 | 週量 | 有 | CTL 每週目標比基礎期高（max(2.5, 7 %)），3:1 恢復週 | `backend/engine/load_guard.py:299`、`overview.py:427` |
 | 恢復週（專項期） | — | 沒有長跑、沒有質量課（恢復週的 fartlek 只在基礎期排） | `overview.py:1179`、`overview.py:1222` |
 | 減量期 | — | 一堂：三區軌是節奏 2×8 分，五區軌或兩軌都沒開是 4×3 分（98–102 % CP） | `overview.py:903–907` |
@@ -250,4 +250,4 @@
 - Ehrström S et al. *MSSE* 2018. DOI 10.1249/mss.0000000000001467
 - Aubry A et al. *MSSE* 2014;46:1769. DOI 10.1249/MSS.0000000000000301
 - Bosquet L et al. *MSSE* 2007. DOI 10.1249/mss.0b013e31806010e0
-- 既有文件：`coach-schools-zones-periodization.md`（Finding 4、8，模式三，R2、R6）、`vo2max-gate-and-trail-metric.md` §2.3–2.5、`interval-prescription.md`、`back-to-back-and-long-day.md`、`bompa-periodization-strength.md`、`docs/spec/plan-auto.spec.md`、`docs/spec/overview.spec.md`。
+- 既有文件：`coach-schools-zones-periodization.md`（Finding 4、8，模式三，R2、R6）、`vo2max-gate-and-trail-metric.md` §2.3–2.5、`interval-prescription.md`、`back-to-back-and-long-day.md`、`bompa-periodization-strength.md`、`obsidian:650 Projects/越野跑教練/spec/plan-auto.md`、`obsidian:650 Projects/越野跑教練/spec/overview.md`。

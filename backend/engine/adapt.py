@@ -1,6 +1,6 @@
 """
 Adaptive adjustments to the generated plan, from what actually happened
-(docs/spec/plan-auto.spec.md). Pure functions over plain dicts.
+(obsidian:650 Projects/越野跑教練/spec/plan-auto.md). Pure functions over plain dicts.
 
 adapt() runs on the generator's weeks *before* reconcile() (engine/reconcile.py
 rule 2 overwrites every unedited auto session with the generator's output, so

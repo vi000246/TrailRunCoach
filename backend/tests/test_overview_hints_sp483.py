@@ -1,4 +1,4 @@
-"""總覽提示精簡 (SP-483; docs/research/ui-hint-audit.md §7 T2, docs/spec/ui-hints.spec.md): the week notes' §5
+"""總覽提示精簡 (SP-483; docs/research/ui-hint-audit.md §7 T2, obsidian:650 Projects/越野跑教練/spec/ui-hints.md): the week notes' §5
 conditions computed on the overview (engine/hints.week_smart: R7 first week, R11 heat, R15, OV8g), the B-race
 warning (no 百岳; 「知道了」 puts it into 「詳細」 until its races change), and overview.html's SP-483 layout block
 (OVH) and the 5 區 card's options run under node with the real hints.js / readiness.js (SP-678): one place for a test, the

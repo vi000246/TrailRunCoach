@@ -1,5 +1,5 @@
 """
-SP-653: the 時間曲線 for 疊石 Cairn (`cairn-curve` v1, docs/spec/cairn-curve.md).
+SP-653: the 時間曲線 for 疊石 Cairn (`cairn-curve` v1, obsidian:650 Projects/越野跑教練/spec/cairn-curve.md).
 
 * Cairn's own segment statistics (rangeStats: haversine, 50 m moving average of the
   elevation, up / flat / down buckets by Δh) and its `munter-split` minutes, copied into
@@ -372,11 +372,11 @@ def test_module_needs_no_private_core():
 
 
 def test_spec_doc_has_the_example_and_cairn_rules():
-    """docs/spec/cairn-curve.md: a valid example and Cairn's rules (hash, 1 % length, backwards → fallback)."""
+    """obsidian:650 Projects/越野跑教練/spec/cairn-curve.md: a valid example and Cairn's rules (hash, 1 % length, backwards → fallback)."""
     import json
     import re
-    from pathlib import Path
-    doc = (Path(__file__).resolve().parents[2] / "docs" / "spec" / "cairn-curve.md").read_text(encoding="utf-8")
+    from backend.tests._vault_spec import vault_spec
+    doc = vault_spec("cairn-curve.md").read_text(encoding="utf-8")   # in the Obsidian vault since OB-441; no vault -> skip
     ex = json.loads(re.search(r"```json\n(.*?)```", doc, re.S).group(1))
     assert ex["v"] == 1 and ex["points"][0] == [0, 0] and ex["fallback"]["kind"] == "munter-split"
     assert set(ex) == set(CC.build(_trail_result(), GPX, start_times=[None]))

@@ -301,4 +301,4 @@ app 沒有肌力的負荷資料（手錶只記到「做了一堂肌力」），�
 ## 參考
 
 - Bompa T, Buzzichelli C. *Periodization Training for Sports*, 3rd ed. Champaign, IL: Human Kinetics; 2015.（本文頁碼是書本頁碼，不是 PDF 頁碼）
-- 相關的既有文件：`loaded-carry-training.md`（ME、賽前停肌力）、`coach-schools-zones-periodization.md`（各學派的周期和強度順序）、`periodization-phase-metrics.md`（各期看哪些指標）、`unsourced-rules.md`（推估數字的清單）、`docs/spec/plan-auto.spec.md`、`docs/spec/overview.spec.md`。
+- 相關的既有文件：`loaded-carry-training.md`（ME、賽前停肌力）、`coach-schools-zones-periodization.md`（各學派的周期和強度順序）、`periodization-phase-metrics.md`（各期看哪些指標）、`unsourced-rules.md`（推估數字的清單）、`obsidian:650 Projects/越野跑教練/spec/plan-auto.md`、`obsidian:650 Projects/越野跑教練/spec/overview.md`。

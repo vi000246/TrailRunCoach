@@ -740,7 +740,7 @@ Stanley 2015、Travers 2020、Rønnestad 2022、Buller 2025、Sekiguchi 2022、B
    原表在 > 180 寫 “hard running not recommended”，沒有給數字。建議：比賽計算機和路線天氣在 Hadley > 180 時加警示「超出 Hadley 表的範圍，原作者不建議硬跑」，
    數字照算但標「外插」。
 3. **百岳步行也套了 Hadley 跑步表。** `backend/engine/racepower/planner.py:1015`（`plan_hike`）每一段都乘 `env.heat_term`（`env.py:141–148`）。
-   Hadley 原表是連續跑的配速調整；`racepower-v2.md` §8 寫「Hadley 只用在跑步段」；`docs/spec/racepower.spec.md` 第 374 行（「百岳 keeps one heat value … limits Hadley to running segments」）和第 475 行（「百岳 applies H per segment」）互相矛盾。
+   Hadley 原表是連續跑的配速調整；`racepower-v2.md` §8 寫「Hadley 只用在跑步段」；`obsidian:650 Projects/越野跑教練/spec/racepower.md` 第 374 行（「百岳 keeps one heat value … limits Hadley to running segments」）和第 475 行（「百岳 applies H per segment」）互相矛盾。
    建議：二選一並寫進規格——(a) 百岳步行段不套 Hadley；(b) 保留但在頁面和規格標「跑步表套到步行，推估」。要你決定。
 
 **跳過的付費／讀不到來源**：

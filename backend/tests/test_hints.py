@@ -1,4 +1,4 @@
-"""提示分類與提示多寡 (SP-482; docs/research/ui-hint-audit.md §4–§5, docs/spec/ui-hints.spec.md):
+"""提示分類與提示多寡 (SP-482; docs/research/ui-hint-audit.md §4–§5, obsidian:650 Projects/越野跑教練/spec/ui-hints.md):
 engine/hints.py (the catalog, the hint object, week notes and calculator warnings, the automatic level,
 「知道了」), the settings keys, the profile API and the calculator responses. Synthetic data only; the DB
 in memory. The page-side filter (static/hints.js) is test_hints_js.py."""
@@ -17,10 +17,11 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.engine import hints as H
+from backend.tests._vault_spec import vault_spec
 
 ROOT = Path(__file__).resolve().parents[2]
 AUDIT = ROOT / "docs" / "research" / "ui-hint-audit.md"
-SPEC = ROOT / "docs" / "spec" / "ui-hints.spec.md"
+SPEC_NAME = "ui-hints.md"   # in the Obsidian vault since OB-441 (_vault_spec.py); no vault -> that test skips
 TODAY = dt.date(2026, 10, 13)
 
 
@@ -36,7 +37,7 @@ async def _session():
     return async_sessionmaker(engine, expire_on_commit=False)()
 
 
-# ---- the catalog = the audit's inventory, written down in docs/spec ------------------------------
+# ---- the catalog = the audit's inventory, written down in the spec (Obsidian vault) ---------------
 
 def _audit_ids() -> list[str]:
     sec = AUDIT.read_text(encoding="utf-8").split("## 1. 盤點與分級")[1].split("## 2.")[0]
@@ -62,8 +63,9 @@ def test_every_audit_id_has_a_class_three_displays_and_a_priority():
 
 
 def test_the_spec_lists_every_id_with_the_catalogs_class_and_displays():
+    spec = vault_spec(SPEC_NAME).read_text(encoding="utf-8")
     rows = {}
-    for line in SPEC.read_text(encoding="utf-8").splitlines():
+    for line in spec.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) == 9 and cells[0] in H.CATALOG:
             rows[cells[0]] = cells
@@ -73,7 +75,7 @@ def test_the_spec_lists_every_id_with_the_catalogs_class_and_displays():
         assert c[2].startswith(str(e.cls)), hid
         assert (c[3], c[4], c[5]) == tuple(e.show), hid
         assert c[6].startswith(str(e.prio)), hid
-    assert "SP-482" in SPEC.read_text(encoding="utf-8").split("## Change History")[1]
+    assert "SP-482" in spec.split("## Change History")[1]
 
 
 def test_the_catalog_follows_the_audit_rows():

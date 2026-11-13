@@ -64,7 +64,7 @@ class Entry:
 
 
 # The inventory of docs/research/ui-hint-audit.md §1 (id, 類, 完／標／精, §5.2 priority, flags), one row per
-# id; docs/spec/ui-hints.spec.md has each row's text and is checked against this table
+# id; obsidian:650 Projects/越野跑教練/spec/ui-hints.md has each row's text and is checked against this table
 # (test_hints.py). Rows the audit merges or removes keep their target display (✕✕✕ = 拿掉／併掉).
 # Added (not in the audit): RC (an untagged / old calculator warning: shown as before), RC3w / RC3h (SP-251
 # 冷風, SP-253 失溫 — implemented after the audit, registered as cls 1), RC13a (高山症, the 百岳 AMS line),

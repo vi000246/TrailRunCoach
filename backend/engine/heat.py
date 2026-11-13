@@ -63,7 +63,7 @@ EVIDENCE = "Pandolf 1998；Racinais 2015 共識；Daanen 2018；Racinais 2015 MS
 # The athlete's own heat coefficient of HR at a given power: the heat
 # back-test (backend/scripts/heat_backtest.py, 271 running route efforts,
 # route FE + power + moving min + time of day + β·(Hadley − 120), OLS) gave
-# β = 0.224 ± 0.036 bpm per Hadley unit (docs/spec/racepower.spec.md,
+# β = 0.224 ± 0.036 bpm per Hadley unit (obsidian:650 Projects/越野跑教練/spec/racepower.md,
 # 2026-10-01; docs/research/unsourced-rules.md §A5). Linear and centred on
 # Hadley 120, as it was fitted. The fit is one runner's own data [本人資料]; using
 # it to move one run's HR to Hadley 120 is [推估].

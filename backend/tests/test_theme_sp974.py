@@ -1,5 +1,5 @@
 """
-外觀 (SP-974; docs/spec/ui-theme.spec.md): the Trig palettes (static/theme.css) and the script that
+外觀 (SP-974; obsidian:650 Projects/越野跑教練/spec/ui-theme.md): the Trig palettes (static/theme.css) and the script that
 picks one (static/theme.js), written inline first in every page's <head> by backend/i18n/pages.py;
 the 設定 › 偏好設定 › 外觀 menu (個人資料 until SP-1011); the default (Trig 米白 on a light system, 原本 dark on a dark one);
 the chart colours of views/*.json mapped to the Trig palette's same hue. theme.js runs under node.

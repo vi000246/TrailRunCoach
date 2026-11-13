@@ -193,4 +193,4 @@
 - Fellrnr. Optical Heart Rate Monitoring. https://fellrnr.com/wiki/Optical_Heart_Rate_Monitoring （2026-10-06 讀取）
 - intervals.icu. Heartrate spikes now automatically fixed. https://forum.intervals.icu/t/heartrate-spikes-now-automatically-fixed/174 （2026-10-06 讀取）
 - TrainingPeaks. How to Fix Your Workout Data. https://help.trainingpeaks.com/hc/en-us/articles/204072284-How-to-Fix-Your-Workout-Data （摘要）
-- 既有文件：`zones-and-thresholds.md` §2.3、`vo2max-session-detection.md` §2.5、§3、`drift-algorithm.md` §1.3、`docs/spec/workout-review.spec.md`、`docs/spec/wko5-engine.spec.md`（Data corrections）。
+- 既有文件：`zones-and-thresholds.md` §2.3、`vo2max-session-detection.md` §2.5、§3、`drift-algorithm.md` §1.3、`obsidian:650 Projects/越野跑教練/spec/workout-review.md`、`obsidian:650 Projects/越野跑教練/spec/wko5-engine.md`（Data corrections）。

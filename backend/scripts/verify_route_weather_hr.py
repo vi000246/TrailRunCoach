@@ -1,6 +1,6 @@
 """
 Independent check of the 路線 page's per-effort weather and peaks
-(docs/spec/route-progress.spec.md, Weather / Metrics).
+(obsidian:650 Projects/越野跑教練/spec/route-progress.md, Weather / Metrics).
 
 For one segment, every effort's max HR (and max 30 s power) is recomputed
 from the raw .wko4 samples with plain loops, and one effort's weather from a

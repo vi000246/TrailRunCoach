@@ -1,4 +1,4 @@
-/* 外觀 (SP-974; docs/spec/ui-theme.spec.md). Written inline at the top of every page's <head>
+/* 外觀 (SP-974; obsidian:650 Projects/越野跑教練/spec/ui-theme.md). Written inline at the top of every page's <head>
    (backend/i18n/pages.py, with theme.css), so the colours are right before the first paint.
 
    The choice (設定 › 偏好設定 › 外觀; 個人資料 until SP-1011) is this browser's, in the `theme` cookie (1 year), like the

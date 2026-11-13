@@ -9,7 +9,7 @@
   - **[筆記]**：讀書與研討會筆記，以 `路徑:行號` 引用。
   - **推估**：我們自己的數字或推論，沒有外部來源。
   - **未驗證**：查不到原文、只有二手轉述。
-- 相關文件：`aerobic-base-readiness.md`（有氧基礎確認）、`interval-adaptation.md`、`docs/spec/plan-auto.spec.md`。
+- 相關文件：`aerobic-base-readiness.md`（有氧基礎確認）、`interval-adaptation.md`、`obsidian:650 Projects/越野跑教練/spec/plan-auto.md`。
 
 ---
 
@@ -425,7 +425,7 @@ Z3 暫停只在恢復期內。量下滑（第 2 列）只停 Z5、不停 Z3。�
 
 ### 6.5 和自動調整（plan-auto）怎麼接
 
-讀 `docs/spec/plan-auto.spec.md`、`backend/engine/adapt.py`（只讀）得到的限制：
+讀 `obsidian:650 Projects/越野跑教練/spec/plan-auto.md`、`backend/engine/adapt.py`（只讀）得到的限制：
 
 1. **adapt 只調當週**，而且在 reconcile 前對產生器的輸出做。恢復期跨好幾週，所以**恢復期要做在產生器（`overview.week_plan` / `projection.project_weeks`）**，不能做成 adapt 規則：
    - 新增 `mode = "reentry"`，帶 `{start, days, segments, fvdot, illness}`。

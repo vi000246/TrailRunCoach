@@ -1,6 +1,6 @@
 """
 The 時間曲線 for 疊石 Cairn (`cairn-curve` v1, SP-653; format and Cairn's rules:
-docs/spec/cairn-curve.md; why: docs/analysis/sp570-cairn-itinerary-times.md).
+obsidian:650 Projects/越野跑教練/spec/cairn-curve.md; why: docs/analysis/sp570-cairn-itinerary-times.md).
 
 Cairn plans a trip's arrival times itself (its 推估鏈: each day's start, the stops, the
 nights); TRC gives it the PACE only — the cumulative MOVING time along the route of a

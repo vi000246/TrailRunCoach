@@ -408,7 +408,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | 2 天 | 間歇離長跑和其他硬課 ≥ 2 天；5 區一週最多 2 次 | `plan_prefs.place()`（已經有） | **台灣教練**：5 區一週最多 2 次、間隔至少 2 天 |
 | 停訓 | 連續 ≥ 6 天沒跑 → 恢復期，期內不排 3 區、5 區 | `engine/reentry.py` | Daniels 表 9.2（`detraining.md` §6） |
 
-**兩道門（2026-10-01 使用者決定）**：3 區（閾值）只要護欄通過就排；5 區要先確認有氧基礎——**三種測試做了其中一種而且達標**：① 徐國峰 90 分鐘測試（平路 1 區，第 90 分 vs 第 10 分心率飄移 < 10%）、② 實測 AeT 的 UA 差距法（LTHR ÷ AeT − 1 ≤ 10%）、③ 實測 AeT 附近 ≥ 60 分鐘的 Friel 飄移（前後半 < 5%）。方法「鎖住」只關 5 區，不再擋 3 區。確認後沒有到期日，每週檢查：1 區時間沒有連 3 週 < 確認時的 2/3（Hickson 1982；3 週推估），掉到線下就暫停到下次確認；停跑 ≥ 6 天照恢復期規則。規則細節見 `docs/spec/plan-auto.spec.md`。
+**兩道門（2026-10-01 使用者決定）**：3 區（閾值）只要護欄通過就排；5 區要先確認有氧基礎——**三種測試做了其中一種而且達標**：① 徐國峰 90 分鐘測試（平路 1 區，第 90 分 vs 第 10 分心率飄移 < 10%）、② 實測 AeT 的 UA 差距法（LTHR ÷ AeT − 1 ≤ 10%）、③ 實測 AeT 附近 ≥ 60 分鐘的 Friel 飄移（前後半 < 5%）。方法「鎖住」只關 5 區，不再擋 3 區。確認後沒有到期日，每週檢查：1 區時間沒有連 3 週 < 確認時的 2/3（Hickson 1982；3 週推估），掉到線下就暫停到下次確認；停跑 ≥ 6 天照恢復期規則。規則細節見 `obsidian:650 Projects/越野跑教練/spec/plan-auto.md`。
 
 **舊的替代訊號路徑拿掉了（2026-10-01 使用者決定）**：原本還有一條 `xu_signals` 路徑（每週 1 區時間＋長跑後段不變差），跟 90 分鐘測試是同一件事，所以改成上面的「三選一」。每週 1 區時間（台灣教練：約 150–210 分鐘）不再是解鎖條件，但留著當**維持／暫停**規則（連 3 週 < 確認時的 2/3 就暫停）和歷程圖的長條；長跑後段檢查只留在停跑 14–28 天後的恢復期長跑飄移檢查（`detraining.md`，不同的規則）。舊設定存的 `xu_signals` 讀成「自動」。
 | 上次掉速 | 上次間歇最後一組比第一組低 > 5% → 劑量退一步 | `WR.last_quality`、`next_quality` | 自訂（現有規則） |
@@ -473,7 +473,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | `backend/static/`（課表偏好面板） | 新下拉選單「間歇門檻」＋週數欄 |
 | `backend/sync/coros_workouts.py` | fartlek／上坡間歇的 steps（`_quality_steps` 已經能解析「N×M 分」；1 分鐘版要確認可以解析）；AeT 測試 steps（§6.4） |
 | `backend/tests/` | `test_workout_review.py`（gate 各模式）、`test_plan_prefs.py`、`test_projection.py` |
-| `docs/spec/workout-review.spec.md` | 同步規則與詞彙（Drift streak → Gate） |
+| `obsidian:650 Projects/越野跑教練/spec/workout-review.md` | 同步規則與詞彙（Drift streak → Gate） |
 
 ---
 

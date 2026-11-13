@@ -50,7 +50,7 @@ INLINE_I18N_PAGES = frozenset({"share", "pace"})     # pace: the 腳程試算 (S
 # `<!--inline:<file>-->` marker instead of loaded by address — the share page draws its 分段目標 with
 # the calculator's component (SP-784)
 INLINE_SCRIPTS = {"share": ("seg_profile.js",)}
-# 外觀 (SP-974, docs/spec/ui-theme.spec.md): the Trig palettes and the script that picks one, inline
+# 外觀 (SP-974, obsidian:650 Projects/越野跑教練/spec/ui-theme.md): the Trig palettes and the script that picks one, inline
 # first in every page's <head> — before the page's own <style>, so the colours never flash; inline
 # because a visitor's /share/* gets no /api/v1/static
 THEME_CSS_FILE = STATIC / "theme.css"

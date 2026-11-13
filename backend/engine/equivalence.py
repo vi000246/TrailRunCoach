@@ -57,7 +57,7 @@ STATUS / VALIDATION
     `backtest()` runs leave-one-out on the athlete's own easy trail and hike
     activities: refit without the activity, predict its moving time, compare.
     It reports n, MAE (min), MAPE (%), bias for the chosen method and for EP.
-    The results are in docs/spec/overview.spec.md. When the chosen method's
+    The results are in obsidian:650 Projects/越野跑教練/spec/overview.md. When the chosen method's
     MAPE is above ESTIMATE_MAPE (or it could not be backtested) the page
     labels the conversion 「推估」.
 

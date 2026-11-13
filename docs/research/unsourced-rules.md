@@ -390,7 +390,7 @@
 - **校正**：每堂間歇的 `first_miss`、fade、RPE 都有記錄後，看哪個維度的進階後下一堂「達標」比例高；≥ 20 堂才有意義。
 - **程式**：IA §4.3 的清單；`quality_gate.dose_step`、`next_quality`。
 
-### B5 自動重排課表的規則（已合併：`docs/spec/plan-auto.spec.md`、`backend/engine/adapt.py`）
+### B5 自動重排課表的規則（已合併：`obsidian:650 Projects/越野跑教練/spec/plan-auto.md`、`backend/engine/adapt.py`）
 
 - **現在的規則與它們的來源**（spec 表）：
 
